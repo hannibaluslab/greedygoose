@@ -2,8 +2,9 @@ import { erc20Abi, isAddressEqual, parseEventLogs, type Log } from "viem";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { ALL_RESERVES, EQUITIES, USDC, findByAddress } from "@/lib/tokens/registry";
+import { GUARDIAN } from "@/lib/guardian/config";
 
-export type ActivityKind = "supply" | "withdraw" | "borrow" | "repay" | "buy" | "receive" | "send";
+export type ActivityKind = "supply" | "withdraw" | "borrow" | "repay" | "buy" | "receive" | "send" | "save" | "unsave";
 
 export type ActivityItem = {
   kind: ActivityKind;
@@ -56,8 +57,17 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
     if (value === undefined) continue;
     const token = findByAddress(t.address);
     if (!token) continue;
-    // Aave moves are already covered by Spoke events.
+    // Aave V4 moves are already covered by Spoke events.
     if (touchesAave(from) || touchesAave(to)) continue;
+    // Aave V3 savings: USDC into / out of the aToken contract.
+    if (token.kind === "debt" && from && to && isAddressEqual(from, user) && isAddressEqual(to, GUARDIAN.AUSDC)) {
+      items.push({ kind: "save", symbol: token.symbol, amount: units(value, token.decimals) });
+      continue;
+    }
+    if (token.kind === "debt" && from && to && isAddressEqual(from, GUARDIAN.AUSDC) && isAddressEqual(to, user)) {
+      items.push({ kind: "unsave", symbol: token.symbol, amount: units(value, token.decimals) });
+      continue;
+    }
     if (token.kind === "debt" && from && isAddressEqual(from, user)) usdcOut += value;
     if (token.kind === "equity" && to && isAddressEqual(to, user)) stockIn.push({ symbol: token.symbol, raw: value, decimals: token.decimals });
     if (token.kind === "equity" && from && isAddressEqual(from, user)) items.push({ kind: "send", symbol: token.symbol, amount: units(value, token.decimals) });

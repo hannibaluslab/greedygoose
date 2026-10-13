@@ -32,6 +32,10 @@ function describe(i: ActivityItem): { title: string; amount: string; sign: "+" |
       return { title: `Received ${name}`, amount: r?.kind === "equity" ? shares : formatUsd(i.amount), sign: "+" };
     case "send":
       return { title: `Sent ${name}`, amount: r?.kind === "equity" ? shares : formatUsd(i.amount), sign: "−" };
+    case "save":
+      return { title: "Added to savings", amount: formatUsd(i.amount), sign: "" };
+    case "unsave":
+      return { title: "Moved savings to cash", amount: formatUsd(i.amount), sign: "" };
   }
 }
 

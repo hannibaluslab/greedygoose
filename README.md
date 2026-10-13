@@ -19,6 +19,16 @@ npm run typecheck
 npm run lint
 ```
 
+## Guardian (branch `feat/guardian`)
+
+Repays your loan from your own savings when it slips into Watch, so your stocks aren't auto-sold. See `docs/guardian.md`.
+
+```bash
+npm run contracts:test   # checker unit/fuzz + Base-fork tests (needs BASE_RPC_URL)
+npm run guardian:e2e     # full keeper rehearsal on an anvil fork
+npm run guardian:keeper  # dry run (add --execute / --loop on the keeper server)
+```
+
 ## Build status
 
 | Step | State |
@@ -31,4 +41,5 @@ npm run lint
 | 5–6. Get a loan: lock any mix of stocks (slider per stock, auto-fill to Safe) + borrow, one Face ID | done |
 | 7. Repay (partial / all, allowance reset after full repay) and Unlock (withdraw, Aave-limit aware) | done |
 | 8. Activity (JAW call history + decoded Base receipts + this device’s pending sends) | done · eligibility geo check, JAW subname: next |
+| Guardian: checker contract, keeper, savings buffer, Guardian screen | done on `feat/guardian` · audit + deploy pending |
 | 9. Fork tests in CI, security review, legal review | — |

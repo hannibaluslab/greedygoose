@@ -5,6 +5,7 @@ import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { TabBar } from "@/components/gg/TabBar";
 import { Line, SubHeader, WhiteCard } from "@/components/gg/Screen";
 import { StatusBar, StatusPill } from "@/components/gg/Status";
+import { ChevronRight, ShieldIcon } from "@/components/gg/icons";
 import { MarketBanner } from "@/components/ui/MarketBanner";
 import { usePosition } from "@/hooks/usePosition";
 import { STATUS_COPY } from "@/lib/risk/status";
@@ -48,6 +49,15 @@ function Credit({ address }: { address: `0x${string}` }) {
             <Line label="USDC left to borrow on Aave" value={formatUsd(data.usdcLiquidity)} />
             <Line label="Network" value="Base" />
           </WhiteCard>
+
+          <Link href="/guardian" className="flex items-center gap-3 rounded-[22px] bg-card px-4 py-3.5 no-underline shadow-[0_1px_3px_rgba(14,13,11,0.06)]">
+            <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-ink"><ShieldIcon size={16} /></span>
+            <span className="flex flex-1 flex-col">
+              <span className="text-[15px] font-semibold">Guardian</span>
+              <span className="text-[12.5px] text-muted">Repays from savings so your stocks aren’t sold</span>
+            </span>
+            <ChevronRight className="text-subtle" />
+          </Link>
 
           {data.borrowPaused && <p role="status" className="m-0 text-[13px] text-act">Borrowing is paused on Aave right now.</p>}
 

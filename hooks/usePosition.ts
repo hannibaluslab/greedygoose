@@ -10,6 +10,39 @@ import { aaveOracleAbi } from "@/lib/aave/abis/IAaveOracle";
 import { borrowApr, monthlyCost, priceToUsd, summarize, type AccountData } from "@/lib/aave/math";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { statusFor } from "@/lib/risk/status";
+import { GUARDIAN } from "@/lib/guardian/config";
+
+/** Aave V3 getReserveData — only `currentLiquidityRate` (index 2, RAY) is used. */
+const v3ReserveAbi = [
+  {
+    type: "function",
+    name: "getReserveData",
+    stateMutability: "view",
+    inputs: [{ name: "asset", type: "address" }],
+    outputs: [
+      {
+        type: "tuple",
+        components: [
+          { name: "configuration", type: "uint256" },
+          { name: "liquidityIndex", type: "uint128" },
+          { name: "currentLiquidityRate", type: "uint128" },
+          { name: "variableBorrowIndex", type: "uint128" },
+          { name: "currentVariableBorrowRate", type: "uint128" },
+          { name: "currentStableBorrowRate", type: "uint128" },
+          { name: "lastUpdateTimestamp", type: "uint40" },
+          { name: "id", type: "uint16" },
+          { name: "aTokenAddress", type: "address" },
+          { name: "stableDebtTokenAddress", type: "address" },
+          { name: "variableDebtTokenAddress", type: "address" },
+          { name: "interestRateStrategyAddress", type: "address" },
+          { name: "accruedToTreasury", type: "uint128" },
+          { name: "unbacked", type: "uint128" },
+          { name: "isolationModeTotalDebt", type: "uint128" },
+        ],
+      },
+    ],
+  },
+] as const;
 
 const uiMultiplierAbi = [
   { type: "function", name: "uiMultiplier", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
@@ -59,6 +92,8 @@ export function usePosition(user: `0x${string}` | undefined) {
       { address: AAVE.HUB, abi: hubAbi, functionName: "getAssetLiquidity", args: [BigInt(USDC.reserveId)] },
       { address: USDC.address, abi: erc20Abi, functionName: "balanceOf", args: [who] },
       { address: AAVE.SPOKE, abi: spokeAbi, functionName: "getReserveConfig", args: [BigInt(USDC.reserveId)] },
+      { address: GUARDIAN.AUSDC, abi: erc20Abi, functionName: "balanceOf", args: [who] },
+      { address: GUARDIAN.AAVE_V3_POOL, abi: v3ReserveAbi, functionName: "getReserveData", args: [USDC.address] },
     ] as const;
   }, [user]);
 
@@ -98,8 +133,8 @@ export function usePosition(user: `0x${string}` | undefined) {
       };
     });
     const o = EQUITIES.length * PER;
-    const [account, debtRaw, riskPremium, drawnRate, liquidity, usdcBal, usdcCfg] = r.slice(o) as [
-      AccountData, bigint, bigint, bigint, bigint, bigint, { paused: boolean; frozen: boolean; borrowable: boolean },
+    const [account, debtRaw, riskPremium, drawnRate, liquidity, usdcBal, usdcCfg, savingsRaw, v3Reserve] = r.slice(o) as [
+      AccountData, bigint, bigint, bigint, bigint, bigint, { paused: boolean; frozen: boolean; borrowable: boolean }, bigint, { currentLiquidityRate: bigint },
     ];
     const s = summarize(account);
     const apr = borrowApr(drawnRate, riskPremium);
@@ -117,6 +152,11 @@ export function usePosition(user: `0x${string}` | undefined) {
       monthlyCostUsd: monthlyCost(debtUsd, apr),
       usdcBalance: Number(usdcBal) / 10 ** USDC.decimals,
       usdcBalanceRaw: usdcBal,
+      /** Guardian savings buffer: USDC supplied to Aave V3 (aBasUSDC). */
+      savingsUsd: Number(savingsRaw) / 10 ** USDC.decimals,
+      savingsRaw,
+      /** Aave V3 USDC supply APR (variable). */
+      savingsApr: Number(v3Reserve.currentLiquidityRate) / 1e27,
       debtRaw,
       usdcLiquidity: Number(liquidity) / 10 ** USDC.decimals,
       borrowPaused: usdcCfg.paused || usdcCfg.frozen || !usdcCfg.borrowable,

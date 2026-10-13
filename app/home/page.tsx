@@ -12,7 +12,9 @@ import { StockAvatar } from "@/components/gg/StockAvatar";
 import { ChevronRight, CreditIcon, InfoIcon, LockIcon, ReceiveIcon, RepayIcon, TradeIcon, UnlockIcon } from "@/components/gg/icons";
 import { MarketBanner } from "@/components/ui/MarketBanner";
 import { usePosition, type PositionData } from "@/hooks/usePosition";
-import { formatShares, formatUsd } from "@/lib/formatting";
+import { useGuardian, type GuardianStatus } from "@/hooks/useGuardian";
+import { ShieldIcon } from "@/components/gg/icons";
+import { formatShares, formatUsd, formatUsdShort } from "@/lib/formatting";
 
 export default function HomePage() {
   return <RequireAccount>{(address) => <Home address={address} />}</RequireAccount>;
@@ -21,6 +23,7 @@ export default function HomePage() {
 /** Design board "2 · Home · portfolio: Rail" (HomeUpliftRail.dc.html). */
 function Home({ address }: { address: `0x${string}` }) {
   const { data, isError, refetch } = usePosition(address);
+  const guardian = useGuardian(address).status;
   const [sheet, setSheet] = useState(false);
 
   return (
@@ -36,15 +39,15 @@ function Home({ address }: { address: `0x${string}` }) {
         </div>
       )}
 
-      {!data ? <Skeleton /> : <Loaded data={data} openCredit={() => setSheet(true)} />}
+      {!data ? <Skeleton /> : <Loaded data={data} guardian={guardian} openCredit={() => setSheet(true)} />}
 
       <TabBar />
-      {sheet && data && <CreditSheet data={data} onClose={() => setSheet(false)} />}
+      {sheet && data && <CreditSheet data={data} guardian={guardian} onClose={() => setSheet(false)} />}
     </div>
   );
 }
 
-function Loaded({ data, openCredit }: { data: PositionData; openCredit: () => void }) {
+function Loaded({ data, guardian, openCredit }: { data: PositionData; guardian: GuardianStatus; openCredit: () => void }) {
   const total = data.stocksUsd + data.usdcBalance;
   const held = data.holdings.filter((h) => h.freeShares + h.lockedShares > 0);
   const stocksUsd = data.stocksUsd;
@@ -63,7 +66,7 @@ function Loaded({ data, openCredit }: { data: PositionData; openCredit: () => vo
           <Divided className="pb-1"><span className="label whitespace-nowrap">Credit available</span></Divided>
           <Money value={total} size={46} dollarSize={22} centsSize={19} />
           <Divided className="self-stretch">
-            <span className="text-[30px] font-semibold leading-none tracking-[-0.03em]">{formatUsd(data.availableUsd).replace(/\.\d+$/, "")}</span>
+            <span className="text-[30px] font-semibold leading-none tracking-[-0.03em]">{formatUsdShort(data.availableUsd)}</span>
           </Divided>
           <div className="pt-[5px] text-[13px] text-muted">
             {data.debtUsd > 0 ? (
@@ -112,7 +115,14 @@ function Loaded({ data, openCredit }: { data: PositionData; openCredit: () => vo
           className="flex flex-col gap-2 rounded-[22px] bg-card px-4 py-3.5 text-left shadow-[0_1px_3px_rgba(14,13,11,0.06)]"
         >
           <div className="flex w-full items-center justify-between">
-            <span className="text-sm font-semibold">Credit</span>
+            <span className="flex items-center gap-1.5 text-sm font-semibold">
+              Credit
+              {guardian === "on" && (
+                <span title="Guardian is on" aria-label="Guardian is on" className="flex size-[18px] items-center justify-center rounded-full bg-accent text-ink">
+                  <ShieldIcon size={10} />
+                </span>
+              )}
+            </span>
             <StatusPill status={data.status} size="sm" />
           </div>
           <div className="flex items-baseline gap-1.5">

@@ -74,6 +74,9 @@ Buy them in-app with USDC (above), or bring your own: from another JAW app (the 
 | D5 | **Next.js (App Router), mobile-first web, installable to the home screen.** Primary target: iPhone Safari with passkeys. |
 | D6 | **Name parent comes from config** (`NEXT_PUBLIC_ENS_PARENT`), defaulting to `justan.id`. JAW supports a custom parent after dashboard setup, so switch it later. |
 | D7 | **Batch only what's honest.** Approve + supply can be one signature. Supply + borrow can be one signature only if the confirm screen lists both steps. Never batch in a way that hides an asset movement. |
+| D8 | **Guardian (feat/guardian, 2026-10-13): one minimal backend.** A keeper holds a spender key whose powers are limited on-chain (see D10). It holds no user funds or keys, and its only call is `JustaPermissionManager.executeBatch`. This replaces "no backend" for Guardian only. |
+| D9 | **Savings buffer in Aave V3 (un-parked for Guardian).** USDC supplied by the user to Aave V3 on Base. It's Guardian's only funding source. Show the variable rate; never call it "interest on cash" in marketing. |
+| D10 | **GuardianChecker contract (needs audit before mainnet).** A stateless, immutable `ICallChecker` that pins arguments: withdraw to the account, approve only the spoke, repay reserve 7 for the account. Combined with a daily USDC cap. Not deployed until an independent audit; the app and keeper stay disabled until `NEXT_PUBLIC_GUARDIAN_CHECKER` is set. See `docs/guardian.md`. |
 
 ---
 

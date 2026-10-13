@@ -5,10 +5,11 @@ import Link from "next/link";
 import { ChevronRight, ShieldIcon, SlidersIcon } from "./icons";
 import { StatusBar, StatusPill } from "./Status";
 import type { PositionData } from "@/hooks/usePosition";
+import type { GuardianStatus } from "@/hooks/useGuardian";
 import { formatUsd } from "@/lib/formatting";
 
 /** Design board "2c · Credit sheet" (HomeCreditSlide.dc.html). */
-export function CreditSheet({ data, onClose }: { data: PositionData; onClose: () => void }) {
+export function CreditSheet({ data, onClose, guardian }: { data: PositionData; onClose: () => void; guardian: GuardianStatus }) {
 
   const limit = data.debtUsd + data.availableUsd;
   const usedPct = limit > 0 ? Math.min(100, (data.debtUsd / limit) * 100) : 0;
@@ -51,15 +52,19 @@ export function CreditSheet({ data, onClose }: { data: PositionData; onClose: ()
               <span>Room {formatUsd(data.availableUsd)}</span>
             </div>
           </div>
-          <Link href="/credit" className="flex items-center justify-between py-3 text-[15px] no-underline">
+          <div className="flex items-center justify-between border-b border-hairline py-3 text-[15px]">
+            <span className="text-muted">Borrow rate</span>
+            <span className="font-semibold">{(data.apr * 100).toFixed(2)}% a year</span>
+          </div>
+          <Link href="/guardian" className="flex items-center justify-between py-3 text-[15px] no-underline">
             <span className="flex items-center gap-2 text-muted">
               <span aria-hidden className="flex size-[22px] items-center justify-center rounded-[11px] bg-accent text-ink">
                 <ShieldIcon />
               </span>
-              Borrow rate
+              Guardian
             </span>
             <span className="flex items-center gap-1 font-semibold">
-              {(data.apr * 100).toFixed(2)}% a year
+              {guardian === "on" ? "On" : guardian === "unconfigured" ? "Soon" : "Set up"}
               <ChevronRight className="text-subtle" />
             </span>
           </Link>
