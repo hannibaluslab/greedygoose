@@ -9,7 +9,10 @@
     "lint": "eslint",
     "test": "vitest run tests/unit",
     "typecheck": "tsc --noEmit",
-    "verify:registry": "vitest run tests/onchain"
+    "verify:registry": "vitest run tests/onchain",
+    "guardian:e2e": "tsx scripts/guardian-e2e.ts",
+    "guardian:keeper": "tsx keeper/run.ts",
+    "contracts:test": "cd contracts && forge test"
   },
   "dependencies": {
     "@jaw.id/core": "^1.6.2",
@@ -30,6 +33,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.4.0",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^5.0.3"
   }
