@@ -8,6 +8,7 @@ import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { SubHeader, WhiteCard } from "@/components/gg/Screen";
 import { AmountInput } from "@/components/gg/AmountInput";
 import { BottomBar } from "@/components/gg/BottomBar";
+import { LoanMeter } from "@/components/gg/LoanMeter";
 import { StatusPill } from "@/components/gg/Status";
 import { StockAvatar, tickerOf } from "@/components/gg/StockAvatar";
 import { LockIcon } from "@/components/gg/icons";
@@ -61,7 +62,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
   const [review, setReview] = useState(false);
   const [ack, setAck] = useState(false);
   const [sent, setSent] = useState<{ borrowed: number; locked: string[] } | null>(null);
-  const [showSmall, setShowSmall] = useState(false);
+  const [expandSmall, setExpandSmall] = useState(false);
 
   const lines: Line[] = useMemo(
     () =>
@@ -73,6 +74,9 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
     [data.holdings, cfs],
   );
 
+  // Only tuck small holdings away when there are bigger ones to show — never hide someone's only stocks.
+  const hasBig = lines.some((l) => l.holding.freeUsd >= SMALL_USD);
+  const showSmall = expandSmall || !hasBig;
   const locks = lines.map((l) => {
     const r = rawFor(l.holding, fractions[l.stock.symbol] ?? 0);
     return { ...l, raw: r, usd: usdFor(l.holding, r, l.stock.decimals) };
@@ -89,6 +93,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
   // Never let a borrow go right up to Aave's line: interest and prices move between reading and signing.
   const hardMax = Math.floor(calc.maxAave * 0.995 * 100) / 100;
   const safeMax = Math.floor(calc.maxSafe * 100) / 100;
+  const watchMax = Math.floor(calc.maxWatch * 100) / 100;
   const after = statusFor(data.debtUsd + amount > 0 ? calc.hfAfter : null);
   const lockingAny = locks.some((l) => l.raw > 0n);
   const overLimit = amount > hardMax;
@@ -108,7 +113,8 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
     // +0.3% so a price tick between reading and signing can't undercut Safe.
     setFractions(Object.fromEntries(lines.map((l) => [l.stock.symbol, Math.min(1, ((usd[l.stock.symbol] ?? 0) * 1.003) / l.holding.freeUsd)])));
   };
-  const needsFill = amount > 0 && amount > safeMax && lines.length > 0;
+  // Only offer auto-fill when there's still free stock to lock.
+  const needsFill = amount > 0 && amount > safeMax && locks.some((l) => l.raw < l.holding.freeRaw);
 
   if (tx.phase === "done" && sent) {
     return (
@@ -236,7 +242,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
                 );
               })}
               {!showSmall && locks.some((l) => l.holding.freeUsd < SMALL_USD && l.raw === 0n) && (
-                <button type="button" onClick={() => setShowSmall(true)} className="h-10 text-[13px] font-semibold text-muted">
+                <button type="button" onClick={() => setExpandSmall(true)} className="h-10 text-[13px] font-semibold text-muted">
                   Show {locks.filter((l) => l.holding.freeUsd < SMALL_USD && l.raw === 0n).length} small holdings (under {formatUsd(SMALL_USD)})
                 </button>
               )}
@@ -258,7 +264,10 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
               />
               <button
                 type="button"
-                onClick={() => setRaw(String(safeMax))}
+                onClick={() => {
+                  setRaw(String(hardMax));
+                  setAck(false);
+                }}
                 className="h-8 shrink-0 rounded-2xl bg-chip px-3 font-mono text-xs font-medium tracking-[0.06em]"
               >
                 MAX
@@ -267,8 +276,9 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
             <p className={`m-0 text-[13px] ${overLimit ? "text-act" : "text-muted"}`}>
               {overLimit
                 ? `Aave won’t lend that much against these stocks. Lock more, or borrow up to ${formatUsd(hardMax)}.`
-                : `Up to ${formatUsd(safeMax)} while staying Safe.`}
+                : `Up to ${formatUsd(hardMax)} (Aave’s limit). Stay under ${formatUsd(safeMax)} to be Safe.`}
             </p>
+            {hardMax > 0 && <LoanMeter amount={amount} safe={safeMax} watch={watchMax} limit={hardMax} />}
             {needsFill && (
               <button type="button" onClick={fill} className="h-11 rounded-[22px] bg-ink text-[14px] font-semibold text-on-ink">
                 Lock enough for {formatUsd(amount)} automatically

@@ -54,6 +54,7 @@ describe("combinedLoan", () => {
     expect(r.powerUsd).toBeCloseTo(506);
     expect(r.hfAfter).toBeCloseTo(506 / 300);
     expect(r.maxSafe).toBeCloseTo(506 / 1.5);
+    expect(r.maxWatch).toBeCloseTo(506 / 1.1);
     expect(r.maxAave).toBeCloseTo(506);
   });
 });

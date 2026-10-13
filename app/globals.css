@@ -61,9 +61,12 @@ body {
   color: var(--subtle);
 }
 
-:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
+/* In the base layer so component utilities (e.g. AmountInput's focus-visible:outline-none) can override it. */
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

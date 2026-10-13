@@ -80,6 +80,8 @@ export function combinedLoan(p: { collateralUsd: number; avgCf: number; debtUsd:
     hfAfter,
     /** Most you can borrow with these locks and still be Safe. */
     maxSafe: room(RISK.safeMin),
+    /** Most you can borrow before the loan reaches Act (the Watch line). */
+    maxWatch: room(RISK.watchMin),
     /** Aave's own limit with these locks (HF = 1). Never borrow right up to it. */
     maxAave: room(1),
   };
