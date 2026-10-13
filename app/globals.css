@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+/* GreedyGoose tokens — from the design canvas (CLAUDE.md › Design system). */
+:root {
+  --ink: #0e0d0b;
+  --ink-2: #2c2a25;
+  --muted: #5a564e;
+  --subtle: #8a8479;
+  --ground: #f4f2ec;
+  --card: #ffffff;
+  --on-ink: #f5f0e2;
+  --accent: #d4ff3c;
+  --safe: #1f6a4a;
+  --safe-bg: #d6e7dc;
+  --watch: #d9a441;
+  --watch-text: #8a6a1f;
+  --act: #8e2a1d;
+  --act-bg: #f3dcd7;
+  --hairline: rgba(14, 13, 11, 0.09);
+  --chip: rgba(15, 14, 11, 0.05);
+}
+
+@theme inline {
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-ground: var(--ground);
+  --color-card: var(--card);
+  --color-on-ink: var(--on-ink);
+  --color-accent: var(--accent);
+  --color-safe: var(--safe);
+  --color-safe-bg: var(--safe-bg);
+  --color-watch: var(--watch);
+  --color-watch-text: var(--watch-text);
+  --color-act: var(--act);
+  --color-act-bg: var(--act-bg);
+  --color-hairline: var(--hairline);
+  --color-chip: var(--chip);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-geist-sans), -apple-system, system-ui, sans-serif;
+  letter-spacing: -0.005em;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.label {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--subtle);
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* Motion — short, calm, and off for reduced-motion users (rule above). */
+@keyframes gg-fade-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes gg-sheet-up { from { transform: translateY(100%) } to { transform: translateY(0) } }
+.gg-backdrop { animation: gg-fade-in 180ms ease-out both; }
+.gg-sheet { animation: gg-sheet-up 260ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+/* Opacity only: a transform here would re-anchor the fixed tab bar / bottom bar mid-animation. */
+.gg-page { animation: gg-fade-in 200ms ease-out both; }
+
+/* Press feedback on every tappable thing. */
+button:not(:disabled), a[href] { -webkit-tap-highlight-color: transparent; transition: transform 120ms ease, opacity 120ms ease, background-color 160ms ease; }
+button:not(:disabled):active, a[href]:active { transform: scale(0.98); }
+
+/* Range sliders in the ink colour with a bigger thumb for thumbs. */
+input[type="range"] { accent-color: var(--ink); }
+input[type="range"]::-webkit-slider-thumb { width: 22px; height: 22px; }

@@ -1,0 +1,82 @@
+import { erc20Abi, isAddressEqual, parseEventLogs, type Log } from "viem";
+import { AAVE } from "@/lib/aave/addresses";
+import { spokeAbi } from "@/lib/aave/abis/ISpoke";
+import { ALL_RESERVES, EQUITIES, USDC, findByAddress } from "@/lib/tokens/registry";
+
+export type ActivityKind = "supply" | "withdraw" | "borrow" | "repay" | "buy" | "receive" | "send";
+
+export type ActivityItem = {
+  kind: ActivityKind;
+  /** Registry symbol, e.g. NVDAc or USDC. */
+  symbol: string;
+  /** Human amount in token units (raw / 10^decimals; shares use raw units). */
+  amount: number;
+  /** For buys: USDC paid. */
+  paidUsd?: number;
+};
+
+const byReserveId = (id: bigint) => ALL_RESERVES.find((r) => BigInt(r.reserveId) === id);
+const units = (raw: bigint, decimals: number) => Number(raw) / 10 ** decimals;
+
+/**
+ * Decode what happened to `user` in one transaction receipt. A bundle tx can carry other
+ * accounts' operations, so every event is filtered by the user's address.
+ */
+export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[] {
+  const items: ActivityItem[] = [];
+
+  const spokeLogs = parseEventLogs({
+    abi: spokeAbi,
+    logs: logs.filter((l) => isAddressEqual(l.address, AAVE.SPOKE)),
+    eventName: ["Supply", "Withdraw", "Borrow", "Repay"],
+    strict: false,
+  });
+  for (const ev of spokeLogs) {
+    const a = ev.args as { reserveId?: bigint; user?: `0x${string}`; suppliedAmount?: bigint; withdrawnAmount?: bigint; drawnAmount?: bigint; totalAmountRepaid?: bigint };
+    if (!a.user || !isAddressEqual(a.user, user) || a.reserveId === undefined) continue;
+    const r = byReserveId(a.reserveId);
+    if (!r) continue;
+    const raw = firstBigint(ev.args as Record<string, unknown>, ["suppliedAmount", "withdrawnAmount", "drawnAmount", "totalAmountRepaid", "amount"]);
+    const kind = ({ Supply: "supply", Withdraw: "withdraw", Borrow: "borrow", Repay: "repay" } as const)[ev.eventName as "Supply" | "Withdraw" | "Borrow" | "Repay"];
+    items.push({ kind, symbol: r.symbol, amount: units(raw, r.decimals) });
+  }
+
+  const tracked = [...EQUITIES.map((e) => e.address), USDC.address];
+  const transfers = parseEventLogs({
+    abi: erc20Abi,
+    logs: logs.filter((l) => tracked.some((a) => isAddressEqual(a, l.address))),
+    eventName: "Transfer",
+    strict: false,
+  });
+  const touchesAave = (addr?: `0x${string}`) => !!addr && (isAddressEqual(addr, AAVE.HUB) || isAddressEqual(addr, AAVE.SPOKE));
+  let usdcOut = 0n;
+  const stockIn: { symbol: string; raw: bigint; decimals: number }[] = [];
+  for (const t of transfers) {
+    const { from, to, value } = t.args as { from?: `0x${string}`; to?: `0x${string}`; value?: bigint };
+    if (value === undefined) continue;
+    const token = findByAddress(t.address);
+    if (!token) continue;
+    // Aave moves are already covered by Spoke events.
+    if (touchesAave(from) || touchesAave(to)) continue;
+    if (token.kind === "debt" && from && isAddressEqual(from, user)) usdcOut += value;
+    if (token.kind === "equity" && to && isAddressEqual(to, user)) stockIn.push({ symbol: token.symbol, raw: value, decimals: token.decimals });
+    if (token.kind === "equity" && from && isAddressEqual(from, user)) items.push({ kind: "send", symbol: token.symbol, amount: units(value, token.decimals) });
+    if (token.kind === "debt" && to && isAddressEqual(to, user)) items.push({ kind: "receive", symbol: token.symbol, amount: units(value, token.decimals) });
+  }
+  for (const s of stockIn) {
+    items.push(
+      usdcOut > 0n
+        ? { kind: "buy", symbol: s.symbol, amount: units(s.raw, s.decimals), paidUsd: units(usdcOut, USDC.decimals) }
+        : { kind: "receive", symbol: s.symbol, amount: units(s.raw, s.decimals) },
+    );
+  }
+  if (stockIn.length === 0 && usdcOut > 0n) items.push({ kind: "send", symbol: USDC.symbol, amount: units(usdcOut, USDC.decimals) });
+  return items;
+}
+
+function firstBigint(args: Record<string, unknown>, keys: string[]): bigint {
+  for (const k of keys) if (typeof args[k] === "bigint") return args[k] as bigint;
+  // Fall back to the last bigint arg (amount fields come last in these events).
+  const vals = Object.values(args).filter((v): v is bigint => typeof v === "bigint");
+  return vals.at(-1) ?? 0n;
+}
