@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { Header } from "@/components/gg/Header";
 import { TabBar } from "@/components/gg/TabBar";
 import { BalanceHero, TodayChange, TodayPending } from "@/components/gg/BalanceHero";
 import { QuickAction } from "@/components/gg/QuickAction";
 import { CashCard, CreditCard } from "@/components/gg/Cards";
+import { ArrivedCard, ConvertSheet, FinishSetupCard } from "@/components/gg/CashSetup";
 import { AddStockCard, HoldingCard } from "@/components/gg/Holding";
 import { CreditSheet } from "@/components/gg/CreditSheet";
 import { StockSheets, useStockSheets } from "@/components/gg/StockSheets";
@@ -16,9 +18,12 @@ import { TotalBalanceSheet, YieldSheet } from "@/components/gg/InfoSheets";
 import { Button } from "@/components/gg/Button";
 import { ChevronRight, CreditIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/icons";
 import { MarketBanner } from "@/components/ui/MarketBanner";
+import { useCashSetup } from "@/hooks/useCashSetup";
+import { useEntryBalances } from "@/hooks/useEntryBalances";
 import { useMarketPrices } from "@/hooks/useMarketPrices";
 import { usePosition, type PositionData } from "@/hooks/usePosition";
 import { aprToApy } from "@/lib/aave/math";
+import { arrivedCoins, arrivedView, finishSetupShown, rateText, type Arrived, type ArrivedView } from "@/lib/cashSetup";
 import { homeStatus } from "@/lib/risk/status";
 import { formatUsd, formatUsdTrim } from "@/lib/formatting";
 import { dayChange, weekValue } from "@/lib/prices/market";
@@ -34,6 +39,10 @@ type Sheet = "total" | "yield" | "credit";
  * Average yield (HomeYieldInfo) and Credit (HomeCreditSlide). Today's change, the line and each holding's day come
  * from market prices (plan item 8). The board's all-time return is left out: it needs what Sam paid, which only the
  * PnL engine will read from the chain (plan item 7). A holding card opens its stock's sheet.
+ *
+ * Earning and other dollars becoming cash run under the hood (D20): a small card asks to finish setting up while the
+ * account has no Save grant, and other dollars that nothing converts get "Turn into cash". Once they convert on their
+ * own, the Cash card only says they're arriving.
  */
 function Home({ address }: { address: `0x${string}` }) {
   const { data, isError, refetch } = usePosition(address);
@@ -41,6 +50,10 @@ function Home({ address }: { address: `0x${string}` }) {
   const stocks = useStockSheets();
   const close = () => setSheet(null);
   const apy = data ? aprToApy(data.savingsApr) : 0;
+  const setup = useCashSetup(address);
+  const arrived = arrivedView(arrivedCoins(useEntryBalances(address)), setup.entry);
+  // The coins a conversion was opened with, kept while its sheet is up.
+  const [converting, setConverting] = useState<{ coins: Arrived[]; open: boolean; key: number } | null>(null);
 
   return (
     <div className="relative min-h-dvh">
@@ -55,7 +68,29 @@ function Home({ address }: { address: `0x${string}` }) {
         </div>
       )}
 
-      {!data ? <Skeleton /> : <Loaded data={data} apy={apy} open={setSheet} openStock={stocks.openStock} />}
+      {!data ? (
+        <Skeleton />
+      ) : (
+        <Loaded
+          data={data}
+          apy={apy}
+          open={setSheet}
+          openStock={stocks.openStock}
+          arrived={arrived}
+          cards={
+            <>
+              {arrived.kind === "ask" && <ArrivedCard text={arrived.text} onConvert={() => setConverting({ coins: arrived.coins, open: true, key: Date.now() })} />}
+              {finishSetupShown(setup.save) && (
+                <FinishSetupCard
+                  rate={rateText(apy)}
+                  grant={{ busy: setup.running, error: setup.error, blocked: setup.blocked, preview: setup.preview }}
+                  onStart={() => setup.startEarning(() => toast.success(`Your cash is earning ${rateText(apy)}`))}
+                />
+              )}
+            </>
+          }
+        />
+      )}
 
       <TabBar />
       {data && (
@@ -66,13 +101,31 @@ function Home({ address }: { address: `0x${string}` }) {
           <StockSheets sheets={stocks} user={address} data={data} />
         </>
       )}
+      {converting && (
+        <ConvertSheet
+          key={converting.key}
+          open={converting.open}
+          onClose={() => setConverting({ ...converting, open: false })}
+          user={address}
+          coins={converting.coins}
+          setup={setup}
+        />
+      )}
     </div>
   );
 }
 
 function Loaded({
-  data, apy, open, openStock,
-}: { data: PositionData; apy: number; open: (sheet: Sheet) => void; openStock: (symbol: string) => void }) {
+  data, apy, open, openStock, arrived, cards,
+}: {
+  data: PositionData;
+  apy: number;
+  open: (sheet: Sheet) => void;
+  openStock: (symbol: string) => void;
+  arrived: ArrivedView;
+  /** What needs the user about their cash: other dollars to turn into cash, setting up to finish. */
+  cards: ReactNode;
+}) {
   const held = data.holdings.filter((h) => h.freeShares + h.lockedShares > 0);
   const market = useMarketPrices(held);
   const priced = held.map((h) => ({ valueUsd: h.freeUsd + h.lockedUsd, ...market.bySymbol[h.symbol] }));
@@ -105,8 +158,10 @@ function Loaded({
         <QuickAction href="/repay" label="Repay" icon={<RepayIcon />} />
       </section>
 
+      <section className="flex flex-col gap-2.5 px-5 pt-[18px] empty:hidden">{cards}</section>
+
       <section className="grid grid-cols-2 gap-2.5 px-5 pt-[18px]">
-        <CashCard cashUsd={data.cashUsd} apy={apy} href="/receive" />
+        <CashCard cashUsd={data.cashUsd} apy={apy} note={arrived.kind === "arriving" ? `${arrived.text} arriving` : undefined} href="/receive" />
         <CreditCard
           debtUsd={data.debtUsd}
           status={homeStatus(data.status)}

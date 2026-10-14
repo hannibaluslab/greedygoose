@@ -8,24 +8,29 @@ import { ATTESTATION_TEXT, ELIGIBILITY_MODE, hasAttested, recordAttestation } fr
 
 const noopSubscribe = () => () => {};
 
-/** Design board "1 · Welcome" (Main.dc.html). Headline corrected: stocks are collateral-only, they don't earn yield. */
+/**
+ * Design board "1 · Welcome" (Main.dc.html). Headline corrected: stocks are collateral-only, they don't earn yield. A
+ * new account goes on to the sign-up's last step, "Finish setting up" (/setup, D20); signing in goes Home.
+ */
 export default function Welcome() {
   const router = useRouter();
   const { status } = useAccount();
   const { connect, connectors, isPending, error, reset } = useConnect();
   const stored = useSyncExternalStore(noopSubscribe, hasAttested, () => false);
   const [ticked, setTicked] = useState(false);
+  const [creating, setCreating] = useState(false);
   const attested = stored || ticked;
   const needsAttest = ELIGIBILITY_MODE !== "off";
 
   useEffect(() => {
-    if (status === "connected") router.replace("/home");
-  }, [status, router]);
+    if (status === "connected") router.replace(creating ? "/setup" : "/home");
+  }, [status, creating, router]);
 
-  const start = () => {
+  const start = (create: boolean) => {
     if (needsAttest && !attested) return;
     recordAttestation();
     reset();
+    setCreating(create);
     const jaw = connectors.find((c) => c.type === "jaw");
     if (jaw) connect({ connector: jaw });
   };
@@ -63,7 +68,7 @@ export default function Welcome() {
         )}
         <button
           type="button"
-          onClick={start}
+          onClick={() => start(true)}
           disabled={blocked}
           className="flex h-14 items-center justify-center gap-2.5 rounded-[28px] bg-ink text-base font-semibold text-on-ink disabled:opacity-45"
         >
@@ -72,7 +77,7 @@ export default function Welcome() {
         </button>
         <button
           type="button"
-          onClick={start}
+          onClick={() => start(false)}
           disabled={blocked}
           className="h-14 rounded-[28px] border border-[rgba(14,13,11,0.18)] bg-transparent text-base font-semibold text-ink disabled:opacity-45"
         >
