@@ -61,7 +61,7 @@ describe("describeAgentEvent: the Agents board's rows", () => {
     expect(row(sale).line).toBe("Sold 0.47 shares of Tesla to repay. Back to Safe.");
   });
 
-  it("says a repay from savings comes from your cash, rounding what's owed up to the cent", () => {
+  it("says a repay from savings used your cash, rounding what's owed up to the cent", () => {
     const r = row(
       { kind: "repaid", amountRaw: usdc(120), hfBefore: hf(1.3), hfAfter: hf(1.65), reason: "watch" },
       { owedRaw: [780_000_001n, 660_000_001n], used: { spentRaw: usdc(120), capRaw: usdc(300), decimals: 6 } },
@@ -71,7 +71,7 @@ describe("describeAgentEvent: the Agents board's rows", () => {
       Why: "Your credit reached Watch.",
       "You owe": "$780.01 → $660.01",
       Status: "Watch → Safe",
-      "From your cash": "$120",
+      "Your cash": "$120 used",
       "Used today": "$120 of $300",
     });
     const weekend = row({ kind: "repaid", amountRaw: usdc(16.58), hfBefore: hf(1.8), hfAfter: maxUint256, reason: "weekend" });
