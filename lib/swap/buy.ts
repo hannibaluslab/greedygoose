@@ -18,8 +18,17 @@ export const BUY_LIMITS = {
   deadlineSec: 600,
 } as const;
 
-/** `pool` is the Uniswap fee tier or the Aerodrome tick spacing. */
+/**
+ * `pool` is the Uniswap fee tier or the Aerodrome tick spacing. A buy spends USDC for shares; a sell
+ * (lib/swap/sell.ts) spends shares for USDC, so its amountIn is shares and its amountOut USDC.
+ */
 export type BuyQuote = { venue: Venue; pool: number; amountIn: bigint; amountOut: bigint };
+
+/** Which way a swap goes: USDC → stock, or stock → USDC. */
+export type Side = "buy" | "sell";
+
+const pair = (stock: ReserveAsset, side: Side) =>
+  side === "buy" ? { tokenIn: USDC.address, tokenOut: stock.address } : { tokenIn: stock.address, tokenOut: USDC.address };
 
 /** Effective $/share paid, and its premium over Aave's oracle price. */
 export function quoteEconomics(q: BuyQuote, stock: Pick<ReserveAsset, "decimals">, oraclePriceUsd: number) {
@@ -38,33 +47,45 @@ export const bestQuote = (quotes: BuyQuote[]): BuyQuote | null =>
 
 type Client = PublicClient<Transport, typeof CHAIN>;
 
-/** Quote `amountIn` USDC → `stock` on one pool (Aerodrome tick spacing or Uniswap fee tier). Throws when the pool can't fill it. */
-export async function quotePool(client: Client, stock: ReserveAsset, venue: Venue, pool: number, amountIn: bigint): Promise<BuyQuote> {
+/**
+ * Quote `amountIn` on one pool (Aerodrome tick spacing or Uniswap fee tier): USDC → `stock` for a buy,
+ * `stock` → USDC for a sell. Throws when the pool can't fill it.
+ */
+export async function quotePool(
+  client: Client,
+  stock: ReserveAsset,
+  venue: Venue,
+  pool: number,
+  amountIn: bigint,
+  side: Side = "buy",
+): Promise<BuyQuote> {
   const { result } =
     venue === "aerodrome"
       ? await client.simulateContract({
           address: AERODROME.QUOTER,
           abi: aeroQuoterAbi,
           functionName: "quoteExactInputSingle",
-          args: [{ tokenIn: USDC.address, tokenOut: stock.address, amountIn, tickSpacing: pool, sqrtPriceLimitX96: 0n }],
+          args: [{ ...pair(stock, side), amountIn, tickSpacing: pool, sqrtPriceLimitX96: 0n }],
         })
       : await client.simulateContract({
           address: UNISWAP.QUOTER_V2,
           abi: quoterV2Abi,
           functionName: "quoteExactInputSingle",
-          args: [{ tokenIn: USDC.address, tokenOut: stock.address, amountIn, fee: pool, sqrtPriceLimitX96: 0n }],
+          args: [{ ...pair(stock, side), amountIn, fee: pool, sqrtPriceLimitX96: 0n }],
         });
   return { venue, pool, amountIn, amountOut: result[0] };
 }
 
-/** Best quote across Aerodrome tick spacings and Uniswap v3 fee tiers. `null` = no pool can fill it. */
-export async function quoteBuy(client: Client, stock: ReserveAsset, amountIn: bigint): Promise<BuyQuote | null> {
+/** Best quote across Aerodrome tick spacings and Uniswap v3 fee tiers, either way. `null` = no pool can fill it. */
+export async function quoteSwap(client: Client, stock: ReserveAsset, amountIn: bigint, side: Side): Promise<BuyQuote | null> {
   const settled = await Promise.allSettled([
-    ...AERODROME.TICK_SPACINGS.map((pool) => quotePool(client, stock, "aerodrome", pool, amountIn)),
-    ...UNISWAP.FEE_TIERS.map((pool) => quotePool(client, stock, "uniswap", pool, amountIn)),
+    ...AERODROME.TICK_SPACINGS.map((pool) => quotePool(client, stock, "aerodrome", pool, amountIn, side)),
+    ...UNISWAP.FEE_TIERS.map((pool) => quotePool(client, stock, "uniswap", pool, amountIn, side)),
   ]);
   return bestQuote(settled.flatMap((r) => (r.status === "fulfilled" ? [r.value] : [])));
 }
+
+export const quoteBuy = (client: Client, stock: ReserveAsset, amountIn: bigint) => quoteSwap(client, stock, amountIn, "buy");
 
 /** Shown when the quote read again just before Face ID gives less than the review's "at least". */
 export const QUOTE_MOVED = "The price moved since you checked. Look at the new amount, then try again.";
@@ -85,19 +106,27 @@ export type Call = { to: `0x${string}`; data: Hex; value: bigint };
 
 /**
  * Exact-amount approve to the chosen router + exactInputSingle, recipient = the user, with the
- * deadline on both venues (Uniswap's through multicall). Targets come only from the registry;
- * anything else throws before the wallet sees it.
+ * deadline on both venues (Uniswap's through multicall). A buy approves USDC and receives `stock`; a
+ * sell approves `stock` and receives USDC. Targets come only from the registry; anything else throws
+ * before the wallet sees it.
  */
-export function buildBuyCalls(p: { user: `0x${string}`; stock: ReserveAsset; quote: BuyQuote; nowSec?: number }): Call[] {
-  const { user, stock, quote } = p;
+export function buildSwapCalls(p: {
+  user: `0x${string}`;
+  stock: ReserveAsset;
+  quote: BuyQuote;
+  side: Side;
+  amountOutMinimum: bigint;
+  nowSec?: number;
+}): Call[] {
+  const { user, stock, quote, amountOutMinimum } = p;
   if (stock.kind !== "equity") throw new Error("Not a supported stock");
+  const { tokenIn, tokenOut } = pair(stock, p.side);
   const router = quote.venue === "aerodrome" ? AERODROME.ROUTER : UNISWAP.SWAP_ROUTER_02;
   const approve: Call = {
-    to: USDC.address,
+    to: tokenIn,
     data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [router, quote.amountIn] }),
     value: 0n,
   };
-  const amountOutMinimum = minOut(quote.amountOut);
   const deadline = BigInt((p.nowSec ?? Math.floor(Date.now() / 1000)) + BUY_LIMITS.deadlineSec);
   const data =
     quote.venue === "aerodrome"
@@ -106,8 +135,8 @@ export function buildBuyCalls(p: { user: `0x${string}`; stock: ReserveAsset; quo
           functionName: "exactInputSingle",
           args: [
             {
-              tokenIn: USDC.address,
-              tokenOut: stock.address,
+              tokenIn,
+              tokenOut,
               tickSpacing: quote.pool,
               recipient: user,
               deadline,
@@ -128,8 +157,8 @@ export function buildBuyCalls(p: { user: `0x${string}`; stock: ReserveAsset; quo
                 functionName: "exactInputSingle",
                 args: [
                   {
-                    tokenIn: USDC.address,
-                    tokenOut: stock.address,
+                    tokenIn,
+                    tokenOut,
                     fee: quote.pool,
                     recipient: user,
                     amountIn: quote.amountIn,
@@ -143,3 +172,7 @@ export function buildBuyCalls(p: { user: `0x${string}`; stock: ReserveAsset; quo
         });
   return assertAllowed(user, [approve, { to: router, data, value: 0n }]);
 }
+
+/** Buy `stock` with USDC: at least the quote less BUY_LIMITS' slippage. */
+export const buildBuyCalls = (p: { user: `0x${string}`; stock: ReserveAsset; quote: BuyQuote; nowSec?: number }): Call[] =>
+  buildSwapCalls({ ...p, side: "buy", amountOutMinimum: minOut(p.quote.amountOut) });

@@ -6,7 +6,7 @@ import { usePublicClient } from "wagmi";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { TxStop } from "./useTx";
 import { CHAIN_ID } from "@/lib/chain";
-import { QUOTE_MOVED, quoteBuy, quotePool, signingQuote, type BuyQuote } from "@/lib/swap/buy";
+import { QUOTE_MOVED, quoteBuy, quotePool, signingQuote, type BuyQuote, type Side } from "@/lib/swap/buy";
 import { USDC, type ReserveAsset } from "@/lib/tokens/registry";
 
 export function useDebounced<T>(value: T, ms = 350) {
@@ -31,18 +31,18 @@ export function useBuyQuote(stock: ReserveAsset | undefined, amountUsd: number) 
 }
 
 /**
- * The quote to sign with, read again right before Face ID (plan item 3): useBuyQuote only refreshes
- * every 15 s. When the price fell under the review's floor, it refreshes the screen's quote and stops
- * the batch with QUOTE_MOVED, so the review shows the new amount.
+ * The quote to sign with, read again right before Face ID (plan item 3): useBuyQuote and useSellQuote
+ * only refresh every 15 s. When the price fell under the review's floor, it refreshes the screen's
+ * quote and stops the batch with QUOTE_MOVED, so the review shows the new amount.
  */
 export function useSigningQuote() {
   const client = usePublicClient({ chainId: CHAIN_ID });
   const queryClient = useQueryClient();
-  return async (stock: ReserveAsset, shown: BuyQuote): Promise<BuyQuote> => {
-    const fresh = await quotePool(client!, stock, shown.venue, shown.pool, shown.amountIn).catch(() => null);
+  return async (stock: ReserveAsset, shown: BuyQuote, side: Side = "buy"): Promise<BuyQuote> => {
+    const fresh = await quotePool(client!, stock, shown.venue, shown.pool, shown.amountIn, side).catch(() => null);
     const quote = fresh && signingQuote(shown, fresh);
     if (quote) return quote;
-    void queryClient.invalidateQueries({ queryKey: ["buyQuote", stock.address] });
+    void queryClient.invalidateQueries({ queryKey: [side === "buy" ? "buyQuote" : "sellQuote", stock.address] });
     throw new TxStop(QUOTE_MOVED);
   };
 }
