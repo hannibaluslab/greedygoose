@@ -178,6 +178,65 @@ export const gooseExecutorAbi = [
                 "internalType": "uint64"
               }
             ]
+          },
+          {
+            "name": "rebalanceLimits",
+            "type": "tuple",
+            "internalType": "struct RebalanceLimits",
+            "components": [
+              {
+                "name": "bandBps",
+                "type": "uint16",
+                "internalType": "uint16"
+              },
+              {
+                "name": "bandMaxBps",
+                "type": "uint16",
+                "internalType": "uint16"
+              },
+              {
+                "name": "poolGapBps",
+                "type": "uint16",
+                "internalType": "uint16"
+              },
+              {
+                "name": "floorBps",
+                "type": "uint16",
+                "internalType": "uint16"
+              },
+              {
+                "name": "minTrade",
+                "type": "uint64",
+                "internalType": "uint64"
+              },
+              {
+                "name": "maxSlice",
+                "type": "uint64",
+                "internalType": "uint64"
+              }
+            ]
+          },
+          {
+            "name": "entryLimits",
+            "type": "tuple",
+            "internalType": "struct EntryLimits",
+            "components": [
+              {
+                "name": "floorBps",
+                "type": "uint16",
+                "internalType": "uint16"
+              },
+              {
+                "name": "minEntry",
+                "type": "uint64",
+                "internalType": "uint64"
+              },
+              {
+                "name": "maxSwap",
+                "type": "uint64",
+                "internalType": "uint64"
+              }
+            ]
           }
         ]
       }
@@ -403,6 +462,11 @@ export const gooseExecutorAbi = [
         "name": "keepMix",
         "type": "bool",
         "internalType": "bool"
+      },
+      {
+        "name": "rebalanceDay",
+        "type": "uint32",
+        "internalType": "uint32"
       }
     ],
     "stateMutability": "view"
@@ -644,6 +708,48 @@ export const gooseExecutorAbi = [
   },
   {
     "type": "function",
+    "name": "entryLimits",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "floorBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "minEntry",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "maxSwap",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "entryWaits",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "frozen",
     "inputs": [
       {
@@ -800,6 +906,25 @@ export const gooseExecutorAbi = [
         "name": "",
         "type": "address",
         "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "mixes",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -1112,6 +1237,44 @@ export const gooseExecutorAbi = [
   },
   {
     "type": "function",
+    "name": "rebalanceLimits",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "bandBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "bandMaxBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "poolGapBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "floorBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "minTrade",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "maxSlice",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "register",
     "inputs": [
       {
@@ -1258,6 +1421,19 @@ export const gooseExecutorAbi = [
   },
   {
     "type": "function",
+    "name": "setMix",
+    "inputs": [
+      {
+        "name": "weights",
+        "type": "uint16[7]",
+        "internalType": "uint16[7]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "stocks",
     "inputs": [],
     "outputs": [
@@ -1388,6 +1564,68 @@ export const gooseExecutorAbi = [
   },
   {
     "type": "event",
+    "name": "EntryConverted",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "coin",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amountIn",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "usdcOut",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "EntryWaiting",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "coin",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amountIn",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "retryAt",
+        "type": "uint32",
+        "indexed": false,
+        "internalType": "uint32"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "ForwarderSet",
     "inputs": [
       {
@@ -1507,6 +1745,25 @@ export const gooseExecutorAbi = [
   },
   {
     "type": "event",
+    "name": "MixSet",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "weights",
+        "type": "uint16[7]",
+        "indexed": false,
+        "internalType": "uint16[7]"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "OwnerSet",
     "inputs": [
       {
@@ -1620,6 +1877,44 @@ export const gooseExecutorAbi = [
         "type": "bool",
         "indexed": false,
         "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RebalanceSkipped",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "Rebalanced",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "sold",
+        "type": "uint256[7]",
+        "indexed": false,
+        "internalType": "uint256[7]"
+      },
+      {
+        "name": "bought",
+        "type": "uint256[7]",
+        "indexed": false,
+        "internalType": "uint256[7]"
       }
     ],
     "anonymous": false
@@ -1748,12 +2043,22 @@ export const gooseExecutorAbi = [
   },
   {
     "type": "error",
+    "name": "BadMix",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "BadTerms",
     "inputs": []
   },
   {
     "type": "error",
     "name": "BadWindow",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "BelowFloor",
     "inputs": []
   },
   {
