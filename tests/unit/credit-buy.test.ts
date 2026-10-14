@@ -8,7 +8,7 @@ import { FILL_MARGIN, fillRaw } from "@/lib/aave/loan";
 import { buildBorrowCalls } from "@/lib/aave/tx";
 import { payFromCash } from "@/lib/cash";
 import {
-  CREDIT_BLOCKED, assertCreditBuy, backingOptions, buildCreditBuyCalls, creditBuyActivity, creditBuyStop, planCredit, splitCash,
+  CREDIT_BLOCKED, assertCreditBuy, backers, backingOptions, buildCreditBuyCalls, creditBuyActivity, creditBuyStop, planCredit, shortNames, splitCash,
   type BackingOption, type CreditPosition,
 } from "@/lib/creditBuy";
 import { aaveV3PoolAbi } from "@/lib/guardian/abis";
@@ -228,6 +228,24 @@ describe("backingOptions", () => {
     const cfs = { AAPLc: 0.78, NVDAc: 0.7, MSFTc: 0.78, METAc: 0 };
     const opts = backingOptions([h("AAPLc"), h("NVDAc", { paused: true }), h("MSFTc", { freeUsd: 0.001 }), h("METAc"), h("TSLAc"), h("AMZNc", { frozen: true })], cfs);
     expect(opts.map((o) => [o.stock.symbol, o.cf])).toEqual([["AAPLc", 0.78]]);
+  });
+});
+
+describe("what backs it, by name (the sheet's \"Against\" and \"Backed by\")", () => {
+  const h = (symbol: string, name: string, lockedRaw = 0n) => ({ symbol, name, lockedRaw });
+  const holdings = [h("AMZNc", "Amazon", 5n), h("METAc", "Meta"), h("NVDAc", "NVIDIA", 2n), h("TSLAc", "Tesla")];
+  const names = (adding: string[], lead?: string, list = holdings) => backers(list, adding, lead).map((b) => b.name);
+  it("lists what goes in use, then what's in use already, once each, with the picked holding first", () => {
+    expect(names(["METAc"], "METAc")).toEqual(["Meta", "Amazon", "NVIDIA"]);
+    expect(names(["NVDAc"], "NVDAc")).toEqual(["NVIDIA", "Amazon"]);
+    expect(names([], "NVDAc")).toEqual(["NVIDIA", "Amazon"]);
+    expect(names([], "METAc")).toEqual(["Amazon", "NVIDIA"]);
+    expect(names(["TSLAc"], undefined, [h("TSLAc", "Tesla")])).toEqual(["Tesla"]);
+  });
+  it("shortNames keeps the line short", () => {
+    expect(shortNames(["NVIDIA"])).toBe("NVIDIA");
+    expect(shortNames(["NVIDIA", "Tesla"])).toBe("NVIDIA and Tesla");
+    expect(shortNames(["Meta", "Amazon", "NVIDIA"])).toBe("Meta and 2 more");
   });
 });
 

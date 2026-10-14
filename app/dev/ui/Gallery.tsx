@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { AmountBadge, AmountField, AmountSource } from "@/components/gg/AmountField";
+import { AmountArrow, AmountBadge, AmountField, AmountSource, YouGet } from "@/components/gg/AmountField";
 import { BalanceHero, TodayChange } from "@/components/gg/BalanceHero";
 import { Button } from "@/components/gg/Button";
 import { CashCard, CreditCard } from "@/components/gg/Cards";
@@ -21,7 +21,7 @@ import { homeStatus, type Status } from "@/lib/risk/status";
 import { boughtLine } from "@/lib/activity/bought";
 import { formatUsd, formatUsdTrim } from "@/lib/formatting";
 
-// Sample figures for the gallery only, the boards' own (HomeUpliftRail, PortfolioPage, F1-4, F2-6).
+// Sample figures for the gallery only, the boards' own (HomeUpliftRail, PortfolioPage, F1-4, F2-5, F2-6, F2-7).
 // Nothing here reads the chain.
 const CASH = 400;
 const CASH_APY = 0.042;
@@ -206,6 +206,13 @@ export function Gallery() {
           onMax={() => setCredit("1000")}
           hint="Up to $1,000 against your NVIDIA"
         />
+      </Section>
+
+      <Section title="You get" kit="you-get">
+        <div className="flex flex-col pt-2.5">
+          <AmountArrow />
+          <YouGet symbol="AAPL" shares={1.35} priceUsd={222.22} />
+        </div>
       </Section>
 
       <Section title="Summary rows" kit="summary">

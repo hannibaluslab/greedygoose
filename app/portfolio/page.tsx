@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { TabBar } from "@/components/gg/TabBar";
@@ -7,6 +8,7 @@ import { TabHeader } from "@/components/gg/Screen";
 import { BalanceHero } from "@/components/gg/BalanceHero";
 import { Button } from "@/components/gg/Button";
 import { BuySheet } from "@/components/gg/BuySheet";
+import { CreditBuySheet } from "@/components/gg/CreditBuySheet";
 import { HoldingList, HoldingRow } from "@/components/gg/Holding";
 import { CreditIcon, TradeIcon } from "@/components/gg/icons";
 import { usePosition, type PositionData } from "@/hooks/usePosition";
@@ -20,7 +22,8 @@ export default function PortfolioPage() {
 
 /**
  * Design board "10 · Portfolio (Invest tab)" (PortfolioPage.dc.html). Market opens Flow 1's sheet
- * (F1-3 → F1-4 → confirm); /buy lands here with ?market, or ?s=SYMBOL for one stock's Buy step.
+ * (F1-3 → F1-4 → confirm); /buy lands here with ?market, or ?s=SYMBOL for one stock's Buy step. Credit Buy
+ * opens Flow 2's sheet (F2-2 → F2-3 … F2-6).
  * Not drawn yet: today's change and the value line (price history, plan item 8) and "Your mix" (the
  * Rebalancer, item 9) have no data source.
  */
@@ -31,6 +34,7 @@ function Portfolio({ address }: { address: `0x${string}` }) {
     params.has("s") ? { symbol: params.get("s") } : params.has("market") ? { symbol: null } : null,
   );
   const openMarket = () => market.show({ symbol: null });
+  const [creditBuy, setCreditBuy] = useState(false);
 
   return (
     <div className="relative min-h-dvh">
@@ -47,18 +51,19 @@ function Portfolio({ address }: { address: `0x${string}` }) {
         ) : !data ? (
           <div aria-busy className="h-[300px] animate-pulse rounded-[22px] bg-chip" />
         ) : (
-          <Loaded data={data} openMarket={openMarket} />
+          <Loaded data={data} openMarket={openMarket} openCreditBuy={() => setCreditBuy(true)} />
         )}
       </div>
       <TabBar />
       {data && market.subject && (
         <BuySheet key={market.key} open={market.open} user={address} data={data} symbol={market.subject.symbol} onClose={market.close} />
       )}
+      {data && <CreditBuySheet open={creditBuy} user={address} data={data} onClose={() => setCreditBuy(false)} />}
     </div>
   );
 }
 
-function Loaded({ data, openMarket }: { data: PositionData; openMarket: () => void }) {
+function Loaded({ data, openMarket, openCreditBuy }: { data: PositionData; openMarket: () => void; openCreditBuy: () => void }) {
   const held = data.holdings.filter((h) => h.freeShares + h.lockedShares > 0);
   return (
     <>
@@ -75,7 +80,7 @@ function Loaded({ data, openMarket }: { data: PositionData; openMarket: () => vo
 
       <div className="grid grid-cols-2 gap-2.5">
         <Button variant="white" icon={<TradeIcon size={18} strokeWidth={1.8} />} onClick={openMarket}>Market</Button>
-        <Button href="/use-credit" icon={<CreditIcon size={18} strokeWidth={1.8} />}>Credit Buy</Button>
+        <Button icon={<CreditIcon size={18} strokeWidth={1.8} />} onClick={openCreditBuy}>Credit Buy</Button>
       </div>
 
       <HoldingList title="Your holdings">
