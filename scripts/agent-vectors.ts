@@ -9,12 +9,23 @@
  */
 import { writeFileSync } from "node:fs";
 import { encodeAbiParameters, hashTypedData, keccak256, parseUnits, toHex, type Address } from "viem";
-import { CASH, CASH_AGENT, PROTECT_SELL } from "@/config/risk";
+import { CASH, CASH_AGENT, ENTRY, PROTECT_SELL, REBALANCER } from "@/config/risk";
 import { GUARDIAN } from "@/lib/guardian/config";
+import { planEntry, type EntryCoin } from "@/lib/guardian/entry";
 import { inWeekendWindow, planGuardian, planSave } from "@/lib/guardian/plan";
+import { planRebalance, rebalanceTrades, type RebalanceHolding } from "@/lib/guardian/rebalance";
 import { planSell, sellAmounts, sellTiming, type SellBook } from "@/lib/guardian/sell";
 import { marketState } from "@/lib/market-hours";
-import { agentPermission, JOBS, sellPermission, STOCK_LIMIT_UNIT, type StockLimits } from "@/lib/agents/permissions";
+import {
+  agentPermission,
+  entryPermission,
+  JOBS,
+  rebalancePermission,
+  sellPermission,
+  STOCK_LIMIT_UNIT,
+  type StockLimits,
+} from "@/lib/agents/permissions";
+import { ENTRY_COINS } from "@/lib/tokens/stables";
 
 const WAD = 10n ** 18n;
 const RAY = 10n ** 27n;
@@ -42,6 +53,8 @@ export const CALENDAR_COUNT = 10_000;
 export const HASH_COUNT = 50;
 export const SELL_COUNT = 600;
 export const TIMING_COUNT = 1000;
+export const REBALANCE_COUNT = 800;
+export const ENTRY_COUNT = 1000;
 /** Where Vectors.sol's hash test puts the executor, so both sides know the spender. */
 export const HASH_SPENDER: Address = "0x0000000000000000000000000000000000600dE5";
 
@@ -148,6 +161,72 @@ export function timingInput(i: number) {
   };
 }
 
+/** Rebalancer inputs: a mix of one to seven stocks worth $1k to $900k drifted from its targets by up to 60%, free stock
+ *  outside the mix a quarter of the time, weekly limits that bind a quarter of the time, a USDC limit that binds a
+ *  fifth of the time, and a pool out of line a tenth of the time. Mirrors Vectors.rebalanceInput. */
+export function rebalanceInput(i: number) {
+  const r = (f: number) => rand("rebalance", i, f);
+  const first = Number(r(0) % 7n);
+  const raw = Array.from({ length: 7 }, (_, k) => (k === first || r(1 + k) % 3n !== 0n ? 1n + (r(10 + k) % 1000n) : 0n));
+  const sum = raw.reduce((a, b) => a + b, 0n);
+  const weights = raw.map((w) => (w * 10_000n) / sum);
+  weights[first] += 10_000n - weights.reduce((a, b) => a + b, 0n);
+  const total = spread(r(20), r(21), 9n, 11n);
+  const drift = between(r(19), 500n, 6_000n);
+  const stocks: RebalanceHolding[] = Array.from({ length: 7 }, (_, k) => {
+    const f = (j: number) => r(30 + 10 * k + j);
+    const price = between(f(0), 10n ** 9n, 10n ** 11n);
+    const valueRaw =
+      weights[k] > 0n
+        ? (((total * weights[k]) / 10_000n) * between(f(1), 10_000n - drift, 10_000n + drift)) / 10_000n
+        : f(2) % 4n === 0n
+          ? spread(f(3), f(4), 6n, 10n)
+          : 0n;
+    const kind = f(5) % 4n;
+    return {
+      sharesRaw: (valueRaw * 10n ** 10n) / price,
+      price,
+      weightBps: weights[k],
+      sellLeftRaw: kind === 0n ? 0n : kind === 1n ? spread(f(6), f(7), 4n, 9n) : 10n ** 18n,
+    };
+  });
+  return {
+    book: {
+      stocks,
+      usdcLeftRaw: r(22) % 5n === 0n ? spread(r(23), r(24), 6n, 9n) : 10n ** 15n,
+      tradable: Array.from({ length: 7 }, (_, k) => r(100 + k) % 10n !== 0n),
+    },
+    bandBps: between(r(25), 500n, 5_000n),
+    bandMaxBps: between(r(26), 100n, 2_000n),
+    floorBps: between(r(27), 10n, 300n),
+    minTradeRaw: between(r(28), 10n ** 6n, 100n * 10n ** 6n),
+    maxSliceRaw: between(r(29), 100n * 10n ** 6n, 50_000n * 10n ** 6n),
+  };
+}
+
+/** Entry inputs: the four coins with balances from dust to $900k, daily limits that bind half the time, a coin
+ *  waiting a fifth of the time. Mirrors Vectors.entryInput. */
+export function entryInput(i: number) {
+  const r = (f: number) => rand("entry", i, f);
+  const coins: EntryCoin[] = ENTRY_COINS.map((c, k) => {
+    const f = (j: number) => r(10 + 10 * k + j);
+    const scale = 10n ** BigInt(c.decimals - 6);
+    const kind = f(3) % 4n;
+    return {
+      balanceRaw: f(0) % 3n === 0n ? 0n : spread(f(1), f(2), 4n, 11n) * scale + (f(4) % scale),
+      decimals: c.decimals,
+      limitLeftRaw: kind === 0n ? 0n : kind === 1n ? spread(f(5), f(6), 5n, 10n) * scale : 10n ** 30n,
+      waiting: f(7) % 5n === 0n,
+    };
+  });
+  return {
+    coins,
+    floorBps: between(r(0), 10n, 100n),
+    minEntryRaw: between(r(1), 100_000n, 100_000_000n),
+    maxSwapRaw: between(r(2), 100n * 10n ** 6n, 100_000n * 10n ** 6n),
+  };
+}
+
 /** Permission-hash inputs. Mirrors Vectors.hashInput. */
 export function hashInput(i: number) {
   const r = (f: number) => rand("hash", i, f);
@@ -178,6 +257,38 @@ export function sellHashInput(i: number) {
     salt: r(4),
     cap: 1n + (r(5) % 5_000_000n),
     limitsRaw,
+  };
+}
+
+/** Rebalancer hash inputs: a weekly USDC limit and a weekly limit per stock, a third of them unsellable, at least one
+ *  sellable. Mirrors Vectors.rebalanceHashInput. */
+export function rebalanceHashInput(i: number) {
+  const r = (f: number) => rand("rebalance-hash", i, f);
+  const first = Number(r(6) % 7n);
+  const limitsRaw: StockLimits = Array.from({ length: 7 }, (_, k) =>
+    k !== first && r(7 + k) % 3n === 0n ? 0n : (1n + (r(14 + k) % 1_000_000n)) * STOCK_LIMIT_UNIT,
+  );
+  const start = 1_700_000_000n + (r(2) % 300_000_000n);
+  return {
+    account: toHex(r(1) % 2n ** 160n, { size: 20 }) as Address,
+    start,
+    end: start + 1n + (r(3) % 400_000_000n),
+    salt: r(4),
+    cap: 1n + (r(5) % 5_000_000n),
+    limitsRaw,
+  };
+}
+
+/** Entry hash inputs. Mirrors Vectors.entryHashInput. */
+export function entryHashInput(i: number) {
+  const r = (f: number) => rand("entry-hash", i, f);
+  const start = 1_700_000_000n + (r(2) % 300_000_000n);
+  return {
+    account: toHex(r(1) % 2n ** 160n, { size: 20 }) as Address,
+    start,
+    end: start + 1n + (r(3) % 400_000_000n),
+    salt: r(4),
+    cap: 1n + (r(5) % 5_000_000n),
   };
 }
 
@@ -276,6 +387,44 @@ function sellVectors() {
   return { amounts, counts: hex(counts), reserves: hex(reserves), shares, minOuts, timings: hex(timings) };
 }
 
+/** What rebalanceTrades decides for each input, flattened, and whether planRebalance trades (the pools in line). */
+function rebalanceVectors() {
+  const counts: number[] = [];
+  const planned: number[] = [];
+  const reserves: number[] = [];
+  const buys: number[] = [];
+  const amountIns: string[] = [];
+  const minOuts: string[] = [];
+  for (let i = 0; i < REBALANCE_COUNT; i++) {
+    const v = rebalanceInput(i);
+    const trades = rebalanceTrades(v.book, v);
+    counts.push(trades.length);
+    planned.push(planRebalance(v.book, v).length > 0 ? 1 : 0);
+    for (const t of trades) {
+      reserves.push(t.reserveId);
+      buys.push(t.buy ? 1 : 0);
+      amountIns.push(t.amountIn.toString());
+      minOuts.push(t.minOut.toString());
+    }
+  }
+  return { counts: hex(counts), planned: hex(planned), reserves: hex(reserves), buys: hex(buys), amountIns, minOuts };
+}
+
+/** What planEntry decides for each input: the coin (255 for none), what it swaps and the floor. */
+function entryVectors() {
+  const indexes: number[] = [];
+  const amountIns: string[] = [];
+  const minOuts: string[] = [];
+  for (let i = 0; i < ENTRY_COUNT; i++) {
+    const v = entryInput(i);
+    const m = planEntry(v.coins, v);
+    indexes.push(m ? m.index : 255);
+    amountIns.push(m ? m.amountIn.toString() : "0");
+    minOuts.push(m ? m.minOut.toString() : "0");
+  }
+  return { indexes: hex(indexes), amountIns, minOuts };
+}
+
 /** The manager's EIP-712 hash (getHash) of a permission, as `getHash` computes it on Base. */
 function managerHash(p: ReturnType<typeof agentPermission>) {
   return hashTypedData({
@@ -323,7 +472,23 @@ function hashVectors() {
       ),
     );
   }
-  return { spender: HASH_SPENDER, hashes, sellHashes };
+  const rebalanceHashes = [];
+  for (let i = 0; i < HASH_COUNT; i++) {
+    const v = rebalanceHashInput(i);
+    rebalanceHashes.push(
+      managerHash(
+        rebalancePermission({ account: v.account, spender: HASH_SPENDER, start: Number(v.start), end: Number(v.end), salt: v.salt, capRaw: v.cap, limitsRaw: v.limitsRaw }),
+      ),
+    );
+  }
+  const entryHashes = [];
+  for (let i = 0; i < HASH_COUNT; i++) {
+    const v = entryHashInput(i);
+    entryHashes.push(
+      managerHash(entryPermission({ account: v.account, spender: HASH_SPENDER, start: Number(v.start), end: Number(v.end), salt: v.salt, capRaw: v.cap })),
+    );
+  }
+  return { spender: HASH_SPENDER, hashes, sellHashes, rebalanceHashes, entryHashes };
 }
 
 /** config/risk.ts in on-chain units: the executor's deploy defaults must match. */
@@ -350,6 +515,19 @@ function defaultsVector() {
       poolCap: usdc(PROTECT_SELL.poolCapUsd),
       maxSlice: usdc(PROTECT_SELL.maxSliceUsd),
     },
+    rebalance: {
+      bandBps: Math.round(REBALANCER.bandOfTarget * 10_000).toString(),
+      bandMaxBps: Math.round(REBALANCER.bandMaxPoints * 100).toString(),
+      poolGapBps: REBALANCER.poolGapBps.toString(),
+      floorBps: REBALANCER.floorBps.toString(),
+      minTrade: usdc(REBALANCER.minTradeUsd),
+      maxSlice: usdc(REBALANCER.maxSliceUsd),
+    },
+    entry: {
+      floorBps: ENTRY.floorBps.toString(),
+      minEntry: usdc(ENTRY.minEntryUsd),
+      maxSwap: usdc(ENTRY.maxSwapUsd),
+    },
   };
 }
 
@@ -360,6 +538,8 @@ export function agentVectors(): Record<string, unknown> {
     "save.json": saveVectors(),
     "calendar.json": calendarVectors(),
     "sell.json": sellVectors(),
+    "rebalance.json": rebalanceVectors(),
+    "entry.json": entryVectors(),
     "permissions.json": hashVectors(),
     "defaults.json": defaultsVector(),
   };

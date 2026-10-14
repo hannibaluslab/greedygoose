@@ -1,4 +1,4 @@
-# GooseExecutor as built (M2, then Protect · sell)
+# GooseExecutor as built (M2, then Protect · sell, the Rebalancer and Entry)
 
 What `src/GooseExecutor.sol` does differently from [GooseExecutor.md](./GooseExecutor.md), and why. The spec is unchanged; read the two together.
 
@@ -19,11 +19,11 @@ What `src/GooseExecutor.sol` does differently from [GooseExecutor.md](./GooseExe
 
 ## Job modules
 
-`GooseExecutor` keeps what every job shares: the registry, who may run, pause and the delayed changes, the paging and shards, the per-account `try/catch`, and the checks every move must pass (the executor holds nothing afterwards). Each job's own rule lives in a library in `src/jobs`: its permission template, when and how much to move, the calls it builds and its own post-checks. `SaveJob` and `ProtectJob` hold the Cash Agent's two jobs and `SellJob` holds Protect · sell; `JobBase` holds what they share (a permission's status, what is left of a limit, the health factor). The pure rules stay where the differential tests read them (`CashRules`, `SellRules`).
+`GooseExecutor` keeps what every job shares: the registry, who may run, pause and the delayed changes, the paging and shards, the per-account `try/catch`, and the checks every move must pass (the executor holds nothing afterwards). Each job's own rule lives in a library in `src/jobs`: its permission template, when and how much to move, the calls it builds, its own post-checks and the bounds on its numbers. `SaveJob` and `ProtectJob` hold the Cash Agent's two jobs, `SellJob` Protect · sell, `RebalanceJob` the Rebalancer and `EntryJob` the Entry agent; `JobBase` holds what they share (a permission's status, what is left of a limit, the health factor, and the per-stock limits Protect · sell and the Rebalancer pack into a grant's terms). The pure rules stay where the differential tests read them (`CashRules`, `SellRules`, `RebalanceRules`, `EntryRules`).
 
-Every job library has the same three functions: `permission(env, account, grant, salt, terms)`, `plan(env, ctx, account, pools)` and `run(env, ctx, account, pools)`. `Env` carries the addresses fixed at deploy (a library can't read the executor's immutables) and `Ctx` the grant, the terms and every number the jobs read. A new job adds a library, a `Job` value and three lines of dispatch. Sizes: core 21.7 KB, `SellJob` 18.3 KB, `ProtectJob` 7.7 KB, `SaveJob` 6.1 KB.
+Every job library has the same three functions: `permission(env, account, grant, salt, terms)`, `plan(env, ctx, account, state)` and `run(env, ctx, account, state)`. `Env` carries the addresses fixed at deploy (a library can't read the executor's immutables) and `Ctx` the grant, the terms and every number the jobs read. `state` is the one registry mapping the job keeps besides the account's slot: the pools' window for Protect · sell, the mixes for the Rebalancer, the waiting coins for Entry. A new job adds a library, a `Job` value and a line in each dispatch. Sizes: core 23.8 KB (785 bytes left), `SellJob` 18.6 KB, `RebalanceJob` 17.2 KB, `EntryJob` 9.0 KB, `ProtectJob` 8.4 KB, `SaveJob` 6.9 KB. The Cash Agent's bound checks moved into `ProtectJob` and `SaveJob` to make room; a sixth job would need the dispatch itself to shrink.
 
-A run plans the jobs in order (Protect from savings, Protect · sell, Save) and the first one to read Aave's health factor passes it on in `Ctx.hf`, so the next doesn't pay for the account data again: about 120k gas an account with seven stocks.
+A run plans the jobs in order (Protect from savings, Protect · sell, the Rebalancer, Entry, Save) and the first one to read Aave's health factor passes it on in `Ctx.hf`, so the next doesn't pay for the account data again: about 120k gas an account with seven stocks.
 
 Each job library is linked: its functions are `external`, it is deployed once as its own contract, and its address is written into the executor's bytecode when the executor is deployed. Why a linked library and not an external contract called with `STATICCALL`:
 
@@ -34,6 +34,8 @@ Each job library is linked: its functions are `external`, it is deployed once as
 - **A library refuses to run on its own.** Solidity's call guard reverts any direct call to a state-changing library function, and the library holds nothing to take.
 
 The cost is a library call per job per account. `forge script` deploys the libraries and links them before the executor.
+
+Tests run a job's post-checks around a batch of their own by calling the library's public `snapshot` and `check` and sending the batch as the executor (`vm.prank`); `ExecutorHarness` only opens the template and the clock. That keeps the harness under 24 KB, which the test EVM enforces when a test deploys it. `DeployExecutor.t.sol` checks the real executor and every library fit.
 
 ## Protect · sell
 
@@ -92,3 +94,81 @@ Facts found on the way:
 - With the deploy defaults (trigger 1.50, drop 15%, floor 1.10), Weekend Shield never acts before Watch does: 1.10 / 0.85 = 1.29 < 1.50. The fork test runs it with a 30% drop and a 1.40 floor. Calibration is item 6 step 9.
 - The contract only fits under 24 KB through the IR pipeline at 200 runs (`foundry.toml` restricts that to this file). Tests that import it compile the same way, and there `block.timestamp` can be reused after a warp, so they read the time with `vm.getBlockTimestamp()`.
 - Measured cold: a run of `MAX_WORK` Protect repays uses 3.8M of Base's 5M perform limit.
+
+## The Rebalancer
+
+Plan item 9, steps 2 and 3: once a market day, 30 to 60 minutes after the open, the Rebalancer brings the account's mix of free stock back when a stock breaks its band, selling what grew too big to buy what fell short. It is its own job (`Job.Rebalance`) and its own JAW grant. The rule is `RebalanceRules` (Solidity) and `lib/guardian/rebalance.ts` (TypeScript): `test/RebalanceRules.t.sol` runs both on 800 vectors and they agree to the unit.
+
+**What it does.**
+
+- **The mix** sits in the registry (`mixes`), a weight in BPS per stock adding up to 100%. Only the account sets it (`setMix`, one Face ID); all 0 clears it. Free stock outside the mix is ignored and never traded.
+- **When:** 10:00 to 10:30 New York time on a day prices are live (the executor's calendar), at most one batch a day (`Account.rebalanceDay`). It waits while the credit isn't Safe (health under Protect's trigger, 1.5): Protect first.
+- **Band:** a stock breaks out past the smaller of 20% of its target and 5 points. Only a stock that broke out is traded back, to half its band. The other side of the trade goes to the stocks still in their band that are furthest from their target, each up to its target, so sales and buys match at Aave's price.
+- **Limits:** a swap is at most $25,000 at Aave's price, and each stock gets at most one a day, so a large drift takes a few days. A sale stays within the stock's weekly limit, the buys within the weekly USDC limit; trades under $20 are skipped and the other side shrinks to match. Nothing to sell or nothing to buy means no trade: it never sells to cash or buys with it.
+- **Price:** every swap gets at least Aave's price less 0.5%. A stock whose pool is more than 0.5% off Aave's price, or whose reserve is paused (a corporate action holds its price), holds the whole rebalance while it is so; if it stays off through the window, the day passes.
+- **Cash:** the buys spend exactly what the sales' minimums bring in, so the wallet's USDC never goes down. What the sales get above their minimums (about 0.45% of what is traded: $1.57 on the fork's $350) stays in the wallet as cash, and Save puts it in savings.
+- **A batch that can't fill** (a swap under its floor) is caught: nothing moves, `RebalanceSkipped` is emitted and the day is done. It isn't a run failure, so a bad pool day can't put Protect into cooldown or, after eight, switch the account's jobs off.
+
+**The permission** (`RebalanceJob.permission`, `lib/agents/permissions.ts` `rebalanceGrant`): `approve` on each stock it may sell, `USDC.approve`, Aerodrome's `exactInputSingle`, all with checker 0; weekly limits on USDC (the buy leg, the boards' "sells up to $X a week") and on each stock it may sell, in shares, packed into the grant's terms like Protect · sell's. No Aave call at all, so savings and backing are out of its reach. A stock in the mix without a limit can be bought, never sold.
+
+**Post-checks** (`RebalanceJob.check`): each stock sold fell by exactly its sale and each stock bought rose by at least its minimum, so only mix stocks were bought and every other balance stayed put; nothing that backs the credit moved; savings didn't move; the wallet's USDC rose by at least the sales' minimums less the buys; the executor holds none of the stock.
+
+| Plan | As built | Why |
+| --- | --- | --- |
+| RebalanceChecker pins the recipient, the floor and the routers | No checker; the executor builds every call and its post-checks revert anything else | D14 (GooseExecutor.md §12). |
+| Floor: Aave's price − 0.3% | Aave's price − 0.5%, the same as the pool gap | With pools allowed 0.5% off, a 0.3% floor would fail every sale into a pool 0.3–0.5% under Aave's price, and every buy out of one as far over. At 0.5% the gap check and the floor agree; a batch that still can't fill skips the day. |
+| "Only the stock that broke out" | Only it goes back to half its band; the other side comes from the in-band stocks furthest from target | The backtest (eval rebal/backtest.py) spread the other side over every in-band stock by weight: about seven swaps a rebalance, most under $20. Furthest-first needs one or two, and never moves a stock past its target. |
+| Skip the day if the pool is > 0.5% off | It waits while the pool is off; the window ends the day | Recording the skip would cost a run for every account every day a pool is off. A pool that comes back within the window trades at a fair price. |
+| Skip while the price feed is paused | Skip while the stock's Aave reserve is paused | The feeds have no paused flag (readiness audit); a corporate action pauses the reserve. |
+| Slices ≤ $25k | One swap a stock a day, ≤ $25k | Splitting a sale within one batch gets the same pool price; across days, the pool and Aave's price catch up. |
+
+**Gas, cold** (`RebalanceGasForkTest`, seven stocks, three over their band and four under): the check costs about 539k in the window, the run 2.26M, of which the manager's batch 1.35M (`REBALANCE_GAS` caps it at 2M). Outside the window an account with the Rebalancer on costs only the calendar check. In the window a page of such accounts doesn't fit in one check (32 × about 0.5M); the scan's gas stop and rotating start spread it over the next blocks, which the 30-minute window allows many times over.
+
+**Fork tests** (`test/RebalanceFork.t.sol`), against the real manager and Aerodrome's stock pools with their real balances, Aave's prices set to each pool's own:
+
+| Case | What happens |
+| --- | --- |
+| 50/50 NVIDIA/Apple at 56/44 | one batch: sells $350 of NVIDIA, buys Apple with the sale's minimum; 52.5/47.5, the wallet's USDC up $1.57, savings untouched |
+| 10:29:59, 10:30, Wednesday 9:59:59 and 10:00, a Saturday | lists, doesn't, doesn't, lists, doesn't |
+| credit at 1.45, then backed to Safe | waits, then rebalances |
+| NVIDIA's pool 0.6% off, then 0.4% | holds, then trades |
+| NVIDIA's pool 0.48% under Aave's price | the sale can't meet its floor: nothing moves, `RebalanceSkipped`, no failure, done for the day |
+| NVIDIA's weekly limit used up | nothing: Apple isn't over its band |
+| seven stocks, three over and four under | one batch of seven swaps |
+| a buy for someone else, a buy with the wallet's cash, a sale for someone else, a stock off the plan | `StockMoved`, `CashLower`, `CashLower`, `StockMoved` |
+| a stock out of the grant | the manager refuses its `approve` |
+
+## Entry on Base
+
+Plan item 2, steps 1 to 3: a whitelisted dollar stablecoin in the wallet becomes USDC in the same wallet at 99.5% of its face value or better, one capped swap a run. It is its own job (`Job.Entry`) and its own JAW grant. The rule is `EntryRules` (Solidity) and `lib/guardian/entry.ts` (TypeScript): `test/EntryRules.t.sol` runs both on 1,000 vectors and they agree to the unit.
+
+**Coins and venues**, each the deepest for that coin on Base, measured 2026-10-14 (`tests/onchain/entry.test.ts` re-reads them):
+
+| Coin | Venue | USDC there | Quote at $1k, $10k |
+| --- | --- | --- | --- |
+| USDT (6) | Aerodrome Slipstream, first deployment, tick spacing 1 | $177k | 99.86%, 99.86% |
+| USDe (18) | Uniswap v3, 0.05% | $724k | 99.96%, 99.95% |
+| USDbC (6) | Aerodrome Slipstream, first deployment, tick spacing 1 | $58k | 99.99%, 99.99% |
+| USDS (18) | Spark PSM3, 1:1 | $1.0M | 100%, 100% |
+
+GHO is left out: Base has no GHO/USDC liquidity to speak of ($100 of GHO quotes $0.15). Leo's Aerodrome venue (`AERODROME`, the newer Slipstream deployment where the stock pools are) has no stablecoin pools worth using; the first deployment's router and QuoterV2 are now `AERODROME_V1` in `lib/swap/venues.ts`, with the same `exactInputSingle` shape (selector 0xa026383e in both routers' bytecode).
+
+**What it does.** The first coin in that order that isn't waiting and holds at least $1 of face value within today's limit is swapped, all of it up to $10,000 a run (a larger balance goes over the next runs), for at least 99.5% of its face value, decimals adjusted and rounded up. A swap the venue can't fill at the floor is caught: nothing moves, `EntryWaiting` is emitted with the time of the next try, and that coin waits an hour (`entryWaits`) while the next one converts. It isn't a run failure. `EntryConverted` carries what went in and the USDC that came out. Save takes over from there.
+
+**The permission** (`EntryJob.permission`, `entryGrant`): `approve` on each coin, then the three venues' swaps (Aerodrome's first router, Uniswap's SwapRouter02, PSM3's `swapExactIn`), all with checker 0; a daily limit on each coin, all at the same face value (`cap` USDC units, decimals adjusted), so one number is stored.
+
+**Post-checks** (`EntryJob.check`): the coin fell by exactly what was swapped, the wallet's USDC rose by at least the floor, savings didn't move, and the executor holds none of the coin.
+
+The coins and venues are Base mainnet's, fixed in `EntryJob` and checked against the chain by `DeployExecutor.t.sol`: a Base Sepolia deploy has no Entry, and another chain gets its own Entry library.
+
+| Plan | As built | Why |
+| --- | --- | --- |
+| EntryChecker pins the recipient, USDC out and the 99.5% floor | No checker; the executor builds every call and its post-checks revert anything else | D14. |
+| The check reads the venues' quoters to pick the better one | One venue per coin, the deepest, measured | A quoter runs a swap and reverts, which a view (the check) can't call. The swap's own minimum is the quote: one that can't fill moves nothing and the coin waits. |
+| USDT, USDe, USDbC, GHO; USDS through PSM3 | The same, without GHO | No GHO liquidity on Base. |
+| "Waiting" below the floor | An event and a one-hour wait per coin; the other coins go on | Without the wait, the check would list the account every block. |
+
+**Gas.** The manager's batch costs 200k–320k (one approve and one swap, under `ACCOUNT_GAS`), a one-account run 750k–890k.
+
+**Fork tests** (`test/EntryFork.t.sol`), against the real manager and venues: each coin from $1,000 to at least $995 of USDC in the same wallet (USDT $998.63, USDe $999.57, USDbC $999.93, USDS $1,000); $25,000 of USDT in three runs; a $1,000 daily limit holding $3,000 of USDbC to $1,000 a day; at a 99.9% floor, USDT waiting while USDbC converts; a swap to someone else (`BelowFloor`); and the manager refusing a coin past its limit and GHO, which the grant doesn't list.
+

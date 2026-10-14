@@ -2,6 +2,8 @@
 pragma solidity 0.8.28;
 
 import {Thresholds} from "../src/CashRules.sol";
+import {Coin} from "../src/EntryRules.sol";
+import {RebalanceBook, RebalanceHolding, RebalanceLimits} from "../src/RebalanceRules.sol";
 import {Book, Holding} from "../src/SellRules.sol";
 
 /// The inputs behind contracts/test/vectors/*.json, drawn exactly as scripts/agent-vectors.ts draws them:
@@ -63,6 +65,28 @@ library Vectors {
     }
 
     struct SellHash {
+        address account;
+        uint48 start;
+        uint48 end;
+        uint256 salt;
+        uint160 cap;
+        uint256[7] limits; // raw shares, by reserve id
+    }
+
+    struct Rebalance {
+        RebalanceBook book;
+        bool[7] tradable;
+        RebalanceLimits l;
+    }
+
+    struct Entry {
+        Coin[] coins;
+        uint16 floorBps;
+        uint64 minEntry;
+        uint64 maxSwap;
+    }
+
+    struct RebalanceHash {
         address account;
         uint48 start;
         uint48 end;
@@ -177,6 +201,110 @@ library Vectors {
         v.end = v.start + 1 + uint48(rand("sell-hash", i, 3) % 400_000_000);
         v.salt = rand("sell-hash", i, 4);
         v.cap = uint160(1 + rand("sell-hash", i, 5) % 5_000_000);
+    }
+
+    /// A mix of one to seven stocks worth $1k to $900k drifted from its targets by up to 60%, free stock outside the
+    /// mix a quarter of the time, weekly limits that bind a quarter of the time, a USDC limit that binds a fifth of the
+    /// time, and a pool out of line a tenth of the time.
+    function rebalanceInput(uint256 i) internal pure returns (Rebalance memory v) {
+        uint256[7] memory w = _mix(i);
+        uint256 total = spread(rand("rebalance", i, 20), rand("rebalance", i, 21), 9, 11);
+        uint256 drift = between(rand("rebalance", i, 19), 500, 6_000);
+        for (uint256 k; k < 7; ++k) {
+            v.book.stocks[k] = _drifted(i, k, w[k], total, drift);
+            v.tradable[k] = rand("rebalance", i, 100 + k) % 10 != 0;
+        }
+        v.book.usdcLeft =
+            rand("rebalance", i, 22) % 5 == 0 ? spread(rand("rebalance", i, 23), rand("rebalance", i, 24), 6, 9) : 1e15;
+        v.l.bandBps = uint16(between(rand("rebalance", i, 25), 500, 5_000));
+        v.l.bandMaxBps = uint16(between(rand("rebalance", i, 26), 100, 2_000));
+        v.l.floorBps = uint16(between(rand("rebalance", i, 27), 10, 300));
+        v.l.minTrade = uint64(between(rand("rebalance", i, 28), 1e6, 100e6));
+        v.l.maxSlice = uint64(between(rand("rebalance", i, 29), 100e6, 50_000e6));
+    }
+
+    /// The target weights: each stock in the mix with odds 2/3, at least one, adding up to 10,000.
+    function _mix(uint256 i) private pure returns (uint256[7] memory w) {
+        uint256 first = rand("rebalance", i, 0) % 7;
+        uint256 sum;
+        for (uint256 k; k < 7; ++k) {
+            if (k == first || rand("rebalance", i, 1 + k) % 3 != 0) w[k] = 1 + rand("rebalance", i, 10 + k) % 1000;
+            sum += w[k];
+        }
+        uint256 assigned;
+        for (uint256 k; k < 7; ++k) {
+            w[k] = w[k] * 10_000 / sum;
+            assigned += w[k];
+        }
+        w[first] += 10_000 - assigned;
+    }
+
+    function _drifted(uint256 i, uint256 k, uint256 weight, uint256 total, uint256 drift)
+        private
+        pure
+        returns (RebalanceHolding memory h)
+    {
+        uint256 f = 30 + 10 * k;
+        h.price = between(rand("rebalance", i, f), 1e9, 1e11);
+        uint256 value;
+        if (weight > 0) {
+            value =
+                total * weight / 10_000 * between(rand("rebalance", i, f + 1), 10_000 - drift, 10_000 + drift) / 10_000;
+        } else if (rand("rebalance", i, f + 2) % 4 == 0) {
+            value = spread(rand("rebalance", i, f + 3), rand("rebalance", i, f + 4), 6, 10);
+        }
+        h.shares = value * 1e10 / h.price;
+        h.weight = weight;
+        uint256 kind = rand("rebalance", i, f + 5) % 4;
+        if (kind == 1) h.sellLeft = spread(rand("rebalance", i, f + 6), rand("rebalance", i, f + 7), 4, 9);
+        else if (kind > 1) h.sellLeft = 1e18;
+    }
+
+    /// The four coins with balances from dust to $900k, daily limits that bind half the time, a coin waiting a fifth of
+    /// the time.
+    function entryInput(uint256 i) internal pure returns (Entry memory v) {
+        uint8[4] memory decimals = [6, 18, 6, 18];
+        v.coins = new Coin[](4);
+        for (uint256 k; k < 4; ++k) {
+            uint256 f = 10 + 10 * k;
+            uint256 scale = 10 ** (decimals[k] - 6);
+            Coin memory c = v.coins[k];
+            c.decimals = decimals[k];
+            if (rand("entry", i, f) % 3 != 0) {
+                c.balance = spread(rand("entry", i, f + 1), rand("entry", i, f + 2), 4, 11) * scale
+                    + rand("entry", i, f + 4) % scale;
+            }
+            uint256 kind = rand("entry", i, f + 3) % 4;
+            c.limitLeft = kind == 0
+                ? 0
+                : kind == 1 ? spread(rand("entry", i, f + 5), rand("entry", i, f + 6), 5, 10) * scale : 1e30;
+            c.waiting = rand("entry", i, f + 7) % 5 == 0;
+        }
+        v.floorBps = uint16(between(rand("entry", i, 0), 10, 100));
+        v.minEntry = uint64(between(rand("entry", i, 1), 100_000, 100_000_000));
+        v.maxSwap = uint64(between(rand("entry", i, 2), 100e6, 100_000e6));
+    }
+
+    /// A third of the stocks unsellable, at least one sellable.
+    function rebalanceHashInput(uint256 i) internal pure returns (RebalanceHash memory v) {
+        uint256 first = rand("rebalance-hash", i, 6) % 7;
+        for (uint256 k; k < 7; ++k) {
+            if (k != first && rand("rebalance-hash", i, 7 + k) % 3 == 0) continue;
+            v.limits[k] = (1 + rand("rebalance-hash", i, 14 + k) % 1_000_000) * 1e4;
+        }
+        v.account = address(uint160(rand("rebalance-hash", i, 1)));
+        v.start = uint48(1_700_000_000 + rand("rebalance-hash", i, 2) % 300_000_000);
+        v.end = v.start + 1 + uint48(rand("rebalance-hash", i, 3) % 400_000_000);
+        v.salt = rand("rebalance-hash", i, 4);
+        v.cap = uint160(1 + rand("rebalance-hash", i, 5) % 5_000_000);
+    }
+
+    function entryHashInput(uint256 i) internal pure returns (Hash memory v) {
+        v.account = address(uint160(rand("entry-hash", i, 1)));
+        v.start = uint48(1_700_000_000 + rand("entry-hash", i, 2) % 300_000_000);
+        v.end = v.start + 1 + uint48(rand("entry-hash", i, 3) % 400_000_000);
+        v.salt = rand("entry-hash", i, 4);
+        v.cap = uint160(1 + rand("entry-hash", i, 5) % 5_000_000);
     }
 
     function hashInput(uint256 i) internal pure returns (Hash memory v) {

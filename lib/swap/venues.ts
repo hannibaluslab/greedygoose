@@ -16,6 +16,29 @@ export const AERODROME = {
   TICK_SPACINGS: [1, 10, 50, 100] as const,
 } as const;
 
+/**
+ * Aerodrome Slipstream's first deployment ("Initial Deployment" in aerodrome-finance/slipstream's README), where Base's
+ * stablecoin pools are: the stock pools above live on the newer one, which has none worth using (its GHO/USDC pool
+ * holds $0.15). Router and quoter `factory()` both return FACTORY, and the router's bytecode has the same
+ * exactInputSingle selector (0xa026383e, the tick-spacing form) as AERODROME's, read 2026-10-14. Measured then on
+ * QuoterV2: USDT → USDC at tick spacing 1 gives 99.86% from $1k to $100k (the pool holds $177k of USDC), USDbC → USDC
+ * 99.99% up to $50k ($58k of USDC).
+ */
+export const AERODROME_V1 = {
+  chainId: CHAIN_ID,
+  FACTORY: "0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A",
+  QUOTER: "0x254cF9E1E6e233aa1AC962CB9B05b2cfeAaE15b0",
+  ROUTER: "0xBE6D8f0d05cC4be24d5167a3eF062215bE6D18a5",
+  /** The stablecoin pools' tick spacing. */
+  STABLE_TICK_SPACING: 1,
+} as const;
+
+/**
+ * Spark's PSM3 on Base (spark-address-registry src/Base.sol): swaps USDS for USDC 1:1, decimals adjusted, from its own
+ * USDC ($1.0M held, 2026-10-14). `usdc()` and `usds()` return Base's USDC and USDS.
+ */
+export const SPARK_PSM3 = { chainId: CHAIN_ID, PSM3: "0x1601843c5E9bC251A3272907010AFa41Fa18347E" } as const;
+
 export const UNISWAP = {
   chainId: CHAIN_ID,
   FACTORY: "0x33128a8fC17869897dcE68Ed026d694621f6FDfD",

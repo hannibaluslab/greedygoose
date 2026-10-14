@@ -3,7 +3,6 @@ pragma solidity 0.8.28;
 
 import {GooseExecutor} from "../src/GooseExecutor.sol";
 import {IJustaPermissionManager as PM} from "../src/IJustaPermissionManager.sol";
-import {SellJob} from "../src/jobs/SellJob.sol";
 
 /// GooseExecutor with a few internals opened up for tests. Never deployed.
 contract ExecutorHarness is GooseExecutor {
@@ -21,16 +20,9 @@ contract ExecutorHarness is GooseExecutor {
         (, preFreeze_) = _clock(ts);
     }
 
-    /// Runs `calls` through the manager as a Protect · sell batch for `account`, under the sale's post-checks, so tests
-    /// can show what they catch. `sold` is what the batch claims to sell, by reserve id.
-    function sellWith(address account, uint256[7] calldata sold, PM.Call[] calldata calls) external {
-        Job job = Job.ProtectSell;
-        PM.Permission memory p =
-            _permission(job, account, grants[account][job], salts[account][job], terms[account][job]);
-        SellJob.Before memory b =
-            SellJob.snapshot(_env(), account, sold, SPOKE.getUserAccountData(account).healthFactor);
-        MANAGER.executeBatch(p, calls);
-        SellJob.check(_env(), account, b);
+    /// The addresses the job libraries are handed, so tests can run a job's post-checks around a batch of their own.
+    function env() external view returns (Env memory) {
+        return _env();
     }
 
     /// Skips the 7-day queue, for calendar tests only.

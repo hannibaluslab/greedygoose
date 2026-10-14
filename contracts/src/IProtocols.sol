@@ -3,9 +3,10 @@ pragma solidity ^0.8.0;
 
 import {IJustaPermissionManager} from "./IJustaPermissionManager.sol";
 
-/// The parts of USDC, Aave, Aerodrome and JAW's account that GooseExecutor uses. Signatures from the verified
-/// sources: Aave V3 Pool, the Aave V4 spoke and its oracle (lib/aave/abis, generated with `forge inspect` at aave-v4
-/// 326751e), Aerodrome Slipstream's router (lib/swap/abis.ts, selector 0xa026383e in the deployed bytecode) and
+/// The parts of USDC, Aave, Aerodrome, Uniswap, Spark and JAW's account that GooseExecutor uses. Signatures from the
+/// verified sources: Aave V3 Pool, the Aave V4 spoke and its oracle (lib/aave/abis, generated with `forge inspect` at
+/// aave-v4 326751e), Aerodrome Slipstream's router and pools (lib/swap/abis.ts, selector 0xa026383e in both routers'
+/// deployed bytecode), Uniswap's SwapRouter02 (selector 0x04e45aaf), Spark's PSM3 (selector 0x1a019e37) and
 /// JustanAccount (JAW's Sourcify bundle).
 
 interface IERC20 {
@@ -78,6 +79,53 @@ interface IAeroRouter {
     }
 
     function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256 amountOut);
+    function factory() external view returns (address);
+}
+
+/// Aerodrome Slipstream's pool factory and pools: where the Rebalancer reads a stock pool's price.
+interface IAeroFactory {
+    function getPool(address tokenA, address tokenB, int24 tickSpacing) external view returns (address);
+}
+
+interface IAeroPool {
+    function slot0()
+        external
+        view
+        returns (
+            uint160 sqrtPriceX96,
+            int24 tick,
+            uint16 observationIndex,
+            uint16 observationCardinality,
+            uint16 observationCardinalityNext,
+            bool unlocked
+        );
+}
+
+/// Uniswap v3's SwapRouter02 on Base (lib/swap/venues.ts UNISWAP.SWAP_ROUTER_02): no deadline in the params.
+interface IUniswapRouter {
+    struct ExactInputSingleParams {
+        address tokenIn;
+        address tokenOut;
+        uint24 fee;
+        address recipient;
+        uint256 amountIn;
+        uint256 amountOutMinimum;
+        uint160 sqrtPriceLimitX96;
+    }
+
+    function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256 amountOut);
+}
+
+/// Spark's PSM3 on Base (lib/swap/venues.ts SPARK_PSM3): USDS for USDC 1:1, decimals adjusted.
+interface IPsm3 {
+    function swapExactIn(
+        address assetIn,
+        address assetOut,
+        uint256 amountIn,
+        uint256 minAmountOut,
+        address receiver,
+        uint256 referralCode
+    ) external returns (uint256 amountOut);
 }
 
 /// JustanAccount, the contract behind every JAW account.

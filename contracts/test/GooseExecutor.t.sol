@@ -7,6 +7,8 @@ import {GooseExecutor} from "../src/GooseExecutor.sol";
 import {IJustaPermissionManager as PM} from "../src/IJustaPermissionManager.sol";
 import {IAaveOracle, IAaveV3Pool, IERC20, ISpoke} from "../src/IProtocols.sol";
 import {Amounts, Thresholds} from "../src/CashRules.sol";
+import {EntryLimits} from "../src/EntryRules.sol";
+import {RebalanceLimits} from "../src/RebalanceRules.sol";
 import {SellLimits} from "../src/SellRules.sol";
 import {NyCalendar} from "../src/NyCalendar.sol";
 import {DeployExecutor} from "../script/DeployExecutor.s.sol";
@@ -63,6 +65,16 @@ contract GooseExecutorTest is Test {
         new GooseExecutor(c);
 
         c = _config();
+        c.rebalanceLimits.minTrade = 0; // every dust drift a trade
+        vm.expectRevert(GooseExecutor.OutOfBounds.selector);
+        new GooseExecutor(c);
+
+        c = _config();
+        c.entryLimits.floorBps = 101; // under 99% of face value
+        vm.expectRevert(GooseExecutor.OutOfBounds.selector);
+        new GooseExecutor(c);
+
+        c = _config();
         c.stocks[3] = address(0);
         vm.expectRevert(GooseExecutor.ZeroValue.selector);
         new GooseExecutor(c);
@@ -78,6 +90,10 @@ contract GooseExecutorTest is Test {
         assertEq(abi.encode(trigger, target, drop, floor), abi.encode(deploy.thresholds()));
         (uint64 minRepay, uint64 minSave, uint64 keepBack, uint32 window, uint8 maxSaves) = x.amounts();
         assertEq(abi.encode(minRepay, minSave, keepBack, window, maxSaves), abi.encode(deploy.amounts()));
+        (uint16 band, uint16 bandMax, uint16 gap, uint16 floor_, uint64 minTrade, uint64 maxSlice) = x.rebalanceLimits();
+        assertEq(abi.encode(band, bandMax, gap, floor_, minTrade, maxSlice), abi.encode(deploy.rebalanceLimits()));
+        (uint16 entryFloor, uint64 minEntry, uint64 maxSwap) = x.entryLimits();
+        assertEq(abi.encode(entryFloor, minEntry, maxSwap), abi.encode(deploy.entryLimits()));
         assertEq(x.owner(), owner);
         assertFalse(x.isForwarder(forwarder));
         assertFalse(x.bootstrapped());
@@ -275,16 +291,62 @@ contract GooseExecutorTest is Test {
         assertEq(actFloor, 250);
     }
 
+    function test_rebalance_and_entry_limits_change_after_the_delay_within_bounds() public {
+        RebalanceLimits memory r = deploy.rebalanceLimits();
+        r.minTrade = 50e6;
+        RebalanceLimits memory badR = deploy.rebalanceLimits();
+        badR.poolGapBps = 201;
+        EntryLimits memory e = EntryLimits(30, 5e6, 25_000e6);
+        EntryLimits memory badE = EntryLimits(50, 1e6, 100_001e6);
+        vm.startPrank(owner);
+        vm.expectRevert(GooseExecutor.OutOfBounds.selector);
+        x.queueChange(GooseExecutor.Change.SetRebalanceLimits, abi.encode(badR));
+        vm.expectRevert(GooseExecutor.OutOfBounds.selector);
+        x.queueChange(GooseExecutor.Change.SetEntryLimits, abi.encode(badE));
+        x.queueChange(GooseExecutor.Change.SetRebalanceLimits, abi.encode(r));
+        x.queueChange(GooseExecutor.Change.SetEntryLimits, abi.encode(e));
+        vm.expectRevert(abi.encodeWithSelector(GooseExecutor.TooEarly.selector, vm.getBlockTimestamp() + 7 days));
+        x.applyChange(GooseExecutor.Change.SetEntryLimits, abi.encode(e), 1);
+        vm.warp(vm.getBlockTimestamp() + 7 days);
+        x.applyChange(GooseExecutor.Change.SetRebalanceLimits, abi.encode(r), 0);
+        x.applyChange(GooseExecutor.Change.SetEntryLimits, abi.encode(e), 1);
+        vm.stopPrank();
+        (,,,, uint64 minTrade,) = x.rebalanceLimits();
+        assertEq(minTrade, 50e6);
+        (uint16 floor_,, uint64 maxSwap) = x.entryLimits();
+        assertEq(floor_, 30);
+        assertEq(maxSwap, 25_000e6);
+    }
+
+    /// One Face ID: the account writes its own mix to the registry. It must add up to 100%, or be all 0 to clear it.
+    function test_only_the_account_itself_sets_its_mix() public {
+        uint16[7] memory mix = [uint16(2_500), 0, 0, 0, 0, 5_000, 2_500];
+        vm.expectEmit(true, false, false, true, address(x));
+        emit GooseExecutor.MixSet(account, mix);
+        vm.prank(account);
+        x.setMix(mix);
+        assertEq(x.mixes(account), uint256(2_500) | uint256(5_000) << 80 | uint256(2_500) << 96);
+        assertEq(x.mixes(stranger), 0, "a stranger only sets its own");
+
+        mix[0] = 2_499;
+        vm.expectRevert(GooseExecutor.BadMix.selector);
+        vm.prank(account);
+        x.setMix(mix);
+        vm.prank(account);
+        x.setMix([uint16(0), 0, 0, 0, 0, 0, 0]);
+        assertEq(x.mixes(account), 0, "cleared");
+    }
+
     function test_only_the_account_itself_sets_keep_my_mix() public {
         vm.expectEmit(true, false, false, true, address(x));
         emit GooseExecutor.KeepMixSet(account, true);
         vm.prank(account);
         x.setKeepMix(true);
-        (,,,,,,, bool keepMix) = x.accounts(account);
+        (,,,,,,, bool keepMix,) = x.accounts(account);
         assertTrue(keepMix);
         vm.prank(stranger);
         x.setKeepMix(false);
-        (,,,,,,, keepMix) = x.accounts(account);
+        (,,,,,,, keepMix,) = x.accounts(account);
         assertTrue(keepMix, "a stranger only sets its own");
     }
 
@@ -337,6 +399,41 @@ contract GooseExecutorTest is Test {
         (, bytes memory data) = abi.decode(performData, (GooseExecutor.Mode, bytes));
         assertEq(data, abi.encode(GooseExecutor.Job.ProtectSell, account, p.start, p.end, p.salt, uint160(5e6), t));
         assertLe(performData.length, 2000);
+    }
+
+    /// The Rebalancer's grant: NVIDIA and Tesla it may sell, each with a weekly limit, and USDC for the buys.
+    function test_checkLog_turns_an_exact_rebalance_grant_into_a_registration() public {
+        _mockPrices(200e8);
+        uint256 t = _terms(0.02e8, 0.03e8);
+        PM.Permission memory p = _grantWith(GooseExecutor.Job.Rebalance, 5e6, t);
+        assertEq(p.calls.length, 4, "two approves, USDC's approve, swap");
+        assertEq(p.spends.length, 3, "USDC and the two stocks");
+        assertEq(uint8(p.spends[0].unit), uint8(PM.PeriodUnit.Week));
+        (bool needed, bytes memory performData) = x.checkLog(_log(p), "");
+        assertTrue(needed);
+        (, bytes memory data) = abi.decode(performData, (GooseExecutor.Mode, bytes));
+        assertEq(data, abi.encode(GooseExecutor.Job.Rebalance, account, p.start, p.end, p.salt, uint160(5e6), t));
+
+        _ignored(_log(_grantWith(GooseExecutor.Job.Rebalance, 5e6, _terms(0.06e8, 0))), "a stock limit over two caps");
+        p.spends[0].unit = PM.PeriodUnit.Day;
+        _ignored(_log(p), "a daily limit");
+    }
+
+    /// Entry's grant: four coins, each with a daily limit at the same face value, and the three venues' swaps.
+    function test_checkLog_turns_an_exact_entry_grant_into_a_registration() public {
+        PM.Permission memory p = _grant(GooseExecutor.Job.Entry, 5e6);
+        assertEq(p.calls.length, 7, "four approves and three swaps");
+        assertEq(p.spends[1].allowance, 5e18, "USDe's limit: $5 at 18 decimals");
+        (bool needed, bytes memory performData) = x.checkLog(_log(p), "");
+        assertTrue(needed);
+        (, bytes memory data) = abi.decode(performData, (GooseExecutor.Mode, bytes));
+        assertEq(data, abi.encode(GooseExecutor.Job.Entry, account, p.start, p.end, p.salt, uint160(5e6), uint256(0)));
+
+        p.spends[1].allowance = 5e6;
+        _ignored(_log(p), "a limit not adjusted for decimals");
+        p = _grant(GooseExecutor.Job.Entry, 5e6);
+        p.calls[5].target = stranger;
+        _ignored(_log(p), "another venue");
     }
 
     function test_checkLog_ignores_a_sell_grant_it_would_not_register() public {
@@ -411,14 +508,15 @@ contract GooseExecutorTest is Test {
     }
 
     function _sellGrant(uint160 cap, uint256 t) internal view returns (PM.Permission memory) {
+        return _grantWith(GooseExecutor.Job.ProtectSell, cap, t);
+    }
+
+    function _grantWith(GooseExecutor.Job job, uint160 cap, uint256 t) internal view returns (PM.Permission memory) {
         uint48 start = uint48(vm.getBlockTimestamp());
-        return x.permissionFor(
-            GooseExecutor.Job.ProtectSell,
-            account,
-            GooseExecutor.Grant(start, start + 365 days, cap),
-            uint256(keccak256("salt")),
-            t
-        );
+        return
+            x.permissionFor(
+                job, account, GooseExecutor.Grant(start, start + 365 days, cap), uint256(keccak256("salt")), t
+            );
     }
 
     function _mockPrices(uint256 price) internal {

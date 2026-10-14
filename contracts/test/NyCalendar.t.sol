@@ -42,7 +42,9 @@ contract NyCalendarTest is Test {
                 codehashes: none,
                 thresholds: d.thresholds(),
                 amounts: d.amounts(),
-                sellLimits: d.sellLimits()
+                sellLimits: d.sellLimits(),
+                rebalanceLimits: d.rebalanceLimits(),
+                entryLimits: d.entryLimits()
             })
         );
     }

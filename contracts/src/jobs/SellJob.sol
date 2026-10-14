@@ -17,21 +17,12 @@ import {JobBase} from "./JobBase.sol";
 ///         stock has no `approve` in `calls`, so the manager refuses any batch that would sell it.
 /// @dev A linked library: its code runs as GooseExecutor, the spender, exactly as if it were inlined there.
 library SellJob {
-    /// A stock's daily limit is a whole number of these raw units (1e-4 share), so all seven fit in one word: the
-    /// grant's `terms` hold the limit of reserve r, in these units, at bits [32r, 32r + 32). 0 = never sell.
-    uint256 internal constant STOCK_LIMIT_UNIT = 1e4;
-    /// At registration, a stock's daily limit may be worth at most this many times CAP_MAX at Aave's price (D13).
-    uint256 internal constant STOCK_LIMIT_CAPS = 2;
     /// Most gas the manager's batch may use for a sale: about 660k plus 234k a slice, measured on a Base fork.
     uint256 internal constant SELL_GAS = 2_600_000;
     /// Kept for the reads and post-checks around the batch.
     uint256 internal constant CHECKS_GAS = 400_000;
     /// The pool cap counts every account's sales into one stock's pool over this window.
     uint48 internal constant POOL_WINDOW = 10 minutes;
-    /// Every stock's Aerodrome Slipstream pool with USDC (checked on a Base fork by DeployExecutor.t.sol).
-    int24 internal constant TICK_SPACING = 10;
-    /// Aave V4's reserve flags: bit 0 is paused (ReserveFlagsMap).
-    uint8 internal constant PAUSED = 1;
 
     /// What a planned sale carries to its batch.
     struct Sale {
@@ -61,7 +52,7 @@ library SellJob {
         p.salt = salt;
         uint256 k;
         for (uint256 r; r < 7; ++r) {
-            if (_limit(terms, r) > 0) ++k;
+            if (JobBase.stockLimit(terms, r) > 0) ++k;
         }
         p.calls = new PM.CallPermission[](4 + k);
         p.spends = new PM.SpendLimit[](2 + k);
@@ -70,7 +61,7 @@ library SellJob {
         p.spends[1] = PM.SpendLimit(address(e.aUsdc), g.cap, PM.PeriodUnit.Day, 1);
         uint256 j;
         for (uint256 r; r < 7; ++r) {
-            uint256 limit = _limit(terms, r);
+            uint256 limit = JobBase.stockLimit(terms, r);
             if (limit == 0) continue;
             ++j;
             p.calls[j] = PM.CallPermission(e.stocks[r], IERC20.approve.selector, address(0));
@@ -81,33 +72,14 @@ library SellJob {
         p.calls[k + 3] = PM.CallPermission(address(e.spoke), ISpoke.repay.selector, address(0));
     }
 
-    /// The terms a granted permission carries, read from its stock limits; 0 if they aren't in reserve order, aren't
-    /// our stocks or aren't whole units. The caller still rebuilds the template and compares it in full.
-    function termsFrom(GooseExecutor.Env memory e, PM.Permission memory p) public pure returns (uint256 terms) {
-        if (p.spends.length < 3 || p.spends.length > 9) return 0;
-        uint256 next;
-        for (uint256 j = 2; j < p.spends.length; ++j) {
-            uint256 r = next;
-            while (r < 7 && e.stocks[r] != p.spends[j].token) ++r;
-            uint256 allowance = p.spends[j].allowance;
-            if (r == 7 || allowance % STOCK_LIMIT_UNIT != 0 || allowance / STOCK_LIMIT_UNIT > type(uint32).max) {
-                return 0;
-            }
-            terms |= allowance / STOCK_LIMIT_UNIT << (32 * r);
-            next = r + 1;
-        }
+    /// The terms a granted permission carries, read from its stock limits after USDC's and aUSDC's (JobBase).
+    function termsFrom(GooseExecutor.Env memory e, PM.Permission memory p) public pure returns (uint256) {
+        return JobBase.stockTerms(e, p, 2);
     }
 
-    /// At least one stock is for sale, and each stock's daily limit is worth at most STOCK_LIMIT_CAPS × CAP_MAX at
-    /// Aave's price now, so a $5 test deploy (D13) can't be granted a large stock limit.
+    /// At least one stock is for sale, each within its registration bound (JobBase).
     function termsOk(GooseExecutor.Env memory e, uint256 terms) public view returns (bool) {
-        if (terms == 0 || terms >> 224 != 0) return false;
-        for (uint256 r; r < 7; ++r) {
-            uint256 limit = _limit(terms, r);
-            if (limit == 0) continue;
-            if (limit * e.oracle.getReservePrice(r) / 1e10 > STOCK_LIMIT_CAPS * e.capMax) return false;
-        }
-        return true;
+        return JobBase.stockTermsOk(e, terms);
     }
 
     function checkLimits(SellLimits memory l) public pure {
@@ -152,7 +124,7 @@ library SellJob {
             uint256 hfAfter = _sell(e, c.account, sale, p.hf);
             for (uint256 i; i < sale.slices.length; ++i) {
                 Slice memory s = sale.slices[i];
-                _usePool(pools[s.reserveId], _ceilDiv(s.shares * sale.prices[s.reserveId], 1e10));
+                _usePool(pools[s.reserveId], JobBase.ceilDiv(s.shares * sale.prices[s.reserveId], 1e10));
             }
             // Done once back above the heads-up line. A sale cut short (by the slices a run makes, a limit or the pool
             // cap) goes on in the next runs without a new wait: the user was warned, or it was urgent.
@@ -181,9 +153,9 @@ library SellJob {
         // A heads-up or a sale: only worth it if there is something Protect may sell now.
         sale.perm = permission(e, c.account, c.grant, c.salt, c.terms);
         uint256 usdcLeft = JobBase.capLeft(e.manager, sale.perm, 0);
-        if (usdcLeft == 0 || e.spoke.getReserve(e.usdcReserveId).flags & PAUSED != 0) return (p, sale);
+        if (usdcLeft == 0 || e.spoke.getReserve(e.usdcReserveId).flags & JobBase.PAUSED != 0) return (p, sale);
         Book memory b = _book(e, c, sale, pools, usdcLeft);
-        b.debt = _ceilDiv(e.spoke.getUserAccountData(c.account).totalDebtValueRay, 1e27);
+        b.debt = JobBase.ceilDiv(e.spoke.getUserAccountData(c.account).totalDebtValueRay, 1e27);
         uint256 floor = sale.atOnce ? c.sellLimits.actFloorBps : c.sellLimits.floorBps;
         uint256[7] memory take = SellRules.amounts(b, c.sellLimits.targetHf, floor, acc.keepMix);
         sale.slices = SellRules.slices(b, take, floor, c.sellLimits.maxSlice);
@@ -222,7 +194,7 @@ library SellJob {
             bool paused;
             (b.stocks[r], paused) = _holding(e, c.account, r);
             sale.prices[r] = b.stocks[r].price;
-            if (_limit(c.terms, r) == 0) continue;
+            if (JobBase.stockLimit(c.terms, r) == 0) continue;
             if (b.stocks[r].shares > 0 && !paused) {
                 b.stocks[r].limit = JobBase.capLeft(e.manager, sale.perm, spend);
                 b.stocks[r].poolLeft = _poolLeft(pools[r], c.sellLimits.poolCap);
@@ -246,7 +218,7 @@ library SellJob {
         if (h.cf == 0) return (h, false);
         h.shares = shares;
         h.price = e.oracle.getReservePrice(r);
-        paused = res.flags & PAUSED != 0;
+        paused = res.flags & JobBase.PAUSED != 0;
     }
 
     /// Takes each slice's stock out of Aave, swaps exactly that on Aerodrome to the account with Aave's price minus the
@@ -342,7 +314,7 @@ library SellJob {
             IAeroRouter.ExactInputSingleParams memory swap = IAeroRouter.ExactInputSingleParams({
                 tokenIn: e.stocks[s.reserveId],
                 tokenOut: address(e.usdc),
-                tickSpacing: TICK_SPACING,
+                tickSpacing: JobBase.STOCK_TICK_SPACING,
                 recipient: account,
                 deadline: block.timestamp,
                 amountIn: s.shares,
@@ -373,19 +345,10 @@ library SellJob {
 
     // ================================================================== helpers
 
-    /// Reserve r's daily limit in raw shares, from the grant's terms.
-    function _limit(uint256 terms, uint256 r) internal pure returns (uint256) {
-        return (terms >> (32 * r) & type(uint32).max) * STOCK_LIMIT_UNIT;
-    }
-
     /// What the planned slices sell, in USDC at Aave's price.
     function _value(Sale memory sale) internal pure returns (uint256 v) {
         for (uint256 i; i < sale.slices.length; ++i) {
             v += sale.slices[i].shares * sale.prices[sale.slices[i].reserveId] / 1e10;
         }
-    }
-
-    function _ceilDiv(uint256 a, uint256 b) internal pure returns (uint256) {
-        return a == 0 ? 0 : (a - 1) / b + 1;
     }
 }

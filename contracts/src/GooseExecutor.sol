@@ -6,10 +6,14 @@ import {ILogAutomation, Log} from "chainlink/automation/interfaces/ILogAutomatio
 import {IJustaPermissionManager as PM} from "./IJustaPermissionManager.sol";
 import {IAaveOracle, IAaveV3Pool, IERC20, ISpoke} from "./IProtocols.sol";
 import {Amounts, ProtectCase, Thresholds} from "./CashRules.sol";
+import {EntryLimits} from "./EntryRules.sol";
 import {NyCalendar} from "./NyCalendar.sol";
+import {RebalanceLimits} from "./RebalanceRules.sol";
 import {SellLimits} from "./SellRules.sol";
+import {EntryJob} from "./jobs/EntryJob.sol";
 import {JobBase} from "./jobs/JobBase.sol";
 import {ProtectJob} from "./jobs/ProtectJob.sol";
+import {RebalanceJob} from "./jobs/RebalanceJob.sol";
 import {SaveJob} from "./jobs/SaveJob.sol";
 import {SellJob} from "./jobs/SellJob.sol";
 
@@ -22,7 +26,9 @@ import {SellJob} from "./jobs/SellJob.sol";
 ///         It runs the Cash Agent: Save (wallet USDC above the keep-back goes to Aave V3 savings), Protect from
 ///         savings (a loan that slips below the trigger is repaid from savings, and before a price freeze a fragile
 ///         one is trimmed), and Protect · sell (when savings can't keep the credit Safe, some of the stock that backs
-///         it is sold to repay, after a heads-up).
+///         it is sold to repay, after a heads-up). It also runs the Rebalancer (once a market day, the mix of free
+///         stock is brought back when a stock breaks its band) and the Entry agent (a whitelisted stablecoin in the
+///         wallet becomes USDC at 99.5% of face value or better).
 ///
 ///         JAW's screen grants with every checker set to 0, so the manager only enforces targets, selectors, the
 ///         spender and the daily limits. Every argument is pinned here: each call is built for the account alone, and
@@ -39,7 +45,9 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     enum Job {
         Save,
         Protect,
-        ProtectSell
+        ProtectSell,
+        Rebalance,
+        Entry
     }
 
     /// What a `performUpkeep` call carries: a run over listed accounts, or a registration found by `checkLog`.
@@ -56,7 +64,9 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         Sell,
         HeadsUp,
         ClearHeadsUp,
-        Defer // a sale that doesn't fit in the gas left waits for the next run
+        Defer, // a batch that doesn't fit in the gas left waits for the next run
+        Rebalance,
+        Convert
     }
 
     enum OffReason {
@@ -73,7 +83,9 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         SetHoliday,
         AllowCodehash,
         SetOwner,
-        SetSellLimits
+        SetSellLimits,
+        SetRebalanceLimits,
+        SetEntryLimits
     }
 
     /// What the user signed that the template doesn't fix. One slot.
@@ -94,6 +106,7 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         uint48 headsUpAt; // Protect · sell: when the pending heads-up went out; 0 = none. A sale cut short sets it
         // a full delay back, so the rest goes on without a new wait
         bool keepMix; // Protect · sell: the same share of each holding, instead of the most safety per dollar first
+        uint32 rebalanceDay; // the Rebalancer: the New York day of its last batch, once a market day
     }
 
     /// What all accounts sold into one stock's pool in the current window (SellJob.POOL_WINDOW). One slot.
@@ -106,9 +119,11 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     struct Plan {
         Action action;
         Job job;
-        uint256 amount; // USDC units (Repay, Save; Sell and HeadsUp: what the sale repays)
+        uint256 amount; // USDC units (Repay, Save; Sell and HeadsUp: what the sale repays; Rebalance: what the buys
+        // spend; Convert: the least USDC the swap brings in)
         uint256 hf; // health factor before the move, WAD, or as the job read it (max: nothing owed)
-        uint8 reason; // Repay: a ProtectCase, Watch or WeekendShield. Sell, HeadsUp: 1 when the sale is at once (Act)
+        uint8 reason; // Repay: a ProtectCase, Watch or WeekendShield. Sell, HeadsUp: 1 when the sale is at once (Act).
+        // Convert: the coin's index in EntryJob
         OffReason off; // Prune
     }
 
@@ -129,6 +144,8 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         Thresholds thresholds;
         Amounts amounts;
         SellLimits sellLimits;
+        RebalanceLimits rebalanceLimits;
+        EntryLimits entryLimits;
     }
 
     struct Balances {
@@ -149,6 +166,8 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         Thresholds thresholds;
         Amounts amounts;
         SellLimits sellLimits;
+        RebalanceLimits rebalanceLimits;
+        EntryLimits entryLimits;
     }
 
     /// The addresses fixed at deploy, handed to the job libraries (which can't read this contract's immutables).
@@ -176,8 +195,8 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     /// Most gas one account's run may use with a sale: planning it, SellJob's batch, its post-checks. A sale that
     /// doesn't find enough left is deferred to the next run.
     uint256 internal constant MAX_RUN_GAS = 4_200_000;
-    /// The jobs, in the order a run tries them: Protect from savings, then by selling, then Save.
-    uint8 internal constant JOBS = 3;
+    /// The jobs, in the order a run tries them: Protect from savings, then by selling, the Rebalancer, Entry, Save.
+    uint8 internal constant JOBS = 5;
     /// `checkUpkeep` stops scanning below this.
     uint256 internal constant CHECK_RESERVE = 1_500_000;
     /// Most accounts per `performUpkeep`.
@@ -191,24 +210,6 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     /// A holiday may be set at most this many days ahead.
     uint256 internal constant HOLIDAY_HORIZON = 800;
     uint32 internal constant MAX_PAGE_SIZE = 200;
-
-    // Hard bounds (D18). Nothing can change them.
-    uint64 internal constant TRIGGER_HF_MIN = 1.2e18;
-    uint64 internal constant TRIGGER_HF_MAX = 2e18;
-    uint64 internal constant TARGET_GAP_MIN = 0.05e18;
-    uint64 internal constant TARGET_HF_MAX = 2.5e18;
-    uint64 internal constant STRESS_DROP_MIN = 0.05e18;
-    uint64 internal constant STRESS_DROP_MAX = 0.3e18;
-    uint64 internal constant STRESS_FLOOR_HF_MIN = 1.02e18;
-    uint64 internal constant MIN_REPAY_MIN = 0.05e6;
-    uint64 internal constant MIN_REPAY_MAX = 50e6;
-    uint64 internal constant MIN_SAVE_MIN = 0.1e6;
-    uint64 internal constant MIN_SAVE_MAX = 100e6;
-    uint64 internal constant KEEP_BACK_MAX = 5e6;
-    uint32 internal constant WEEKEND_WINDOW_MIN = 1 hours;
-    uint32 internal constant WEEKEND_WINDOW_MAX = 12 hours;
-    uint8 internal constant MAX_SAVES_MIN = 1;
-    uint8 internal constant MAX_SAVES_MAX = 24;
 
     // ------------------------------------------------------------------ immutables
 
@@ -241,8 +242,13 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     mapping(address account => Account) public accounts;
     mapping(address account => mapping(Job => Grant)) internal grants;
     mapping(address account => mapping(Job => uint256)) internal salts;
-    /// What else the user signed, packed by the job: Protect · sell's daily limit per stock (SellJob).
+    /// What else the user signed, packed by the job: Protect · sell's daily and the Rebalancer's weekly limit per stock
+    /// (JobBase).
     mapping(address account => mapping(Job => uint256)) internal terms;
+    /// The Rebalancer's target mix, set only by the account: a weight in BPS per stock, 16 bits each by reserve id.
+    mapping(address account => uint256) public mixes;
+    /// Entry: when each coin that couldn't meet the floor may be tried again, 32 bits each in EntryJob's order.
+    mapping(address account => uint256) public entryWaits;
     /// Append-only. Page p is members[p * PAGE_SIZE, (p + 1) * PAGE_SIZE).
     address[] public members;
     /// Code an account must run to register: JAW's account proxy, or its EIP-7702 delegation.
@@ -251,6 +257,8 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     Thresholds public thresholds;
     Amounts public amounts;
     SellLimits public sellLimits;
+    RebalanceLimits public rebalanceLimits;
+    EntryLimits public entryLimits;
     /// The app-wide cap on Protect's sales into each stock's pool, by reserve id.
     mapping(uint256 reserveId => PoolUse) public pools;
     /// New York days when the stock prices are held (NyCalendar).
@@ -280,6 +288,14 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         address indexed account, uint256[7] shares, uint256 repaid, uint256 hfBefore, uint256 hfAfter, bool atOnce
     );
     event KeepMixSet(address indexed account, bool on);
+    event MixSet(address indexed account, uint16[7] weights);
+    /// Shares by reserve id: what the sales sold and the buys bought.
+    event Rebalanced(address indexed account, uint256[7] sold, uint256[7] bought);
+    /// A batch that couldn't meet its floors: nothing moved, and the Rebalancer is done for the day.
+    event RebalanceSkipped(address indexed account);
+    event EntryConverted(address indexed account, address indexed coin, uint256 amountIn, uint256 usdcOut);
+    /// The coin's swap couldn't meet the floor: nothing moved, and it is tried again at `retryAt`.
+    event EntryWaiting(address indexed account, address indexed coin, uint256 amountIn, uint32 retryAt);
     event RunFailed(address indexed account, bytes4 reason, uint8 fails);
     event RunDeferred(address indexed account);
     event PageOpened(uint32 indexed page);
@@ -317,6 +333,8 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     error CashLower();
     error WrongAmount();
     error SavingsNotUp();
+    error BelowFloor();
+    error BadMix();
     error ExecutorGotFunds();
     error NotOwner();
     error AlreadyBootstrapped();
@@ -350,9 +368,11 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
             if (c.stocks[r] == address(0)) revert ZeroValue();
         }
         if (c.capMax == 0 || c.pageSize == 0 || c.pageSize > MAX_PAGE_SIZE) revert OutOfBounds();
-        _checkThresholds(c.thresholds);
-        _checkAmounts(c.amounts);
+        ProtectJob.checkThresholds(c.thresholds);
+        SaveJob.checkAmounts(c.amounts);
         SellJob.checkLimits(c.sellLimits);
+        RebalanceJob.checkLimits(c.rebalanceLimits);
+        EntryJob.checkLimits(c.entryLimits);
         MANAGER = c.manager;
         AAVE_V3_POOL = c.aaveV3Pool;
         SPOKE = c.spoke;
@@ -366,6 +386,8 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         (STOCK0, STOCK1, STOCK2, STOCK3, STOCK4, STOCK5, STOCK6) =
         (c.stocks[0], c.stocks[1], c.stocks[2], c.stocks[3], c.stocks[4], c.stocks[5], c.stocks[6]);
         sellLimits = c.sellLimits;
+        rebalanceLimits = c.rebalanceLimits;
+        entryLimits = c.entryLimits;
         owner = c.owner;
         thresholds = c.thresholds;
         amounts = c.amounts;
@@ -379,8 +401,8 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
 
     /// Switches `job` on for `account` with the permission it approved through JAW's screen. Anyone may call it: it
     /// moves no money and checks everything on-chain. A newer grant for the same job replaces the stored one; the same
-    /// grant again changes nothing. `t` is the job's terms: Protect · sell's daily limit per stock (SellJob), 0 for
-    /// the Cash Agent's other jobs.
+    /// grant again changes nothing. `t` is the job's terms: the limit per stock for Protect · sell and the Rebalancer
+    /// (JobBase), 0 for the other jobs.
     function register(Job job, address account, uint48 start, uint48 end, uint256 salt, uint160 cap, uint256 t)
         external
         nonReentrant
@@ -393,6 +415,13 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     function setKeepMix(bool on) external nonReentrant {
         accounts[msg.sender].keepMix = on;
         emit KeepMixSet(msg.sender, on);
+    }
+
+    /// The Rebalancer's target mix: a weight in BPS per stock, by reserve id, adding up to 100% (all 0 clears it). Only
+    /// the account itself sets it, in one Face ID.
+    function setMix(uint16[7] calldata weights) external nonReentrant {
+        mixes[msg.sender] = RebalanceJob.mixOf(weights);
+        emit MixSet(msg.sender, weights);
     }
 
     /// Switches `job` off once its permission is dead: revoked, past its end, or the manager no longer owns the account.
@@ -428,9 +457,9 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         for (uint8 j; j < JOBS; ++j) {
             Job job = Job(j);
             uint256 t;
-            if (job == Job.ProtectSell) {
-                t = SellJob.termsFrom(_env(), p);
-                if (!SellJob.termsOk(_env(), t)) continue;
+            if (job == Job.ProtectSell || job == Job.Rebalance) {
+                t = job == Job.ProtectSell ? SellJob.termsFrom(_env(), p) : RebalanceJob.termsFrom(_env(), p);
+                if (!_termsOk(job, t)) continue;
             }
             if (keccak256(abi.encode(_permission(job, p.account, Grant(p.start, p.end, cap), p.salt, t))) != signed) {
                 continue;
@@ -530,7 +559,7 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         }
     }
 
-    /// One account's run: Protect from savings, then by selling, then Save, and at most one move. A dead permission
+    /// One account's run: Protect from savings, then by selling, the Rebalancer, Entry, then Save, and at most one move. A dead permission
     /// switches its job off on the way. Returns true when a sale didn't fit in the gas left. Only callable by this
     /// contract, from `performUpkeep`.
     function runAccount(address account, bool frozen_, bool preFreeze) external returns (bool deferred) {
@@ -645,7 +674,8 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     }
 
     /// Everything else waits `DELAY` in public. `value` is abi-encoded: an address (AddForwarder, SetOwner), a
-    /// Thresholds, an Amounts, (uint32 day, bool on) for SetHoliday, a bytes32 codehash, or a SellLimits.
+    /// Thresholds, an Amounts, (uint32 day, bool on) for SetHoliday, a bytes32 codehash, a SellLimits, a
+    /// RebalanceLimits or an EntryLimits.
     function queueChange(Change kind, bytes calldata value)
         external
         nonReentrant
@@ -682,6 +712,10 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
             _setCodehash(abi.decode(value, (bytes32)), true);
         } else if (kind == Change.SetSellLimits) {
             sellLimits = abi.decode(value, (SellLimits));
+        } else if (kind == Change.SetRebalanceLimits) {
+            rebalanceLimits = abi.decode(value, (RebalanceLimits));
+        } else if (kind == Change.SetEntryLimits) {
+            entryLimits = abi.decode(value, (EntryLimits));
         } else {
             owner = abi.decode(value, (address));
             emit OwnerSet(owner);
@@ -704,7 +738,7 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         if (!JobBase.managerOwns(MANAGER, account)) revert ManagerNotOwner();
         if (cap == 0 || cap > CAP_MAX) revert CapOutOfBounds();
         if (start >= end || block.timestamp > end) revert BadWindow();
-        if (job == Job.ProtectSell ? !SellJob.termsOk(_env(), t) : t != 0) revert BadTerms();
+        if (!_termsOk(job, t)) revert BadTerms();
         Grant memory g = Grant(start, end, cap);
         PM.Permission memory p = _permission(job, account, g, salt, t);
         if (!MANAGER.isApproved(p) || MANAGER.isRevoked(p)) revert NotApproved();
@@ -753,7 +787,16 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     {
         if (job == Job.Save) return SaveJob.permission(_env(), account, g, salt, t);
         if (job == Job.Protect) return ProtectJob.permission(_env(), account, g, salt, t);
-        return SellJob.permission(_env(), account, g, salt, t);
+        if (job == Job.ProtectSell) return SellJob.permission(_env(), account, g, salt, t);
+        if (job == Job.Rebalance) return RebalanceJob.permission(_env(), account, g, salt, t);
+        return EntryJob.permission(_env(), account, g, salt, t);
+    }
+
+    /// Protect · sell and the Rebalancer carry a limit per stock, within its bounds; the other jobs none.
+    function _termsOk(Job job, uint256 t) internal view returns (bool) {
+        if (job == Job.ProtectSell) return SellJob.termsOk(_env(), t);
+        if (job == Job.Rebalance) return RebalanceJob.termsOk(_env(), t);
+        return t == 0;
     }
 
     // ================================================================== internals: rules
@@ -775,14 +818,18 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         Ctx memory c = _ctx(account, job, g, frozen_, preFreeze, hf);
         if (job == Job.Save) return SaveJob.plan(_env(), c, accounts[account], pools);
         if (job == Job.Protect) return ProtectJob.plan(_env(), c, accounts[account], pools);
-        return SellJob.plan(_env(), c, accounts[account], pools);
+        if (job == Job.ProtectSell) return SellJob.plan(_env(), c, accounts[account], pools);
+        if (job == Job.Rebalance) return RebalanceJob.plan(_env(), c, accounts[account], mixes);
+        return EntryJob.plan(_env(), c, accounts[account], entryWaits);
     }
 
     /// Plans the job again from fresh reads and makes its move, if any, through its library.
     function _runJob(Job job, Ctx memory c) internal returns (Plan memory) {
         if (job == Job.Save) return SaveJob.run(_env(), c, accounts[c.account], pools);
         if (job == Job.Protect) return ProtectJob.run(_env(), c, accounts[c.account], pools);
-        return SellJob.run(_env(), c, accounts[c.account], pools);
+        if (job == Job.ProtectSell) return SellJob.run(_env(), c, accounts[c.account], pools);
+        if (job == Job.Rebalance) return RebalanceJob.run(_env(), c, accounts[c.account], mixes);
+        return EntryJob.run(_env(), c, accounts[c.account], entryWaits);
     }
 
     function _ctx(address account, Job job, Grant memory g, bool frozen_, bool preFreeze, uint256 hf)
@@ -794,13 +841,15 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
             account: account,
             grant: g,
             salt: salts[account][job],
-            terms: job == Job.ProtectSell ? terms[account][job] : 0,
+            terms: job == Job.ProtectSell || job == Job.Rebalance ? terms[account][job] : 0,
             frozen: frozen_,
             preFreeze: preFreeze,
             hf: hf,
             thresholds: thresholds,
             amounts: amounts,
-            sellLimits: sellLimits
+            sellLimits: sellLimits,
+            rebalanceLimits: rebalanceLimits,
+            entryLimits: entryLimits
         });
     }
 
@@ -808,9 +857,9 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         return Env(MANAGER, AAVE_V3_POOL, SPOKE, USDC, AUSDC, USDC_RESERVE_ID, ORACLE, ROUTER, stocks(), CAP_MAX);
     }
 
-    /// The order a run tries the jobs in: Protect from savings, then by selling, then Save.
+    /// The order a run tries the jobs in: Protect from savings, then by selling, the Rebalancer, Entry, then Save.
     function _priority(uint8 j) internal pure returns (Job) {
-        return j == 0 ? Job.Protect : j == 1 ? Job.ProtectSell : Job.Save;
+        return j == 0 ? Job.Protect : j == 1 ? Job.ProtectSell : j == 2 ? Job.Rebalance : j == 3 ? Job.Entry : Job.Save;
     }
 
     /// Whether stock prices are held at `ts`, and whether it is in Weekend Shield's window: prices are live and the
@@ -877,9 +926,11 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     }
 
     function _checkChange(Change kind, bytes calldata value) internal view {
-        if (kind == Change.SetThresholds) return _checkThresholds(abi.decode(value, (Thresholds)));
-        if (kind == Change.SetAmounts) return _checkAmounts(abi.decode(value, (Amounts)));
+        if (kind == Change.SetThresholds) return ProtectJob.checkThresholds(abi.decode(value, (Thresholds)));
+        if (kind == Change.SetAmounts) return SaveJob.checkAmounts(abi.decode(value, (Amounts)));
         if (kind == Change.SetSellLimits) return SellJob.checkLimits(abi.decode(value, (SellLimits)));
+        if (kind == Change.SetRebalanceLimits) return RebalanceJob.checkLimits(abi.decode(value, (RebalanceLimits)));
+        if (kind == Change.SetEntryLimits) return EntryJob.checkLimits(abi.decode(value, (EntryLimits)));
         if (kind == Change.SetHoliday) {
             (uint32 day,) = abi.decode(value, (uint32, bool));
             uint256 today = NyCalendar.day(block.timestamp);
@@ -891,22 +942,5 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
             return;
         }
         if (abi.decode(value, (address)) == address(0)) revert ZeroValue(); // AddForwarder, SetOwner
-    }
-
-    function _checkThresholds(Thresholds memory t) internal pure {
-        if (
-            t.triggerHf < TRIGGER_HF_MIN || t.triggerHf > TRIGGER_HF_MAX || t.targetHf < t.triggerHf + TARGET_GAP_MIN
-                || t.targetHf > TARGET_HF_MAX || t.stressDrop < STRESS_DROP_MIN || t.stressDrop > STRESS_DROP_MAX
-                || t.stressFloorHf < STRESS_FLOOR_HF_MIN || t.stressFloorHf > t.triggerHf
-        ) revert OutOfBounds();
-    }
-
-    function _checkAmounts(Amounts memory a) internal pure {
-        if (
-            a.minRepay < MIN_REPAY_MIN || a.minRepay > MIN_REPAY_MAX || a.minSave < MIN_SAVE_MIN
-                || a.minSave > MIN_SAVE_MAX || a.keepBack > KEEP_BACK_MAX || a.weekendWindow < WEEKEND_WINDOW_MIN
-                || a.weekendWindow > WEEKEND_WINDOW_MAX || a.maxSavesPerDay < MAX_SAVES_MIN
-                || a.maxSavesPerDay > MAX_SAVES_MAX
-        ) revert OutOfBounds();
     }
 }

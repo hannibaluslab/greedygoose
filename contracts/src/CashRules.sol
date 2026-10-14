@@ -47,6 +47,38 @@ library CashRules {
     uint256 internal constant RAY = 1e27;
     uint256 internal constant VALUE_PER_USDC_UNIT = 1e20;
 
+    // Hard bounds (D18). Nothing can change them.
+    uint64 internal constant TRIGGER_HF_MIN = 1.2e18;
+    uint64 internal constant TRIGGER_HF_MAX = 2e18;
+    uint64 internal constant TARGET_GAP_MIN = 0.05e18;
+    uint64 internal constant TARGET_HF_MAX = 2.5e18;
+    uint64 internal constant STRESS_DROP_MIN = 0.05e18;
+    uint64 internal constant STRESS_DROP_MAX = 0.3e18;
+    uint64 internal constant STRESS_FLOOR_HF_MIN = 1.02e18;
+    uint64 internal constant MIN_REPAY_MIN = 0.05e6;
+    uint64 internal constant MIN_REPAY_MAX = 50e6;
+    uint64 internal constant MIN_SAVE_MIN = 0.1e6;
+    uint64 internal constant MIN_SAVE_MAX = 100e6;
+    uint64 internal constant KEEP_BACK_MAX = 5e6;
+    uint32 internal constant WEEKEND_WINDOW_MIN = 1 hours;
+    uint32 internal constant WEEKEND_WINDOW_MAX = 12 hours;
+    uint8 internal constant MAX_SAVES_MIN = 1;
+    uint8 internal constant MAX_SAVES_MAX = 24;
+
+    function thresholdsOk(Thresholds memory t) internal pure returns (bool) {
+        return t.triggerHf >= TRIGGER_HF_MIN && t.triggerHf <= TRIGGER_HF_MAX
+            && t.targetHf >= t.triggerHf + TARGET_GAP_MIN && t.targetHf <= TARGET_HF_MAX
+            && t.stressDrop >= STRESS_DROP_MIN && t.stressDrop <= STRESS_DROP_MAX
+            && t.stressFloorHf >= STRESS_FLOOR_HF_MIN && t.stressFloorHf <= t.triggerHf;
+    }
+
+    function amountsOk(Amounts memory a) internal pure returns (bool) {
+        return a.minRepay >= MIN_REPAY_MIN && a.minRepay <= MIN_REPAY_MAX && a.minSave >= MIN_SAVE_MIN
+            && a.minSave <= MIN_SAVE_MAX && a.keepBack <= KEEP_BACK_MAX && a.weekendWindow >= WEEKEND_WINDOW_MIN
+            && a.weekendWindow <= WEEKEND_WINDOW_MAX && a.maxSavesPerDay >= MAX_SAVES_MIN
+            && a.maxSavesPerDay <= MAX_SAVES_MAX;
+    }
+
     /// Protect, first half (plan.ts:41-57): how much debt, in Value, should go, and why. Needs only the account data,
     /// so the executor reads savings and limits only when there is something to repay.
     /// @param collateral `totalCollateralValue`; @param avgCf `avgCollateralFactor`; @param debtRay `totalDebtValueRay`.

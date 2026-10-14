@@ -295,8 +295,8 @@ contract GooseExecutorForkTest is ExecutorForkBase {
     }
 
     /// GooseExecutor.md §3: the app's grant (lib/agents/permissions.ts, hashed in scripts/agent-vectors.ts) and the
-    /// executor's template give the same manager hash on 50 random inputs per kind: the Cash Agent's jobs, and
-    /// Protect · sell with its stock limits.
+    /// executor's template give the same manager hash on 50 random inputs per kind: the Cash Agent's jobs, Protect ·
+    /// sell and the Rebalancer with their stock limits, and Entry.
     function test_templates_hash_like_the_apps_builder() public {
         vm.etch(Vectors.HASH_SPENDER, address(x).code);
         ExecutorHarness h = ExecutorHarness(Vectors.HASH_SPENDER);
@@ -322,6 +322,28 @@ contract GooseExecutorForkTest is ExecutorForkBase {
                 GooseExecutor.Job.ProtectSell, v.account, GooseExecutor.Grant(v.start, v.end, v.cap), v.salt, t
             );
             assertEq(MANAGER.getHash(p), sellHashes[i], string.concat("sell vector ", vm.toString(i)));
+        }
+        bytes32[] memory rebalanceHashes = vm.parseJsonBytes32Array(json, ".rebalanceHashes");
+        assertEq(rebalanceHashes.length, 50);
+        for (uint256 i; i < rebalanceHashes.length; ++i) {
+            Vectors.RebalanceHash memory v = Vectors.rebalanceHashInput(i);
+            uint256 t;
+            for (uint256 r; r < 7; ++r) {
+                t |= v.limits[r] / 1e4 << (32 * r);
+            }
+            PM.Permission memory p = h.permissionFor(
+                GooseExecutor.Job.Rebalance, v.account, GooseExecutor.Grant(v.start, v.end, v.cap), v.salt, t
+            );
+            assertEq(MANAGER.getHash(p), rebalanceHashes[i], string.concat("rebalance vector ", vm.toString(i)));
+        }
+        bytes32[] memory entryHashes = vm.parseJsonBytes32Array(json, ".entryHashes");
+        assertEq(entryHashes.length, 50);
+        for (uint256 i; i < entryHashes.length; ++i) {
+            Vectors.Hash memory v = Vectors.entryHashInput(i);
+            PM.Permission memory p = h.permissionFor(
+                GooseExecutor.Job.Entry, v.account, GooseExecutor.Grant(v.start, v.end, v.cap), v.salt, 0
+            );
+            assertEq(MANAGER.getHash(p), entryHashes[i], string.concat("entry vector ", vm.toString(i)));
         }
     }
 
@@ -507,7 +529,7 @@ contract GooseExecutorForkTest is ExecutorForkBase {
         for (uint8 n = 1; n <= 8; ++n) {
             vm.warp(_failOnce(address(fake), n));
         }
-        (uint8 jobs,,,,,,,) = x.accounts(address(fake));
+        (uint8 jobs,,,,,,,,) = x.accounts(address(fake));
         assertEq(jobs, 0, "Stuck after eight");
     }
 
@@ -517,11 +539,11 @@ contract GooseExecutorForkTest is ExecutorForkBase {
         one[0] = fake;
         _run(one);
         uint8 fails;
-        (,, fails, cooldownUntil,,,,) = x.accounts(fake);
+        (,, fails, cooldownUntil,,,,,) = x.accounts(fake);
         assertEq(fails, n);
         assertEq(cooldownUntil, vm.getBlockTimestamp() + (10 minutes << (n - 1)));
         _run(one);
-        (,, fails,,,,,) = x.accounts(fake);
+        (,, fails,,,,,,) = x.accounts(fake);
         assertEq(fails, n, "skipped while cooling down, not a failure");
     }
 
