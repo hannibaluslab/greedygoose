@@ -153,7 +153,10 @@ describe("savings-first batches from a $0 wallet", () => {
   });
 
   it("repay $1: withdraw from savings → approve → repay, fee buffer left in the wallet", async () => {
-    const amountRaw = 1_000_000n;
+    // A live account: repay $1, or all of it once it owes less (Aave takes no more than is owed).
+    const owed = await client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserTotalDebt", args: [BigInt(USDC.reserveId), user] });
+    expect(owed, "the test account owes nothing to repay").toBeGreaterThan(0n);
+    const amountRaw = owed < 1_000_000n ? owed : 1_000_000n;
     const calls = payFromCash(user, amountRaw, await cash(), buildRepayCalls({ user, amountRaw, all: false }));
     expect(calls.map((c) => c.to)).toEqual([GUARDIAN.AAVE_V3_POOL, USDC.address, AAVE.SPOKE]);
     const r = await simulateFromEmptyWallet(calls);
