@@ -7,7 +7,7 @@ import { AddMoneyView } from "@/components/gg/AddMoney";
 import { AgentsFeed } from "@/components/gg/Agents";
 import { BalanceHero, TodayChange } from "@/components/gg/BalanceHero";
 import { CashCard, CreditCard } from "@/components/gg/Cards";
-import { ArrivedCard, AutomaticStep, cashNowText, FinishSetupCard, FinishSetupStep } from "@/components/gg/CashSetup";
+import { ArrivedCard, AutomaticStep, cashNowText, StartEarningCard } from "@/components/gg/CashSetup";
 import { QuickAction } from "@/components/gg/QuickAction";
 import { TabHeader } from "@/components/gg/Screen";
 import { TabBar } from "@/components/gg/TabBar";
@@ -28,8 +28,8 @@ import { ENTRY_COINS } from "@/lib/tokens/stables";
 /*
  * Dev only: earning and other dollars becoming cash (D20), in each state, from fixtures run through the app's own
  * rules and words (arrivedView, arrivedText, describeAgentEvent). Nothing here reads the chain or signs.
- *   /dev/ui/cash?view=signup      the sign-up's last step, "Finish setting up"
- *   ?view=home                    Home with "120 USDT arrived · Turn into cash" (its one screen) and the finish card
+ *   /dev/ui/cash?view=home        Home with "120 USDT arrived · Turn into cash" (its one screen) and "Your $100 arrived ·
+ *                                 Start earning"
  *   ?view=arriving                Home once other dollars convert on their own: the Cash card says "arriving"
  *   ?view=convert                 "Turn into cash" with one coin under the floor: it stays as it is
  *   ?view=auto                    once it lands, "Do this automatically next time?"
@@ -51,8 +51,8 @@ const GRANT: GrantView = { busy: false, error: null, blocked: null, preview: fal
 const ZERO_TX = `0x${"0".repeat(64)}` as const;
 const noop = () => toast("Dev gallery: nothing is signed");
 
-type View = "signup" | "home" | "arriving" | "convert" | "auto" | "done" | "pay" | "pay-setup" | "activity";
-const VIEWS: View[] = ["signup", "home", "arriving", "convert", "auto", "done", "pay", "pay-setup", "activity"];
+type View = "home" | "arriving" | "convert" | "auto" | "done" | "pay" | "pay-setup" | "activity";
+const VIEWS: View[] = ["home", "arriving", "convert", "auto", "done", "pay", "pay-setup", "activity"];
 
 export function CashGallery() {
   const raw = useSearchParams().get("view") as View | null;
@@ -60,7 +60,6 @@ export function CashGallery() {
   const nowSec = useNowSec();
   if (!nowSec) return null;
 
-  if (view === "signup") return <FinishSetupStep rate={RATE} grant={GRANT} onStart={noop} onLater={noop} />;
   if (view === "pay" || view === "pay-setup") {
     return <AddMoneyView address={ADDRESS} name="sam.justan.id" rate={view === "pay" ? RATE : null} onCopy={noop} />;
   }
@@ -95,7 +94,7 @@ export function CashGallery() {
                 onConvert={noop}
               />
             )}
-            {view === "home" && <FinishSetupCard rate={RATE} grant={GRANT} onStart={noop} />}
+            {view === "home" && <StartEarningCard cashUsd={100} rate={RATE} grant={GRANT} onStart={noop} />}
           </>
         )
       }

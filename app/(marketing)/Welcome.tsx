@@ -2,13 +2,12 @@
 
 import { useEffect, useLayoutEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { useAccount, useBytecode, useConnect } from "wagmi";
+import { useAccount, useConnect } from "wagmi";
 import { Check } from "lucide-react";
 import { Button } from "@/components/gg/Button";
 import { GooseMark } from "@/components/gg/GooseMark";
 import { CreditIcon, InvestIcon, SaveIcon } from "@/components/gg/icons";
 import { useCashRate } from "@/hooks/useCashRate";
-import { afterConnect } from "@/lib/cashSetup";
 import { ATTESTATION_TEXT, ELIGIBILITY_MODE, hasAttested, recordAttestation } from "@/lib/eligibility";
 
 const noopSubscribe = () => () => {};
@@ -16,8 +15,8 @@ const noopSubscribe = () => () => {};
 /**
  * The welcome before sign-in: the goose, one line, three facts and one Continue. Continue opens JAW's own sign in /
  * sign up frame (the jaw connector, CrossPlatform), so a new account and a returning one take the same tap; once
- * connected, a new account goes on to "Finish setting up" (/setup, D20) and a returning one Home (afterConnect). Leo's
- * eligibility gate stands: Continue waits for the attestation (D1).
+ * connected, both go Home. Earning is asked there once money is in ("Your $100 arrived · Start earning"), not at $0.
+ * Leo's eligibility gate stands: Continue waits for the attestation (D1).
  */
 export function Welcome() {
   const router = useRouter();
@@ -25,18 +24,13 @@ export function Welcome() {
   const { connect, connectors, isPending, error, reset } = useConnect();
   const stored = useSyncExternalStore(noopSubscribe, hasAttested, () => false);
   const [ticked, setTicked] = useState(false);
-  // Continue was tapped this visit: a fresh connect, which may be a sign-up. A session JAW restores on load isn't.
-  const [continued, setContinued] = useState(false);
   const attested = stored || ticked;
   const needsAttest = ELIGIBILITY_MODE !== "off";
   const gated = needsAttest && !attested;
   const apy = useCashRate();
 
   const connected = status === "connected" && !!address;
-  const code = useBytecode({ address, query: { enabled: connected && continued } });
-  const next = connected
-    ? afterConnect({ continued, code: { done: code.isSuccess, failed: code.isError, deployed: !!code.data && code.data !== "0x" } })
-    : null;
+  const next = connected ? "/home" : null;
 
   useEffect(() => {
     if (next) router.replace(next);
@@ -53,7 +47,6 @@ export function Welcome() {
     if (gated) return;
     recordAttestation();
     reset();
-    setContinued(true);
     const jaw = connectors.find((c) => c.type === "jaw");
     if (jaw) connect({ connector: jaw });
   };

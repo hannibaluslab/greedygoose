@@ -6,32 +6,24 @@ import { ENTRY_COINS, type EntryCoinAsset } from "@/lib/tokens/stables";
 
 /*
  * Earning and other dollars turning into cash run under the hood (D20). The user meets them only where they matter:
- * "Finish setting up" once, for earning (the Save grant), and "120 USDT arrived · Turn into cash" when other dollars
- * sit in the account with nothing to convert them (then "Do this automatically next time?", the Entry grant). Pure, so
- * the dev gallery draws every state with the app's own words.
+ * "Your $100 arrived · Start earning" once money is in, for earning (the Save grant), and "120 USDT arrived · Turn into
+ * cash" when other dollars sit in the account with nothing to convert them (then "Do this automatically next time?",
+ * the Entry grant). Pure, so the dev gallery draws every state with the app's own words.
  */
 
 /** The cash rate as the screens say it: "3.9%". */
 export const rateText = (apy: number) => `${(apy * 100).toFixed(1)}%`;
 
-/**
- * Whether Home asks to finish setting up: an executor is configured (`save` isn't "unconfigured") and the account has no
- * Save grant, neither running nor starting. Not while it loads, so a set-up account never sees it flash.
- */
-export const finishSetupShown = (save: AgentStatus) => save === "off";
+/** Cash it takes before Home asks to start earning: below it there's nothing to earn on, and JAW's fee is paid in it. */
+export const MIN_START_USD = 1;
 
 /**
- * Where the welcome's Continue leads once JAW connects (D20): a new account goes on to the sign-up's last step,
- * "Finish setting up" (/setup), a returning one Home. JAW's one frame signs in and signs up alike and doesn't say which
- * it did, so the chain does: a JAW account is counterfactual until its first move, so one with no code on Base has
- * never moved anything and is new here. A session JAW restored (no Continue this visit) is returning. null while the
- * code is read; a read that fails goes Home, where the small card asks instead.
+ * Whether Home asks to start earning (Adrian, 2026-10-14: when money comes in, not at $0): an executor is configured
+ * (`save` isn't "unconfigured"), the account has no Save grant, neither running nor starting, and at least $1 of cash
+ * is in. Not while it loads, so an earning account never sees it flash. Sign-up goes straight Home: at $0 there's
+ * nothing to earn on and nothing to pay JAW's fee with.
  */
-export function afterConnect(a: { continued: boolean; code: { done: boolean; failed: boolean; deployed: boolean } }): "/setup" | "/home" | null {
-  if (!a.continued || a.code.failed) return "/home";
-  if (!a.code.done) return null;
-  return a.code.deployed ? "/home" : "/setup";
-}
+export const startEarningShown = (save: AgentStatus, cashUsd: number) => save === "off" && cashUsd >= MIN_START_USD;
 
 /** A coin sitting in the wallet: how much, in its own units. */
 export type Arrived = { coin: EntryCoinAsset; raw: bigint };

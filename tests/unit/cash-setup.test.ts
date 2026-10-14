@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { afterConnect, arrivedCoins, arrivedText, arrivedView, askAutomatic, finishSetupShown, rateText } from "@/lib/cashSetup";
+import { arrivedCoins, arrivedText, arrivedView, askAutomatic, MIN_START_USD, rateText, startEarningShown } from "@/lib/cashSetup";
 import type { AgentStatus } from "@/lib/agents/status";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 
@@ -7,29 +7,22 @@ const [USDT, USDE, USDBC, USDS] = ENTRY_COINS;
 const raw = (coin: (typeof ENTRY_COINS)[number], n: number) => BigInt(Math.round(n * 100)) * 10n ** BigInt(coin.decimals - 2);
 const STATUSES: AgentStatus[] = ["unconfigured", "loading", "off", "starting", "on"];
 
-describe("finishing set-up (earning, the Save grant)", () => {
+describe("start earning (the Save grant)", () => {
   it("is asked only with an executor, once it's known the account has no Save grant", () => {
-    expect(STATUSES.filter(finishSetupShown)).toEqual(["off"]);
+    expect(STATUSES.filter((s) => startEarningShown(s, 100))).toEqual(["off"]);
+  });
+
+  it("waits for money to come in: never at $0 or dust, from $1", () => {
+    expect(startEarningShown("off", 0)).toBe(false);
+    expect(startEarningShown("off", 0.42)).toBe(false);
+    expect(startEarningShown("off", MIN_START_USD)).toBe(true);
+    expect(startEarningShown("off", 100)).toBe(true);
+    expect(startEarningShown("on", 100)).toBe(false);
   });
 
   it("says the live rate as the screens do", () => {
     expect(rateText(0.0391)).toBe("3.9%");
     expect(rateText(0.04249)).toBe("4.2%");
-  });
-});
-
-describe("afterConnect: where the welcome's Continue leads", () => {
-  const code = (c: Partial<{ done: boolean; failed: boolean; deployed: boolean }>) => ({ done: false, failed: false, deployed: false, ...c });
-
-  it("takes a new account (no code on Base yet) on to Finish setting up, and a returning one Home", () => {
-    expect(afterConnect({ continued: true, code: code({ done: true }) })).toBe("/setup");
-    expect(afterConnect({ continued: true, code: code({ done: true, deployed: true }) })).toBe("/home");
-  });
-
-  it("waits for the code, goes Home when it can't be read, and sends a session JAW restored Home", () => {
-    expect(afterConnect({ continued: true, code: code({}) })).toBeNull();
-    expect(afterConnect({ continued: true, code: code({ failed: true }) })).toBe("/home");
-    expect(afterConnect({ continued: false, code: code({}) })).toBe("/home");
   });
 });
 

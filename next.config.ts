@@ -18,6 +18,8 @@ const nextConfig: NextConfig = {
     // Manage is gone: each agent's settings live in its sheet on the Agents tab.
     { source: "/manage", destination: "/agents?agent=rebalance", permanent: false },
     { source: "/manage/credit", destination: "/agents?agent=protect", permanent: false },
+    // Sign-up's "Finish setting up" step is gone: Home asks to start earning once money is in.
+    { source: "/setup", destination: "/home", permanent: false },
     // Guardian's savings page is gone: Protect repays from the cash, which is one pot on screen (D20).
     { source: "/guardian", destination: "/agents?agent=protect", permanent: false },
   ],

@@ -166,3 +166,9 @@ JAW's own sheet shows the Review and asks for Face ID, so the app shows no confi
 - **"Turn into cash" is one screen.** The "120 USDT arrived" card on Home and Pay carries what the review said: each coin and what it brings now, the least it all brings, the network fee, and every move in small print (D7). Its own "Turn into cash" signs. Once the batch lands, a sheet asks "Do this automatically next time?" (it says what the conversion brought), or, with nothing to ask, says "It's cash now".
 - **One pot wins over the sweep's savings lines.** Neither the Buy step's small print nor Repay says what comes out of savings (D20); JAW's sheet still lists every call.
 - **The welcome's one Continue still sends a new account to `/setup`.** JAW's frame signs in and signs up alike and doesn't say which, so the app reads the chain: a JAW account has no code on Base until its first move, so an account with none is new and goes on to "Finish setting up"; one with code goes Home. A session JAW restores on load, or a code read that fails, goes Home, where the small card asks instead. An account that chose "Later" and has moved nothing since sees the step again on its next Continue.
+
+## Start earning once money is in (Adrian, 2026-10-14)
+
+- **Earning is asked when money comes in, not at sign-up.** At $0 there's nothing to earn on and nothing to pay JAW's fee with. Sign-up goes straight Home (`/setup` is gone and redirects there). Home's card shows once the account has $1 or more of cash and no Save grant: "Your $100 arrived · Start earning 4.6% on it." with one "Start earning" (board 2g). This replaces "The welcome's one Continue still sends a new account to `/setup`" above.
+- **The empty portfolio fills Home down to the tab bar:** the board's dashed "add a stock" card, grown, with the seven stocks and one Buy stocks button.
+- **Home's round mark is the GreedyGoose logo,** not the name's initial.

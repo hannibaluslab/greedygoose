@@ -11,13 +11,13 @@ import { NOT_FAIR, useConvert, useConvertQuotes, type ConvertQuote } from "@/hoo
 import type { GrantView, useCashSetup } from "@/hooks/useCashSetup";
 import type { TxPhase } from "@/hooks/useTx";
 import { askAutomatic, arrivedText, type Arrived, type ArrivedView } from "@/lib/cashSetup";
-import { formatCoin, formatUsd, inWords } from "@/lib/formatting";
+import { formatCoin, formatUsd, formatUsdTrim, inWords } from "@/lib/formatting";
 import { USDC } from "@/lib/tokens/registry";
 import type { EntryVenue } from "@/lib/tokens/stables";
 
 /*
- * Earning and other dollars becoming cash, where the user meets them (D20): "Finish setting up" once (the sign-up's
- * last step, then a small card on Home), and "120 USDT arrived · Turn into cash" on Home and Pay, then "Do this
+ * Earning and other dollars becoming cash, where the user meets them (D20): "Your $100 arrived · Start earning" on Home
+ * once money is in (board 2g), and "120 USDT arrived · Turn into cash" on Home and Pay, then "Do this
  * automatically next time?". No agent, limit or switch, and no confirm step of ours: each button names its action and
  * opens JAW's own sheet straight away, which shows the Review and asks for Face ID. Plain values in, so the dev gallery
  * draws every state.
@@ -25,52 +25,23 @@ import type { EntryVenue } from "@/lib/tokens/stables";
 
 const usd = (raw: bigint) => formatUsd(Number(raw) / 10 ** USDC.decimals);
 
-/** The sign-up's last step: Start earning (JAW's sheet, the Save grant) and your cash earns, or "Later". */
-export function FinishSetupStep({ rate, grant, onStart, onLater }: { rate: string | null; grant: GrantView; onStart: () => void; onLater: () => void }) {
-  return (
-    <main className="flex min-h-dvh flex-col gap-6 px-5 pb-[34px] pt-16">
-      <div className="flex items-center gap-2.5">
-        <span aria-hidden className="flex size-8 items-center justify-center rounded-2xl bg-brand text-[15px] font-bold">G</span>
-        <span className="text-[17px] font-semibold">GreedyGoose</span>
-      </div>
-
-      <div className="flex grow flex-col justify-center gap-4">
-        <div className="font-mono text-xs uppercase tracking-[0.08em] text-ink-mid">One last step</div>
-        <h1 className="m-0 text-[40px] font-semibold leading-[1.05] tracking-[-0.03em]">Finish setting up</h1>
-        <p className="num m-0 text-[22px] font-semibold leading-[1.25] tracking-[-0.01em]">
-          Your cash starts earning{" "}
-          {rate ? <span className="rounded-[8px] bg-brand px-1.5">{rate}</span> : <span aria-hidden className="inline-block h-6 w-14 animate-pulse rounded-[8px] bg-chip align-[-4px]" />}
-        </p>
-        <p className="m-0 text-base leading-[1.45] text-ink-mid [text-wrap:pretty]">
-          At a rate that moves with the market. Spend your cash whenever you like: buys and repayments take it as they always do.
-        </p>
-      </div>
-
-      <div className="flex flex-col gap-3">
-        <TxError error={grant.error} />
-        <TxButton label="Start earning" phase={grant.busy ? "signing" : "idle"} note={grant.blocked} disabled={!!grant.blocked} preview={grant.preview} onClick={onStart} />
-        <button type="button" onClick={onLater} disabled={grant.busy} className="h-11 text-[15px] font-semibold text-ink-mid disabled:opacity-45">
-          Later
-        </button>
-      </div>
-    </main>
-  );
-}
-
 const SMALL_CARD = "flex flex-col gap-2 rounded-[22px] bg-card p-3.5 shadow-card-elev";
 const PILL = "flex h-9 shrink-0 items-center gap-1.5 rounded-[18px] bg-ink px-3.5 text-sm font-semibold text-on-ink disabled:opacity-45";
 
-/** Home's card when setting up wasn't finished: the same grant on JAW's sheet. While it's open, the card adds nothing. */
-export function FinishSetupCard({ rate, grant, onStart }: { rate: string | null; grant: GrantView; onStart: () => void }) {
+/**
+ * Home's card once money is in and the cash doesn't earn yet (board 2g): "Your $100 arrived · Start earning 4.6% on it."
+ * and the Save grant on JAW's sheet. While it's open, the card adds nothing.
+ */
+export function StartEarningCard({ cashUsd, rate, grant, onStart }: { cashUsd: number; rate: string | null; grant: GrantView; onStart: () => void }) {
   return (
-    <section aria-label="Finish setting up" className={SMALL_CARD}>
+    <section aria-label="Start earning" className={SMALL_CARD}>
       <div className="flex items-center gap-2.5">
         <span aria-hidden className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand text-ink">
           <TrendUpIcon size={15} />
         </span>
         <span className="flex min-w-0 grow flex-col gap-0.5">
-          <span className="text-[15px] font-semibold leading-[1.3]">Finish setting up</span>
-          <span className="num text-[13px] leading-[1.3] text-ink-2">Your cash starts earning{rate ? ` ${rate}` : ""}</span>
+          <span className="num text-[15px] font-semibold leading-[1.3]">Your {formatUsdTrim(cashUsd)} arrived</span>
+          <span className="num text-[13px] leading-[1.3] text-ink-2">Start earning{rate ? ` ${rate}` : ""} on it.</span>
         </span>
         <button
           type="button"
