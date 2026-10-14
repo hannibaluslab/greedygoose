@@ -188,7 +188,9 @@ export function agentCards(i: CardsInput): AgentCard[] {
       ],
     });
   }
-  if (i.fails >= FAILS_CARD) {
+  // Runs fail for the whole account; with neither agent running, they were earning's or converting's (D20): no card.
+  const running = AGENTS.some((a) => ["on", "starting"].includes(agentStatus(a, i.status)));
+  if (i.fails >= FAILS_CARD && running) {
     const retry = i.cooldownUntil > i.nowSec ? `They try again at ${timeText(i.cooldownUntil)}` : "They try again on the next run";
     cards.push({
       key: "fails",

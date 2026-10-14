@@ -135,6 +135,11 @@ describe("agentCards: only when something needs the user", () => {
     expect(c.sub).toMatch(/^They try again at \d{1,2}:\d{2} [AP]M\. At 8 in a row they stop, and you can switch them back on here\.$/);
   });
 
+  it("says nothing of failed runs while neither agent runs: they were earning's or converting's (D20)", () => {
+    const cashOnly = { ...calm, status: { ...jobs("off"), save: "on" as const, entry: "on" as const }, ends: { ...calm.ends, protect: null, sell: null, rebalance: null } };
+    expect(agentCards({ ...cashOnly, fails: 5 })).toEqual([]);
+  });
+
   it("puts the heads-up first, then failures, stopped and stopping soon", () => {
     const everything: CardsInput = {
       ...calm,
