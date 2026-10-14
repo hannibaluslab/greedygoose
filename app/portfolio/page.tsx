@@ -9,6 +9,7 @@ import { BalanceHero } from "@/components/gg/BalanceHero";
 import { Button } from "@/components/gg/Button";
 import { BuySheet } from "@/components/gg/BuySheet";
 import { CreditBuySheet } from "@/components/gg/CreditBuySheet";
+import { CreditSheet } from "@/components/gg/CreditSheet";
 import { HoldingList, HoldingRow } from "@/components/gg/Holding";
 import { CreditIcon, TradeIcon } from "@/components/gg/icons";
 import { usePosition, type PositionData } from "@/hooks/usePosition";
@@ -23,7 +24,7 @@ export default function PortfolioPage() {
 /**
  * Design board "10 · Portfolio (Invest tab)" (PortfolioPage.dc.html). Market opens Flow 1's sheet
  * (F1-3 → F1-4 → confirm); /buy lands here with ?market, or ?s=SYMBOL for one stock's Buy step. Credit Buy
- * opens Flow 2's sheet (F2-2 → F2-3 … F2-6).
+ * opens Flow 2's sheet (F2-2 → F2-3 … F2-6). The status pill opens the Credit sheet (HomeCreditSlide).
  * Not drawn yet: today's change and the value line (price history, plan item 8) and "Your mix" (the
  * Rebalancer, item 9) have no data source.
  */
@@ -35,11 +36,12 @@ function Portfolio({ address }: { address: `0x${string}` }) {
   );
   const openMarket = () => market.show({ symbol: null });
   const [creditBuy, setCreditBuy] = useState(false);
+  const [credit, setCredit] = useState(false);
 
   return (
     <div className="relative min-h-dvh">
       <div className="flex flex-col gap-4 px-5 pt-[58px]">
-        <TabHeader title="Portfolio" back="/home" status={data?.status} statusHref="/credit" />
+        <TabHeader title="Portfolio" back="/home" status={data?.status} onStatus={() => setCredit(true)} />
 
         {isError && !data ? (
           <div className="rounded-[22px] bg-card p-4 shadow-card-elev">
@@ -59,6 +61,19 @@ function Portfolio({ address }: { address: `0x${string}` }) {
         <BuySheet key={market.key} open={market.open} user={address} data={data} symbol={market.subject.symbol} onClose={market.close} />
       )}
       {data && <CreditBuySheet open={creditBuy} user={address} data={data} onClose={() => setCreditBuy(false)} />}
+      {data && (
+        <CreditSheet
+          open={credit}
+          onClose={() => setCredit(false)}
+          account={address}
+          data={data}
+          // The Market is already on this page: Buy more swaps the sheets instead of navigating to itself.
+          onBuyMore={() => {
+            setCredit(false);
+            openMarket();
+          }}
+        />
+      )}
     </div>
   );
 }

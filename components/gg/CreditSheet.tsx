@@ -22,7 +22,16 @@ function protection(status: AgentStatus, capRaw: bigint | null) {
  * Design board "2c · Credit sheet" (HomeCreditSlide.dc.html). The rate sits under the cost (CLAUDE.md: always show
  * the rate and the monthly cost); the settings button opens the Credit page until ManageCredit is built.
  */
-export function CreditSheet({ open, account, data, onClose }: { open: boolean; account: `0x${string}`; data: PositionData; onClose: () => void }) {
+export function CreditSheet({
+  open, account, data, onClose, onBuyMore,
+}: {
+  open: boolean;
+  account: `0x${string}`;
+  data: PositionData;
+  onClose: () => void;
+  /** Where "Buy more" goes when the Market is on the same page (Invest); the Market at /buy otherwise. */
+  onBuyMore?: () => void;
+}) {
   const agents = useAgents(account);
   const limit = data.debtUsd + data.availableUsd;
   const usedPct = limit > 0 ? Math.min(100, (data.debtUsd / limit) * 100) : 0;
@@ -90,7 +99,7 @@ export function CreditSheet({ open, account, data, onClose }: { open: boolean; a
         </div>
 
         <div className="grid grid-cols-2 gap-2.5">
-          <Button variant="soft" href="/buy">Buy more</Button>
+          <Button variant="soft" href={onBuyMore ? undefined : "/buy"} onClick={onBuyMore}>Buy more</Button>
           <Button href="/repay" disabled={data.debtUsd <= 0}>Repay</Button>
         </div>
       </SheetSteps>
