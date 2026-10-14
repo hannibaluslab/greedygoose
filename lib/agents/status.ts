@@ -1,4 +1,4 @@
-import { EXECUTOR_JOBS, type AgentGrant, type ExecutorJob } from "@/lib/agents/permissions";
+import { JOBS, type AgentGrant, type AgentJob } from "@/lib/agents/permissions";
 
 /**
  * - "unconfigured": no executor is set (NEXT_PUBLIC_GOOSE_EXECUTOR), so no agent can be switched on yet.
@@ -7,26 +7,24 @@ import { EXECUTOR_JOBS, type AgentGrant, type ExecutorJob } from "@/lib/agents/p
  */
 export type AgentStatus = "unconfigured" | "loading" | "off" | "starting" | "on";
 
-type Stored = { start: number; end: number; cap: bigint };
-
-/** What GooseExecutor's registry holds for one account: the job bits, and each job's stored grant (`permissionOf`). */
-export type Registry = { jobs: number; grants: Readonly<Record<ExecutorJob, Stored>> };
+/** A job's grant as the executor stores it: what the user signed that its template doesn't fix. */
+export type Stored = { start: number; end: number; cap: bigint };
 
 /**
- * Whether the executor runs `job`: registered, not past its end, and with that same grant still in JAW's list,
- * where a revoke shows at once (the registry only learns of it on the next run). If JAW's list can't be read, the
- * registry alone decides.
+ * Whether the executor runs `job`: registered (its bit in `jobs`, from the registry's `accounts`), not past its end,
+ * and with that same grant still in JAW's list, where a revoke shows at once (the registry only learns of it on the
+ * next run). If JAW's list can't be read, the registry alone decides.
  */
 export function jobStatus(
-  job: ExecutorJob,
-  registry: Registry,
+  job: AgentJob,
+  jobs: number,
+  stored: Stored,
   granted: readonly AgentGrant[],
   nowSec: number,
   listUnreadable: boolean,
 ): Exclude<AgentStatus, "unconfigured" | "loading"> {
-  const stored = registry.grants[job];
   const live = granted.filter((g) => g.job === job && g.end >= nowSec);
-  const registered = (registry.jobs & (1 << EXECUTOR_JOBS.indexOf(job))) !== 0 && stored.end >= nowSec;
+  const registered = (jobs & (1 << JOBS.indexOf(job))) !== 0 && stored.end >= nowSec;
   const stillGranted =
     listUnreadable || live.some((g) => g.start === stored.start && g.end === stored.end && g.capRaw === stored.cap);
   if (registered && stillGranted) return "on";

@@ -18,8 +18,8 @@ import { planSell, sellAmounts, sellTiming, type SellBook } from "@/lib/guardian
 import { marketState } from "@/lib/market-hours";
 import {
   agentPermission,
+  CASH_JOBS,
   entryPermission,
-  JOBS,
   rebalancePermission,
   sellPermission,
   STOCK_LIMIT_UNIT,
@@ -232,7 +232,7 @@ export function hashInput(i: number) {
   const r = (f: number) => rand("hash", i, f);
   const start = 1_700_000_000n + (r(2) % 300_000_000n);
   return {
-    job: JOBS[Number(r(0) % 2n)],
+    job: CASH_JOBS[Number(r(0) % 2n)],
     account: toHex(r(1) % 2n ** 160n, { size: 20 }) as Address,
     start,
     end: start + 1n + (r(3) % 400_000_000n),

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { agentList, mixOnTarget, type AgentListInput } from "@/lib/agents/list";
-import type { ExecutorJob } from "@/lib/agents/permissions";
+import type { AgentJob } from "@/lib/agents/permissions";
 import type { AgentStatus } from "@/lib/agents/status";
 
-const jobs = (s: AgentStatus): Record<ExecutorJob, AgentStatus> => ({ save: s, protect: s, sell: s, rebalance: s, entry: s });
-const noCaps: Record<ExecutorJob, bigint | null> = { save: null, protect: null, sell: null, rebalance: null, entry: null };
+const jobs = (s: AgentStatus): Record<AgentJob, AgentStatus> => ({ save: s, protect: s, sell: s, rebalance: s, entry: s });
+const noCaps: Record<AgentJob, bigint | null> = { save: null, protect: null, sell: null, rebalance: null, entry: null };
 const list = (over: Partial<AgentListInput>) => agentList({ status: jobs("off"), capRaw: noCaps, credit: "safe", onTarget: null, ...over });
 const pills = (over: Partial<AgentListInput>) => list(over).agents.map((a) => `${a.agent}: ${a.pill.text}`);
 

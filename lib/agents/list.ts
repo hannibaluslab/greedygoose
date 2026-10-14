@@ -1,7 +1,7 @@
 import { maxUint256 } from "viem";
 import { REBALANCER } from "@/config/risk";
 import { MANAGE, type AgentName } from "@/lib/agents/feed";
-import { SELL_LIMIT_USD, type ExecutorJob } from "@/lib/agents/permissions";
+import { SELL_LIMIT_USD, type AgentJob } from "@/lib/agents/permissions";
 import type { AgentStatus } from "@/lib/agents/status";
 import { rebalanceTrades } from "@/lib/guardian/rebalance";
 import { STATUS_LABEL, type Status } from "@/lib/risk/status";
@@ -22,9 +22,9 @@ export type AgentItem = {
 };
 
 export type AgentListInput = {
-  status: Readonly<Record<ExecutorJob, AgentStatus>>;
+  status: Readonly<Record<AgentJob, AgentStatus>>;
   /** Each job's limit once it's on, in USDC units (a week's for the Rebalancer). */
-  capRaw: Readonly<Record<ExecutorJob, bigint | null>>;
+  capRaw: Readonly<Record<AgentJob, bigint | null>>;
   /** The credit's status: none when nothing is owed. */
   credit: Status;
   /** Whether the free stock sits in the Rebalancer's band; null when no mix is set or it can't be read yet. */

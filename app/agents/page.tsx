@@ -16,6 +16,7 @@ import { summarize } from "@/lib/aave/math";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { agentList, mixOnTarget } from "@/lib/agents/list";
+import { JOBS, type AgentJob } from "@/lib/agents/permissions";
 import { toUsd } from "@/lib/cash";
 import { CHAIN_ID } from "@/lib/chain";
 import { formatUsdTrim } from "@/lib/formatting";
@@ -48,7 +49,8 @@ function Agents({ address }: { address: `0x${string}` }) {
         : null,
     [agents.mixBps, position],
   );
-  const list = agentList({ status: agents.status, capRaw: agents.capRaw, credit: position?.status ?? "none", onTarget });
+  const capRaw = Object.fromEntries(JOBS.map((job) => [job, agents.terms[job]?.capRaw ?? null])) as Record<AgentJob, bigint | null>;
+  const list = agentList({ status: agents.status, capRaw, credit: position?.status ?? "none", onTarget });
 
   // The registry still holds the heads-up the event announced: a sale cut short, or one cleared, has moved it.
   const pending = feed.headsUp && agents.headsUpAt !== 0 && feed.headsUp.sentAt === agents.headsUpAt ? feed.headsUp : null;

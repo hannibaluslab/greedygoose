@@ -9,15 +9,15 @@ import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import {
   agentGrant,
+  CASH_JOBS,
   dailyLimitRaw,
-  EXECUTOR_JOBS,
   JOBS,
   readAgentGrant,
   type AgentGrant,
   type AgentJob,
-  type ExecutorJob,
+  type CashJob,
 } from "@/lib/agents/permissions";
-import { jobStatus, type AgentStatus, type Registry } from "@/lib/agents/status";
+import { jobStatus, type AgentStatus, type Stored } from "@/lib/agents/status";
 import { useNowSec } from "@/hooks/useNowSec";
 
 /** A grant lasts a year, like Guardian's. */
@@ -37,6 +37,9 @@ type AccountSlot = readonly [
 ];
 type StoredPermission = { start: number; end: number; spends: readonly { allowance: bigint }[] };
 
+/** What a job runs with: its limit, in USDC units (a week's for the Rebalancer). */
+export type JobTerms = { capRaw: bigint };
+
 /** The Rebalancer's target mix as the registry packs it: a weight in BPS per stock, 16 bits each by reserve id. */
 const unpackMix = (mix: bigint) => Array.from({ length: 7 }, (_, r) => (mix >> BigInt(16 * r)) & 0xffffn);
 
@@ -52,9 +55,8 @@ export function useAgents(account: `0x${string}`) {
   const contracts = useMemo(() => {
     // The query is disabled until an executor is configured.
     const read = { address: executor ?? zeroAddress, abi: gooseExecutorAbi, chainId: CHAIN_ID } as const;
-    const permissionOf = (job: ExecutorJob) =>
-      ({ ...read, functionName: "permissionOf", args: [account, EXECUTOR_JOBS.indexOf(job)] }) as const;
-    // Each job's stored grant, in EXECUTOR_JOBS order.
+    const permissionOf = (job: AgentJob) => ({ ...read, functionName: "permissionOf", args: [account, JOBS.indexOf(job)] }) as const;
+    // Each job's stored grant, in JOBS order.
     return [
       { ...read, functionName: "accounts", args: [account] },
       permissionOf("save"),
@@ -88,32 +90,46 @@ export function useAgents(account: `0x${string}`) {
     const r = reads.data as readonly unknown[] | undefined;
     if (!r) return undefined;
     const slot = r[0] as AccountSlot;
-    const stored = r.slice(1, 1 + EXECUTOR_JOBS.length) as StoredPermission[];
+    const stored = r.slice(1, 1 + JOBS.length) as StoredPermission[];
     const grants = Object.fromEntries(
-      EXECUTOR_JOBS.map((job, j) => [job, { start: stored[j].start, end: stored[j].end, cap: stored[j].spends[0]?.allowance ?? 0n }]),
-    ) as Registry["grants"];
-    return { jobs: slot[0], grants, fails: slot[2], headsUpAt: slot[6], mixBps: unpackMix(r[1 + EXECUTOR_JOBS.length] as bigint) };
+      JOBS.map((job, j) => [job, { start: stored[j].start, end: stored[j].end, cap: stored[j].spends[0]?.allowance ?? 0n }]),
+    ) as Record<AgentJob, Stored>;
+    return { jobs: slot[0], grants, fails: slot[2], headsUpAt: slot[6], mixBps: unpackMix(r[1 + JOBS.length] as bigint) };
   }, [reads.data]);
 
   const status = useMemo(
     () =>
       Object.fromEntries(
-        EXECUTOR_JOBS.map((job): [ExecutorJob, AgentStatus] => [
+        JOBS.map((job): [AgentJob, AgentStatus] => [
           job,
           !executor
             ? "unconfigured"
             : listed.isLoading || !registry
               ? "loading"
-              : jobStatus(job, registry, granted, nowSec, listed.isError),
+              : jobStatus(job, registry.jobs, registry.grants[job], granted, nowSec, listed.isError),
         ]),
-      ) as Record<ExecutorJob, AgentStatus>,
+      ) as Record<AgentJob, AgentStatus>,
     [executor, registry, listed.isLoading, listed.isError, granted, nowSec],
+  );
+
+  /** What each job runs with: the registry's grant once it's on, the newest one JAW lists while it's starting. */
+  const terms = useMemo(
+    () =>
+      Object.fromEntries(
+        JOBS.map((job): [AgentJob, JobTerms | null] => {
+          if (status[job] === "on" && registry) return [job, { capRaw: registry.grants[job].cap }];
+          if (status[job] !== "starting") return [job, null];
+          const newest = granted.filter((g) => g.job === job && g.end >= nowSec).sort((a, b) => b.start - a.start)[0];
+          return [job, { capRaw: newest.capRaw }];
+        }),
+      ) as Record<AgentJob, JobTerms | null>,
+    [status, registry, granted, nowSec],
   );
 
   const refetch = () => Promise.all([listed.refetch(), reads.refetch()]);
 
   /** One JAW screen and one Face ID per job: a grant request carries one permission. */
-  async function turnOn(job: AgentJob, capRaw: bigint) {
+  async function turnOn(job: CashJob, capRaw: bigint) {
     if (!executor) throw new Error("Agents aren't available yet");
     await grant.mutateAsync({
       address: account,
@@ -126,7 +142,7 @@ export function useAgents(account: `0x${string}`) {
   }
 
   /** Revokes every grant JAW lists for the job, so nothing is left for the executor to use. */
-  async function turnOff(job: AgentJob) {
+  async function turnOff(job: CashJob) {
     for (const g of granted.filter((g) => g.job === job)) {
       await revoke.mutateAsync({ address: account, chainId: CHAIN_ID, id: g.permissionId });
     }
@@ -135,15 +151,11 @@ export function useAgents(account: `0x${string}`) {
 
   return {
     status,
-    /** Each job's limit once it's on, in USDC units: a day's, or a week's for the Rebalancer. */
-    capRaw: Object.fromEntries(
-      EXECUTOR_JOBS.map((job) => [job, status[job] === "on" ? registry!.grants[job].cap : null]),
-    ) as Record<ExecutorJob, bigint | null>,
-    /** The daily limit a job is switched on with (`turnOn`), once the executor's CAP_MAX is read. */
-    limitRaw: Object.fromEntries(JOBS.map((job) => [job, capMax.data === undefined ? null : dailyLimitRaw(job, capMax.data)])) as Record<
-      AgentJob,
-      bigint | null
-    >,
+    terms,
+    /** The daily limit a Cash job is switched on with (`turnOn`), once the executor's CAP_MAX is read. */
+    limitRaw: Object.fromEntries(
+      CASH_JOBS.map((job) => [job, capMax.data === undefined ? null : dailyLimitRaw(job, capMax.data)]),
+    ) as Record<CashJob, bigint | null>,
     /** Failed runs in a row: the executor backs off, then switches the account off at eight. */
     fails: registry?.fails ?? 0,
     /** When Protect · sell's pending heads-up went out, in seconds; 0 when none is pending. */

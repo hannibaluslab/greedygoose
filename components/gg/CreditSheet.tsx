@@ -92,7 +92,7 @@ export function CreditSheet({
               Protection
             </span>
             <span className="flex items-center gap-1 font-semibold">
-              {protection(agents.status.protect, agents.capRaw.protect)}
+              {protection(agents.status.protect, agents.terms.protect?.capRaw ?? null)}
               <ChevronRight className="text-subtle" />
             </span>
           </Link>

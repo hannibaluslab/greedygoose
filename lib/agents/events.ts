@@ -1,6 +1,6 @@
 import { isAddressEqual, parseEventLogs, type Address, type ContractEventName, type Hex, type Log, type ParseEventLogsReturnType } from "viem";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
-import { EXECUTOR_JOBS, type ExecutorJob } from "@/lib/agents/permissions";
+import { JOBS, type AgentJob } from "@/lib/agents/permissions";
 
 /** GooseExecutor's OffReason, in order: why a job was switched off. */
 export const OFF_REASONS = ["revoked", "expired", "not-owner", "stuck"] as const;
@@ -11,8 +11,8 @@ const WEEKEND_SHIELD = 6;
 
 /** What GooseExecutor did, or was told, for one account: every event it emits indexed by the account. */
 export type AgentEvent =
-  | { kind: "job-on"; job: ExecutorJob; capRaw: bigint; end: number }
-  | { kind: "job-off"; job: ExecutorJob; reason: OffReason }
+  | { kind: "job-on"; job: AgentJob; capRaw: bigint; end: number }
+  | { kind: "job-off"; job: AgentJob; reason: OffReason }
   | { kind: "saved"; amountRaw: bigint }
   | { kind: "repaid"; amountRaw: bigint; hfBefore: bigint; hfAfter: bigint; reason: "watch" | "weekend" }
   | { kind: "heads-up"; hf: bigint; sellValueRaw: bigint; sellAfter: number }
@@ -33,7 +33,7 @@ export type AgentLog = AgentEvent & { key: string; blockNumber: bigint; logIndex
 type EventName = ContractEventName<typeof gooseExecutorAbi>;
 type Args<N extends EventName> = Extract<ParseEventLogsReturnType<typeof gooseExecutorAbi, N, true>[number], { eventName: N }>["args"];
 
-const job = (id: number): ExecutorJob | null => EXECUTOR_JOBS[id] ?? null;
+const job = (id: number): AgentJob | null => JOBS[id] ?? null;
 
 /**
  * What each executor event means for one account, by name. The keys are every event in the ABI, so a new event can't

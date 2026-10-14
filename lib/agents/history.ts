@@ -6,7 +6,7 @@ import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import type { AgentLog } from "@/lib/agents/events";
 import { limitOf, movesMoney, type MoveContext } from "@/lib/agents/feed";
-import { EXECUTOR_JOBS } from "@/lib/agents/permissions";
+import { JOBS } from "@/lib/agents/permissions";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { permissionManagerAbi } from "@/lib/guardian/abis";
 import { USDC } from "@/lib/tokens/registry";
@@ -83,7 +83,7 @@ export async function readMoveContext(
           address: q.executor,
           abi: gooseExecutorAbi,
           functionName: "permissionOf",
-          args: [q.account, EXECUTOR_JOBS.indexOf(limit.job)],
+          args: [q.account, JOBS.indexOf(limit.job)],
           blockNumber: e.blockNumber,
         }).catch(() => undefined)
       : undefined,

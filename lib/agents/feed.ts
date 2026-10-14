@@ -1,7 +1,7 @@
 import { decodeErrorResult, isAddressEqual, maxUint256, type Hex } from "viem";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import type { AgentEvent } from "@/lib/agents/events";
-import type { ExecutorJob } from "@/lib/agents/permissions";
+import type { AgentJob } from "@/lib/agents/permissions";
 import { marketState } from "@/lib/market-hours";
 import { statusFor, type Status } from "@/lib/risk/status";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
@@ -48,7 +48,7 @@ export type MoveContext = {
 };
 
 /** Which grant's limit a move counts against, and which of its limits: the coin's own for Entry. */
-export function limitOf(e: AgentEvent): { job: ExecutorJob; spend: number } | null {
+export function limitOf(e: AgentEvent): { job: AgentJob; spend: number } | null {
   switch (e.kind) {
     case "saved":
       return { job: "save", spend: 0 };
@@ -127,7 +127,7 @@ function usedRow(ctx: MoveContext, per: "today" | "this week") {
 }
 
 /** A job's name in a sentence, and the agent its rows sit under. */
-const JOB: Record<ExecutorJob, { agent: AgentName; on: (cap: string) => string; off: string }> = {
+const JOB: Record<AgentJob, { agent: AgentName; on: (cap: string) => string; off: string }> = {
   save: { agent: "Cash Agent", on: (cap) => `Save is on, up to ${cap} a day.`, off: "Save is off" },
   protect: { agent: "Protection", on: (cap) => `Protection is on. It repays from your cash, up to ${cap} a day.`, off: "Protection is off" },
   sell: { agent: "Protection", on: (cap) => `Protection can sell backing stock, up to ${cap} a day.`, off: "Protection won't sell" },
