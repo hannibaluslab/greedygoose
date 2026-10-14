@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { arrivedCoins, arrivedText, arrivedView, askAutomatic, finishSetupShown, rateText } from "@/lib/cashSetup";
+import { afterConnect, arrivedCoins, arrivedText, arrivedView, askAutomatic, finishSetupShown, rateText } from "@/lib/cashSetup";
 import type { AgentStatus } from "@/lib/agents/status";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 
@@ -15,6 +15,21 @@ describe("finishing set-up (earning, the Save grant)", () => {
   it("says the live rate as the screens do", () => {
     expect(rateText(0.0391)).toBe("3.9%");
     expect(rateText(0.04249)).toBe("4.2%");
+  });
+});
+
+describe("afterConnect: where the welcome's Continue leads", () => {
+  const code = (c: Partial<{ done: boolean; failed: boolean; deployed: boolean }>) => ({ done: false, failed: false, deployed: false, ...c });
+
+  it("takes a new account (no code on Base yet) on to Finish setting up, and a returning one Home", () => {
+    expect(afterConnect({ continued: true, code: code({ done: true }) })).toBe("/setup");
+    expect(afterConnect({ continued: true, code: code({ done: true, deployed: true }) })).toBe("/home");
+  });
+
+  it("waits for the code, goes Home when it can't be read, and sends a session JAW restored Home", () => {
+    expect(afterConnect({ continued: true, code: code({}) })).toBeNull();
+    expect(afterConnect({ continued: true, code: code({ failed: true }) })).toBe("/home");
+    expect(afterConnect({ continued: false, code: code({}) })).toBe("/home");
   });
 });
 

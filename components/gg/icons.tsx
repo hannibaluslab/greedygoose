@@ -53,6 +53,8 @@ export const PayIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}>
 export const ArrowLeftIcon = ({ size = 18, ...r }: P) => <svg {...base(size, 2, r)}><path d="M19 12H5M11 6l-6 6 6 6" /></svg>;
 export const CloseIcon = ({ size = 16, ...r }: P) => <svg {...base(size, 2, r)}><path d="M6 6l12 12M18 6L6 18" /></svg>;
 export const ChevronDown = ({ size = 16, ...r }: P) => <svg {...base(size, 2, r)}><path d="M6 9l6 6 6-6" /></svg>;
+/** Cash that earns (the welcome's first fact): cash going down into the pot. */
+export const SaveIcon = ({ size = 19, ...r }: P) => <svg {...base(size, 1.9, r)}><path d="M12 4v10M8 10l4 4 4-4M4 16v4h16v-4" /></svg>;
 export const RebalanceIcon = ({ size = 19, ...r }: P) => <svg {...base(size, 1.9, r)}><path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3M18 3v4h-4M6 21v-4h4" /></svg>;
 export const PadlockIcon = ({ size = 13, ...r }: P) => <svg {...base(size, 2, r)}><path d="M6 11h12v9H6zM9 11V8a3 3 0 0 1 6 0v3" /></svg>;
 export const CopyIcon = ({ size = 18, ...r }: P) => <svg {...base(size, 1.8, r)}><path d="M9 9h10v10H9zM5 15V5h10" /></svg>;

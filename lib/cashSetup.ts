@@ -20,6 +20,19 @@ export const rateText = (apy: number) => `${(apy * 100).toFixed(1)}%`;
  */
 export const finishSetupShown = (save: AgentStatus) => save === "off";
 
+/**
+ * Where the welcome's Continue leads once JAW connects (D20): a new account goes on to the sign-up's last step,
+ * "Finish setting up" (/setup), a returning one Home. JAW's one frame signs in and signs up alike and doesn't say which
+ * it did, so the chain does: a JAW account is counterfactual until its first move, so one with no code on Base has
+ * never moved anything and is new here. A session JAW restored (no Continue this visit) is returning. null while the
+ * code is read; a read that fails goes Home, where the small card asks instead.
+ */
+export function afterConnect(a: { continued: boolean; code: { done: boolean; failed: boolean; deployed: boolean } }): "/setup" | "/home" | null {
+  if (!a.continued || a.code.failed) return "/home";
+  if (!a.code.done) return null;
+  return a.code.deployed ? "/home" : "/setup";
+}
+
 /** A coin sitting in the wallet: how much, in its own units. */
 export type Arrived = { coin: EntryCoinAsset; raw: bigint };
 
