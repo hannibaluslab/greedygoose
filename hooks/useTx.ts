@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { isAddressEqual } from "viem";
 import { useAccount, useCapabilities, usePublicClient, useSendCalls, useWaitForCallsStatus } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ChainCapabilities } from "@jaw.id/core";
@@ -55,6 +56,13 @@ export function useTx(failedOnChain = "This didn’t go through on Base. Nothing
     activity?: ActivityItem[],
   ) {
     setError(null);
+    // Every call is pinned to `user` and simulated from it, so only that account may sign it. They differ only in
+    // the dev preview (`?as=`), which would otherwise pay from the signed-in account for another address.
+    if (!address || !isAddressEqual(user, address)) {
+      setPhase("failed");
+      setError("Only the signed-in account can do this. Nothing was sent.");
+      return;
+    }
     setPhase("simulating");
     let batch: Call[];
     try {
