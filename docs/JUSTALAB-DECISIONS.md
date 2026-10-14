@@ -64,3 +64,16 @@ Legal is cleared. No step waits on a legal view.
 - **GHO is not in Entry:** Base has no GHO/USDC liquidity.
 - **An Entry swap below 99.5% waits an hour** (`EntryWaiting`) and isn't a run failure; the other coins go on.
 - **Entry's coins and venues are fixed in `EntryJob`** (Base mainnet). Another chain gets its own Entry library.
+
+## From the Manage build (2026-10-14)
+
+- **Manage is two tabs:** Your mix (Manage board) and Credit (ManageCredit). "Every month" (ManageMonthly: Auto buy, Auto top up) stays parked, so the tab control has two. The titles are the boards' own ("Agents" on Your mix, "Manage" on Credit).
+- **Saving a tab is at most two Face IDs, each only when needed:** the registry setting through `useTx` (`setMix`, `setKeepMix`), then the job's new JAW grant on JAW's own screen (D14: a grant is its own user operation). A grant replaced this way stays in JAW's list; the executor only runs the newest registered one, and Turn off revokes them all.
+- **Stock limits in a grant** (Protect · sell, the Rebalancer) are shares worth twice the dollar limit at Aave's price when granted, held 1% under the executor's registration bound (twice `CAP_MAX`). A stock that falls after the grant can still be sold up to the dollar limit, which is what binds (`stockLimitsRaw`).
+- **The Rebalancer's grant** may sell the stocks in the mix. Saving a mix with a stock the grant can't sell asks for a new grant.
+- **Protection's "Can sell up to"** is the Protect · sell grant's daily limit. Protect from savings keeps its own $300 a day.
+- **The never-sell list is the Protect · sell grant:** the grant lists all seven stocks except the never-sell ones, so a stock bought and used as backing later is covered without a new grant. GooseExecutor has no registry setter for the list; changing it is a new grant.
+- **"What happens"** is the Rebalancer's own rule (`lib/guardian/rebalance.ts`) on today's free shares, with a fresh week at the chosen limit. Shares backing credit are left out, and the line says so.
+- **"Use credit for buying"** only changes what the Buy sheet offers past your cash (decision 1). It moves nothing, so it lives in this browser and takes no Face ID.
+- **Turn off credit:** while anything is owed, it says "Repay the $X first". Once nothing is owed, it revokes both Protect grants.
+- **Pause has nothing to call yet:** GooseExecutor has no pause for one account (its `pause` stops every run), so "Pause the Rebalancer" and "Pause Protection" show disabled.
