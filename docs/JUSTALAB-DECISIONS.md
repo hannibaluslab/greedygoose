@@ -121,3 +121,13 @@ Adrian's spec (eval/agents-redesign.md) replaces the Agents and Manage boards fo
 - **Rebalance can't be switched on before a mix,** which is saved with its own Face ID (`setMix`); its switch opens its sheet until then.
 - **The sheet:** what it does and what it never does, its status and next move, its limit, its settings, "Stops on <date> · Renew", its own moves, and Switch on or Turn off. Receive's settings list the coins it converts, what's in the account and what's waiting. Protect's and Rebalance's settings still open Manage until the next stage moves them into their sheets.
 - **Dev gallery** `/dev/ui/agents`: every card, every row state, today's "Not live yet", and each sheet and confirm step, from fixtures run through the app's own rules and words.
+
+## From the Agents redesign: Manage moves into the sheets (2026-10-15)
+
+This replaces "From the Manage build" above for where the settings live (its rules on grants, stock limits and Face IDs stand), and the frame's line that Protect's and Rebalance's settings still open Manage.
+
+- **Manage is gone.** Protect's and Rebalance's settings are the bodies of their agent sheets. `/manage` redirects to `/agents?agent=rebalance` and `/manage/credit` to `/agents?agent=protect` (307, query kept); `/agents?agent=save|protect|rebalance|receive` opens that sheet. The Credit sheet's and Repay's settings buttons, and the Credit sheet's Protect row, open Protect's sheet.
+- **One limit and one Face ID button per sheet.** In Protect's and Rebalance's sheets the body carries the limit chips and the Save; the sheet adds no limit line and no "Switch on". While the agent is off, the button reads "Switch on with Face ID", and the line under it counts the Face IDs. A row's switch still opens a confirm at the limit the agent starts on.
+- **Protect switches on from its body.** While repaying from cash is off, saving grants it at the limit on screen first, then selling if it's switched on (two Face IDs).
+- **"Use credit for buying" is on the Credit sheet,** under Protect. It is about credit, not an agent.
+- **Not carried over from Manage:** "Turn off credit" (Turn off Protect in its sheet revokes both of Protect's grants) and the disabled "Pause" buttons (there is no pause for one account; Turn off is the control).
