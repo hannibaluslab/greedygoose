@@ -16,7 +16,7 @@ import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import { cashRaw, saveRuns, toUsd, type Cash } from "@/lib/cash";
 
 /** Aave V3 getReserveData — only `currentLiquidityRate` (index 2, RAY) is used. */
-const v3ReserveAbi = [
+export const v3ReserveAbi = [
   {
     type: "function",
     name: "getReserveData",
