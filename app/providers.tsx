@@ -30,8 +30,9 @@ export function Providers({ children }: { children: ReactNode }) {
           toastOptions={{
             unstyled: true,
             classNames: {
+              // font-sans: sonner puts a system font on its toaster; the boards' toast is in Geist.
               toast:
-                "flex min-h-[42px] w-full items-center gap-2.5 rounded-[21px] bg-ink px-4 py-2 text-[14px] font-semibold text-on-ink shadow-toast has-[[data-icon]]:pl-2.5",
+                "flex min-h-[42px] w-full items-center gap-2.5 rounded-[21px] bg-ink px-4 py-2 font-sans text-[14px] font-semibold text-on-ink shadow-toast has-[[data-icon]]:pl-2.5",
               icon: "shrink-0",
               description: "text-[12.5px] font-normal text-ink-on-dark-dim",
             },
