@@ -216,7 +216,7 @@ function Skeleton() {
 
 /**
  * Home's portfolio before the first stock: the board's dashed "add a stock" language, grown to fill the room down to
- * the tab bar, with the seven stocks you can buy and one button to the Market.
+ * the tab bar, with the seven stocks you can buy and one button: Top up at $0, the Market once there's cash.
  */
 function EmptyPortfolio({ cashUsd }: { cashUsd: number }) {
   return (
@@ -230,9 +230,12 @@ function EmptyPortfolio({ cashUsd }: { cashUsd: number }) {
         <p className="m-0 text-[17px] font-semibold tracking-[-0.01em]">You don’t hold any stocks yet</p>
         <p className="m-0 text-[13px] leading-[1.4] text-ink-mid">{EQUITIES.map((e) => e.name).join(", ")}.</p>
       </div>
-      <Button href="/buy" className="w-full">
-        {cashUsd >= 1 ? `Buy stocks with your ${formatUsd(cashUsd)}` : "Buy stocks"}
-      </Button>
+      {/* At $0 there's nothing to buy with: the one step is topping up, as Home's Top up does. */}
+      {cashUsd >= 1 ? (
+        <Button href="/buy" className="w-full">Buy stocks with your {formatUsd(cashUsd)}</Button>
+      ) : (
+        <Button href="/receive" className="w-full">Top up</Button>
+      )}
     </div>
   );
 }
