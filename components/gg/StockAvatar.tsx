@@ -1,15 +1,19 @@
 const COLORS: Record<string, string> = {
-  NVDA: "#76b900", AAPL: "#2c2a25", AMZN: "#ff9900", GOOGL: "#4285f4", META: "#0866ff", MSFT: "#00a4ef", TSLA: "#cc0000",
+  NVDA: "#76b900", AAPL: "#2c2a25", AMZN: "#ff9900", GOOGL: "#4285f4", META: "#0866ff", MSFT: "#00a4ef", TSLA: "#e31937",
 };
 
-/** Round ticker badge, as in the design (NVDA green, AAPL ink). */
+/** Round ticker badge, as in the design: 30px on cards (9px, 800), 40px in lists (10.5px, 700), 16px inside a pill (5px). */
 export function StockAvatar({ symbol, size = 30 }: { symbol: string; size?: number }) {
   const ticker = symbol.replace(/c$/, "");
+  const font = size <= 20 ? 5 : size >= 40 ? 10.5 : 9;
   return (
     <span
       aria-hidden
-      className="flex shrink-0 items-center justify-center rounded-full font-extrabold text-white"
-      style={{ width: size, height: size, background: COLORS[ticker] ?? "#2c2a25", fontSize: (size >= 40 ? 10.5 : 9) * (ticker.length > 4 ? 0.8 : 1), letterSpacing: "0.02em" }}
+      className="flex shrink-0 items-center justify-center rounded-full text-white"
+      style={{
+        width: size, height: size, background: COLORS[ticker] ?? "#2c2a25",
+        fontSize: font * (ticker.length > 4 ? 0.8 : 1), fontWeight: size >= 40 ? 700 : 800, letterSpacing: "0.02em",
+      }}
     >
       {ticker}
     </span>
