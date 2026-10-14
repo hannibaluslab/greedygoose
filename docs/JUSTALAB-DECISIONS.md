@@ -101,3 +101,8 @@ Legal is cleared. No step waits on a legal view.
 - **"Use credit for buying"** only changes what the Buy sheet offers past your cash (decision 1). It moves nothing, so it lives in this browser and takes no Face ID.
 - **Turn off credit:** while anything is owed, it says "Repay the $X first". Once nothing is owed, it revokes both Protect grants.
 - **Pause has nothing to call yet:** GooseExecutor has no pause for one account (its `pause` stops every run), so "Pause the Rebalancer" and "Pause Protection" show disabled.
+
+## From the integration of the follow-ups, Agents and Manage (2026-10-14)
+
+- **A heads-up's sale time is the executor's `sellAfter`, as given.** Near a freeze it is the moment prices reopen, holidays included, so the app adds no 30 minutes of its own. The card and the feed ask whether the second before it is frozen; if so they read "when prices reopen", otherwise "in N min" or the time.
+- **The Agents list reads the mix where Manage does** (`useAgentSettings`: `mixes`, `accounts` and the executor's live `rebalanceLimits`), so "On target" follows the band the executor runs with. `useAgents` keeps to the jobs and their grants.
