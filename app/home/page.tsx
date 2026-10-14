@@ -15,7 +15,6 @@ import { CreditSheet } from "@/components/gg/CreditSheet";
 import { StockSheets, useStockSheets } from "@/components/gg/StockSheets";
 import { ValueLine } from "@/components/gg/ValueLine";
 import { TotalBalanceSheet, YieldSheet } from "@/components/gg/InfoSheets";
-import { Button } from "@/components/gg/Button";
 import { StockAvatar } from "@/components/gg/StockAvatar";
 import { ChevronRight, CreditIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/icons";
 import { MarketBanner } from "@/components/ui/MarketBanner";
@@ -26,7 +25,7 @@ import { usePosition, type PositionData } from "@/hooks/usePosition";
 import { aprToApy } from "@/lib/aave/math";
 import { arrivedCoins, arrivedView, rateText, startEarningShown, type ArrivedView } from "@/lib/cashSetup";
 import { homeStatus } from "@/lib/risk/status";
-import { formatUsd, formatUsdTrim } from "@/lib/formatting";
+import { formatUsdTrim } from "@/lib/formatting";
 import { EQUITIES } from "@/lib/tokens/registry";
 import { dayChange, weekValue } from "@/lib/prices/market";
 
@@ -174,7 +173,7 @@ function Loaded({
           </Link>
         </div>
         {held.length === 0 ? (
-          <EmptyPortfolio cashUsd={data.cashUsd} />
+          <EmptyPortfolio />
         ) : (
           <div className={`-mx-5 flex ${held.length < 2 ? "justify-start" : "justify-between"} gap-2 overflow-x-auto px-5 pb-4 pt-0.5 [scrollbar-width:none]`}>
             {held.map((h) => {
@@ -216,9 +215,9 @@ function Skeleton() {
 
 /**
  * Home's portfolio before the first stock: the board's dashed "add a stock" language, grown to fill the room down to
- * the tab bar, with the seven stocks you can buy and one button: Top up at $0, the Market once there's cash.
+ * the tab bar, with the seven stocks you can buy. No button of its own (Adrian): Top up and Trade sit above it.
  */
-function EmptyPortfolio({ cashUsd }: { cashUsd: number }) {
+function EmptyPortfolio() {
   return (
     <div className="mb-4 flex min-h-[200px] grow flex-col items-center justify-center gap-4 rounded-[22px] border-[1.5px] border-dashed border-[rgba(14,13,11,0.2)] px-6 py-6 text-center">
       <div aria-hidden className="flex gap-1">
@@ -230,12 +229,6 @@ function EmptyPortfolio({ cashUsd }: { cashUsd: number }) {
         <p className="m-0 text-[17px] font-semibold tracking-[-0.01em]">You don’t hold any stocks yet</p>
         <p className="m-0 text-[13px] leading-[1.4] text-ink-mid">{EQUITIES.map((e) => e.name).join(", ")}.</p>
       </div>
-      {/* At $0 there's nothing to buy with: the one step is topping up, as Home's Top up does. */}
-      {cashUsd >= 1 ? (
-        <Button href="/buy" className="w-full">Buy stocks with your {formatUsd(cashUsd)}</Button>
-      ) : (
-        <Button href="/receive" className="w-full">Top up</Button>
-      )}
     </div>
   );
 }
