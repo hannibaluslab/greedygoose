@@ -64,3 +64,11 @@ Legal is cleared. No step waits on a legal view.
 - **GHO is not in Entry:** Base has no GHO/USDC liquidity.
 - **An Entry swap below 99.5% waits an hour** (`EntryWaiting`) and isn't a run failure; the other coins go on.
 - **Entry's coins and venues are fixed in `EntryJob`** (Base mainnet). Another chain gets its own Entry library.
+
+## From the price build (2026-10-14)
+
+- **JAW first, by each stock's own ticker.** JAW's market data answers by ticker, and a stock's is its registry symbol in capitals: NVDAc → NVDAC, the Coinbase tokenized stock's own. A plain ticker can be another token (JAW's META is about $5).
+- **Every market price is checked against Aave's.** It must be within 2% of Aave's price for the stock, and within 10% while US markets are closed (Friday 20:00 to Sunday 20:00 ET): Aave holds Friday's close then while the tokens trade on. Another token is still far outside. A price that fails is never shown. The label stays "Market prices", and on Home and Invest it sits inside the chart, so the layout is the boards'.
+- **CoinGecko is the fallback, keyless,** for a stock whose JAW price fails the check or doesn't come. It goes through the app's stateless `/api/prices` route (and `/api/prices/history` for the stock chart), which stores nothing and caches each answer for 2 minutes, since CoinGecko's public API turns callers away after a few calls a minute. The app checks its answer against Aave's the same way.
+- **No all-time return until the PnL engine** (plan item 7). It needs what Sam paid, read from the chain; Home leaves the boards' "+$485 all-time return" out until then.
+- **GreedyGoose needs its own JAW API key before launch.** One key, `NEXT_PUBLIC_JAW_API_KEY`, serves both the wallet (`lib/jaw/config.ts`) and the market data (`lib/prices/jaw.ts`).
