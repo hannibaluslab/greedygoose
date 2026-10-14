@@ -26,8 +26,8 @@ library EntryRules {
 
     // Hard bounds (D18). Nothing can change them.
     uint16 internal constant FLOOR_BPS_MIN = 10;
-    /// Never under 99% of face value.
-    uint16 internal constant FLOOR_BPS_MAX = 100;
+    /// Never under 99.5% of face value (decision, 2026-10-14): a change through the delay can only make it stricter.
+    uint16 internal constant FLOOR_BPS_MAX = 50;
     uint64 internal constant MIN_ENTRY_MIN = 0.1e6;
     uint64 internal constant MIN_ENTRY_MAX = 100e6;
     uint64 internal constant MAX_SWAP_MIN = 100e6;

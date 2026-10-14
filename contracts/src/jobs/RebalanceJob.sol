@@ -89,6 +89,14 @@ library RebalanceJob {
         if (!RebalanceRules.limitsOk(l)) revert GooseExecutor.OutOfBounds();
     }
 
+    /// A change through the delay: within the bounds, and the swap floor and the pool gap no looser than `current`
+    /// (decision, 2026-10-14). Checked when it is queued and again when it lands, so no change ever loosens what a
+    /// user's swaps get against Aave's price.
+    function checkChange(RebalanceLimits memory l, RebalanceLimits storage current) public view {
+        checkLimits(l);
+        if (l.floorBps > current.floorBps || l.poolGapBps > current.poolGapBps) revert GooseExecutor.OutOfBounds();
+    }
+
     // ================================================================== plan and run
 
     /// What a run would do now: rebalance, prune a dead permission, or nothing.

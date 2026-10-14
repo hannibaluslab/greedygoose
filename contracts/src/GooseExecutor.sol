@@ -930,7 +930,9 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         if (kind == Change.SetThresholds) return ProtectJob.checkThresholds(abi.decode(value, (Thresholds)));
         if (kind == Change.SetAmounts) return SaveJob.checkAmounts(abi.decode(value, (Amounts)));
         if (kind == Change.SetSellLimits) return SellJob.checkLimits(abi.decode(value, (SellLimits)));
-        if (kind == Change.SetRebalanceLimits) return RebalanceJob.checkLimits(abi.decode(value, (RebalanceLimits)));
+        if (kind == Change.SetRebalanceLimits) {
+            return RebalanceJob.checkChange(abi.decode(value, (RebalanceLimits)), rebalanceLimits);
+        }
         if (kind == Change.SetEntryLimits) return EntryJob.checkLimits(abi.decode(value, (EntryLimits)));
         if (kind == Change.SetHoliday) {
             (uint32 day,) = abi.decode(value, (uint32, bool));

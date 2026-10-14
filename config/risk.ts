@@ -59,7 +59,8 @@ export const PROTECT_SELL = {
  * target and 5 points, and goes back to half the band; trades under $20 are skipped; a pool more than 0.5% off Aave's
  * price holds the rebalance; each swap is at most $25k. Each swap gets at least Aave's price less 0.5%, the same as the
  * pool gap. All wait on calibration (plan item 6 step 9, item 9 step 5). GooseExecutor holds the live values within
- * hard bounds (contracts/src/RebalanceRules.sol); a change waits the public 7-day delay.
+ * hard bounds (contracts/src/RebalanceRules.sol); a change waits the public 7-day delay, and can only make the floor and
+ * the pool gap stricter.
  */
 export const REBALANCER = {
   /** The band: the smaller of this share of a stock's target… */
@@ -76,7 +77,8 @@ export const REBALANCER = {
  * The Entry agent's numbers (D18), plan item 2: every swap at 99.5% of face value or better. A swap is at most $10k,
  * under a fifth of the thinnest venue's USDC (Aerodrome's USDbC pool holds $58k and fills $10k at 99.99%, 2026-10-14);
  * a larger balance is split over the next runs. Both wait on calibration (plan item 6 step 9). GooseExecutor holds
- * the live values within hard bounds (contracts/src/EntryRules.sol); a change waits the public 7-day delay.
+ * the live values within hard bounds, the floor never under 99.5% (contracts/src/EntryRules.sol); a change waits the
+ * public 7-day delay.
  */
 export const ENTRY = {
   floorBps: 50,

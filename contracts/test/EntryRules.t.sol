@@ -76,7 +76,8 @@ contract EntryRulesTest is Test {
 
     function test_limit_bounds() public pure {
         assertTrue(EntryRules.limitsOk(_limits()));
-        assertFalse(EntryRules.limitsOk(EntryLimits(101, 1e6, 10_000e6)), "never under 99%");
+        assertTrue(EntryRules.limitsOk(EntryLimits(10, 1e6, 10_000e6)), "99.9%");
+        assertFalse(EntryRules.limitsOk(EntryLimits(51, 1e6, 10_000e6)), "never under 99.5%");
         assertFalse(EntryRules.limitsOk(EntryLimits(50, 1e6, 99e6)));
     }
 
