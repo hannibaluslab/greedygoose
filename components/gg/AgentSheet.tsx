@@ -133,7 +133,8 @@ export function AgentSheet({
         </section>
 
         <TxError error={error} />
-        {(on || !settingsSave) && (
+        {/* Protect's and Rebalance's bodies say the fee next to their own button. */}
+        {!settingsSave && (
           <div className="flex items-center justify-between px-1 text-[13px]">
             <span className="text-ink-mid">{NETWORK_FEE_ROW.label}</span>
             <span className="font-semibold">{NETWORK_FEE_ROW.value}</span>
