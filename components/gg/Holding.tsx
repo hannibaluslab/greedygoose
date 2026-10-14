@@ -3,7 +3,7 @@ import { MoneyCompact } from "./Money";
 import { Sparkline } from "./Sparkline";
 import { StockAvatar } from "./StockAvatar";
 import { Tap } from "./Tap";
-import { ChevronRight, LockIcon, UnlockIcon } from "./icons";
+import { ChevronRight, LockIcon, PlusIcon, UnlockIcon } from "./icons";
 import { formatShares, formatSignedPct, formatUsd } from "@/lib/formatting";
 
 /** Stocks earn no yield (D19): the holding pieces carry no APY. What a holding shows instead is how much of it backs credit. */
@@ -90,6 +90,21 @@ export function HoldingCard({ symbol, name, valueUsd, backs, today, spark, share
           <span className="text-subtle">shares</span>
         </span>
       )}
+    </Tap>
+  );
+}
+
+/** The Home rail's dashed last card while it holds fewer than three stocks (F2-1): it opens the Market. */
+export function AddStockCard({ href }: { href: string }) {
+  return (
+    <Tap
+      href={href}
+      className="flex w-[111px] shrink-0 flex-col items-center justify-center gap-2 rounded-[22px] border-[1.5px] border-dashed border-[rgba(14,13,11,0.2)] text-xs font-semibold leading-[normal] text-ink-mid"
+    >
+      <span aria-hidden className="flex size-[30px] items-center justify-center rounded-[15px] bg-pill">
+        <PlusIcon size={14} strokeWidth={2.2} />
+      </span>
+      Add a stock
     </Tap>
   );
 }

@@ -7,7 +7,7 @@ import { AmountArrow, AmountBadge, AmountField, AmountSource, YouGet } from "@/c
 import { BalanceHero, TodayChange } from "@/components/gg/BalanceHero";
 import { Button } from "@/components/gg/Button";
 import { CashCard, CreditCard } from "@/components/gg/Cards";
-import { HoldingCard, HoldingList, HoldingRow } from "@/components/gg/Holding";
+import { AddStockCard, HoldingCard, HoldingList, HoldingRow } from "@/components/gg/Holding";
 import { MarketList, MarketRow } from "@/components/gg/Market";
 import { QuickAction } from "@/components/gg/QuickAction";
 import { TabHeader } from "@/components/gg/Screen";
@@ -149,6 +149,15 @@ export function Gallery() {
           {HOLDINGS.map(({ symbol, name, valueUsd, backs, shares }) => (
             <HoldingCard key={symbol} symbol={symbol} name={name} valueUsd={valueUsd} backs={backs} shares={shares} onClick={noop} />
           ))}
+        </div>
+      </Section>
+
+      <Section title="Holding cards · two held, Add a stock (F2-1)" kit="holding-cards-add">
+        <div className="flex justify-between gap-2 pb-4 pt-0.5">
+          {[HOLDINGS[0], HOLDINGS[2]].map(({ symbol, name, valueUsd, shares }) => (
+            <HoldingCard key={symbol} symbol={symbol} name={name} valueUsd={valueUsd} backs={0} shares={shares} onClick={noop} />
+          ))}
+          <AddStockCard href="#" />
         </div>
       </Section>
 

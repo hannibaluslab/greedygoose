@@ -8,7 +8,7 @@ import { TabBar } from "@/components/gg/TabBar";
 import { BalanceHero } from "@/components/gg/BalanceHero";
 import { QuickAction } from "@/components/gg/QuickAction";
 import { CashCard, CreditCard } from "@/components/gg/Cards";
-import { HoldingCard } from "@/components/gg/Holding";
+import { AddStockCard, HoldingCard } from "@/components/gg/Holding";
 import { CreditSheet } from "@/components/gg/CreditSheet";
 import { TotalBalanceSheet, YieldSheet } from "@/components/gg/InfoSheets";
 import { Button } from "@/components/gg/Button";
@@ -120,7 +120,7 @@ function Loaded({ data, apy, open }: { data: PositionData; apy: number; open: (s
             </Button>
           </div>
         ) : (
-          <div className="-mx-5 flex justify-between gap-2 overflow-x-auto px-5 pb-4 pt-0.5 [scrollbar-width:none]">
+          <div className={`-mx-5 flex ${held.length < 2 ? "justify-start" : "justify-between"} gap-2 overflow-x-auto px-5 pb-4 pt-0.5 [scrollbar-width:none]`}>
             {held.map((h) => {
               const valueUsd = h.freeUsd + h.lockedUsd;
               return (
@@ -135,6 +135,7 @@ function Loaded({ data, apy, open }: { data: PositionData; apy: number; open: (s
                 />
               );
             })}
+            {held.length < 3 && <AddStockCard href="/buy" />}
           </div>
         )}
       </section>
