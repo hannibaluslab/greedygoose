@@ -1,14 +1,13 @@
 "use client";
 
 import type { ReactNode } from "react";
-import Link from "next/link";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { Button } from "./Button";
 import { LimitChips } from "./LimitChips";
 import { AgentPill } from "./Status";
 import { NETWORK_FEE_ROW, Summary } from "./Summary";
 import { FaceIdButton, TxError } from "./TxUi";
-import { ChevronRight, ShieldIcon } from "./icons";
+import { ShieldIcon } from "./icons";
 import { AGENT_COPY, type AgentItem, type ConfirmCopy, type SheetAction } from "@/lib/agents/list";
 import type { AgentStatus } from "@/lib/agents/status";
 
@@ -186,22 +185,6 @@ export function ReceiveCoins({ coins }: { coins: readonly ReceiveCoin[] }) {
         ))}
       </ul>
       <p className="m-0 px-1 text-xs leading-[1.4] text-subtle">Each at 99.5% of face value or better. A coin that can’t get it waits an hour and tries again.</p>
-    </section>
-  );
-}
-
-/** A link to settings that live on their own screen for now. */
-export function SettingsLink({ title, sub, href }: { title: string; sub: string; href: string }) {
-  return (
-    <section className="flex flex-col gap-2">
-      <Label>Settings</Label>
-      <Link href={href} className="flex items-center gap-3 rounded-[22px] bg-card px-4 py-3.5 text-ink no-underline shadow-card-elev">
-        <span className="flex grow flex-col gap-0.5">
-          <span className="text-[15px] font-semibold">{title}</span>
-          <span className="text-xs leading-[1.35] text-subtle">{sub}</span>
-        </span>
-        <ChevronRight size={16} className="shrink-0 text-subtle" />
-      </Link>
     </section>
   );
 }

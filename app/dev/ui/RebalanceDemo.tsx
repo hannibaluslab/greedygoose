@@ -6,7 +6,7 @@ import { RebalanceSettings, RebalanceSettingsView, type SettingsHolding } from "
 import { rebalanceOptions, type MixRow } from "@/lib/agents/mix";
 import { EQUITIES } from "@/lib/tokens/registry";
 
-// Sample figures for the gallery only: the Manage board's NVIDIA, Apple and Tesla at 43/26/30 of their free shares,
+// Sample figures for the gallery only: the old Manage board's NVIDIA, Apple and Tesla at 43/26/30 of their free shares,
 // with $3,300 of Tesla backing credit. The trades come from the Rebalancer's own rule on these figures.
 const FREE = [
   { reserveId: 5, usd: 4_300, price: 178.57 },
@@ -44,6 +44,32 @@ const STATES = [
   { key: "switch-on", title: "Off · first mix switches it on", configured: true, saved: EQUITIES.map(() => 0), terms: null, draft: TARGET },
 ] as const;
 
+export type RebalanceState = (typeof STATES)[number]["key"];
+
+/** RebalanceSettings' body in one state, from fixtures: what the Agents gallery's Rebalance sheet holds. */
+export function RebalanceStateBody({ state }: { state: RebalanceState }) {
+  const s = STATES.find((x) => x.key === state)!;
+  return (
+    <RebalanceSettingsView
+      holdings={HOLDINGS}
+      saved={s.saved}
+      options={rebalanceOptions()}
+      terms={s.terms}
+      capMaxRaw={s.configured ? 10_000_000_000n : null}
+      configured={s.configured}
+      connected
+      running={!!s.terms}
+      feeBlocked={false}
+      feeLoading={false}
+      busy={false}
+      phase="idle"
+      error={null}
+      onSave={noop}
+      draft={s.draft ? [...s.draft] : undefined}
+    />
+  );
+}
+
 /** RebalanceSettings' body in each state, from fixtures (nothing reads the chain). */
 export function RebalanceDemo() {
   const as = useSyncExternalStore(noopSubscribe, previewAs, () => null);
@@ -56,23 +82,7 @@ export function RebalanceDemo() {
       {STATES.map((s) => (
         <div key={s.key} data-state={s.key} className="flex flex-col gap-2 rounded-[26px] bg-sheet p-3">
           <span className="text-xs font-semibold text-subtle">{s.title}</span>
-          <RebalanceSettingsView
-            holdings={HOLDINGS}
-            saved={s.saved}
-            options={rebalanceOptions()}
-            terms={s.terms}
-            capMaxRaw={s.configured ? 10_000_000_000n : null}
-            configured={s.configured}
-            connected
-            running={!!s.terms}
-            feeBlocked={false}
-            feeLoading={false}
-            busy={false}
-            phase="idle"
-            error={null}
-            onSave={noop}
-            draft={s.draft ? [...s.draft] : undefined}
-          />
+          <RebalanceStateBody state={s.key} />
         </div>
       ))}
     </div>

@@ -18,12 +18,15 @@ const SAVED: Record<"off" | "on" | "repay", ProtectSaved> = {
   repay: { repayCapRaw: usdc(300), sell: null, keepMix: false },
 };
 
-/** Protect's settings body in each state the sheet shows: not live yet, all on, selling off. Saving only toasts. */
-export function ProtectDemo({ state }: { state: "not-live" | "on" | "sell-off" }) {
+/**
+ * Protect's settings body in each state the sheet shows: not live yet, off (saving switches it on), all on, selling
+ * off. Saving only toasts.
+ */
+export function ProtectDemo({ state }: { state: "not-live" | "off" | "on" | "sell-off" }) {
   const props: ProtectSettingsViewProps = {
     live: state !== "not-live",
     preview: false,
-    saved: state === "not-live" ? SAVED.off : state === "on" ? SAVED.on : SAVED.repay,
+    saved: state === "not-live" || state === "off" ? SAVED.off : state === "on" ? SAVED.on : SAVED.repay,
     backsUsd: BACKS,
     pricesRaw: PRICES,
     capMaxRaw: state === "not-live" ? null : CAP_MAX,

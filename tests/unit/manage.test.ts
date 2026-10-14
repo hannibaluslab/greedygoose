@@ -16,10 +16,8 @@ import {
   previewTrades,
   rebalanceOptions,
   startingMix,
-  tradesInWords,
   unpackMix,
   wholePercents,
-  whatHappens,
   type MixHolding,
 } from "@/lib/agents/mix";
 import { stockLimitsRaw } from "@/lib/agents/permissions";
@@ -114,20 +112,6 @@ describe("previewTrades (the Rebalancer's rule on today's free stock)", () => {
     const small = previewTrades({ holdings: board, rows: boardMix, capRaw: 100_000_000n, capMaxRaw: null, options });
     expect(small.filter((t) => t.buy).reduce((a, t) => a + t.amountIn, 0n)).toBeLessThanOrEqual(100_000_000n);
     expect(previewTrades({ holdings: board, rows: boardMix.slice(1), capRaw: 500_000_000n, capMaxRaw: null, options })).toEqual([]);
-  });
-});
-
-describe("the What happens line", () => {
-  it("says the trades as the board does, largest first", () => {
-    const trades = previewTrades({ holdings: board, rows: boardMix, capRaw: 500_000_000n, capMaxRaw: null, options });
-    expect(tradesInWords(trades, board)).toBe("sells about $277 of Tesla and $125 of Apple, buys about $400 of NVIDIA");
-    expect(whatHappens(boardMix, trades, board)).toBe("To get there: sells about $277 of Tesla and $125 of Apple, buys about $400 of NVIDIA.");
-  });
-
-  it("asks for a stock, or for 100%, and says when there's nothing to trade", () => {
-    expect(whatHappens([], [], board)).toBe("Add a stock to start your mix.");
-    expect(whatHappens(boardMix.slice(1), [], board)).toBe("Make it add up to 100% to see what it trades.");
-    expect(whatHappens(boardMix, [], board)).toBe("Nothing to trade: every stock is close enough to its target.");
   });
 });
 

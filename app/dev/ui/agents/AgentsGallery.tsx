@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { FeedCard, FeedDays } from "@/components/gg/Activity";
-import { AgentSheet, ReceiveCoins, SettingsLink, type ConfirmView } from "@/components/gg/AgentSheet";
+import { AgentSheet, ReceiveCoins, type ConfirmView } from "@/components/gg/AgentSheet";
 import { AgentRow, AgentsFeed, AgentsView, AttentionCard, MixBar, TurnOffAll } from "@/components/gg/Agents";
 import type { AgentRow as FeedAgentRow } from "@/hooks/useAgentFeed";
 import { useNowSec } from "@/hooks/useNowSec";
@@ -28,6 +28,8 @@ import { agentNexts, defaultNumbers, type NextInput } from "@/lib/agents/next";
 import { JOBS, LIMIT_USD, type AgentJob } from "@/lib/agents/permissions";
 import type { AgentStatus } from "@/lib/agents/status";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
+import { ProtectDemo } from "../ProtectDemos";
+import { RebalanceStateBody } from "../RebalanceDemo";
 
 /*
  * Dev only: the Agents tab in each state it can be in, with fixtures run through the app's own rules and words
@@ -277,10 +279,11 @@ function GallerySheet({
           : undefined
       }
       settings={
+        // The real settings bodies, drawn from their fixtures (ProtectDemos, RebalanceDemo).
         agent === "protect" ? (
-          <SettingsLink title="Selling backing stock" sub="Its own switch, what sells first, and stocks it never sells" href="/manage/credit" />
+          <ProtectDemo state={!live ? "not-live" : item.status === "off" ? "off" : "on"} />
         ) : agent === "rebalance" ? (
-          <SettingsLink title="Your mix" sub="The target for each stock, and when it trades" href="/manage" />
+          <RebalanceStateBody state={!live ? "not-live" : item.status === "off" ? "switch-on" : "on-target"} />
         ) : agent === "receive" ? (
           <ReceiveCoins
             coins={ENTRY_COINS.map((c, k) => ({
@@ -297,6 +300,7 @@ function GallerySheet({
           {live && activity.length ? <FeedDays rows={activity} nowMs={nowSec * 1000} /> : <p className="m-0 py-3.5 text-sm text-ink-mid">Nothing yet.</p>}
         </FeedCard>
       }
+      settingsSave={agent === "protect" || agent === "rebalance"}
       onAction={onStep}
     />
   );

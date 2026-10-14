@@ -1,12 +1,11 @@
 import { REBALANCER } from "@/config/risk";
 import { stockLimitsRaw, type StockLimits } from "@/lib/agents/permissions";
 import { rebalanceTrades, type RebalanceOptions, type RebalanceTrade } from "@/lib/guardian/rebalance";
-import { formatUsdTrim, inWords } from "@/lib/formatting";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
 /**
- * The Rebalancer's mix in Manage (plan item 9 step 4): the weights GooseExecutor's registry keeps (`setMix`, `mixes`)
- * and what the Rebalancer would trade for them, from its TypeScript rule (lib/guardian/rebalance.ts).
+ * The Rebalancer's mix (plan item 9 step 4), set in its agent sheet: the weights GooseExecutor's registry keeps
+ * (`setMix`, `mixes`) and what the Rebalancer would trade for them, from its TypeScript rule (lib/guardian/rebalance.ts).
  */
 
 /** A whole mix in BPS (RebalanceRules.WHOLE). */
@@ -57,7 +56,7 @@ const holdingOf = (holdings: readonly MixHolding[], reserveId: number) =>
   holdings.find((h) => h.reserveId === reserveId);
 
 /**
- * The rows Manage opens on: the saved mix, largest first; before one is saved, the stocks with free shares at their
+ * The rows Rebalance's sheet opens on: the saved mix, largest first; before one is saved, the stocks with free shares at their
  * share now, so nothing trades until the user moves a slider. Dust whose share rounds to 0% is left out (Add a stock
  * brings it back).
  */
@@ -145,35 +144,4 @@ export function previewTrades(p: {
     },
     p.options,
   );
-}
-
-/**
- * The trades as the Manage board words them: "sells about $250 of Tesla and $50 of Apple, buys about $300 of NVIDIA",
- * largest first, in whole dollars at Aave's price. Null when there is nothing to trade.
- */
-export function tradesInWords(trades: readonly RebalanceTrade[], holdings: readonly MixHolding[]): string | null {
-  const usd = (t: RebalanceTrade) => {
-    const raw = t.buy ? t.amountIn : (t.amountIn * (holdingOf(holdings, t.reserveId)?.priceRaw ?? 0n)) / 10n ** 10n;
-    return Number(raw) / 10 ** USDC.decimals;
-  };
-  const side = (buy: boolean) =>
-    trades
-      .filter((t) => t.buy === buy)
-      .sort((a, b) => usd(b) - usd(a))
-      .map((t) => `${formatUsdTrim(Math.round(usd(t)))} of ${EQUITIES.find((e) => e.reserveId === t.reserveId)!.name}`);
-  const sells = side(false);
-  const buys = side(true);
-  return sells.length && buys.length ? `sells about ${inWords(sells)}, buys about ${inWords(buys)}` : null;
-}
-
-/** The "What happens" line for the mix on screen and the trades `previewTrades` found for it. */
-export function whatHappens(
-  rows: readonly MixRow[],
-  trades: readonly RebalanceTrade[],
-  holdings: readonly MixHolding[],
-): string {
-  if (rows.length === 0) return "Add a stock to start your mix.";
-  if (rows.reduce((a, r) => a + r.bps, 0) !== MIX_WHOLE) return "Make it add up to 100% to see what it trades.";
-  const words = tradesInWords(trades, holdings);
-  return words ? `To get there: ${words}.` : "Nothing to trade: every stock is close enough to its target.";
 }
