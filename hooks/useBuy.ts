@@ -12,7 +12,7 @@ import { USDC, type ReserveAsset } from "@/lib/tokens/registry";
 /**
  * Buy with cash. Decision 1: when the buy is more than the cash, `credit` (planCredit for the other
  * part, from splitCash) turns it into one batch: withdraw savings, take credit, approve, swap. The quote
- * and the cash are read again right before Face ID.
+ * and the cash are read again right before JAW's sheet.
  */
 export function useBuy() {
   const tx = useTx("The buy didn’t go through on Base. Nothing was taken except any network fee.");

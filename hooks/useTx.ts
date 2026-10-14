@@ -14,7 +14,7 @@ import { addLocal, updateLocal } from "@/lib/activity/local";
 
 export type TxPhase = "idle" | "simulating" | "signing" | "pending" | "done" | "failed";
 
-/** Stops a batch built at signing time, with words for the user (e.g. the price moved since the review). */
+/** Stops a batch built at signing time, with words for the user (e.g. the price moved since the screen showed it). */
 export class TxStop extends Error {}
 
 /**

@@ -266,13 +266,11 @@ export function Gallery() {
 
       <Section title="Summary rows" kit="summary">
         <div className="flex flex-col gap-3">
-          <Summary look="box" rows={[{ label: "Arrives", value: "In seconds" }, NETWORK_FEE_ROW]} />
+          <Summary rows={[{ label: "Arrives", value: "In seconds" }, NETWORK_FEE_ROW]} />
           <Summary
             rows={[
+              { label: "From your cash", value: "$400.00" },
               { label: "On credit", value: "$300.00" },
-              { label: "Backed by", value: "NVIDIA" },
-              { label: "Cost", value: "$1.50 / month" },
-              { label: "You owe after", value: "$300.00" },
               { label: "Status", value: <StatusChange from="safe" to="safe" /> },
               NETWORK_FEE_ROW,
             ]}
@@ -365,7 +363,7 @@ function BuyDemoSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (op
             onMax={() => setAmount(CASH.toFixed(2))}
             hint={`Cash available: ${formatUsd(CASH)}`}
           />
-          <Summary look="box" rows={[{ label: "Arrives", value: "In seconds" }, NETWORK_FEE_ROW]} />
+          <Summary rows={[{ label: "Arrives", value: "In seconds" }, NETWORK_FEE_ROW]} />
           {usd > CASH && <Button variant="dark" disabled className="mt-1">That’s more than your cash ({formatUsd(CASH)})</Button>}
           <TxButton label="Buy" phase="idle" size="md" disabled={usd <= 0 || usd > CASH} onClick={finish} />
         </div>

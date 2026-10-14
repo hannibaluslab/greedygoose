@@ -31,9 +31,9 @@ export function useBuyQuote(stock: ReserveAsset | undefined, amountUsd: number) 
 }
 
 /**
- * The quote to sign with, read again right before Face ID (plan item 3): useBuyQuote and useSellQuote
- * only refresh every 15 s. When the price fell under the review's floor, it refreshes the screen's
- * quote and stops the batch with QUOTE_MOVED, so the review shows the new amount.
+ * The quote to sign with, read again right before JAW's sheet (plan item 3): useBuyQuote and useSellQuote
+ * only refresh every 15 s. When the price fell under the screen's floor, it refreshes the screen's
+ * quote and stops the batch with QUOTE_MOVED, so the screen shows the new amount.
  */
 export function useSigningQuote() {
   const client = usePublicClient({ chainId: CHAIN_ID });

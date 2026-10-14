@@ -242,7 +242,6 @@ export function CreditBuySheet({
             <AmountArrow />
             <YouGet symbol={stock.symbol} shares={quote.isFetching && amount > 0 ? null : econ ? econ.shares : 0} priceUsd={econ ? econ.price : oraclePriceUsd} />
             <Summary
-              look="box"
               rows={[
                 { label: "Cost", value: `${formatUsd(monthlyCost(amount, data.apr))} / month` },
                 { label: against.length === 1 ? `Credit left on ${against[0].name}` : "Credit left", value: wholeUsd(plan.maxUsd - amount) },

@@ -10,9 +10,9 @@ import type { ReserveAsset } from "@/lib/tokens/registry";
 export type CreditBuyInput = {
   user: `0x${string}`;
   stock: ReserveAsset;
-  /** The quote the review shows; its amountIn is the credit plus what cash pays. */
+  /** The quote the screen shows; its amountIn is the credit plus what cash pays. */
   quote: BuyQuote;
-  /** planCredit for the credit the review shows. */
+  /** planCredit for the credit the screen shows. */
   plan: CreditPlan;
   /** The extra confirmation when it ends in Watch or Act (D2). */
   confirmedRisk: boolean;
@@ -22,7 +22,7 @@ export const CREDIT_BUY_FALLBACK =
   "This Credit Buy would fail right now — the price or Aave’s limits may have moved. Try a smaller amount in a moment.";
 
 /**
- * The Credit Buy batch, built right before Face ID: the review's blocks and extra confirmation
+ * The Credit Buy batch, built right before JAW's sheet: the screen's blocks and risk tick
  * still hold, and the quote and the cash are read again (useSigningQuote, useSigningCash) before
  * buildCreditBuyCalls. Cash pays what the quote spends past the credit, and the network fee.
  */
@@ -39,7 +39,7 @@ export function useCreditBuyBatch() {
 }
 
 /**
- * Credit Buy (plan item 3): take credit and buy a stock in one Face ID, so the USDC never sits in
+ * Credit Buy (plan item 3): take credit and buy a stock in one batch, so the USDC never sits in
  * the wallet. Status before → after and the extra confirmation come from `plan` (planCredit).
  */
 export function useCreditBuy() {

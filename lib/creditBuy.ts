@@ -73,12 +73,12 @@ export type CreditPlan = {
   before: Status;
   after: Status;
   hfAfter: number;
-  /** It ends in Watch or Act, so the review needs the extra confirmation (D2). */
+  /** It ends in Watch or Act, so the screen needs the risk tick (D2). */
   extraConfirm: boolean;
   /** Most credit with every option in use: staying Safe, and the MAX (99.5% of Aave's limit, as /use-credit). */
   maxSafeUsd: number;
   maxUsd: number;
-  /** Markets are closed: still allowed (Aave allows it), and the review must say the price may move when they reopen (CLAUDE.md › Market hours). */
+  /** Markets are closed: still allowed (Aave allows it), and the screen must say the price may move when they reopen (CLAUDE.md › Market hours). */
   priceMayMove: boolean;
   /** Why it can't go ahead. */
   block?: CreditBlock;
@@ -88,7 +88,7 @@ export type CreditPlan = {
  * What backs `creditRaw` of credit and the status it ends in, on Leo's loan maths. What already
  * backs credit counts first; autoFill tops up from `options` (highest collateral factor first) so
  * the position starts Safe, with FILL_MARGIN on top. Past Safe, everything in `options` goes in
- * and the review asks for the extra confirmation. Plan only: the batch is simulated before Face ID.
+ * and the screen asks for the risk tick. Plan only: the batch is simulated before JAW's sheet.
  */
 export function planCredit(p: { position: CreditPosition; options: BackingOption[]; creditRaw: bigint; cash: Cash; now?: Date }): CreditPlan {
   const { position: pos, options } = p;
@@ -126,7 +126,7 @@ export function planCredit(p: { position: CreditPosition; options: BackingOption
   };
 }
 
-/** Why a reviewed Credit Buy can't be signed: a block, or a Watch/Act ending without the extra confirmation (D2). */
+/** Why a Credit Buy on screen can't be signed: a block, or a Watch/Act ending without the extra confirmation (D2). */
 export function creditBuyStop(plan: CreditPlan, confirmedRisk: boolean): string | null {
   if (plan.block) return CREDIT_BLOCKED[plan.block];
   if (plan.extraConfirm && !confirmedRisk) return `Confirm you understand this puts your credit in ${STATUS_LABEL[plan.after]} first.`;
@@ -153,11 +153,11 @@ export function splitCash(amountRaw: bigint, cash: Cash): { cashRaw: bigint; cre
 }
 
 /**
- * Credit Buy in one Face ID (plan item 3): [savings withdrawal] → [put backing in use] → take credit
+ * Credit Buy in one batch (plan item 3): [savings withdrawal] → [put backing in use] → take credit
  * → approve → swap, so the credit never sits in the wallet. The swap spends the credit plus what cash
  * pays (decision 1; 0 for a plain Credit Buy). Cash pays the network fee, from savings when the wallet
  * can't (payFromCash). Every call passes the allowlist with the user pinned, and the whole batch is
- * checked against the review (assertCreditBuy).
+ * checked against the screen (assertCreditBuy).
  */
 export function buildCreditBuyCalls(p: {
   user: Address;
@@ -193,7 +193,7 @@ const spokeCall = (c: Call) => {
 };
 
 /**
- * The Credit Buy checks on the finished batch, against what the review shows: credit is taken once,
+ * The Credit Buy checks on the finished batch, against what the screen shows: credit is taken once,
  * as USDC to the user, for exactly `creditRaw`; the batch ends with an exact approve and one swap into
  * `stock` (one of the 7), paid to the user, spending exactly the credit plus `cashRaw`.
  */

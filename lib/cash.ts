@@ -29,7 +29,7 @@ export const saveRuns = (jobs: number) => (jobs & (1 << JOBS.indexOf("save"))) !
 
 /**
  * The account's cash as Base has it now: wallet USDC, savings and whether Save runs, the balances usePosition reads
- * every 15 s. For the batch built right before Face ID (useSigningCash).
+ * every 15 s. For the batch built right before JAW's sheet (useSigningCash).
  */
 export async function readCash(client: PublicClient<Transport, typeof CHAIN>, user: Address): Promise<Cash> {
   const [[walletRaw, savingsRaw], account] = await Promise.all([
@@ -76,7 +76,7 @@ export function cantRepay(c: Cash): string {
 
 /**
  * Why a spend of `amountRaw` can't be signed with the cash there is now, `c`: it and the network fee no longer fit,
- * because cash moved since the review (another app spent it, or Protect repaid from savings). Null when they fit.
+ * because cash moved since the screen showed it (another app spent it, or Protect repaid from savings). Null when they fit.
  */
 export function cashShort(amountRaw: bigint, c: Cash): string | null {
   if (amountRaw + feeBufferRaw <= cashRaw(c)) return null;

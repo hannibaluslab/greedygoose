@@ -168,7 +168,6 @@ export function StockSheet({
             <AmountArrow />
             <YouGetCash usd={quote.isFetching && sharesRaw > 0n ? null : econ ? econ.usd : 0} priceUsd={econ ? econ.price : holding.priceUsd} />
             <Summary
-              look="box"
               rows={[
                 { label: "Lowest price", value: plan && !quote.isFetching ? `${formatUsd(floorPriceUsd(plan, stock))} a share` : "…" },
                 NETWORK_FEE_ROW,

@@ -171,7 +171,7 @@ export function BuySheet({
             />
             <AmountArrow />
             <YouGet symbol={stock.symbol} shares={quote.isFetching && amount > 0 ? null : econ ? econ.shares : 0} priceUsd={econ ? econ.price : oraclePriceUsd} />
-            <Summary look="box" rows={plan && split ? creditRows(data, plan, split.cashRaw) : [{ label: "Arrives", value: "In seconds" }, NETWORK_FEE_ROW]} />
+            <Summary rows={plan && split ? creditRows(data, plan, split.cashRaw) : [{ label: "Arrives", value: "In seconds" }, NETWORK_FEE_ROW]} />
             {note && (
               <p role="status" className={`m-0 text-[13px] leading-snug ${blocker ? "text-act" : "text-watch-text"}`}>{note}</p>
             )}

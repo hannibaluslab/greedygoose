@@ -7,7 +7,7 @@ import { isMix } from "@/lib/agents/mix";
 
 /**
  * The agents' settings in GooseExecutor's registry, which only the account itself sets (the executor reads
- * `msg.sender`), each in one Face ID through `useTx`: the Rebalancer's mix and Protect · sell's "Keep my mix".
+ * `msg.sender`), each in one batch through `useTx`: the Rebalancer's mix and Protect · sell's "Keep my mix".
  */
 
 function executor() {

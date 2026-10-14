@@ -193,7 +193,7 @@ export function useAgents(account: `0x${string}`) {
   const refetch = () => Promise.all([listed.refetch(), registry.refetch()]);
 
   /**
-   * One JAW screen and one Face ID per job: a grant request carries one permission. Protect · sell and the Rebalancer
+   * One JAW sheet per job: a grant request carries one permission. Protect · sell and the Rebalancer
    * take a limit per stock as well (`stockLimitsRaw`).
    */
   async function turnOn(job: AgentJob, capRaw: bigint, limitsRaw?: StockLimits) {
@@ -224,7 +224,7 @@ export function useAgents(account: `0x${string}`) {
     ranOut,
     lastTerms,
     left,
-    /** Face IDs it takes to turn `jobs` off: one per grant JAW lists for them that hasn't ended. */
+    /** JAW sheets it takes to turn `jobs` off: one per grant JAW lists for them that hasn't ended. */
     faceIdsOff: (jobs: readonly AgentJob[]) => jobs.reduce((n, job) => n + live[job].length, 0),
     /** The most any limit may be on this executor, once read. */
     capMaxRaw: capMax.data ?? null,

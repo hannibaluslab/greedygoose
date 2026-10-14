@@ -17,7 +17,7 @@ async function runGrants(agents: ReturnType<typeof useAgents>, steps: readonly P
 }
 
 /**
- * Saves Protect's settings, one Face ID a step (lib/agents/protect.ts `protectSteps`): "Sells first" through the one
+ * Saves Protect's settings, one JAW sheet a step (lib/agents/protect.ts `protectSteps`): "Sells first" through the one
  * write path (useTx, `setKeepMix`), then each grant or revoke on JAW's own screen (D14), in order. `onSaved` runs once
  * every step has landed; a step that fails stops the rest, and the screen then offers only what is still to save.
  */
