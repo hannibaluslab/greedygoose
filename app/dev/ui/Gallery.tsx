@@ -22,6 +22,7 @@ import { ValueLine } from "@/components/gg/ValueLine";
 import { CreditIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/icons";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { useNowSec } from "@/hooks/useNowSec";
+import { RebalanceDemo } from "./RebalanceDemo";
 import type { ActivityRow } from "@/hooks/useActivity";
 import { homeStatus, type Status } from "@/lib/risk/status";
 import { boughtLine } from "@/lib/activity/bought";
@@ -316,6 +317,10 @@ export function Gallery() {
 
       <Section title="Manage · Your mix" kit="manage-mix">
         <MixDemo />
+      </Section>
+
+      <Section title="Agent sheet · Rebalance settings" kit="rebalance-settings">
+        <RebalanceDemo />
       </Section>
 
       <Section title="Sparklines" kit="sparklines">
