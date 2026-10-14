@@ -13,6 +13,7 @@ import { Sparkline } from "@/components/gg/Sparkline";
 import { StatusChange, StatusPill, type StatusPillSize } from "@/components/gg/Status";
 import { StockAvatar } from "@/components/gg/StockAvatar";
 import { NETWORK_FEE_ROW, Summary } from "@/components/gg/Summary";
+import { Switch } from "@/components/gg/Switch";
 import { FaceIdButton } from "@/components/gg/TxUi";
 import { CreditIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/icons";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
@@ -45,6 +46,7 @@ export function Gallery() {
   const [amount, setAmount] = useState("20");
   const [credit, setCredit] = useState("300");
   const [open, setOpen] = useState(false);
+  const [on, setOn] = useState(true);
   return (
     <div className="flex min-h-dvh flex-col gap-6 px-5 pb-12 pt-[54px]">
       <div className="flex flex-col gap-1">
@@ -160,6 +162,16 @@ export function Gallery() {
             <Button onClick={noop}>Repay</Button>
           </div>
           <Button variant="dark" disabled>That’s more than your cash ($400.00)</Button>
+        </div>
+      </Section>
+
+      <Section title="Switch" kit="switch">
+        <div className="flex items-center justify-between rounded-[22px] bg-card px-4 py-3 shadow-card-elev">
+          <span className="text-[15px] font-semibold">Use credit for buying</span>
+          <span className="flex gap-2.5">
+            <Switch checked={on} onChange={setOn} label="On" />
+            <Switch checked={!on} onChange={(next) => setOn(!next)} label="Off" />
+          </span>
         </div>
       </Section>
 
