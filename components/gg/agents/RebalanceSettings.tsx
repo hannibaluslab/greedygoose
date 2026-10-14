@@ -159,7 +159,7 @@ export function RebalanceSettingsView({
           return (
             <div key={r.reserveId} className="flex items-center gap-2.5">
               <StockAvatar symbol={e.symbol} size={30} font={tickerOf(e.symbol).length > 4 ? 7 : 8.5} />
-              <div className="flex w-16 shrink-0 flex-col">
+              <div className="flex w-[78px] shrink-0 flex-col">
                 <span className="whitespace-nowrap text-sm font-semibold">{e.name}</span>
                 <span className="num text-[11px] text-subtle">{now[i] === null ? "none now" : `now ${now[i]}%`}</span>
               </div>
