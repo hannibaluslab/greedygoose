@@ -6,7 +6,9 @@ import { useAccount } from "wagmi";
 import { toast } from "sonner";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { FeedCard, FeedDays } from "@/components/gg/Activity";
-import { AgentConfirm, AgentSheet, ReceiveCoins, SettingsLink, type ConfirmView, type LimitView } from "@/components/gg/AgentSheet";
+import { AgentConfirm, AgentSheet, ReceiveCoins, type ConfirmView, type LimitView } from "@/components/gg/AgentSheet";
+import { ProtectSettings } from "@/components/gg/agents/ProtectSettings";
+import { RebalanceSettings } from "@/components/gg/agents/RebalanceSettings";
 import { AgentRow, AgentsFeed, AgentsView, AttentionCard, MixBar, TurnOffAll, type FeedError } from "@/components/gg/Agents";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { useActivity } from "@/hooks/useActivity";
@@ -251,16 +253,14 @@ function Agents({ address }: { address: `0x${string}` }) {
           </FeedCard>
         }
         onAction={(action) => openStep({ ...o, action, jobs: undefined })}
-        cantSwitchOn={o.agent === "rebalance" && !mixSet ? "Set your mix in Settings first: saving it switches Rebalance on." : null}
+        cantSwitchOn={o.agent === "rebalance" && !mixSet ? "Set your mix below first: saving it switches Rebalance on." : null}
       />
     );
   }
 
   function settingsFor(agent: Agent) {
-    if (agent === "protect") {
-      return <SettingsLink title="Selling backing stock" sub="Its own switch, what sells first, and stocks it never sells" href="/manage/credit" />;
-    }
-    if (agent === "rebalance") return <SettingsLink title="Your mix" sub="The target for each stock, and when it trades" href="/manage" />;
+    if (agent === "protect") return <ProtectSettings account={address} />;
+    if (agent === "rebalance") return <RebalanceSettings account={address} />;
     if (agent === "receive") {
       return (
         <ReceiveCoins
