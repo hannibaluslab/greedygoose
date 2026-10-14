@@ -30,9 +30,11 @@ interface ISpokeOracle {
 ///      about 4.0M of it (seven stocks, six slices: ProtectSellSevenStockGasForkTest); with less, sales are deferred
 ///      (the accounts after them still run);
 ///   2. register the registration upkeep: log trigger, emitter = the manager, topic0 = PermissionApproved
-///      (0x84b07255c6c3e177513e059044c77d305a6aecf39fbe512d64dcd3cebb59d5ea), target = the executor;
-///   3. the owner calls bootstrap([run upkeep forwarder, registration upkeep forwarder]). Any later forwarder waits
-///      the 7-day delay.
+///      (0x84b07255c6c3e177513e059044c77d305a6aecf39fbe512d64dcd3cebb59d5ea), target = the executor, gas limit
+///      1,000,000 (the largest registration, Protect · sell on all seven stocks, costs about 480k cold);
+///   3. read each upkeep's forwarder from the registry (getForwarder(upkeepId)), then the owner calls
+///      bootstrap([run upkeep forwarder, registration upkeep forwarder]) once, with both: bootstrap closes for good, and
+///      any later forwarder waits the 7-day delay.
 ///
 /// Base Sepolia has JAW's manager and factory (same code and addresses as Base) but no Aave, no Coinbase USDC, no
 /// equities hub and no stock pools, so a Sepolia deploy only proves the Chainlink plumbing: it takes stand-ins for
