@@ -80,7 +80,7 @@ const Check = () => (
 export type MixLine = { reserveId: number; symbol: string; name: string; bps: number; nowPct: number | null };
 
 /** A target slider: the board's 4px track and 22px thumb, over an invisible native range for touch, keys, readers. */
-function MixSlider({ name, bps, onChange }: { name: string; bps: number; onChange: (bps: number) => void }) {
+export function MixSlider({ name, bps, onChange }: { name: string; bps: number; onChange: (bps: number) => void }) {
   const pct = bps / 100;
   return (
     <div className="group relative flex h-[22px] grow items-center">
