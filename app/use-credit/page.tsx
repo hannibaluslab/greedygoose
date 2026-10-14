@@ -17,7 +17,7 @@ import { MarketBanner } from "@/components/ui/MarketBanner";
 import { useCollateralFactors, usePosition, type Holding, type PositionData } from "@/hooks/usePosition";
 import { useTx } from "@/hooks/useTx";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
-import { autoFill, combinedLoan } from "@/lib/aave/loan";
+import { FILL_MARGIN, autoFill, combinedLoan } from "@/lib/aave/loan";
 import { buildLoanCalls } from "@/lib/aave/tx";
 import { monthlyCost } from "@/lib/aave/math";
 import { needsExtraConfirm, statusFor } from "@/lib/risk/status";
@@ -110,8 +110,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
       borrowUsd: amount,
       lines: locks.map((l) => ({ key: l.stock.symbol, usd: l.usd, cf: l.cf, freeUsd: l.holding.freeUsd })),
     });
-    // +0.3% so a price tick between reading and signing can't undercut Safe.
-    setFractions(Object.fromEntries(lines.map((l) => [l.stock.symbol, Math.min(1, ((usd[l.stock.symbol] ?? 0) * 1.003) / l.holding.freeUsd)])));
+    setFractions(Object.fromEntries(lines.map((l) => [l.stock.symbol, Math.min(1, ((usd[l.stock.symbol] ?? 0) * FILL_MARGIN) / l.holding.freeUsd)])));
   };
   // Only offer auto-fill when there's still free stock to lock.
   const needsFill = amount > 0 && amount > safeMax && locks.some((l) => l.raw < l.holding.freeRaw);

@@ -1,4 +1,4 @@
-/* Minimal ABIs. Uniswap v3-periphery (QuoterV2, SwapRouter02 IV3SwapRouter). */
+/* Minimal ABIs. Uniswap v3-periphery (QuoterV2, SwapRouter02 IV3SwapRouter + MulticallExtended). */
 export const quoterV2Abi = [
   {
     type: "function",
@@ -47,6 +47,18 @@ export const swapRouter02Abi = [
       },
     ],
     outputs: [{ name: "amountOut", type: "uint256" }],
+  },
+  /* exactInputSingle has no deadline on SwapRouter02; it comes from multicall (MulticallExtended, selector 0x5ae401dc,
+     present in the deployed bytecode; an expired deadline reverts "Transaction too old", simulated 2026-10-14). */
+  {
+    type: "function",
+    name: "multicall",
+    stateMutability: "payable",
+    inputs: [
+      { name: "deadline", type: "uint256" },
+      { name: "data", type: "bytes[]" },
+    ],
+    outputs: [{ name: "results", type: "bytes[]" }],
   },
 ] as const;
 

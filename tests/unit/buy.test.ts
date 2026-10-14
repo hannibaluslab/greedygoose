@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { decodeFunctionData, erc20Abi } from "viem";
-import { bestQuote, buildBuyCalls, minOut, quoteEconomics, type BuyQuote } from "@/lib/swap/buy";
+import { bestQuote, buildBuyCalls, minOut, quoteEconomics, signingQuote, type BuyQuote } from "@/lib/swap/buy";
 import { aeroRouterAbi, swapRouter02Abi } from "@/lib/swap/abis";
 import { AERODROME, UNISWAP } from "@/lib/swap/venues";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
@@ -23,18 +23,25 @@ describe("minOut", () => {
 });
 
 describe("buildBuyCalls", () => {
-  it("approves exactly amountIn to the router, then swaps to the user", () => {
-    const [approve, swap] = buildBuyCalls({ user, stock: aapl, quote });
+  it("approves exactly amountIn to the router, then swaps to the user before a 10-minute deadline", () => {
+    const [approve, swap] = buildBuyCalls({ user, stock: aapl, quote, nowSec: 1_000 });
     expect(approve.to).toBe(USDC.address);
     const a = decodeFunctionData({ abi: erc20Abi, data: approve.data });
     expect(a.functionName).toBe("approve");
     expect(a.args).toEqual([UNISWAP.SWAP_ROUTER_02, 100_000_000n]);
 
     expect(swap.to).toBe(UNISWAP.SWAP_ROUTER_02);
-    const s = decodeFunctionData({ abi: swapRouter02Abi, data: swap.data });
-    const params = s.args[0];
+    const m = decodeFunctionData({ abi: swapRouter02Abi, data: swap.data });
+    expect(m.functionName).toBe("multicall");
+    const [deadline, inner] = m.args as readonly [bigint, readonly `0x${string}`[]];
+    expect(deadline).toBe(1_600n);
+    expect(inner).toHaveLength(1);
+    const s = decodeFunctionData({ abi: swapRouter02Abi, data: inner[0] });
+    expect(s.functionName).toBe("exactInputSingle");
+    const params = (s.args as readonly [{ tokenIn: string; tokenOut: string; fee: number; recipient: string; amountOutMinimum: bigint }])[0];
     expect(params.tokenIn).toBe(USDC.address);
     expect(params.tokenOut).toBe(aapl.address);
+    expect(params.fee).toBe(3000);
     expect(params.recipient).toBe(user);
     expect(params.amountOutMinimum).toBe(minOut(29_554_521n));
   });
@@ -58,5 +65,25 @@ describe("aerodrome route", () => {
   it("bestQuote picks the venue with more shares", () => {
     expect(bestQuote([quote, aq, { ...aq, amountOut: 0n }])).toBe(aq);
     expect(bestQuote([])).toBeNull();
+  });
+});
+
+describe("signingQuote (the pool read again right before Face ID)", () => {
+  const shown: BuyQuote = { venue: "aerodrome", pool: 10, amountIn: 300_000_000n, amountOut: 135_000_000n };
+  const fresh = (amountOut: bigint): BuyQuote => ({ ...shown, amountOut });
+
+  it("signs on a better fresh quote, so the floor rises with it", () => {
+    expect(signingQuote(shown, fresh(136_000_000n))).toEqual(fresh(136_000_000n));
+  });
+  it("keeps the review's floor when the price slipped but stays above it", () => {
+    expect(signingQuote(shown, fresh(134_000_000n))).toBe(shown);
+    expect(signingQuote(shown, fresh(minOut(shown.amountOut)))).toBe(shown);
+  });
+  it("stops when the fresh quote is under the review's \"at least\"", () => {
+    expect(signingQuote(shown, fresh(minOut(shown.amountOut) - 1n))).toBeNull();
+  });
+  it("only compares the same pool and amount", () => {
+    expect(signingQuote(shown, { ...fresh(140_000_000n), venue: "uniswap", pool: 3000 })).toBeNull();
+    expect(signingQuote(shown, { ...fresh(140_000_000n), amountIn: 1n })).toBeNull();
   });
 });

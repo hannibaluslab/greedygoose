@@ -10,7 +10,7 @@ export type Cash = { walletRaw: bigint; savingsRaw: bigint };
 
 const usdcRaw = (usd: number) => parseUnits(usd.toFixed(USDC.decimals), USDC.decimals);
 const keepBackRaw = usdcRaw(CASH.keepBackUsd);
-const feeBufferRaw = usdcRaw(CASH.feeBufferUsd);
+export const feeBufferRaw = usdcRaw(CASH.feeBufferUsd);
 
 export const cashRaw = (c: Cash) => c.walletRaw + c.savingsRaw;
 export const toUsd = (raw: bigint) => Number(raw) / 10 ** USDC.decimals;
@@ -33,9 +33,12 @@ export function savingsWithdrawal(amountRaw: bigint, c: Cash): { raw: bigint; al
   return need < c.savingsRaw ? { raw: need, all: false } : { raw: c.savingsRaw, all: true };
 }
 
-/** Pay for a buy or repay from cash: the savings withdrawal it needs goes first, in the same batch. */
+/**
+ * Pay for a buy or repay from cash: the savings withdrawal it needs goes first, in the same batch.
+ * `amountRaw` can be 0 (a Credit Buy spends only credit): cash still pays the network fee.
+ */
 export function payFromCash(user: `0x${string}`, amountRaw: bigint, c: Cash, spend: Call[]): Call[] {
-  if (amountRaw > maxSpendRaw(c)) throw new Error("More than your cash");
+  if (amountRaw + feeBufferRaw > cashRaw(c)) throw new Error("More than your cash");
   const w = savingsWithdrawal(amountRaw, c);
   return assertAllowed(user, w ? [...buildWithdrawSavingsCalls(user, w.raw, w.all), ...spend] : spend);
 }

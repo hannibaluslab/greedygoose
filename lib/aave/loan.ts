@@ -87,6 +87,16 @@ export function combinedLoan(p: { collateralUsd: number; avgCf: number; debtUsd:
   };
 }
 
+/** Margin on auto-filled backing, so a price tick between reading and signing can't undercut Safe. */
+export const FILL_MARGIN = 1.003;
+
+/** Raw units of a free balance for `usd` of it plus FILL_MARGIN; never more than the balance, and 99.99% or more rounds up to all of it. */
+export function fillRaw(freeRaw: bigint, freeUsd: number, usd: number): bigint {
+  if (usd <= 0 || freeUsd <= 0) return 0n;
+  const f = Math.min(1, (usd * FILL_MARGIN) / freeUsd);
+  return f >= 0.9999 ? freeRaw : (freeRaw * BigInt(Math.round(f * 1_000_000))) / 1_000_000n;
+}
+
 /**
  * Fill locks so `borrowUsd` starts at `targetHf`, keeping what the user already chose and
  * topping up from the stocks with the highest collateral factor first.
