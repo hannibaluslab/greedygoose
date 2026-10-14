@@ -22,7 +22,7 @@ import { USDC } from "@/lib/tokens/registry";
  */
 
 /** Said under every grant's button: JAW's own screen comes next (D14). */
-export const JAW_NOTE = "One Face ID. JAW shows what it allows before you sign.";
+const JAW_NOTE = "One Face ID. JAW shows what it allows before you sign.";
 
 const usd = (raw: bigint) => formatUsd(Number(raw) / 10 ** USDC.decimals);
 
