@@ -89,13 +89,13 @@ function Guardian({ address }: { address: `0x${string}` }) {
           <span className="num text-xs text-subtle">earns {(data.savingsApr * 100).toFixed(2)}% · Aave</span>
         </div>
         <div className="num text-[38px] font-semibold leading-none tracking-[-0.04em]">{formatUsd(data.savingsUsd)}</div>
-        <p className="m-0 text-[13px] text-ink-mid">Guardian only ever pays from here, never from your cash or stocks.</p>
+        <p className="m-0 text-[13px] text-ink-mid">Guardian only ever pays from your savings, the part of your cash that earns. It never touches your stocks.</p>
         <div className="grid grid-cols-2 gap-2.5">
           <button type="button" onClick={() => sheet.show("add")} disabled={data.usdcBalance <= 0} className="h-11 rounded-[22px] bg-ink text-[14px] font-semibold text-on-ink disabled:opacity-45">
-            Add from cash
+            Save idle cash
           </button>
           <button type="button" onClick={() => sheet.show("withdraw")} disabled={data.savingsUsd <= 0} className="h-11 rounded-[22px] bg-chip text-[14px] font-semibold disabled:opacity-45">
-            Move to cash
+            Move out of savings
           </button>
         </div>
       </WhiteCard>
@@ -135,7 +135,7 @@ function Guardian({ address }: { address: `0x${string}` }) {
         <ul className="m-0 flex list-none flex-col gap-1.5 p-0 text-ink-mid">
           <li>✕ Send money anywhere else, or pay anyone else’s loan</li>
           <li>✕ Sell or move your stocks, or change what backs your credit</li>
-          <li>✕ Use credit, or touch your cash</li>
+          <li>✕ Use credit, or move cash that isn’t in savings</li>
           <li>✕ Spend more than your daily limit</li>
         </ul>
         <p className="m-0 mt-3 text-xs text-subtle">
@@ -218,14 +218,14 @@ function SavingsSheet({
   const tooMuch = amount > max + 1e-9;
 
   return (
-    <SheetShell open={open} onOpenChange={(next) => !next && onClose()} title={mode === "add" ? "Add to savings" : "Move savings to cash"}>
+    <SheetShell open={open} onOpenChange={(next) => !next && onClose()} title={mode === "add" ? "Add to savings" : "Move out of savings"}>
       <SheetSteps stepKey={tx.phase === "done" ? "done" : "amount"} className="flex flex-col gap-3">
         {tx.phase === "done" ? (
-          <TxDone title="Done" body={mode === "add" ? "Your savings buffer is bigger and earning." : "The USDC is back in your cash."} txHash={tx.txHash} onDone={onClose} />
+          <TxDone title="Done" body={mode === "add" ? "Your savings buffer is bigger and earning." : "It’s out of savings and still in your cash."} txHash={tx.txHash} onDone={onClose} />
         ) : (
           <>
             <div className="flex flex-col gap-2 rounded-2xl border border-ink bg-card p-3.5">
-              <span className="text-xs text-subtle">{mode === "add" ? `Cash available: ${formatUsd(data.usdcBalance)}` : `In savings: ${formatUsd(data.savingsUsd)}`}</span>
+              <span className="text-xs text-subtle">{mode === "add" ? `Not in savings yet: ${formatUsd(data.usdcBalance)}` : `In savings: ${formatUsd(data.savingsUsd)}`}</span>
               <div className="flex items-center gap-2">
                 <span className="text-[22px] font-semibold text-subtle">$</span>
                 <AmountInput autoFocus value={raw} onValue={setRaw} className="text-[30px] font-semibold leading-none tracking-[-0.03em]" />

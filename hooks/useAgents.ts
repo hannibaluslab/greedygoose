@@ -6,7 +6,7 @@ import { useGrantPermissions, usePermissions, useRevokePermissions } from "@jaw.
 import { CHAIN_ID } from "@/lib/chain";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
-import { agentGrant, JOBS, readAgentGrant, type AgentGrant, type AgentJob } from "@/lib/agents/permissions";
+import { agentGrant, dailyLimitRaw, JOBS, readAgentGrant, type AgentGrant, type AgentJob } from "@/lib/agents/permissions";
 import { jobStatus, type AgentStatus } from "@/lib/agents/status";
 import { useNowSec } from "@/hooks/useNowSec";
 
@@ -29,6 +29,14 @@ export function useAgents(account: `0x${string}`) {
     args: [account],
     chainId: CHAIN_ID,
     query: { enabled: !!executor, refetchInterval: 20_000 },
+  });
+  // Immutable: the most any daily limit may be on this executor (a grant above it never registers).
+  const capMax = useReadContract({
+    address: executor,
+    abi: gooseExecutorAbi,
+    functionName: "CAP_MAX",
+    chainId: CHAIN_ID,
+    query: { enabled: !!executor, staleTime: Infinity },
   });
   const grant = useGrantPermissions();
   const revoke = useRevokePermissions();
@@ -83,6 +91,11 @@ export function useAgents(account: `0x${string}`) {
     status,
     /** The daily limit each job runs with, in USDC units, once it's on. */
     capRaw: { save: status.save === "on" ? save!.cap : null, protect: status.protect === "on" ? protect!.cap : null },
+    /** The daily limit a job is switched on with (`turnOn`), once the executor's CAP_MAX is read. */
+    limitRaw: Object.fromEntries(JOBS.map((job) => [job, capMax.data === undefined ? null : dailyLimitRaw(job, capMax.data)])) as Record<
+      AgentJob,
+      bigint | null
+    >,
     /** Failed runs in a row: the executor backs off, then switches the account off at eight. */
     fails: fails ?? 0,
     busy: grant.isPending || revoke.isPending,

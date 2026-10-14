@@ -1,49 +1,63 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { toast } from "sonner";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
-import { TabHeader, WhiteCard } from "@/components/gg/Screen";
 import { TabBar } from "@/components/gg/TabBar";
-import { StockAvatar } from "@/components/gg/StockAvatar";
-import { EQUITIES } from "@/lib/tokens/registry";
+import { AddressQr } from "@/components/gg/AddressQr";
+import { BackIcon, CopyIcon } from "@/components/gg/icons";
+import { usePosition } from "@/hooks/usePosition";
+import { shortAddress } from "@/lib/formatting";
 
 export default function ReceivePage() {
-  return <RequireAccount>{(address) => <Receive address={address} />}</RequireAccount>;
+  return <RequireAccount>{(address) => <AddMoney address={address} />}</RequireAccount>;
 }
 
-function Receive({ address }: { address: `0x${string}` }) {
-  const [copied, setCopied] = useState(false);
+/**
+ * Design board "Add money" (AddMoney.dc.html), the Pay tab. Until the name lookup is wired (Header) it shows the
+ * address, and until the Entry agent converts other coins only USDC on Base lands as cash, so the label says so.
+ * Money starts earning once Save sweeps it into savings, so the board's "earning interest right away" waits for Save.
+ * Auto top up is parked (PARKED.md).
+ */
+function AddMoney({ address }: { address: `0x${string}` }) {
+  const { data } = usePosition(address);
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(address);
-      setCopied(true);
+      toast("Address copied");
     } catch {
-      setCopied(false);
+      toast("Couldn’t copy. Press and hold the address instead.");
     }
   };
+
   return (
-    <div className="relative flex min-h-dvh flex-col gap-4 px-5 pt-[54px]">
-      <TabHeader title="Receive" />
-      <WhiteCard className="flex flex-col gap-3 p-[18px]">
-        <span className="label">Your address on Base</span>
-        <code className="num break-all text-[15px]">{address}</code>
-        <button type="button" onClick={copy} className="h-[52px] rounded-[26px] bg-ink text-[15px] font-semibold text-on-ink">
-          {copied ? "Copied" : "Copy address"}
-        </button>
-      </WhiteCard>
-      <WhiteCard className="flex flex-col gap-3 p-[18px]">
-        <span className="label">Supported</span>
-        <div className="flex flex-wrap gap-2">
-          {EQUITIES.map((e) => (
-            <span key={e.symbol} className="inline-flex items-center gap-2 rounded-full bg-ground py-1 pl-1 pr-3 text-[13px] font-medium">
-              <StockAvatar symbol={e.symbol} size={24} />{e.name}
-            </span>
-          ))}
+    <div className="relative flex min-h-dvh flex-col gap-5 px-5 pt-[60px] leading-[normal]">
+      <div className="flex items-center gap-3">
+        <Link href="/home" aria-label="Back" className="-ml-3 flex size-11 items-center justify-center text-ink"><BackIcon /></Link>
+        <h1 className="m-0 text-[28px] font-semibold tracking-[-0.02em]">Add money</h1>
+      </div>
+
+      <div className="flex flex-col gap-3.5 rounded-[22px] bg-card p-5">
+        <span className="font-mono text-xs uppercase tracking-[0.08em] text-ink-mid">Send USDC on Base to your address</span>
+        <div className="flex items-center justify-between gap-3">
+          <span className="num select-all text-2xl font-semibold tracking-[-0.02em]">{shortAddress(address)}</span>
+          <button type="button" onClick={copy} aria-label="Copy address" className="flex size-11 shrink-0 items-center justify-center rounded-[22px] bg-chip text-ink">
+            <CopyIcon />
+          </button>
         </div>
-        <p className="m-0 text-[13px] leading-snug text-ink-mid">
-          Send only on <strong className="text-ink">Base</strong>: Coinbase tokenized stocks and USDC. Anything else won’t show up here.
+        <AddressQr address={address} />
+        <p className="m-0 text-sm leading-[1.45] text-ink-mid">
+          {data?.cash.saveOn ? "It lands as dollars and starts earning interest right away." : "It lands as dollars in your cash."}
         </p>
-      </WhiteCard>
+      </div>
+
+      <div className="flex flex-col gap-1.5 rounded-[22px] bg-card-bone px-5 py-[18px]">
+        <span className="text-[15px] font-semibold">Already hold stocks with JAW?</span>
+        <p className="m-0 text-sm leading-[1.45] text-ink-2">
+          They are already here. Any supported stock in your JAW account shows up on Home, ready to back credit.
+        </p>
+      </div>
+
       <TabBar />
     </div>
   );

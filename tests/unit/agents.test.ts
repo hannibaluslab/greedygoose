@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { toHex, zeroAddress } from "viem";
-import { agentGrant, agentPermission, readAgentGrant, type ListedPermission } from "@/lib/agents/permissions";
+import { agentGrant, agentPermission, dailyLimitRaw, readAgentGrant, type ListedPermission } from "@/lib/agents/permissions";
 import { jobStatus } from "@/lib/agents/status";
 import { PERIOD } from "@/lib/guardian/permission";
 import { GUARDIAN, SEL } from "@/lib/guardian/config";
@@ -122,5 +122,17 @@ describe("jobStatus", () => {
   });
   it("trusts the registry when JAW's list can't be read", () => {
     expect(jobStatus("save", [1, stored, empty], [], 500, true)).toBe("on");
+  });
+});
+
+describe("dailyLimitRaw (the limit a switch turns a job on with)", () => {
+  it("is the boards' $300 a day for Protection and $1,000 for Save", () => {
+    expect(dailyLimitRaw("protect", 10n ** 12n)).toBe(300_000_000n);
+    expect(dailyLimitRaw("save", 10n ** 12n)).toBe(1_000_000_000n);
+  });
+
+  it("never asks for more than the executor's CAP_MAX, so a $5 test deploy registers the grant", () => {
+    expect(dailyLimitRaw("protect", 5_000_000n)).toBe(5_000_000n);
+    expect(dailyLimitRaw("save", 5_000_000n)).toBe(5_000_000n);
   });
 });

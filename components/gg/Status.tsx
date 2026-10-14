@@ -81,3 +81,18 @@ export function GuardianPill({ status }: { status: GuardianStatus }) {
     </span>
   );
 }
+
+/**
+ * An agent's state on its card (Agents board: 20px, 12px bold, 6px dot). `on` is the board's green; anything else
+ * (not live yet, off, coming later) is neutral.
+ */
+export function AgentPill({ on = false, children }: { on?: boolean; children: string }) {
+  return (
+    <span
+      className={`inline-flex h-5 shrink-0 items-center gap-[5px] whitespace-nowrap rounded-[10px] px-2 text-xs font-bold ${on ? "bg-pos-soft text-pos" : "bg-pill text-ink-mid"}`}
+    >
+      <span aria-hidden className={`size-1.5 rounded-[3px] ${on ? "bg-pos" : "bg-subtle"}`} />
+      {children}
+    </span>
+  );
+}

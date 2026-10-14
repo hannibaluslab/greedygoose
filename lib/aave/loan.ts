@@ -123,3 +123,16 @@ export function autoFill(p: {
   }
   return out;
 }
+
+/** The Repay screen's amounts (CreditOn): $100 and $300, as the board offers them. */
+const REPAY_CHIPS = [100, 300];
+
+/**
+ * Whole-dollar amounts to offer next to "All": the board's $100 and $300 when both are below `maxUsd` (the most the
+ * cash can repay), else a quarter and a half of it, so a small loan still gets two choices.
+ */
+export function repayChips(maxUsd: number): number[] {
+  const fit = REPAY_CHIPS.filter((v) => v < maxUsd);
+  const chips = fit.length === REPAY_CHIPS.length ? fit : [Math.floor(maxUsd / 4), Math.floor(maxUsd / 2)];
+  return chips.filter((v, i, a) => v > 0 && v < maxUsd && a.indexOf(v) === i);
+}

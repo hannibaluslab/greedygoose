@@ -36,6 +36,19 @@ const LIMITED: Record<AgentJob, readonly Address[]> = {
   protect: [USDC.address, GUARDIAN.AUSDC],
 };
 
+/**
+ * The daily limit each job is switched on with: Protection's is the boards' "up to $300 a day" (HomeCreditSlide,
+ * Agents). Save only moves the account's own USDC into its own savings, so its limit is wider. Both wait on the
+ * calibration pass (plan item 6 step 9).
+ */
+export const DAILY_LIMIT_USD: Record<AgentJob, number> = { save: 1_000, protect: 300 };
+
+/** A job's daily limit in USDC units, never above the executor's `CAP_MAX` (a D13 test deploy allows $5). */
+export function dailyLimitRaw(job: AgentJob, capMaxRaw: bigint): bigint {
+  const raw = BigInt(DAILY_LIMIT_USD[job]) * 10n ** BigInt(USDC.decimals);
+  return raw < capMaxRaw ? raw : capMaxRaw;
+}
+
 /** What the app sends to JAW's `useGrantPermissions` to switch `job` on, with a daily limit in USDC units. */
 export function agentGrant(job: AgentJob, capRaw: bigint): PermissionsDetail {
   if (capRaw <= 0n) throw new Error("Daily limit must be positive");

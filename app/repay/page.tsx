@@ -10,12 +10,13 @@ import { FaceIdButton, TxDone, TxError } from "@/components/gg/TxUi";
 import { useTx } from "@/hooks/useTx";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { buildRepayCalls, fullRepayAmount } from "@/lib/aave/tx";
-import { maxSpendRaw, payFromCash, savingsWithdrawal, toUsd } from "@/lib/cash";
+import { repayChips } from "@/lib/aave/loan";
+import { maxSpendRaw, payFromCash, toUsd } from "@/lib/cash";
 import { USDC } from "@/lib/tokens/registry";
 import { StatusBar, StatusPill } from "@/components/gg/Status";
 import { ChevronRight, SlidersIcon } from "@/components/gg/icons";
 import { usePosition } from "@/hooks/usePosition";
-import { formatUsd } from "@/lib/formatting";
+import { formatUsdTrim } from "@/lib/formatting";
 
 export default function RepayPage() {
   return <RequireAccount>{(address) => <Repay address={address} />}</RequireAccount>;
@@ -30,13 +31,7 @@ function Repay({ address }: { address: `0x${string}` }) {
   const [choice, setChoice] = useState<number | "all" | null>(null);
   const [paid, setPaid] = useState(0);
 
-  const options = useMemo(() => {
-    if (!data) return [];
-    const max = Math.min(toUsd(maxSpendRaw(data.cash)), data.debtUsd);
-    const half = Math.floor(max / 2);
-    const quarter = Math.floor(max / 4);
-    return [quarter, half].filter((v, i, a) => v > 0 && a.indexOf(v) === i);
-  }, [data]);
+  const options = useMemo(() => (data ? repayChips(Math.min(toUsd(maxSpendRaw(data.cash)), data.debtUsd)) : []), [data]);
 
   if (!data) {
     return <div className="px-5 pt-[54px]"><div aria-busy className="h-[420px] animate-pulse rounded-[22px] bg-chip" /></div>;
@@ -47,8 +42,9 @@ function Repay({ address }: { address: `0x${string}` }) {
   const amount = choice === "all" ? maxRepay : choice ?? 0;
   const amountRaw =
     choice === "all" ? fullRepayAmount(data.debtRaw, maxSpend) : parseUnits(amount.toFixed(USDC.decimals), USDC.decimals);
-  const fromSavings = amountRaw > 0n ? savingsWithdrawal(amountRaw, data.cash) : null;
   const after = Math.max(0, data.debtUsd - amount);
+  // Owed amounts are rounded up, as on Home's Credit card: never shown as less than they are.
+  const owed = (usd: number) => formatUsdTrim(Math.ceil(usd));
   const coversAll = choice === "all" && maxSpend >= data.debtRaw;
   const feeBlocked = isConnected && fee.state === "unsupported";
 
@@ -64,7 +60,7 @@ function Repay({ address }: { address: `0x${string}` }) {
       <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[54px]">
         <SubHeader label="Credit" />
         <TxDone
-          title={`You repaid ${formatUsd(paid)}`}
+          title={`You repaid ${formatUsdTrim(paid)}`}
           body={coversAll ? "Your credit is fully repaid. You can free up your stocks any time." : "Your loan is smaller now and costs less each month."}
           txHash={tx.txHash}
           onDone={() => {
@@ -87,52 +83,51 @@ function Repay({ address }: { address: `0x${string}` }) {
         }
       />
 
-      <WhiteCard className="flex flex-col gap-4 px-[18px] pb-1 pt-[18px]">
+      <WhiteCard className="flex flex-col gap-4 px-[18px] pb-1 pt-[18px] leading-[normal]">
         <div className="flex items-start justify-between gap-3">
           <div className="num flex items-baseline gap-2">
-            <span className={`${data.debtUsd >= 1000 ? "text-[38px]" : "text-5xl"} font-semibold leading-none tracking-[-0.04em]`}>{formatUsd(data.debtUsd).replace(/\.00$/, "")}</span>
+            <span className={`${data.debtUsd >= 100_000 ? "text-[38px]" : "text-5xl"} font-semibold leading-none tracking-[-0.04em]`}>{owed(data.debtUsd)}</span>
             <span className="text-base font-medium text-ink-mid">owed</span>
           </div>
           <span className="mt-1"><StatusPill status={data.status} size="lg" /></span>
         </div>
         <StatusBar status={data.status} healthFactor={data.healthFactor} />
         <div className="flex flex-col">
-          <Line label="Cost" value={`${formatUsd(data.monthlyCostUsd)} / month`} />
-          <Line label="Credit available" value={formatUsd(data.availableUsd)} />
+          <Line label="Cost" value={`${formatUsdTrim(data.monthlyCostUsd)} / month`} />
+          <Line label="Credit available" value={formatUsdTrim(data.availableUsd)} />
         </div>
       </WhiteCard>
 
-      <WhiteCard className="flex flex-col gap-3.5 px-[18px] pb-1 pt-[18px]">
+      <WhiteCard className="flex flex-col gap-3.5 px-[18px] pb-1 pt-[18px] leading-[normal]">
         <div className="text-[17px] font-semibold">
-          Repay from cash <span className="font-medium text-subtle">({formatUsd(data.cashUsd)})</span>
+          Repay from cash <span className="font-medium text-subtle">({formatUsdTrim(data.cashUsd)})</span>
         </div>
         {data.debtUsd === 0 ? (
           <p className="m-0 pb-4 text-[15px] text-ink-mid">You don’t owe anything.</p>
         ) : maxRepay === 0 ? (
-          <p className="m-0 pb-4 text-[15px] text-ink-mid">You need USDC in your account to repay. <Link href="/receive" className="underline">Receive USDC</Link></p>
+          <p className="m-0 pb-4 text-[15px] text-ink-mid">Add money to your cash to repay. <Link href="/receive" className="underline">Add money</Link></p>
         ) : (
           <>
             <div role="radiogroup" aria-label="Amount to repay" className="grid grid-cols-3 gap-2">
               {options.map((v) => (
-                <Chip key={v} selected={choice === v} onClick={() => setChoice(v)}>{formatUsd(v).replace(/\.00$/, "")}</Chip>
+                <Chip key={v} selected={choice === v} onClick={() => setChoice(v)}>{formatUsdTrim(v)}</Chip>
               ))}
               <Chip selected={choice === "all"} onClick={() => setChoice("all")}>{maxRepay >= data.debtUsd ? "All" : "All cash"}</Chip>
             </div>
-            {fromSavings && <Line label="From savings" value={formatUsd(toUsd(fromSavings.raw))} />}
-            <Line label="You owe after" value={formatUsd(after)} />
+            <Line label="You owe after" value={owed(after)} />
           </>
         )}
       </WhiteCard>
 
-      <Link href="/use-credit" className="flex h-11 items-center gap-1.5 self-center px-3 text-[15px] font-semibold text-ink no-underline">
-        Use more credit <ChevronRight size={16} className="text-subtle" />
+      <Link href="/buy" className="flex h-11 items-center gap-1.5 self-center px-3 text-[15px] font-semibold text-ink no-underline">
+        Buy more with credit <ChevronRight size={16} className="text-subtle" />
       </Link>
 
       <div className="grow" />
       {feeBlocked && <p role="alert" className="m-0 text-[13px] text-act">Your account can’t pay network fees in USDC on Base right now.</p>}
       <TxError error={tx.error} />
       <FaceIdButton
-        label={amount > 0 ? `Repay ${coversAll ? "all" : formatUsd(amount)} with Face ID` : "Repay with Face ID"}
+        label={amount > 0 ? `Repay ${coversAll ? "all" : formatUsdTrim(amount)} with Face ID` : "Repay with Face ID"}
         phase={tx.phase}
         preview={!isConnected}
         disabled={amount <= 0 || feeBlocked || fee.loading}

@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
+import { FeedCard, FeedDays } from "@/components/gg/Activity";
 import { AmountArrow, AmountBadge, AmountField, AmountSource, YouGet } from "@/components/gg/AmountField";
 import { BalanceHero, TodayChange } from "@/components/gg/BalanceHero";
 import { Button } from "@/components/gg/Button";
@@ -14,9 +15,12 @@ import { Sparkline } from "@/components/gg/Sparkline";
 import { StatusChange, StatusPill, type StatusPillSize } from "@/components/gg/Status";
 import { StockAvatar } from "@/components/gg/StockAvatar";
 import { NETWORK_FEE_ROW, Summary } from "@/components/gg/Summary";
+import { Switch } from "@/components/gg/Switch";
 import { FaceIdButton } from "@/components/gg/TxUi";
 import { CreditIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/icons";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
+import { useNowSec } from "@/hooks/useNowSec";
+import type { ActivityRow } from "@/hooks/useActivity";
 import { homeStatus, type Status } from "@/lib/risk/status";
 import { boughtLine } from "@/lib/activity/bought";
 import { formatUsd, formatUsdTrim } from "@/lib/formatting";
@@ -44,6 +48,13 @@ const MARKET = [
   { symbol: "NVDA", name: "NVIDIA", price: 178.57, owned: 2000 },
   { symbol: "TSLA", name: "Tesla", price: 378.38, owned: 0 },
 ];
+const HOUR = 3_600_000;
+/** Activity rows the way useActivity hands them over, timed from now so they group under Today and a weekday. */
+const MOVES = (now: number): ActivityRow[] => [
+  { key: "repay", time: now - HOUR, status: "done", items: [{ kind: "repay", symbol: "USDC", amount: 180 }] },
+  { key: "save", time: now - 2 * HOUR, status: "pending", items: [{ kind: "save", symbol: "USDC", amount: 40 }] },
+  { key: "buy", time: now - 50 * HOUR, status: "done", items: [{ kind: "buy", symbol: "NVDAc", amount: 0.112, paidUsd: 20 }] },
+];
 const PILL_SIZES: StatusPillSize[] = ["sm", "row", "header", "md", "lg"];
 const STATUSES: Status[] = ["safe", "watch", "act", "none"];
 
@@ -53,6 +64,8 @@ export function Gallery() {
   const [amount, setAmount] = useState("20");
   const [credit, setCredit] = useState("300");
   const [open, setOpen] = useState(false);
+  const [on, setOn] = useState(true);
+  const now = useNowSec() * 1000;
   return (
     <div className="flex min-h-dvh flex-col gap-6 px-5 pb-12 pt-[54px]">
       <div className="flex flex-col gap-1">
@@ -184,6 +197,16 @@ export function Gallery() {
         </div>
       </Section>
 
+      <Section title="Switch" kit="switch">
+        <div className="flex items-center justify-between rounded-[22px] bg-card px-4 py-3 shadow-card-elev">
+          <span className="text-[15px] font-semibold">Use credit for buying</span>
+          <span className="flex gap-2.5">
+            <Switch checked={on} onChange={setOn} label="On" />
+            <Switch checked={!on} onChange={(next) => setOn(!next)} label="Off" />
+          </span>
+        </div>
+      </Section>
+
       <Section title="Amount field" kit="amount-cash">
         <AmountField
           label="You pay"
@@ -229,6 +252,12 @@ export function Gallery() {
             ]}
           />
         </div>
+      </Section>
+
+      <Section title="Activity feed · Agents" kit="feed">
+        <FeedCard>
+          <FeedDays rows={MOVES(now)} nowMs={now} />
+        </FeedCard>
       </Section>
 
       <Section title="Sheet with steps" kit="sheet">
