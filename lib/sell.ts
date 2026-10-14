@@ -57,7 +57,7 @@ export type SellPlan = {
   before: Status;
   after: Status;
   hfAfter: number | null;
-  /** Markets are closed: Aave's price is held while the pools trade, so the review must say the price may move when they reopen. */
+  /** Markets are closed: Aave's price is held while the pools trade, so the screen must say the price may move when they reopen. */
   priceMayMove: boolean;
   /** Why it can't go ahead. */
   block?: SellBlock;
@@ -79,7 +79,7 @@ const part = (raw: bigint, f: number) => (f >= 1 ? raw : f > 0 ? (raw * BigInt(M
  * Plan a sale of `quote.amountIn` shares on Leo's maths. A backing holding comes out only as far as the loan
  * stays Safe (maxWithdrawUsd at the Safe line). Selling to repay takes the shares out first, so the loan must
  * stay within Aave's limit until the repay lands; it always ends healthier. Plan only: the batch is simulated
- * before Face ID.
+ * before JAW's sheet.
  */
 export function planSell(p: {
   from: SellFrom;
@@ -139,7 +139,7 @@ export function planSell(p: {
 }
 
 /**
- * The sale in one Face ID: [take the shares out of backing] → approve → swap to USDC [→ approve → repay].
+ * The sale in one batch: [take the shares out of backing] → approve → swap to USDC [→ approve → repay].
  * The repay spends what the swap is sure to pay (saleRepayRaw of its floor), so it can't fail for a
  * price move within the floor; anything the swap pays over that stays in the wallet as cash. Every call
  * passes the allowlist with the user pinned.

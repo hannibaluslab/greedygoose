@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { ActivityAvatar } from "./Activity";
 import { NETWORK_FEE_ROW, Summary, type SummaryRow } from "./Summary";
-import { FaceIdButton, TxDone, TxError } from "./TxUi";
+import { TxButton, TxDone, TxError } from "./TxUi";
 import { FaceIdIcon, TrendUpIcon } from "./icons";
 import { NOT_FAIR, useConvert, useConvertQuotes, type ConvertQuote } from "@/hooks/useConvert";
 import type { GrantView, useCashSetup } from "@/hooks/useCashSetup";
@@ -49,7 +49,7 @@ export function FinishSetupStep({ rate, grant, onStart, onLater }: { rate: strin
 
       <div className="flex flex-col gap-3">
         <TxError error={grant.error} />
-        <FaceIdButton label="Start earning with Face ID" phase={grant.busy ? "signing" : "idle"} disabled={!!grant.blocked} preview={grant.preview} onClick={onStart} />
+        <TxButton label="Start earning with Face ID" phase={grant.busy ? "signing" : "idle"} disabled={!!grant.blocked} preview={grant.preview} onClick={onStart} />
         <p className="m-0 text-center text-xs text-subtle">{grant.blocked ?? JAW_NOTE}</p>
         <button type="button" onClick={onLater} disabled={grant.busy} className="h-11 text-[15px] font-semibold text-ink-mid disabled:opacity-45">
           Later
@@ -154,7 +154,7 @@ export function ConvertReview({
         </p>
       )}
       <TxError error={error ?? (quotes && fair.length === 0 ? NOT_FAIR : null)} />
-      <FaceIdButton label="Turn into cash with Face ID" size="md" phase={phase} preview={preview} disabled={!quotes || fair.length === 0} onClick={onConfirm} />
+      <TxButton label="Turn into cash with Face ID" size="md" phase={phase} preview={preview} disabled={!quotes || fair.length === 0} onClick={onConfirm} />
     </>
   );
 }
@@ -167,7 +167,7 @@ export function AutomaticStep({ grant, onYes, onNo }: { grant: GrantView; onYes:
         Dollars other than USDC that arrive in your account turn into cash on their own, at 99.5% of face value or better.
       </p>
       <TxError error={grant.error} />
-      <FaceIdButton label="Yes, with Face ID" size="md" phase={grant.busy ? "signing" : "idle"} disabled={!!grant.blocked} preview={grant.preview} onClick={onYes} />
+      <TxButton label="Yes, with Face ID" size="md" phase={grant.busy ? "signing" : "idle"} disabled={!!grant.blocked} preview={grant.preview} onClick={onYes} />
       <button type="button" onClick={onNo} disabled={grant.busy} className="h-11 text-[15px] font-semibold text-ink-mid disabled:opacity-45">
         No
       </button>

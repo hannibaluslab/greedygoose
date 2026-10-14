@@ -7,9 +7,9 @@ import { CHAIN_ID } from "@/lib/chain";
 import { cashShort, readCash, type Cash } from "@/lib/cash";
 
 /**
- * The cash to sign with, read again right before Face ID, as useSigningQuote reads the quote: usePosition only
- * refreshes every 15 s, and cash can move between the review and the tap. When `amountRaw` and the network fee no
- * longer fit, it refreshes the screen's balances and stops the batch with cashShort's words, so the review shows
+ * The cash to sign with, read again right before JAW's sheet, as useSigningQuote reads the quote: usePosition only
+ * refreshes every 15 s, and cash can move between the screen and the tap. When `amountRaw` and the network fee no
+ * longer fit, it refreshes the screen's balances and stops the batch with cashShort's words, so the screen shows
  * what's there now.
  */
 export function useSigningCash() {

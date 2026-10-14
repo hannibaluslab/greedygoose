@@ -30,10 +30,10 @@ export function useCashSetup(account: `0x${string}`) {
   const blocked = !!signer && fee.state === "unsupported" ? FEE_BLOCKED : capMax === null ? "One moment…" : null;
   // The dev preview (`?as=`) reads another account: nothing can be signed for it.
   const preview = !signer || !isAddressEqual(signer, account);
-  const view = (run: ReturnType<typeof useAgentRun>): GrantView => ({ busy: run.running, error: run.error, blocked, preview });
+  const view = (run: ReturnType<typeof useAgentRun>): GrantView => ({ busy: run.running, error: run.errorFor(""), blocked, preview });
   const grant = (run: ReturnType<typeof useAgentRun>, job: "save" | "entry", onDone: () => void) => {
     if (capMax === null) return;
-    void run.run([{ grant: { job, capRaw: limitRaw(LIMIT_USD[job].start, capMax) } }], onDone);
+    void run.run(job, [{ grant: { job, capRaw: limitRaw(LIMIT_USD[job].start, capMax) } }], onDone);
   };
 
   return {

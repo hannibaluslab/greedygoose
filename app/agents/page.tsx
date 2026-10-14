@@ -7,11 +7,10 @@ import { useAccount } from "wagmi";
 import { toast } from "sonner";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { FeedCard, FeedDays } from "@/components/gg/Activity";
-import { AgentConfirm, AgentSheet, type ConfirmView } from "@/components/gg/AgentSheet";
+import { AgentSheet } from "@/components/gg/AgentSheet";
 import { ProtectSettings } from "@/components/gg/agents/ProtectSettings";
 import { RebalanceSettings } from "@/components/gg/agents/RebalanceSettings";
 import { AgentRow, AgentsFeed, AgentsView, AttentionCard, MixBar, TurnOffAll } from "@/components/gg/Agents";
-import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { useAccountFeed } from "@/hooks/useAccountFeed";
 import { useAgentFeed } from "@/hooks/useAgentFeed";
 import { useAgentRun, type AgentStep } from "@/hooks/useAgentRun";
@@ -30,21 +29,16 @@ import {
   agentCards,
   agentItems,
   agentParam,
-  allOffCopy,
-  confirmFor,
   longDateText,
-  limitText,
   TAB_JOBS,
   type Agent,
   type AgentItem,
-  type ConfirmCopy,
   type Next,
   type SheetAction,
 } from "@/lib/agents/list";
 import { rebalanceOptions } from "@/lib/agents/mix";
 import { agentNexts, defaultNumbers } from "@/lib/agents/next";
 import { JOBS, LIMIT_USD, limitRaw, stockLimitsRaw, type AgentJob } from "@/lib/agents/permissions";
-import { toUsd } from "@/lib/cash";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
 export default function AgentsPage() {
@@ -54,15 +48,16 @@ export default function AgentsPage() {
 const byJob = <T,>(f: (job: AgentJob) => T) => Object.fromEntries(JOBS.map((job) => [job, f(job)])) as Record<AgentJob, T>;
 const LOADING = Object.fromEntries(AGENTS.map((a) => [a, { idle: "…" }])) as Record<Agent, Next>;
 
-/** The open sheet: which agent, its confirm step if one is open, and whether a row or a card led straight to it. */
-type Open = { agent: Agent; action: SheetAction | null; direct: boolean; jobs?: AgentJob[] };
+const PREVIEW = "Preview mode — sign in to do this.";
 
 /**
  * The Agents tab (Adrian, 2026-10-15): Protect and Rebalance. Each agent's state is the executor's registry and JAW's
  * list (useAgents, D14); its next move is the executor's `planOf` or its TypeScript rule on live data
- * (lib/agents/next.ts); the cards come from the executor's events and registry. Every switch is JAW's own screen, one
- * Face ID each. With no executor configured, everything renders with real data and nothing can be switched on ("Not
- * live yet"). Earning and turning other dollars into cash run under the hood and have no place here (D20).
+ * (lib/agents/next.ts); the cards come from the executor's events and registry. Every switch, Renew and Turn off opens
+ * JAW's own sheet straight away (its Review and Face ID), once a grant or revoke: the row or the sheet already says the
+ * limit, so there is no confirm step of ours. With no executor configured, everything renders with real data and
+ * nothing can be switched on ("Not live yet"). Earning and turning other dollars into cash run under the hood and have
+ * no place here (D20).
  */
 function Agents({ address }: { address: `0x${string}` }) {
   const { address: signer } = useAccount();
@@ -80,9 +75,8 @@ function Agents({ address }: { address: `0x${string}` }) {
   // The sheet keeps its last agent while it slides away. A link can name one (`/agents?agent=protect`): its sheet
   // opens on arrival, as a row's tap opens it.
   const linked = agentParam(useSearchParams().get("agent"));
-  const [open, setOpen] = useState<Open | null>(linked && { agent: linked, action: null, direct: false });
+  const [open, setOpen] = useState<Agent | null>(linked);
   const [shown, setShown] = useState(!!linked);
-  const [allOff, setAllOff] = useState(false);
 
   const capMax = agents.capMaxRaw;
   const capOf = (usd: number) => limitRaw(usd, capMax ?? BigInt(usd) * 10n ** BigInt(USDC.decimals));
@@ -124,7 +118,6 @@ function Agents({ address }: { address: `0x${string}` }) {
     cooldownUntil: agents.cooldownUntil,
   });
 
-
   /** The limit an agent will run with: its grant's, else the one it starts on. */
   const limitUsd = (agent: Agent) => items.find((i) => i.agent === agent)!.limitUsd;
 
@@ -142,80 +135,71 @@ function Agents({ address }: { address: `0x${string}` }) {
   /** What renewing a job keeps: the limit of the grant it runs with, or last ran with. */
   const renewCapRaw = (job: AgentJob) => agents.terms[job]?.capRaw ?? agents.lastTerms[job]?.capRaw ?? capOf(LIMIT_USD[job].start);
 
-  /** The JAW screens an action takes. */
-  const stepsFor = (o: Open & { action: SheetAction }): AgentStep[] => {
-    const main = AGENT_JOBS[o.agent][0];
-    if (o.action === "off") return AGENT_JOBS[o.agent].filter((j) => agents.faceIdsOff([j]) > 0).map((j) => ({ off: j }));
+  /** The JAW sheets a change takes. */
+  const stepsFor = (agent: Agent, action: SheetAction, jobs?: AgentJob[]): AgentStep[] => {
+    const main = AGENT_JOBS[agent][0];
+    if (action === "off") return AGENT_JOBS[agent].filter((j) => agents.faceIdsOff([j]) > 0).map((j) => ({ off: j }));
     if (!position || capMax === null) return [];
-    if (o.action === "renew") {
-      const jobs = o.jobs ?? AGENT_JOBS[o.agent].filter((j) => agents.terms[j]);
-      return jobs.map((j) => ({ grant: grantFor(j, renewCapRaw(j), position) }));
-    }
-    return [{ grant: grantFor(main, capOf(limitUsd(o.agent)), position) }];
+    if (action === "renew") return (jobs ?? AGENT_JOBS[agent].filter((j) => agents.terms[j])).map((j) => ({ grant: grantFor(j, renewCapRaw(j), position) }));
+    return [{ grant: grantFor(main, capOf(limitUsd(agent)), position) }];
   };
 
+  // The dev preview (`?as=`) reads another account: nothing can be signed for it.
+  const preview = !signer || !isAddressEqual(signer, address);
   const blocked = !live
     ? "Not live yet"
     : !!signer && fee.state === "unsupported"
       ? "Your account can’t pay network fees in USDC on Base right now."
       : capMax === null || !position
         ? "One moment…"
-        : null;
-  // The dev preview (`?as=`) reads another account: nothing can be signed for it.
-  const preview = !signer || !isAddressEqual(signer, address);
+        : preview
+          ? PREVIEW
+          : null;
 
-  const confirmView = (copy: ConfirmCopy, steps: AgentStep[], done: () => void): ConfirmView => ({
-    ...copy,
-    busy: runner.running,
-    error: runner.error,
-    blocked: blocked ?? (steps.length === 0 ? "Nothing to change." : null),
-    preview,
-    onConfirm: () => void runner.run(steps, done),
-  });
+  /** Runs `steps` on JAW's own sheets; an error shows in the open sheet, or as a toast from a row, a card or the tab. */
+  const start = (key: string, agent: Agent | null, steps: AgentStep[], message: string) => {
+    if (blocked) return void toast(blocked);
+    if (steps.length === 0) return;
+    void runner
+      .run(key, steps, () => toast.success(message))
+      .then((error) => {
+        if (error && !(agent && shown && open === agent)) toast.error(error);
+      });
+  };
 
-  const openStep = (o: Open) => {
-    runner.reset();
-    setOpen(o);
+  const act = (agent: Agent, action: SheetAction, jobs?: AgentJob[]) => {
+    const name = AGENT_NAME[agent];
+    const message = { on: `${name} is on`, off: `${name} is off`, renew: `${name} runs until ${longDateText(nowSec + GRANT_SECONDS)}` }[action];
+    start(`${agent}:${action}`, agent, stepsFor(agent, action, jobs), message);
+  };
+
+  const openSheet = (agent: Agent) => {
+    setOpen(agent);
     setShown(true);
   };
   const onSwitch = (agent: Agent, on: boolean) => {
-    if (on && agent === "rebalance" && !mixSet) openStep({ agent, action: null, direct: false });
-    else openStep({ agent, action: on ? "on" : "off", direct: true });
+    if (on && agent === "rebalance" && !mixSet) openSheet(agent);
+    else act(agent, on ? "on" : "off");
   };
 
   const sheet = open && sheetFor(open);
-  function sheetFor(o: Open) {
-    const item = items.find((i) => i.agent === o.agent)!;
-    const name = AGENT_NAME[o.agent];
-    const main = AGENT_JOBS[o.agent][0];
-    const ends = AGENT_JOBS[o.agent].map((j) => agents.terms[j]?.end ?? null).filter((e): e is number => e !== null);
-    const done = (message: string) => () => {
-      toast.success(message);
-      if (o.direct) setShown(false);
-      else setOpen({ ...o, action: null, jobs: undefined });
-    };
-    let confirm: ConfirmView | null = null;
-    if (o.action) {
-      const steps = stepsFor({ ...o, action: o.action });
-      const limit = limitText(o.action === "renew" ? toUsd(renewCapRaw(main)) : limitUsd(o.agent), main);
-      const untilSec = nowSec + GRANT_SECONDS;
-      const faceIds = o.action === "off" ? agents.faceIdsOff(AGENT_JOBS[o.agent]) : steps.length;
-      const copy = confirmFor({ kind: o.action, agent: o.agent, limit, untilSec, faceIds });
-      const message = { on: `${name} is on`, off: `${name} is off`, renew: `${name} runs until ${longDateText(untilSec)}` }[o.action];
-      confirm = confirmView(copy, steps, done(message));
-    }
+  function sheetFor(agent: Agent) {
+    const item = items.find((i) => i.agent === agent)!;
+    const name = AGENT_NAME[agent];
+    const ends = AGENT_JOBS[agent].map((j) => agents.terms[j]?.end ?? null).filter((e): e is number => e !== null);
     const activity = feed.rows.filter((r) => r.by === name);
     return (
       <AgentSheet
         open={shown}
         onClose={() => setShown(false)}
         item={item}
-        confirm={confirm}
-        onBack={o.direct ? undefined : () => openStep({ ...o, action: null, jobs: undefined })}
         live={live}
+        busy={runner.running}
+        error={runner.errorFor(`${agent}:`)}
+        offSteps={agents.faceIdsOff(AGENT_JOBS[agent])}
         stops={ends.length ? longDateText(Math.min(...ends)) : null}
         // Each settings body carries the agent's limit and Save, which switches it on too.
-        settings={o.agent === "protect" ? <ProtectSettings account={address} /> : <RebalanceSettings account={address} />}
+        settings={agent === "protect" ? <ProtectSettings account={address} /> : <RebalanceSettings account={address} />}
         activity={
           <FeedCard>
             {feed.isLoading ? (
@@ -227,7 +211,7 @@ function Agents({ address }: { address: `0x${string}` }) {
             )}
           </FeedCard>
         }
-        onAction={(action) => openStep({ ...o, action, jobs: undefined })}
+        onAction={(action) => act(agent, action)}
       />
     );
   }
@@ -241,14 +225,14 @@ function Agents({ address }: { address: `0x${string}` }) {
       <AgentsView
         live={live}
         cards={cards.map((c) => (
-          <AttentionCard key={c.key} card={c} onRenew={(agent, jobs) => openStep({ agent, action: "renew", direct: true, jobs })} />
+          <AttentionCard key={c.key} card={c} disabled={runner.running} onRenew={(agent, jobs) => act(agent, "renew", jobs)} />
         ))}
         rows={items.map((item: AgentItem) => (
           <AgentRow
             key={item.agent}
             item={item}
-            switchable={live && item.status !== "loading"}
-            onOpen={() => openStep({ agent: item.agent, action: null, direct: false })}
+            switchable={live && item.status !== "loading" && !runner.running}
+            onOpen={() => openSheet(item.agent)}
             onSwitch={(on) => onSwitch(item.agent, on)}
             extra={item.agent === "rebalance" && mixSet && settings ? <MixBar mixBps={settings.mixBps} /> : undefined}
           />
@@ -260,19 +244,16 @@ function Agents({ address }: { address: `0x${string}` }) {
             {...all}
           />
         }
-        turnOffAll={<TurnOffAll faceIds={allOffIds} live={live} disabled={agents.busy} onClick={() => (runner.reset(), setAllOff(true))} />}
+        turnOffAll={
+          <TurnOffAll
+            steps={allOffIds}
+            live={live}
+            disabled={agents.busy || runner.running}
+            onClick={() => start("all:off", null, allOffSteps, "Your agents are off")}
+          />
+        }
       />
       {sheet}
-      <SheetShell open={allOff} onOpenChange={setAllOff} title="Turn off all agents">
-        <SheetSteps stepKey="all-off" className="flex flex-col gap-3.5">
-          <AgentConfirm
-            confirm={confirmView(allOffCopy(allOffIds), allOffSteps, () => {
-              toast.success("Your agents are off");
-              setAllOff(false);
-            })}
-          />
-        </SheetSteps>
-      </SheetShell>
     </>
   );
 }

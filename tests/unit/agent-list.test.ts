@@ -7,8 +7,6 @@ import {
   agentOf,
   agentParam,
   agentStatus,
-  allOffCopy,
-  confirmFor,
   nextLine,
   NOT_LIVE,
   TAB_JOBS,
@@ -44,10 +42,10 @@ describe("the two agents", () => {
     expect(NOT_LIVE).not.toMatch(ON_SCREEN);
   });
 
-  it("starts each on its limit, and shows the grant's once it has one", () => {
-    expect(agentItems({ status: jobs("off"), capRaw: none, next: nexts }).map((i) => i.limit)).toEqual(["$300 a day", "$500 a week"]);
-    const capRaw = { ...none, protect: 100_000_000n, rebalance: 1_000_000_000n };
-    expect(agentItems({ status: jobs("on"), capRaw, next: nexts }).map((i) => i.limit)).toEqual(["$100 a day", "$1,000 a week"]);
+  it("starts each on its limit, reading as a limit, and shows the grant's once it has one", () => {
+    expect(agentItems({ status: jobs("off"), capRaw: none, next: nexts }).map((i) => i.limit)).toEqual(["Limit $100 a day", "Limit $100 a week"]);
+    const capRaw = { ...none, protect: 25_000_000n, rebalance: 1_234_000_000n };
+    expect(agentItems({ status: jobs("on"), capRaw, next: nexts }).map((i) => i.limit)).toEqual(["Limit $25 a day", "Limit $1,234 a week"]);
   });
 
   it("leaves earning and converting other dollars off the tab: no agent runs them, and turning all off spares them (D20)", () => {
@@ -151,36 +149,6 @@ describe("agentCards: only when something needs the user", () => {
     };
     expect(agentCards(everything).map((c) => c.key)).toEqual(["heads-up", "fails", "stopped-rebalance", "expiring-protect"]);
     for (const c of agentCards(everything)) expect(`${c.text} ${c.sub ?? ""}`).not.toMatch(ON_SCREEN);
-  });
-});
-
-describe("confirmFor: the confirm step, before JAW's own screen", () => {
-  const until = NOW + 365 * DAY;
-  it("says switching on is one Face ID, with the limit and how long it lasts", () => {
-    const c = confirmFor({ kind: "on", agent: "protect", limit: "$300 a day", untilSec: until, faceIds: 1 });
-    expect(c).toMatchObject({ title: "Switch on Protect", button: "Switch on with Face ID", note: "One Face ID" });
-    expect(c.lead).toBe("Protect keeps your credit Safe, up to $300 a day. JAW shows the limit on its own screen before you sign.");
-    expect(c.rows).toEqual([
-      { label: "Limit", value: "$300 a day" },
-      { label: "Until", value: expect.stringMatching(/^\w{3} \d{1,2}, \d{4}$/) },
-    ]);
-  });
-
-  it("counts a Face ID for each grant turning off takes", () => {
-    expect(confirmFor({ kind: "off", agent: "protect", limit: "$300 a day", untilSec: until, faceIds: 2 }).note).toBe(
-      "2 Face IDs, one for each limit you signed",
-    );
-    expect(confirmFor({ kind: "renew", agent: "rebalance", limit: "$500 a week", untilSec: until, faceIds: 1 }).title).toBe("Renew Rebalance");
-    expect(allOffCopy(3)).toMatchObject({ title: "Turn off all agents", note: "3 Face IDs, one for each limit you signed" });
-  });
-
-  it("uses none of the words the screens leave out", () => {
-    for (const agent of AGENTS) {
-      for (const kind of ["on", "off", "renew"] as const) {
-        const c = confirmFor({ kind, agent, limit: "$1 a day", untilSec: until, faceIds: 1 });
-        expect([c.title, c.lead, c.button, c.note, ...c.rows.map((r) => r.value)].join(" ")).not.toMatch(ON_SCREEN);
-      }
-    }
   });
 });
 

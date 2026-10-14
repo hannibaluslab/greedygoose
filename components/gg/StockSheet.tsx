@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { useAccount } from "wagmi";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { MarketBanner } from "@/components/ui/MarketBanner";
@@ -9,7 +9,7 @@ import { Button } from "./Button";
 import { StockAvatar, tickerOf } from "./StockAvatar";
 import { StatCard, StockActivity, StockChart, StockHeader, StockPosition } from "./StockOverview";
 import { NETWORK_FEE_ROW, Summary } from "./Summary";
-import { FaceIdButton, TxDone, TxError } from "./TxUi";
+import { TxButton, TxDone, TxError } from "./TxUi";
 import { CreditIcon } from "./icons";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { useMarketPrices } from "@/hooks/useMarketPrices";
@@ -24,15 +24,16 @@ import { VENUE_LABEL } from "@/lib/swap/venues";
 import { rawToShares, sharesToRaw } from "@/lib/tokens/b20";
 import type { ReserveAsset } from "@/lib/tokens/registry";
 
-type Step = "stock" | "sell" | "review";
-const ORDER: Step[] = ["stock", "sell", "review"];
+type Step = "stock" | "sell";
+const ORDER: Step[] = ["stock", "sell"];
 
 /**
  * One stock in a sheet: NYM's CoinDetailSheet in the GreedyGoose kit, opened from the Home rail, the Invest rows and
  * the Market. The stock's market price and today's move, your holding and how it splits, the price chart, its share
  * of your portfolio and Aave's price (stocks earn no yield, D19), the actions, and this stock's moves. Selling free
- * shares is a step inside this sheet (useSell); Buy, Credit Buy and Free up shares open their own flows, which come
- * back here (StockSheets). For a stock you don't own: Buy and Credit Buy only.
+ * shares is a step inside this sheet (useSell) whose Sell opens JAW's own sheet: the step says the lowest price, what
+ * moves and the fee, so there is no confirm of ours. Buy, Credit Buy and Free up shares open their own flows, which
+ * come back here (StockSheets). For a stock you don't own: Buy and Credit Buy only.
  */
 export function StockSheet({
   open, user, data, stock, holding, onClose, onBack, onBuy, onCreditBuy, onFreeUp,
@@ -58,7 +59,7 @@ export function StockSheet({
   const [direction, setDirection] = useState<"forward" | "back">("forward");
   const [raw, setRaw] = useState("");
   const [all, setAll] = useState(false);
-  // What went to Face ID: once the sale lands the shares are re-read, and MAX's free shares are then none.
+  // What went to JAW's sheet: once the sale lands the shares are re-read, and MAX's free shares are then none.
   const [sold, setSold] = useState(0n);
   const go = (next: Step) => {
     setDirection(ORDER.indexOf(next) > ORDER.indexOf(step) ? "forward" : "back");
@@ -83,17 +84,15 @@ export function StockSheet({
   else if (plan?.block) blocker = SELL_BLOCKED[plan.block];
   const warning =
     blocker ?? (plan?.warn ? `You’d get ${(plan.discount * 100).toFixed(1)}% under Aave’s price — the market for ${stock.name} is small.` : null);
-  // The review says it in its small print instead.
   const note = warning ?? (plan?.priceMayMove ? "Stock markets are closed. You can still sell, but the price can jump when they reopen." : null);
   const ready = sharesRaw > 0n && !!plan && q?.amountIn === sharesRaw && !blocker && !quote.isFetching;
   const feeBlocked = isConnected && fee.state === "unsupported";
 
   const back = () => {
-    if (step === "sell") go("stock");
-    else if (busy) onClose();
+    if (busy) onClose();
     else {
       if (phase === "failed") reset();
-      go("sell");
+      go("stock");
     }
   };
   const done = phase === "done";
@@ -102,7 +101,7 @@ export function StockSheet({
     <SheetShell
       open={open}
       onOpenChange={(next) => !next && onClose()}
-      title={step === "sell" ? `Sell ${stock.name}` : step === "review" && !done ? "Confirm" : stock.name}
+      title={step === "sell" && !done ? `Sell ${stock.name}` : stock.name}
       onBack={step === "stock" ? onBack : done ? undefined : back}
     >
       <SheetSteps stepKey={done ? "done" : step} direction={direction} className="flex flex-col gap-3">
@@ -149,7 +148,7 @@ export function StockSheet({
               Tokenized stocks track the share price; they are not company shares and carry no voting rights.
             </p>
           </>
-        ) : step === "sell" ? (
+        ) : (
           <>
             <AmountField
               label="You sell"
@@ -169,45 +168,35 @@ export function StockSheet({
             <AmountArrow />
             <YouGetCash usd={quote.isFetching && sharesRaw > 0n ? null : econ ? econ.usd : 0} priceUsd={econ ? econ.price : holding.priceUsd} />
             <Summary
-              look="box"
               rows={[
                 { label: "Lowest price", value: plan && !quote.isFetching ? `${formatUsd(floorPriceUsd(plan, stock))} a share` : "…" },
                 NETWORK_FEE_ROW,
               ]}
             />
             {note && <p role="status" className={`m-0 text-[13px] leading-snug ${blocker ? "text-act" : "text-watch-text"}`}>{note}</p>}
-            <Button variant="dark" disabled={!ready} onClick={() => go("review")} className="mt-1">Review sale</Button>
-          </>
-        ) : plan && q && econ ? (
-          <SellReview
-            stock={stock}
-            holding={holding}
-            quote={q}
-            plan={plan}
-            price={econ.price}
-            note={warning}
-            blocked={!!blocker}
-            feeBlocked={feeBlocked}
-            error={error}
-            busy={busy}
-            onBack={back}
-            button={
-              <FaceIdButton
-                label="Confirm with Face ID"
+            {ready && plan && q && <SellSmallPrint stock={stock} holding={holding} quote={q} plan={plan} />}
+            {feeBlocked && (
+              <p role="alert" className="m-0 text-[13px] text-act">
+                Your account can’t pay network fees in USDC on Base right now, so this sale can’t go through.
+              </p>
+            )}
+            <TxError error={error} />
+            <div className="mt-1">
+              <TxButton
+                label="Sell"
                 size="md"
                 phase={phase}
                 preview={!isConnected}
-                disabled={!!blocker || feeBlocked || fee.loading}
+                disabled={!ready || !plan || !q || feeBlocked || fee.loading}
                 onClick={() => {
+                  if (!plan || !q) return;
                   if (phase === "failed") reset();
                   setSold(plan.sharesRaw);
                   void sell({ user, stock, quote: q, plan, oraclePriceUsd: holding.priceUsd, debtRaw: data.debtRaw });
                 }}
               />
-            }
-          />
-        ) : (
-          <div aria-busy className="h-[320px] animate-pulse rounded-[16px] bg-chip" />
+            </div>
+          </>
         )}
       </SheetSteps>
     </SheetShell>
@@ -255,65 +244,19 @@ function Actions({
 }
 
 /**
- * The sale's confirm step, in F2-6's layout as the buy's: "0.4365 NVDA → $99.50", the summary with the lowest price
- * the swap accepts, the small print that names every move in the batch (D7), then Back and Face ID.
+ * The Sell step's small print: every move in the batch (D7), the lowest price the swap accepts and what the stock is.
  */
-function SellReview({
-  stock, holding, quote, plan, price, note, blocked, feeBlocked, error, busy, onBack, button,
-}: {
-  stock: ReserveAsset;
-  holding: Holding;
-  quote: SellQuote;
-  plan: SellPlan;
-  price: number;
-  note: string | null;
-  blocked: boolean;
-  feeBlocked: boolean;
-  error: string | null;
-  busy: boolean;
-  onBack: () => void;
-  button: ReactNode;
-}) {
+function SellSmallPrint({ stock, holding, quote, plan }: { stock: ReserveAsset; holding: Holding; quote: SellQuote; plan: SellPlan }) {
   const ticker = tickerOf(stock.symbol);
   const shares = formatShares(rawToShares(plan.sharesRaw, holding.multiplier, stock.decimals));
   const floor = formatUsd(floorPriceUsd(plan, stock));
   const venue = VENUE_LABEL[quote.venue];
   return (
-    <>
-      <div className="pb-0.5 pt-1.5 text-center leading-[normal]">
-        <div className="num text-[25px] font-semibold tracking-[-0.03em]">
-          {shares} {ticker} <span className="font-[system-ui]">→</span> {formatUsd(plan.usd)}
-        </div>
-        <div className="mt-1 text-[13px] text-ink-mid">{stock.name}, from your free shares</div>
-      </div>
-      <Summary
-        rows={[
-          { label: "You sell", value: `${shares} ${ticker}` },
-          { label: "Price", value: formatUsd(price) },
-          { label: "You get at least", value: formatUsd(toUsd(plan.minOutRaw)) },
-          { label: "Lowest price", value: `${floor} a share` },
-          { label: "Via", value: venue },
-          NETWORK_FEE_ROW,
-        ]}
-      />
-      <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">
-        In one Face ID: exactly {shares} {ticker} is approved for the {venue} router and swapped, and the dollars land in your
-        cash. If the price falls under {floor} a share, the sale is cancelled, so it never sells for more than{" "}
-        {SELL_LIMITS.floorBps / 100}% under Aave’s price ({formatUsd(holding.priceUsd)}).
-        {plan.priceMayMove && " Markets are closed, so the price may move when they reopen."} {stock.name} here is a tokenized
-        stock. It tracks the share price; it is not company shares or voting rights.
-      </p>
-      {note && <p role="status" className={`m-0 text-[13px] leading-snug ${blocked ? "text-act" : "text-watch-text"}`}>{note}</p>}
-      {feeBlocked && (
-        <p role="alert" className="m-0 text-[13px] text-act">
-          Your account can’t pay network fees in USDC on Base right now, so this sale can’t go through.
-        </p>
-      )}
-      <TxError error={error} />
-      <div className="mt-1 flex items-start gap-2">
-        <Button variant="soft" onClick={onBack} disabled={busy}>Back</Button>
-        <div className="flex-1">{button}</div>
-      </div>
-    </>
+    <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">
+      In one go: exactly {shares} {ticker} is approved for the {venue} router and swapped, and at least{" "}
+      {formatUsd(toUsd(plan.minOutRaw))} lands in your cash. If the price falls under {floor} a share, the sale is cancelled,
+      so it never sells for more than {SELL_LIMITS.floorBps / 100}% under Aave’s price ({formatUsd(holding.priceUsd)}).{" "}
+      {stock.name} here is a tokenized stock. It tracks the share price; it is not company shares or voting rights.
+    </p>
   );
 }

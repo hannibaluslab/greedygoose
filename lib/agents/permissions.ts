@@ -6,6 +6,7 @@ import { PERIOD, type GuardianPermission } from "@/lib/guardian/permission";
 import { AERODROME, AERODROME_V1, SPARK_PSM3, UNISWAP } from "@/lib/swap/venues";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
+import { formatUsdTrim } from "@/lib/formatting";
 
 /** The agents' jobs, in GooseExecutor's order (enum Job): the index is the job's id on-chain. */
 export const JOBS = ["save", "protect", "sell", "rebalance", "entry"] as const;
@@ -45,22 +46,43 @@ const LIMITED: Record<CashJob, readonly Address[]> = {
 
 /**
  * The limits an agent's sheet offers and the one each job is switched on with, in dollars a day (a week for the
- * Rebalancer) (Adrian, 2026-10-15): Protect $100 / $300 / $500, for repaying from cash and for selling backing stock
- * alike; the Rebalancer $250 / $500 / $1,000. Save and Entry run under the hood (D20), each at $1,000 a day with no
- * other offer. All wait on the calibration pass (plan item 6 step 9).
+ * Rebalancer). Protect (for repaying from cash and for selling backing stock alike) and the Rebalancer: $25 / $50 /
+ * $100 / $200 or any whole number of dollars (Custom), starting on $100 (Adrian, 2026-10-15). Save and Entry run under
+ * the hood (D20), each at $1,000 a day with no other offer. All wait on the calibration pass (plan item 6 step 9).
  */
 export const LIMIT_USD: Record<AgentJob, { options: readonly number[]; start: number; per: "day" | "week" }> = {
   save: { options: [], start: 1_000, per: "day" },
-  protect: { options: [100, 300, 500], start: 300, per: "day" },
-  sell: { options: [100, 300, 500], start: 300, per: "day" },
-  rebalance: { options: [250, 500, 1_000], start: 500, per: "week" },
+  protect: { options: [25, 50, 100, 200], start: 100, per: "day" },
+  sell: { options: [25, 50, 100, 200], start: 100, per: "day" },
+  rebalance: { options: [25, 50, 100, 200], start: 100, per: "week" },
   entry: { options: [], start: 1_000, per: "day" },
 };
+
+/** The most a typed limit may be, so the dollars stay exact as a number; the executor's `CAP_MAX` binds far below. */
+const MAX_LIMIT_USD = 1_000_000_000;
+
+/** A Custom limit as typed: whole dollars from $1 ("1,000" and "250.75" read as $1,000 and $250), or null. */
+export function parseLimitUsd(text: string): number | null {
+  const t = text.trim().replace(/,/g, "");
+  if (!/^\d+(\.\d*)?$/.test(t)) return null;
+  const usd = Math.floor(Number(t));
+  return usd >= 1 && usd <= MAX_LIMIT_USD ? usd : null;
+}
 
 /** A dollar limit in USDC units, never above the executor's `CAP_MAX` (a D13 test deploy allows $5). */
 export function limitRaw(usd: number, capMaxRaw: bigint): bigint {
   const raw = BigInt(usd) * 10n ** BigInt(USDC.decimals);
   return raw < capMaxRaw ? raw : capMaxRaw;
+}
+
+/**
+ * In dev, when the executor's `CAP_MAX` is under the limit on screen (a D13 test deploy allows $5): "Test version: up
+ * to $5". The grant is held to it either way (`limitRaw`); production never shows this line.
+ */
+export function testCapNote(usd: number | null, capMaxRaw: bigint | null, dev = process.env.NODE_ENV !== "production"): string | null {
+  if (!dev || usd === null || capMaxRaw === null) return null;
+  if (BigInt(usd) * 10n ** BigInt(USDC.decimals) <= capMaxRaw) return null;
+  return `Test version: up to ${formatUsdTrim(Number(capMaxRaw) / 10 ** USDC.decimals)}`;
 }
 
 /** What the app sends to JAW's `useGrantPermissions` to switch `job` on, with a daily limit in USDC units. */

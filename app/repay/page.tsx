@@ -8,18 +8,19 @@ import { toast } from "sonner";
 import Link from "next/link";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { Line, SubHeader, WhiteCard } from "@/components/gg/Screen";
-import { FaceIdButton, TxError } from "@/components/gg/TxUi";
+import { NETWORK_FEE_ROW } from "@/components/gg/Summary";
+import { TxButton, TxError } from "@/components/gg/TxUi";
 import { useTx } from "@/hooks/useTx";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { useSigningCash } from "@/hooks/useSigningCash";
 import { buildRepayCalls, fullRepayAmount } from "@/lib/aave/tx";
 import { repayChips } from "@/lib/aave/loan";
-import { cantRepay, maxSpendRaw, payFromCash, toUsd } from "@/lib/cash";
+import { cantRepay, maxSpendRaw, payFromCash, savingsWithdrawal, toUsd } from "@/lib/cash";
 import { USDC } from "@/lib/tokens/registry";
 import { StatusBar, StatusPill } from "@/components/gg/Status";
 import { ChevronRight, SlidersIcon } from "@/components/gg/icons";
 import { usePosition } from "@/hooks/usePosition";
-import { formatUsdTrim } from "@/lib/formatting";
+import { formatUsd, formatUsdTrim } from "@/lib/formatting";
 
 export default function RepayPage() {
   return <RequireAccount>{(address) => <Repay address={address} />}</RequireAccount>;
@@ -27,8 +28,9 @@ export default function RepayPage() {
 
 /**
  * Design board "5b · Repay" (CreditOn.dc.html): it opens on the larger amount ($300), and a landed repay goes Home,
- * as the board's button does, with a toast like a buy's (F1-6). The batch is built with the cash read again right
- * before Face ID (useSigningCash), so cash that moved since shows in words instead of a batch that can't pay.
+ * as the board's button does, with a toast like a buy's (F1-6). Repay opens JAW's own sheet straight away: this screen
+ * already says what you owe after, the fee and what comes out of savings. The batch is built with the cash read again
+ * right before signing (useSigningCash), so cash that moved since shows in words instead of a batch that can't pay.
  */
 function Repay({ address }: { address: `0x${string}` }) {
   const { isConnected } = useAccount();
@@ -67,6 +69,8 @@ function Repay({ address }: { address: `0x${string}` }) {
   const owed = (usd: number) => formatUsdTrim(Math.ceil(usd));
   const coversAll = picked === "all" && maxSpend >= data.debtRaw;
   const feeBlocked = isConnected && fee.state === "unsupported";
+  // D7: the batch takes from savings what the wallet can't pay; the screen says so.
+  const fromSavings = amountRaw > 0n ? savingsWithdrawal(amountRaw, data.cash) : null;
 
   const submit = () => {
     if (tx.phase === "failed") tx.reset();
@@ -122,7 +126,15 @@ function Repay({ address }: { address: `0x${string}` }) {
               ))}
               <Chip selected={picked === "all"} onClick={() => setChoice("all")}>{maxRepay >= data.debtUsd ? "All" : "All cash"}</Chip>
             </div>
-            <Line label="You owe after" value={owed(after)} />
+            <div className="flex flex-col">
+              <Line label="You owe after" value={owed(after)} />
+              <Line label={NETWORK_FEE_ROW.label} value={NETWORK_FEE_ROW.value} />
+            </div>
+            {fromSavings && (
+              <p className="m-0 -mt-1.5 pb-3.5 text-xs leading-snug text-subtle">
+                {formatUsd(toUsd(fromSavings.raw))} of it comes out of savings, in the same step.
+              </p>
+            )}
           </>
         )}
       </WhiteCard>
@@ -134,8 +146,8 @@ function Repay({ address }: { address: `0x${string}` }) {
       <div className="grow" />
       {feeBlocked && <p role="alert" className="m-0 text-[13px] text-act">Your account can’t pay network fees in USDC on Base right now.</p>}
       <TxError error={tx.error} />
-      <FaceIdButton
-        label={amount > 0 ? `Repay ${coversAll ? "all" : formatUsdTrim(amount)} with Face ID` : "Repay with Face ID"}
+      <TxButton
+        label="Repay"
         phase={tx.phase}
         preview={!isConnected}
         disabled={amount <= 0 || feeBlocked || fee.loading}

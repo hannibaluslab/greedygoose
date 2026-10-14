@@ -17,7 +17,7 @@ import { StatusChange, StatusPill, type StatusPillSize } from "@/components/gg/S
 import { StockAvatar } from "@/components/gg/StockAvatar";
 import { NETWORK_FEE_ROW, Summary } from "@/components/gg/Summary";
 import { Switch } from "@/components/gg/Switch";
-import { FaceIdButton } from "@/components/gg/TxUi";
+import { TxButton } from "@/components/gg/TxUi";
 import { ValueLine } from "@/components/gg/ValueLine";
 import { CreditIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/icons";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
@@ -207,12 +207,9 @@ export function Gallery() {
 
       <Section title="Buttons" kit="buttons">
         <div className="flex flex-col gap-2.5">
-          <FaceIdButton label="Repay $300 with Face ID" phase="idle" onClick={noop} />
-          <div className="flex gap-2">
-            <Button variant="soft" onClick={noop}>Back</Button>
-            <div className="flex-1"><FaceIdButton label="Confirm with Face ID" phase="idle" size="md" onClick={noop} /></div>
-          </div>
-          <Button variant="dark" onClick={noop}>Review buy</Button>
+          <TxButton label="Repay" phase="idle" onClick={noop} />
+          <TxButton label="Switch on" phase="idle" size="md" steps={2} onClick={noop} />
+          <Button variant="dark" onClick={noop}>Continue</Button>
           <div className="grid grid-cols-2 gap-2.5">
             <Button variant="white" icon={<TradeIcon size={18} strokeWidth={1.8} />} onClick={noop}>Market</Button>
             <Button icon={<CreditIcon size={18} strokeWidth={1.8} />} onClick={noop}>Credit Buy</Button>
@@ -268,13 +265,11 @@ export function Gallery() {
 
       <Section title="Summary rows" kit="summary">
         <div className="flex flex-col gap-3">
-          <Summary look="box" rows={[{ label: "Arrives", value: "In seconds" }, NETWORK_FEE_ROW]} />
+          <Summary rows={[{ label: "Arrives", value: "In seconds" }, NETWORK_FEE_ROW]} />
           <Summary
             rows={[
+              { label: "From your cash", value: "$400.00" },
               { label: "On credit", value: "$300.00" },
-              { label: "Backed by", value: "NVIDIA" },
-              { label: "Cost", value: "$1.50 / month" },
-              { label: "You owe after", value: "$300.00" },
               { label: "Status", value: <StatusChange from="safe" to="safe" /> },
               NETWORK_FEE_ROW,
             ]}
@@ -343,61 +338,34 @@ function Section({ title, kit, children }: { title: string; kit: string; childre
   );
 }
 
-type Step = "amount" | "review";
-
-/** F1-4 then the F2-6 confirm layout in one drawer: back slides the other way, confirm closes and toasts. */
+/** F1-4 in a drawer: the amount, what arrives and the fee, then Buy (JAW's own sheet in the app), which closes and toasts. */
 function BuyDemoSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const [step, setStep] = useState<Step>("amount");
   const [amount, setAmount] = useState("20");
   const usd = Number(amount) || 0;
   const shares = (usd / NVDA.price).toFixed(4);
 
-  const change = (next: boolean) => {
-    onOpenChange(next);
-    if (!next) setStep("amount");
-  };
   const finish = () => {
-    change(false);
+    onOpenChange(false);
     toast.success(`Bought ${shares} ${NVDA.symbol}`);
   };
 
   return (
-    <SheetShell
-      open={open}
-      onOpenChange={change}
-      title={step === "amount" ? `Buy ${NVDA.name}` : "Confirm"}
-      onBack={step === "review" ? () => setStep("amount") : () => change(false)}
-    >
-      <SheetSteps stepKey={step} direction={step === "review" ? "forward" : "back"}>
-        {step === "amount" ? (
-          <div className="flex flex-col gap-3">
-            <AmountField
-              label="You pay"
-              source={<AmountSource>Cash</AmountSource>}
-              badge={<AmountBadge kind="cash" />}
-              value={amount}
-              onValue={setAmount}
-              onMax={() => setAmount(CASH.toFixed(2))}
-              hint={`Cash available: ${formatUsd(CASH)}`}
-            />
-            <Summary look="box" rows={[{ label: "Arrives", value: "In seconds" }, NETWORK_FEE_ROW]} />
-            <Button variant="dark" disabled={usd <= 0 || usd > CASH} onClick={() => setStep("review")} className="mt-1">
-              {usd <= 0 ? "Enter an amount" : usd > CASH ? `That’s more than your cash (${formatUsd(CASH)})` : "Review buy"}
-            </Button>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            <div className="pb-0.5 pt-1.5 text-center">
-              <div className="num text-[25px] font-semibold tracking-[-0.03em]">{formatUsd(usd)} <span className="font-[system-ui]">→</span> {shares} {NVDA.symbol}</div>
-              <div className="mt-1 text-[13px] text-ink-mid">{NVDA.name}, with your cash</div>
-            </div>
-            <Summary rows={[{ label: "You pay", value: formatUsd(usd) }, { label: "Price", value: formatUsd(NVDA.price) }, NETWORK_FEE_ROW]} />
-            <div className="mt-1 flex gap-2">
-              <Button variant="soft" onClick={() => setStep("amount")}>Back</Button>
-              <div className="flex-1"><FaceIdButton label="Confirm with Face ID" phase="idle" size="md" onClick={finish} /></div>
-            </div>
-          </div>
-        )}
+    <SheetShell open={open} onOpenChange={onOpenChange} title={`Buy ${NVDA.name}`} onBack={() => onOpenChange(false)}>
+      <SheetSteps stepKey="amount">
+        <div className="flex flex-col gap-3">
+          <AmountField
+            label="You pay"
+            source={<AmountSource>Cash</AmountSource>}
+            badge={<AmountBadge kind="cash" />}
+            value={amount}
+            onValue={setAmount}
+            onMax={() => setAmount(CASH.toFixed(2))}
+            hint={`Cash available: ${formatUsd(CASH)}`}
+          />
+          <Summary rows={[{ label: "Arrives", value: "In seconds" }, NETWORK_FEE_ROW]} />
+          {usd > CASH && <Button variant="dark" disabled className="mt-1">That’s more than your cash ({formatUsd(CASH)})</Button>}
+          <TxButton label="Buy" phase="idle" size="md" disabled={usd <= 0 || usd > CASH} onClick={finish} />
+        </div>
       </SheetSteps>
     </SheetShell>
   );

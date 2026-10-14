@@ -4,9 +4,8 @@ import { useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { FeedCard, FeedDays } from "@/components/gg/Activity";
-import { AgentConfirm, AgentSheet, type ConfirmView } from "@/components/gg/AgentSheet";
+import { AgentSheet } from "@/components/gg/AgentSheet";
 import { AgentRow, AgentsFeed, AgentsView, AttentionCard, MixBar, TurnOffAll } from "@/components/gg/Agents";
-import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import type { AgentRow as FeedAgentRow } from "@/hooks/useAgentFeed";
 import { useNowSec } from "@/hooks/useNowSec";
 import type { AgentEvent } from "@/lib/agents/events";
@@ -16,15 +15,11 @@ import {
   AGENT_NAME,
   agentCards,
   agentItems,
-  allOffCopy,
-  confirmFor,
   longDateText,
-  limitText,
   TAB_JOBS,
   timeText,
   type Agent,
   type AgentItem,
-  type SheetAction,
 } from "@/lib/agents/list";
 import { rebalanceOptions } from "@/lib/agents/mix";
 import { agentNexts, defaultNumbers, type NextInput } from "@/lib/agents/next";
@@ -41,9 +36,11 @@ import { RebalanceStateBody } from "../RebalanceDemo";
  *   ?view=cards                   every card
  *   ?view=rows                    each row state
  *   ?view=notlive                 today: no executor configured
- *   &sheet=protect|rebalance [&step=on|off|renew]   a sheet open, or its confirm step
- *   &sheet=all-off                "Turn off all agents" and its Face ID count
+ *   &sheet=protect|rebalance      a sheet open
+ * Every switch, Renew and Turn off goes straight to JAW's own sheet in the app; here it only says so.
  */
+
+const NOTHING_SIGNED = () => toast("Dev gallery: nothing is signed");
 
 const usdc = (x: number) => BigInt(Math.round(x * 1e6));
 const WAD = 10n ** 18n;
@@ -121,12 +118,10 @@ export function AgentsGallery() {
   const nowSec = useNowSec();
   const nowMs = nowSec * 1000;
   const view = (["cards", "rows", "notlive"].includes(params.get("view") ?? "") ? params.get("view") : "live") as View;
-  const [sheet, setSheet] = useState<{ agent: Agent; step: SheetAction | null } | null>(() => {
+  const [sheet, setSheet] = useState<Agent | null>(() => {
     const a = params.get("sheet") as Agent | null;
-    const step = params.get("step") as SheetAction | null;
-    return a && a in AGENT_JOBS ? { agent: a, step: step && ["on", "off", "renew"].includes(step) ? step : null } : null;
+    return a && a in AGENT_JOBS ? a : null;
   });
-  const [allOff, setAllOff] = useState(params.get("sheet") === "all-off");
   if (!nowSec) return null;
 
   const live = view !== "notlive";
@@ -155,16 +150,15 @@ export function AgentsGallery() {
       })
     : [];
 
-  const open = (agent: Agent, step: SheetAction | null) => setSheet({ agent, step });
-  // One Face ID for each of Protect's and Rebalance's grants that's on: Protect's two on the cards view, all three otherwise.
-  const allOffIds = live ? TAB_JOBS.filter((j) => status[j] !== "off").length : 0;
+  // One JAW sheet for each of Protect's and Rebalance's grants that's on: Protect's two on the cards view, all three otherwise.
+  const allOffSteps = live ? TAB_JOBS.filter((j) => status[j] !== "off").length : 0;
   const row = (item: AgentItem, mix = live) => (
     <AgentRow
       key={`${item.agent}-${item.status}`}
       item={item}
       switchable={live && item.status !== "loading"}
-      onOpen={() => open(item.agent, null)}
-      onSwitch={(on) => open(item.agent, on ? "on" : "off")}
+      onOpen={() => setSheet(item.agent)}
+      onSwitch={NOTHING_SIGNED}
       extra={item.agent === "rebalance" && mix ? <MixBar mixBps={MIX} /> : undefined}
     />
   );
@@ -174,7 +168,7 @@ export function AgentsGallery() {
       <AgentsView
         live={live}
         cards={cards.map((c) => (
-          <AttentionCard key={c.key} card={c} onRenew={(agent) => open(agent, "renew")} />
+          <AttentionCard key={c.key} card={c} onRenew={NOTHING_SIGNED} />
         ))}
         rows={view === "rows" ? <RowStates nowSec={nowSec} row={(item) => row(item, false)} /> : items.map((item) => row(item))}
         feed={
@@ -189,31 +183,15 @@ export function AgentsGallery() {
             onShowEarlier={() => {}}
           />
         }
-        turnOffAll={<TurnOffAll faceIds={allOffIds} live={live} disabled={false} onClick={() => setAllOff(true)} />}
+        turnOffAll={<TurnOffAll steps={allOffSteps} live={live} disabled={false} onClick={NOTHING_SIGNED} />}
       />
-      <SheetShell open={allOff} onOpenChange={setAllOff} title="Turn off all agents">
-        <SheetSteps stepKey="all-off" className="flex flex-col gap-3.5">
-          <AgentConfirm
-            confirm={{
-              ...allOffCopy(allOffIds),
-              busy: false,
-              error: null,
-              blocked: live ? null : "Not live yet",
-              preview: false,
-              onConfirm: () => toast("Dev gallery: nothing is signed"),
-            }}
-          />
-        </SheetSteps>
-      </SheetShell>
       {sheet && (
         <GallerySheet
-          agent={sheet.agent}
-          step={sheet.step}
-          item={items.find((i) => i.agent === sheet.agent)!}
+          agent={sheet}
+          item={items.find((i) => i.agent === sheet)!}
           live={live}
           nowSec={nowSec}
           rows={rows}
-          onStep={(step) => setSheet({ ...sheet, step })}
           onClose={() => {
             setSheet(null);
             router.replace(`/dev/ui/agents${view === "live" ? "" : `?view=${view}`}`);
@@ -245,39 +223,26 @@ function RowStates({ nowSec, row }: { nowSec: number; row: (item: AgentItem) => 
 }
 
 function GallerySheet({
-  agent, step, item, live, nowSec, rows, onStep, onClose,
+  agent, item, live, nowSec, rows, onClose,
 }: {
   agent: Agent;
-  step: SheetAction | null;
   item: AgentItem;
   live: boolean;
   nowSec: number;
   rows: FeedAgentRow[];
-  onStep: (step: SheetAction | null) => void;
   onClose: () => void;
 }) {
   const name = AGENT_NAME[agent];
-  const main = AGENT_JOBS[agent][0];
-  const faceIds = step === "off" ? AGENT_JOBS[agent].length : 1;
-  const confirm: ConfirmView | null = step
-    ? {
-        ...confirmFor({ kind: step, agent, limit: limitText(item.limitUsd, main), untilSec: nowSec + 365 * 86_400, faceIds }),
-        busy: false,
-        error: null,
-        blocked: live ? null : "Not live yet",
-        preview: false,
-        onConfirm: () => toast("Dev gallery: nothing is signed"),
-      }
-    : null;
   const activity = rows.filter((r) => r.by === name);
   return (
     <AgentSheet
       open
       onClose={onClose}
       item={item}
-      confirm={confirm}
-      onBack={() => onStep(null)}
       live={live}
+      busy={false}
+      error={null}
+      offSteps={AGENT_JOBS[agent].length}
       stops={item.on ? longDateText(nowSec + 200 * 86_400) : null}
       settings={
         // The real settings bodies, drawn from their fixtures (ProtectDemos, RebalanceDemo).
@@ -292,7 +257,7 @@ function GallerySheet({
           {live && activity.length ? <FeedDays rows={activity} nowMs={nowSec * 1000} /> : <p className="m-0 py-3.5 text-sm text-ink-mid">Nothing yet.</p>}
         </FeedCard>
       }
-      onAction={onStep}
+      onAction={NOTHING_SIGNED}
     />
   );
 }

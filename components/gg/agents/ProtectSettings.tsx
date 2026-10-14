@@ -5,7 +5,7 @@ import { isAddressEqual } from "viem";
 import { useAccount } from "wagmi";
 import { toast } from "sonner";
 import { CardTitle, ManageCard, SaveFooter } from "@/components/gg/Manage";
-import { LimitChips } from "@/components/gg/LimitChips";
+import { LimitChips, neverMoreThan } from "@/components/gg/LimitChips";
 import { StockAvatar } from "@/components/gg/StockAvatar";
 import { NETWORK_FEE_ROW } from "@/components/gg/Summary";
 import { Switch } from "@/components/gg/Switch";
@@ -16,13 +16,11 @@ import { usePosition } from "@/hooks/usePosition";
 import { useProtectSave } from "@/hooks/useProtectSave";
 import type { TxPhase } from "@/hooks/useTx";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
-import { limitRaw } from "@/lib/agents/permissions";
+import { LIMIT_USD, limitRaw, testCapNote } from "@/lib/agents/permissions";
 import {
-  faceIdCount,
-  faceIdWords,
-  PROTECT_LIMIT_USD,
   protectSteps,
   savedChoice,
+  stepCount,
   type ProtectChoice,
   type ProtectSaved,
   type ProtectStep,
@@ -45,8 +43,8 @@ const running = (s: AgentStatus) => s === "on" || s === "starting";
 /**
  * Protect's settings, for the agent sheet's settings slot: repay from cash (always first) at a daily limit, selling
  * backing stock as its own switch (Job.ProtectSell), what it sells first (`setKeepMix`) and the never-sell list (stocks
- * left out of a new sell grant). Everything comes from the chain through the agents' hooks; saving takes one Face ID a
- * change (`useProtectSave`). Without an executor it renders the real figures and saves nothing ("Not live yet").
+ * left out of a new sell grant). Everything comes from the chain through the agents' hooks; saving opens JAW's sheet
+ * once a change (`useProtectSave`). Without an executor it renders the real figures and saves nothing ("Not live yet").
  */
 export function ProtectSettings({ account, onDone }: { account: `0x${string}`; onDone?: () => void }) {
   const { address } = useAccount();
@@ -80,7 +78,7 @@ export function ProtectSettings({ account, onDone }: { account: `0x${string}`; o
       backsUsd={EQUITIES.map((e) => (data.holdings[e.reserveId].lockedRaw > 0n ? data.holdings[e.reserveId].lockedUsd : 0))}
       pricesRaw={EQUITIES.map((e) => data.holdings[e.reserveId].priceRaw)}
       capMaxRaw={agents.capMaxRaw}
-      // Turning selling off revokes each sell grant JAW lists that hasn’t ended (useAgents.turnOff): one Face ID each.
+      // Turning selling off revokes each sell grant JAW lists that hasn’t ended (useAgents.turnOff): one JAW sheet each.
       sellGrants={agents.faceIdsOff(["sell"])}
       feeBlocked={!!address && fee.state === "unsupported"}
       waiting={fee.loading || agents.busy}
@@ -112,7 +110,7 @@ export type ProtectSettingsViewProps = {
   /** Aave's prices by reserve id (8 decimals), for a sell grant's stock limits. */
   pricesRaw: readonly bigint[];
   capMaxRaw: bigint | null;
-  /** Sell grants JAW lists that haven’t ended: one Face ID each to switch selling off. */
+  /** Sell grants JAW lists that haven’t ended: one JAW sheet each to switch selling off. */
   sellGrants: number;
   feeBlocked: boolean;
   /** Something still loading or signing elsewhere (fee support, an agent switch). */
@@ -128,6 +126,8 @@ export function ProtectSettingsView({
   live, preview, saved, backsUsd, pricesRaw, capMaxRaw, sellGrants, feeBlocked, waiting = false, phase, error, busy, onSave,
 }: ProtectSettingsViewProps) {
   const [chosen, setChosen] = useState<Partial<ProtectChoice>>({});
+  // A Custom limit that isn't a number of dollars yet: nothing to save until it is.
+  const [limitTyped, setLimitTyped] = useState(true);
   const start = savedChoice(saved);
   const choice: ProtectChoice = { ...start, ...chosen };
   const set = (c: Partial<ProtectChoice>) => setChosen((p) => ({ ...p, ...c }));
@@ -135,7 +135,7 @@ export function ProtectSettingsView({
   const capMax = capMaxRaw ?? BigInt(choice.limitUsd) * 10n ** 6n;
   const plan = protectSteps(saved, choice, { capMaxRaw: capMax, pricesRaw });
   const steps = live ? plan.steps : [];
-  const faceIds = faceIdCount(steps, sellGrants);
+  const count = stepCount(steps, sellGrants);
   const limitUsd = toUsd(limitRaw(choice.limitUsd, capMax));
   // Selling's own limit while untouched (a grant from before can differ), Protect's otherwise.
   const sellUsd = saved.sell && chosen.limitUsd === undefined ? toUsd(saved.sell.capRaw) : limitUsd;
@@ -143,12 +143,13 @@ export function ProtectSettingsView({
 
   // While repaying from cash is off, saving switches Protect on (protectSteps).
   const off = saved.repayCapRaw === null;
-  const canSave = live && !preview && !feeBlocked && !waiting && !busy && !plan.blocked && steps.length > 0 && capMaxRaw !== null;
+  const canSave =
+    live && limitTyped && !preview && !feeBlocked && !waiting && !busy && !plan.blocked && steps.length > 0 && capMaxRaw !== null;
   const note = !live
     ? "Not live yet"
     : feeBlocked
       ? "Your account can’t pay network fees in USDC on Base right now."
-      : (plan.blocked ?? (faceIds > 0 ? faceIdWords(faceIds) : null));
+      : plan.blocked;
 
   const neverChanged = choice.never.length !== start.never.length || choice.never.some((r) => !start.never.includes(r));
   const lines = steps.flatMap((s) => {
@@ -168,20 +169,30 @@ export function ProtectSettingsView({
   return (
     <div className="flex flex-col gap-3.5 leading-[normal]">
       <ManageCard className="flex flex-col gap-3 px-4 py-3.5">
-        <CardTitle title="Repay from your cash" sub="Always first. Your cash pays before any stock is sold." />
+        <CardTitle title="Daily limit" sub={neverMoreThan("Protect", "day")} />
         <LimitChips
-          label="Protect’s limit, a day"
-          options={PROTECT_LIMIT_USD.options}
+          label="Daily limit"
+          options={LIMIT_USD.protect.options}
           value={choice.limitUsd}
-          onChange={(usd) => set({ limitUsd: usd })}
-          per="a day"
+          onChange={(usd) => {
+            setLimitTyped(usd !== null);
+            if (usd !== null) set({ limitUsd: usd });
+          }}
           size="md"
+          custom
         />
+        {limitTyped && testCapNote(choice.limitUsd, capMaxRaw) && (
+          <span className="text-xs leading-[1.4] text-subtle">{testCapNote(choice.limitUsd, capMaxRaw)}</span>
+        )}
         {live && off && <span className="text-xs leading-[1.4] text-subtle">Off now. It starts on this limit when you switch it on.</span>}
       </ManageCard>
 
       <ManageCard className="flex flex-col px-4 py-0.5">
-        <div className="flex items-center gap-3 py-[13px]">
+        <div className="flex flex-col gap-0.5 py-[13px]">
+          <span className="text-[15px] font-semibold">Repay from your cash</span>
+          <span className="text-xs leading-[1.35] text-subtle">Always first. Your cash pays before any stock is sold.</span>
+        </div>
+        <div className="flex items-center gap-3 border-t border-hairline py-[13px]">
           <div className="flex grow flex-col gap-0.5">
             <span className="text-[15px] font-semibold">Sell stock if cash isn’t enough</span>
             <span className="text-xs leading-[1.35] text-subtle">Only stock that backs your credit, up to {formatUsdTrim(sellUsd)} a day</span>
@@ -248,7 +259,7 @@ export function ProtectSettingsView({
         )}
       </ManageCard>
 
-      {lines.length > 0 && (
+      {limitTyped && lines.length > 0 && (
         <div className="flex flex-col gap-1.5 rounded-[16px] bg-card-bone px-[13px] pb-3 pt-[11px] text-[13px]">
           <span className="font-semibold">{off ? "Switching on does" : "Saving does"}</span>
           <ul className="m-0 flex list-none flex-col gap-1 p-0 text-ink-2">
@@ -263,8 +274,9 @@ export function ProtectSettingsView({
       )}
 
       <SaveFooter
-        label={live && off ? "Switch on with Face ID" : "Save with Face ID"}
+        label={live && off ? "Switch on" : "Save"}
         phase={phase}
+        steps={count}
         disabled={!canSave}
         preview={live && preview}
         onSave={() => onSave(steps)}

@@ -4,7 +4,7 @@ import { Tap } from "./Tap";
 /**
  * Pill buttons from the canvas:
  *   primary  lime, the one main action (HomeCreditSlide "Repay", PortfolioPage "Credit Buy")
- *   dark     ink (F1-4 "Review buy")
+ *   dark     ink ("That’s more than your cash", Credit Buy's "Continue")
  *   soft     grey (HomeCreditSlide "Buy more", F2-6 "Back")
  *   white    card (PortfolioPage "Market")
  * md is the 52px sheet and card size; lg is the 56px CTA at the foot of a page (CreditOn).

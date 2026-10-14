@@ -60,7 +60,7 @@ export function agentStatus(agent: Agent, status: Readonly<Record<AgentJob, Agen
   return (["unconfigured", "loading", "on", "starting"] as const).find((x) => s.includes(x)) ?? "off";
 }
 
-/** "$1,000 a day", "$500 a week". */
+/** "$100 a day", "$100 a week". */
 export const limitText = (usd: number, job: AgentJob) => `${formatUsdTrim(usd)} a ${LIMIT_USD[job].per}`;
 const usdOf = (raw: bigint) => Number(raw) / 10 ** USDC.decimals;
 
@@ -88,7 +88,7 @@ export type AgentItem = {
   /** The switch: on while the agent runs or is starting. */
   on: boolean;
   line: string;
-  /** "$1,000 a day": the grant's limit while it has one, the one it starts on otherwise. */
+  /** "Limit $100 a day": the grant's limit while it has one, the one it starts on otherwise. */
   limit: string;
   limitUsd: number;
 };
@@ -114,7 +114,7 @@ export function agentItems(i: AgentItemsInput): AgentItem[] {
       status,
       on: status === "on" || status === "starting",
       line: nextLine(status, i.next[agent]),
-      limit: limitText(limitUsd, job),
+      limit: `Limit ${limitText(limitUsd, job)}`,
       limitUsd,
     };
   });
@@ -232,64 +232,5 @@ export function agentCards(i: CardsInput): AgentCard[] {
   return cards;
 }
 
-/*
- * The confirm step: what a switch, a limit, a renewal or turning off does, said before JAW's own screen.
- */
-
-/** What an agent's sheet can do, each a JAW grant or revoke. Its limit is changed in its settings body. */
+/** What an agent's sheet can do, each a JAW grant or revoke on JAW's own sheet. Its limit is set in its body. */
 export type SheetAction = "on" | "off" | "renew";
-
-/** "One Face ID", "2 Face IDs". */
-export const faceIdText = (n: number) => (n === 1 ? "One Face ID" : `${n} Face IDs`);
-const faceIdNote = (n: number) => (n > 1 ? `${faceIdText(n)}, one for each limit you signed` : faceIdText(n));
-
-const lower = (s: string) => s[0].toLowerCase() + s.slice(1);
-
-export type ConfirmCopy = { title: string; lead: string; rows: { label: string; value: string }[]; button: string; note: string };
-
-/**
- * The confirm step's words. `limit` is what the agent will run with ("$300 a day"), `untilSec` when a new grant would
- * end, `faceIds` how many JAW screens it takes.
- */
-export function confirmFor(a: { kind: SheetAction; agent: Agent; limit: string; untilSec: number; faceIds: number }): ConfirmCopy {
-  const name = AGENT_NAME[a.agent];
-  const until = { label: "Until", value: longDateText(a.untilSec) };
-  const note = faceIdNote(a.faceIds);
-  switch (a.kind) {
-    case "on":
-      return {
-        title: `Switch on ${name}`,
-        lead: `${name} ${lower(AGENT_COPY[a.agent].does)}, up to ${a.limit}. JAW shows the limit on its own screen before you sign.`,
-        rows: [{ label: "Limit", value: a.limit }, until],
-        button: "Switch on with Face ID",
-        note,
-      };
-    case "renew":
-      return {
-        title: `Renew ${name}`,
-        lead: `${name} runs for another year, up to ${a.limit}.`,
-        rows: [{ label: "Limit", value: a.limit }, until],
-        button: "Renew with Face ID",
-        note,
-      };
-    case "off":
-      return {
-        title: `Turn off ${name}`,
-        lead: `${name} stops at once. Switching it back on takes a new Face ID.`,
-        rows: [],
-        button: "Turn off with Face ID",
-        note,
-      };
-  }
-}
-
-/** "Turn off all agents": one JAW screen for each grant that hasn't ended. */
-export function allOffCopy(faceIds: number): ConfirmCopy {
-  return {
-    title: "Turn off all agents",
-    lead: "Every agent stops at once. Switching one back on takes a new Face ID.",
-    rows: [],
-    button: "Turn off with Face ID",
-    note: faceIdNote(faceIds),
-  };
-}

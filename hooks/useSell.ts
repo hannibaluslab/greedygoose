@@ -25,7 +25,7 @@ export function useSellQuote(stock: ReserveAsset | undefined, sharesRaw: bigint)
 export type SellInput = {
   user: `0x${string}`;
   stock: ReserveAsset;
-  /** The quote the review shows. */
+  /** The quote the screen shows. */
   quote: SellQuote;
   /** planSell for that quote. */
   plan: SellPlan;
@@ -42,8 +42,8 @@ const FALLBACK: Record<SellFrom, string> = {
 };
 
 /**
- * Sell stock in one Face ID (plan item 7 steps 2, 3 and 9): free shares, a backing holding, or a backing
- * holding sold to repay. The review's block still holds, and the quote is read again right before Face ID.
+ * Sell stock in one batch (plan item 7 steps 2, 3 and 9): free shares, a backing holding, or a backing
+ * holding sold to repay. The screen's block still holds, and the quote is read again right before JAW's sheet.
  */
 export function useSell() {
   const tx = useTx("The sale didn’t go through on Base. Nothing moved except any network fee.");

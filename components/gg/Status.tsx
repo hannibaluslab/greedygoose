@@ -32,7 +32,7 @@ export function StatusPill({ status, size = "md" }: { status: Status; size?: Sta
 }
 
 /**
- * "Safe → Watch" on a review screen (F2-6). Geist has no "→", so the arrow is set in the system
+ * "Safe → Watch" in a summary before JAW's sheet. Geist has no "→", so the arrow is set in the system
  * font, as the board draws it, rather than the Arial-based fallback next/font puts after Geist.
  */
 export function StatusChange({ from, to }: { from: Status; to: Status }) {

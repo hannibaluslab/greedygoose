@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { parseUnits } from "viem";
 import { useAccount } from "wagmi";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
@@ -10,8 +10,7 @@ import { MarketList, MarketRow } from "./Market";
 import { StatusChange } from "./Status";
 import { tickerOf } from "./StockAvatar";
 import { NETWORK_FEE_ROW, Summary, type SummaryRow } from "./Summary";
-import { FaceIdButton, TxError } from "./TxUi";
-import { CreditIcon } from "./icons";
+import { TxButton, TxError } from "./TxUi";
 import { useBoughtHome } from "@/hooks/useBoughtHome";
 import { useBuy } from "@/hooks/useBuy";
 import { useBuyQuote } from "@/hooks/useBuyQuote";
@@ -30,17 +29,18 @@ import { VENUE_LABEL } from "@/lib/swap/venues";
 import { rawToShares } from "@/lib/tokens/b20";
 import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
 
-type Step = "market" | "amount" | "review";
-const ORDER: Step[] = ["market", "amount", "review"];
+type Step = "market" | "amount";
+const ORDER: Step[] = ["market", "amount"];
 
 const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
 
 /**
- * Flow 1: Market (F1-3) → the stock's sheet → Buy (F1-4) → Confirm (F2-6's layout; there is no
- * F1-5 board), then Home with the "Bought …" toast (F1-6). A Market row opens the stock's sheet
- * (StockSheets), whose Buy opens this sheet again at the Buy step. More than your cash (decision 1):
- * Review is blocked and one button takes credit for the other part, so the review becomes one batch:
- * withdraw savings, take credit, approve, swap; unless "Use credit for buying" is off on the Credit sheet.
+ * Flow 1: Market (F1-3) → the stock's sheet → Buy (F1-4), then Home with the "Bought …" toast (F1-6). A Market row
+ * opens the stock's sheet (StockSheets), whose Buy opens this sheet again at the Buy step. There is no confirm step of
+ * ours: the Buy step says what you get, what moves and the fee, and its button opens JAW's own sheet (its Review and
+ * Face ID). More than your cash (decision 1): "That's more than your cash" and one button that takes credit for the
+ * other part, in one batch: withdraw savings, take credit, approve, swap; unless "Use credit for buying" is off on the
+ * Credit sheet.
  */
 export function BuySheet({
   open, user, data, symbol: initial, onClose, onStock, onBack,
@@ -102,7 +102,8 @@ export function BuySheet({
   else if (plan?.block) blocker = CREDIT_BLOCKED[plan.block];
   const warnPremium = !!econ && econ.premium > BUY_LIMITS.warnPremium && !blocker;
   const feeBlocked = isConnected && fee.state === "unsupported";
-  const ready = amount > 0 && !!q && !blocker && !quote.isFetching && (!over || !!plan);
+  // Past your cash, it can go ahead only with its credit plan: never a cash buy for more than the cash.
+  const ready = amount > 0 && !!q && !!econ && !blocker && !quote.isFetching && (!over || !!plan);
   const note =
     blocker ??
     (warnPremium && stock
@@ -112,26 +113,25 @@ export function BuySheet({
         : null);
 
   const back = () => {
-    if (step === "amount") {
-      if (onBack) onBack();
-      else go("market");
-    }
-    else if (busy) onClose();
-    else {
-      if (phase === "failed") reset();
-      setAck(false);
-      go("amount");
-    }
+    if (busy) onClose();
+    else if (onBack) onBack();
+    else go("market");
   };
 
   // F1-3: every stock in one list, A to Z, the ones you own marked "You own $X".
   const stocks = [...data.holdings].sort(byName);
+  const sign = () => {
+    if (!stock || !q) return;
+    if (phase === "failed") reset();
+    void buy({ user, stock, quote: q, credit: plan ? { plan, confirmedRisk: ack } : undefined });
+  };
+  const disabled = !ready || feeBlocked || fee.loading || (!!plan?.extraConfirm && !ack) || phase === "done";
 
   return (
     <SheetShell
       open={open}
       onOpenChange={(next) => !next && onClose()}
-      title={step === "market" || !stock ? "Market" : step === "amount" ? `Buy ${stock.name}` : "Confirm"}
+      title={step === "market" || !stock ? "Market" : `Buy ${stock.name}`}
       description={step === "market" ? "Pick one to buy." : undefined}
       topPx={step === "market" ? 188 : undefined}
       onBack={step === "market" ? undefined : back}
@@ -150,84 +150,91 @@ export function BuySheet({
               />
             ))}
           </MarketList>
-        ) : step === "amount" ? (
+        ) : (
           <>
             <AmountField
               label="You pay"
               source={<AmountSource>Cash</AmountSource>}
               badge={<AmountBadge kind="cash" />}
               value={raw}
-              onValue={setRaw}
+              onValue={(v) => {
+                setRaw(v);
+                // The risk tick is for the plan on screen; a new amount asks again.
+                setAck(false);
+              }}
               autoFocus
-              onMax={() => setRaw((Math.floor(maxUsd * 100) / 100).toString())}
+              onMax={() => {
+                setRaw((Math.floor(maxUsd * 100) / 100).toString());
+                setAck(false);
+              }}
               hint={`Cash available: ${formatUsd(cashUsd)}`}
             />
             <AmountArrow />
             <YouGet symbol={stock.symbol} shares={quote.isFetching && amount > 0 ? null : econ ? econ.shares : 0} priceUsd={econ ? econ.price : oraclePriceUsd} />
-            <Summary look="box" rows={[{ label: "Arrives", value: "In seconds" }, NETWORK_FEE_ROW]} />
+            <Summary rows={plan && split ? creditRows(data, plan, split.cashRaw) : [{ label: "Arrives", value: "In seconds" }, NETWORK_FEE_ROW]} />
             {note && (
               <p role="status" className={`m-0 text-[13px] leading-snug ${blocker ? "text-act" : "text-watch-text"}`}>{note}</p>
             )}
+            {ready && q && econ && (
+              <SmallPrint
+                data={data}
+                stock={stock}
+                econ={econ}
+                minShares={Number(minOut(q.amountOut)) / 10 ** stock.decimals}
+                venue={VENUE_LABEL[q.venue]}
+                credit={plan && split ? { plan, cashRaw: split.cashRaw } : null}
+              />
+            )}
+            {ready && plan?.extraConfirm && (
+              <label className="flex items-start gap-2.5 rounded-2xl bg-act-bg px-4 py-3 text-[13px] leading-snug text-act">
+                <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-px size-[18px] shrink-0 accent-[#8e2a1d]" />
+                I understand this puts my credit in {STATUS_LABEL[plan.after]}. If my stocks fall, Aave can sell part of them.
+              </label>
+            )}
+            {feeBlocked && (
+              <p role="alert" className="m-0 text-[13px] text-act">
+                Your account can’t pay network fees in USDC on Base right now, so this buy can’t go through.
+              </p>
+            )}
+            <TxError error={error} />
             {over ? (
               <>
                 <Button variant="dark" disabled className="mt-1">That’s more than your cash ({formatUsd(cashUsd)})</Button>
                 {!blocker && (
-                  <Button icon={<CreditIcon size={18} strokeWidth={1.8} />} disabled={!ready} onClick={() => go("review")}>
-                    Use credit for the other {formatUsd(creditUsd)}
-                  </Button>
+                  <TxButton label={`Use credit for the other ${formatUsd(creditUsd)}`} size="md" phase={phase} preview={!isConnected} disabled={disabled} onClick={sign} />
                 )}
               </>
             ) : (
-              <Button variant="dark" disabled={!ready} onClick={() => go("review")} className="mt-1">Review buy</Button>
+              <div className="mt-1">
+                <TxButton label="Buy" size="md" phase={phase} preview={!isConnected} disabled={disabled} onClick={sign} />
+              </div>
             )}
           </>
-        ) : (
-          q &&
-          econ &&
-          // Past your cash, the review exists only with its credit plan: never a cash review for more than the cash.
-          (!over || plan) && (
-            <Review
-              data={data}
-              stock={stock}
-              econ={econ}
-              minShares={Number(minOut(q.amountOut)) / 10 ** stock.decimals}
-              venue={VENUE_LABEL[q.venue]}
-              credit={plan && split ? { plan, cashRaw: split.cashRaw } : null}
-              note={note}
-              blocked={!!blocker}
-              ack={ack}
-              onAck={setAck}
-              feeBlocked={feeBlocked}
-              error={error}
-              onBack={back}
-              button={
-                <FaceIdButton
-                  label="Confirm with Face ID"
-                  size="md"
-                  phase={phase}
-                  preview={!isConnected}
-                  disabled={!!blocker || (over && !plan) || (!!plan?.extraConfirm && !ack) || feeBlocked || fee.loading || phase === "done"}
-                  onClick={() => {
-                    if (phase === "failed") reset();
-                    void buy({ user, stock, quote: q, credit: plan ? { plan, confirmedRisk: ack } : undefined });
-                  }}
-                />
-              }
-              busy={busy}
-            />
-          )
         )}
       </SheetSteps>
     </SheetShell>
   );
 }
 
-/**
- * The confirm step, in F2-6's layout: "$20.00 → 0.1120 NVDA", the summary table, the small print that
- * lists every move in the batch (D7), then Back and Face ID.
- */
-function Review({
-  data, stock, econ, minShares, venue, credit, note, blocked, ack, onAck, feeBlocked, error, onBack, button, busy,
+/** Decision 1's facts, in the amount step's box: what cash and credit each pay, the cost and the status after. */
+function creditRows(data: PositionData, plan: CreditPlan, cashRaw: bigint): SummaryRow[] {
+  const creditUsd = toUsd(plan.creditRaw);
+  const backers = plan.backing.length ? plan.backing.map((b) => b.stock.name) : data.holdings.filter((h) => h.lockedRaw > 0n).map((h) => h.name);
+  return [
+    { label: "From your cash", value: formatUsd(toUsd(cashRaw)) },
+    { label: "On credit", value: formatUsd(creditUsd) },
+    { label: "Backed by", value: backers.length > 2 ? `${backers.length} of your stocks` : inWords(backers) },
+    { label: "Cost", value: `${formatUsd(monthlyCost(creditUsd, data.apr))} / month` },
+    { label: "You owe after", value: formatUsd(data.debtUsd + creditUsd) },
+    // No debt yet is as safe as it gets: the board reads "Safe → Safe" for a first Credit Buy.
+    { label: "Status", value: <StatusChange from={plan.before === "none" ? "safe" : plan.before} to={plan.after} /> },
+    NETWORK_FEE_ROW,
+  ];
+}
+
+/** The small print under the Buy step: every move in the batch (D7), the price guard, and what the stock is. */
+function SmallPrint({
+  data, stock, econ, minShares, venue, credit,
 }: {
   data: PositionData;
   stock: ReserveAsset;
@@ -236,84 +243,23 @@ function Review({
   venue: string;
   /** Decision 1: the credit plan for the part cash can't pay, and what cash pays. */
   credit: { plan: CreditPlan; cashRaw: bigint } | null;
-  note: string | null;
-  blocked: boolean;
-  ack: boolean;
-  onAck: (ack: boolean) => void;
-  feeBlocked: boolean;
-  error: string | null;
-  onBack: () => void;
-  button: ReactNode;
-  busy: boolean;
 }) {
   const ticker = tickerOf(stock.symbol);
   const plan = credit?.plan;
-  const creditUsd = plan ? toUsd(plan.creditRaw) : 0;
-  const backers = plan
-    ? plan.backing.length
-      ? plan.backing.map((b) => b.stock.name)
-      : data.holdings.filter((h) => h.lockedRaw > 0n).map((h) => h.name)
-    : [];
-
-  const rows: SummaryRow[] = credit
-    ? [
-        { label: "From your cash", value: formatUsd(toUsd(credit.cashRaw)) },
-        { label: "On credit", value: formatUsd(creditUsd) },
-        { label: "Backed by", value: backers.length > 2 ? `${backers.length} of your stocks` : inWords(backers) },
-        { label: "Cost", value: `${formatUsd(monthlyCost(creditUsd, data.apr))} / month` },
-        { label: "You owe after", value: formatUsd(data.debtUsd + creditUsd) },
-        // No debt yet is as safe as it gets: the board reads "Safe → Safe" for a first Credit Buy.
-        { label: "Status", value: <StatusChange from={credit.plan.before === "none" ? "safe" : credit.plan.before} to={credit.plan.after} /> },
-        NETWORK_FEE_ROW,
-      ]
-    : [
-        { label: "You pay", value: formatUsd(econ.usd) },
-        { label: "Price", value: formatUsd(econ.price) },
-        { label: "You get at least", value: `${minShares.toFixed(4)} ${ticker}` },
-        { label: "Via", value: venue },
-        NETWORK_FEE_ROW,
-      ];
-
   const moves = [
     ...(plan?.backing ?? []).map((b) => {
       const h = data.holdings.find((x) => x.symbol === b.stock.symbol);
       return `${formatShares(rawToShares(b.raw, h?.multiplier ?? 10n ** 18n, b.stock.decimals))} ${tickerOf(b.stock.symbol)} goes in use to back credit`;
     }),
-    ...(plan ? [`${formatUsd(creditUsd)} of credit is taken`] : []),
+    ...(plan ? [`${formatUsd(toUsd(plan.creditRaw))} of credit is taken`] : []),
     `exactly ${formatUsd(econ.usd)} is approved for the ${venue} router and swapped`,
   ];
-
   return (
-    <>
-      <div className="pb-0.5 pt-1.5 text-center leading-[normal]">
-        <div className="num text-[25px] font-semibold tracking-[-0.03em]">
-          {formatUsd(econ.usd)} <span className="font-[system-ui]">→</span> {econ.shares.toFixed(4)} {ticker}
-        </div>
-        <div className="mt-1 text-[13px] text-ink-mid">{stock.name}, with your {plan ? "cash and credit" : "cash"}</div>
-      </div>
-      <Summary rows={rows} />
-      <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">
-        In one Face ID: {inWords(moves)}. If the price moves more than {BUY_LIMITS.slippageBps / 100}%, the buy is cancelled.{" "}
-        {plan && `Credit costs ${(data.apr * 100).toFixed(2)}% a year (variable). If your stocks fall too far, Aave can sell part of them to repay what you owe. `}
-        {stock.name} here is a tokenized stock. It tracks the share price; it is not company shares or voting rights.
-      </p>
-      {note && <p role="status" className={`m-0 text-[13px] leading-snug ${blocked ? "text-act" : "text-watch-text"}`}>{note}</p>}
-      {plan?.extraConfirm && (
-        <label className="flex items-start gap-2.5 rounded-2xl bg-act-bg px-4 py-3 text-[13px] leading-snug text-act">
-          <input type="checkbox" checked={ack} onChange={(e) => onAck(e.target.checked)} className="mt-px size-[18px] shrink-0 accent-[#8e2a1d]" />
-          I understand this puts my credit in {STATUS_LABEL[plan.after]}. If my stocks fall, Aave can sell part of them.
-        </label>
-      )}
-      {feeBlocked && (
-        <p role="alert" className="m-0 text-[13px] text-act">
-          Your account can’t pay network fees in USDC on Base right now, so this buy can’t go through.
-        </p>
-      )}
-      <TxError error={error} />
-      <div className="mt-1 flex items-start gap-2">
-        <Button variant="soft" onClick={onBack} disabled={busy}>Back</Button>
-        <div className="flex-1">{button}</div>
-      </div>
-    </>
+    <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">
+      In one go: {inWords(moves)}. You get at least {minShares.toFixed(4)} {ticker}: if the price moves more than{" "}
+      {BUY_LIMITS.slippageBps / 100}%, the buy is cancelled.{" "}
+      {plan && `Credit costs ${(data.apr * 100).toFixed(2)}% a year (variable). If your stocks fall too far, Aave can sell part of them to repay what you owe. `}
+      {stock.name} here is a tokenized stock. It tracks the share price; it is not company shares or voting rights.
+    </p>
   );
 }
