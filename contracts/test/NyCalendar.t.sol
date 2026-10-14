@@ -1,0 +1,142 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.28;
+
+import {Test} from "forge-std/Test.sol";
+import {GooseExecutor} from "../src/GooseExecutor.sol";
+import {IJustaPermissionManager} from "../src/IJustaPermissionManager.sol";
+import {IAaveV3Pool, IERC20, ISpoke} from "../src/IProtocols.sol";
+import {NyCalendar} from "../src/NyCalendar.sol";
+import {DeployExecutor} from "../script/DeployExecutor.s.sol";
+import {ExecutorHarness} from "./ExecutorHarness.sol";
+import {Vectors} from "./Vectors.sol";
+
+/// The executor's New York calendar (GooseExecutor.md §7): time-zone switches, the Friday window in summer and
+/// winter, holidays, and agreement with Leo's inWeekendWindow and the app's marketState on 10,000 timestamps.
+contract NyCalendarTest is Test {
+    ExecutorHarness x;
+
+    // UTC instants, checked against America/New_York.
+    uint256 constant DST_START_2026 = 1_772_953_200; // Sun 2026-03-08 07:00 UTC = 03:00 EDT
+    uint256 constant DST_END_2026 = 1_793_512_800; // Sun 2026-11-01 06:00 UTC = 01:00 EST
+    uint256 constant DST_START_2027 = 1_805_007_600; // Sun 2027-03-14 07:00 UTC
+    uint256 constant FRI_2026_10_16 = 1_792_108_800; // Fri 2026-10-16 00:00 UTC (summer time)
+    uint256 constant FRI_2026_12_04 = 1_796_342_400; // Fri 2026-12-04 00:00 UTC (winter time)
+
+    function setUp() public {
+        DeployExecutor d = new DeployExecutor();
+        bytes32[] memory none;
+        x = new ExecutorHarness(
+            GooseExecutor.Config({
+                manager: IJustaPermissionManager(makeAddr("manager")),
+                aaveV3Pool: IAaveV3Pool(makeAddr("pool")),
+                spoke: ISpoke(makeAddr("spoke")),
+                usdc: IERC20(makeAddr("usdc")),
+                aUsdc: IERC20(makeAddr("ausdc")),
+                usdcReserveId: 7,
+                capMax: 5e6,
+                pageSize: 48,
+                owner: address(this),
+                codehashes: none,
+                thresholds: d.thresholds(),
+                amounts: d.amounts()
+            })
+        );
+    }
+
+    function test_time_zone_switches_one_second_either_side() public pure {
+        assertEq(NyCalendar.offset(DST_START_2026 - 1), 5 hours);
+        assertEq(NyCalendar.offset(DST_START_2026), 4 hours);
+        assertEq(NyCalendar.offset(DST_END_2026 - 1), 4 hours);
+        assertEq(NyCalendar.offset(DST_END_2026), 5 hours);
+        assertEq(NyCalendar.offset(DST_START_2027 - 1), 5 hours);
+        assertEq(NyCalendar.offset(DST_START_2027), 4 hours);
+    }
+
+    function test_friday_window_in_summer() public view {
+        _fridayEdges(FRI_2026_10_16, 4 hours);
+    }
+
+    function test_friday_window_in_winter() public view {
+        _fridayEdges(FRI_2026_12_04, 5 hours);
+    }
+
+    /// The Fridays either side of each switch: 2026-03-06 (EST) and 2026-03-13 (EDT), 2026-10-30 (EDT) and
+    /// 2026-11-06 (EST).
+    function test_friday_window_in_switch_weeks() public view {
+        _fridayEdges(1_772_755_200, 5 hours);
+        _fridayEdges(1_773_360_000, 4 hours);
+        _fridayEdges(1_793_318_400, 4 hours);
+        _fridayEdges(1_793_923_200, 5 hours);
+    }
+
+    /// Sunday 20:00 New York reopens, in both the switch weekends.
+    function test_reopens_sunday_evening() public view {
+        uint256 sunMar8 = DST_START_2026 - 7 hours + 20 hours + 4 hours; // 2026-03-08 20:00 EDT
+        assertTrue(x.frozen(sunMar8 - 1));
+        assertFalse(x.frozen(sunMar8));
+        uint256 sunNov1 = DST_END_2026 - 6 hours + 20 hours + 5 hours; // 2026-11-01 20:00 EST
+        assertTrue(x.frozen(sunNov1 - 1));
+        assertFalse(x.frozen(sunNov1));
+        assertEq(x.nextFreeze(sunNov1 - 1), sunNov1 - 1, "while frozen, now");
+    }
+
+    /// Thanksgiving (Thu 2026-11-26): held from Wednesday 20:00 to Thursday 20:00, and Weekend Shield looks on
+    /// Wednesday afternoon.
+    function test_a_holiday_freezes_from_the_evening_before() public {
+        uint256 thu = 1_795_651_200; // 2026-11-26 00:00 UTC
+        x.setHolidayNow(uint32(thu / 1 days), true);
+        uint256 wed20 = thu - 1 days + 20 hours + 5 hours;
+        assertFalse(x.frozen(wed20 - 1));
+        assertTrue(x.frozen(wed20));
+        assertTrue(x.frozen(wed20 + 1 days - 1));
+        assertFalse(x.frozen(wed20 + 1 days), "Thursday 20:00 reopens for Friday");
+        assertEq(x.nextFreeze(wed20 - 6 hours), wed20);
+        assertTrue(x.preFreeze(wed20 - 6 hours));
+        assertFalse(x.preFreeze(wed20 - 6 hours - 1));
+    }
+
+    /// A Monday holiday (MLK, 2027-01-18) keeps the weekend freeze going until Monday 20:00; a Friday one (Good
+    /// Friday, 2027-03-26) starts it on Thursday.
+    function test_holidays_next_to_a_weekend() public {
+        uint256 mon = 1_800_230_400; // 2027-01-18 00:00 UTC
+        x.setHolidayNow(uint32(mon / 1 days), true);
+        uint256 sun20 = mon - 1 days + 20 hours + 5 hours;
+        assertTrue(x.frozen(sun20), "no Sunday reopening");
+        assertTrue(x.frozen(sun20 + 1 days - 1));
+        assertFalse(x.frozen(sun20 + 1 days));
+
+        uint256 goodFriday = 1_806_019_200; // 2027-03-26 00:00 UTC, summer time
+        x.setHolidayNow(uint32(goodFriday / 1 days), true);
+        uint256 thu20 = goodFriday - 1 days + 20 hours + 4 hours;
+        assertEq(x.nextFreeze(thu20 - 1 hours), thu20);
+        assertTrue(x.preFreeze(thu20 - 1 hours), "Weekend Shield moves to Thursday");
+        assertFalse(x.preFreeze(goodFriday + 15 hours + 4 hours), "and is over by Friday");
+        assertTrue(x.frozen(goodFriday + 2 days + 20 hours + 4 hours - 1), "until Sunday 20:00");
+    }
+
+    /// GooseExecutor.md §7: with no holiday and a 6-hour window, the pre-freeze window is Leo's inWeekendWindow
+    /// (plan.ts) and `frozen` is the app's "markets closed" (lib/market-hours).
+    function test_agrees_with_the_app_on_10000_timestamps() public view {
+        string memory json = vm.readFile("test/vectors/calendar.json");
+        bytes memory window = vm.parseJsonBytes(json, ".window");
+        bytes memory closed = vm.parseJsonBytes(json, ".frozen");
+        for (uint256 i; i < 10_000; ++i) {
+            uint256 ts = Vectors.calendarTime(i);
+            string memory at = string.concat("t = ", vm.toString(ts));
+            assertEq(x.preFreeze(ts), Vectors.bit(window, i), at);
+            assertEq(x.frozen(ts), Vectors.bit(closed, i), at);
+        }
+    }
+
+    function _fridayEdges(uint256 fridayUtc, uint256 offset) internal view {
+        uint256 at14 = fridayUtc + 14 hours + offset;
+        uint256 at20 = fridayUtc + 20 hours + offset;
+        assertFalse(x.preFreeze(at14 - 1), "13:59:59");
+        assertTrue(x.preFreeze(at14), "14:00");
+        assertTrue(x.preFreeze(at20 - 1), "19:59:59");
+        assertFalse(x.frozen(at20 - 1));
+        assertFalse(x.preFreeze(at20), "20:00 is frozen, not before it");
+        assertTrue(x.frozen(at20), "20:00");
+        assertEq(x.nextFreeze(at14), at20);
+    }
+}

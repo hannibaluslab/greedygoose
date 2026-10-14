@@ -27,9 +27,10 @@ export const guardianConfigured = () => !!GUARDIAN_CHECKER && !!GUARDIAN_KEEPER;
 /** Fixed salt so a user's Guardian permission can be rebuilt deterministically for revoke / status. */
 export const GUARDIAN_SALT = BigInt("0x" + "677561726469616e2e7631".padStart(64, "0")); // "guardian.v1"
 
-/** Selectors the permission whitelists (each guarded by the checker). */
+/** Selectors the agent permissions whitelist. */
 export const SEL = {
   withdraw: "0x69328dec", // Pool.withdraw(address,uint256,address)
   approve: "0x095ea7b3", // ERC20.approve(address,uint256)
   repay: "0xb1e8f8ef", // Spoke.repay(uint256,uint256,address)
+  supply: "0x617ba037", // Pool.supply(address,uint256,address,uint16)
 } as const;

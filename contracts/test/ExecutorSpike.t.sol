@@ -4,6 +4,7 @@ pragma solidity 0.8.28;
 import {Vm} from "forge-std/Vm.sol";
 import {console} from "forge-std/console.sol";
 import {ForkBase} from "./ForkBase.sol";
+import {FakeAccount} from "./FakeAccount.sol";
 import {IJustaPermissionManager as PM, ISpokeLite, IERC20Lite} from "./IJustaPermissionManager.sol";
 
 /// Spike for GooseExecutor (contracts/docs/GooseExecutor.md), test code only. The smallest contract that can be the
@@ -84,20 +85,6 @@ contract SpenderHarness {
         uint256 debtAfter = SPOKE.getUserTotalDebt(USDC_RESERVE_ID, account);
         if (debtAfter >= debt) revert DebtNotLower();
         emit Repaid(account, amount, debtAfter);
-    }
-}
-
-/// Not a JAW account. It answers the manager's executeBatch without running the calls, or, with `burn`, spends
-/// all the gas it is given.
-contract FakeAccount {
-    bool internal immutable BURN;
-
-    constructor(bool burn) {
-        BURN = burn;
-    }
-
-    function executeBatch(PM.Call[] calldata) external view {
-        while (BURN) {}
     }
 }
 

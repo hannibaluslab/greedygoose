@@ -1,4 +1,5 @@
-import { RISK } from "@/config/risk";
+import { parseUnits } from "viem";
+import { CASH, CASH_AGENT } from "@/config/risk";
 
 /**
  * Guardian's decision for one account. Pure — the keeper and the app's preview share it.
@@ -30,11 +31,11 @@ export type GuardianDecision =
   | { action: "repay"; amountUsd: number; reason: "watch" | "weekend-shield"; hf: number; hfAfter: number; limitedBy?: "savings" | "cap" };
 
 export const GUARDIAN_DEFAULTS = {
-  triggerHf: RISK.safeMin, // 1.5
-  targetHf: RISK.safeMin + 0.15, // 1.65
-  stressDrop: 0.15,
-  stressFloorHf: RISK.watchMin, // 1.1
-  minRepayUsd: 0.05,
+  triggerHf: CASH_AGENT.triggerHf, // 1.5
+  targetHf: CASH_AGENT.targetHf, // 1.65
+  stressDrop: CASH_AGENT.stressDrop,
+  stressFloorHf: CASH_AGENT.stressFloorHf, // 1.1
+  minRepayUsd: CASH_AGENT.minRepayUsd,
 } as const;
 
 export function planGuardian(i: GuardianInput): GuardianDecision {
@@ -71,6 +72,37 @@ export function planGuardian(i: GuardianInput): GuardianDecision {
   if (amount < o.minRepayUsd) return { action: "none", reason: "too-small", hf };
   const left = i.debtUsd - amount;
   return { action: "repay", amountUsd: amount, reason, hf, hfAfter: left > 0 ? power / left : Infinity, limitedBy };
+}
+
+/**
+ * Save's decision for one account: wallet USDC above the keep-back goes into savings, within what's left of
+ * today's limit and at most `maxSavesPerDay` times a New York day. Integer USDC units, so GooseExecutor's port
+ * (contracts/src/CashRules.sol) must agree exactly. Save never leaves the wallet below the keep-back.
+ */
+export type SaveInput = {
+  walletRaw: bigint;
+  capLeftRaw: bigint;
+  /** Saves already made today. */
+  savesToday: number;
+  keepBackRaw?: bigint;
+  minSaveRaw?: bigint;
+  maxSavesPerDay?: number;
+};
+
+export type SaveDecision = { action: "none"; reason: "too-small" | "no-cap" | "rate" } | { action: "save"; amountRaw: bigint };
+
+const usdc = (usd: number) => parseUnits(usd.toFixed(6), 6);
+
+export function planSave(i: SaveInput): SaveDecision {
+  const keepBack = i.keepBackRaw ?? usdc(CASH.keepBackUsd);
+  const minSave = i.minSaveRaw ?? usdc(CASH_AGENT.minSaveUsd);
+  const idle = i.walletRaw > keepBack ? i.walletRaw - keepBack : 0n;
+  if (idle < minSave) return { action: "none", reason: "too-small" };
+  if (i.capLeftRaw <= 0n) return { action: "none", reason: "no-cap" };
+  if (i.savesToday >= (i.maxSavesPerDay ?? CASH_AGENT.maxSavesPerDay)) return { action: "none", reason: "rate" };
+  const amountRaw = idle < i.capLeftRaw ? idle : i.capLeftRaw;
+  if (amountRaw < minSave) return { action: "none", reason: "too-small" };
+  return { action: "save", amountRaw };
 }
 
 function strip<T extends object>(o: T): Partial<T> {

@@ -63,7 +63,8 @@ async function live(user: Address) {
     }),
   );
   const cfs = Object.fromEntries(holdings.map((h) => [h.symbol, h.cf]));
-  const cash: Cash = { walletRaw, savingsRaw };
+  // No GooseExecutor is deployed yet, so Save is off, as usePosition reads it.
+  const cash: Cash = { walletRaw, savingsRaw, saveOn: false };
   return { position, options: backingOptions(holdings, cfs), cash };
 }
 
@@ -155,7 +156,7 @@ describe("Credit Buy batches simulate on mainnet", () => {
 
   it("already backing, $0 wallet: savings pay just the network fee", async () => {
     const { position, options, cash: real } = await live(backer);
-    const cash = { walletRaw: 0n, savingsRaw: real.savingsRaw };
+    const cash = { ...real, walletRaw: 0n };
     const creditRaw = usd(5);
     const plan = planCredit({ position, options, creditRaw, cash });
     const quote = await quoteToSign(aapl, creditRaw);
@@ -169,7 +170,7 @@ describe("Credit Buy batches simulate on mainnet", () => {
   it("decision 1, more than your cash: withdraw savings → take credit for the rest → approve → swap", async () => {
     const { position, options, cash: real } = await live(backer);
     // An empty wallet makes savings all of the cash; the buy is $2 more than that.
-    const cash = { walletRaw: 0n, savingsRaw: real.savingsRaw };
+    const cash = { ...real, walletRaw: 0n };
     const amountIn = cash.savingsRaw + usd(2);
     const { cashRaw, creditRaw } = splitCash(amountIn, cash);
     expect(creditRaw).toBe(usd(2) + feeBuffer);
@@ -191,7 +192,7 @@ describe("Credit Buy batches simulate on mainnet", () => {
 
   it("decision 1 on an account that never backed credit: its stock goes in use in the same batch", async () => {
     const { position, options } = await live(newcomer);
-    const cash = { walletRaw: usd(3), savingsRaw: 0n }; // $3 of cash, a $10 buy
+    const cash: Cash = { walletRaw: usd(3), savingsRaw: 0n, saveOn: false }; // $3 of cash, a $10 buy
     const amountIn = usd(10);
     const { cashRaw, creditRaw } = splitCash(amountIn, cash);
     const plan = planCredit({ position, options, creditRaw, cash });

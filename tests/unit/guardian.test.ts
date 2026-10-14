@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { decodeFunctionData, erc20Abi } from "viem";
-import { inWeekendWindow, planGuardian } from "@/lib/guardian/plan";
+import { inWeekendWindow, planGuardian, planSave } from "@/lib/guardian/plan";
 import { buildGuardianPermission, buildRescueCalls, buildAddSavingsCalls, PERIOD } from "@/lib/guardian/permission";
 import { aaveV3PoolAbi } from "@/lib/guardian/abis";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
@@ -42,6 +42,26 @@ describe("planGuardian", () => {
   it("skips dust repays (gas would cost more than it helps)", () => {
     // In Watch, but only 1 cent of savings left → too small to be worth a transaction.
     expect(planGuardian({ ...base, debtUsd: 600, savingsUsd: 0.01 })).toMatchObject({ action: "none", reason: "too-small" });
+  });
+});
+
+describe("planSave", () => {
+  const usd = (n: number) => BigInt(Math.round(n * 1e6));
+  const base = { capLeftRaw: usd(100), savesToday: 0 }; // keep-back $1, minimum $1, 6 a day
+
+  it("saves wallet USDC above the keep-back, never below it", () => {
+    expect(planSave({ ...base, walletRaw: usd(41) })).toEqual({ action: "save", amountRaw: usd(40) });
+    expect(planSave({ ...base, walletRaw: usd(1.99) })).toEqual({ action: "none", reason: "too-small" });
+    expect(planSave({ ...base, walletRaw: usd(2), keepBackRaw: 0n })).toEqual({ action: "save", amountRaw: usd(2) });
+  });
+  it("stays within today's limit and the daily number of saves", () => {
+    expect(planSave({ ...base, walletRaw: usd(500) })).toEqual({ action: "save", amountRaw: usd(100) });
+    expect(planSave({ ...base, walletRaw: usd(500), capLeftRaw: 0n })).toEqual({ action: "none", reason: "no-cap" });
+    expect(planSave({ ...base, walletRaw: usd(500), savesToday: 6 })).toEqual({ action: "none", reason: "rate" });
+    expect(planSave({ ...base, walletRaw: usd(500), savesToday: 6, maxSavesPerDay: 7 }).action).toBe("save");
+  });
+  it("skips a save the limit would shrink below the minimum", () => {
+    expect(planSave({ ...base, walletRaw: usd(500), capLeftRaw: usd(0.5) })).toEqual({ action: "none", reason: "too-small" });
   });
 });
 

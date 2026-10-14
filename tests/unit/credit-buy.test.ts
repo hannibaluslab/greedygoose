@@ -24,7 +24,7 @@ const aapl = EQUITIES.find((e) => e.symbol === "AAPLc")!;
 const nvda = EQUITIES.find((e) => e.symbol === "NVDAc")!;
 const msft = EQUITIES.find((e) => e.symbol === "MSFTc")!;
 const quote: BuyQuote = { venue: "aerodrome", pool: 10, amountIn: usd(300), amountOut: 135_000_000n }; // $300 → 1.35 AAPLc
-const walletCash = { walletRaw: usd(40), savingsRaw: 0n };
+const walletCash = { walletRaw: usd(40), savingsRaw: 0n, saveOn: true };
 const fn = (data: `0x${string}`) => decodeFunctionData({ abi: [...erc20Abi, ...spokeAbi, ...aaveV3PoolAbi], data }).functionName;
 const steps = (calls: { data: `0x${string}`; to: `0x${string}` }[]) => calls.map((c) => (swapOf(c) ? "swap" : fn(c.data)));
 
@@ -47,7 +47,7 @@ describe("buildCreditBuyCalls (plan item 3)", () => {
   });
 
   it("the network fee comes from cash: a $0 wallet takes just the fee buffer out of savings first", () => {
-    const calls = buildCreditBuyCalls({ user, stock: aapl, quote, creditRaw: quote.amountIn, backing: [], cash: { walletRaw: 0n, savingsRaw: usd(100) } });
+    const calls = buildCreditBuyCalls({ user, stock: aapl, quote, creditRaw: quote.amountIn, backing: [], cash: { walletRaw: 0n, savingsRaw: usd(100), saveOn: true } });
     expect(steps(calls)).toEqual(["withdraw", "borrow", "approve", "swap"]);
     expect(decodeFunctionData({ abi: aaveV3PoolAbi, data: calls[0].data }).args).toEqual([USDC.address, fee, user]);
   });
@@ -64,20 +64,20 @@ describe("buildCreditBuyCalls (plan item 3)", () => {
     expect(() => buildCreditBuyCalls({ ...base, creditRaw: quote.amountIn + 1n })).toThrow(/Credit must be part of the buy/);
     expect(() => buildCreditBuyCalls({ ...base, creditRaw: 0n })).toThrow(/Credit must be part of the buy/);
     expect(() => buildCreditBuyCalls({ ...base, stock: USDC, creditRaw: quote.amountIn })).toThrow(/Not a supported stock/);
-    expect(() => buildCreditBuyCalls({ ...base, creditRaw: quote.amountIn, cash: { walletRaw: fee - 1n, savingsRaw: 0n } })).toThrow(/More than your cash/);
+    expect(() => buildCreditBuyCalls({ ...base, creditRaw: quote.amountIn, cash: { walletRaw: fee - 1n, savingsRaw: 0n, saveOn: true } })).toThrow(/More than your cash/);
   });
 });
 
 describe("decision 1: more than your cash", () => {
   it("splitCash: cash pays all it can (less the fee buffer), credit the other part", () => {
-    const cash = { walletRaw: usd(40), savingsRaw: usd(60) };
+    const cash = { walletRaw: usd(40), savingsRaw: usd(60), saveOn: true };
     expect(splitCash(usd(80), cash)).toEqual({ cashRaw: usd(80), creditRaw: 0n });
     expect(splitCash(usd(300), cash)).toEqual({ cashRaw: usd(100) - fee, creditRaw: usd(200) + fee });
-    expect(splitCash(usd(5), { walletRaw: fee / 2n, savingsRaw: 0n })).toEqual({ cashRaw: 0n, creditRaw: usd(5) });
+    expect(splitCash(usd(5), { walletRaw: fee / 2n, savingsRaw: 0n, saveOn: true })).toEqual({ cashRaw: 0n, creditRaw: usd(5) });
   });
 
   it("one batch: withdraw savings → put backing in use → take credit for the rest → approve → swap", () => {
-    const cash = { walletRaw: 0n, savingsRaw: usd(100) };
+    const cash = { walletRaw: 0n, savingsRaw: usd(100), saveOn: true };
     const { cashRaw, creditRaw } = splitCash(quote.amountIn, cash);
     const calls = buildCreditBuyCalls({ user, stock: aapl, quote, creditRaw, backing: [{ stock: nvda, raw: 1n }], cash });
     expect(steps(calls)).toEqual(["withdraw", "approve", "supply", "setUsingAsCollateral", "borrow", "approve", "swap"]);
@@ -121,12 +121,12 @@ describe("assertCreditBuy (the batch against the review)", () => {
 describe("payFromCash with nothing to pay but the fee", () => {
   const spend = buildBorrowCalls({ user, amountRaw: 1n });
   it("takes the fee buffer out of savings when the wallet can't cover it", () => {
-    const calls = payFromCash(user, 0n, { walletRaw: 0n, savingsRaw: usd(10) }, spend);
+    const calls = payFromCash(user, 0n, { walletRaw: 0n, savingsRaw: usd(10), saveOn: true }, spend);
     expect(decodeFunctionData({ abi: aaveV3PoolAbi, data: calls[0].data }).args).toEqual([USDC.address, fee, user]);
-    expect(payFromCash(user, 0n, { walletRaw: fee, savingsRaw: usd(10) }, spend)).toEqual(spend);
+    expect(payFromCash(user, 0n, { walletRaw: fee, savingsRaw: usd(10), saveOn: true }, spend)).toEqual(spend);
   });
   it("refuses when cash can't pay the fee", () => {
-    expect(() => payFromCash(user, 0n, { walletRaw: fee - 1n, savingsRaw: 0n }, spend)).toThrow(/More than your cash/);
+    expect(() => payFromCash(user, 0n, { walletRaw: fee - 1n, savingsRaw: 0n, saveOn: true }, spend)).toThrow(/More than your cash/);
   });
 });
 
@@ -185,7 +185,7 @@ describe("planCredit (Leo's loan maths: autoFill, combinedLoan, status)", () => 
     expect(plan(1_394).block).toBe("too-much");
     expect(plan(300, { ...fresh, usdcLiquidity: 299 }).block).toBe("no-liquidity");
     expect(plan(300, { ...fresh, borrowPaused: true }).block).toBe("paused");
-    const broke = planCredit({ position: fresh, options: [nvdaFree], creditRaw: usd(300), cash: { walletRaw: fee - 1n, savingsRaw: 0n }, now: weekday });
+    const broke = planCredit({ position: fresh, options: [nvdaFree], creditRaw: usd(300), cash: { walletRaw: fee - 1n, savingsRaw: 0n, saveOn: true }, now: weekday });
     expect(broke.block).toBe("fee");
   });
 
