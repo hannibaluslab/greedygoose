@@ -12,9 +12,10 @@ export type GrantStep = { job: AgentJob; capRaw: bigint; limitsRaw?: StockLimits
 const CANCELLED = /reject|denied|cancel/i;
 
 /**
- * Saves a Manage tab in at most two Face IDs, each only when it's needed: first the registry setting (`setMix`,
- * `setKeepMix`) through the one write path (useTx), then the job's new grant on JAW's own screen (D14: a grant is its
- * own user operation and can't ride in a batch). `onSaved` runs once both have landed.
+ * Saves Rebalance's settings (its agent sheet) in at most two Face IDs, each only when it's needed: first the mix
+ * (`setMix`) through the one write path (useTx), then the job's new grant on JAW's own screen (D14: a grant is its own
+ * user operation and can't ride in a batch). `onSaved` runs once both have landed. Protect's has its own steps
+ * (useProtectSave).
  */
 export function useManageSave(account: `0x${string}`, agents: ReturnType<typeof useAgents>, onSaved: () => void) {
   const tx = useTx();

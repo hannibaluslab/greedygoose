@@ -1,54 +1,55 @@
 "use client";
 
 import { useMemo } from "react";
-import { zeroAddress } from "viem";
-import { useReadContract, useReadContracts } from "wagmi";
+import { isAddressEqual, zeroAddress } from "viem";
+import { useAccount, useReadContract, useReadContracts } from "wagmi";
 import { useGrantPermissions, usePermissions, useRevokePermissions } from "@jaw.id/wagmi";
 import { CHAIN_ID } from "@/lib/chain";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
+import type { SpendLeft } from "@/lib/agents/next";
 import {
-  CASH_JOBS,
-  dailyLimitRaw,
   JOBS,
   jobGrant,
   readAgentGrant,
   readStockLimits,
   type AgentGrant,
   type AgentJob,
-  type CashJob,
   type StockLimits,
 } from "@/lib/agents/permissions";
 import { jobStatus, type AgentStatus, type Stored } from "@/lib/agents/status";
+import { GUARDIAN } from "@/lib/guardian/config";
+import { permissionManagerAbi } from "@/lib/guardian/abis";
 import { useNowSec } from "@/hooks/useNowSec";
 
 /** A grant lasts a year, like Guardian's. */
-const GRANT_SECONDS = 365 * 86_400;
-
-/** The jobs whose stored grant only `permissionOf` returns: `jobsOf` carries Save's and Protect's. */
-const LATER_JOBS = ["sell", "rebalance", "entry"] as const;
+export const GRANT_SECONDS = 365 * 86_400;
 
 /** What a job runs with: its limit, and for Protect · sell and the Rebalancer each stock's. */
 export type JobTerms = { capRaw: bigint; limitsRaw?: StockLimits };
+
+const byJob = <T,>(f: (job: AgentJob) => T) => Object.fromEntries(JOBS.map((job) => [job, f(job)])) as Record<AgentJob, T>;
 
 /**
  * One account's agents, through JAW's own permission screens (D14): turned on with `useGrantPermissions`, listed
  * with `usePermissions` and turned off with `useRevokePermissions`, always with GooseExecutor as the spender. The
  * app sends no raw `manager.approve` or `addOwnerAddress`. Whether a job runs comes from the executor's registry
- * (`jobsOf`, and `permissionOf` for the jobs after the Cash Agent's), so the switches survive cleared browser storage.
+ * (`jobsOf`, and each job's `permissionOf`), so the switches survive cleared browser storage.
  */
 export function useAgents(account: `0x${string}`) {
   const executor = GOOSE_EXECUTOR;
   const listed = usePermissions({ address: account, chainId: CHAIN_ID, query: { enabled: !!executor } });
   const at = executor ?? zeroAddress; // the reads stay off until the executor is configured
-  const stockOf = (job: (typeof LATER_JOBS)[number]) =>
-    ({ address: at, abi: gooseExecutorAbi, functionName: "permissionOf", args: [account, JOBS.indexOf(job)], chainId: CHAIN_ID }) as const;
+  const permissionOf = (id: number) =>
+    ({ address: at, abi: gooseExecutorAbi, functionName: "permissionOf", args: [account, id], chainId: CHAIN_ID }) as const;
   const registry = useReadContracts({
     contracts: [
       { address: at, abi: gooseExecutorAbi, functionName: "jobsOf", args: [account], chainId: CHAIN_ID },
-      stockOf(LATER_JOBS[0]),
-      stockOf(LATER_JOBS[1]),
-      stockOf(LATER_JOBS[2]),
+      permissionOf(0),
+      permissionOf(1),
+      permissionOf(2),
+      permissionOf(3),
+      permissionOf(4),
     ],
     allowFailure: false,
     query: { enabled: !!executor, refetchInterval: 20_000 },
@@ -63,19 +64,24 @@ export function useAgents(account: `0x${string}`) {
   });
   const grant = useGrantPermissions();
   const revoke = useRevokePermissions();
+  const { address: signer } = useAccount();
   const nowSec = useNowSec();
 
-  /** The registry: the job bits, failures in a row, and each job's stored grant (with its stock limits). */
+  /** Grants and revokes are the account's own, like useTx's calls: never while another address is shown (`?as=`). */
+  function ownAccount() {
+    if (!signer || !isAddressEqual(signer, account)) throw new Error("Only the signed-in account can do this");
+  }
+
+  /** The registry: the job bits, failures in a row and the back-off, and each job's stored grant (with its stock limits). */
   const stored = useMemo(() => {
     if (!registry.data) return undefined;
-    const [[jobs, save, protect, fails], ...later] = registry.data;
-    const grants = { save, protect } as Record<AgentJob, Stored & { limitsRaw?: StockLimits }>;
-    LATER_JOBS.forEach((job, i) => {
-      const p = later[i];
-      const limitsRaw = job === "entry" ? undefined : (readStockLimits(job, p.spends) ?? undefined);
-      grants[job] = { start: p.start, end: p.end, cap: p.spends[0]?.allowance ?? 0n, limitsRaw };
+    const [[jobs, , , fails, cooldownUntil], ...permissions] = registry.data;
+    const grants = byJob((job): Stored & { limitsRaw?: StockLimits } => {
+      const p = permissions[JOBS.indexOf(job)];
+      const limitsRaw = job === "sell" || job === "rebalance" ? (readStockLimits(job, p.spends) ?? undefined) : undefined;
+      return { start: p.start, end: p.end, cap: p.spends[0]?.allowance ?? 0n, limitsRaw };
     });
-    return { jobs, fails, grants };
+    return { jobs, fails, cooldownUntil: Number(cooldownUntil), grants, permissions };
   }, [registry.data]);
 
   /** Our grants in JAW's list. */
@@ -86,31 +92,102 @@ export function useAgents(account: `0x${string}`) {
 
   const status = useMemo(
     () =>
-      Object.fromEntries(
-        JOBS.map((job): [AgentJob, AgentStatus] => [
-          job,
-          !executor
-            ? "unconfigured"
-            : registry.isLoading || listed.isLoading || !stored
-              ? "loading"
-              : jobStatus(job, stored.jobs, stored.grants[job], granted, nowSec, listed.isError),
-        ]),
-      ) as Record<AgentJob, AgentStatus>,
+      byJob((job): AgentStatus =>
+        !executor
+          ? "unconfigured"
+          : registry.isLoading || listed.isLoading || !stored
+            ? "loading"
+            : jobStatus(job, stored.jobs, stored.grants[job], granted, nowSec, listed.isError),
+      ),
     [executor, registry.isLoading, stored, listed.isLoading, listed.isError, granted, nowSec],
+  );
+
+  /** Each job's grants JAW lists that haven't ended, newest first. */
+  const live = useMemo(
+    () => byJob((job) => granted.filter((g) => g.job === job && g.end >= nowSec).sort((a, b) => b.start - a.start)),
+    [granted, nowSec],
   );
 
   /** What each job runs with: the registry's grant once it's on, the newest one JAW lists while it's starting. */
   const terms = useMemo(
     () =>
-      Object.fromEntries(
-        JOBS.map((job): [AgentJob, JobTerms | null] => {
-          if (status[job] === "on" && stored) return [job, { capRaw: stored.grants[job].cap, limitsRaw: stored.grants[job].limitsRaw }];
-          if (status[job] !== "starting") return [job, null];
-          const newest = granted.filter((g) => g.job === job && g.end >= nowSec).sort((a, b) => b.start - a.start)[0];
-          return [job, { capRaw: newest.capRaw, limitsRaw: newest.limitsRaw }];
-        }),
-      ) as Record<AgentJob, JobTerms | null>,
-    [status, stored, granted, nowSec],
+      byJob((job): (JobTerms & { end: number }) | null => {
+        if (status[job] === "on" && stored) {
+          const g = stored.grants[job];
+          return { capRaw: g.cap, limitsRaw: g.limitsRaw, end: g.end };
+        }
+        if (status[job] !== "starting") return null;
+        const newest = live[job][0];
+        return { capRaw: newest.capRaw, limitsRaw: newest.limitsRaw, end: newest.end };
+      }),
+    [status, stored, live],
+  );
+
+  /**
+   * When a job stopped without being revoked: its newest grant, in JAW's list or the registry, ran out. A grant the
+   * user revoked leaves JAW's list, so it never counts.
+   */
+  const ranOut = useMemo(
+    () =>
+      byJob((job): number | null => {
+        if (status[job] !== "off") return null;
+        const ended = [
+          ...granted.filter((g) => g.job === job).map((g) => g.end),
+          ...(stored && (stored.jobs & (1 << JOBS.indexOf(job))) !== 0 ? [stored.grants[job].end] : []),
+        ].filter((end) => end > 0 && end < nowSec);
+        return ended.length ? Math.max(...ended) : null;
+      }),
+    [status, granted, stored, nowSec],
+  );
+
+  /**
+   * The terms a job last ran with, to renew it: its newest grant in JAW's list, else the registry's; null if it never
+   * had one.
+   */
+  const lastTerms = useMemo(
+    () =>
+      byJob((job): JobTerms | null => {
+        const newest = granted.filter((g) => g.job === job).sort((a, b) => b.start - a.start)[0];
+        if (newest) return { capRaw: newest.capRaw, limitsRaw: newest.limitsRaw };
+        const g = stored?.grants[job];
+        return g && g.cap > 0n ? { capRaw: g.cap, limitsRaw: g.limitsRaw } : null;
+      }),
+    [granted, stored],
+  );
+
+  // What each running job's limits still allow this period: the manager's count against the grant the executor runs.
+  const spends = useMemo(
+    () =>
+      stored
+        ? JOBS.filter((job) => status[job] === "on").flatMap((job) => {
+            const permission = stored.permissions[JOBS.indexOf(job)];
+            return permission.spends.map((spend) => ({ job, permission, spend }));
+          })
+        : [],
+    [stored, status],
+  );
+  const periods = useReadContracts({
+    contracts: spends.map(({ permission, spend }) => ({
+      address: GUARDIAN.PERMISSION_MANAGER,
+      abi: permissionManagerAbi,
+      functionName: "getCurrentPeriod",
+      args: [permission, spend],
+      chainId: CHAIN_ID,
+    })),
+    allowFailure: false,
+    query: { enabled: spends.length > 0, refetchInterval: 20_000 },
+  });
+  const left = useMemo(
+    () =>
+      byJob((job): SpendLeft[] | null => {
+        if (!periods.data || !spends.some((s) => s.job === job)) return null;
+        return spends.flatMap(({ job: j, spend }, k) => {
+          if (j !== job) return [];
+          const used = (periods.data[k] as { spend: bigint }).spend;
+          return [{ token: spend.token, leftRaw: spend.allowance > used ? spend.allowance - used : 0n }];
+        });
+      }),
+    [periods.data, spends],
   );
 
   const refetch = () => Promise.all([listed.refetch(), registry.refetch()]);
@@ -121,6 +198,7 @@ export function useAgents(account: `0x${string}`) {
    */
   async function turnOn(job: AgentJob, capRaw: bigint, limitsRaw?: StockLimits) {
     if (!executor) throw new Error("Agents aren't available yet");
+    ownAccount();
     await grant.mutateAsync({
       address: account,
       chainId: CHAIN_ID,
@@ -131,9 +209,10 @@ export function useAgents(account: `0x${string}`) {
     await refetch();
   }
 
-  /** Revokes every grant JAW lists for the job, so nothing is left for the executor to use. */
+  /** Revokes every grant JAW lists for the job that hasn't ended, so nothing is left for the executor to use. */
   async function turnOff(job: AgentJob) {
-    for (const g of granted.filter((g) => g.job === job)) {
+    ownAccount();
+    for (const g of live[job]) {
       await revoke.mutateAsync({ address: account, chainId: CHAIN_ID, id: g.permissionId });
     }
     await refetch();
@@ -142,14 +221,16 @@ export function useAgents(account: `0x${string}`) {
   return {
     status,
     terms,
-    /** The daily limit a Cash job is switched on with (`turnOn`), once the executor's CAP_MAX is read. */
-    limitRaw: Object.fromEntries(
-      CASH_JOBS.map((job) => [job, capMax.data === undefined ? null : dailyLimitRaw(job, capMax.data)]),
-    ) as Record<CashJob, bigint | null>,
+    ranOut,
+    lastTerms,
+    left,
+    /** Face IDs it takes to turn `jobs` off: one per grant JAW lists for them that hasn't ended. */
+    faceIdsOff: (jobs: readonly AgentJob[]) => jobs.reduce((n, job) => n + live[job].length, 0),
     /** The most any limit may be on this executor, once read. */
     capMaxRaw: capMax.data ?? null,
-    /** Failed runs in a row: the executor backs off, then switches the account off at eight. */
+    /** Failed runs in a row, and when the executor tries again: it backs off, then switches the account off at eight. */
     fails: stored?.fails ?? 0,
+    cooldownUntil: stored?.cooldownUntil ?? 0,
     busy: grant.isPending || revoke.isPending,
     error: grant.error ?? revoke.error,
     turnOn,

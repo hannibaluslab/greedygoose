@@ -15,6 +15,9 @@ const nextConfig: NextConfig = {
     { source: "/unlock", destination: "/free-up", permanent: false },
     // The Market is a sheet on Invest (F1-3): /buy opens it, and /buy?s=NVDAc opens that stock's Buy step.
     { source: "/buy", destination: "/portfolio?market", permanent: false },
+    // Manage is gone: each agent's settings live in its sheet on the Agents tab.
+    { source: "/manage", destination: "/agents?agent=rebalance", permanent: false },
+    { source: "/manage/credit", destination: "/agents?agent=protect", permanent: false },
   ],
   partialPrefetching: true,
   turbopack: {

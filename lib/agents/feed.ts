@@ -1,6 +1,7 @@
 import { decodeErrorResult, isAddressEqual, maxUint256, type Hex } from "viem";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import type { AgentEvent } from "@/lib/agents/events";
+import type { AgentName } from "@/lib/agents/list";
 import type { AgentJob } from "@/lib/agents/permissions";
 import { marketState } from "@/lib/market-hours";
 import { statusFor, type Status } from "@/lib/risk/status";
@@ -11,24 +12,11 @@ import { formatShares, formatUsdTrim } from "@/lib/formatting";
 /** A line of the feed: plain words, and Safe / Watch / Act in their colour. */
 export type Words = readonly (string | { status: Exclude<Status, "none"> })[];
 
-export type AgentName = "Cash Agent" | "Protection" | "Rebalancer" | "Entry agent" | "Agents";
-
-/**
- * Where each agent is managed: the Manage boards' Credit tab for Protection (ManageCredit) and Your mix for the
- * Rebalancer (Manage). No board draws the Entry agent's.
- */
-export const MANAGE = {
-  protection: { href: "/manage/credit", label: "Change Protection's limits" },
-  mix: { href: "/manage", label: "Change your mix" },
-  entry: { href: "/manage/entry", label: "Change the Entry agent's limit" },
-} as const;
-
-/** One agent move as the Agents board draws it: who, one line on what changed, and the details on tap. */
+/** One agent move as the Agents tab draws it: who, one line on what changed, and the details on tap. */
 export type AgentMove = {
   agent: AgentName;
   line: Words;
   details: { label: string; value: Words }[];
-  manage?: (typeof MANAGE)[keyof typeof MANAGE];
 };
 
 /**
@@ -128,14 +116,15 @@ function usedRow(ctx: MoveContext, per: "today" | "this week") {
 
 /** A job's name in a sentence, and the agent its rows sit under. */
 const JOB: Record<AgentJob, { agent: AgentName; on: (cap: string) => string; off: string }> = {
-  save: { agent: "Cash Agent", on: (cap) => `Save is on, up to ${cap} a day.`, off: "Save is off" },
-  protect: { agent: "Protection", on: (cap) => `Protection is on. It repays from your cash, up to ${cap} a day.`, off: "Protection is off" },
-  sell: { agent: "Protection", on: (cap) => `Protection can sell backing stock, up to ${cap} a day.`, off: "Protection won't sell" },
-  rebalance: { agent: "Rebalancer", on: (cap) => `The Rebalancer is on, up to ${cap} a week.`, off: "The Rebalancer is off" },
-  entry: { agent: "Entry agent", on: (cap) => `The Entry agent is on, up to ${cap} a day.`, off: "The Entry agent is off" },
+  save: { agent: "Save", on: (cap) => `Save is on, up to ${cap} a day.`, off: "Save is off" },
+  protect: { agent: "Protect", on: (cap) => `Protect is on. It repays from your cash, up to ${cap} a day.`, off: "Protect is off" },
+  sell: { agent: "Protect", on: (cap) => `Protect can sell backing stock, up to ${cap} a day.`, off: "Protect won't sell" },
+  rebalance: { agent: "Rebalance", on: (cap) => `Rebalance is on, up to ${cap} a week.`, off: "Rebalance is off" },
+  entry: { agent: "Receive", on: (cap) => `Receive is on, up to ${cap} a day.`, off: "Receive is off" },
 };
 
-const OFF_WHY = {
+/** Why a job was switched off, after its name ("Save is off: …"). */
+export const OFF_WHY = {
   revoked: ".",
   expired: ": a year has passed since you switched it on.",
   "not-owner": ": it can no longer act on your account.",
@@ -170,13 +159,13 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
     case "saved":
       return {
         // Cash is savings (D15): a Save folds into the money arriving.
-        agent: "Cash Agent",
+        agent: "Save",
         line: [`${usd(e.amountRaw)} added to your cash.`],
         details: [{ label: "Why", value: ["Money that lands in your wallet goes into savings, where it earns."] }, ...usedRow(ctx, "today")],
       };
     case "repaid":
       return {
-        agent: "Protection",
+        agent: "Protect",
         line: [`Repaid ${usd(e.amountRaw)} from your cash. `, ...after(e.hfAfter)],
         details: [
           {
@@ -192,11 +181,10 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
           { label: "Your cash", value: [`${usd(e.amountRaw)} used`] },
           ...usedRow(ctx, "today"),
         ],
-        manage: MANAGE.protection,
       };
     case "sold":
       return {
-        agent: "Protection",
+        agent: "Protect",
         line: [`Sold ${worth(e.sharesRaw, ctx.pricesRaw)} of ${names(held(e.sharesRaw))} to repay. `, ...after(e.hfAfter)],
         details: [
           {
@@ -210,11 +198,10 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
           { label: "Your cash", value: cashAfterTrade(ctx) },
           ...usedRow(ctx, "today"),
         ],
-        manage: MANAGE.protection,
       };
     case "heads-up":
       return {
-        agent: "Protection",
+        agent: "Protect",
         line: ["Credit reached ", ...word(e.hf), ". Asked you to repay or add more."],
         details: [
           { label: "Why", value: ["Your cash couldn't bring it back to ", { status: "safe" }, "."] },
@@ -222,29 +209,26 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
           // A wait that ends while prices are held gives their reopening as the sale time: the second before is closed.
           { label: "Sells at", value: [marketState(new Date((e.sellAfter - 1) * 1000)).open ? at(e.sellAfter) : "When prices reopen"] },
         ],
-        manage: MANAGE.protection,
       };
     case "heads-up-cleared":
-      return { agent: "Protection", line: ["Credit recovered. Nothing was sold."], details: [{ label: "Status", value: word(e.hf) }] };
+      return { agent: "Protect", line: ["Credit recovered. Nothing was sold."], details: [{ label: "Status", value: word(e.hf) }] };
     case "keep-mix":
       return {
-        agent: "Protection",
+        agent: "Protect",
         line: [e.on ? "Will sell the same share of each stock." : "Will sell for the most safety per dollar."],
         details: [],
-        manage: MANAGE.protection,
       };
     case "mix": {
       const set = e.weightsBps.flatMap((w, r) => (w > 0 ? [[r, w] as const] : [])).sort((a, b) => b[1] - a[1]);
       return {
-        agent: "Rebalancer",
+        agent: "Rebalance",
         line: [set.length ? `Your mix: ${set.map(([r, w]) => `${EQUITIES[r].name} ${w / 100}%`).join(", ")}.` : "Your mix is cleared."],
         details: [],
-        manage: MANAGE.mix,
       };
     }
     case "rebalanced":
       return {
-        agent: "Rebalancer",
+        agent: "Rebalance",
         line: [
           `Sold ${worth(e.soldRaw, ctx.pricesRaw)} of ${names(held(e.soldRaw))}, bought ${worth(e.boughtRaw, ctx.pricesRaw)} of ${names(held(e.boughtRaw))}.`,
         ],
@@ -253,19 +237,17 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
           { label: "Your cash", value: cashAfterTrade(ctx) },
           ...usedRow(ctx, "this week"),
         ],
-        manage: MANAGE.mix,
       };
     case "rebalance-skipped":
       return {
-        agent: "Rebalancer",
+        agent: "Rebalance",
         line: ["Prices were off today, so it didn't trade."],
         details: [{ label: "Why", value: ["Each trade must get close to Aave's price. It tries again next market day."] }],
-        manage: MANAGE.mix,
       };
     case "converted": {
       const c = coin(e.coin);
       return {
-        agent: "Entry agent",
+        agent: "Receive",
         line: [`Turned ${c ? `${coinAmount(e.amountInRaw, c.decimals)} ${c.symbol}` : "a stablecoin"} into ${usd(e.usdcOutRaw)} of cash.`],
         details: [
           { label: "Why", value: ["Dollars other than USDC become cash, at 99.5% or better."] },
@@ -277,7 +259,7 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
     case "entry-waiting": {
       const c = coin(e.coin);
       return {
-        agent: "Entry agent",
+        agent: "Receive",
         line: [`${c ? `${coinAmount(e.amountInRaw, c.decimals)} ${c.symbol}` : "A stablecoin"} is waiting: the price was under 99.5%.`],
         details: [
           { label: "Why", value: ["It only swaps at 99.5% of face value or better."] },

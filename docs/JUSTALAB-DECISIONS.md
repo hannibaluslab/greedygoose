@@ -106,3 +106,28 @@ Legal is cleared. No step waits on a legal view.
 
 - **A heads-up's sale time is the executor's `sellAfter`, as given.** Near a freeze it is the moment prices reopen, holidays included, so the app adds no 30 minutes of its own. The card and the feed ask whether the second before it is frozen; if so they read "when prices reopen", otherwise "in N min" or the time.
 - **The Agents list reads the mix where Manage does** (`useAgentSettings`: `mixes`, `accounts` and the executor's live `rebalanceLimits`), so "On target" follows the band the executor runs with. `useAgents` keeps to the jobs and their grants.
+
+## From the Agents redesign: the frame (2026-10-15)
+
+Adrian's spec (eval/agents-redesign.md) replaces the Agents and Manage boards for structure; the kit's look stays. This stage builds the tab and the agent sheet's frame, with Save's and Receive's sheets. It replaces "From the Agents tab build" above (the board's list, its pills and its links to Manage).
+
+- **Four agents, one name each, everywhere on screen:** Save, Protect, Rebalance, Receive (the Entry agent), the activity included; a run that didn't go through is "Agents". The tab is titled "Agents".
+- **A row** is the agent, what it does in under six words, its switch, its "next" line, its limit and a chevron to its sheet; Rebalance adds its mix as a bar. Protect's switch is repaying from cash; selling backing stock keeps its own grant and switch (decision 5), and turning Protect off revokes both.
+- **"Next"** is the executor's `planOf` for the job it names, and each other agent's TypeScript rule (lib/guardian) on live data: what its grant's limits still allow this period (the manager's `getCurrentPeriod` for each spend of `permissionOf`), today's saves, the Rebalancer's last day, the coins Receive is waiting on and the executor's live numbers. With no executor, the rules run on config/risk.ts and a fresh period. An agent that doesn't run says what it would do ("Would save $40").
+- **Limits** (`LIMIT_USD`): Save $250 / $1,000 / $5,000 a day, starting on $1,000; Protect $100 / $300 / $500, starting on $300; Rebalance $250 / $500 / $1,000 a week, starting on $500; Receive $1,000 a day with no other offer. A new limit is a new grant.
+- **Every change is a confirm step, then JAW's own screen:** one Face ID for each grant or revoke, said on the confirm. There is no pause for one account, so "Turn off" revokes and switching back on is a new grant. Turning off revokes each grant JAW lists that hasn't ended (an ended one would cost a Face ID for nothing); "Turn off all agents" counts them.
+- **Cards only when something needs the user,** most urgent first: the heads-up ("Your credit hit Watch. Add $X, or Protect sells $Y at 3:42 PM.", the time from `sellAfter`, "when prices reopen" near a freeze); three or more failed runs in a row, with when they're tried again; an agent that stopped without the user (its grant ran out, in JAW's list or the registry, or a `JobOff` that isn't a revoke, unless its newest switch is the user's own revoke), with Renew; a grant ending within 7 days, with Renew; a coin waiting for a fair price (`entryWaits`), with its retry time.
+- **Renew** is a new grant at the limit the job runs with, or last ran with; a job that sells stock gets limits for the same stocks at today's prices.
+- **Rebalance can't be switched on before a mix,** which is saved with its own Face ID (`setMix`); its switch opens its sheet until then.
+- **The sheet:** what it does and what it never does, its status and next move, its limit, its settings, "Stops on <date> · Renew", its own moves, and Switch on or Turn off. Receive's settings list the coins it converts, what's in the account and what's waiting. Protect's and Rebalance's settings still open Manage until the next stage moves them into their sheets.
+- **Dev gallery** `/dev/ui/agents`: every card, every row state, today's "Not live yet", and each sheet and confirm step, from fixtures run through the app's own rules and words.
+
+## From the Agents redesign: Manage moves into the sheets (2026-10-15)
+
+This replaces "From the Manage build" above for where the settings live (its rules on grants, stock limits and Face IDs stand), and the frame's line that Protect's and Rebalance's settings still open Manage.
+
+- **Manage is gone.** Protect's and Rebalance's settings are the bodies of their agent sheets. `/manage` redirects to `/agents?agent=rebalance` and `/manage/credit` to `/agents?agent=protect` (307, query kept); `/agents?agent=save|protect|rebalance|receive` opens that sheet. The Credit sheet's and Repay's settings buttons, and the Credit sheet's Protect row, open Protect's sheet.
+- **One limit and one Face ID button per sheet.** In Protect's and Rebalance's sheets the body carries the limit chips and the Save; the sheet adds no limit line and no "Switch on". While the agent is off, the button reads "Switch on with Face ID", and the line under it counts the Face IDs. A row's switch still opens a confirm at the limit the agent starts on.
+- **Protect switches on from its body.** While repaying from cash is off, saving grants it at the limit on screen first, then selling if it's switched on (two Face IDs).
+- **"Use credit for buying" is on the Credit sheet,** under Protect. It is about credit, not an agent.
+- **Not carried over from Manage:** "Turn off credit" (Turn off Protect in its sheet revokes both of Protect's grants) and the disabled "Pause" buttons (there is no pause for one account; Turn off is the control).

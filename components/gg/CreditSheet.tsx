@@ -5,14 +5,16 @@ import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { Button } from "./Button";
 import { ChevronRight, ShieldIcon, SlidersIcon } from "./icons";
 import { StatusBar, StatusPill } from "./Status";
+import { Switch } from "./Switch";
 import type { PositionData } from "@/hooks/usePosition";
 import { useAgents } from "@/hooks/useAgents";
+import { useCreditForBuying } from "@/hooks/useCreditForBuying";
 import type { AgentStatus } from "@/lib/agents/status";
 import { homeStatus } from "@/lib/risk/status";
 import { USDC } from "@/lib/tokens/registry";
 import { formatUsdTrim } from "@/lib/formatting";
 
-/** The Protection row: the Cash Agent's Protect job, and its daily limit once it runs. */
+/** The Protect row: the Protect job, and its daily limit once it runs. */
 function protection(status: AgentStatus, capRaw: bigint | null) {
   if (status === "on" && capRaw !== null) return `Up to ${formatUsdTrim(Number(capRaw) / 10 ** USDC.decimals)} a day`;
   return { unconfigured: "Not live yet", loading: "…", off: "Off", starting: "Starting", on: "On" }[status];
@@ -20,7 +22,8 @@ function protection(status: AgentStatus, capRaw: bigint | null) {
 
 /**
  * Design board "2c · Credit sheet" (HomeCreditSlide.dc.html). The rate sits under the cost (CLAUDE.md: always show
- * the rate and the monthly cost); the settings button and the Protection row open Manage's Credit tab (ManageCredit).
+ * the rate and the monthly cost); the settings button and the Protect row open Protect's sheet on the Agents tab.
+ * "Use credit for buying" (ManageCredit's switch) lives here now that Manage is gone: it's about credit, not an agent.
  */
 export function CreditSheet({
   open, account, data, onClose, onBuyMore,
@@ -33,6 +36,7 @@ export function CreditSheet({
   onBuyMore?: () => void;
 }) {
   const agents = useAgents(account);
+  const [creditForBuying, setCreditForBuying] = useCreditForBuying(account);
   const limit = data.debtUsd + data.availableUsd;
   const usedPct = limit > 0 ? Math.min(100, (data.debtUsd / limit) * 100) : 0;
   const status = homeStatus(data.status);
@@ -46,7 +50,7 @@ export function CreditSheet({
       look="info"
       title="Credit"
       headerRight={
-        <Link href="/manage/credit" aria-label="Credit settings" className="-mr-1.5 flex size-10 items-center justify-center rounded-full bg-pill text-ink">
+        <Link href="/agents?agent=protect" aria-label="Protect settings" className="-mr-1.5 flex size-10 items-center justify-center rounded-full bg-pill text-ink">
           <SlidersIcon strokeWidth={2} />
         </Link>
       }
@@ -84,18 +88,25 @@ export function CreditSheet({
               <span>Room {formatUsdTrim(data.availableUsd)}</span>
             </div>
           </div>
-          <Link href="/manage/credit" className="flex items-center justify-between py-3 text-[15px] text-ink no-underline">
+          <Link href="/agents?agent=protect" className="flex items-center justify-between py-3 text-[15px] text-ink no-underline">
             <span className="flex items-center gap-2 text-ink-mid">
               <span aria-hidden className="flex size-[22px] items-center justify-center rounded-[11px] bg-brand text-ink">
                 <ShieldIcon />
               </span>
-              Protection
+              Protect
             </span>
             <span className="flex items-center gap-1 font-semibold">
               {protection(agents.status.protect, agents.terms.protect?.capRaw ?? null)}
               <ChevronRight className="text-subtle" />
             </span>
           </Link>
+          <div className="flex items-center gap-3 border-t border-hairline py-3">
+            <span className="flex grow flex-col gap-0.5">
+              <span className="text-[15px] text-ink-mid">Use credit for buying</span>
+              <span className="text-xs text-subtle">Only when a buy is bigger than your cash</span>
+            </span>
+            <Switch label="Use credit for buying" checked={creditForBuying} onChange={setCreditForBuying} />
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-2.5">

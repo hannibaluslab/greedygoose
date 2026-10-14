@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import Link from "next/link";
 import { StockAvatar, tickerOf } from "./StockAvatar";
-import { AgentsIcon, ChevronDown, ChevronRight, EntryIcon, RebalanceIcon, ShieldIcon } from "./icons";
+import { AgentsIcon, ChevronDown, ChevronRight, EntryIcon, RebalanceIcon, SaveIcon, ShieldIcon } from "./icons";
 import type { ActivityRow } from "@/hooks/useActivity";
 import type { AgentRow } from "@/hooks/useAgentFeed";
 import type { ActivityItem } from "@/lib/activity/decode";
-import type { AgentName, Words } from "@/lib/agents/feed";
+import type { Words } from "@/lib/agents/feed";
+import type { AgentName } from "@/lib/agents/list";
 import { STATUS_LABEL } from "@/lib/risk/status";
 import { txUrl } from "@/lib/chain";
 import { ALL_RESERVES, USDC, findByAddress } from "@/lib/tokens/registry";
@@ -64,12 +64,12 @@ export function ActivityAvatar({ symbol, size }: { symbol: string; size: number 
   );
 }
 
-/** Each agent's round mark (Agents board): the Cash Agent's lime shield, the others' bone badges. */
+/** Each agent's round mark: Protect's lime shield (the board's), the others' bone badges. */
 const MARK: Record<AgentName, { Icon: typeof ShieldIcon; bg: string }> = {
-  "Cash Agent": { Icon: ShieldIcon, bg: "bg-brand" },
-  Protection: { Icon: ShieldIcon, bg: "bg-brand" },
-  Rebalancer: { Icon: RebalanceIcon, bg: "bg-card-bone" },
-  "Entry agent": { Icon: EntryIcon, bg: "bg-card-bone" },
+  Save: { Icon: SaveIcon, bg: "bg-card-bone" },
+  Protect: { Icon: ShieldIcon, bg: "bg-brand" },
+  Rebalance: { Icon: RebalanceIcon, bg: "bg-card-bone" },
+  Receive: { Icon: EntryIcon, bg: "bg-card-bone" },
   Agents: { Icon: AgentsIcon, bg: "bg-card-bone" },
 };
 
@@ -196,12 +196,8 @@ function Move({ row, last, open, onToggle }: { row: ActivityRow; last: boolean; 
   );
 }
 
-/**
- * One agent move as the board draws Protection's: the agent · time, what changed and why on tap, then where its
- * limits are changed and the transaction on Base.
- */
+/** One agent move: the agent · time, what changed, and on tap why and the details, then the transaction on Base. */
 function AgentMove({ row, last, open, onToggle }: { row: AgentRow; last: boolean; open: boolean; onToggle: () => void }) {
-  const link = "flex h-10 items-center justify-between text-[13px] font-semibold text-ink no-underline";
   return (
     <li className={`py-2 ${last ? "" : "border-b border-hairline"}`}>
       <button type="button" aria-expanded={open} onClick={onToggle} className="flex w-full items-start gap-2.5 text-left">
@@ -227,16 +223,11 @@ function AgentMove({ row, last, open, onToggle }: { row: AgentRow; last: boolean
               ))}
             </dl>
           )}
-          {row.manage && (
-            <Link href={row.manage.href} className={`${link} ${row.details.length ? "border-t border-hairline" : ""}`}>
-              {row.manage.label} <ChevronRight size={15} />
-            </Link>
-          )}
           <a
             href={txUrl(row.hash)}
             target="_blank"
             rel="noreferrer"
-            className={`${link} ${row.details.length || row.manage ? "border-t border-hairline" : ""}`}
+            className={`flex h-10 items-center justify-between text-[13px] font-semibold text-ink no-underline ${row.details.length ? "border-t border-hairline" : ""}`}
           >
             View on Base <ChevronRight size={15} />
           </a>

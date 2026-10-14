@@ -345,14 +345,14 @@ function unavailable(h: Holding): string | undefined {
 
 /**
  * The review's risk line (F2-6). The board's "Your cash is never touched" is left out: the network fee comes from
- * cash, and Protection repays from savings first (D11).
+ * cash, and Protect repays from savings first (D11).
  */
 function riskNote(backers: string[], protectOn: boolean): string {
   const one = backers.length === 1 ? backers[0] : null;
   if (protectOn) {
     return one
-      ? `If ${one} falls, you can repay, or Protection repays from your cash or sells a little ${one} to keep you Safe.`
-      : "If your stocks fall, you can repay, or Protection repays from your cash or sells a little of them to keep you Safe.";
+      ? `If ${one} falls, you can repay, or Protect repays from your cash or sells a little ${one} to keep you Safe.`
+      : "If your stocks fall, you can repay, or Protect repays from your cash or sells a little of them to keep you Safe.";
   }
   return one
     ? `If ${one} falls, you can repay. If it falls too far, Aave can sell part of it to repay what you owe.`
