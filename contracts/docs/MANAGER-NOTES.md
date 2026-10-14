@@ -4,7 +4,7 @@ What the JAW permission manager on Base does, read from its verified source. The
 
 **Source.** `JustaPermissionManager` at `0xf1b40E3D5701C04d86F7828f0EB367B9C90901D8` (`lib/guardian/config.ts:11`), fetched from Sourcify's v2 API on 2026-10-14 (`/server/v2/contract/8453/<address>?fields=sources,compilation,deployment`). solc 0.8.30, via-IR, deployed in block 42,868,201. The same 14,180 bytes sit at the same address on Base Sepolia. The contract is not a proxy and has no admin, so what follows can't change.
 
-Line references are to `src/JustaPermissionManager.sol` in that bundle unless a file is named. `BaseAccount.sol`, `JustanAccount.sol` and `MultiOwnable.sol` come from the same bundle (`lib/justanaccount/...`). SDK references are to `node_modules/@jaw.id/core/dist` at version 1.6.2, the version in our `package.json`.
+Line references are to `src/JustaPermissionManager.sol` in that bundle unless a file is named. `BaseAccount.sol`, `JustanAccount.sol` and `MultiOwnable.sol` come from the same bundle (`lib/justanaccount/...`). SDK references are to `node_modules/@jaw.id/core/dist` at version 1.6.3, the version `package.json` pins.
 
 ## 1. How spend is metered
 
@@ -73,7 +73,7 @@ What that function builds (`apiPermissionsToPermission`, `rpc/permissions.js:217
 | `calls[].checker` | **always `0x0`** (`:237-241`). The request type has no checker field (`rpc/permissions.d.ts:92-99`; the struct comment at `:41` says "internal only - defaults to zero address") |
 | `spends[].multiplier` | the app's value, or 1 (`:251`) |
 
-Then it sends one user operation, `[optional paymaster approval, optional spender prefund, manager.approve(permission)]` (`:81-85`, `account/Account.js:836-841`). The approve is always last, and the app can't add calls of its own. It reads the hash from the `PermissionApproved` log (`:301-329`) and stores the full permission, checker included, in JAW's relay (`:267-290`). `usePermissions` lists from that relay (`:186-213`). `useRevokePermissions` rebuilds the struct from the relay and calls `manager.revoke` (`:130-141`). A permission approved some other way isn't in the relay, so JAW's revoke can't find it ("Permission not found").
+Then it sends one user operation, `[optional paymaster approval, optional spender prefund, manager.approve(permission)]` (`:81-85`, `account/Account.js:850-874`). The approve is always last, and the app can't add calls of its own. It reads the hash from the `PermissionApproved` log (`:301-329`) and stores the full permission, checker included, in JAW's relay (`:267-290`). `usePermissions` lists from that relay (`:186-213`). `useRevokePermissions` rebuilds the struct from the relay and calls `manager.revoke` (`:130-141`). A permission approved some other way isn't in the relay, so JAW's revoke can't find it ("Permission not found").
 
 On-chain, the manager stores only `_isApproved[hash] = true` (`:485`). There is no lookup by hash: `_isApproved` and `_isRevoked` are internal (`:316`, `:321`).
 
@@ -87,10 +87,10 @@ Yes. The manager runs the calls through `JustanAccount.executeBatch` (`:1217-121
 
 Who makes the manager an owner in JAW's flow:
 
-- **Passkey accounts:** JAW's factory creates every account with owners `[passkey, manager]` (`account/smartAccount.js:372-393`; the factory call `createAccount(owners, nonce)` at `toJustanAccount.js:116-129`). Nobody has to add it. Our fork tests create accounts the same way, and the manager is an owner from the start.
-- **EIP-7702 accounts:** before each user operation, the SDK checks `isOwnerAddress(manager)` and puts `addOwnerAddress(manager)` first if it's missing (`account/smartAccount.js:144-209`).
+- **Passkey accounts:** JAW's factory creates every account with owners `[passkey, manager]` (`account/smartAccount.js:378-421`; the factory call `createAccount(owners, nonce)` at `toJustanAccount.js:116-132`). Nobody has to add it. Our fork tests create accounts the same way, and the manager is an owner from the start.
+- **EIP-7702 accounts:** before each user operation, the SDK checks `isOwnerAddress(manager)` and puts `addOwnerAddress(manager)` first if it's missing (`account/smartAccount.js:145-214`).
 - **The grant itself** doesn't add it (`rpc/permissions.js:76-111`).
-- **Accounts the SDK didn't create** (opened by address through `createSmartAccountForAddress`, `smartAccount.js:504-523`) may lack it.
+- **Accounts the SDK didn't create** (opened by address through `createSmartAccountForAddress`, `smartAccount.js:526-546`) may lack it.
 
 Leo's `useGuardian.ts:74-77` adds `addOwnerAddress(manager)` only when it's missing. For accounts made by JAW's SDK it never fires. The executor checks `isOwnerAddress(manager)` when an account registers.
 
