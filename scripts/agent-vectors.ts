@@ -12,6 +12,7 @@ import { encodeAbiParameters, hashTypedData, keccak256, parseUnits, toHex, type 
 import { CASH, CASH_AGENT, PROTECT_SELL } from "@/config/risk";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { inWeekendWindow, planGuardian, planSave } from "@/lib/guardian/plan";
+import { planRebalance, rebalanceTrades, type RebalanceHolding } from "@/lib/guardian/rebalance";
 import { planSell, sellAmounts, sellTiming, type SellBook } from "@/lib/guardian/sell";
 import { marketState } from "@/lib/market-hours";
 import { agentPermission, JOBS, sellPermission, STOCK_LIMIT_UNIT, type StockLimits } from "@/lib/agents/permissions";
@@ -42,6 +43,7 @@ export const CALENDAR_COUNT = 10_000;
 export const HASH_COUNT = 50;
 export const SELL_COUNT = 600;
 export const TIMING_COUNT = 1000;
+export const REBALANCE_COUNT = 800;
 /** Where Vectors.sol's hash test puts the executor, so both sides know the spender. */
 export const HASH_SPENDER: Address = "0x0000000000000000000000000000000000600dE5";
 
@@ -145,6 +147,49 @@ export function timingInput(i: number) {
     headsUpHf,
     nowHf: between(r(5), (WAD * 102n) / 100n, headsUpHf),
     headsUpDelaySec: between(r(6), 600n, 7_200n),
+  };
+}
+
+/** Rebalancer inputs: a mix of one to seven stocks worth $1k to $900k drifted from its targets by up to 60%, free stock
+ *  outside the mix a quarter of the time, weekly limits that bind a quarter of the time, a USDC limit that binds a
+ *  fifth of the time, and a pool out of line a tenth of the time. Mirrors Vectors.rebalanceInput. */
+export function rebalanceInput(i: number) {
+  const r = (f: number) => rand("rebalance", i, f);
+  const first = Number(r(0) % 7n);
+  const raw = Array.from({ length: 7 }, (_, k) => (k === first || r(1 + k) % 3n !== 0n ? 1n + (r(10 + k) % 1000n) : 0n));
+  const sum = raw.reduce((a, b) => a + b, 0n);
+  const weights = raw.map((w) => (w * 10_000n) / sum);
+  weights[first] += 10_000n - weights.reduce((a, b) => a + b, 0n);
+  const total = spread(r(20), r(21), 9n, 11n);
+  const drift = between(r(19), 500n, 6_000n);
+  const stocks: RebalanceHolding[] = Array.from({ length: 7 }, (_, k) => {
+    const f = (j: number) => r(30 + 10 * k + j);
+    const price = between(f(0), 10n ** 9n, 10n ** 11n);
+    const valueRaw =
+      weights[k] > 0n
+        ? (((total * weights[k]) / 10_000n) * between(f(1), 10_000n - drift, 10_000n + drift)) / 10_000n
+        : f(2) % 4n === 0n
+          ? spread(f(3), f(4), 6n, 10n)
+          : 0n;
+    const kind = f(5) % 4n;
+    return {
+      sharesRaw: (valueRaw * 10n ** 10n) / price,
+      price,
+      weightBps: weights[k],
+      sellLeftRaw: kind === 0n ? 0n : kind === 1n ? spread(f(6), f(7), 4n, 9n) : 10n ** 18n,
+    };
+  });
+  return {
+    book: {
+      stocks,
+      usdcLeftRaw: r(22) % 5n === 0n ? spread(r(23), r(24), 6n, 9n) : 10n ** 15n,
+      tradable: Array.from({ length: 7 }, (_, k) => r(100 + k) % 10n !== 0n),
+    },
+    bandBps: between(r(25), 500n, 5_000n),
+    bandMaxBps: between(r(26), 100n, 2_000n),
+    floorBps: between(r(27), 10n, 300n),
+    minTradeRaw: between(r(28), 10n ** 6n, 100n * 10n ** 6n),
+    maxSliceRaw: between(r(29), 100n * 10n ** 6n, 50_000n * 10n ** 6n),
   };
 }
 
@@ -276,6 +321,29 @@ function sellVectors() {
   return { amounts, counts: hex(counts), reserves: hex(reserves), shares, minOuts, timings: hex(timings) };
 }
 
+/** What rebalanceTrades decides for each input, flattened, and whether planRebalance trades (the pools in line). */
+function rebalanceVectors() {
+  const counts: number[] = [];
+  const planned: number[] = [];
+  const reserves: number[] = [];
+  const buys: number[] = [];
+  const amountIns: string[] = [];
+  const minOuts: string[] = [];
+  for (let i = 0; i < REBALANCE_COUNT; i++) {
+    const v = rebalanceInput(i);
+    const trades = rebalanceTrades(v.book, v);
+    counts.push(trades.length);
+    planned.push(planRebalance(v.book, v).length > 0 ? 1 : 0);
+    for (const t of trades) {
+      reserves.push(t.reserveId);
+      buys.push(t.buy ? 1 : 0);
+      amountIns.push(t.amountIn.toString());
+      minOuts.push(t.minOut.toString());
+    }
+  }
+  return { counts: hex(counts), planned: hex(planned), reserves: hex(reserves), buys: hex(buys), amountIns, minOuts };
+}
+
 /** The manager's EIP-712 hash (getHash) of a permission, as `getHash` computes it on Base. */
 function managerHash(p: ReturnType<typeof agentPermission>) {
   return hashTypedData({
@@ -360,6 +428,7 @@ export function agentVectors(): Record<string, unknown> {
     "save.json": saveVectors(),
     "calendar.json": calendarVectors(),
     "sell.json": sellVectors(),
+    "rebalance.json": rebalanceVectors(),
     "permissions.json": hashVectors(),
     "defaults.json": defaultsVector(),
   };
