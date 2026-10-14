@@ -35,6 +35,18 @@ export type Range = keyof typeof RANGES;
 
 export const isRange = (r: string | null | undefined): r is Range => !!r && Object.hasOwn(RANGES, r);
 
+const DAY_MS = 86_400_000;
+
+/**
+ * The day a 1Y line starts when it holds less than a year: the stock's token launched inside it (the seven launched in
+ * mid-August 2026). Its points are daily closes at 00:00 UTC, then the current price, so `points` of them start
+ * points − 2 days before today (UTC). Null for a full year, for the other ranges, and before the clock is known.
+ */
+export function yearLineStart(range: Range, points: number, nowMs: number): Date | null {
+  if (range !== "1Y" || points < 2 || points > RANGES["1Y"] || nowMs <= 0) return null;
+  return new Date(Math.floor(nowMs / DAY_MS) * DAY_MS - (points - 2) * DAY_MS);
+}
+
 /** A price line to draw, if it has two points or more and its last price agrees with Aave's (as `checked`). */
 export function checkedLine(points: readonly number[] | undefined, aaveUsd: number): number[] | undefined {
   if (!points || points.length < 2 || !points.every(isPrice)) return undefined;

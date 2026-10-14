@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { fromCoinRow, type CoinRow } from "@/lib/prices/coingecko";
 import { jawMarketData } from "@/lib/prices/jaw";
 import {
-  PRICE_TOLERANCE, RANGES, agreesWithAave, checked, checkedLine, dayChange, downsample, isRange, moveUsd, pickMarketData, weekValue,
+  PRICE_TOLERANCE, RANGES, agreesWithAave, checked, checkedLine, dayChange, downsample, isRange, moveUsd, pickMarketData, weekValue, yearLineStart,
   type MarketData,
 } from "@/lib/prices/market";
 const line = (from: number, to: number, n = 24) => Array.from({ length: n }, (_, i) => from + ((to - from) * i) / (n - 1));
@@ -238,5 +238,22 @@ describe("checkedLine (a chart line, checked against Aave)", () => {
   it("never hands back the caller's array", () => {
     const points = [220, 229.13];
     expect(checkedLine(points, AAVE.NVDAc)).not.toBe(points);
+  });
+});
+
+describe("yearLineStart (a 1Y line shorter than a year)", () => {
+  // JAW's and CoinGecko's NVDAc year at 2026-10-14 09:11 UTC: 59 points, the first a close at 2026-08-18 00:00 UTC.
+  const now = Date.UTC(2026, 9, 14, 9, 11);
+
+  it("is the first daily close's day", () => {
+    expect(yearLineStart("1Y", 59, now)?.toISOString()).toBe("2026-08-18T00:00:00.000Z");
+  });
+
+  it("is null for a full year, the other ranges, too few points and an unknown clock", () => {
+    expect(yearLineStart("1Y", 366, now)).toBeNull();
+    expect(yearLineStart("1M", 59, now)).toBeNull();
+    expect(yearLineStart("1D", 289, now)).toBeNull();
+    expect(yearLineStart("1Y", 1, now)).toBeNull();
+    expect(yearLineStart("1Y", 59, 0)).toBeNull();
   });
 });
