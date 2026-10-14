@@ -55,6 +55,18 @@ export const PROTECT_SELL = {
 } as const;
 
 /**
+ * The Entry agent's numbers (D18), plan item 2: every swap at 99.5% of face value or better. A swap is at most $10k,
+ * under a fifth of the thinnest venue's USDC (Aerodrome's USDbC pool holds $58k and fills $10k at 99.99%, 2026-10-14);
+ * a larger balance is split over the next runs. Both wait on calibration (plan item 6 step 9). GooseExecutor holds
+ * the live values within hard bounds (contracts/src/EntryRules.sol); a change waits the public 7-day delay.
+ */
+export const ENTRY = {
+  floorBps: 50,
+  minEntryUsd: 1,
+  maxSwapUsd: 10_000,
+} as const;
+
+/**
  * Savings-first spending (D15): a buy or repay takes what it needs from savings in the same batch.
  * Cautious defaults. M0's real $0-wallet test (plan item 1 step 0) settles both numbers.
  */
