@@ -23,7 +23,7 @@ function read(account: string): boolean {
 }
 
 /**
- * "Use credit for buying" (ManageCredit): whether a buy bigger than your cash offers credit for the rest (decision 1).
+ * "Use credit for buying" (ManageCredit's switch, now on the Credit sheet): whether a buy bigger than your cash offers credit for the rest (decision 1).
  * On unless switched off. It only changes what this device's Buy sheet offers and moves nothing, so it lives in this
  * browser rather than on-chain, and needs no Face ID. Browser storage may be unavailable: then it stays on.
  */

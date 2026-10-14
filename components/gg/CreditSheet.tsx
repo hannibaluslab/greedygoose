@@ -5,8 +5,10 @@ import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { Button } from "./Button";
 import { ChevronRight, ShieldIcon, SlidersIcon } from "./icons";
 import { StatusBar, StatusPill } from "./Status";
+import { Switch } from "./Switch";
 import type { PositionData } from "@/hooks/usePosition";
 import { useAgents } from "@/hooks/useAgents";
+import { useCreditForBuying } from "@/hooks/useCreditForBuying";
 import type { AgentStatus } from "@/lib/agents/status";
 import { homeStatus } from "@/lib/risk/status";
 import { USDC } from "@/lib/tokens/registry";
@@ -33,6 +35,7 @@ export function CreditSheet({
   onBuyMore?: () => void;
 }) {
   const agents = useAgents(account);
+  const [creditForBuying, setCreditForBuying] = useCreditForBuying(account);
   const limit = data.debtUsd + data.availableUsd;
   const usedPct = limit > 0 ? Math.min(100, (data.debtUsd / limit) * 100) : 0;
   const status = homeStatus(data.status);
@@ -96,6 +99,13 @@ export function CreditSheet({
               <ChevronRight className="text-subtle" />
             </span>
           </Link>
+          <div className="flex items-center gap-3 border-t border-hairline py-3">
+            <span className="flex grow flex-col gap-0.5">
+              <span className="text-[15px] text-ink-mid">Use credit for buying</span>
+              <span className="text-xs text-subtle">Only when a buy is bigger than your cash</span>
+            </span>
+            <Switch label="Use credit for buying" checked={creditForBuying} onChange={setCreditForBuying} />
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-2.5">
