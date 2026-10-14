@@ -142,12 +142,14 @@ export function SheetShell({
     <>
       {/* Our own dim + tap-outside-to-close: non-modal vaul (below) skips
           its overlay along with its scroll lock. z-40 sits under the drawer
-          (z-50), above the page. */}
+          (z-50), above the page. pointer-events-auto: vaul still opens Radix's
+          dialog as modal, which sets body { pointer-events: none } while the
+          sheet is open, and vaul only resets that for uncontrolled opens. */}
       {open && (
         <div
           aria-hidden
           onClick={() => onOpenChange(false)}
-          className="fixed inset-0 z-40 mx-auto max-w-[430px] bg-[rgba(14,13,11,0.45)] animate-in fade-in-0 duration-300"
+          className="pointer-events-auto fixed inset-0 z-40 mx-auto max-w-[430px] bg-[rgba(14,13,11,0.45)] animate-in fade-in-0 duration-300"
         />
       )}
       <Drawer
