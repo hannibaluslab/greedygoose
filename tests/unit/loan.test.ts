@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planLoan } from "@/lib/aave/loan";
+import { planLoan, repayChips } from "@/lib/aave/loan";
 
 const base = { collateralUsd: 0, avgCf: 0, debtUsd: 0, priceUsd: 230, cf: 0.7, freeUsd: 1000, liquidityUsd: 1e9 };
 
@@ -75,5 +75,21 @@ describe("autoFill", () => {
       lines: [{ key: "NVDAc", usd: 500, cf: 0.7, freeUsd: 1000 }],
     });
     expect(out.NVDAc).toBe(500);
+  });
+});
+
+describe("repayChips", () => {
+  it("offers the board's $100 and $300 when the cash can repay more", () => {
+    expect(repayChips(1208.13)).toEqual([100, 300]);
+    expect(repayChips(400)).toEqual([100, 300]);
+  });
+  it("offers a quarter and a half of a smaller amount", () => {
+    expect(repayChips(300)).toEqual([75, 150]);
+    expect(repayChips(41)).toEqual([10, 20]);
+  });
+  it("offers nothing extra when All is the only sensible choice", () => {
+    expect(repayChips(3)).toEqual([1]);
+    expect(repayChips(1)).toEqual([]);
+    expect(repayChips(0)).toEqual([]);
   });
 });
