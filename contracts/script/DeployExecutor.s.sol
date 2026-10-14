@@ -9,7 +9,12 @@ import {Amounts, Thresholds} from "../src/CashRules.sol";
 import {EntryLimits} from "../src/EntryRules.sol";
 import {RebalanceLimits} from "../src/RebalanceRules.sol";
 import {SellLimits} from "../src/SellRules.sol";
-import {IAaveOracle} from "../src/IProtocols.sol";
+import {IAaveOracle, IAeroRouter} from "../src/IProtocols.sol";
+import {EntryJob} from "../src/jobs/EntryJob.sol";
+
+interface ISpokeOracle {
+    function ORACLE() external view returns (address);
+}
 
 /// Deploys GooseExecutor as a D13 test deploy: daily limits of at most $5, for throwaway accounts, never wired into the
 /// production app config. Production waits for the audit (plan item 6).
@@ -61,21 +66,52 @@ contract DeployExecutor is Script {
 
     function run() external returns (GooseExecutor executor) {
         GooseExecutor.Config memory c = config(block.chainid, vm.envAddress("EXECUTOR_OWNER"));
-        address[7] memory needCode = [
+        checkCode(c);
+        vm.startBroadcast();
+        executor = new GooseExecutor(c);
+        vm.stopBroadcast();
+    }
+
+    /// Before anything is sent: every address the executor is deployed with or its job libraries fix has code (the
+    /// manager, Aave, USDC and aUSDC, the oracle, the router, the seven stocks and JAW's account implementation behind
+    /// the allowed codehashes), and on Base Aerodrome's pool factory, Entry's coins and venues, and the stocks, USDC and
+    /// the oracle are the spoke's own.
+    function checkCode(GooseExecutor.Config memory c) public view {
+        address[15] memory need = [
             address(c.manager),
             address(c.aaveV3Pool),
             address(c.spoke),
             address(c.usdc),
             address(c.aUsdc),
             address(c.oracle),
-            c.router
+            c.router,
+            JAW_ACCOUNT,
+            c.stocks[0],
+            c.stocks[1],
+            c.stocks[2],
+            c.stocks[3],
+            c.stocks[4],
+            c.stocks[5],
+            c.stocks[6]
         ];
-        for (uint256 i; i < needCode.length; ++i) {
-            require(needCode[i].code.length > 0, "no code at a configured address");
+        for (uint256 i; i < need.length; ++i) {
+            require(need[i].code.length > 0, "no code at a configured address");
         }
-        vm.startBroadcast();
-        executor = new GooseExecutor(c);
-        vm.stopBroadcast();
+        if (block.chainid != BASE) return; // Sepolia's stand-ins have no Entry, no spoke reserves and no pools
+        require(IAeroRouter(c.router).factory().code.length > 0, "no code at a configured address");
+        for (uint256 k; k < EntryJob.COINS; ++k) {
+            (address coin,,) = EntryJob.coin(k);
+            require(coin.code.length > 0, "no code at a configured address");
+        }
+        address[3] memory venues = [EntryJob.AERODROME_V1_ROUTER, EntryJob.UNISWAP_ROUTER, EntryJob.PSM3];
+        for (uint256 i; i < venues.length; ++i) {
+            require(venues[i].code.length > 0, "no code at a configured address");
+        }
+        require(ISpokeOracle(address(c.spoke)).ORACLE() == address(c.oracle), "the oracle isn't the spoke's");
+        require(c.spoke.getReserve(c.usdcReserveId).underlying == address(c.usdc), "USDC isn't the spoke's reserve");
+        for (uint256 r; r < 7; ++r) {
+            require(c.spoke.getReserve(r).underlying == c.stocks[r], "a stock isn't the spoke's reserve");
+        }
     }
 
     function config(uint256 chainId, address owner) public view returns (GooseExecutor.Config memory c) {

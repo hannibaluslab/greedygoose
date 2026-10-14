@@ -6,7 +6,7 @@ import {Amounts, Thresholds} from "../src/CashRules.sol";
 import {EntryLimits} from "../src/EntryRules.sol";
 import {RebalanceLimits} from "../src/RebalanceRules.sol";
 import {SellLimits} from "../src/SellRules.sol";
-import {IAeroFactory, ISpoke} from "../src/IProtocols.sol";
+import {IAaveOracle, IAeroFactory, ISpoke} from "../src/IProtocols.sol";
 import {EntryJob} from "../src/jobs/EntryJob.sol";
 import {ProtectJob} from "../src/jobs/ProtectJob.sol";
 import {RebalanceJob} from "../src/jobs/RebalanceJob.sol";
@@ -157,6 +157,27 @@ contract DeployExecutorTest is ForkBase {
         assertEq(e.floorBps, vm.parseJsonUint(json, ".entry.floorBps"));
         assertEq(e.minEntry, vm.parseJsonUint(json, ".entry.minEntry"));
         assertEq(e.maxSwap, vm.parseJsonUint(json, ".entry.maxSwap"));
+    }
+
+    /// The script refuses to deploy unless every address it uses has code (the seven stocks, JAW's implementation and
+    /// Entry's coins and venues included) and, on Base, the stocks, USDC and the oracle are the spoke's own.
+    function test_the_script_checks_every_address_before_it_deploys() public {
+        GooseExecutor.Config memory c = deploy.config(8453, makeAddr("owner"));
+        deploy.checkCode(c);
+
+        c.stocks[3] = makeAddr("no stock here");
+        vm.expectRevert("no code at a configured address");
+        deploy.checkCode(c);
+
+        c = deploy.config(8453, makeAddr("owner"));
+        (c.stocks[0], c.stocks[1]) = (c.stocks[1], c.stocks[0]);
+        vm.expectRevert("a stock isn't the spoke's reserve");
+        deploy.checkCode(c);
+
+        c = deploy.config(8453, makeAddr("owner"));
+        c.oracle = IAaveOracle(address(USDC)); // code, but not the spoke's oracle
+        vm.expectRevert("the oracle isn't the spoke's");
+        deploy.checkCode(c);
     }
 
     function test_only_base_and_base_sepolia() public {
