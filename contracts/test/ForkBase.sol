@@ -8,6 +8,7 @@ import {
     IJawFactory,
     IJustanAccount,
     IAaveV3Pool,
+    ISpoke,
     ISpokeLite,
     IERC20Lite
 } from "./IJustaPermissionManager.sol";
@@ -27,6 +28,16 @@ abstract contract ForkBase is Test {
     IERC20Lite constant AUSDC = IERC20Lite(0x4e65fE4DbA92790696d040ac24Aa414708F5c0AB);
     address constant NVDAC = 0xb20000000000000000000078ee7ce2fE4908108C;
     uint256 constant NVDAC_RESERVE = 5;
+    /// The seven stocks, by reserve id (lib/tokens/registry.ts).
+    address[7] STOCKS = [
+        0xb200000000000000000000C2e324d24d7eEcd1fb, // AAPLc
+        0xb200000000000000000000d9192b6B456483C2E8, // AMZNc
+        0xb2000000000000000000002D0BA3164cc74f58B7, // GOOGLc
+        0xb2000000000000000000008bC8786B856E61707C, // METAc
+        0xB200000000000000000000Ab99cFa739E253872B, // MSFTc
+        NVDAC,
+        0xb2000000000000000000001e800a7f5189430cD0 // TSLAc
+    ];
     uint256 constant USDC_RESERVE = 7;
 
     function _fork() internal {
@@ -62,12 +73,44 @@ abstract contract ForkBase is Test {
 
     /// Back a credit line with NVDAc and draw `creditRaw` USDC, as the account itself.
     function _openCredit(address account, uint256 sharesRaw, uint256 creditRaw) internal {
+        _backWithNvda(account, sharesRaw);
+        vm.prank(account);
+        SPOKE.borrow(USDC_RESERVE, creditRaw, account);
+    }
+
+    /// Back a credit line with NVDAc and draw USDC until the health factor is `hf` (WAD), as the account itself.
+    function _openCreditAt(address account, uint256 sharesRaw, uint256 hf) internal returns (uint256 creditRaw) {
+        _backWithNvda(account, sharesRaw);
+        return _drawTo(account, hf);
+    }
+
+    /// Draw USDC on what already backs the account until its health factor is `hf` (WAD).
+    function _drawTo(address account, uint256 hf) internal returns (uint256 creditRaw) {
+        ISpoke.UserAccountData memory d = SPOKE.getUserAccountData(account);
+        creditRaw = d.totalCollateralValue * d.avgCollateralFactor / 1e18 * 1e18 / hf / 1e20;
+        vm.prank(account);
+        SPOKE.borrow(USDC_RESERVE, creditRaw, account);
+    }
+
+    /// Back a credit line with `sharesRaw` of each of the seven stocks, the costliest position to read. Needs
+    /// `_useStockDouble` for every stock first.
+    function _backWithAllStocks(address account, uint256 sharesRaw) internal {
+        for (uint256 r; r < STOCKS.length; ++r) {
+            deal(STOCKS[r], account, sharesRaw);
+            vm.startPrank(account);
+            IERC20Lite(STOCKS[r]).approve(address(SPOKE), sharesRaw);
+            SPOKE.supply(r, sharesRaw, account);
+            SPOKE.setUsingAsCollateral(r, true, account);
+            vm.stopPrank();
+        }
+    }
+
+    function _backWithNvda(address account, uint256 sharesRaw) internal {
         deal(NVDAC, account, sharesRaw);
         vm.startPrank(account);
         IERC20Lite(NVDAC).approve(address(SPOKE), sharesRaw);
         SPOKE.supply(NVDAC_RESERVE, sharesRaw, account);
         SPOKE.setUsingAsCollateral(NVDAC_RESERVE, true, account);
-        SPOKE.borrow(USDC_RESERVE, creditRaw, account);
         vm.stopPrank();
     }
 
@@ -84,6 +127,14 @@ abstract contract ForkBase is Test {
     function _grantThroughAccount(PM.Permission memory p) internal {
         PM.Call[] memory calls = new PM.Call[](1);
         calls[0] = PM.Call(address(MANAGER), 0, abi.encodeCall(PM.approve, (p)));
+        vm.prank(ENTRY_POINT);
+        IJustanAccount(p.account).executeBatch(calls);
+    }
+
+    /// Revoke the way JAW's revoke screen lands on-chain: account.executeBatch([manager.revoke(permission)]).
+    function _revokeThroughAccount(PM.Permission memory p) internal {
+        PM.Call[] memory calls = new PM.Call[](1);
+        calls[0] = PM.Call(address(MANAGER), 0, abi.encodeCall(PM.revoke, (p)));
         vm.prank(ENTRY_POINT);
         IJustanAccount(p.account).executeBatch(calls);
     }
