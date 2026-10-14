@@ -149,7 +149,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
         <h1 className="m-0 text-[30px] font-semibold tracking-[-0.03em]">Get a loan</h1>
         <WhiteCard className="flex flex-col gap-3 p-[18px]">
           <p className="m-0 text-[15px]">You need stocks to borrow against. Buy some with your USDC, or receive them.</p>
-          <Link href="/buy" className="flex h-[52px] items-center justify-center rounded-[26px] bg-accent text-[15px] font-bold no-underline">Buy stocks</Link>
+          <Link href="/buy" className="flex h-[52px] items-center justify-center rounded-[26px] bg-brand text-[15px] font-bold no-underline">Buy stocks</Link>
         </WhiteCard>
       </div>
     );
@@ -162,7 +162,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
       <Row label="Cost" value={`about ${formatUsd(monthlyCost(data.debtUsd + amount, data.apr))} / month`} />
       <Row label="Rate" value={`${(data.apr * 100).toFixed(2)}% a year, variable`} />
       <div className="flex items-center justify-between py-3 text-[15px]">
-        <span className="text-muted">Status</span>
+        <span className="text-ink-mid">Status</span>
         <span className="flex items-center gap-2"><StatusPill status={data.status} /> → <StatusPill status={after} /></span>
       </div>
     </WhiteCard>
@@ -173,7 +173,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
       <SubHeader label="Loan" />
       <div className="flex flex-col gap-1">
         <h1 className="m-0 text-[30px] font-semibold tracking-[-0.03em]">{review ? "Review" : "Get a loan"}</h1>
-        {!review && <p className="m-0 text-sm text-muted">Choose what to lock and how much to borrow. Nothing is sold.</p>}
+        {!review && <p className="m-0 text-sm text-ink-mid">Choose what to lock and how much to borrow. Nothing is sold.</p>}
       </div>
       <MarketBanner />
 
@@ -184,9 +184,9 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
               <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-full bg-ink text-on-ink"><LockIcon size={12} /></span>
               <span className="flex flex-1 flex-col">
                 <span className="text-[15px] font-semibold">Already locked</span>
-                <span className="num text-[12.5px] text-muted">{formatUsd(data.collateralUsd)} · you owe {formatUsd(data.debtUsd)}</span>
+                <span className="num text-[12.5px] text-ink-mid">{formatUsd(data.collateralUsd)} · you owe {formatUsd(data.debtUsd)}</span>
               </span>
-              <Link href="/unlock" className="text-[13px] font-semibold text-muted underline">Unlock</Link>
+              <Link href="/unlock" className="text-[13px] font-semibold text-ink-mid underline">Unlock</Link>
             </div>
           )}
 
@@ -206,13 +206,13 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
                       <StockAvatar symbol={l.stock.symbol} size={36} />
                       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                         <span className="text-[15px] font-semibold">{l.holding.name}</span>
-                        <span className="whitespace-nowrap text-[12.5px] text-muted">
+                        <span className="whitespace-nowrap text-[12.5px] text-ink-mid">
                           {formatUsd(l.holding.freeUsd)} free · {Math.round(l.cf * 100)}% counts
                         </span>
                       </span>
                       <span className="flex shrink-0 flex-col text-right">
                         <span className="text-lg font-bold leading-[1.1] tracking-[-0.02em]">{formatUsd(l.usd)}</span>
-                        <span className="whitespace-nowrap text-[11.5px] text-muted">{on ? `${formatShares(shares)} ${tickerOf(l.stock.symbol)}` : "not locking"}</span>
+                        <span className="whitespace-nowrap text-[11.5px] text-ink-mid">{on ? `${formatShares(shares)} ${tickerOf(l.stock.symbol)}` : "not locking"}</span>
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -229,11 +229,11 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
                         }}
                         className="h-6 flex-1 accent-[#0e0d0b]"
                       />
-                      <span className="w-10 text-right text-xs font-semibold text-muted">{Math.round(f * 100)}%</span>
+                      <span className="w-10 text-right text-xs font-semibold text-ink-mid">{Math.round(f * 100)}%</span>
                       <button
                         type="button"
                         onClick={() => setFractions((s) => ({ ...s, [l.stock.symbol]: f >= 0.9999 ? 0 : 1 }))}
-                        className="h-7 rounded-[14px] bg-chip px-2.5 text-xs font-semibold text-muted"
+                        className="h-7 rounded-[14px] bg-chip px-2.5 text-xs font-semibold text-ink-mid"
                       >
                         {f >= 0.9999 ? "None" : "All"}
                       </button>
@@ -242,7 +242,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
                 );
               })}
               {!showSmall && locks.some((l) => l.holding.freeUsd < SMALL_USD && l.raw === 0n) && (
-                <button type="button" onClick={() => setExpandSmall(true)} className="h-10 text-[13px] font-semibold text-muted">
+                <button type="button" onClick={() => setExpandSmall(true)} className="h-10 text-[13px] font-semibold text-ink-mid">
                   Show {locks.filter((l) => l.holding.freeUsd < SMALL_USD && l.raw === 0n).length} small holdings (under {formatUsd(SMALL_USD)})
                 </button>
               )}
@@ -252,7 +252,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
           <WhiteCard className="flex flex-col gap-3 p-[18px] focus-within:shadow-[0_0_0_1.5px_#0e0d0b]">
             <label htmlFor="amount" className="text-[15px] font-semibold">How much USDC to borrow?</label>
             <div className="flex items-center gap-2">
-              <span className="text-[38px] font-semibold text-muted">$</span>
+              <span className="text-[38px] font-semibold text-ink-mid">$</span>
               <AmountInput
                 id="amount"
                 value={raw}
@@ -273,7 +273,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
                 MAX
               </button>
             </div>
-            <p className={`m-0 text-[13px] ${overLimit ? "text-act" : "text-muted"}`}>
+            <p className={`m-0 text-[13px] ${overLimit ? "text-act" : "text-ink-mid"}`}>
               {overLimit
                 ? `Aave won’t lend that much against these stocks. Lock more, or borrow up to ${formatUsd(hardMax)}.`
                 : `Up to ${formatUsd(hardMax)} (Aave’s limit). Stay under ${formatUsd(safeMax)} to be Safe.`}
@@ -371,7 +371,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
               }}
             />
             {!tx.busy && (
-              <button type="button" onClick={() => setReview(false)} className="h-9 text-[15px] font-semibold text-muted">Change</button>
+              <button type="button" onClick={() => setReview(false)} className="h-9 text-[15px] font-semibold text-ink-mid">Change</button>
             )}
           </BottomBar>
         </>
@@ -383,7 +383,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between border-b border-hairline py-3 text-[15px]">
-      <span className="text-muted">{label}</span>
+      <span className="text-ink-mid">{label}</span>
       <span className="font-semibold">{value}</span>
     </div>
   );

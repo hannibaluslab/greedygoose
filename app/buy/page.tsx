@@ -29,7 +29,7 @@ function Market({ address }: { address: `0x${string}` }) {
       <SubHeader label="Market" />
       <div className="flex flex-col gap-1">
         <h1 className="m-0 text-[30px] font-semibold tracking-[-0.03em]">Buy stocks</h1>
-        <p className="m-0 text-sm text-muted">
+        <p className="m-0 text-sm text-ink-mid">
           With your cash{data ? <> · <span className="num font-semibold text-ink">{formatUsd(data.usdcBalance)}</span> available</> : null}
         </p>
       </div>
@@ -43,13 +43,13 @@ function Market({ address }: { address: `0x${string}` }) {
               <button type="button" onClick={() => setSelected(h.symbol)} className="flex w-full items-center gap-2.5 px-0.5 py-3.5 text-left">
                 <StockAvatar symbol={h.symbol} size={40} />
                 <div className="min-w-0 grow">
-                  <div className="text-[15px] font-semibold leading-tight">{h.name}</div>
-                  <div className="mt-0.5 text-[13px] font-medium text-muted">
+                  <div className="text-[15px] font-semibold leading-[1.25]">{h.name}</div>
+                  <div className="mt-0.5 text-[13px] font-medium text-ink-mid">
                     {h.freeShares + h.lockedShares > 0 ? `You have ${formatShares(h.freeShares + h.lockedShares)}` : h.symbol.replace(/c$/, "")}
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-[15px] font-semibold leading-tight">{formatUsd(h.priceUsd)}</div>
+                  <div className="text-[15px] font-semibold leading-[1.25]">{formatUsd(h.priceUsd)}</div>
                   <div className="mt-0.5 font-mono text-xs text-subtle">per share</div>
                 </div>
                 <ChevronRight className="shrink-0 text-[#b9b3a6]" />

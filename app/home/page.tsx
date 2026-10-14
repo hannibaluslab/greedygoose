@@ -68,14 +68,14 @@ function Loaded({ data, guardian, openCredit }: { data: PositionData; guardian: 
           <Divided className="self-stretch">
             <span className="text-[30px] font-semibold leading-none tracking-[-0.03em]">{formatUsdShort(data.availableUsd)}</span>
           </Divided>
-          <div className="pt-[5px] text-[13px] text-muted">
+          <div className="pt-[5px] text-[13px] text-ink-mid">
             {data.debtUsd > 0 ? (
               <>You owe <span className="font-semibold text-ink">{formatUsd(data.debtUsd)}</span></>
             ) : (
               <>Nothing owed</>
             )}
           </div>
-          <Divided className="pt-[5px] text-[13px] text-muted">
+          <Divided className="pt-[5px] text-[13px] text-ink-mid">
             <span className="whitespace-nowrap"><span className="font-semibold text-safe">{(data.apr * 100).toFixed(1)}%</span> a year</span>
           </Divided>
         </div>
@@ -99,7 +99,7 @@ function Loaded({ data, guardian, openCredit }: { data: PositionData; guardian: 
         >
           <div className="flex items-center justify-between">
             <span className="text-sm font-semibold">Cash</span>
-            <span className="flex h-[22px] items-center rounded-md bg-[rgba(212,255,60,0.14)] px-[7px] font-mono text-[10px] font-medium tracking-[0.04em] text-accent">
+            <span className="flex h-[22px] items-center rounded-[6px] bg-[rgba(212,255,60,0.14)] px-[7px] font-mono text-[10px] font-medium tracking-[0.04em] text-brand">
               USDC
             </span>
           </div>
@@ -118,7 +118,7 @@ function Loaded({ data, guardian, openCredit }: { data: PositionData; guardian: 
             <span className="flex items-center gap-1.5 text-sm font-semibold">
               Credit
               {guardian === "on" && (
-                <span title="Guardian is on" aria-label="Guardian is on" className="flex size-[18px] items-center justify-center rounded-full bg-accent text-ink">
+                <span title="Guardian is on" aria-label="Guardian is on" className="flex size-[18px] items-center justify-center rounded-full bg-brand text-ink">
                   <ShieldIcon size={10} />
                 </span>
               )}
@@ -143,7 +143,7 @@ function Loaded({ data, guardian, openCredit }: { data: PositionData; guardian: 
             <span className="text-lg font-semibold tracking-[-0.015em]">Portfolio</span>
             <span className="num text-sm text-subtle">{formatUsd(stocksUsd)}</span>
           </Link>
-          <Link href="/portfolio" className="-my-[5px] -mr-1 flex h-8 items-center gap-0.5 px-1 text-[13px] font-medium text-muted no-underline">
+          <Link href="/portfolio" className="-my-[5px] -mr-1 flex h-8 items-center gap-0.5 px-1 text-[13px] font-medium text-ink-mid no-underline">
             See all <ChevronRight />
           </Link>
         </div>
@@ -169,20 +169,20 @@ function Loaded({ data, guardian, openCredit }: { data: PositionData; guardian: 
                   <div className="flex items-center justify-between">
                     <StockAvatar symbol={h.symbol} />
                     {lockedPct > 0 ? (
-                      <span title={`${lockedPct}% is collateral`} className="num inline-flex h-4 items-center gap-[3px] whitespace-nowrap rounded-lg bg-ground pl-1.5 pr-[5px] text-[9.5px] font-semibold text-ink-2">
+                      <span title={`${lockedPct}% is collateral`} className="num inline-flex h-4 items-center gap-[3px] whitespace-nowrap rounded-[8px] bg-ground pl-1.5 pr-[5px] text-[9.5px] font-semibold text-ink-2">
                         {lockedPct}%<LockIcon />
                       </span>
                     ) : (
-                      <span title="Not collateral" className="inline-flex h-4 w-5 items-center justify-center rounded-lg border border-dashed border-[rgba(14,13,11,0.22)] text-subtle">
+                      <span title="Not collateral" className="inline-flex h-4 w-5 items-center justify-center rounded-[8px] border border-dashed border-[rgba(14,13,11,0.22)] text-subtle">
                         <UnlockIcon />
                       </span>
                     )}
                   </div>
                   <span className="mt-2 text-[12.5px] font-semibold">{h.name}</span>
                   <div className="mt-px"><MoneyCompact value={value} /></div>
-                  <span className="mt-px whitespace-nowrap font-mono text-[10px] text-muted">{formatUsd(h.priceUsd)} / share</span>
+                  <span className="mt-px whitespace-nowrap font-mono text-[10px] text-ink-mid">{formatUsd(h.priceUsd)} / share</span>
                   <span className="mt-2 flex items-center gap-[5px] whitespace-nowrap text-[11px]">
-                    <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-accent shadow-[0_0_0_1px_rgba(14,13,11,0.18)]" />
+                    <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-brand shadow-[0_0_0_1px_rgba(14,13,11,0.18)]" />
                     <b className="font-semibold">{formatShares(h.freeShares + h.lockedShares)}</b>
                     <span className="text-subtle">shares</span>
                   </span>
@@ -208,7 +208,7 @@ function Action({ label, icon, href, onClick }: { label: string; icon: ReactNode
   const inner = (
     <>
       <span className="flex size-12 items-center justify-center rounded-3xl bg-ink text-on-ink">{icon}</span>
-      <span className="text-center text-xs font-medium leading-tight text-ink-2">{label}</span>
+      <span className="text-center text-xs font-medium leading-[1.25] text-ink-2">{label}</span>
     </>
   );
   const cls = "flex flex-col items-center gap-[7px] no-underline";

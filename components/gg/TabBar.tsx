@@ -40,7 +40,7 @@ export function TabBar() {
               <Icon />
               {label}
               {active && (
-                <span aria-hidden className="absolute bottom-1 h-0.5 w-4 rounded-[1px] bg-accent" style={{ boxShadow: "0 0 12px rgba(212,255,60,0.5)" }} />
+                <span aria-hidden className="absolute bottom-1 h-0.5 w-4 rounded-[1px] bg-brand" style={{ boxShadow: "0 0 12px rgba(212,255,60,0.5)" }} />
               )}
             </Link>
           );

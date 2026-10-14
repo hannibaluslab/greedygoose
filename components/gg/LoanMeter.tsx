@@ -27,7 +27,7 @@ export function LoanMeter({ amount, safe, watch, limit }: { amount: number; safe
           />
         )}
       </div>
-      <div className="num grid grid-cols-3 gap-2 text-[11.5px] leading-tight">
+      <div className="num grid grid-cols-3 gap-2 text-[11.5px] leading-[1.25]">
         <Legend color="bg-safe" label="Safe up to" value={formatUsd(safe)} tone="text-safe" />
         <Legend color="bg-watch" label="Watch up to" value={formatUsd(watch)} tone="text-watch-text" />
         <Legend color="bg-act" label="Aave limit" value={formatUsd(limit)} tone="text-act" />

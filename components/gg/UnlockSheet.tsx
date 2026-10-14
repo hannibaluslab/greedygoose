@@ -88,7 +88,7 @@ export function UnlockSheet({
                     if (canAll) setAll(true);
                     else setRaw(String(Math.floor(Math.max(0, maxShares) * 1e6) / 1e6));
                   }}
-                  className="flex h-7 items-center rounded-[14px] bg-[rgba(15,14,11,0.06)] px-2.5 text-xs font-semibold text-muted"
+                  className="flex h-7 items-center rounded-[14px] bg-[rgba(15,14,11,0.06)] px-2.5 text-xs font-semibold text-ink-mid"
                 >
                   {canAll ? "ALL" : "MAX"}
                 </button>
@@ -98,11 +98,11 @@ export function UnlockSheet({
 
             <div className="num rounded-[22px] bg-card px-4 py-0.5 shadow-[0_1px_3px_rgba(14,13,11,0.06)]">
               <div className="flex items-center justify-between border-b border-hairline py-3 text-[15px]">
-                <span className="text-muted">You owe</span>
+                <span className="text-ink-mid">You owe</span>
                 <span className="font-semibold">{formatUsd(data.debtUsd)}</span>
               </div>
               <div className="flex items-center justify-between py-3 text-[15px]">
-                <span className="text-muted">Status</span>
+                <span className="text-ink-mid">Status</span>
                 <span className="flex items-center gap-2"><StatusPill status={data.status} /> → <StatusPill status={amountRaw > 0n ? after : data.status} /></span>
               </div>
             </div>

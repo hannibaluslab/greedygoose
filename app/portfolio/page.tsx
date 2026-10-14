@@ -43,10 +43,10 @@ function Portfolio({ address }: { address: `0x${string}` }) {
               <Divided className="pb-1"><span className="label">Cash available</span></Divided>
               <Money value={data.stocksUsd} size={46} dollarSize={22} centsSize={19} />
               <Divided className="self-stretch"><span className="text-[30px] font-semibold leading-none tracking-[-0.03em]">{formatUsd(data.usdcBalance).replace(/\.\d+$/, "")}</span></Divided>
-              <div className="pt-[5px] text-[13px] text-muted">
+              <div className="pt-[5px] text-[13px] text-ink-mid">
                 <span className="font-semibold text-ink">{formatUsd(data.collateralUsd)}</span> as collateral
               </div>
-              <Divided className="pt-[5px] text-[13px] text-muted">USDC</Divided>
+              <Divided className="pt-[5px] text-[13px] text-ink-mid">USDC</Divided>
             </section>
 
             <div className="grid grid-cols-2 gap-2.5">
@@ -55,7 +55,7 @@ function Portfolio({ address }: { address: `0x${string}` }) {
               </Link>
               <Link
                 href="/loan"
-                className="flex h-[52px] items-center justify-center gap-2 rounded-[26px] bg-accent text-[15px] font-bold no-underline"
+                className="flex h-[52px] items-center justify-center gap-2 rounded-[26px] bg-brand text-[15px] font-bold no-underline"
                 style={{ boxShadow: "0 0 14px rgba(212,255,60,0.32)" }}
               >
                 <PlusIcon size={18} />Add collateral
@@ -83,20 +83,20 @@ function Portfolio({ address }: { address: `0x${string}` }) {
                         <div className="flex items-center gap-2.5">
                           <StockAvatar symbol={h.symbol} size={40} />
                           <div className="min-w-0 grow">
-                            <div className="whitespace-nowrap text-[15px] font-semibold leading-tight">{h.name}</div>
-                            <div className="mt-0.5 whitespace-nowrap text-[13px] font-medium leading-snug text-muted">{formatShares(h.freeShares + h.lockedShares)} shares</div>
+                            <div className="whitespace-nowrap text-[15px] font-semibold leading-[1.25]">{h.name}</div>
+                            <div className="mt-0.5 whitespace-nowrap text-[13px] font-medium leading-snug text-ink-mid">{formatShares(h.freeShares + h.lockedShares)} shares</div>
                           </div>
                           <div className="min-w-[84px] text-right">
-                            <div className="whitespace-nowrap text-[15px] font-semibold leading-tight">{formatUsd(value)}</div>
-                            <div className="mt-0.5 whitespace-nowrap font-mono text-xs leading-snug text-muted">{formatUsd(h.priceUsd)}</div>
+                            <div className="whitespace-nowrap text-[15px] font-semibold leading-[1.25]">{formatUsd(value)}</div>
+                            <div className="mt-0.5 whitespace-nowrap font-mono text-xs leading-snug text-ink-mid">{formatUsd(h.priceUsd)}</div>
                           </div>
                         </div>
                         <div className="mt-2.5 flex items-center gap-1.5">
                           <Chip>{formatShares(h.freeShares)} free</Chip>
                           {lockedPct > 0 ? (
-                            <Chip className="ml-auto text-muted"><LockIcon size={10} />{lockedPct}% is collateral</Chip>
+                            <Chip className="ml-auto text-ink-mid"><LockIcon size={10} />{lockedPct}% is collateral</Chip>
                           ) : (
-                            <Chip className="ml-auto text-muted"><UnlockIcon size={10} />Not collateral</Chip>
+                            <Chip className="ml-auto text-ink-mid"><UnlockIcon size={10} />Not collateral</Chip>
                           )}
                           <ChevronRight className="shrink-0 text-[#b9b3a6]" />
                         </div>
@@ -124,7 +124,7 @@ function Divided({ children, className = "" }: { children: ReactNode; className?
 
 function Chip({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
-    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-ground px-[9px] py-1 text-[11.5px] leading-tight ${className}`}>
+    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-ground px-[9px] py-1 text-[11.5px] leading-[1.25] ${className}`}>
       {children}
     </span>
   );

@@ -4,12 +4,12 @@
 :root {
   --ink: #0e0d0b;
   --ink-2: #2c2a25;
-  --muted: #5a564e;
+  --ink-mid: #5a564e;
   --subtle: #8a8479;
   --ground: #f4f2ec;
   --card: #ffffff;
   --on-ink: #f5f0e2;
-  --accent: #d4ff3c;
+  --brand: #d4ff3c;
   --safe: #1f6a4a;
   --safe-bg: #d6e7dc;
   --watch: #d9a441;
@@ -23,12 +23,12 @@
 @theme inline {
   --color-ink: var(--ink);
   --color-ink-2: var(--ink-2);
-  --color-muted: var(--muted);
+  --color-ink-mid: var(--ink-mid);
   --color-subtle: var(--subtle);
   --color-ground: var(--ground);
   --color-card: var(--card);
   --color-on-ink: var(--on-ink);
-  --color-accent: var(--accent);
+  --color-brand: var(--brand);
   --color-safe: var(--safe);
   --color-safe-bg: var(--safe-bg);
   --color-watch: var(--watch);
