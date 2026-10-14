@@ -83,7 +83,7 @@ function Home({ address }: { address: `0x${string}` }) {
               {finishSetupShown(setup.save) && (
                 <FinishSetupCard
                   rate={rateText(apy)}
-                  grant={{ busy: setup.running, error: setup.error, blocked: setup.blocked, preview: setup.preview }}
+                  grant={setup.earning}
                   onStart={() => setup.startEarning(() => toast.success(`Your cash is earning ${rateText(apy)}`))}
                 />
               )}

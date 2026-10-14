@@ -8,7 +8,7 @@ import { NETWORK_FEE_ROW, Summary, type SummaryRow } from "./Summary";
 import { FaceIdButton, TxDone, TxError } from "./TxUi";
 import { FaceIdIcon, TrendUpIcon } from "./icons";
 import { NOT_FAIR, useConvert, useConvertQuotes, type ConvertQuote } from "@/hooks/useConvert";
-import type { useCashSetup } from "@/hooks/useCashSetup";
+import type { GrantView, useCashSetup } from "@/hooks/useCashSetup";
 import type { TxPhase } from "@/hooks/useTx";
 import { askAutomatic, arrivedText, type Arrived } from "@/lib/cashSetup";
 import { formatCoin, formatUsd } from "@/lib/formatting";
@@ -23,9 +23,6 @@ import { USDC } from "@/lib/tokens/registry";
 
 /** Said under every grant's button: JAW's own screen comes next (D14). */
 export const JAW_NOTE = "One Face ID. JAW shows what it allows before you sign.";
-
-/** A grant's button and what's around it, from useCashSetup. */
-export type GrantView = { busy: boolean; error: string | null; blocked: string | null; preview: boolean };
 
 const usd = (raw: bigint) => formatUsd(Number(raw) / 10 ** USDC.decimals);
 
@@ -193,7 +190,6 @@ export function ConvertSheet({
   const [ask] = useState(() => askAutomatic(setup.entry));
   const landed = tx.phase === "done";
   const got = quotes.data?.filter((q) => q.fair).reduce((t, q) => t + q.outRaw, 0n) ?? 0n;
-  const grant: GrantView = { busy: setup.running, error: setup.error, blocked: setup.blocked, preview: setup.preview };
   const close = () => {
     if (landed) toast.success(`${arrivedText(coins)} is cash now`);
     onClose();
@@ -209,13 +205,13 @@ export function ConvertSheet({
             preview={setup.preview}
             onConfirm={() => {
               if (tx.phase === "failed") tx.reset();
-              setup.reset();
+              setup.resetAutomatic();
               void tx.convert(user, quotes.data ?? []);
             }}
           />
         ) : ask ? (
           <AutomaticStep
-            grant={grant}
+            grant={setup.automatic}
             onYes={() =>
               setup.convertAutomatically(() => {
                 toast.success("Done. Next time it’s automatic");

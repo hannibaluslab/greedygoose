@@ -7,7 +7,7 @@ import { AddMoneyView } from "@/components/gg/AddMoney";
 import { AgentsFeed } from "@/components/gg/Agents";
 import { BalanceHero, TodayChange } from "@/components/gg/BalanceHero";
 import { CashCard, CreditCard } from "@/components/gg/Cards";
-import { ArrivedCard, AutomaticStep, ConvertReview, FinishSetupCard, FinishSetupStep, type GrantView } from "@/components/gg/CashSetup";
+import { ArrivedCard, AutomaticStep, ConvertReview, FinishSetupCard, FinishSetupStep } from "@/components/gg/CashSetup";
 import { QuickAction } from "@/components/gg/QuickAction";
 import { TabHeader } from "@/components/gg/Screen";
 import { TabBar } from "@/components/gg/TabBar";
@@ -16,6 +16,7 @@ import { CreditIcon, MenuIcon, PlusIcon, RepayIcon, TradeIcon } from "@/componen
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import type { FeedRow } from "@/components/gg/Activity";
 import type { ActivityRow } from "@/hooks/useActivity";
+import type { GrantView } from "@/hooks/useCashSetup";
 import type { ConvertQuote } from "@/hooks/useConvert";
 import { useNowSec } from "@/hooks/useNowSec";
 import type { AgentEvent } from "@/lib/agents/events";

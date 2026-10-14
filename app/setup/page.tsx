@@ -28,14 +28,14 @@ function Setup({ address }: { address: `0x${string}` }) {
   const needed = finishSetupShown(setup.save);
 
   useEffect(() => {
-    if (settled && !needed && !setup.running) router.replace("/home");
-  }, [settled, needed, setup.running, router]);
+    if (settled && !needed && !setup.earning.busy) router.replace("/home");
+  }, [settled, needed, setup.earning.busy, router]);
 
   if (!needed) return <div aria-busy className="min-h-dvh" />;
   return (
     <FinishSetupStep
       rate={rate}
-      grant={{ busy: setup.running, error: setup.error, blocked: setup.blocked, preview: setup.preview }}
+      grant={setup.earning}
       onStart={() =>
         setup.startEarning(() => {
           if (rate) toast.success(`Your cash is earning ${rate}`);

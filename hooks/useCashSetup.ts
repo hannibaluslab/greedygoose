@@ -10,22 +10,30 @@ import { LIMIT_USD, limitRaw } from "@/lib/agents/permissions";
 /** Why a grant can't be signed now; null when it can. */
 const FEE_BLOCKED = "Your account can’t pay network fees in USDC on Base right now.";
 
+/** A grant's button and what's around it: signing, its last error, why it can't be signed, and the dev preview. */
+export type GrantView = { busy: boolean; error: string | null; blocked: string | null; preview: boolean };
+
 /**
  * The two grants that run under the hood (D20), each one Face ID on JAW's own screen (D14): earning (the Save job) and
  * turning other dollars into cash on their own (the Entry job), each at its one limit (LIMIT_USD), never above the
- * executor's CAP_MAX. No agent, limit or switch is shown for them.
+ * executor's CAP_MAX. No agent, limit or switch is shown for them. Each has its own run, so a grant that didn't go
+ * through is retried as itself and its error stays on its own button.
  */
 export function useCashSetup(account: `0x${string}`) {
   const { address: signer } = useAccount();
   const fee = useFeeSupport();
   const agents = useAgents(account);
-  const runner = useAgentRun(agents);
+  const earning = useAgentRun(agents);
+  const automatic = useAgentRun(agents);
   const capMax = agents.capMaxRaw;
 
   const blocked = !!signer && fee.state === "unsupported" ? FEE_BLOCKED : capMax === null ? "One moment…" : null;
-  const grant = (job: "save" | "entry", onDone: () => void) => {
+  // The dev preview (`?as=`) reads another account: nothing can be signed for it.
+  const preview = !signer || !isAddressEqual(signer, account);
+  const view = (run: ReturnType<typeof useAgentRun>): GrantView => ({ busy: run.running, error: run.error, blocked, preview });
+  const grant = (run: ReturnType<typeof useAgentRun>, job: "save" | "entry", onDone: () => void) => {
     if (capMax === null) return;
-    void runner.run([{ grant: { job, capRaw: limitRaw(LIMIT_USD[job].start, capMax) } }], onDone);
+    void run.run([{ grant: { job, capRaw: limitRaw(LIMIT_USD[job].start, capMax) } }], onDone);
   };
 
   return {
@@ -33,15 +41,14 @@ export function useCashSetup(account: `0x${string}`) {
     save: agents.status.save,
     /** Other dollars converting on their own. */
     entry: agents.status.entry,
-    blocked,
-    /** The dev preview (`?as=`) reads another account: nothing can be signed for it. */
-    preview: !signer || !isAddressEqual(signer, account),
-    running: runner.running,
-    error: runner.error,
-    reset: runner.reset,
+    preview,
     /** "Finish setting up": your cash starts earning. */
-    startEarning: (onDone: () => void) => grant("save", onDone),
+    earning: view(earning),
+    startEarning: (onDone: () => void) => grant(earning, "save", onDone),
     /** "Do this automatically next time?": other dollars turn into cash on their own. */
-    convertAutomatically: (onDone: () => void) => grant("entry", onDone),
+    automatic: view(automatic),
+    convertAutomatically: (onDone: () => void) => grant(automatic, "entry", onDone),
+    /** Clears the last "automatically" error, for a new conversion. */
+    resetAutomatic: automatic.reset,
   };
 }
