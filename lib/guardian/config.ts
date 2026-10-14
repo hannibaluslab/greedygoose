@@ -2,8 +2,8 @@ import { CHAIN_ID } from "@/lib/chain";
 
 /**
  * Guardian contracts on Base. Manager / Aave V3 addresses verified on-chain 2026-10-13.
- * The GuardianChecker is NOT deployed to mainnet yet (needs an independent audit first);
- * the app and keeper read its address from config and stay disabled until it is set.
+ * The GuardianChecker is NOT deployed to mainnet yet (needs an independent audit first); the keeper reads its
+ * address from its own env (keeper/run.ts). The app has no Guardian screen: Protect replaced it (D11, D20).
  */
 export const GUARDIAN = {
   chainId: CHAIN_ID,
@@ -14,15 +14,6 @@ export const GUARDIAN = {
   /** aBasUSDC — the savings balance token (getReserveData(USDC).aTokenAddress). */
   AUSDC: "0x4e65fE4DbA92790696d040ac24Aa414708F5c0AB",
 } as const;
-
-const addr = (v: string | undefined) => (v && /^0x[0-9a-fA-F]{40}$/.test(v) ? (v as `0x${string}`) : undefined);
-
-/** Deployed GuardianChecker (contracts/src/GuardianChecker.sol). */
-export const GUARDIAN_CHECKER = addr(process.env.NEXT_PUBLIC_GUARDIAN_CHECKER);
-/** The keeper's spender address (its key lives only on the keeper server). */
-export const GUARDIAN_KEEPER = addr(process.env.NEXT_PUBLIC_GUARDIAN_KEEPER);
-
-export const guardianConfigured = () => !!GUARDIAN_CHECKER && !!GUARDIAN_KEEPER;
 
 /** Fixed salt so a user's Guardian permission can be rebuilt deterministically for revoke / status. */
 export const GUARDIAN_SALT = BigInt("0x" + "677561726469616e2e7631".padStart(64, "0")); // "guardian.v1"

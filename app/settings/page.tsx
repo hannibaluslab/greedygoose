@@ -19,7 +19,6 @@ function Settings({ address }: { address: `0x${string}` }) {
         <Line first label="Account" value={<a className="underline" href={addressUrl(address)} target="_blank" rel="noreferrer">{shortAddress(address)}</a>} />
         <Line label="Network" value="Base" />
         <Line label="Security" value="Passkey (JAW)" />
-        <Line label="Guardian" value={<a href="/guardian" className="underline">Manage</a>} />
       </WhiteCard>
       <WhiteCard className="p-4 text-[13px] leading-snug text-ink-mid">
         GreedyGoose is a non-custodial interface. Your stocks and USDC stay in your own smart account. Loans come from the Aave

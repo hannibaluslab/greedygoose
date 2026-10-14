@@ -35,21 +35,9 @@ export function describeActivity(i: ActivityItem): { title: string; amount: stri
       return { title: `Received ${name}`, amount: r?.kind === "equity" ? shares : formatUsd(i.amount), sign: "+" };
     case "send":
       return { title: `Sent ${name}`, amount: r?.kind === "equity" ? shares : formatUsd(i.amount), sign: "−" };
-    case "save":
-      return { title: "Moved into savings", amount: formatUsd(i.amount), sign: "" };
-    case "unsave":
-      return { title: "Moved out of savings", amount: formatUsd(i.amount), sign: "" };
     case "convert":
       return { title: `Turned ${i.symbol} into cash`, amount: `${formatCoin(i.amount)} ${i.symbol} · ${formatUsd(i.receivedUsd ?? 0)}`, sign: "" };
   }
-}
-
-/**
- * A row's moves for its details: each item, and after a buy or repay paid from savings, that withdrawal as it
- * happened ("Moved out of savings"). The row itself counts the items only, so it never shows as one more.
- */
-export function detailMoves(items: readonly ActivityItem[]): ActivityItem[] {
-  return items.flatMap((i) => (i.fromSavingsUsd ? [i, { kind: "unsave" as const, symbol: USDC.symbol, amount: i.fromSavingsUsd }] : [i]));
 }
 
 /** The round mark beside a move: the stock's badge, or a green $ for USDC and the other dollars that become cash. */
@@ -171,7 +159,7 @@ function Move({ row, last, open, onToggle }: { row: ActivityRow; last: boolean; 
       {open && (
         <div className="mt-2 rounded-[16px] bg-card-bone px-3 pt-2.5 text-[13px] leading-[1.35]">
           <dl className="num m-0 grid grid-cols-[82px_minmax(0,1fr)] gap-y-[5px]">
-            {detailMoves(row.items).map((item, i) => {
+            {row.items.map((item, i) => {
               const x = describeActivity(item);
               return (
                 <Detail key={i} label={i === 0 ? "What" : ""}>

@@ -30,7 +30,7 @@ export type GuardianDecision =
   | { action: "none"; reason: "no-debt" | "healthy" | "no-savings" | "no-cap" | "too-small"; hf: number | null }
   | { action: "repay"; amountUsd: number; reason: "watch" | "weekend-shield"; hf: number; hfAfter: number; limitedBy?: "savings" | "cap" };
 
-export const GUARDIAN_DEFAULTS = {
+const GUARDIAN_DEFAULTS = {
   triggerHf: CASH_AGENT.triggerHf, // 1.5
   targetHf: CASH_AGENT.targetHf, // 1.65
   stressDrop: CASH_AGENT.stressDrop,

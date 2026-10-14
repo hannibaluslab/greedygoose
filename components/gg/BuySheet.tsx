@@ -20,7 +20,7 @@ import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { useCollateralFactors, type PositionData } from "@/hooks/usePosition";
 import { CASH } from "@/config/risk";
 import { monthlyCost } from "@/lib/aave/math";
-import { maxSpendRaw, savingsWithdrawal, toUsd } from "@/lib/cash";
+import { maxSpendRaw, toUsd } from "@/lib/cash";
 import { CREDIT_BLOCKED, backingOptions, planCredit, splitCash, type CreditPlan } from "@/lib/creditBuy";
 import { formatShares, formatUsd, inWords } from "@/lib/formatting";
 import { marketState } from "@/lib/market-hours";
@@ -190,7 +190,6 @@ export function BuySheet({
               data={data}
               stock={stock}
               econ={econ}
-              amountInRaw={q.amountIn}
               minShares={Number(minOut(q.amountOut)) / 10 ** stock.decimals}
               venue={VENUE_LABEL[q.venue]}
               credit={plan && split ? { plan, cashRaw: split.cashRaw } : null}
@@ -228,12 +227,11 @@ export function BuySheet({
  * lists every move in the batch (D7), then Back and Face ID.
  */
 function Review({
-  data, stock, econ, amountInRaw, minShares, venue, credit, note, blocked, ack, onAck, feeBlocked, error, onBack, button, busy,
+  data, stock, econ, minShares, venue, credit, note, blocked, ack, onAck, feeBlocked, error, onBack, button, busy,
 }: {
   data: PositionData;
   stock: ReserveAsset;
   econ: ReturnType<typeof quoteEconomics>;
-  amountInRaw: bigint;
   minShares: number;
   venue: string;
   /** Decision 1: the credit plan for the part cash can't pay, and what cash pays. */
@@ -249,7 +247,6 @@ function Review({
   busy: boolean;
 }) {
   const ticker = tickerOf(stock.symbol);
-  const fromSavings = savingsWithdrawal(credit ? credit.cashRaw : amountInRaw, data.cash);
   const plan = credit?.plan;
   const creditUsd = plan ? toUsd(plan.creditRaw) : 0;
   const backers = plan
@@ -278,7 +275,6 @@ function Review({
       ];
 
   const moves = [
-    ...(fromSavings ? [`${formatUsd(toUsd(fromSavings.raw))} comes out of savings`] : []),
     ...(plan?.backing ?? []).map((b) => {
       const h = data.holdings.find((x) => x.symbol === b.stock.symbol);
       return `${formatShares(rawToShares(b.raw, h?.multiplier ?? 10n ** 18n, b.stock.decimals))} ${tickerOf(b.stock.symbol)} goes in use to back credit`;

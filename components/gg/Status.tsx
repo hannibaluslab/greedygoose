@@ -1,5 +1,4 @@
 import { STATUS_LABEL, type Status } from "@/lib/risk/status";
-import type { GuardianStatus } from "@/hooks/useGuardian";
 
 const PILL: Record<Status, string> = {
   none: "bg-pill text-ink-mid",
@@ -68,17 +67,6 @@ export function StatusBar({ status, healthFactor }: { status: Status; healthFact
         <span className="text-act" style={{ flex: 1.4 }}>Act</span>
       </div>
     </div>
-  );
-}
-
-/** Guardian's state: On, Off, Coming soon (its contract isn't deployed yet), or … while it loads. */
-export function GuardianPill({ status }: { status: GuardianStatus }) {
-  const on = status === "on";
-  return (
-    <span className={`inline-flex h-6 shrink-0 items-center gap-1.5 rounded-[12px] px-2.5 text-xs font-bold ${on ? "bg-safe-bg text-safe" : "bg-chip text-ink-mid"}`}>
-      <span aria-hidden className={`size-1.5 rounded-full ${on ? "bg-safe" : "bg-subtle"}`} />
-      {status === "unconfigured" ? "Coming soon" : on ? "On" : status === "loading" ? "…" : "Off"}
-    </span>
   );
 }
 

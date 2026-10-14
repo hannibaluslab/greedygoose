@@ -7,6 +7,7 @@ import { StatusBar, StatusPill } from "@/components/gg/Status";
 import { ChevronRight, ShieldIcon } from "@/components/gg/icons";
 import { MarketBanner } from "@/components/ui/MarketBanner";
 import { usePosition } from "@/hooks/usePosition";
+import { AGENT_COPY } from "@/lib/agents/list";
 import { STATUS_COPY } from "@/lib/risk/status";
 import { formatPct, formatUsd } from "@/lib/formatting";
 
@@ -49,11 +50,11 @@ function Credit({ address }: { address: `0x${string}` }) {
             <Line label="Network" value="Base" />
           </WhiteCard>
 
-          <Link href="/guardian" className="flex items-center gap-3 rounded-[22px] bg-card px-4 py-3.5 no-underline shadow-[0_1px_3px_rgba(14,13,11,0.06)]">
+          <Link href="/agents?agent=protect" className="flex items-center gap-3 rounded-[22px] bg-card px-4 py-3.5 no-underline shadow-[0_1px_3px_rgba(14,13,11,0.06)]">
             <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand text-ink"><ShieldIcon size={16} /></span>
             <span className="flex flex-1 flex-col">
-              <span className="text-[15px] font-semibold">Guardian</span>
-              <span className="text-[12.5px] text-ink-mid">Repays from savings so your stocks aren’t sold</span>
+              <span className="text-[15px] font-semibold">Protect</span>
+              <span className="text-[12.5px] text-ink-mid">{AGENT_COPY.protect.does}</span>
             </span>
             <ChevronRight className="text-subtle" />
           </Link>

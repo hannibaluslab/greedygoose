@@ -45,12 +45,13 @@ export function TotalBalanceSheet({
 
 /**
  * Design board "2e · Average yield info" (HomeYieldInfo.dc.html), with D19: stocks earn no yield, so the average
- * yield is the cash rate and cash is the only row. What it earns in a year counts savings only, since wallet USDC
- * earns nothing until it's in savings.
+ * yield is the cash rate and cash is the only row. Cash is one pot on screen (D20): what it earns in a year counts
+ * the part that earns now (savings), and the rest is said in cash terms. While earning runs (`earning`, the Save job),
+ * money that just arrived starts earning soon; before it's set up, it isn't earning yet.
  */
 export function YieldSheet({
-  open, onClose, cashUsd, savingsUsd, apy,
-}: { open: boolean; onClose: () => void; cashUsd: number; savingsUsd: number; apy: number }) {
+  open, onClose, cashUsd, savingsUsd, apy, earning,
+}: { open: boolean; onClose: () => void; cashUsd: number; savingsUsd: number; apy: number; earning: boolean }) {
   const rate = `${(apy * 100).toFixed(1)}%`;
   const value = formatUsdTrim(Math.round(cashUsd));
   const earns = Math.round(savingsUsd * apy);
@@ -61,7 +62,7 @@ export function YieldSheet({
       onOpenChange={(next) => !next && onClose()}
       look="info"
       title="Average yield"
-      description="What your cash earns in savings. Stocks don’t earn a yield, so your average yield is your cash rate."
+      description="What your cash earns. Stocks don’t earn a yield, so your average yield is your cash rate."
     >
       <SheetSteps stepKey="yield" className="num flex flex-col gap-[18px] leading-[normal]">
         <div className="rounded-[22px] bg-card px-4 py-1 shadow-card-elev">
@@ -87,7 +88,8 @@ export function YieldSheet({
           </div>
           <p className="m-0 px-0.5 text-[12.5px] leading-[1.45] text-subtle">
             At today’s rate, which moves with the market.
-            {wallet > CASH.keepBackUsd && ` ${formatUsd(wallet)} of your cash is in your wallet and earns nothing until it’s in savings.`}
+            {wallet > CASH.keepBackUsd &&
+              (earning ? ` ${formatUsd(wallet)} arrived recently and starts earning soon.` : ` ${formatUsd(wallet)} of your cash isn’t earning yet.`)}
             {" "}What credit costs isn’t taken off; you see it on your Credit card.
           </p>
         </div>

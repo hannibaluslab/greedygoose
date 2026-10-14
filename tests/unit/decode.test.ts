@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { encodeAbiParameters, encodeEventTopics, erc20Abi, getAbiItem, type Log } from "viem";
-import { detailMoves } from "@/components/gg/Activity";
 import { decodeActivity } from "@/lib/activity/decode";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
@@ -62,21 +61,22 @@ describe("decodeActivity: sales", () => {
   });
 });
 
-describe("decodeActivity: a savings withdrawal paying for the move (D15)", () => {
+describe("decodeActivity: savings stay inside the cash (D15, D20)", () => {
   // Aave V3 sends the USDC from the aToken contract to the account; the fee buffer stays behind in the wallet.
   const fromSavings = (raw: bigint, to: Address = user) => transfer(USDC.address, GUARDIAN.AUSDC, to, raw);
+  const intoSavings = (raw: bigint) => transfer(USDC.address, user, GUARDIAN.AUSDC, raw);
 
-  it("a repay from savings is one repay, with what came out of savings on it", () => {
+  it("a repay paid from savings is one repay, paid from cash", () => {
     const logs = [fromSavings(10_500_000n), repayEvent(user, 10_000_000n), transfer(USDC.address, user, AAVE.HUB, 10_000_000n)];
-    expect(decodeActivity(logs, user)).toEqual([{ kind: "repay", symbol: "USDC", amount: 10, fromSavingsUsd: 10.5 }]);
+    expect(decodeActivity(logs, user)).toEqual([{ kind: "repay", symbol: "USDC", amount: 10 }]);
   });
 
-  it("a buy from savings is one buy, paid what the swap took", () => {
+  it("a buy paid from savings is one buy, paid what the swap took", () => {
     const logs = [fromSavings(1_500_000n), transfer(USDC.address, user, pool, 1_000_000n), transfer(nvda.address, pool, user, 436_000n)];
-    expect(decodeActivity(logs, user)).toEqual([{ kind: "buy", symbol: "NVDAc", amount: 0.00436, paidUsd: 1, fromSavingsUsd: 1.5 }]);
+    expect(decodeActivity(logs, user)).toEqual([{ kind: "buy", symbol: "NVDAc", amount: 0.00436, paidUsd: 1 }]);
   });
 
-  it("a Credit Buy whose cash part came from savings keeps it on the buy", () => {
+  it("a Credit Buy whose cash part came from savings is credit taken and a buy", () => {
     const borrow = getAbiItem({ abi: spokeAbi, name: "Borrow" });
     const borrowLog = log(
       AAVE.SPOKE,
@@ -92,24 +92,16 @@ describe("decodeActivity: a savings withdrawal paying for the move (D15)", () =>
     ];
     const items = decodeActivity(logs, user);
     expect(items.map((i) => i.kind)).toEqual(["borrow", "buy"]);
-    expect(items[1]).toMatchObject({ kind: "buy", paidUsd: 300, fromSavingsUsd: 100.5 });
+    expect(items[1]).toEqual({ kind: "buy", symbol: "NVDAc", amount: 1.3, paidUsd: 300 });
   });
 
-  it("a withdrawal on its own is still a move out of savings", () => {
-    expect(decodeActivity([fromSavings(5_000_000n)], user)).toEqual([{ kind: "unsave", symbol: "USDC", amount: 5 }]);
+  it("money moving between the wallet and savings alone is no move: the cash didn't change", () => {
+    expect(decodeActivity([fromSavings(5_000_000n)], user)).toEqual([]);
+    expect(decodeActivity([intoSavings(5_000_000n)], user)).toEqual([]);
   });
 
   it("another account's withdrawal in the same bundle isn't the user's", () => {
     const logs = [fromSavings(5_000_000n, other), repayEvent(user, 1_000_000n)];
     expect(decodeActivity(logs, user)).toEqual([{ kind: "repay", symbol: "USDC", amount: 1 }]);
-  });
-});
-
-describe("detailMoves (a row's details)", () => {
-  it("lists the withdrawal after the move it paid for, and leaves other moves alone", () => {
-    const repay = { kind: "repay" as const, symbol: "USDC", amount: 10, fromSavingsUsd: 10.5 };
-    const supply = { kind: "supply" as const, symbol: "NVDAc", amount: 0.1 };
-    expect(detailMoves([repay])).toEqual([repay, { kind: "unsave", symbol: "USDC", amount: 10.5 }]);
-    expect(detailMoves([supply])).toEqual([supply]);
   });
 });

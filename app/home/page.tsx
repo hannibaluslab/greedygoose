@@ -96,7 +96,7 @@ function Home({ address }: { address: `0x${string}` }) {
       {data && (
         <>
           <TotalBalanceSheet open={sheet === "total"} onClose={close} cashUsd={data.cashUsd} stocksUsd={data.stocksUsd} debtUsd={data.debtUsd} />
-          <YieldSheet open={sheet === "yield"} onClose={close} cashUsd={data.cashUsd} savingsUsd={data.savingsUsd} apy={apy} />
+          <YieldSheet open={sheet === "yield"} onClose={close} cashUsd={data.cashUsd} savingsUsd={data.savingsUsd} apy={apy} earning={data.cash.saveOn} />
           <CreditSheet open={sheet === "credit"} onClose={close} account={address} data={data} />
           <StockSheets sheets={stocks} user={address} data={data} />
         </>

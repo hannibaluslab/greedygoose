@@ -5,7 +5,7 @@ import { ALL_RESERVES, EQUITIES, USDC, findByAddress } from "@/lib/tokens/regist
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 import { GUARDIAN } from "@/lib/guardian/config";
 
-export type ActivityKind = "supply" | "withdraw" | "borrow" | "repay" | "buy" | "sell" | "receive" | "send" | "save" | "unsave" | "convert";
+export type ActivityKind = "supply" | "withdraw" | "borrow" | "repay" | "buy" | "sell" | "receive" | "send" | "convert";
 
 export type ActivityItem = {
   kind: ActivityKind;
@@ -17,8 +17,6 @@ export type ActivityItem = {
   paidUsd?: number;
   /** For sells, and for other dollars turned into cash (`convert`, `symbol` is the coin's): USDC received. */
   receivedUsd?: number;
-  /** For a buy or a repay: what came out of savings in the same batch to pay for it (cash is savings, D15). */
-  fromSavingsUsd?: number;
 };
 
 const byReserveId = (id: bigint) => ALL_RESERVES.find((r) => BigInt(r.reserveId) === id);
@@ -26,9 +24,9 @@ const units = (raw: bigint, decimals: number) => Number(raw) / 10 ** decimals;
 
 /**
  * Decode what happened to `user` in one transaction receipt. A bundle tx can carry other
- * accounts' operations, so every event is filtered by the user's address. A savings withdrawal
- * that pays for a buy or a repay in the same batch is part of that move, not one of its own: it
- * goes on it as `fromSavingsUsd` (the raw move stays in the details, plan item 1).
+ * accounts' operations, so every event is filtered by the user's address. USDC moving between the
+ * wallet and savings stays inside the cash (D15), and the cash is one pot on screen (D20): it is no
+ * move of its own, and a buy or a repay it paid for reads as paid from cash.
  */
 export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[] {
   const items: ActivityItem[] = [];
@@ -58,7 +56,6 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
   });
   const touchesAave = (addr?: `0x${string}`) => !!addr && (isAddressEqual(addr, AAVE.HUB) || isAddressEqual(addr, AAVE.SPOKE));
   let usdcOut = 0n;
-  let fromSavings = 0n;
   const usdcIn: bigint[] = [];
   const stockIn: { symbol: string; raw: bigint; decimals: number }[] = [];
   const stockOut: { symbol: string; raw: bigint; decimals: number }[] = [];
@@ -69,15 +66,9 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
     if (!token) continue;
     // Aave V4 moves are already covered by Spoke events.
     if (touchesAave(from) || touchesAave(to)) continue;
-    // Aave V3 savings: USDC into / out of the aToken contract.
-    if (token.kind === "debt" && from && to && isAddressEqual(from, user) && isAddressEqual(to, GUARDIAN.AUSDC)) {
-      items.push({ kind: "save", symbol: token.symbol, amount: units(value, token.decimals) });
-      continue;
-    }
-    if (token.kind === "debt" && from && to && isAddressEqual(from, GUARDIAN.AUSDC) && isAddressEqual(to, user)) {
-      fromSavings += value;
-      continue;
-    }
+    // Aave V3 savings: USDC into or out of the aToken contract, within the user's own cash.
+    if (token.kind === "debt" && from && to && isAddressEqual(from, user) && isAddressEqual(to, GUARDIAN.AUSDC)) continue;
+    if (token.kind === "debt" && from && to && isAddressEqual(from, GUARDIAN.AUSDC) && isAddressEqual(to, user)) continue;
     if (token.kind === "debt" && from && isAddressEqual(from, user)) usdcOut += value;
     if (token.kind === "equity" && to && isAddressEqual(to, user)) stockIn.push({ symbol: token.symbol, raw: value, decimals: token.decimals });
     if (token.kind === "equity" && from && isAddressEqual(from, user)) stockOut.push({ symbol: token.symbol, raw: value, decimals: token.decimals });
@@ -118,11 +109,6 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
   if (stockIn.length === 0 && usdcOut > 0n) items.push({ kind: "send", symbol: USDC.symbol, amount: units(usdcOut, USDC.decimals) });
   if (stockOut.length === 0) {
     for (const v of usdcIn.slice(converted.length)) items.push({ kind: "receive", symbol: USDC.symbol, amount: units(v, USDC.decimals) });
-  }
-  if (fromSavings > 0n) {
-    const paid = items.find((i) => i.kind === "buy" || i.kind === "repay");
-    if (paid) paid.fromSavingsUsd = units(fromSavings, USDC.decimals);
-    else items.push({ kind: "unsave", symbol: USDC.symbol, amount: units(fromSavings, USDC.decimals) });
   }
   return items;
 }

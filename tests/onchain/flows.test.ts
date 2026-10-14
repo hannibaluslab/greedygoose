@@ -153,9 +153,9 @@ describe("savings-first batches from a $0 wallet", () => {
     const r = await simulateFromEmptyWallet(calls);
     expect(r.statuses).toEqual(["success", "success", "success"]);
     expect(r.walletAfter).toBe(feeBuffer);
-    // One Activity row: the buy, with the savings withdrawal that paid for it on it, not a move of its own.
+    // One Activity row: the buy, paid from cash. The savings withdrawal that paid for it stays inside the cash (D20).
     expect(r.activity).toEqual([
-      { kind: "buy", symbol: "NVDAc", amount: Number(quote.amountOut) / 1e8, paidUsd: 1, fromSavingsUsd: 1 + CASH.feeBufferUsd },
+      { kind: "buy", symbol: "NVDAc", amount: Number(quote.amountOut) / 1e8, paidUsd: 1 },
     ]);
   });
 
@@ -170,7 +170,7 @@ describe("savings-first batches from a $0 wallet", () => {
     expect(r.statuses).toEqual(["success", "success", "success"]);
     expect(r.walletAfter).toBe(feeBuffer);
     expect(r.activity).toEqual([
-      { kind: "repay", symbol: "USDC", amount: Number(amountRaw) / 1e6, fromSavingsUsd: Number(amountRaw + feeBuffer) / 1e6 },
+      { kind: "repay", symbol: "USDC", amount: Number(amountRaw) / 1e6 },
     ]);
   });
 
