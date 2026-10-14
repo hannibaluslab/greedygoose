@@ -40,6 +40,11 @@ type SheetShellProps = {
    *  the padding held the pinned button short of the sheet bottom AND let the
    *  content scrolling beneath peek through that strip. */
   flushBottom?: boolean;
+  /** "info" is the canvas's read-only sheet (HomeInfo, HomeCreditSlide): a
+   *  24px title, the description as a 15px lead, and no Close: the sheet ends
+   *  in its own buttons, and a tap outside or Escape closes it. 18px between
+   *  parts with a lead, 16px without. */
+  look?: "flow" | "info";
   children: ReactNode;
 };
 
@@ -120,8 +125,10 @@ export function SheetShell({
   maxHeightVh = 88,
   contentHeightPx,
   flushBottom = false,
+  look = "flow",
   children,
 }: SheetShellProps) {
+  const info = look === "info";
   // Inside a host flow this sheet is a step, not a drawer (see SheetSteps).
   const embedded = useContext(SheetHostContext);
   // Body lock + keyboard lift are a UNIT (see useSheetViewport) — the lift
@@ -174,7 +181,7 @@ export function SheetShell({
         >
           {/* The canvas draws a grabber; the sheet doesn't drag (dismissible={false}), so it's decoration only. */}
           <div aria-hidden className="mx-auto mt-2.5 h-[5px] w-10 shrink-0 rounded-[3px] bg-line-strong" />
-          <div className="flex items-center gap-1.5 px-5 pb-3 pt-4">
+          <div className={`flex items-center gap-1.5 px-5 ${!info ? "pb-3 pt-4" : description ? "py-[18px]" : "py-4"}`}>
             {onBack && (
               <button
                 type="button"
@@ -187,15 +194,17 @@ export function SheetShell({
             )}
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-2">
-                <DrawerTitle className="m-0 shrink-0 text-[20px] font-semibold tracking-tight-2 text-ink">{title}</DrawerTitle>
+                <DrawerTitle className={`m-0 shrink-0 font-semibold tracking-tight-2 text-ink ${info ? "text-[24px] leading-[normal]" : "text-[20px]"}`}>{title}</DrawerTitle>
                 {titleAccessory}
               </div>
               {description && (
-                <DrawerDescription className="mt-1 text-body-xs leading-body text-ink-mid">{description}</DrawerDescription>
+                <DrawerDescription className={info ? "m-0 mt-2 text-[15px] leading-body text-ink-2" : "mt-1 text-body-xs leading-body text-ink-mid"}>
+                  {description}
+                </DrawerDescription>
               )}
             </div>
             {headerRight}
-            {!hideClose && (
+            {!hideClose && !info && (
               <button
                 type="button"
                 aria-label="Close"
