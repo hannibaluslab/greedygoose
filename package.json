@@ -15,8 +15,8 @@
     "contracts:test": "cd contracts && forge test"
   },
   "dependencies": {
-    "@jaw.id/core": "^1.6.2",
-    "@jaw.id/wagmi": "^1.1.12",
+    "@jaw.id/core": "1.6.3",
+    "@jaw.id/wagmi": "1.1.13",
     "@tanstack/react-query": "<5.100.10",
     "next": "16.4.0",
     "react": "19.3.0",
