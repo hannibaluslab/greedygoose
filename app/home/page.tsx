@@ -9,13 +9,14 @@ import { TabBar } from "@/components/gg/TabBar";
 import { BalanceHero, TodayChange, TodayPending } from "@/components/gg/BalanceHero";
 import { QuickAction } from "@/components/gg/QuickAction";
 import { CashCard, CreditCard } from "@/components/gg/Cards";
-import { FinishSetupCard, TurnIntoCash } from "@/components/gg/CashSetup";
+import { StartEarningCard, TurnIntoCash } from "@/components/gg/CashSetup";
 import { AddStockCard, HoldingCard } from "@/components/gg/Holding";
 import { CreditSheet } from "@/components/gg/CreditSheet";
 import { StockSheets, useStockSheets } from "@/components/gg/StockSheets";
 import { ValueLine } from "@/components/gg/ValueLine";
 import { TotalBalanceSheet, YieldSheet } from "@/components/gg/InfoSheets";
 import { Button } from "@/components/gg/Button";
+import { StockAvatar } from "@/components/gg/StockAvatar";
 import { ChevronRight, CreditIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/icons";
 import { MarketBanner } from "@/components/ui/MarketBanner";
 import { useCashSetup } from "@/hooks/useCashSetup";
@@ -23,9 +24,10 @@ import { useEntryBalances } from "@/hooks/useEntryBalances";
 import { useMarketPrices } from "@/hooks/useMarketPrices";
 import { usePosition, type PositionData } from "@/hooks/usePosition";
 import { aprToApy } from "@/lib/aave/math";
-import { arrivedCoins, arrivedView, finishSetupShown, rateText, type ArrivedView } from "@/lib/cashSetup";
+import { arrivedCoins, arrivedView, rateText, startEarningShown, type ArrivedView } from "@/lib/cashSetup";
 import { homeStatus } from "@/lib/risk/status";
 import { formatUsd, formatUsdTrim } from "@/lib/formatting";
+import { EQUITIES } from "@/lib/tokens/registry";
 import { dayChange, weekValue } from "@/lib/prices/market";
 
 export default function HomePage() {
@@ -54,7 +56,7 @@ function Home({ address }: { address: `0x${string}` }) {
   const arrived = arrivedView(arrivedCoins(useEntryBalances(address)), setup.entry);
 
   return (
-    <div className="relative min-h-dvh">
+    <div className="relative flex min-h-dvh flex-col">
       <Header address={address} />
 
       {isError && !data && (
@@ -78,8 +80,9 @@ function Home({ address }: { address: `0x${string}` }) {
           cards={
             <>
               <TurnIntoCash user={address} view={arrived} setup={setup} />
-              {finishSetupShown(setup.save) && (
-                <FinishSetupCard
+              {startEarningShown(setup.save, data.cashUsd) && (
+                <StartEarningCard
+                  cashUsd={data.cashUsd}
                   rate={rateText(apy)}
                   grant={setup.earning}
                   onStart={() => setup.startEarning(() => toast.success(`Your cash starts earning ${rateText(apy)}`))}
@@ -159,7 +162,8 @@ function Loaded({
         />
       </section>
 
-      <section className="flex flex-col gap-2.5 px-5 pt-[17px] leading-[normal]">
+      {/* With no stocks, the empty state takes the room down to the tab bar. */}
+      <section className={`flex flex-col gap-2.5 px-5 pt-[17px] leading-[normal] ${held.length === 0 ? "grow" : ""}`}>
         <div className="flex h-[22px] items-center justify-between">
           <Link href="/portfolio" className="flex items-baseline gap-2 no-underline">
             <span className="text-lg font-semibold tracking-[-0.015em]">Portfolio</span>
@@ -170,12 +174,7 @@ function Loaded({
           </Link>
         </div>
         {held.length === 0 ? (
-          <div className="mb-4 flex flex-col gap-3 rounded-[22px] bg-card p-4 shadow-card-elev">
-            <p className="m-0 text-[15px]">You don’t hold any supported stocks yet.</p>
-            <Button variant="soft" href="/buy">
-              {data.cashUsd >= 1 ? `Buy stocks with your ${formatUsd(data.cashUsd)}` : "Buy stocks"}
-            </Button>
-          </div>
+          <EmptyPortfolio cashUsd={data.cashUsd} />
         ) : (
           <div className={`-mx-5 flex ${held.length < 2 ? "justify-start" : "justify-between"} gap-2 overflow-x-auto px-5 pb-4 pt-0.5 [scrollbar-width:none]`}>
             {held.map((h) => {
@@ -211,6 +210,29 @@ function Skeleton() {
       <div className="grid grid-cols-4 gap-2">{[0, 1, 2, 3].map((i) => <div key={i} className="mx-auto size-12 animate-pulse rounded-3xl bg-chip" />)}</div>
       <div className="grid grid-cols-2 gap-2.5"><div className="h-[108px] animate-pulse rounded-[22px] bg-chip" /><div className="h-[108px] animate-pulse rounded-[22px] bg-chip" /></div>
       <div className="h-[170px] animate-pulse rounded-[22px] bg-chip" />
+    </div>
+  );
+}
+
+/**
+ * Home's portfolio before the first stock: the board's dashed "add a stock" language, grown to fill the room down to
+ * the tab bar, with the seven stocks you can buy and one button to the Market.
+ */
+function EmptyPortfolio({ cashUsd }: { cashUsd: number }) {
+  return (
+    <div className="mb-4 flex min-h-[200px] grow flex-col items-center justify-center gap-4 rounded-[22px] border-[1.5px] border-dashed border-[rgba(14,13,11,0.2)] px-6 py-6 text-center">
+      <div aria-hidden className="flex gap-1">
+        {EQUITIES.map((e) => (
+          <StockAvatar key={e.symbol} symbol={e.symbol} size={38} />
+        ))}
+      </div>
+      <div className="flex flex-col gap-1">
+        <p className="m-0 text-[17px] font-semibold tracking-[-0.01em]">You don’t hold any stocks yet</p>
+        <p className="m-0 text-[13px] leading-[1.4] text-ink-mid">{EQUITIES.map((e) => e.name).join(", ")}.</p>
+      </div>
+      <Button variant="dark" href="/buy" className="w-full">
+        {cashUsd >= 1 ? `Buy stocks with your ${formatUsd(cashUsd)}` : "Buy stocks"}
+      </Button>
     </div>
   );
 }
