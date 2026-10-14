@@ -5,8 +5,8 @@ import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
 /**
  * The Rebalancer's settings in its agent sheet (agents-redesign spec): what its next run would trade, and what saving
- * takes. Saving is at most two Face IDs, each only when needed: the mix in the registry (`setMix`), then a new grant
- * when there is none, the weekly limit changed, or a stock in the mix has no sell limit in it.
+ * takes. Saving opens JAW's sheet at most twice, each only when needed: the mix in the registry (`setMix`), then a new
+ * grant when there is none, the weekly limit changed, or a stock in the mix has no sell limit in it.
  */
 
 /** One trade of the preview: sells first, then buys, each largest first, in whole dollars at Aave's price. */
@@ -30,10 +30,10 @@ export type RebalanceTerms = { capRaw: bigint; limitsRaw?: StockLimits } | null 
 export type SavePlan = {
   mixChanged: boolean;
   needsGrant: boolean;
-  /** How many Face IDs saving takes (0 when there is nothing to save). */
-  faceIds: number;
+  /** How many times saving opens JAW's sheet (0 when there is nothing to save). */
+  steps: number;
   canSave: boolean;
-  /** The line under the button: why it can't save, or how many Face IDs it takes. */
+  /** Why it can't save, under the button; null when it can (the button says "2 steps" itself). */
   note: string | null;
 };
 
@@ -61,9 +61,9 @@ export function rebalanceSave(p: {
     (!p.terms ||
       p.terms.capRaw !== p.capRaw ||
       p.weights.some((w, r) => w > 0 && !((p.terms!.limitsRaw?.[r] ?? 0n) > 0n)));
-  const faceIds = Number(mixChanged) + Number(needsGrant);
+  const steps = Number(mixChanged) + Number(needsGrant);
   const canSave =
-    p.configured && p.connected && whole && faceIds > 0 && p.capMaxRaw !== null && !p.feeBlocked && !p.feeLoading && !p.busy;
+    p.configured && p.connected && whole && steps > 0 && p.capMaxRaw !== null && !p.feeBlocked && !p.feeLoading && !p.busy;
 
   const note = !p.configured
     ? "Not live yet"
@@ -71,17 +71,7 @@ export function rebalanceSave(p: {
       ? "Your account can’t pay network fees in USDC on Base right now."
       : !whole
         ? "Make your mix add up to 100% to save it."
-        : faceIds === 2
-          ? p.running
-            ? "Two Face IDs: your mix, then its new limit."
-            : "Two Face IDs: your mix, then switching it on."
-          : mixChanged
-            ? "One Face ID."
-            : needsGrant
-              ? p.running
-                ? "One Face ID for its new limit."
-                : "One Face ID switches it on."
-              : null;
+        : null;
 
-  return { mixChanged, needsGrant, faceIds, canSave, note };
+  return { mixChanged, needsGrant, steps, canSave, note };
 }

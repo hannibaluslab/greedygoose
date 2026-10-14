@@ -17,7 +17,7 @@ import { StatusChange, StatusPill, type StatusPillSize } from "@/components/gg/S
 import { StockAvatar } from "@/components/gg/StockAvatar";
 import { NETWORK_FEE_ROW, Summary } from "@/components/gg/Summary";
 import { Switch } from "@/components/gg/Switch";
-import { FaceIdButton } from "@/components/gg/TxUi";
+import { TxButton } from "@/components/gg/TxUi";
 import { ValueLine } from "@/components/gg/ValueLine";
 import { CreditIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/icons";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
@@ -208,12 +208,9 @@ export function Gallery() {
 
       <Section title="Buttons" kit="buttons">
         <div className="flex flex-col gap-2.5">
-          <FaceIdButton label="Repay $300 with Face ID" phase="idle" onClick={noop} />
-          <div className="flex gap-2">
-            <Button variant="soft" onClick={noop}>Back</Button>
-            <div className="flex-1"><FaceIdButton label="Confirm with Face ID" phase="idle" size="md" onClick={noop} /></div>
-          </div>
-          <Button variant="dark" onClick={noop}>Review buy</Button>
+          <TxButton label="Repay" phase="idle" onClick={noop} />
+          <TxButton label="Switch on" phase="idle" size="md" steps={2} onClick={noop} />
+          <Button variant="dark" onClick={noop}>Continue</Button>
           <div className="grid grid-cols-2 gap-2.5">
             <Button variant="white" icon={<TradeIcon size={18} strokeWidth={1.8} />} onClick={noop}>Market</Button>
             <Button icon={<CreditIcon size={18} strokeWidth={1.8} />} onClick={noop}>Credit Buy</Button>
@@ -395,7 +392,7 @@ function BuyDemoSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (op
             <Summary rows={[{ label: "You pay", value: formatUsd(usd) }, { label: "Price", value: formatUsd(NVDA.price) }, NETWORK_FEE_ROW]} />
             <div className="mt-1 flex gap-2">
               <Button variant="soft" onClick={() => setStep("amount")}>Back</Button>
-              <div className="flex-1"><FaceIdButton label="Confirm with Face ID" phase="idle" size="md" onClick={finish} /></div>
+              <div className="flex-1"><TxButton label="Buy" phase="idle" size="md" onClick={finish} /></div>
             </div>
           </div>
         )}

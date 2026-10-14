@@ -6,7 +6,7 @@ import { Button } from "./Button";
 import { LimitChips } from "./LimitChips";
 import { AgentPill } from "./Status";
 import { NETWORK_FEE_ROW, Summary } from "./Summary";
-import { FaceIdButton, TxError } from "./TxUi";
+import { TxButton, TxError } from "./TxUi";
 import { ShieldIcon } from "./icons";
 import { AGENT_COPY, type AgentItem, type ConfirmCopy, type SheetAction } from "@/lib/agents/list";
 import type { AgentStatus } from "@/lib/agents/status";
@@ -196,7 +196,7 @@ export function AgentConfirm({ confirm }: { confirm: ConfirmView }) {
       <p className="m-0 text-[15px] leading-[1.45] text-ink-2">{confirm.lead}</p>
       <Summary rows={[...confirm.rows, NETWORK_FEE_ROW]} />
       <TxError error={confirm.error} />
-      <FaceIdButton
+      <TxButton
         label={confirm.button}
         size="md"
         phase={confirm.busy ? "signing" : "idle"}

@@ -9,7 +9,7 @@ import { AmountInput } from "@/components/gg/AmountInput";
 import { BottomBar } from "@/components/gg/BottomBar";
 import { GuardianPill, StatusPill } from "@/components/gg/Status";
 import { ShieldIcon } from "@/components/gg/icons";
-import { FaceIdButton, TxDone, TxError } from "@/components/gg/TxUi";
+import { TxButton, TxDone, TxError } from "@/components/gg/TxUi";
 import { usePosition, type PositionData } from "@/hooks/usePosition";
 import { useGuardian } from "@/hooks/useGuardian";
 import { useTx } from "@/hooks/useTx";
@@ -169,8 +169,8 @@ function Guardian({ address }: { address: `0x${string}` }) {
             {tx.busy ? "Confirming…" : "Turn off Guardian"}
           </button>
         ) : (
-          <FaceIdButton
-            label={`Turn on Guardian · up to $${cap}/day`}
+          <TxButton
+            label="Turn on Guardian"
             phase={tx.phase}
             preview={!isConnected}
             disabled={unconfigured || g.status === "loading" || data.savingsUsd <= 0}
@@ -236,8 +236,8 @@ function SavingsSheet({
             </div>
             {tooMuch && <p role="status" className="m-0 text-[13px] text-act">That’s more than you have.</p>}
             <TxError error={tx.error} />
-            <FaceIdButton
-              label={mode === "add" ? `Save ${formatUsd(amount)} with Face ID` : `Move ${all ? "all" : formatUsd(amount)} with Face ID`}
+            <TxButton
+              label={mode === "add" ? "Save" : "Move out"}
               phase={tx.phase}
               preview={!isConnected}
               disabled={amount <= 0 || tooMuch}

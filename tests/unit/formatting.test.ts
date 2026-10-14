@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatSignedPct, formatSignedUsd, formatUsdTrim } from "@/lib/formatting";
+import { formatSignedPct, formatSignedUsd, formatUsdTrim, stepsNote } from "@/lib/formatting";
 
 describe("formatUsdTrim", () => {
   it("drops cents only when they are zero", () => {
@@ -24,5 +24,12 @@ describe("signed changes", () => {
   it("never shows a minus on a change that rounds to zero", () => {
     expect(formatSignedPct(-0.00001)).toBe("+0.00%");
     expect(formatSignedUsd(-0.001)).toBe("+$0.00");
+  });
+});
+
+describe("stepsNote (the line under a button that opens JAW's sheet more than once)", () => {
+  it("says nothing for one step, and counts two or more", () => {
+    expect([0, 1].map(stepsNote)).toEqual([null, null]);
+    expect([2, 3, 5].map(stepsNote)).toEqual(["2 steps", "3 steps", "5 steps"]);
   });
 });

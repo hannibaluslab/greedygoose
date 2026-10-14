@@ -24,7 +24,7 @@ export type ProtectSaved = {
 /** What the screen shows: the saved settings until the user changes one. */
 export type ProtectChoice = { limitUsd: number; sellOn: boolean; keepMix: boolean; never: readonly number[] };
 
-/** One Face ID each: the registry setting through useTx, then each grant or revoke on JAW's own screen (D14). */
+/** One JAW sheet each: the registry setting through useTx, then each grant or revoke on JAW's own screen (D14). */
 export type ProtectStep =
   | { kind: "keepMix"; on: boolean }
   | { kind: "grant"; job: "protect"; capRaw: bigint }
@@ -85,14 +85,7 @@ export function protectSteps(
   return { steps, blocked: null };
 }
 
-/** Face IDs a save takes: one a step, and a revoke one for each sell grant JAW still lists. */
-export function faceIdCount(steps: readonly ProtectStep[], sellGrants: number): number {
+/** How many times a save opens JAW's sheet: once a step, and a revoke once for each sell grant JAW still lists. */
+export function stepCount(steps: readonly ProtectStep[], sellGrants: number): number {
   return steps.reduce((n, s) => n + (s.kind === "revoke" ? Math.max(1, sellGrants) : 1), 0);
-}
-
-const COUNT = ["", "One", "Two", "Three", "Four", "Five"];
-
-/** "One Face ID", "Two Face IDs". */
-export function faceIdWords(n: number): string {
-  return `${COUNT[n] ?? n} Face ID${n === 1 ? "" : "s"}`;
 }

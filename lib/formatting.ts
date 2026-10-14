@@ -13,6 +13,9 @@ export const shortAddress = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 export const inWords = (parts: readonly string[]) =>
   parts.length < 2 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
 
+/** The line under a button that opens JAW's sheet more than once in one tap: "2 steps"; none for one. */
+export const stepsNote = (n: number) => (n > 1 ? `${n} steps` : null);
+
 /** Sign for a change: "−" (U+2212, as on the boards) below zero, "+" otherwise, judged on the rounded figure. */
 const sign = (n: number, shown: string) => (n < 0 && Number(shown) !== 0 ? "−" : "+");
 

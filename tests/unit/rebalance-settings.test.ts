@@ -67,47 +67,47 @@ describe("rebalanceSave", () => {
     expect(rebalanceSave({ ...base, configured: false, saved: null, terms: null })).toEqual({
       mixChanged: false,
       needsGrant: false,
-      faceIds: 0,
+      steps: 0,
       canSave: false,
       note: "Not live yet",
     });
   });
 
   it("has nothing to save when the mix and the limit are what it runs with", () => {
-    expect(rebalanceSave(base)).toMatchObject({ faceIds: 0, canSave: false, note: null });
+    expect(rebalanceSave(base)).toMatchObject({ steps: 0, canSave: false, note: null });
   });
 
-  it("takes one Face ID for a new mix in stocks it may already sell", () => {
+  it("takes one step for a new mix in stocks it may already sell", () => {
     const weights = [5_000, 0, 0, 0, 0, 2_500, 2_500];
-    expect(rebalanceSave({ ...base, weights })).toMatchObject({ mixChanged: true, needsGrant: false, faceIds: 1, canSave: true, note: "One Face ID." });
+    expect(rebalanceSave({ ...base, weights })).toMatchObject({ mixChanged: true, needsGrant: false, steps: 1, canSave: true, note: null });
   });
 
   it("takes a new grant for a new weekly limit", () => {
     expect(rebalanceSave({ ...base, capRaw: usdc(1_000) })).toMatchObject({
       mixChanged: false,
       needsGrant: true,
-      faceIds: 1,
-      note: "One Face ID for its new limit.",
+      steps: 1,
+      note: null,
     });
   });
 
-  it("takes two Face IDs for a stock the grant can't sell yet", () => {
+  it("takes two steps for a stock the grant can't sell yet", () => {
     const weights = [2_500, 2_500, 0, 0, 0, 2_500, 2_500];
     expect(rebalanceSave({ ...base, weights })).toMatchObject({
       mixChanged: true,
       needsGrant: true,
-      faceIds: 2,
-      note: "Two Face IDs: your mix, then its new limit.",
+      steps: 2,
+      note: null,
     });
   });
 
   it("switches it on with the first mix", () => {
     expect(rebalanceSave({ ...base, saved: [0, 0, 0, 0, 0, 0, 0], terms: null, running: false })).toMatchObject({
-      faceIds: 2,
+      steps: 2,
       canSave: true,
-      note: "Two Face IDs: your mix, then switching it on.",
+      note: null,
     });
-    expect(rebalanceSave({ ...base, terms: null, running: false })).toMatchObject({ faceIds: 1, note: "One Face ID switches it on." });
+    expect(rebalanceSave({ ...base, terms: null, running: false })).toMatchObject({ steps: 1, canSave: true, note: null });
   });
 
   it("stays disabled until the mix adds up to 100%", () => {

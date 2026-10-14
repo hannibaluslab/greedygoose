@@ -3,35 +3,43 @@
 import type { ReactNode } from "react";
 import { txUrl } from "@/lib/chain";
 import type { TxPhase } from "@/hooks/useTx";
+import { stepsNote } from "@/lib/formatting";
 import { buttonClass, type ButtonSize } from "./Button";
 
-const FaceId = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" aria-hidden>
-    <path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M9 9v1M15 9v1M12 9v4h-1M9 16c1.5 1 4.5 1 6 0" />
-  </svg>
-);
-
-/** Lime Face ID CTA whose label follows the transaction phase. lg at the foot of a page (CreditOn), md in a sheet (F2-6). */
-export function FaceIdButton({
-  label, phase, disabled, onClick, preview, size = "lg",
-}: { label: string; phase: TxPhase; disabled?: boolean; onClick: () => void; preview?: boolean; size?: ButtonSize }) {
-  const text =
-    phase === "simulating" ? "Checking…" : phase === "signing" ? "Confirm with Face ID…" : phase === "pending" ? "Confirming on Base…" : label;
+/**
+ * The one button that opens JAW's own sheet (its Review and Face ID), lime, named for the action only: "Buy", "Repay",
+ * "Switch on". The screen it sits on already says what matters, so there is no confirm step of ours before it, and
+ * while JAW's sheet is open this screen adds nothing: the label stays and the button waits. lg at the foot of a page,
+ * md in a sheet. Under it, one small line: `note` (why it can't go ahead), else "2 steps" when one tap opens JAW's
+ * sheet more than once (`steps`).
+ */
+export function TxButton({
+  label, phase, steps = 1, note, disabled, onClick, preview, size = "lg",
+}: {
+  label: string;
+  phase: TxPhase;
+  steps?: number;
+  note?: string | null;
+  disabled?: boolean;
+  onClick: () => void;
+  preview?: boolean;
+  size?: ButtonSize;
+}) {
+  const text = phase === "simulating" ? "Checking…" : phase === "pending" ? "Confirming on Base…" : label;
   // "done" too: a sheet that closes on success (BuySheet) still shows the button while it slides out.
-  const off = disabled || preview || phase === "simulating" || phase === "signing" || phase === "pending" || phase === "done";
+  const busy = phase === "simulating" || phase === "signing" || phase === "pending";
+  const off = disabled || preview || busy || phase === "done";
+  const line = note ?? stepsNote(steps);
   return (
     <div className="flex flex-col gap-2">
-      <button
-        type="button"
-        disabled={off}
-        onClick={onClick}
-        aria-busy={phase === "simulating" || phase === "signing" || phase === "pending"}
-        className={buttonClass("primary", size)}
-      >
-        <FaceId />
+      <button type="button" disabled={off} onClick={onClick} aria-busy={busy} className={buttonClass("primary", size)}>
         {text}
       </button>
-      {preview && <p className="m-0 text-center text-xs text-subtle">Preview mode — sign in to do this.</p>}
+      {preview ? (
+        <p className="m-0 text-center text-xs text-subtle">Preview mode — sign in to do this.</p>
+      ) : (
+        line && <p className="m-0 text-center text-xs text-subtle">{line}</p>
+      )}
     </div>
   );
 }

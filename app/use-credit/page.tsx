@@ -12,7 +12,7 @@ import { LoanMeter } from "@/components/gg/LoanMeter";
 import { StatusPill } from "@/components/gg/Status";
 import { StockAvatar, tickerOf } from "@/components/gg/StockAvatar";
 import { LockIcon } from "@/components/gg/icons";
-import { FaceIdButton, TxDone, TxError } from "@/components/gg/TxUi";
+import { TxButton, TxDone, TxError } from "@/components/gg/TxUi";
 import { MarketBanner } from "@/components/ui/MarketBanner";
 import { useCollateralFactors, usePosition, type Holding, type PositionData } from "@/hooks/usePosition";
 import { useTx } from "@/hooks/useTx";
@@ -342,8 +342,8 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
           {feeBlocked && <p role="alert" className="m-0 text-[13px] text-act">Your account can’t pay network fees in USDC on Base right now.</p>}
           <TxError error={tx.error} />
           <BottomBar>
-            <FaceIdButton
-              label={amount > 0 ? `Use ${formatUsd(amount)} of credit with Face ID` : "Add backing with Face ID"}
+            <TxButton
+              label={amount > 0 ? "Use credit" : "Add backing"}
               phase={tx.phase}
               preview={!isConnected}
               disabled={!ready || (risky && !ack) || feeBlocked || fee.loading}

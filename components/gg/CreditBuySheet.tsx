@@ -10,7 +10,7 @@ import { Button } from "./Button";
 import { StatusChange } from "./Status";
 import { StockAvatar, tickerOf } from "./StockAvatar";
 import { NETWORK_FEE_ROW, Summary } from "./Summary";
-import { FaceIdButton, TxError } from "./TxUi";
+import { TxButton, TxError } from "./TxUi";
 import { ChevronRight, LockIcon } from "./icons";
 import { useAgents } from "@/hooks/useAgents";
 import { useBoughtHome } from "@/hooks/useBoughtHome";
@@ -312,8 +312,8 @@ export function CreditBuySheet({
             <div className="mt-1 flex gap-2">
               <Button variant="soft" disabled={busy} onClick={() => go("amount")}>Back</Button>
               <div className="flex-1">
-                <FaceIdButton
-                  label="Confirm with Face ID"
+                <TxButton
+                  label="Credit Buy"
                   size="md"
                   phase={phase}
                   preview={!isConnected}

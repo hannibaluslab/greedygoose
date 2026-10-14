@@ -10,7 +10,7 @@ import { MarketList, MarketRow } from "./Market";
 import { StatusChange } from "./Status";
 import { tickerOf } from "./StockAvatar";
 import { NETWORK_FEE_ROW, Summary, type SummaryRow } from "./Summary";
-import { FaceIdButton, TxError } from "./TxUi";
+import { TxButton, TxError } from "./TxUi";
 import { CreditIcon } from "./icons";
 import { useBoughtHome } from "@/hooks/useBoughtHome";
 import { useBuy } from "@/hooks/useBuy";
@@ -202,8 +202,8 @@ export function BuySheet({
               error={error}
               onBack={back}
               button={
-                <FaceIdButton
-                  label="Confirm with Face ID"
+                <TxButton
+                  label={plan ? "Use credit" : "Buy"}
                   size="md"
                   phase={phase}
                   preview={!isConnected}

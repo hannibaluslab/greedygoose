@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { WhiteCard } from "./Screen";
-import { FaceIdButton, TxError } from "./TxUi";
+import { TxButton, TxError } from "./TxUi";
 import type { TxPhase } from "@/hooks/useTx";
 
 /*
@@ -50,24 +50,26 @@ export function MixSlider({ name, bps, onChange }: { name: string; bps: number; 
   );
 }
 
-/** The foot of a settings body: its Face ID button, its error, and what saving does or why it can't. */
+/** The foot of a settings body: its button to JAW's sheet, its error, and why it can't save or how many steps it takes. */
 export function SaveFooter({
-  phase, disabled, preview, onSave, error, note, label = "Save with Face ID",
+  phase, disabled, preview, onSave, error, note, steps, label = "Save",
 }: {
   phase: TxPhase;
   disabled: boolean;
   preview: boolean;
   onSave: () => void;
   error: string | null;
+  /** Why it can't save now; null when it can. */
   note: string | null;
-  /** What the button does: "Save with Face ID", or "Switch on with Face ID" while the agent is off. */
+  /** How many times saving opens JAW's sheet. */
+  steps: number;
+  /** What the button does: "Save", or "Switch on" while the agent is off. */
   label?: string;
 }) {
   return (
     <div className="mt-auto flex flex-col gap-2 pt-2">
       <TxError error={error} />
-      <FaceIdButton label={label} phase={phase} disabled={disabled} preview={preview} onClick={onSave} />
-      {note && <p className="m-0 text-center text-xs text-subtle">{note}</p>}
+      <TxButton label={label} phase={phase} steps={steps} note={note} disabled={disabled} preview={preview} onClick={onSave} />
     </div>
   );
 }

@@ -38,7 +38,7 @@ const previewAs = () => {
 
 const STATES = [
   { key: "not-live", title: "Not live yet (no executor)", configured: false, saved: null, terms: null, draft: TARGET },
-  { key: "one-face-id", title: "New mix · one Face ID", configured: true, saved: SAVED, terms: TERMS, draft: TARGET },
+  { key: "one-step", title: "New mix · one step", configured: true, saved: SAVED, terms: TERMS, draft: TARGET },
   { key: "not-whole", title: "Not 100% yet", configured: true, saved: SAVED, terms: TERMS, draft: [TARGET[0], TARGET[1], { reserveId: 6, bps: 2_000 }] },
   { key: "on-target", title: "On target · nothing to save", configured: true, saved: SAVED, terms: TERMS, draft: undefined },
   { key: "switch-on", title: "Off · first mix switches it on", configured: true, saved: EQUITIES.map(() => 0), terms: null, draft: TARGET },

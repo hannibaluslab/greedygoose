@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { isAddressEqual, type Address } from "viem";
 import {
-  faceIdCount,
-  faceIdWords,
   neverSellOf,
   protectSteps,
   savedChoice,
   sellLimitsFor,
+  stepCount,
   type ProtectSaved,
 } from "@/lib/agents/protect";
 import { readAgentGrant, sellGrant, stockLimitsRaw, type ListedPermission } from "@/lib/agents/permissions";
@@ -70,7 +69,7 @@ describe("protectSteps", () => {
       { kind: "grant", job: "protect", capRaw: usdc(500) },
       { kind: "grant", job: "sell", capRaw: usdc(500), limitsRaw: sellLimitsFor(usdc(500), CAP_MAX, PRICES, [TESLA]) },
     ]);
-    expect(faceIdWords(faceIdCount(steps, 0))).toBe("Two Face IDs");
+    expect(stepCount(steps, 0)).toBe(2);
     // Selling still on from before, its repay grant ended: repaying goes back on first, at selling's limit.
     const sellOnly: ProtectSaved = { ...fullOn, repayCapRaw: null };
     expect(protectSteps(sellOnly, savedChoice(sellOnly), ctx).steps).toEqual([{ kind: "grant", job: "protect", capRaw: usdc(300) }]);
@@ -80,14 +79,14 @@ describe("protectSteps", () => {
     const saved: ProtectSaved = { ...fullOn, sell: null };
     const { steps } = protectSteps(saved, { ...savedChoice(saved), limitUsd: 500 }, ctx);
     expect(steps).toEqual([{ kind: "grant", job: "protect", capRaw: usdc(500) }]);
-    expect(faceIdWords(faceIdCount(steps, 0))).toBe("One Face ID");
+    expect(stepCount(steps, 0)).toBe(1);
   });
 
   it("a new limit with selling on re-grants both parts", () => {
     const { steps } = protectSteps(fullOn, { ...savedChoice(fullOn), limitUsd: 100 }, ctx);
     expect(steps.map((s) => `${s.kind}:${"job" in s ? s.job : ""}`)).toEqual(["grant:protect", "grant:sell"]);
     expect(steps[1]).toMatchObject({ capRaw: usdc(100), limitsRaw: sellLimitsFor(usdc(100), CAP_MAX, PRICES, []) });
-    expect(faceIdWords(faceIdCount(steps, 1))).toBe("Two Face IDs");
+    expect(stepCount(steps, 1)).toBe(2);
   });
 
   it("switching selling on is its own grant, at Protect's limit, leaving the never-sell stocks out", () => {
@@ -96,10 +95,10 @@ describe("protectSteps", () => {
     expect(steps).toEqual([{ kind: "grant", job: "sell", capRaw: usdc(300), limitsRaw: sellLimitsFor(usdc(300), CAP_MAX, PRICES, [TESLA]) }]);
   });
 
-  it("switching selling off revokes it, one Face ID for each grant JAW lists", () => {
+  it("switching selling off revokes it, one JAW sheet for each grant JAW lists", () => {
     const { steps } = protectSteps(fullOn, { ...savedChoice(fullOn), sellOn: false }, ctx);
     expect(steps).toEqual([{ kind: "revoke", job: "sell" }]);
-    expect(faceIdCount(steps, 2)).toBe(2);
+    expect(stepCount(steps, 2)).toBe(2);
   });
 
   it("a changed never-sell list is a new sell grant; the same set in another order is not", () => {
@@ -131,11 +130,5 @@ describe("protectSteps", () => {
     const capMax = usdc(5);
     const saved: ProtectSaved = { repayCapRaw: usdc(5), sell: null, keepMix: false };
     expect(protectSteps(saved, { ...savedChoice(saved), limitUsd: 500 }, { capMaxRaw: capMax, pricesRaw: PRICES }).steps).toEqual([]);
-  });
-});
-
-describe("faceIdWords", () => {
-  it("counts in words", () => {
-    expect([1, 2, 3, 7].map(faceIdWords)).toEqual(["One Face ID", "Two Face IDs", "Three Face IDs", "7 Face IDs"]);
   });
 });

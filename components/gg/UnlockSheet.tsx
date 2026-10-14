@@ -6,7 +6,8 @@ import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { useAccount } from "wagmi";
 import { StockAvatar, tickerOf } from "./StockAvatar";
 import { StatusPill } from "./Status";
-import { FaceIdButton, TxDone, TxError } from "./TxUi";
+import { NETWORK_FEE_ROW } from "./Summary";
+import { TxButton, TxDone, TxError } from "./TxUi";
 import { useTx } from "@/hooks/useTx";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import type { Holding, PositionData } from "@/hooks/usePosition";
@@ -17,7 +18,10 @@ import { rawToShares, sharesToRaw } from "@/lib/tokens/b20";
 import { formatShares, formatUsd } from "@/lib/formatting";
 import type { ReserveAsset } from "@/lib/tokens/registry";
 
-/** "Free up shares": withdraw a stock from Aave back to the user's account. `onBack` when opened from the stock's sheet. */
+/**
+ * "Free up shares": withdraw a stock from Aave back to the user's account, straight to JAW's own sheet from the amount
+ * (with the risk tick on this screen when it ends in Watch or Act). `onBack` when opened from the stock's sheet.
+ */
 export function UnlockSheet({
   open, user, stock, holding, data, cf, onClose, onBack,
 }: {
@@ -108,9 +112,13 @@ export function UnlockSheet({
                 <span className="text-ink-mid">You owe</span>
                 <span className="font-semibold">{formatUsd(data.debtUsd)}</span>
               </div>
-              <div className="flex items-center justify-between py-3 text-[15px]">
+              <div className="flex items-center justify-between border-b border-hairline py-3 text-[15px]">
                 <span className="text-ink-mid">Status</span>
                 <span className="flex items-center gap-2"><StatusPill status={data.status} /> → <StatusPill status={amountRaw > 0n ? after : data.status} /></span>
+              </div>
+              <div className="flex items-center justify-between py-3 text-[15px]">
+                <span className="text-ink-mid">{NETWORK_FEE_ROW.label}</span>
+                <span className="font-semibold">{NETWORK_FEE_ROW.value}</span>
               </div>
             </div>
 
@@ -127,8 +135,8 @@ export function UnlockSheet({
             {holding.paused && <p role="status" className="m-0 text-[13px] text-act">Aave has paused {stock.name} for now.</p>}
             {feeBlocked && <p role="alert" className="m-0 text-[13px] text-act">Your account can’t pay network fees in USDC on Base right now.</p>}
             <TxError error={tx.error} />
-            <FaceIdButton
-              label={amountRaw > 0n ? `Free up ${all ? "all" : formatShares(shares)} ${ticker} with Face ID` : `Free up ${ticker} with Face ID`}
+            <TxButton
+              label="Free up"
               phase={tx.phase}
               preview={!isConnected}
               disabled={amountRaw === 0n || tooMuch || (risky && !ack) || holding.paused || feeBlocked || fee.loading || cf === undefined}

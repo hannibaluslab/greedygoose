@@ -8,7 +8,7 @@ import { CardTitle, ManageCard, MixSlider } from "@/components/gg/Manage";
 import { LimitChips } from "@/components/gg/LimitChips";
 import { StockAvatar, tickerOf } from "@/components/gg/StockAvatar";
 import { NETWORK_FEE_ROW } from "@/components/gg/Summary";
-import { FaceIdButton, TxError } from "@/components/gg/TxUi";
+import { TxButton, TxError } from "@/components/gg/TxUi";
 import { PlusIcon } from "@/components/gg/icons";
 import { useAgents } from "@/hooks/useAgents";
 import { useAgentSettings } from "@/hooks/useAgentSettings";
@@ -256,14 +256,15 @@ export function RebalanceSettingsView({
           <span className="text-ink-mid">{NETWORK_FEE_ROW.label}</span>
           <span className="font-semibold">{NETWORK_FEE_ROW.value}</span>
         </div>
-        <FaceIdButton
-          label={configured && !running ? "Switch on with Face ID" : "Save with Face ID"}
+        <TxButton
+          label={configured && !running ? "Switch on" : "Save"}
           phase={phase}
+          steps={plan.steps}
+          note={plan.note}
           disabled={!plan.canSave || busy}
           preview={configured && preview}
           onClick={() => onSave({ weights, capRaw, plan })}
         />
-        {plan.note && <p className="m-0 text-center text-xs text-subtle">{plan.note}</p>}
       </div>
     </div>
   );

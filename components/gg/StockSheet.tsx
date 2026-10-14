@@ -9,7 +9,7 @@ import { Button } from "./Button";
 import { StockAvatar, tickerOf } from "./StockAvatar";
 import { StatCard, StockActivity, StockChart, StockHeader, StockPosition } from "./StockOverview";
 import { NETWORK_FEE_ROW, Summary } from "./Summary";
-import { FaceIdButton, TxDone, TxError } from "./TxUi";
+import { TxButton, TxDone, TxError } from "./TxUi";
 import { CreditIcon } from "./icons";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { useMarketPrices } from "@/hooks/useMarketPrices";
@@ -192,8 +192,8 @@ export function StockSheet({
             busy={busy}
             onBack={back}
             button={
-              <FaceIdButton
-                label="Confirm with Face ID"
+              <TxButton
+                label="Sell"
                 size="md"
                 phase={phase}
                 preview={!isConnected}

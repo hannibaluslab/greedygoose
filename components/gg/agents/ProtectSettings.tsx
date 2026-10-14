@@ -18,11 +18,10 @@ import type { TxPhase } from "@/hooks/useTx";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { limitRaw } from "@/lib/agents/permissions";
 import {
-  faceIdCount,
-  faceIdWords,
   PROTECT_LIMIT_USD,
   protectSteps,
   savedChoice,
+  stepCount,
   type ProtectChoice,
   type ProtectSaved,
   type ProtectStep,
@@ -45,8 +44,8 @@ const running = (s: AgentStatus) => s === "on" || s === "starting";
 /**
  * Protect's settings, for the agent sheet's settings slot: repay from cash (always first) at a daily limit, selling
  * backing stock as its own switch (Job.ProtectSell), what it sells first (`setKeepMix`) and the never-sell list (stocks
- * left out of a new sell grant). Everything comes from the chain through the agents' hooks; saving takes one Face ID a
- * change (`useProtectSave`). Without an executor it renders the real figures and saves nothing ("Not live yet").
+ * left out of a new sell grant). Everything comes from the chain through the agents' hooks; saving opens JAW's sheet
+ * once a change (`useProtectSave`). Without an executor it renders the real figures and saves nothing ("Not live yet").
  */
 export function ProtectSettings({ account, onDone }: { account: `0x${string}`; onDone?: () => void }) {
   const { address } = useAccount();
@@ -80,7 +79,7 @@ export function ProtectSettings({ account, onDone }: { account: `0x${string}`; o
       backsUsd={EQUITIES.map((e) => (data.holdings[e.reserveId].lockedRaw > 0n ? data.holdings[e.reserveId].lockedUsd : 0))}
       pricesRaw={EQUITIES.map((e) => data.holdings[e.reserveId].priceRaw)}
       capMaxRaw={agents.capMaxRaw}
-      // Turning selling off revokes each sell grant JAW lists that hasn’t ended (useAgents.turnOff): one Face ID each.
+      // Turning selling off revokes each sell grant JAW lists that hasn’t ended (useAgents.turnOff): one JAW sheet each.
       sellGrants={agents.faceIdsOff(["sell"])}
       feeBlocked={!!address && fee.state === "unsupported"}
       waiting={fee.loading || agents.busy}
@@ -112,7 +111,7 @@ export type ProtectSettingsViewProps = {
   /** Aave's prices by reserve id (8 decimals), for a sell grant's stock limits. */
   pricesRaw: readonly bigint[];
   capMaxRaw: bigint | null;
-  /** Sell grants JAW lists that haven’t ended: one Face ID each to switch selling off. */
+  /** Sell grants JAW lists that haven’t ended: one JAW sheet each to switch selling off. */
   sellGrants: number;
   feeBlocked: boolean;
   /** Something still loading or signing elsewhere (fee support, an agent switch). */
@@ -135,7 +134,7 @@ export function ProtectSettingsView({
   const capMax = capMaxRaw ?? BigInt(choice.limitUsd) * 10n ** 6n;
   const plan = protectSteps(saved, choice, { capMaxRaw: capMax, pricesRaw });
   const steps = live ? plan.steps : [];
-  const faceIds = faceIdCount(steps, sellGrants);
+  const count = stepCount(steps, sellGrants);
   const limitUsd = toUsd(limitRaw(choice.limitUsd, capMax));
   // Selling's own limit while untouched (a grant from before can differ), Protect's otherwise.
   const sellUsd = saved.sell && chosen.limitUsd === undefined ? toUsd(saved.sell.capRaw) : limitUsd;
@@ -148,7 +147,7 @@ export function ProtectSettingsView({
     ? "Not live yet"
     : feeBlocked
       ? "Your account can’t pay network fees in USDC on Base right now."
-      : (plan.blocked ?? (faceIds > 0 ? faceIdWords(faceIds) : null));
+      : plan.blocked;
 
   const neverChanged = choice.never.length !== start.never.length || choice.never.some((r) => !start.never.includes(r));
   const lines = steps.flatMap((s) => {
@@ -263,8 +262,9 @@ export function ProtectSettingsView({
       )}
 
       <SaveFooter
-        label={live && off ? "Switch on with Face ID" : "Save with Face ID"}
+        label={live && off ? "Switch on" : "Save"}
         phase={phase}
+        steps={count}
         disabled={!canSave}
         preview={live && preview}
         onSave={() => onSave(steps)}
