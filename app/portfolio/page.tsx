@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { TabBar } from "@/components/gg/TabBar";
+import { Button } from "@/components/gg/Button";
+import { CreditBuySheet } from "@/components/gg/CreditBuySheet";
 import { Money } from "@/components/gg/Money";
 import { StatusPill } from "@/components/gg/Status";
 import { StockAvatar } from "@/components/gg/StockAvatar";
-import { BackIcon, ChevronRight, LockIcon, PlusIcon, TradeIcon, UnlockIcon } from "@/components/gg/icons";
+import { BackIcon, ChevronRight, CreditIcon, LockIcon, TradeIcon, UnlockIcon } from "@/components/gg/icons";
 import { MenuButton } from "@/components/gg/MenuButton";
 import { usePosition } from "@/hooks/usePosition";
 import { formatShares, formatUsd } from "@/lib/formatting";
@@ -19,6 +21,7 @@ export default function PortfolioPage() {
 /** Design board "10 · Portfolio (Invest tab)" (PortfolioPage.dc.html). */
 function Portfolio({ address }: { address: `0x${string}` }) {
   const { data } = usePosition(address);
+  const [creditBuy, setCreditBuy] = useState(false);
   const held = data?.holdings.filter((h) => h.freeShares + h.lockedShares > 0) ?? [];
 
   return (
@@ -54,13 +57,7 @@ function Portfolio({ address }: { address: `0x${string}` }) {
               <Link href="/buy" className="flex h-[52px] items-center justify-center gap-2 rounded-[26px] bg-card text-[15px] font-semibold no-underline shadow-[0_1px_3px_rgba(14,13,11,0.06)]">
                 <TradeIcon size={18} />Buy stocks
               </Link>
-              <Link
-                href="/use-credit"
-                className="flex h-[52px] items-center justify-center gap-2 rounded-[26px] bg-brand text-[15px] font-bold no-underline"
-                style={{ boxShadow: "0 0 14px rgba(212,255,60,0.32)" }}
-              >
-                <PlusIcon size={18} />Use credit
-              </Link>
+              <Button icon={<CreditIcon size={18} strokeWidth={1.8} />} onClick={() => setCreditBuy(true)}>Credit Buy</Button>
             </div>
 
             <div className="flex flex-col gap-2">
@@ -115,6 +112,7 @@ function Portfolio({ address }: { address: `0x${string}` }) {
         )}
       </div>
       <TabBar />
+      {data && <CreditBuySheet open={creditBuy} user={address} data={data} onClose={() => setCreditBuy(false)} />}
     </div>
   );
 }
