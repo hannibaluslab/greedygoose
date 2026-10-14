@@ -5,6 +5,7 @@ import { StockAvatar } from "./StockAvatar";
 import { Tap } from "./Tap";
 import { ChevronRight, LockIcon, PlusIcon, UnlockIcon } from "./icons";
 import { formatShares, formatSignedPct, formatUsd } from "@/lib/formatting";
+import { LINE_POINTS, downsample } from "@/lib/prices/market";
 
 /** Stocks earn no yield (D19): the holding pieces carry no APY. What a holding shows instead is how much of it backs credit. */
 type HoldingProps = {
@@ -15,7 +16,7 @@ type HoldingProps = {
   backs: number;
   /** Today's change as a fraction, from market prices; hidden until known. */
   today?: number | null;
-  /** Recent market prices, oldest first; no line until there are two. */
+  /** Market prices over the last 24 hours, oldest first, drawn with as many points as the board; no line until there are two. */
   spark?: number[];
   href?: string;
   onClick?: () => void;
@@ -59,7 +60,9 @@ export function BacksChip({ backs, compact = false }: { backs: number; compact?:
 const toneOf = (today: number) => (formatSignedPct(today).startsWith("−") ? "neg" : "pos");
 
 /** A holding on the Home rail (HomeUpliftRail): badge, name, value, today's move and its line. */
-export function HoldingCard({ symbol, name, valueUsd, backs, today, spark, shares, href, onClick }: HoldingProps & {
+export function HoldingCard({ symbol, name, valueUsd, backs, today, spark, pending, shares, href, onClick }: HoldingProps & {
+  /** Market prices are loading: a pulse holds the place of today's move and its line. */
+  pending?: boolean;
   /** The rail's last line, where the boards had the APY (D19): "● 11.2 shares". */
   shares?: number;
 }) {
@@ -82,7 +85,8 @@ export function HoldingCard({ symbol, name, valueUsd, backs, today, spark, share
           <span className={`whitespace-nowrap font-mono text-[10px] ${tone === "neg" ? "text-neg" : "text-pos"}`}>{formatSignedPct(today)} today</span>
         </span>
       )}
-      {spark && spark.length > 1 && <Sparkline points={spark} tone={tone} width={85} height={22} className="mt-[7px]" />}
+      {spark && spark.length > 1 && <Sparkline points={downsample(spark, LINE_POINTS.card)} tone={tone} width={85} height={22} className="mt-[7px]" />}
+      {pending && today == null && <span aria-hidden className="mt-[3px] block h-[42px] w-[85px] animate-pulse rounded-lg bg-chip" />}
       {shares != null && (
         <span className="mt-2 flex items-center gap-[5px] whitespace-nowrap text-[11px]">
           <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-brand shadow-[0_0_0_1px_rgba(14,13,11,0.18)]" />
@@ -124,7 +128,7 @@ export function HoldingRow({ symbol, name, valueUsd, backs, today, spark, shares
           <span className="block whitespace-nowrap text-[15px] font-semibold leading-[1.25]">{name}</span>
           <span className="mt-0.5 block whitespace-nowrap text-[13px] font-medium leading-[1.35] text-ink-mid">{formatShares(shares)} shares</span>
         </span>
-        {spark && spark.length > 1 && <Sparkline points={spark} tone={tone} variant="row" width={46} height={24} className="shrink-0" />}
+        {spark && spark.length > 1 && <Sparkline points={downsample(spark, LINE_POINTS.row)} tone={tone} variant="row" width={46} height={24} className="shrink-0" />}
         <span className="min-w-[84px] text-right">
           <span className="num block whitespace-nowrap text-[15px] font-semibold leading-[1.25]">{formatUsd(valueUsd)}</span>
           {today != null && (
