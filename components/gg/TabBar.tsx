@@ -2,15 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ActivityIcon, CreditIcon, GearIcon, HomeIcon, InvestIcon } from "./icons";
+import { AgentsIcon, FriendsIcon, HomeIcon, InvestIcon, PayIcon } from "./icons";
+import { FRIENDS_ENABLED } from "@/lib/features";
 
+/** D16: Home / Invest / Agents / Friends / Pay. `match` lists the routes that light a tab. */
 const TABS = [
-  { href: "/home", label: "Home", Icon: HomeIcon },
-  { href: "/portfolio", label: "Portfolio", Icon: InvestIcon },
-  { href: "/credit", label: "Credit", Icon: CreditIcon },
-  { href: "/activity", label: "Activity", Icon: ActivityIcon },
-  { href: "/settings", label: "Settings", Icon: GearIcon },
-] as const;
+  { href: "/home", label: "Home", Icon: HomeIcon, match: ["/home"] },
+  { href: "/portfolio", label: "Invest", Icon: InvestIcon, match: ["/portfolio"] },
+  { href: "/agents", label: "Agents", Icon: AgentsIcon, match: ["/agents", "/activity"] },
+  ...(FRIENDS_ENABLED ? [{ href: "/friends", label: "Friends", Icon: FriendsIcon, match: ["/friends"] }] : []),
+  { href: "/receive", label: "Pay", Icon: PayIcon, match: ["/receive"] },
+];
 
 /** Floating dark pill tab bar with the fade behind it, as in the design. */
 export function TabBar() {
@@ -28,8 +30,8 @@ export function TabBar() {
         className="fixed bottom-6 left-1/2 grid h-14 w-[calc(min(100vw,430px)-28px)] -translate-x-1/2 rounded-[28px] px-1.5"
         style={{ gridTemplateColumns: `repeat(${TABS.length}, minmax(0,1fr))`, background: "rgba(20,19,15,0.94)", boxShadow: "0 16px 48px -16px rgba(0,0,0,0.4)" }}
       >
-        {TABS.map(({ href, label, Icon }) => {
-          const active = path.startsWith(href);
+        {TABS.map(({ href, label, Icon, match }) => {
+          const active = match.some((m) => path.startsWith(m));
           return (
             <Link
               key={href}

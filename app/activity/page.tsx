@@ -2,6 +2,7 @@
 
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { TabBar } from "@/components/gg/TabBar";
+import { TabHeader } from "@/components/gg/Screen";
 import { StockAvatar, tickerOf } from "@/components/gg/StockAvatar";
 import { useActivity, type ActivityRow } from "@/hooks/useActivity";
 import type { ActivityItem } from "@/lib/activity/decode";
@@ -47,7 +48,7 @@ function Activity({ address }: { address: `0x${string}` }) {
 
   return (
     <div className="relative flex min-h-dvh flex-col gap-4 px-5 pt-[54px]">
-      <h1 className="m-0 text-[30px] font-semibold leading-[1.1] tracking-[-0.03em]">Activity</h1>
+      <TabHeader title="Activity" />
       {isLoading ? (
         <div aria-busy className="h-[300px] animate-pulse rounded-[22px] bg-chip" />
       ) : isError ? (

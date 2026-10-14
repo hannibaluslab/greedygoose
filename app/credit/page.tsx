@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
-import { TabBar } from "@/components/gg/TabBar";
 import { Line, SubHeader, WhiteCard } from "@/components/gg/Screen";
 import { StatusBar, StatusPill } from "@/components/gg/Status";
 import { ChevronRight, ShieldIcon } from "@/components/gg/icons";
@@ -19,7 +18,7 @@ export default function CreditPage() {
 function Credit({ address }: { address: `0x${string}` }) {
   const { data } = usePosition(address);
   return (
-    <div className="flex min-h-dvh flex-col gap-4 px-5 pt-[54px]">
+    <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[54px]">
       <SubHeader label="Credit" />
       <MarketBanner />
       {!data ? (
@@ -71,7 +70,6 @@ function Credit({ address }: { address: `0x${string}` }) {
           </div>
         </>
       )}
-      <TabBar />
     </div>
   );
 }

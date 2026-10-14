@@ -2,8 +2,7 @@
 
 import { useDisconnect } from "wagmi";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
-import { TabBar } from "@/components/gg/TabBar";
-import { Line, WhiteCard } from "@/components/gg/Screen";
+import { Line, SubHeader, WhiteCard } from "@/components/gg/Screen";
 import { addressUrl } from "@/lib/chain";
 import { shortAddress } from "@/lib/formatting";
 
@@ -14,8 +13,8 @@ export default function SettingsPage() {
 function Settings({ address }: { address: `0x${string}` }) {
   const { disconnect } = useDisconnect();
   return (
-    <div className="relative flex min-h-dvh flex-col gap-3.5 px-5 pt-[54px]">
-      <h1 className="m-0 text-[30px] font-semibold leading-[1.1] tracking-[-0.03em]">Settings</h1>
+    <div className="flex min-h-dvh flex-col gap-3.5 px-5 pb-[34px] pt-[54px]">
+      <SubHeader label="Settings" />
       <WhiteCard className="px-4 py-0.5">
         <Line first label="Account" value={<a className="underline" href={addressUrl(address)} target="_blank" rel="noreferrer">{shortAddress(address)}</a>} />
         <Line label="Network" value="Base" />
@@ -30,7 +29,6 @@ function Settings({ address }: { address: `0x${string}` }) {
       <button type="button" onClick={() => disconnect()} className="h-[52px] rounded-[26px] bg-chip text-[15px] font-semibold">
         Sign out
       </button>
-      <TabBar />
     </div>
   );
 }

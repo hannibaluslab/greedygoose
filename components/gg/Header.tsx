@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { MenuIcon } from "./icons";
+import { MenuButton } from "./MenuButton";
 import { shortAddress } from "@/lib/formatting";
 
 /** "Hi, Sam / sam.justan.id" header from the design. Name shows once JAW subname lookup is wired. */
@@ -16,9 +15,7 @@ export function Header({ address, name }: { address: `0x${string}`; name?: strin
           <span className="num text-xs text-subtle">{name ?? shortAddress(address)}</span>
         </div>
       </div>
-      <Link href="/settings" aria-label="Menu" className="-mr-2 flex size-10 items-center justify-center rounded-[20px] text-ink">
-        <MenuIcon />
-      </Link>
+      <MenuButton />
     </header>
   );
 }

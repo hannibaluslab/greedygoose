@@ -7,7 +7,7 @@ import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { SubHeader, WhiteCard } from "@/components/gg/Screen";
 import { AmountInput } from "@/components/gg/AmountInput";
 import { BottomBar } from "@/components/gg/BottomBar";
-import { StatusPill } from "@/components/gg/Status";
+import { GuardianPill, StatusPill } from "@/components/gg/Status";
 import { ShieldIcon } from "@/components/gg/icons";
 import { FaceIdButton, TxDone, TxError } from "@/components/gg/TxUi";
 import { usePosition, type PositionData } from "@/hooks/usePosition";
@@ -50,7 +50,7 @@ function Guardian({ address }: { address: `0x${string}` }) {
   if (tx.phase === "done") {
     return (
       <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[54px]">
-        <SubHeader label="Guardian" back="/credit" />
+        <SubHeader label="Guardian" back="/agents" />
         <TxDone
           title={on ? "Guardian is on" : "Guardian is off"}
           body={on ? "If your loan slips into Watch, Guardian repays from your savings. Your stocks stay put." : "Guardian can no longer act on your account."}
@@ -66,7 +66,7 @@ function Guardian({ address }: { address: `0x${string}` }) {
 
   return (
     <div className="flex min-h-dvh flex-col gap-4 px-5 pt-[54px]">
-      <SubHeader label="Guardian" back="/credit" />
+      <SubHeader label="Guardian" back="/agents" />
 
       <WhiteCard className="flex flex-col gap-3 p-[18px]">
         <div className="flex items-center gap-3">
@@ -75,12 +75,7 @@ function Guardian({ address }: { address: `0x${string}` }) {
             <h1 className="m-0 text-[24px] font-semibold tracking-[-0.02em]">Guardian</h1>
             <span className="text-[13px] text-ink-mid">Your stocks are never auto-sold</span>
           </div>
-          <span
-            className={`inline-flex h-6 items-center gap-1.5 rounded-[12px] px-2.5 text-xs font-bold ${on ? "bg-safe-bg text-safe" : "bg-chip text-ink-mid"}`}
-          >
-            <span aria-hidden className={`size-1.5 rounded-full ${on ? "bg-safe" : "bg-subtle"}`} />
-            {unconfigured ? "Coming soon" : on ? "On" : g.status === "loading" ? "…" : "Off"}
-          </span>
+          <GuardianPill status={g.status} />
         </div>
         <p className="m-0 text-[14px] leading-snug text-ink-mid">
           If your loan slips into <b className="text-watch-text">Watch</b>, Guardian repays part of it from your savings to bring

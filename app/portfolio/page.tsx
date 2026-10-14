@@ -7,7 +7,8 @@ import { TabBar } from "@/components/gg/TabBar";
 import { Money } from "@/components/gg/Money";
 import { StatusPill } from "@/components/gg/Status";
 import { StockAvatar } from "@/components/gg/StockAvatar";
-import { BackIcon, ChevronRight, LockIcon, MenuIcon, PlusIcon, TradeIcon, UnlockIcon } from "@/components/gg/icons";
+import { BackIcon, ChevronRight, LockIcon, PlusIcon, TradeIcon, UnlockIcon } from "@/components/gg/icons";
+import { MenuButton } from "@/components/gg/MenuButton";
 import { usePosition } from "@/hooks/usePosition";
 import { formatShares, formatUsd } from "@/lib/formatting";
 
@@ -30,7 +31,7 @@ function Portfolio({ address }: { address: `0x${string}` }) {
           </div>
           <div className="flex items-center gap-2">
             {data && <Link href="/credit" aria-label="Credit status" className="flex h-8 items-center"><StatusPill status={data.status} /></Link>}
-            <Link href="/settings" aria-label="Menu" className="-mr-2 flex size-10 items-center justify-center rounded-[20px] text-ink"><MenuIcon /></Link>
+            <MenuButton />
           </div>
         </div>
 
