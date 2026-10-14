@@ -12,7 +12,8 @@
     "verify:registry": "vitest run tests/onchain",
     "guardian:e2e": "tsx scripts/guardian-e2e.ts",
     "guardian:keeper": "tsx keeper/run.ts",
-    "contracts:test": "cd contracts && forge test"
+    "contracts:test": "cd contracts && forge test",
+    "contracts:vectors": "tsx scripts/agent-vectors.ts"
   },
   "dependencies": {
     "@jaw.id/core": "1.6.3",
