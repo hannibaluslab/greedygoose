@@ -33,4 +33,6 @@ export const SEL = {
   approve: "0x095ea7b3", // ERC20.approve(address,uint256)
   repay: "0xb1e8f8ef", // Spoke.repay(uint256,uint256,address)
   supply: "0x617ba037", // Pool.supply(address,uint256,address,uint16)
+  spokeWithdraw: "0x0ad58d2f", // Spoke.withdraw(uint256,uint256,address)
+  aeroSwap: "0xa026383e", // Aerodrome Slipstream router exactInputSingle((address,address,int24,address,uint256,uint256,uint256,uint160))
 } as const;
