@@ -14,6 +14,12 @@
     "guardian:keeper": "tsx keeper/run.ts",
     "contracts:test": "cd contracts && forge test",
     "contracts:vectors": "tsx scripts/agent-vectors.ts",
+    "rehearsal:fork": "bash scripts/rehearsal/start-fork.sh",
+    "rehearsal:setup": "tsx scripts/rehearsal/setup.ts",
+    "rehearsal:dev": "tsx scripts/rehearsal/dev.ts",
+    "rehearsal:agents": "tsx scripts/rehearsal/run-agents.ts",
+    "rehearsal:shock": "tsx scripts/rehearsal/price-shock.ts",
+    "rehearsal:warp": "tsx scripts/rehearsal/time-warp.ts",
     "rehearsal:check-build": "tsx scripts/rehearsal/check-build.ts"
   },
   "dependencies": {
