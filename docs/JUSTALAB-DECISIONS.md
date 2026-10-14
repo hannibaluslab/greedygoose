@@ -64,3 +64,10 @@ Legal is cleared. No step waits on a legal view.
 - **GHO is not in Entry:** Base has no GHO/USDC liquidity.
 - **An Entry swap below 99.5% waits an hour** (`EntryWaiting`) and isn't a run failure; the other coins go on.
 - **Entry's coins and venues are fixed in `EntryJob`** (Base mainnet). Another chain gets its own Entry library.
+
+## From the contract follow-ups (Adrian, 2026-10-14)
+
+- **Protect skips a stock whose pool can't fill.** Before a sale or a heads-up, Protect reads each stock's pool and leaves out one more than the floor less 0.25% under Aave's price (0.75% after a heads-up, 2.75% in Act). The sale moves to the next stock. With nothing left to sell there is no move and no heads-up, and the run doesn't fail.
+- **Heads-up near the Friday freeze:** it goes out on time. When its 30 minutes end while prices are held, the sale waits for them to reopen and goes then if the health is still below 1.25. The heads-up gives the reopen as its sale time (holidays included), so the app and the phone notification say when.
+- **Bounds only tighten.** Entry's floor can't go under 99.5%. The Rebalancer's swap floor and pool gap can only get stricter through the delay. Protect · sell's floors are unchanged (bounded at 0.25% to 5%), since a sale must stay possible.
+- **Already as built, unchanged:** GHO isn't in Entry. The Rebalancer takes the other side from the in-band stocks furthest from target (one or two swaps), with a floor of Aave's price less 0.5%. While a pool is off it waits inside the window, and the dust stays as cash for Save. Entry swaps up to $10k a time from $1, and a coin that can't fill waits an hour. These are test defaults, calibrated at go-live.

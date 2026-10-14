@@ -19,9 +19,9 @@ What `src/GooseExecutor.sol` does differently from [GooseExecutor.md](./GooseExe
 
 ## Job modules
 
-`GooseExecutor` keeps what every job shares: the registry, who may run, pause and the delayed changes, the paging and shards, the per-account `try/catch`, and the checks every move must pass (the executor holds nothing afterwards). Each job's own rule lives in a library in `src/jobs`: its permission template, when and how much to move, the calls it builds, its own post-checks and the bounds on its numbers. `SaveJob` and `ProtectJob` hold the Cash Agent's two jobs, `SellJob` Protect · sell, `RebalanceJob` the Rebalancer and `EntryJob` the Entry agent; `JobBase` holds what they share (a permission's status, what is left of a limit, the health factor, and the per-stock limits Protect · sell and the Rebalancer pack into a grant's terms). The pure rules stay where the differential tests read them (`CashRules`, `SellRules`, `RebalanceRules`, `EntryRules`).
+`GooseExecutor` keeps what every job shares: the registry, who may run, pause and the delayed changes, the paging and shards, the per-account `try/catch`, and the checks every move must pass (the executor holds nothing afterwards). Each job's own rule lives in a library in `src/jobs`: its permission template, when and how much to move, the calls it builds, its own post-checks and the bounds on its numbers. `SaveJob` and `ProtectJob` hold the Cash Agent's two jobs, `SellJob` Protect · sell, `RebalanceJob` the Rebalancer and `EntryJob` the Entry agent; `JobBase` holds what they share (a permission's status, what is left of a limit, the health factor, the per-stock limits Protect · sell and the Rebalancer pack into a grant's terms, and a stock pool's price, which both read before they trade). The pure rules stay where the differential tests read them (`CashRules`, `SellRules`, `RebalanceRules`, `EntryRules`).
 
-Every job library has the same three functions: `permission(env, account, grant, salt, terms)`, `plan(env, ctx, account, state)` and `run(env, ctx, account, state)`. `Env` carries the addresses fixed at deploy (a library can't read the executor's immutables) and `Ctx` the grant, the terms and every number the jobs read. `state` is the one registry mapping the job keeps besides the account's slot: the pools' window for Protect · sell, the mixes for the Rebalancer, the waiting coins for Entry. A new job adds a library, a `Job` value and a line in each dispatch. Sizes: core 23.8 KB (785 bytes left), `SellJob` 18.6 KB, `RebalanceJob` 17.2 KB, `EntryJob` 9.0 KB, `ProtectJob` 8.4 KB, `SaveJob` 6.9 KB. The Cash Agent's bound checks moved into `ProtectJob` and `SaveJob` to make room; a sixth job would need the dispatch itself to shrink.
+Every job library has the same three functions: `permission(env, account, grant, salt, terms)`, `plan(env, ctx, account, state)` and `run(env, ctx, account, state)`; `SellJob.run` also takes the executor's calendar, for the sale time a heads-up gives. `Env` carries the addresses fixed at deploy (a library can't read the executor's immutables) and `Ctx` the grant, the terms and every number the jobs read. `state` is the one registry mapping the job keeps besides the account's slot: the pools' window for Protect · sell, the mixes for the Rebalancer, the waiting coins for Entry. A new job adds a library, a `Job` value and a line in each dispatch. Sizes: core 23.9 KB (693 bytes left; `ExecutorHarness`, the core plus four test openings, has 95), `SellJob` 19.6 KB, `RebalanceJob` 17.4 KB, `EntryJob` 9.0 KB, `ProtectJob` 8.4 KB, `SaveJob` 6.9 KB. The Cash Agent's bound checks moved into `ProtectJob` and `SaveJob` to make room; a sixth job would need the dispatch itself to shrink.
 
 A run plans the jobs in order (Protect from savings, Protect · sell, the Rebalancer, Entry, Save) and the first one to read Aave's health factor passes it on in `Ctx.hf`, so the next doesn't pay for the account data again: about 120k gas an account with seven stocks.
 
@@ -43,11 +43,12 @@ Plan item 1, steps 10–12: when savings can't keep the credit Safe, Protect sel
 
 **What it does.**
 
-- **When** (decision 3): below 1.25 on a weekday, a heads-up (`SellHeadsUp`, with the stock it would sell at Aave's price and when), and the sale 30 minutes later if the health is still below; below 1.10 (Act), at once. Never while prices are held (weekends and holidays, the executor's New York calendar). Back above 1.25, a pending heads-up is cleared (`SellHeadsUpCleared`), so a later fall gets a new one; a sale that gets there clears it too. A sale cut short (a run makes six slices; a limit or the pool cap can stop it) goes on in the next runs without a new wait: `headsUpAt` is set a full delay back. A heads-up is only sent when there is something Protect may sell now.
+- **When** (decision 3): below 1.25 on a weekday, a heads-up (`SellHeadsUp`, with the stock it would sell at Aave's price and when), and the sale 30 minutes later if the health is still below; below 1.10 (Act), at once. Never while prices are held (weekends and holidays, the executor's New York calendar). Back above 1.25, a pending heads-up is cleared (`SellHeadsUpCleared`), so a later fall gets a new one; a sale that gets there clears it too. A sale cut short (a run makes six slices; a limit or the pool cap can stop it) goes on in the next runs without a new wait: `headsUpAt` is set a full delay back. A heads-up is only sent when there is something Protect may sell now. Near a freeze (decision, 2026-10-14) it still goes out on time: one in the 30 minutes before Friday 20:00 gives the reopen, Sunday 20:00 New York, as its sale time (`NyCalendar.nextOpen`, holidays included), and the sale goes then if the health is still below 1.25.
 - **Which stock:** the lowest collateral factor first, the most safety per dollar sold. Factors within one point are a near-tie, and the larger holding goes first. "Keep my mix" (`setKeepMix`, only the account itself) sells the same share of each holding instead. Factors are read from each reserve's current config, the one Aave applies to the whole position on a withdrawal.
 - **How much:** the least that brings the health back to 1.4 once the proceeds repay at the floor. Each stock is held to its backing, its daily limit, its pool's window and the USDC limit; what one can't cover spills over to the next.
 - **Slices:** each slice is withdraw, swap, repay. Aave's spoke checks health ≥ 1.0 right after every withdrawal, so a slice takes out no more than leaves it at 1.001, and no more than $5,000 at Aave's price (about 1% of a pool's USDC). A run makes at most six slices; the rest waits for the next run.
 - **Price floor:** every swap's minimum output is Aave's price less 1% (3% in Act, still under Aave's 5.5% liquidation bonus), and each slice repays exactly that minimum. What the swap pays above it stays in the wallet as cash, which Save puts back in savings.
+- **Pools that can't fill** (decision, 2026-10-14): before a sale or a heads-up, each stock's Aerodrome pool is read. A stock whose pool sits more than the floor less 0.25% under Aave's price (0.75% after a heads-up, 2.75% in Act) is left out, and the sale spills over to the next stock as it does at a limit. The 0.25% is room for the pools' 0.05% fee and a slice's price impact (a $5,000 slice moves each stock pool under 0.01%, QuoterV2, 2026-10-14). With nothing left to sell there is no move and no heads-up, so a pool that can't fill is never a run failure.
 - **Pool cap:** all accounts together sell at most $10,000 at Aave's price into one stock's pool per 10 minutes (about 2% of the pools' USDC). The check lists sales first, lowest health first, so they get the gas and the pools' room before anything else.
 - **Never-sell:** a stock left out of the grant has no `approve` and no limit, so JAW's manager refuses any batch that would sell it.
 
@@ -62,8 +63,9 @@ Plan item 1, steps 10–12: when savings can't keep the credit Safe, Protect sel
 | USDC limit on the repay leg | USDC and aUSDC, at the same cap | The manager meters only the tokens a permission lists. Nothing in a sale touches savings; the aUSDC limit bounds what a batch could move through an allowance the account gave elsewhere. |
 | "Keep my mix" from the registry | The same share of each holding for sale, then the usual order for what limits leave | The Rebalancer's target mix doesn't exist yet (item 9). |
 | A sale repays what it sold for | It repays the minimum output | The calls are fixed before the swap runs; repaying more would take the user's own cash. |
+| A swap that can't meet its floor reverts the batch | A stock whose pool is too far under Aave's price isn't sold; the sale moves to the next stock | Decision (Adrian, 2026-10-14). A reverted sale counted as a failed run: the account's cooldown also held Protect from savings and Save, every retry picked the same stock, and eight in a row switched every job off. |
 
-**Checking cost.** An account with Protect · sell on costs about 36k more to check while it waits above the heads-up line, using the health Protect already read. One below the line whose sale a stock limit or the pool cap blocks pays for the full plan on every check until the limit resets or the window rolls; the scan's gas stop and its rotating start absorb that.
+**Checking cost.** An account with Protect · sell on costs about 36k more to check while it waits above the heads-up line, using the health Protect already read. One below the line whose sale a stock limit, the pool cap or a pool that can't fill blocks pays for the full plan on every check until the limit resets or the window rolls; the scan's gas stop and its rotating start absorb that.
 
 **Fork tests** (`test/ProtectSellFork.t.sol`), against the real manager, the Equities Hub and Aerodrome's pools with their real balances, from fresh JAW accounts backed by NVIDIA:
 
@@ -74,10 +76,14 @@ Plan item 1, steps 10–12: when savings can't keep the credit Safe, Protect sel
 | 1.05 | sale at once; 1.40 | 5 | 2.23M |
 | 1.01 | six slices, then the next block's run finishes; 1.40 | 6 + 3 | 2.45M + 1.73M |
 | any, weekend | nothing | | |
-| 1.05, pool 4% under Aave's price | the swap can't meet the Act floor; the run fails, nothing moves | | |
+| 1.05, NVIDIA's pool 3.8% under Aave's price | NVIDIA can't fill even at the Act floor, so it isn't for sale: nothing to do, and a run that lists the account anyway moves nothing and isn't a failure | | |
+| 1.05, Tesla's pool 3.8% under, NVIDIA's in line | Tesla (lowest factor) is left out; NVIDIA sells instead; 1.40 | | |
+| 1.20 and 1.08, NVIDIA's pool 1.5% under | no heads-up at 1.20 (too far for the 1% floor); 1.08 sells at once at the Act floor; 1.40 | | |
+| 1.20, Friday 19:45 New York | heads-up giving Sunday 20:00 as the sale time; nothing on Friday night or over the weekend; the sale at the reopen; 1.40 | | |
+| 1.20, Friday 19:45, backing added on Saturday | the heads-up is cleared while prices are held; nothing sells at the reopen | | |
 | 1.05 and 1.08 sharing NVIDIA's pool, $1,000 cap | 1.05 first; 1.08 sells what the window leaves, then the rest in the next window | | |
 
-The costliest run, six slices over three stocks, used 2.89M gas, inside `MAX_RUN_GAS` (4.2M) and Base's 5M perform limit. Measured: the manager's batch costs about 660k plus 234k a slice.
+The costliest run, six slices over three stocks, used 2.93M gas, inside `MAX_RUN_GAS` (4.2M) and Base's 5M perform limit. Measured: the manager's batch costs about 660k plus 234k a slice.
 
 ## Flash-loan helper: not needed
 
@@ -85,7 +91,7 @@ The panel's open question (eval/protect-panel.json): near 1.0, would the emergen
 
 - **It couldn't work without Aave governance.** The spoke's `withdraw` and `repay` are `onlyPositionManager(onBehalfOf)`. A helper repaying first and withdrawing after would have to be the user's position manager, which needs the user's approval and Aave governance to activate it (`isPositionManagerActive`). And the account can't take a flash loan into its own batch: the manager is `nonReentrant` and the account only runs batches its owners send.
 - **Slices cover every starting health within one or two runs.** A slice takes out at most what leaves the health at 1.001. From the fork: 1.25 takes one slice, 1.10 three, 1.05 five, 1.01 nine, as six in one run and three in the next block's (about 2 seconds later on Base). The model in `SellRules` gives the same for factors from 65% to 78%; the worst, Apple at 78% from 1.01, takes 13 slices, three runs.
-- **Gas fits.** About 660k plus 234k a slice for the batch; six slices over three stocks used 2.89M for the whole run.
+- **Gas fits.** About 660k plus 234k a slice for the batch; six slices over three stocks used 2.93M for the whole run.
 - **Below 1.001 nothing can be sold.** No withdrawal at all fits under Aave's check, so Protect can't act and Aave's liquidation follows its own rules. The heads-up at 1.25 and the immediate sale below 1.10 exist so an account rarely gets there.
 
 Facts found on the way:
@@ -121,6 +127,7 @@ Plan item 9, steps 2 and 3: once a market day, 30 to 60 minutes after the open, 
 | Skip the day if the pool is > 0.5% off | It waits while the pool is off; the window ends the day | Recording the skip would cost a run for every account every day a pool is off. A pool that comes back within the window trades at a fair price. |
 | Skip while the price feed is paused | Skip while the stock's Aave reserve is paused | The feeds have no paused flag (readiness audit); a corporate action pauses the reserve. |
 | Slices ≤ $25k | One swap a stock a day, ≤ $25k | Splitting a sale within one batch gets the same pool price; across days, the pool and Aave's price catch up. |
+| The floor and the pool gap change through the delay, within their bounds (D18) | The same, and a change can only make them stricter (`RebalanceJob.checkChange`, when it is queued and again when it lands) | Decision (Adrian, 2026-10-14): no change can loosen what a user's swaps get against Aave's price. |
 
 **Gas, cold** (`RebalanceGasForkTest`, seven stocks, three over their band and four under): the check costs about 539k in the window, the run 2.26M, of which the manager's batch 1.35M (`REBALANCE_GAS` caps it at 2M). Outside the window an account with the Rebalancer on costs only the calendar check. In the window a page of such accounts doesn't fit in one check (32 × about 0.5M); the scan's gas stop and rotating start spread it over the next blocks, which the 30-minute window allows many times over.
 
@@ -166,6 +173,7 @@ The coins and venues are Base mainnet's, fixed in `EntryJob` and checked against
 | EntryChecker pins the recipient, USDC out and the 99.5% floor | No checker; the executor builds every call and its post-checks revert anything else | D14. |
 | The check reads the venues' quoters to pick the better one | One venue per coin, the deepest, measured | A quoter runs a swap and reverts, which a view (the check) can't call. The swap's own minimum is the quote: one that can't fill moves nothing and the coin waits. |
 | USDT, USDe, USDbC, GHO; USDS through PSM3 | The same, without GHO | No GHO liquidity on Base. |
+| minOut ≥ 99.5% | The floor can't be set under 99.5% (`EntryRules.FLOOR_BPS_MAX`); a change can only make it stricter | Decision (Adrian, 2026-10-14). The bound was 99%. |
 | "Waiting" below the floor | An event and a one-hour wait per coin; the other coins go on | Without the wait, the check would list the account every block. |
 
 **Gas.** The manager's batch costs 200k–320k (one approve and one swap, under `ACCOUNT_GAS`), a one-account run 750k–890k.
