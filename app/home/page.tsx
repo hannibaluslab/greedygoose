@@ -8,7 +8,7 @@ import { Header } from "@/components/gg/Header";
 import { TabBar } from "@/components/gg/TabBar";
 import { BalanceHero, TodayChange, TodayPending } from "@/components/gg/BalanceHero";
 import { QuickAction } from "@/components/gg/QuickAction";
-import { CashCard, CreditCard } from "@/components/gg/Cards";
+import { CashCard, YieldCard } from "@/components/gg/Cards";
 import { StartEarningCard, TurnIntoCash } from "@/components/gg/CashSetup";
 import { AddStockCard, HoldingCard } from "@/components/gg/Holding";
 import { CreditSheet } from "@/components/gg/CreditSheet";
@@ -25,6 +25,7 @@ import { usePosition, type PositionData } from "@/hooks/usePosition";
 import { aprToApy } from "@/lib/aave/math";
 import { arrivedCoins, arrivedView, rateText, startEarningShown, type ArrivedView } from "@/lib/cashSetup";
 import { homeStatus } from "@/lib/risk/status";
+import { StatusPill } from "@/components/gg/Status";
 import { formatUsdTrim } from "@/lib/formatting";
 import { EQUITIES } from "@/lib/tokens/registry";
 import { dayChange, weekValue } from "@/lib/prices/market";
@@ -76,6 +77,7 @@ function Home({ address }: { address: `0x${string}` }) {
           open={setSheet}
           openStock={stocks.openStock}
           arrived={arrived}
+          dim={startEarningShown(setup.save, data.cashUsd)}
           cards={
             <>
               <TurnIntoCash user={address} view={arrived} setup={setup} />
@@ -106,15 +108,17 @@ function Home({ address }: { address: `0x${string}` }) {
 }
 
 function Loaded({
-  data, apy, open, openStock, arrived, cards,
+  data, apy, open, openStock, arrived, cards, dim,
 }: {
   data: PositionData;
   apy: number;
   open: (sheet: Sheet) => void;
   openStock: (symbol: string) => void;
   arrived: ArrivedView;
-  /** What needs the user about their cash: other dollars to turn into cash, setting up to finish. */
+  /** What needs the user about their cash: other dollars to turn into cash, starting to earn. */
   cards: ReactNode;
+  /** Board 2g: money is in but doesn't earn yet, so Cash and Yield sit faded under "Start earning". */
+  dim: boolean;
 }) {
   const held = data.holdings.filter((h) => h.freeShares + h.lockedShares > 0);
   const market = useMarketPrices(held);
@@ -129,12 +133,21 @@ function Loaded({
           info={{ label: "What’s in your total balance", onClick: () => open("total") }}
           value={data.stocksUsd + data.cashUsd}
           sub={today ? <TodayChange usd={today.usd} pct={today.pct} /> : market.loading ? <TodayPending /> : undefined}
+          // Board 2f: what you have on the left, what you owe on the right. Owed is rounded up, never shown as less.
           side={{
-            // D19: stocks earn no yield, so the average yield is the cash rate.
-            label: "Average yield",
-            info: { label: "How your average yield is worked out", onClick: () => open("yield") },
-            value: `${(apy * 100).toFixed(1)}%`,
-            unit: "APY",
+            label: "Credit",
+            info: { label: "Your credit", onClick: () => open("credit") },
+            value: formatUsdTrim(Math.ceil(data.debtUsd)),
+            unit: "owed",
+            sub:
+              data.debtUsd > 0 ? (
+                <span className="inline-flex items-center justify-center gap-1.5">
+                  <StatusPill status={homeStatus(data.status)} size="sm" />
+                  {formatUsdTrim(data.monthlyCostUsd)} / month
+                </span>
+              ) : (
+                <span className="text-subtle">None taken</span>
+              ),
           }}
         />
         {held.length > 0 && <ValueLine points={weekValue(priced)} height={68} loading={market.loading} onRetry={market.retry} />}
@@ -151,14 +164,14 @@ function Loaded({
       <section className="flex flex-col gap-2.5 px-5 pt-[18px] empty:hidden">{cards}</section>
 
       <section className="grid grid-cols-2 gap-2.5 px-5 pt-[18px]">
-        <CashCard cashUsd={data.cashUsd} apy={apy} note={arrived.kind === "arriving" ? `${arrived.text} arriving` : undefined} href="/receive" />
-        <CreditCard
-          debtUsd={data.debtUsd}
-          status={homeStatus(data.status)}
-          monthlyCostUsd={data.monthlyCostUsd}
-          availableUsd={data.availableUsd}
-          onClick={() => open("credit")}
+        <CashCard
+          cashUsd={data.cashUsd}
+          earning={data.cash.saveOn}
+          dim={dim}
+          note={arrived.kind === "arriving" ? `${arrived.text} arriving` : undefined}
+          href="/receive"
         />
+        <YieldCard apy={apy} dim={dim} onClick={() => open("yield")} />
       </section>
 
       {/* With no stocks, the empty state takes the room down to the tab bar. */}
