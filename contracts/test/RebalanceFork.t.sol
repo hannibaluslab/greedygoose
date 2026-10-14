@@ -7,7 +7,6 @@ import {GooseExecutor} from "../src/GooseExecutor.sol";
 import {IAeroRouter, IERC20} from "../src/IProtocols.sol";
 import {NyCalendar} from "../src/NyCalendar.sol";
 import {Trade} from "../src/RebalanceRules.sol";
-import {JobBase} from "../src/jobs/JobBase.sol";
 import {RebalanceJob} from "../src/jobs/RebalanceJob.sol";
 import {SellForkBase} from "./ProtectSellFork.t.sol";
 import {IJustaPermissionManager as PM} from "./IJustaPermissionManager.sol";
@@ -54,12 +53,6 @@ abstract contract RebalanceForkBase is SellForkBase {
         );
         _grantThroughAccount(p);
         x.register(GooseExecutor.Job.Rebalance, a, p.start, p.end, p.salt, 1_000e6, t);
-    }
-
-    /// Aave's price for stock `r`: its Aerodrome pool's, times `bps` / 10,000.
-    function _priceAt(uint256 r, uint256 bps) internal {
-        uint256 price = JobBase.poolPrice(x.env(), r) * bps / 10_000;
-        vm.mockCall(address(x.ORACLE()), abi.encodeWithSignature("getReservePrice(uint256)", r), abi.encode(price));
     }
 
     /// The account's free stock in `r`, in USDC units at Aave's price.
