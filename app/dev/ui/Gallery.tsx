@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
+import { FeedCard, FeedDays } from "@/components/gg/Activity";
 import { AmountBadge, AmountField, AmountSource } from "@/components/gg/AmountField";
 import { BalanceHero, TodayChange } from "@/components/gg/BalanceHero";
 import { Button } from "@/components/gg/Button";
@@ -17,6 +18,8 @@ import { Switch } from "@/components/gg/Switch";
 import { FaceIdButton } from "@/components/gg/TxUi";
 import { CreditIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/icons";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
+import { useNowSec } from "@/hooks/useNowSec";
+import type { ActivityRow } from "@/hooks/useActivity";
 import type { Status } from "@/lib/risk/status";
 import { formatUsd, formatUsdTrim } from "@/lib/formatting";
 
@@ -37,6 +40,13 @@ const HOLDINGS = [
     card: [3, 6, 4, 9, 7, 12, 10, 15, 13, 17, 19], row: [2, 6.4, 4.7, 13.1, 10.9, 18.9, 22] },
 ];
 const NVDA = { symbol: "NVDA", name: "NVIDIA", price: 178.57 };
+const HOUR = 3_600_000;
+/** Activity rows the way useActivity hands them over, timed from now so they group under Today and a weekday. */
+const MOVES = (now: number): ActivityRow[] => [
+  { key: "repay", time: now - HOUR, status: "done", items: [{ kind: "repay", symbol: "USDC", amount: 180 }] },
+  { key: "save", time: now - 2 * HOUR, status: "pending", items: [{ kind: "save", symbol: "USDC", amount: 40 }] },
+  { key: "buy", time: now - 50 * HOUR, status: "done", items: [{ kind: "buy", symbol: "NVDAc", amount: 0.112, paidUsd: 20 }] },
+];
 const PILL_SIZES: StatusPillSize[] = ["sm", "row", "header", "md", "lg"];
 const STATUSES: Status[] = ["safe", "watch", "act", "none"];
 
@@ -47,6 +57,7 @@ export function Gallery() {
   const [credit, setCredit] = useState("300");
   const [open, setOpen] = useState(false);
   const [on, setOn] = useState(true);
+  const now = useNowSec() * 1000;
   return (
     <div className="flex min-h-dvh flex-col gap-6 px-5 pb-12 pt-[54px]">
       <div className="flex flex-col gap-1">
@@ -213,6 +224,12 @@ export function Gallery() {
             ]}
           />
         </div>
+      </Section>
+
+      <Section title="Activity feed · Agents" kit="feed">
+        <FeedCard>
+          <FeedDays rows={MOVES(now)} nowMs={now} />
+        </FeedCard>
       </Section>
 
       <Section title="Sheet with steps" kit="sheet">
