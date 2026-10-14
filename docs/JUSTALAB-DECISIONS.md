@@ -52,3 +52,16 @@ Legal is cleared. No step waits on a legal view.
 - **"Keep my mix" sells the same share of each holding**, until the Rebalancer's target mix exists (item 9).
 - **A sale cut short goes on without a new heads-up** (a run makes six slices; limits and the pool cap can stop it), until the health is back above 1.25.
 - **No flash-loan helper.** Slices cover every starting health in one or two runs (1.25: one slice; 1.01: six, then three in the next block). See the as-built doc, "Flash-loan helper: not needed".
+
+## From the Rebalancer and Entry build (2026-10-14)
+
+- **The Rebalancer and Entry are their own jobs and grants** (`Job.Rebalance`, `Job.Entry`; `rebalanceGrant`, `entryGrant` in `lib/agents/permissions.ts`). The Rebalancer's grant has no Aave call; it approves only the stocks it may sell, with a weekly limit each, and USDC for the buys within a weekly limit.
+- **The mix lives in the registry** (`setMix`, only the account, in one Face ID). Weights in BPS that add up to 100%.
+- **Only the stock that broke out goes back to half its band; the other side comes from the in-band stocks furthest from their target.** Fewer, larger swaps than spreading it over every stock.
+- **Every Rebalancer swap gets at least Aave's price less 0.5%**, the same as the pool gap. A batch that can't fill skips the day and isn't a run failure, so it never delays Protect.
+- **The buys spend exactly what the sales' minimums bring in.** The rest of the sales' proceeds (about 0.45% of what is traded) stays in the wallet as cash, and Save puts it in savings.
+- **Entry's venues:** USDT and USDbC on Aerodrome's first Slipstream deployment, USDe on Uniswap v3 (0.05%), USDS on Spark's PSM3. Each the deepest for its coin on Base; one venue per coin.
+- **GHO is not in Entry:** Base has no GHO/USDC liquidity.
+- **An Entry swap below 99.5% waits an hour** (`EntryWaiting`) and isn't a run failure; the other coins go on.
+- **Entry's coins and venues are fixed in `EntryJob`** (Base mainnet). Another chain gets its own Entry library.
+
