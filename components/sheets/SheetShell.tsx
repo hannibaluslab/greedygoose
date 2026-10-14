@@ -25,6 +25,10 @@ type SheetShellProps = {
    *  only meant to be left via Back, so the one-way hierarchy isn't
    *  short-circuited by an X that dismisses the whole flow. */
   hideClose?: boolean;
+  /** The boards draw two sheet headers: `flow` (F1-4 Buy, F2-6 Confirm) has a
+   *  20px title and Close; `info` (HomeCreditSlide, HomeInfo) has a 24px
+   *  title, no Close (the dim behind it closes the sheet) and 16px below. */
+  look?: "flow" | "info";
   /** Cap on the sheet's height, as a percent of viewport height. Only pass a
    *  value for a flow that deliberately wants a different ceiling; a lower
    *  default here would silently shrink every other sheet in the app. */
@@ -117,6 +121,7 @@ export function SheetShell({
   titleAccessory,
   headerRight,
   hideClose = false,
+  look = "flow",
   maxHeightVh = 88,
   contentHeightPx,
   flushBottom = false,
@@ -174,7 +179,7 @@ export function SheetShell({
         >
           {/* The canvas draws a grabber; the sheet doesn't drag (dismissible={false}), so it's decoration only. */}
           <div aria-hidden className="mx-auto mt-2.5 h-[5px] w-10 shrink-0 rounded-[3px] bg-line-strong" />
-          <div className="flex items-center gap-1.5 px-5 pb-3 pt-4">
+          <div className={`flex items-center gap-1.5 px-5 pt-4 ${look === "info" ? "pb-4" : "pb-3"}`}>
             {onBack && (
               <button
                 type="button"
@@ -187,7 +192,9 @@ export function SheetShell({
             )}
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-2">
-                <DrawerTitle className="m-0 shrink-0 text-[20px] font-semibold tracking-tight-2 text-ink">{title}</DrawerTitle>
+                <DrawerTitle className={`m-0 shrink-0 font-semibold tracking-tight-2 text-ink ${look === "info" ? "text-[24px]" : "text-[20px]"}`}>
+                  {title}
+                </DrawerTitle>
                 {titleAccessory}
               </div>
               {description && (
@@ -195,7 +202,7 @@ export function SheetShell({
               )}
             </div>
             {headerRight}
-            {!hideClose && (
+            {!hideClose && look === "flow" && (
               <button
                 type="button"
                 aria-label="Close"
