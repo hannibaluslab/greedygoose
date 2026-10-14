@@ -34,7 +34,8 @@ export function BalanceHero({
       {(sub || side.sub) && (
         <>
           <div className="pt-[5px] text-[13px] text-ink-mid">{sub}</div>
-          <Divided className="whitespace-nowrap pt-[5px] text-[13px] text-ink-mid">{side.sub}</Divided>
+          {/* Stretched when empty, so the hairline still runs down beside the line under the big figure. */}
+          <Divided className={`whitespace-nowrap pt-[5px] text-[13px] text-ink-mid ${side.sub ? "" : "self-stretch"}`}>{side.sub}</Divided>
         </>
       )}
     </div>
@@ -63,6 +64,11 @@ export function TodayChange({ usd, pct }: { usd: number; pct: number }) {
       <span className={`font-semibold ${tone}`}>{money}</span> · <span className={`font-semibold ${tone}`}>{formatSignedPct(pct)}</span> today
     </>
   );
+}
+
+/** TodayChange's place while market prices load. */
+export function TodayPending() {
+  return <span aria-hidden className="inline-block h-[13px] w-[150px] animate-pulse rounded-full bg-chip align-[-2px]" />;
 }
 
 function Divided({ children, className = "" }: { children: ReactNode; className?: string }) {
