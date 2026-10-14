@@ -45,12 +45,12 @@ const LIMITED: Record<CashJob, readonly Address[]> = {
 
 /**
  * The limits an agent's sheet offers and the one each job is switched on with, in dollars a day (a week for the
- * Rebalancer) (Adrian, 2026-10-15): Save $250 / $1,000 / $5,000; Protect $100 / $300 / $500, for repaying from cash
- * and for selling backing stock alike; the Rebalancer $250 / $500 / $1,000; Receive (Entry) $1,000 a day, with no
+ * Rebalancer) (Adrian, 2026-10-15): Protect $100 / $300 / $500, for repaying from cash and for selling backing stock
+ * alike; the Rebalancer $250 / $500 / $1,000. Save and Entry run under the hood (D20), each at $1,000 a day with no
  * other offer. All wait on the calibration pass (plan item 6 step 9).
  */
 export const LIMIT_USD: Record<AgentJob, { options: readonly number[]; start: number; per: "day" | "week" }> = {
-  save: { options: [250, 1_000, 5_000], start: 1_000, per: "day" },
+  save: { options: [], start: 1_000, per: "day" },
   protect: { options: [100, 300, 500], start: 300, per: "day" },
   sell: { options: [100, 300, 500], start: 300, per: "day" },
   rebalance: { options: [250, 500, 1_000], start: 500, per: "week" },

@@ -4,12 +4,15 @@ import { formatUsdTrim } from "@/lib/formatting";
 import { USDC } from "@/lib/tokens/registry";
 
 /*
- * The Agents tab (Adrian, 2026-10-15): four agents, each a switch, a "next" line and a limit, and cards only when
+ * The Agents tab (Adrian, 2026-10-15): two agents, each a switch, a "next" line and a limit, and cards only when
  * something needs the user. Pure, so the dev gallery draws every state with the app's own words.
+ *
+ * Earning and turning other dollars into cash (the Save and Entry jobs) run under the hood (D20): they have no row,
+ * no sheet and no switch here. Their grants are asked where they matter, on Home and Pay (lib/cashSetup.ts).
  */
 
-/** The four agents, in the tab's order. */
-export const AGENTS = ["save", "protect", "rebalance", "receive"] as const;
+/** The two agents, in the tab's order. */
+export const AGENTS = ["protect", "rebalance"] as const;
 export type Agent = (typeof AGENTS)[number];
 
 /**
@@ -17,33 +20,28 @@ export type Agent = (typeof AGENTS)[number];
  * its own switch inside Protect's sheet (decision 5). The first job is the one the agent's switch grants.
  */
 export const AGENT_JOBS: Record<Agent, readonly [AgentJob, ...AgentJob[]]> = {
-  save: ["save"],
   protect: ["protect", "sell"],
   rebalance: ["rebalance"],
-  receive: ["entry"],
 };
 
-export const agentOf = (job: AgentJob): Agent => AGENTS.find((a) => AGENT_JOBS[a].includes(job))!;
+/** The jobs the Agents tab switches: Protect's two and the Rebalancer's ("Turn off all agents" covers these). */
+export const TAB_JOBS: readonly AgentJob[] = AGENTS.flatMap((a) => AGENT_JOBS[a]);
+
+/** The agent that runs `job`; null for Save and Entry, which have no agent on screen (D20). */
+export const agentOf = (job: AgentJob): Agent | null => AGENTS.find((a) => AGENT_JOBS[a].includes(job)) ?? null;
 
 /** The agent a link names (`/agents?agent=protect`), or null for anything else. */
 export const agentParam = (value: string | null): Agent | null => AGENTS.find((a) => a === value) ?? null;
 
 /** Who made a move in the activity: an agent, or "Agents" for a run that didn't go through. */
-export type AgentName = "Save" | "Protect" | "Rebalance" | "Receive" | "Agents";
+export type AgentName = "Protect" | "Rebalance" | "Agents";
 export const AGENT_NAME: Record<Agent, Exclude<AgentName, "Agents">> = {
-  save: "Save",
   protect: "Protect",
   rebalance: "Rebalance",
-  receive: "Receive",
 };
 
 /** What each agent does, in under six words for its row and in a line for its sheet, and what it never does. */
 export const AGENT_COPY: Record<Agent, { does: string; lead: string; never: string }> = {
-  save: {
-    does: "Puts idle cash into savings",
-    lead: "Cash you aren’t using goes into savings, where it earns.",
-    never: "Save never moves money out of your account.",
-  },
   protect: {
     does: "Keeps your credit Safe",
     lead: "Repays from your cash when your credit leaves Safe. It can sell backing stock if cash isn’t enough.",
@@ -53,11 +51,6 @@ export const AGENT_COPY: Record<Agent, { does: string; lead: string; never: stri
     does: "Keeps your mix on target",
     lead: "Once a market day, it sells what grew too big to buy what fell short.",
     never: "Rebalance never touches your cash or the stocks backing your credit.",
-  },
-  receive: {
-    does: "Turns other dollars into cash",
-    lead: "USDT, USDe, USDbC and USDS that land in your account become cash.",
-    never: "Receive never converts below 99.5% of face value.",
   },
 };
 
@@ -73,7 +66,8 @@ const usdOf = (raw: bigint) => Number(raw) / 10 ** USDC.decimals;
 
 /**
  * What an agent does next, from the executor's `planOf` or its rule (lib/agents/next.ts): a move, said for an agent
- * that runs ("saves $40") and for one that doesn't ("Would save $40"), or why there's none ("Safe. Nothing to do.").
+ * that runs ("repays $40 from your cash") and for one that doesn't ("Would repay $40 from your cash"), or why there's
+ * none ("Safe. Nothing to do.").
  */
 export type Next = { will: string; would: string } | { idle: string };
 
@@ -106,7 +100,7 @@ export type AgentItemsInput = {
   next: Readonly<Record<Agent, Next>>;
 };
 
-/** The four rows. Each limit is the agent's own job's (Protect's: repaying from cash). */
+/** The two rows. Each limit is the agent's own job's (Protect's: repaying from cash). */
 export function agentItems(i: AgentItemsInput): AgentItem[] {
   return AGENTS.map((agent) => {
     const job = AGENT_JOBS[agent][0];
@@ -173,14 +167,12 @@ export type CardsInput = {
    * off (`JobOff`, not revoked). Null when it didn't, or it has been switched on since.
    */
   stopped: Readonly<Record<AgentJob, number | null>>;
-  /** Coins Receive couldn't convert at a fair price: face value in USDC units, and the retry time. */
-  waiting: readonly { symbol: string; amountRaw: bigint; retryAt: number }[];
   /** Failed runs in a row, and when the executor tries again. */
   fails: number;
   cooldownUntil: number;
 };
 
-/** The cards, most urgent first: the heads-up, failed runs, stopped agents, agents about to stop, waiting coins. */
+/** The cards, most urgent first: the heads-up, failed runs, stopped agents, agents about to stop. */
 export function agentCards(i: CardsInput): AgentCard[] {
   const cards: AgentCard[] = [];
   if (i.headsUp) {
@@ -235,25 +227,15 @@ export function agentCards(i: CardsInput): AgentCard[] {
       actions: [{ kind: "renew", agent, jobs }],
     });
   }
-  for (const w of i.waiting) {
-    cards.push({
-      key: `waiting-${w.symbol}`,
-      tone: "plain",
-      agent: "Receive",
-      text: `${formatUsdTrim(usdOf(w.amountRaw))} ${w.symbol} is waiting for a fair price. Retrying at ${timeText(w.retryAt)}.`,
-      actions: [],
-    });
-  }
   return cards;
 }
-
 
 /*
  * The confirm step: what a switch, a limit, a renewal or turning off does, said before JAW's own screen.
  */
 
-/** What an agent's sheet can do, each a JAW grant or revoke. */
-export type SheetAction = "on" | "off" | "limit" | "renew";
+/** What an agent's sheet can do, each a JAW grant or revoke. Its limit is changed in its settings body. */
+export type SheetAction = "on" | "off" | "renew";
 
 /** "One Face ID", "2 Face IDs". */
 export const faceIdText = (n: number) => (n === 1 ? "One Face ID" : `${n} Face IDs`);
@@ -264,17 +246,10 @@ const lower = (s: string) => s[0].toLowerCase() + s.slice(1);
 export type ConfirmCopy = { title: string; lead: string; rows: { label: string; value: string }[]; button: string; note: string };
 
 /**
- * The confirm step's words. `limit` is what the agent will run with ("$1,000 a day"), `from` the one it runs with now
- * (a limit change), `untilSec` when a new grant would end, `faceIds` how many JAW screens it takes.
+ * The confirm step's words. `limit` is what the agent will run with ("$300 a day"), `untilSec` when a new grant would
+ * end, `faceIds` how many JAW screens it takes.
  */
-export function confirmFor(a: {
-  kind: SheetAction;
-  agent: Agent;
-  limit: string;
-  from?: string;
-  untilSec: number;
-  faceIds: number;
-}): ConfirmCopy {
+export function confirmFor(a: { kind: SheetAction; agent: Agent; limit: string; untilSec: number; faceIds: number }): ConfirmCopy {
   const name = AGENT_NAME[a.agent];
   const until = { label: "Until", value: longDateText(a.untilSec) };
   const note = faceIdNote(a.faceIds);
@@ -285,14 +260,6 @@ export function confirmFor(a: {
         lead: `${name} ${lower(AGENT_COPY[a.agent].does)}, up to ${a.limit}. JAW shows the limit on its own screen before you sign.`,
         rows: [{ label: "Limit", value: a.limit }, until],
         button: "Switch on with Face ID",
-        note,
-      };
-    case "limit":
-      return {
-        title: `Change ${name}’s limit`,
-        lead: `${name} keeps running, up to ${a.limit} from now on.`,
-        rows: [{ label: "Limit", value: `${a.from} → ${a.limit}` }, until],
-        button: "Save limit with Face ID",
         note,
       };
     case "renew":

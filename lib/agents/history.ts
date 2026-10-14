@@ -10,7 +10,6 @@ import { JOBS } from "@/lib/agents/permissions";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { permissionManagerAbi } from "@/lib/guardian/abis";
 import { USDC } from "@/lib/tokens/registry";
-import { ENTRY_COINS } from "@/lib/tokens/stables";
 
 /** Blocks per getLogs request, the size Leo's keeper reads the manager's logs in (lib/guardian/keeper.ts). */
 export const LOG_CHUNK = 5_000n;
@@ -104,8 +103,7 @@ export async function readMoveContext(
       args: [permission, spend],
       blockNumber: e.blockNumber,
     }).catch(() => undefined);
-    const decimals = limit.job === "entry" ? ENTRY_COINS[limit.spend].decimals : USDC.decimals;
-    if (period) ctx.used = { spentRaw: period.spend, capRaw: spend.allowance, decimals };
+    if (period) ctx.used = { spentRaw: period.spend, capRaw: spend.allowance };
   }
   return { time: Number(block.timestamp), ctx };
 }

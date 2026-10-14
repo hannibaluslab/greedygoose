@@ -13,7 +13,7 @@ import type { AgentJob } from "@/lib/agents/permissions";
 import { EQUITIES } from "@/lib/tokens/registry";
 
 /*
- * The Agents tab (Adrian, 2026-10-15): cards only when something needs the user, the four agents with their
+ * The Agents tab (Adrian, 2026-10-15): cards only when something needs the user, the two agents with their
  * switches, what they did and why, and one way to turn them all off. Plain values in, so the dev gallery draws every
  * state.
  */

@@ -12,9 +12,15 @@ import { formatShares, formatUsdTrim } from "@/lib/formatting";
 /** A line of the feed: plain words, and Safe / Watch / Act in their colour. */
 export type Words = readonly (string | { status: Exclude<Status, "none"> })[];
 
-/** One agent move as the Agents tab draws it: who, one line on what changed, and the details on tap. */
+/**
+ * Whose move a row is: an agent's, or "Cash" for what happens to the cash under the hood (D20): money that arrives
+ * starts earning, and other dollars become cash. Those read as money events, with no agent named.
+ */
+export type MoveBy = AgentName | "Cash";
+
+/** One executor move as the feed draws it: who, one line on what changed, and the details on tap. */
 export type AgentMove = {
-  agent: AgentName;
+  by: MoveBy;
   line: Words;
   details: { label: string; value: Words }[];
 };
@@ -29,27 +35,24 @@ export type MoveContext = {
   owedRaw?: readonly [bigint, bigint];
   /** USDC units of cash, before and after. */
   cashRaw?: readonly [bigint, bigint];
-  /** The grant's limit and what its period had used, in the limit's token units (`decimals`). */
-  used?: { spentRaw: bigint; capRaw: bigint; decimals: number };
+  /** The grant's limit and what its period had used, in USDC units. */
+  used?: { spentRaw: bigint; capRaw: bigint };
   /** Aave's price per stock, 8 decimals, by reserve id. */
   pricesRaw?: readonly bigint[];
 };
 
-/** Which grant's limit a move counts against, and which of its limits: the coin's own for Entry. */
+/**
+ * Which grant's limit an agent's move counts against ("Used today"). A cash event (a Save, a conversion) shows no
+ * limit: those grants run under the hood (D20).
+ */
 export function limitOf(e: AgentEvent): { job: AgentJob; spend: number } | null {
   switch (e.kind) {
-    case "saved":
-      return { job: "save", spend: 0 };
     case "repaid":
       return { job: "protect", spend: 0 };
     case "sold":
       return { job: "sell", spend: 0 };
     case "rebalanced":
       return { job: "rebalance", spend: 0 };
-    case "converted": {
-      const i = ENTRY_COINS.findIndex((c) => isAddressEqual(c.address, e.coin));
-      return i < 0 ? null : { job: "entry", spend: i };
-    }
     default:
       return null;
   }
@@ -66,7 +69,7 @@ const TIME = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digi
 const DATE = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
 const at = (sec: number) => TIME.format(sec * 1000);
 
-const usd = (raw: bigint, decimals = USDC.decimals) => formatUsdTrim(Number(raw) / 10 ** decimals);
+const usd = (raw: bigint) => formatUsdTrim(Number(raw) / 10 ** USDC.decimals);
 /** What's owed rounds up to the cent: it's never shown as less than it is. */
 const owed = (raw: bigint) => formatUsdTrim(Math.ceil(Number(raw) / 10 ** (USDC.decimals - 2)) / 100);
 
@@ -110,17 +113,18 @@ function owedRow(ctx: MoveContext) {
 
 function usedRow(ctx: MoveContext, per: "today" | "this week") {
   if (!ctx.used) return [];
-  const { spentRaw, capRaw, decimals } = ctx.used;
-  return [{ label: per === "today" ? "Used today" : "Used this week", value: [`${usd(spentRaw, decimals)} of ${usd(capRaw, decimals)}`] }];
+  const { spentRaw, capRaw } = ctx.used;
+  return [{ label: per === "today" ? "Used today" : "Used this week", value: [`${usd(spentRaw)} of ${usd(capRaw)}`] }];
 }
 
-/** A job's name in a sentence, and the agent its rows sit under. */
-const JOB: Record<AgentJob, { agent: AgentName; on: (cap: string) => string; off: string }> = {
-  save: { agent: "Save", on: (cap) => `Save is on, up to ${cap} a day.`, off: "Save is off" },
+/**
+ * An agent job's name in a sentence, and the agent its rows sit under. Save and Entry are switched on once, where they
+ * matter, and their switches make no row (D20).
+ */
+const JOB: Partial<Record<AgentJob, { agent: AgentName; on: (cap: string) => string; off: string }>> = {
   protect: { agent: "Protect", on: (cap) => `Protect is on. It repays from your cash, up to ${cap} a day.`, off: "Protect is off" },
   sell: { agent: "Protect", on: (cap) => `Protect can sell backing stock, up to ${cap} a day.`, off: "Protect won't sell" },
   rebalance: { agent: "Rebalance", on: (cap) => `Rebalance is on, up to ${cap} a week.`, off: "Rebalance is off" },
-  entry: { agent: "Receive", on: (cap) => `Receive is on, up to ${cap} a day.`, off: "Receive is off" },
 };
 
 /** Why a job was switched off, after its name ("Save is off: …"). */
@@ -148,24 +152,29 @@ const coinAmount = (raw: bigint, decimals: number) =>
 
 /**
  * The Agents board's words for one executor event at `time` (seconds). Plain words and dollars, no health factor
- * (D17's words too); null for what isn't a move from the user's side (a run deferred to the next block).
+ * (D17's words too); null for what isn't a move from the user's side: a run deferred to the next block, Save's and
+ * Entry's switches, and a coin waiting for a fair price (the Cash card says it's arriving).
  */
 export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext = {}): AgentMove | null {
   switch (e.kind) {
-    case "job-on":
-      return { agent: JOB[e.job].agent, line: [JOB[e.job].on(usd(e.capRaw))], details: [{ label: "Until", value: [DATE.format(e.end * 1000)] }] };
-    case "job-off":
-      return { agent: JOB[e.job].agent, line: [JOB[e.job].off + OFF_WHY[e.reason]], details: [] };
+    case "job-on": {
+      const j = JOB[e.job];
+      return j ? { by: j.agent, line: [j.on(usd(e.capRaw))], details: [{ label: "Until", value: [DATE.format(e.end * 1000)] }] } : null;
+    }
+    case "job-off": {
+      const j = JOB[e.job];
+      return j ? { by: j.agent, line: [j.off + OFF_WHY[e.reason]], details: [] } : null;
+    }
     case "saved":
+      // Cash is savings (D15), and earning is under the hood (D20): a Save reads as the money arriving.
       return {
-        // Cash is savings (D15): a Save folds into the money arriving.
-        agent: "Save",
+        by: "Cash",
         line: [`${usd(e.amountRaw)} added to your cash.`],
-        details: [{ label: "Why", value: ["Money that lands in your wallet goes into savings, where it earns."] }, ...usedRow(ctx, "today")],
+        details: [{ label: "Why", value: ["Money that arrives in your account earns with the rest of your cash."] }],
       };
     case "repaid":
       return {
-        agent: "Protect",
+        by: "Protect",
         line: [`Repaid ${usd(e.amountRaw)} from your cash. `, ...after(e.hfAfter)],
         details: [
           {
@@ -184,7 +193,7 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
       };
     case "sold":
       return {
-        agent: "Protect",
+        by: "Protect",
         line: [`Sold ${worth(e.sharesRaw, ctx.pricesRaw)} of ${names(held(e.sharesRaw))} to repay. `, ...after(e.hfAfter)],
         details: [
           {
@@ -201,7 +210,7 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
       };
     case "heads-up":
       return {
-        agent: "Protect",
+        by: "Protect",
         line: ["Credit reached ", ...word(e.hf), ". Asked you to repay or add more."],
         details: [
           { label: "Why", value: ["Your cash couldn't bring it back to ", { status: "safe" }, "."] },
@@ -211,24 +220,24 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
         ],
       };
     case "heads-up-cleared":
-      return { agent: "Protect", line: ["Credit recovered. Nothing was sold."], details: [{ label: "Status", value: word(e.hf) }] };
+      return { by: "Protect", line: ["Credit recovered. Nothing was sold."], details: [{ label: "Status", value: word(e.hf) }] };
     case "keep-mix":
       return {
-        agent: "Protect",
+        by: "Protect",
         line: [e.on ? "Will sell the same share of each stock." : "Will sell for the most safety per dollar."],
         details: [],
       };
     case "mix": {
       const set = e.weightsBps.flatMap((w, r) => (w > 0 ? [[r, w] as const] : [])).sort((a, b) => b[1] - a[1]);
       return {
-        agent: "Rebalance",
+        by: "Rebalance",
         line: [set.length ? `Your mix: ${set.map(([r, w]) => `${EQUITIES[r].name} ${w / 100}%`).join(", ")}.` : "Your mix is cleared."],
         details: [],
       };
     }
     case "rebalanced":
       return {
-        agent: "Rebalance",
+        by: "Rebalance",
         line: [
           `Sold ${worth(e.soldRaw, ctx.pricesRaw)} of ${names(held(e.soldRaw))}, bought ${worth(e.boughtRaw, ctx.pricesRaw)} of ${names(held(e.boughtRaw))}.`,
         ],
@@ -240,36 +249,28 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
       };
     case "rebalance-skipped":
       return {
-        agent: "Rebalance",
+        by: "Rebalance",
         line: ["Prices were off today, so it didn't trade."],
         details: [{ label: "Why", value: ["Each trade must get close to Aave's price. It tries again next market day."] }],
       };
     case "converted": {
+      // Other dollars becoming cash is under the hood (D20): it reads as the money arriving.
       const c = coin(e.coin);
       return {
-        agent: "Receive",
-        line: [`Turned ${c ? `${coinAmount(e.amountInRaw, c.decimals)} ${c.symbol}` : "a stablecoin"} into ${usd(e.usdcOutRaw)} of cash.`],
+        by: "Cash",
+        line: [`${c ? `${coinAmount(e.amountInRaw, c.decimals)} ${c.symbol}` : "A dollar coin"} arrived as ${usd(e.usdcOutRaw)} cash.`],
         details: [
-          { label: "Why", value: ["Dollars other than USDC become cash, at 99.5% or better."] },
+          { label: "Why", value: ["Dollars other than USDC become cash, at 99.5% of face value or better."] },
           { label: "Your cash", value: [`+${usd(e.usdcOutRaw)}`] },
-          ...usedRow(ctx, "today"),
         ],
       };
     }
-    case "entry-waiting": {
-      const c = coin(e.coin);
-      return {
-        agent: "Receive",
-        line: [`${c ? `${coinAmount(e.amountInRaw, c.decimals)} ${c.symbol}` : "A stablecoin"} is waiting: the price was under 99.5%.`],
-        details: [
-          { label: "Why", value: ["It only swaps at 99.5% of face value or better."] },
-          { label: "Tries again", value: [at(e.retryAt)] },
-        ],
-      };
-    }
+    case "entry-waiting":
+    case "run-deferred":
+      return null;
     case "run-failed":
       return {
-        agent: "Agents",
+        by: "Agents",
         line: ["A run didn't go through. Nothing moved."],
         details: [
           ...(e.fails < MAX_FAILS ? [{ label: "Tries again", value: [at(time + (FIRST_COOLDOWN_SEC << (e.fails - 1)))] }] : []),
@@ -277,7 +278,5 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
           { label: "Code", value: [errorName(e.reason)] },
         ],
       };
-    case "run-deferred":
-      return null;
   }
 }

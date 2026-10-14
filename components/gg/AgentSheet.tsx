@@ -2,8 +2,6 @@
 
 import type { ReactNode } from "react";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
-import { Button } from "./Button";
-import { LimitChips } from "./LimitChips";
 import { AgentPill } from "./Status";
 import { NETWORK_FEE_ROW, Summary } from "./Summary";
 import { FaceIdButton, TxError } from "./TxUi";
@@ -12,9 +10,9 @@ import { AGENT_COPY, type AgentItem, type ConfirmCopy, type SheetAction } from "
 import type { AgentStatus } from "@/lib/agents/status";
 
 /*
- * An agent's sheet (Adrian, 2026-10-15): what it does and never does, its state and next move, its limit, its own
- * settings, when it stops, what it did, and a way to switch it on or off. Every change is its own JAW screen, said on
- * a confirm step in the same sheet (SheetSteps).
+ * An agent's sheet (Adrian, 2026-10-15): what it does and never does, its state and next move, its own settings (which
+ * carry its limit and the Face ID button that saves it or switches it on), when it stops, what it did, and a way to
+ * turn it off. Every change is its own JAW screen, said on a confirm step in the same sheet (SheetSteps).
  */
 
 /** The confirm step, with what's needed to sign it. */
@@ -28,16 +26,6 @@ export type ConfirmView = ConfirmCopy & {
   onConfirm: () => void;
 };
 
-export type LimitView = {
-  options: readonly number[];
-  /** What's on screen: the one picked, else the one it runs with. */
-  value: number;
-  per: "day" | "week";
-  onChange: (usd: number) => void;
-  /** The pick differs from what it runs with, so saving it is a new grant. */
-  changed: boolean;
-};
-
 const PILL: Record<AgentStatus, { text: string; tone: "on" | "neutral" }> = {
   unconfigured: { text: "Not live yet", tone: "neutral" },
   loading: { text: "…", tone: "neutral" },
@@ -49,7 +37,7 @@ const PILL: Record<AgentStatus, { text: string; tone: "on" | "neutral" }> = {
 const Label = ({ children }: { children: ReactNode }) => <h3 className="label m-0 px-1">{children}</h3>;
 
 export function AgentSheet({
-  open, onClose, item, confirm, onBack, live, stops, limit, settings, settingsSave = false, activity, onAction,
+  open, onClose, item, confirm, onBack, live, stops, settings, activity, onAction,
 }: {
   open: boolean;
   onClose: () => void;
@@ -61,15 +49,11 @@ export function AgentSheet({
   live: boolean;
   /** "Oct 15, 2027": when its grant ends, while it has one. */
   stops: string | null;
-  /** The limits it offers; without them the sheet shows the one it runs with. */
-  limit?: LimitView;
-  /** Its own settings: Receive's coins, Protect's and Rebalance's settings bodies. */
-  settings?: ReactNode;
   /**
-   * The settings carry the limit and their own Save, which also switches the agent on (Protect, Rebalance): the sheet
-   * then shows no limit of its own and no Switch on, so there is one limit and one Face ID button on screen.
+   * Its settings body (Protect's, Rebalance's): the limit and its own Face ID button, which also switches the agent on,
+   * so there is one limit and one Face ID button on screen.
    */
-  settingsSave?: boolean;
+  settings: ReactNode;
   activity: ReactNode;
   onAction: (a: SheetAction) => void;
 }) {
@@ -110,27 +94,6 @@ export function AgentSheet({
               )}
             </div>
 
-            {!settingsSave && (
-              <section className="flex flex-col gap-2">
-                <Label>Limit</Label>
-                {limit && limit.options.length > 1 ? (
-                  <div className="flex flex-col gap-2.5 rounded-[22px] bg-card px-4 py-3.5 shadow-card-elev">
-                    <LimitChips label={`${item.name} can move up to, a ${limit.per}`} options={limit.options} value={limit.value} onChange={limit.onChange} per={`a ${limit.per}`} size="sm" />
-                    {limit.changed &&
-                      (on ? (
-                        <Button variant="dark" disabled={!live} onClick={() => onAction("limit")}>
-                          Save the new limit
-                        </Button>
-                      ) : (
-                        <span className="text-xs text-subtle">It starts on this limit when you switch it on.</span>
-                      ))}
-                  </div>
-                ) : (
-                  <p className="num m-0 rounded-[22px] bg-card px-4 py-3.5 text-[15px] font-semibold shadow-card-elev">{item.limit}</p>
-                )}
-              </section>
-            )}
-
             {settings}
 
             <section className="flex flex-col gap-2">
@@ -138,54 +101,15 @@ export function AgentSheet({
               {activity}
             </section>
 
-            {on ? (
+            {on && (
               <button type="button" disabled={!live} onClick={() => onAction("off")} className="flex h-11 items-center justify-center text-sm font-semibold text-act disabled:opacity-45">
                 Turn off {item.name}
               </button>
-            ) : (
-              !settingsSave && (
-                <div className="flex flex-col gap-2">
-                  <Button disabled={!live || item.status === "loading"} onClick={() => onAction("on")}>
-                    Switch on {item.name}
-                  </Button>
-                  {!live && <p className="m-0 text-center text-xs text-subtle">Not live yet</p>}
-                </div>
-              )
             )}
           </>
         )}
       </SheetSteps>
     </SheetShell>
-  );
-}
-
-/** One coin Receive converts: what's in the account, and when it's tried again if it's waiting for a fair price. */
-export type ReceiveCoin = { symbol: string; name: string; amount: string | null; waitingUntil: string | null };
-
-/** Receive's settings: the coins it converts on Base, what's in the account, and what's waiting. */
-export function ReceiveCoins({ coins }: { coins: readonly ReceiveCoin[] }) {
-  return (
-    <section className="flex flex-col gap-2">
-      <Label>Coins it converts</Label>
-      <ul className="m-0 list-none rounded-[22px] bg-card px-4 py-0.5 shadow-card-elev">
-        {coins.map((c) => (
-          <li key={c.symbol} className="flex items-center gap-3 border-b border-hairline py-3 last:border-b-0">
-            <span aria-hidden className="flex size-[30px] shrink-0 items-center justify-center rounded-full bg-card-bone text-xs font-bold">
-              $
-            </span>
-            <span className="flex min-w-0 grow flex-col gap-0.5">
-              <span className="text-[15px] font-semibold">{c.symbol}</span>
-              <span className="truncate text-xs text-subtle">{c.name}</span>
-            </span>
-            <span className="num flex shrink-0 flex-col items-end gap-0.5 text-right">
-              <span className="text-sm font-semibold">{c.amount ?? "None"}</span>
-              {c.waitingUntil && <span className="text-xs text-watch-ink">Waiting until {c.waitingUntil}</span>}
-            </span>
-          </li>
-        ))}
-      </ul>
-      <p className="m-0 px-1 text-xs leading-[1.4] text-subtle">Each at 99.5% of face value or better. A coin that can’t get it waits an hour and tries again.</p>
-    </section>
   );
 }
 

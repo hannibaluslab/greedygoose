@@ -2,12 +2,11 @@
 
 import { useState, type ReactNode } from "react";
 import { StockAvatar, tickerOf } from "./StockAvatar";
-import { AgentsIcon, ChevronDown, ChevronRight, EntryIcon, RebalanceIcon, SaveIcon, ShieldIcon } from "./icons";
+import { AgentsIcon, ChevronDown, ChevronRight, RebalanceIcon, ShieldIcon } from "./icons";
 import type { ActivityRow } from "@/hooks/useActivity";
 import type { AgentRow } from "@/hooks/useAgentFeed";
 import type { ActivityItem } from "@/lib/activity/decode";
-import type { Words } from "@/lib/agents/feed";
-import type { AgentName } from "@/lib/agents/list";
+import type { MoveBy, Words } from "@/lib/agents/feed";
 import { STATUS_LABEL } from "@/lib/risk/status";
 import { txUrl } from "@/lib/chain";
 import { ALL_RESERVES, USDC, findByAddress } from "@/lib/tokens/registry";
@@ -65,16 +64,18 @@ export function ActivityAvatar({ symbol, size }: { symbol: string; size: number 
 }
 
 /** Each agent's round mark: Protect's lime shield (the board's), the others' bone badges. */
-const MARK: Record<AgentName, { Icon: typeof ShieldIcon; bg: string }> = {
-  Save: { Icon: SaveIcon, bg: "bg-card-bone" },
+const MARK: Record<Exclude<MoveBy, "Cash">, { Icon: typeof ShieldIcon; bg: string }> = {
   Protect: { Icon: ShieldIcon, bg: "bg-brand" },
   Rebalance: { Icon: RebalanceIcon, bg: "bg-card-bone" },
-  Receive: { Icon: EntryIcon, bg: "bg-card-bone" },
   Agents: { Icon: AgentsIcon, bg: "bg-card-bone" },
 };
 
-/** 38px on the agent list (19px icon), 32px in the activity (16px icon), as the board draws them. */
-export function AgentMark({ agent, size }: { agent: AgentName; size: 32 | 38 }) {
+/**
+ * 38px on the agent list (19px icon), 32px in the activity (16px icon), as the board draws them. A cash event wears
+ * the green $ of a USDC move: no agent made it, as far as the user is concerned (D20).
+ */
+export function AgentMark({ agent, size }: { agent: MoveBy; size: 32 | 38 }) {
+  if (agent === "Cash") return <ActivityAvatar symbol={USDC.symbol} size={size} />;
   const { Icon, bg } = MARK[agent];
   return (
     <span aria-hidden className={`flex shrink-0 items-center justify-center rounded-full text-ink ${bg}`} style={{ width: size, height: size }}>
@@ -119,9 +120,9 @@ export function dayLabel(ms: number, nowMs: number) {
   return days === 0 ? "Today" : days === 1 ? "Yesterday" : days < 7 ? WEEKDAY.format(ms) : DATE.format(ms);
 }
 
-/** A row of the feed: the user's own move (JAW's history), or an agent's (GooseExecutor's events). */
+/** A row of the feed: the user's own move (JAW's history), or the executor's (GooseExecutor's events). */
 export type FeedRow = ActivityRow | AgentRow;
-const isAgentRow = (r: FeedRow): r is AgentRow => "agent" in r;
+const isAgentRow = (r: FeedRow): r is AgentRow => "by" in r;
 
 /** Moves grouped by day under the board's mono labels; one opens at a time for its details. */
 export function FeedDays({ rows, nowMs }: { rows: readonly FeedRow[]; nowMs: number }) {
@@ -196,15 +197,18 @@ function Move({ row, last, open, onToggle }: { row: ActivityRow; last: boolean; 
   );
 }
 
-/** One agent move: the agent · time, what changed, and on tap why and the details, then the transaction on Base. */
+/**
+ * One executor move: the agent (or "Cash" for a cash event) · time, what changed, and on tap why and the details, then
+ * the transaction on Base.
+ */
 function AgentMove({ row, last, open, onToggle }: { row: AgentRow; last: boolean; open: boolean; onToggle: () => void }) {
   return (
     <li className={`py-2 ${last ? "" : "border-b border-hairline"}`}>
       <button type="button" aria-expanded={open} onClick={onToggle} className="flex w-full items-start gap-2.5 text-left">
-        <AgentMark agent={row.agent} size={32} />
+        <AgentMark agent={row.by} size={32} />
         <span className="flex min-w-0 grow flex-col gap-0.5">
           <span className="text-sm font-semibold leading-[1.3]">
-            {row.agent} <span className="font-normal text-subtle">· {TIME.format(row.time)}</span>
+            {row.by} <span className="font-normal text-subtle">· {TIME.format(row.time)}</span>
           </span>
           <span className="text-[13px] leading-[1.3] text-ink-2">
             <WordsText words={row.line} />

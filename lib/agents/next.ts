@@ -1,40 +1,33 @@
-import { CASH, CASH_AGENT, ENTRY } from "@/config/risk";
+import { CASH_AGENT } from "@/config/risk";
 import { OFF_REASONS } from "@/lib/agents/events";
 import { OFF_WHY } from "@/lib/agents/feed";
 import { agentOf, AGENTS, type Agent, type Next } from "@/lib/agents/list";
 import { isMix, previewTrades, type MixHolding } from "@/lib/agents/mix";
 import { JOBS, readStockLimits, type AgentJob } from "@/lib/agents/permissions";
-import { planEntry, type EntryOptions } from "@/lib/guardian/entry";
-import { inWeekendWindow, planGuardian, planSave } from "@/lib/guardian/plan";
+import { inWeekendWindow, planGuardian } from "@/lib/guardian/plan";
 import type { RebalanceOptions } from "@/lib/guardian/rebalance";
 import { formatUsdTrim } from "@/lib/formatting";
 import { STATUS_LABEL, statusFor, type Status } from "@/lib/risk/status";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
-import { ENTRY_COINS } from "@/lib/tokens/stables";
 
 /*
  * What each agent does next. With an executor configured, its `planOf(account)` names the first job, in its order,
  * with a move; every other agent reads its TypeScript rule (lib/guardian/*.ts, which the contract matches through the
- * differential tests) on live data. With none configured, every agent reads its rule.
+ * differential tests) on live data. With none configured, every agent reads its rule. Save and Entry have no agent on
+ * screen (D20), so a plan for them gives no line.
  */
 
 const usd = (raw: bigint) => formatUsdTrim(Number(raw) / 10 ** USDC.decimals);
 const move = (will: string, would: string): Next => ({ will, would });
-const coinAmount = (raw: bigint, decimals: number) =>
-  (Number(raw) / 10 ** decimals).toLocaleString("en-US", { maximumFractionDigits: 2 });
 
 /** The executor's numbers the rules take (its registry, D18); config/risk.ts mirrors its deploy defaults. */
 export type RuleNumbers = {
-  keepBackRaw: bigint;
-  minSaveRaw: bigint;
-  maxSavesPerDay: number;
   minRepayRaw: bigint;
   triggerHf: number;
   targetHf: number;
   stressDrop: number;
   stressFloorHf: number;
   rebalance: RebalanceOptions;
-  entry: EntryOptions;
 };
 
 const raw = (usdAmount: number) => BigInt(Math.round(usdAmount * 10 ** USDC.decimals));
@@ -42,16 +35,12 @@ const raw = (usdAmount: number) => BigInt(Math.round(usdAmount * 10 ** USDC.deci
 /** The deploy defaults, for when no executor is configured. */
 export function defaultNumbers(rebalance: RebalanceOptions): RuleNumbers {
   return {
-    keepBackRaw: raw(CASH.keepBackUsd),
-    minSaveRaw: raw(CASH_AGENT.minSaveUsd),
-    maxSavesPerDay: CASH_AGENT.maxSavesPerDay,
     minRepayRaw: raw(CASH_AGENT.minRepayUsd),
     triggerHf: CASH_AGENT.triggerHf,
     targetHf: CASH_AGENT.targetHf,
     stressDrop: CASH_AGENT.stressDrop,
     stressFloorHf: CASH_AGENT.stressFloorHf,
     rebalance,
-    entry: { floorBps: BigInt(ENTRY.floorBps), minEntryRaw: raw(ENTRY.minEntryUsd), maxSwapRaw: raw(ENTRY.maxSwapUsd) },
   };
 }
 
@@ -61,31 +50,31 @@ export type Plan = { action: number; job: number; amount: bigint; reason: number
 /** GooseExecutor's Action, in order. */
 const ACTIONS = ["none", "prune", "repay", "save", "sell", "heads-up", "clear-heads-up", "defer", "rebalance", "convert"] as const;
 
-/** The plan's move in words, and the job it's for; null when a run would do nothing. */
-export function planNext(p: Plan): { job: AgentJob; next: Next } | null {
-  const job = JOBS[p.job];
+/**
+ * The plan's move in words, and the agent it's for; null when a run would do nothing, or when it's a job with no agent
+ * on screen (Save's and Entry's moves, D20).
+ */
+export function planNext(p: Plan): { agent: Agent; next: Next } | null {
+  const job: AgentJob | undefined = JOBS[p.job];
+  const agent = job ? agentOf(job) : null;
   const action = ACTIONS[p.action];
-  if (!job || !action || action === "none") return null;
+  if (!agent || !action || action === "none" || action === "save" || action === "convert") return null;
   const a = usd(p.amount);
   const next: Next =
     action === "prune"
       ? { idle: `Stopping${OFF_WHY[OFF_REASONS[p.off] ?? "revoked"]}` }
       : action === "repay"
         ? move(`repays ${a} from your cash`, `Would repay ${a} from your cash`)
-        : action === "save"
-          ? move(`saves ${a}`, `Would save ${a}`)
-          : action === "sell"
-            ? move(`sells backing stock to repay ${a}`, `Would sell backing stock to repay ${a}`)
-            : action === "heads-up"
-              ? move("sends you a heads-up before selling", "Would send you a heads-up before selling")
-              : action === "clear-heads-up"
-                ? move("clears the heads-up", "Would clear the heads-up")
-                : action === "defer"
-                  ? move("finishes its last move", "Would finish its last move")
-                  : action === "rebalance"
-                    ? move(`trades ${a}`, `Would trade ${a}`)
-                    : move(`turns ${ENTRY_COINS[p.reason]?.symbol ?? "a coin"} into cash`, `Would turn ${ENTRY_COINS[p.reason]?.symbol ?? "a coin"} into cash`);
-  return { job, next };
+        : action === "sell"
+          ? move(`sells backing stock to repay ${a}`, `Would sell backing stock to repay ${a}`)
+          : action === "heads-up"
+            ? move("sends you a heads-up before selling", "Would send you a heads-up before selling")
+            : action === "clear-heads-up"
+              ? move("clears the heads-up", "Would clear the heads-up")
+              : action === "defer"
+                ? move("finishes its last move", "Would finish its last move")
+                : move(`trades ${a}`, `Would trade ${a}`);
+  return { agent, next };
 }
 
 /** New York's calendar day of `sec`, counted from 1970-01-01, as GooseExecutor's NyCalendar.day counts it. */
@@ -135,8 +124,7 @@ export type SpendLeft = { token: string; leftRaw: bigint };
 /** What the rules read off the account and the chain. */
 export type NextInput = {
   nowSec: number;
-  /** Wallet USDC, and savings (Aave V3), USDC units. */
-  walletRaw: bigint;
+  /** Savings (Aave V3), USDC units: the cash Protect repays from. */
   savingsRaw: bigint;
   collateralUsd: number;
   avgCf: number;
@@ -155,30 +143,12 @@ export type NextInput = {
   capRaw: Readonly<Record<AgentJob, bigint>>;
   capMaxRaw: bigint | null;
   numbers: RuleNumbers;
-  /** Saves made today and the New York day the Rebalancer last traded (the registry's `accounts`). */
-  savesToday: number;
+  /** The New York day the Rebalancer last traded (the registry's `accounts`). */
   rebalanceDay: number;
-  /** Each Entry coin in the wallet (raw units) and when it may be tried again (seconds; 0 = not waiting). */
-  entryRaw: readonly bigint[];
-  entryRetryAt: readonly number[];
   plan: Plan | null;
 };
 
 const smaller = (a: bigint, b: bigint) => (a < b ? a : b);
-
-/** Save: wallet USDC above the keep-back goes into savings, within today's limit (planSave). */
-function saveNext(i: NextInput): Next {
-  const d = planSave({
-    walletRaw: i.walletRaw,
-    capLeftRaw: i.left.save?.[0]?.leftRaw ?? i.capRaw.save,
-    savesToday: i.savesToday,
-    keepBackRaw: i.numbers.keepBackRaw,
-    minSaveRaw: i.numbers.minSaveRaw,
-    maxSavesPerDay: i.numbers.maxSavesPerDay,
-  });
-  if (d.action === "save") return move(`saves ${usd(d.amountRaw)}`, `Would save ${usd(d.amountRaw)}`);
-  return { idle: d.reason === "too-small" ? "Nothing to save" : d.reason === "no-cap" ? "Today’s limit is used" : "Done for today" };
-}
 
 /** Protect: repays from savings below Safe, back up to its target; Weekend Shield before a freeze (planGuardian). */
 function protectNext(i: NextInput): Next {
@@ -228,37 +198,13 @@ function rebalanceNext(i: NextInput): Next {
   return move(`trades ${spend} ${when}`, `Would trade ${spend}`);
 }
 
-/** Receive: the first coin worth converting, all of it up to a run's most, at 99.5% or better (planEntry). */
-function receiveNext(i: NextInput): Next {
-  const scale = (k: number) => 10n ** BigInt(ENTRY_COINS[k].decimals - USDC.decimals);
-  const coins = ENTRY_COINS.map((c, k) => ({
-    balanceRaw: i.entryRaw[k] ?? 0n,
-    decimals: c.decimals,
-    limitLeftRaw: i.left.entry?.[k]?.leftRaw ?? i.capRaw.entry * scale(k),
-    waiting: (i.entryRetryAt[k] ?? 0) > i.nowSec,
-  }));
-  const m = planEntry(coins, i.numbers.entry);
-  if (m) {
-    const c = ENTRY_COINS[m.index];
-    const amount = `${coinAmount(m.amountIn, c.decimals)} ${c.symbol}`;
-    return move(`turns ${amount} into cash`, `Would turn ${amount} into cash`);
-  }
-  const w = coins.findIndex((c) => c.waiting && c.balanceRaw > 0n);
-  if (w >= 0) return { idle: `${ENTRY_COINS[w].symbol} waits until ${TIME.format(i.entryRetryAt[w] * 1000)}` };
-  return { idle: "Nothing waiting" };
-}
-
 const RULES: Record<Agent, (i: NextInput) => Next> = {
-  save: saveNext,
   protect: protectNext,
   rebalance: rebalanceNext,
-  receive: receiveNext,
 };
 
-/** Every agent's next line: the executor's plan for the job it names, each agent's own rule for the rest. */
+/** Every agent's next line: the executor's plan for the agent it names, each agent's own rule for the rest. */
 export function agentNexts(i: NextInput): Record<Agent, Next> {
   const planned = i.plan && planNext(i.plan);
-  return Object.fromEntries(
-    AGENTS.map((a) => [a, planned && agentOf(planned.job) === a ? planned.next : RULES[a](i)]),
-  ) as Record<Agent, Next>;
+  return Object.fromEntries(AGENTS.map((a) => [a, planned?.agent === a ? planned.next : RULES[a](i)])) as Record<Agent, Next>;
 }

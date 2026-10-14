@@ -350,10 +350,11 @@ describe("jobStatus", () => {
 });
 
 describe("limitRaw (the limit a switch turns a job on with)", () => {
-  it("starts Protect on $300 a day, Save and Receive on $1,000, the Rebalancer on $500 a week", () => {
+  it("starts Protect on $300 a day, Save and Entry on $1,000 with no other offer, the Rebalancer on $500 a week", () => {
     expect(limitRaw(LIMIT_USD.protect.start, 10n ** 12n)).toBe(300_000_000n);
     expect(limitRaw(LIMIT_USD.save.start, 10n ** 12n)).toBe(1_000_000_000n);
     expect(limitRaw(LIMIT_USD.entry.start, 10n ** 12n)).toBe(1_000_000_000n);
+    expect([LIMIT_USD.save.options, LIMIT_USD.entry.options]).toEqual([[], []]);
     expect([LIMIT_USD.rebalance.start, LIMIT_USD.rebalance.per]).toEqual([500, "week"]);
   });
 

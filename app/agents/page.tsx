@@ -7,7 +7,7 @@ import { useAccount } from "wagmi";
 import { toast } from "sonner";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { FeedCard, FeedDays } from "@/components/gg/Activity";
-import { AgentConfirm, AgentSheet, ReceiveCoins, type ConfirmView, type LimitView } from "@/components/gg/AgentSheet";
+import { AgentConfirm, AgentSheet, type ConfirmView } from "@/components/gg/AgentSheet";
 import { ProtectSettings } from "@/components/gg/agents/ProtectSettings";
 import { RebalanceSettings } from "@/components/gg/agents/RebalanceSettings";
 import { AgentRow, AgentsFeed, AgentsView, AttentionCard, MixBar, TurnOffAll, type FeedError } from "@/components/gg/Agents";
@@ -17,7 +17,6 @@ import { useAgentFeed } from "@/hooks/useAgentFeed";
 import { useAgentRun, type AgentStep } from "@/hooks/useAgentRun";
 import { GRANT_SECONDS, useAgents } from "@/hooks/useAgents";
 import { useAgentSettings } from "@/hooks/useAgentSettings";
-import { useEntryBalances } from "@/hooks/useEntryBalances";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import type { GrantStep } from "@/hooks/useManageSave";
 import { useHeadsUp } from "@/hooks/useHeadsUp";
@@ -35,7 +34,7 @@ import {
   confirmFor,
   longDateText,
   limitText,
-  timeText,
+  TAB_JOBS,
   type Agent,
   type AgentItem,
   type ConfirmCopy,
@@ -47,7 +46,6 @@ import { agentNexts, defaultNumbers } from "@/lib/agents/next";
 import { JOBS, LIMIT_USD, limitRaw, stockLimitsRaw, type AgentJob } from "@/lib/agents/permissions";
 import { toUsd } from "@/lib/cash";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
-import { ENTRY_COINS } from "@/lib/tokens/stables";
 
 export default function AgentsPage() {
   return <RequireAccount>{(address) => <Agents address={address} />}</RequireAccount>;
@@ -60,10 +58,11 @@ const LOADING = Object.fromEntries(AGENTS.map((a) => [a, { idle: "…" }])) as R
 type Open = { agent: Agent; action: SheetAction | null; direct: boolean; jobs?: AgentJob[] };
 
 /**
- * The Agents tab (Adrian, 2026-10-15). Each agent's state is the executor's registry and JAW's list (useAgents, D14);
- * its next move is the executor's `planOf` or its TypeScript rule on live data (lib/agents/next.ts); the cards come
- * from the executor's events and registry. Every switch is JAW's own screen, one Face ID each. With no executor
- * configured, everything renders with real data and nothing can be switched on ("Not live yet").
+ * The Agents tab (Adrian, 2026-10-15): Protect and Rebalance. Each agent's state is the executor's registry and JAW's
+ * list (useAgents, D14); its next move is the executor's `planOf` or its TypeScript rule on live data
+ * (lib/agents/next.ts); the cards come from the executor's events and registry. Every switch is JAW's own screen, one
+ * Face ID each. With no executor configured, everything renders with real data and nothing can be switched on ("Not
+ * live yet"). Earning and turning other dollars into cash run under the hood and have no place here (D20).
  */
 function Agents({ address }: { address: `0x${string}` }) {
   const { address: signer } = useAccount();
@@ -73,7 +72,6 @@ function Agents({ address }: { address: `0x${string}` }) {
   const { data: position } = usePosition(address);
   const feed = useAgentFeed(address);
   const yours = useActivity(address);
-  const entryRaw = useEntryBalances(address);
   const nowSec = useNowSec();
   const headsUp = useHeadsUp(address, feed.headsUp, settings, nowSec);
   const runner = useAgentRun(agents);
@@ -85,7 +83,6 @@ function Agents({ address }: { address: `0x${string}` }) {
   const [open, setOpen] = useState<Open | null>(linked && { agent: linked, action: null, direct: false });
   const [shown, setShown] = useState(!!linked);
   const [allOff, setAllOff] = useState(false);
-  const [picked, setPicked] = useState<Partial<Record<Agent, number>>>({});
 
   const capMax = agents.capMaxRaw;
   const capOf = (usd: number) => limitRaw(usd, capMax ?? BigInt(usd) * 10n ** BigInt(USDC.decimals));
@@ -94,7 +91,6 @@ function Agents({ address }: { address: `0x${string}` }) {
   const next = position
     ? agentNexts({
         nowSec,
-        walletRaw: position.cash.walletRaw,
         savingsRaw: position.savingsRaw,
         collateralUsd: position.collateralUsd,
         avgCf: position.avgCf,
@@ -106,10 +102,7 @@ function Agents({ address }: { address: `0x${string}` }) {
         capRaw: byJob((job) => agents.terms[job]?.capRaw ?? capOf(LIMIT_USD[job].start)),
         capMaxRaw: capMax,
         numbers: settings?.numbers ?? defaultNumbers(rebalanceOptions()),
-        savesToday: settings?.savesToday ?? 0,
         rebalanceDay: settings?.rebalanceDay ?? 0,
-        entryRaw: entryRaw ?? [],
-        entryRetryAt: settings?.entryRetryAt ?? [],
         plan: settings?.plan ?? null,
       })
     : LOADING;
@@ -127,11 +120,6 @@ function Agents({ address }: { address: `0x${string}` }) {
       const at = Math.max(agents.ranOut[job] ?? 0, last && !last.on ? last.at : 0);
       return at > 0 ? at : null;
     }),
-    waiting: ENTRY_COINS.flatMap((c, k) => {
-      const retryAt = settings?.entryRetryAt[k] ?? 0;
-      const balance = entryRaw?.[k] ?? 0n;
-      return retryAt > nowSec && balance > 0n ? [{ symbol: c.symbol, amountRaw: balance / 10n ** BigInt(c.decimals - USDC.decimals), retryAt }] : [];
-    }),
     fails: agents.fails,
     cooldownUntil: agents.cooldownUntil,
   });
@@ -143,8 +131,8 @@ function Agents({ address }: { address: `0x${string}` }) {
   );
   const error: FeedError = yours.isError && (feed.isError || !live) ? "all" : feed.isError ? "agents" : yours.isError ? "yours" : null;
 
-  /** The limit an agent will run with: the one picked on its sheet, else its grant's, else the one it starts on. */
-  const limitUsd = (agent: Agent) => picked[agent] ?? items.find((i) => i.agent === agent)!.limitUsd;
+  /** The limit an agent will run with: its grant's, else the one it starts on. */
+  const limitUsd = (agent: Agent) => items.find((i) => i.agent === agent)!.limitUsd;
 
   /** A job's grant at `capRaw`; a job that sells stock takes a limit per stock it may sell, at Aave's price now. */
   const grantFor = (job: AgentJob, capRaw: bigint, data: PositionData): GrantStep => {
@@ -209,7 +197,6 @@ function Agents({ address }: { address: `0x${string}` }) {
     const ends = AGENT_JOBS[o.agent].map((j) => agents.terms[j]?.end ?? null).filter((e): e is number => e !== null);
     const done = (message: string) => () => {
       toast.success(message);
-      setPicked((p) => ({ ...p, [o.agent]: undefined }));
       if (o.direct) setShown(false);
       else setOpen({ ...o, action: null, jobs: undefined });
     };
@@ -219,21 +206,11 @@ function Agents({ address }: { address: `0x${string}` }) {
       const limit = limitText(o.action === "renew" ? toUsd(renewCapRaw(main)) : limitUsd(o.agent), main);
       const untilSec = nowSec + GRANT_SECONDS;
       const faceIds = o.action === "off" ? agents.faceIdsOff(AGENT_JOBS[o.agent]) : steps.length;
-      const copy = confirmFor({ kind: o.action, agent: o.agent, limit, from: item.limit, untilSec, faceIds });
-      const message = { on: `${name} is on`, off: `${name} is off`, limit: `${name}’s limit is ${limit}`, renew: `${name} runs until ${longDateText(untilSec)}` }[o.action];
+      const copy = confirmFor({ kind: o.action, agent: o.agent, limit, untilSec, faceIds });
+      const message = { on: `${name} is on`, off: `${name} is off`, renew: `${name} runs until ${longDateText(untilSec)}` }[o.action];
       confirm = confirmView(copy, steps, done(message));
     }
-    const limit: LimitView | undefined =
-      o.agent === "save"
-        ? {
-            options: LIMIT_USD.save.options,
-            value: limitUsd("save"),
-            per: LIMIT_USD.save.per,
-            onChange: (usd) => setPicked((p) => ({ ...p, save: usd })),
-            changed: picked.save !== undefined && picked.save !== item.limitUsd,
-          }
-        : undefined;
-    const activity = feed.rows.filter((r) => r.agent === name);
+    const activity = feed.rows.filter((r) => r.by === name);
     return (
       <AgentSheet
         open={shown}
@@ -243,10 +220,8 @@ function Agents({ address }: { address: `0x${string}` }) {
         onBack={o.direct ? undefined : () => openStep({ ...o, action: null, jobs: undefined })}
         live={live}
         stops={ends.length ? longDateText(Math.min(...ends)) : null}
-        limit={limit}
-        settings={settingsFor(o.agent)}
-        // Protect's and Rebalance's settings carry their limit and Save, which switches them on too.
-        settingsSave={o.agent === "protect" || o.agent === "rebalance"}
+        // Each settings body carries the agent's limit and Save, which switches it on too.
+        settings={o.agent === "protect" ? <ProtectSettings account={address} /> : <RebalanceSettings account={address} />}
         activity={
           <FeedCard>
             {feed.isLoading ? (
@@ -263,30 +238,9 @@ function Agents({ address }: { address: `0x${string}` }) {
     );
   }
 
-  function settingsFor(agent: Agent) {
-    if (agent === "protect") return <ProtectSettings account={address} />;
-    if (agent === "rebalance") return <RebalanceSettings account={address} />;
-    if (agent === "receive") {
-      return (
-        <ReceiveCoins
-          coins={ENTRY_COINS.map((c, k) => {
-            const balance = entryRaw?.[k] ?? 0n;
-            const retryAt = settings?.entryRetryAt[k] ?? 0;
-            return {
-              symbol: c.symbol,
-              name: c.name,
-              amount: balance > 0n ? (Number(balance) / 10 ** c.decimals).toLocaleString("en-US", { maximumFractionDigits: 2 }) : null,
-              waitingUntil: retryAt > nowSec && balance > 0n ? timeText(retryAt) : null,
-            };
-          })}
-        />
-      );
-    }
-    return undefined;
-  }
-
-  const allOffSteps: AgentStep[] = JOBS.filter((j) => agents.faceIdsOff([j]) > 0).map((j) => ({ off: j }));
-  const allOffIds = agents.faceIdsOff(JOBS);
+  // "Turn off all agents" is Protect and Rebalance: earning and converting other dollars stay on (D20).
+  const allOffSteps: AgentStep[] = TAB_JOBS.filter((j) => agents.faceIdsOff([j]) > 0).map((j) => ({ off: j }));
+  const allOffIds = agents.faceIdsOff(TAB_JOBS);
 
   return (
     <>
