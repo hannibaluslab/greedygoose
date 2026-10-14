@@ -108,6 +108,7 @@ describe("savings-first batches from a $0 wallet", () => {
   const cash = async (): Promise<Cash> => ({
     walletRaw: 0n,
     savingsRaw: await client.readContract({ address: GUARDIAN.AUSDC, abi: erc20Abi, functionName: "balanceOf", args: [user] }),
+    saveOn: false,
   });
 
   /** Simulates the batch with an empty wallet, then reads what the wallet holds after it. */

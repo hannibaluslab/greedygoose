@@ -11,6 +11,9 @@ import { borrowApr, monthlyCost, priceToUsd, summarize, type AccountData } from 
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { statusFor } from "@/lib/risk/status";
 import { GUARDIAN } from "@/lib/guardian/config";
+import { GOOSE_EXECUTOR } from "@/lib/agents/config";
+import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
+import { JOBS } from "@/lib/agents/permissions";
 import { cashRaw, toUsd, type Cash } from "@/lib/cash";
 
 /** Aave V3 getReserveData — only `currentLiquidityRate` (index 2, RAY) is used. */
@@ -95,6 +98,8 @@ export function usePosition(user: `0x${string}` | undefined) {
       { address: AAVE.SPOKE, abi: spokeAbi, functionName: "getReserveConfig", args: [BigInt(USDC.reserveId)] },
       { address: GUARDIAN.AUSDC, abi: erc20Abi, functionName: "balanceOf", args: [who] },
       { address: GUARDIAN.AAVE_V3_POOL, abi: v3ReserveAbi, functionName: "getReserveData", args: [USDC.address] },
+      // The Cash Agent's switches, once the executor is deployed: whether Save runs decides the keep-back.
+      ...(GOOSE_EXECUTOR ? [{ address: GOOSE_EXECUTOR, abi: gooseExecutorAbi, functionName: "accounts", args: [who] } as const] : []),
     ] as const;
   }, [user]);
 
@@ -134,13 +139,14 @@ export function usePosition(user: `0x${string}` | undefined) {
       };
     });
     const o = EQUITIES.length * PER;
-    const [account, debtRaw, riskPremium, drawnRate, liquidity, usdcBal, usdcCfg, savingsRaw, v3Reserve] = r.slice(o) as [
+    const [account, debtRaw, riskPremium, drawnRate, liquidity, usdcBal, usdcCfg, savingsRaw, v3Reserve, agents] = r.slice(o) as [
       AccountData, bigint, bigint, bigint, bigint, bigint, { paused: boolean; frozen: boolean; borrowable: boolean }, bigint, { currentLiquidityRate: bigint },
+      readonly [jobs: number, ...rest: unknown[]] | undefined,
     ];
     const s = summarize(account);
     const apr = borrowApr(drawnRate, riskPremium);
     const debtUsd = Number(debtRaw) / 10 ** USDC.decimals;
-    const cash: Cash = { walletRaw: usdcBal, savingsRaw };
+    const cash: Cash = { walletRaw: usdcBal, savingsRaw, saveOn: ((agents?.[0] ?? 0) & (1 << JOBS.indexOf("save"))) !== 0 };
     return {
       holdings,
       stocksUsd: holdings.reduce((a, h) => a + h.freeUsd + h.lockedUsd, 0),
