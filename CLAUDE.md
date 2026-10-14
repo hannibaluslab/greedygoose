@@ -2,7 +2,7 @@
 
 Next.js version notes: @AGENTS.md
 
-> **JustaLab decisions come first.** Read @docs/JUSTALAB-DECISIONS.md before anything below. Where it conflicts with this file or `docs/PARKED.md`, it wins (agents in scope, no server, JAW permission screens, cash is savings, five tabs, no "borrow" or "lock" on screen).
+> **JustaLab decisions come first.** Read @docs/JUSTALAB-DECISIONS.md before anything below. Where it conflicts with this file or `docs/PARKED.md`, it wins (agents in scope, no server, JAW permission screens, cash is savings and one pot on screen, Save and Receive invisible, five tabs, no "borrow" or "lock" on screen).
 
 ## Mission
 
