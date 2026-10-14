@@ -3,7 +3,7 @@
  * (`src/lib/prices/marketData.ts`), cut to the two calls GreedyGoose makes:
  *
  *   GET /markets?symbols=NVDAC,AAPLC → [{ symbol, price, change24h, marketCap, spark24h }]
- *   GET /history?symbol=NVDAC&days=7 → closes, oldest first (hourly over 7 days)
+ *   GET /history?symbol=NVDAC&days=7 → prices, oldest first (hourly over 7 days; days 1, 30 and 365 for the chart)
  *
  * It answers by ticker. A stock's ticker is its registry symbol in capitals (NVDAc → NVDAC, the Coinbase tokenized
  * stock's own ticker); a plain ticker can be another token (its META is about $5). Callers check every price against
@@ -59,15 +59,18 @@ export async function fetchJawQuotes(symbols: readonly string[], signal?: AbortS
   return out;
 }
 
+/** One stock's prices over the last `days` days, oldest first (/history; `RANGES` in market.ts says how dense). */
+export async function fetchJawHistory(symbol: string, days: number, signal?: AbortSignal): Promise<number[]> {
+  return prices(await getData<number[]>(`/history?symbol=${encodeURIComponent(ticker(symbol))}&days=${days}`, signal));
+}
+
 /** Each stock's hourly prices over the last 7 days, one /history call per stock. A stock whose call fails is left out. */
 export async function fetchJawWeeks(symbols: readonly string[], signal?: AbortSignal): Promise<Record<string, number[]>> {
-  const weeks = await Promise.allSettled(
-    symbols.map((s) => getData<number[]>(`/history?symbol=${encodeURIComponent(ticker(s))}&days=7`, signal)),
-  );
+  const weeks = await Promise.allSettled(symbols.map((s) => fetchJawHistory(s, 7, signal)));
   return Object.fromEntries(
     symbols.flatMap((s, i) => {
       const week = weeks[i];
-      return week.status === "fulfilled" ? [[s, prices(week.value)]] : [];
+      return week.status === "fulfilled" ? [[s, week.value]] : [];
     }),
   );
 }

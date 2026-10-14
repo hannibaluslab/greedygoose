@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { fromCoinRow, type CoinRow } from "@/lib/prices/coingecko";
 import { jawMarketData } from "@/lib/prices/jaw";
 import {
-  PRICE_TOLERANCE, agreesWithAave, checked, dayChange, downsample, moveUsd, pickMarketData, weekValue, type MarketData,
+  PRICE_TOLERANCE, RANGES, agreesWithAave, checked, checkedLine, dayChange, downsample, isRange, moveUsd, pickMarketData, weekValue,
+  type MarketData,
 } from "@/lib/prices/market";
 const line = (from: number, to: number, n = 24) => Array.from({ length: n }, (_, i) => from + ((to - from) * i) / (n - 1));
 const data = (price: number, change = 0.01, week = line(price * 0.95, price, 169)): MarketData => ({
@@ -202,5 +203,40 @@ describe("downsample", () => {
 
   it("leaves short series alone", () => {
     expect(downsample([1, 2, 3], 7)).toEqual([1, 2, 3]);
+  });
+});
+
+describe("the chart's ranges", () => {
+  it("asks for a day, a week, a month and a year of history", () => {
+    expect(RANGES).toEqual({ "1D": 1, "1W": 7, "1M": 30, "1Y": 365 });
+  });
+
+  it("isRange accepts those four only", () => {
+    for (const r of ["1D", "1W", "1M", "1Y"]) expect(isRange(r)).toBe(true);
+    for (const r of ["1H", "ALL", "1d", "toString", "", null, undefined]) expect(isRange(r)).toBe(false);
+  });
+});
+
+describe("checkedLine (a chart line, checked against Aave)", () => {
+  it("keeps a line that ends within 2% of Aave's price", () => {
+    const month = line(212.86, 229.13, 721);
+    expect(checkedLine(month, AAVE.NVDAc)).toEqual(month);
+  });
+
+  it("drops a line that ends on another token's price", () => {
+    expect(checkedLine(line(5.1, 5.38, 289), AAVE.METAc)).toBeUndefined();
+  });
+
+  it("drops a line with fewer than two points, or a bad point anywhere", () => {
+    expect(checkedLine([229.13], AAVE.NVDAc)).toBeUndefined();
+    expect(checkedLine([], AAVE.NVDAc)).toBeUndefined();
+    expect(checkedLine(undefined, AAVE.NVDAc)).toBeUndefined();
+    expect(checkedLine([220, 0, 229.13], AAVE.NVDAc)).toBeUndefined();
+    expect(checkedLine([220, Number.NaN, 229.13], AAVE.NVDAc)).toBeUndefined();
+  });
+
+  it("never hands back the caller's array", () => {
+    const points = [220, 229.13];
+    expect(checkedLine(points, AAVE.NVDAc)).not.toBe(points);
   });
 });
