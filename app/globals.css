@@ -1,48 +1,229 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
-/* GreedyGoose tokens — from the design canvas (CLAUDE.md › Design system). */
+/* Touch-only variant: `touch:active:scale-95` gives press feedback on phones and leaves desktop
+   hover alone (Tailwind 4 already gates `hover:` behind `@media (hover: hover)`). */
+@custom-variant touch (@media (hover: none));
+
+/* Design tokens: NYM's token set (styles/tokens.css) with the GreedyGoose canvas values.
+   Leo's names (ground, subtle, safe, act…) are mapped onto the same values below. */
 :root {
+  /* Surfaces */
+  --bg-app: #f4f2ec;
+  --bg-app-sub: #ebe6db;
+  --bg-card: #ffffff;
+  --bg-card-elev: #faf8f2;
+  --bg-card-dark: #0e0d0b;
+  --bg-card-bone: #e7e1d2;
+  --bg-sheet: #f4f2ec;
+  --bg-pill: rgba(15, 14, 11, 0.05);
+  --bg-pill-strong: rgba(15, 14, 11, 0.08);
+  --bg-pill-dark: rgba(255, 255, 255, 0.08);
+
+  /* Ink */
   --ink: #0e0d0b;
   --ink-2: #2c2a25;
   --ink-mid: #5a564e;
-  --subtle: #8a8479;
-  --ground: #f4f2ec;
-  --card: #ffffff;
-  --on-ink: #f5f0e2;
+  --ink-mute: #8a8479;
+  --ink-faint: #b9b3a6;
+  --ink-on-dark: #f5f0e2;
+  --ink-on-dark-mute: #a8a294;
+  --ink-on-dark-dim: rgba(245, 240, 226, 0.55);
+  --ink-on-dark-soft: rgba(245, 240, 226, 0.85);
+
+  /* Brand and status: Safe / Watch / Act */
   --brand: #d4ff3c;
-  --safe: #1f6a4a;
-  --safe-bg: #d6e7dc;
+  --brand-ink: #0e0d0b;
+  --pos: #1f6a4a;
+  --pos-soft: #d6e7dc;
   --watch: #d9a441;
-  --watch-text: #8a6a1f;
-  --act: #8e2a1d;
-  --act-bg: #f3dcd7;
-  --hairline: rgba(14, 13, 11, 0.09);
-  --chip: rgba(15, 14, 11, 0.05);
+  --watch-ink: #8a6a1f;
+  --watch-soft: #f3e6c9;
+  --neg: #8e2a1d;
+  --neg-soft: #f3e0da;
+  --gold: #b69050;
+
+  /* Hairlines */
+  --line: rgba(14, 13, 11, 0.09);
+  --line-mid: rgba(14, 13, 11, 0.12);
+  --line-strong: rgba(14, 13, 11, 0.18);
+  --line-field: #e3ddcf;
+  --line-dark: rgba(255, 255, 255, 0.1);
+
+  /* shadcn semantic names, so radix/vaul primitives inherit the palette unedited. */
+  --background: var(--bg-app);
+  --foreground: var(--ink);
+  --card: var(--bg-card);
+  --card-foreground: var(--ink);
+  --popover: var(--bg-card);
+  --popover-foreground: var(--ink);
+  --primary: var(--ink);
+  --primary-foreground: var(--ink-on-dark);
+  --secondary: var(--bg-pill);
+  --secondary-foreground: var(--ink-2);
+  --muted: var(--bg-app-sub);
+  --muted-foreground: var(--ink-mute);
+  --accent: var(--bg-pill);
+  --accent-foreground: var(--ink);
+  --destructive: var(--neg);
+  --destructive-foreground: var(--ink-on-dark);
+  --border: var(--line);
+  --input: var(--line);
+  --ring: var(--ink);
+  --radius: 14px;
 }
 
 @theme inline {
+  /* NYM names */
+  --color-app: var(--bg-app);
+  --color-app-sub: var(--bg-app-sub);
+  --color-card: var(--bg-card);
+  --color-card-elev: var(--bg-card-elev);
+  --color-card-dark: var(--bg-card-dark);
+  --color-card-bone: var(--bg-card-bone);
+  --color-sheet: var(--bg-sheet);
+  --color-pill: var(--bg-pill);
+  --color-pill-strong: var(--bg-pill-strong);
+  --color-pill-dark: var(--bg-pill-dark);
   --color-ink: var(--ink);
   --color-ink-2: var(--ink-2);
   --color-ink-mid: var(--ink-mid);
-  --color-subtle: var(--subtle);
-  --color-ground: var(--ground);
-  --color-card: var(--card);
-  --color-on-ink: var(--on-ink);
+  --color-ink-mute: var(--ink-mute);
+  --color-ink-faint: var(--ink-faint);
+  --color-ink-on-dark: var(--ink-on-dark);
+  --color-ink-on-dark-mute: var(--ink-on-dark-mute);
+  --color-ink-on-dark-dim: var(--ink-on-dark-dim);
+  --color-ink-on-dark-soft: var(--ink-on-dark-soft);
   --color-brand: var(--brand);
-  --color-safe: var(--safe);
-  --color-safe-bg: var(--safe-bg);
+  --color-brand-ink: var(--brand-ink);
+  --color-pos: var(--pos);
+  --color-pos-soft: var(--pos-soft);
   --color-watch: var(--watch);
-  --color-watch-text: var(--watch-text);
-  --color-act: var(--act);
-  --color-act-bg: var(--act-bg);
-  --color-hairline: var(--hairline);
-  --color-chip: var(--chip);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-watch-ink: var(--watch-ink);
+  --color-watch-soft: var(--watch-soft);
+  --color-neg: var(--neg);
+  --color-neg-soft: var(--neg-soft);
+  --color-gold: var(--gold);
+  --color-line: var(--line);
+  --color-line-mid: var(--line-mid);
+  --color-line-strong: var(--line-strong);
+  --color-line-field: var(--line-field);
+  --color-line-dark: var(--line-dark);
+
+  /* Leo's names, same values */
+  --color-subtle: var(--ink-mute);
+  --color-ground: var(--bg-app);
+  --color-on-ink: var(--ink-on-dark);
+  --color-safe: var(--pos);
+  --color-safe-bg: var(--pos-soft);
+  --color-watch-text: var(--watch-ink);
+  --color-act: var(--neg);
+  --color-act-bg: var(--neg-soft);
+  --color-hairline: var(--line);
+  --color-chip: var(--bg-pill);
+
+  /* shadcn names */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-default: var(--radius);
+
+  --font-sans: var(--font-geist-sans), -apple-system, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), "SF Mono", ui-monospace, monospace;
+}
+
+/* NYM's scales, as NYM ships them. Leo's code was moved off the names these redefine
+   (rounded-xs…xl, leading-tight) by scripts/rename-colors.mjs. */
+@theme {
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --radius-card: 22px;
+  --radius-button: 8px;
+  --radius-pill: 22px;
+  --radius-pill-lg: 26px;
+
+  --text-mono-8: 8.5px;
+  --text-mono-9: 9.5px;
+  --text-mono-10: 10px;
+  --text-eyebrow: 10.5px;
+  --text-caption-sm: 11px;
+  --text-caption: 11.5px;
+  --text-mono-12: 12px;
+  --text-tiny: 12.5px;
+  --text-body-xs: 13px;
+  --text-body: 13.5px;
+  --text-body-sm: 14px;
+  --text-body-md: 14.5px;
+  --text-h3: 16px;
+  --text-h3-lg: 17px;
+  --text-h2-xs: 18px;
+  --text-h2-sm: 19px;
+  --text-h2: 22px;
+  --text-h1-sm: 28px;
+  --text-h1: 30px;
+  --text-display-sm: 36px;
+  --text-display: 44px;
+  --text-display-lg: 56px;
+  --text-display-xl: 64px;
+  --text-display-hero: 104px;
+
+  --leading-display: 1;
+  --leading-h1: 1.05;
+  --leading-h2: 1.1;
+  --leading-h3: 1.15;
+  --leading-body: 1.45;
+  --leading-tight: 0.95;
+
+  --tracking-body: -0.005em;
+  --tracking-tight-1: -0.01em;
+  --tracking-tight-2: -0.02em;
+  --tracking-tight-3: -0.025em;
+  --tracking-tight-4: -0.03em;
+  --tracking-tight-5: -0.035em;
+  --tracking-tight-6: -0.04em;
+  --tracking-tight-7: -0.045em;
+  --tracking-loose-1: 0.01em;
+  --tracking-loose-2: 0.04em;
+  --tracking-loose-3: 0.05em;
+  --tracking-loose-4: 0.06em;
+  --tracking-mono: 0.12em;
+  --tracking-eyebrow: 0.14em;
+  --tracking-mono-md: 0.16em;
+  --tracking-mono-lg: 0.18em;
+  --tracking-mono-xl: 0.22em;
+
+  --shadow-card-elev: 0 1px 3px rgba(14, 13, 11, 0.06);
+  --shadow-card-hover: 0 4px 12px -4px rgba(14, 13, 11, 0.08);
+  --shadow-brand-glow: 0 0 14px rgba(212, 255, 60, 0.32);
+  --shadow-brand-soft: 0 0 12px rgba(212, 255, 60, 0.5);
+  --shadow-bottom-nav: 0 16px 48px -16px rgba(0, 0, 0, 0.4);
+  /* From the canvas: bottom sheet and the dark toast pill. */
+  --shadow-sheet: 0 -16px 48px -16px rgba(0, 0, 0, 0.35);
+  --shadow-toast: 0 14px 30px -14px rgba(0, 0, 0, 0.55);
+
+  --aspect-card: 1.585 / 1;
 }
 
 body {
-  background: var(--ground);
+  background: var(--bg-app);
   color: var(--ink);
   font-family: var(--font-geist-sans), -apple-system, system-ui, sans-serif;
   letter-spacing: -0.005em;
@@ -58,7 +239,7 @@ body {
   font-weight: 500;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--subtle);
+  color: var(--ink-mute);
 }
 
 /* In the base layer so component utilities (e.g. AmountInput's focus-visible:outline-none) can override it. */
@@ -67,6 +248,16 @@ body {
     outline: 2px solid var(--ink);
     outline-offset: 2px;
   }
+}
+
+/* iOS zooms the page when a focused input is under 16px, and the zoom sticks after a sheet
+   closes. A 16px floor fixes it without blocking pinch-zoom (no maximum-scale). Amount fields
+   (inputmode="decimal") are at least 16px already and keep their display size. Unlayered so it
+   wins over Tailwind's font-size utilities. */
+input:not([inputmode="decimal"]),
+textarea,
+select {
+  font-size: 16px;
 }
 
 @media (prefers-reduced-motion: reduce) {
