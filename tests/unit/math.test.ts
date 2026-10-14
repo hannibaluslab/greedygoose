@@ -55,6 +55,16 @@ describe("withdraw limits", () => {
   it("never below zero when already over", () => {
     expect(maxWithdrawUsd({ collateralUsd: 1000, avgCf: 0.5, debtUsd: 600, cf: 0.5, lockedUsd: 1000 })).toBe(0);
   });
+  it("keeps HF at a target health when given one", () => {
+    // room = 1000*0.7 - 300*1.5 = 250 → 250/0.7 ≈ 357.1 of this stock, leaving HF 1.5
+    const max = maxWithdrawUsd({ collateralUsd: 1000, avgCf: 0.7, debtUsd: 300, cf: 0.7, lockedUsd: 1000, targetHf: 1.5 });
+    expect(max).toBeCloseTo(357.14, 1);
+    expect(healthAfterWithdraw({ collateralUsd: 1000, avgCf: 0.7, debtUsd: 300, cf: 0.7, usd: max })).toBeCloseTo(1.5, 6);
+    // Already under the target: nothing can come out, though Aave's own limit would allow some.
+    expect(maxWithdrawUsd({ collateralUsd: 1000, avgCf: 0.7, debtUsd: 500, cf: 0.7, lockedUsd: 1000, targetHf: 1.5 })).toBe(0);
+    // A target under Aave's limit counts as the limit.
+    expect(maxWithdrawUsd({ collateralUsd: 1000, avgCf: 0.7, debtUsd: 500, cf: 0.7, lockedUsd: 1000, targetHf: 0.5 })).toBeCloseTo(285.71, 1);
+  });
 });
 
 describe("aprToApy", () => {

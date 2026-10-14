@@ -54,13 +54,14 @@ const SECONDS_PER_YEAR = 31_536_000;
 export const aprToApy = (apr: number) => (1 + apr / SECONDS_PER_YEAR) ** SECONDS_PER_YEAR - 1;
 
 /**
- * Most USD of one collateral that can be withdrawn while staying within Aave's limit (HF ≥ 1),
- * using the position's weighted collateral factor. Display only — Aave re-checks on-chain.
+ * Most USD of one collateral that can be withdrawn while the health factor stays at or above
+ * `targetHf`: Aave's limit (1) by default, the Safe line when a sale must keep the loan Safe. Uses
+ * the position's weighted collateral factor. Display only — Aave re-checks on-chain.
  */
-export function maxWithdrawUsd(p: { collateralUsd: number; avgCf: number; debtUsd: number; cf: number; lockedUsd: number }): number {
+export function maxWithdrawUsd(p: { collateralUsd: number; avgCf: number; debtUsd: number; cf: number; lockedUsd: number; targetHf?: number }): number {
   if (p.debtUsd <= 0) return p.lockedUsd;
   if (p.cf <= 0) return p.lockedUsd;
-  const room = p.collateralUsd * p.avgCf - p.debtUsd;
+  const room = p.collateralUsd * p.avgCf - p.debtUsd * Math.max(1, p.targetHf ?? 1);
   return Math.max(0, Math.min(p.lockedUsd, room / p.cf));
 }
 
