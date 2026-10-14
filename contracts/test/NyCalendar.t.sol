@@ -14,6 +14,8 @@ import {Vectors} from "./Vectors.sol";
 /// winter, holidays, and agreement with Leo's inWeekendWindow and the app's marketState on 10,000 timestamps.
 contract NyCalendarTest is Test {
     ExecutorHarness x;
+    /// The calendar for the library's own functions (`x` keeps its own).
+    mapping(uint32 => bool) holidays;
 
     // UTC instants, checked against America/New_York.
     uint256 constant DST_START_2026 = 1_772_953_200; // Sun 2026-03-08 07:00 UTC = 03:00 EDT
@@ -118,6 +120,52 @@ contract NyCalendarTest is Test {
         assertTrue(x.preFreeze(thu20 - 1 hours), "Weekend Shield moves to Thursday");
         assertFalse(x.preFreeze(goodFriday + 15 hours + 4 hours), "and is over by Friday");
         assertTrue(x.frozen(goodFriday + 2 days + 20 hours + 4 hours - 1), "until Sunday 20:00");
+    }
+
+    /// When prices are next live, the time a heads-up gives for a sale whose wait ends in a freeze: now while they
+    /// are; Sunday 20:00 after the Friday freeze, in summer, in winter and in both switch weekends.
+    function test_next_open_after_the_weekend() public view {
+        uint256 fri20 = FRI_2026_10_16 + 20 hours + 4 hours;
+        assertEq(NyCalendar.nextOpen(holidays, fri20 - 1), fri20 - 1, "live: now");
+        assertEq(NyCalendar.nextOpen(holidays, fri20), fri20 + 2 days, "Friday 20:00: Sunday 20:00");
+        assertEq(NyCalendar.nextOpen(holidays, fri20 + 2 days - 1), fri20 + 2 days);
+        uint256 winterFri20 = FRI_2026_12_04 + 20 hours + 5 hours;
+        assertEq(NyCalendar.nextOpen(holidays, winterFri20 + 30 minutes), winterFri20 + 2 days);
+        uint256 sunMar8 = DST_START_2026 - 7 hours + 20 hours + 4 hours; // 2026-03-08 20:00 EDT
+        assertEq(NyCalendar.nextOpen(holidays, sunMar8 - 2 days + 1 hours), sunMar8, "from Friday 20:00 EST");
+        uint256 sunNov1 = DST_END_2026 - 6 hours + 20 hours + 5 hours; // 2026-11-01 20:00 EST
+        assertEq(NyCalendar.nextOpen(holidays, sunNov1 - 2 days - 1 hours), sunNov1, "from Friday 20:00 EDT");
+    }
+
+    /// Holidays: MLK Monday holds the weekend's prices until Monday 20:00, Good Friday's freeze from Thursday 20:00
+    /// ends Sunday 20:00, and Thanksgiving's ends Thursday 20:00.
+    function test_next_open_past_holidays() public {
+        uint256 mon = 1_800_230_400; // 2027-01-18 00:00 UTC
+        holidays[uint32(mon / 1 days)] = true;
+        assertEq(NyCalendar.nextOpen(holidays, mon - 3 days + 20 hours + 5 hours), mon + 20 hours + 5 hours);
+
+        uint256 goodFriday = 1_806_019_200; // 2027-03-26 00:00 UTC, summer time
+        holidays[uint32(goodFriday / 1 days)] = true;
+        uint256 thu20 = goodFriday - 1 days + 20 hours + 4 hours;
+        assertEq(NyCalendar.nextOpen(holidays, thu20 + 30 minutes), thu20 + 3 days);
+
+        uint256 thanksgiving = 1_795_651_200; // 2026-11-26 00:00 UTC
+        holidays[uint32(thanksgiving / 1 days)] = true;
+        uint256 wed20 = thanksgiving - 1 days + 20 hours + 5 hours;
+        assertEq(NyCalendar.nextOpen(holidays, wed20), wed20 + 1 days);
+    }
+
+    /// On the 10,000 calendar timestamps: the next open is live, no earlier than now, and prices are held right up to
+    /// it.
+    function test_next_open_is_where_the_freeze_ends() public view {
+        for (uint256 i; i < 10_000; ++i) {
+            uint256 ts = Vectors.calendarTime(i);
+            uint256 open = NyCalendar.nextOpen(holidays, ts);
+            string memory at = string.concat("t = ", vm.toString(ts));
+            assertGe(open, ts, at);
+            assertFalse(NyCalendar.frozen(holidays, open), at);
+            if (open > ts) assertTrue(NyCalendar.frozen(holidays, open - 1), at);
+        }
     }
 
     /// GooseExecutor.md §7: with no holiday and a 6-hour window, the pre-freeze window is Leo's inWeekendWindow

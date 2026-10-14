@@ -5,6 +5,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {console} from "forge-std/console.sol";
 import {GooseExecutor} from "../src/GooseExecutor.sol";
 import {IAeroFactory, IAeroRouter, IERC20} from "../src/IProtocols.sol";
+import {NyCalendar} from "../src/NyCalendar.sol";
 import {JobBase} from "../src/jobs/JobBase.sol";
 import {SellJob} from "../src/jobs/SellJob.sol";
 import {ExecutorForkBase} from "./GooseExecutorFork.t.sol";
@@ -142,6 +143,23 @@ abstract contract SellForkBase is ExecutorForkBase {
         uint256 d = ts / 1 days + 1;
         return (d + (12 - d % 7) % 7) * 1 days + 15 hours; // day 5 (1970-01-06) was a Tuesday
     }
+
+    /// `nyTime` seconds past midnight New York time, on the next Tuesday after `ts`.
+    function _tuesdayAt(uint256 ts, uint256 nyTime) internal pure returns (uint256) {
+        uint256 utc = _nextTuesday(ts);
+        return utc / 1 days * 1 days + nyTime + NyCalendar.offset(utc);
+    }
+
+    /// The sale time the run's SellHeadsUp gave.
+    function _sellAfter(Vm.Log[] memory logs) internal view returns (uint256) {
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == address(x) && logs[i].topics[0] == GooseExecutor.SellHeadsUp.selector) {
+                (,, uint48 sellAfter) = abi.decode(logs[i].data, (uint256, uint256, uint48));
+                return sellAfter;
+            }
+        }
+        revert("no SellHeadsUp");
+    }
 }
 
 /// Protect · sell against the real JAW manager, the Aave V4 Equities Hub and Aerodrome's stock pools on a Base fork,
@@ -162,9 +180,9 @@ contract ProtectSellForkTest is SellForkBase {
         uint256 backing = SPOKE.getUserSuppliedAssets(NVDA, a);
 
         assertEq(uint8(x.planOf(a).action), uint8(GooseExecutor.Action.HeadsUp));
-        vm.expectEmit(true, false, false, false, address(x));
-        emit GooseExecutor.SellHeadsUp(a, 0, 0, 0);
+        vm.recordLogs();
         _run(_check());
+        assertEq(_sellAfter(vm.getRecordedLogs()), vm.getBlockTimestamp() + 30 minutes, "the heads-up says when");
         assertEq(SPOKE.getUserSuppliedAssets(NVDA, a), backing, "nothing sold yet");
         assertEq(_headsUpAt(a), vm.getBlockTimestamp());
         assertEq(_check().length, 0, "waiting");
@@ -234,6 +252,58 @@ contract ProtectSellForkTest is SellForkBase {
         assertEq(_check().length, 0);
         vm.warp(vm.getBlockTimestamp() + 2 days); // Monday: prices live again
         assertEq(uint8(x.planOf(a).action), uint8(GooseExecutor.Action.Sell));
+    }
+
+    /// A heads-up just before the Friday freeze goes out on time. Its 30 minutes end while prices are held, so it gives
+    /// Sunday 20:00 New York as the sale time, and the sale waits for it: nothing on Friday night or over the
+    /// weekend, then the sale at the reopen, the health still below the line.
+    function test_a_heads_up_before_the_friday_freeze_sells_when_prices_reopen() public {
+        uint256 friday = _tuesdayAt(vm.getBlockTimestamp(), 19 hours + 45 minutes) + 3 days;
+        vm.warp(friday);
+        address a = _owing("a", NVDA, 10e8, 1.2e18);
+        _sellOn(a, _limits(NVDA, 5e8));
+        uint256 backing = SPOKE.getUserSuppliedAssets(NVDA, a);
+        vm.recordLogs();
+        _run(_check());
+        // Sunday 20:00 in New York: two days and 15 minutes on, give or take a time-zone switch that weekend.
+        uint256 reopen = friday + 2 days + 15 minutes + NyCalendar.offset(friday + 2 days) - NyCalendar.offset(friday);
+        assertEq(_sellAfter(vm.getRecordedLogs()), reopen, "the sale time is the reopen");
+        assertTrue(x.frozen(reopen - 1));
+        assertFalse(x.frozen(reopen));
+
+        vm.warp(friday + 30 minutes);
+        assertEq(uint8(x.planOf(a).action), uint8(GooseExecutor.Action.None), "Friday 20:15: prices are held");
+        vm.warp(reopen - 1);
+        assertEq(_check().length, 0, "nor over the weekend");
+        assertEq(SPOKE.getUserSuppliedAssets(NVDA, a), backing);
+        vm.warp(reopen);
+        GooseExecutor.Plan memory plan = x.planOf(a);
+        assertEq(uint8(plan.action), uint8(GooseExecutor.Action.Sell), "the reopen: still below the line");
+        assertEq(plan.reason, 0, "after the heads-up, at the normal floor");
+        _run(_check());
+        _assertBackTo1_4(a);
+    }
+
+    /// The same heads-up, answered over the weekend (the account adds backing): it is cleared while prices are held,
+    /// and nothing sells at the reopen.
+    function test_a_heads_up_answered_over_the_weekend_sells_nothing_at_the_reopen() public {
+        uint256 friday = _tuesdayAt(vm.getBlockTimestamp(), 19 hours + 45 minutes) + 3 days;
+        vm.warp(friday);
+        address a = _owing("a", NVDA, 10e8, 1.2e18);
+        _sellOn(a, _limits(NVDA, 5e8));
+        vm.recordLogs();
+        _run(_check());
+        uint256 reopen = _sellAfter(vm.getRecordedLogs());
+        vm.warp(friday + 1 days); // Saturday
+        _backWith(a, NVDA, 3e8);
+        vm.expectEmit(true, false, false, false, address(x));
+        emit GooseExecutor.SellHeadsUpCleared(a, 0);
+        _run(_check());
+        assertEq(_headsUpAt(a), 0);
+        uint256 backing = SPOKE.getUserSuppliedAssets(NVDA, a);
+        vm.warp(reopen);
+        assertEq(_check().length, 0, "back above the line: no sale");
+        assertEq(SPOKE.getUserSuppliedAssets(NVDA, a), backing);
     }
 
     /// A heads-up that the account answers (it adds backing) is cleared, so a later fall gets a new one.

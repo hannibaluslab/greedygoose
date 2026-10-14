@@ -4,6 +4,7 @@ pragma solidity 0.8.28;
 import {GooseExecutor} from "../GooseExecutor.sol";
 import {IJustaPermissionManager as PM} from "../IJustaPermissionManager.sol";
 import {IAeroRouter, IERC20, ISpoke} from "../IProtocols.sol";
+import {NyCalendar} from "../NyCalendar.sol";
 import {Book, Holding, SellLimits, SellRules, SellTiming, Slice} from "../SellRules.sol";
 import {JobBase} from "./JobBase.sol";
 
@@ -102,12 +103,13 @@ library SellJob {
     }
 
     /// Plans, then makes the move: a sale, a heads-up, or clearing one. A sale that wouldn't fit in the gas left is
-    /// deferred to the next run.
+    /// deferred to the next run. `holiday` is the executor's calendar, for the time a heads-up gives.
     function run(
         GooseExecutor.Env memory e,
         GooseExecutor.Ctx memory c,
         GooseExecutor.Account storage acc,
-        mapping(uint256 => GooseExecutor.PoolUse) storage pools
+        mapping(uint256 => GooseExecutor.PoolUse) storage pools,
+        mapping(uint32 => bool) storage holiday
     ) external returns (GooseExecutor.Plan memory p) {
         Sale memory sale;
         (p, sale) = _plan(e, c, acc, pools);
@@ -116,9 +118,10 @@ library SellJob {
             emit GooseExecutor.SellHeadsUpCleared(c.account, p.hf);
         } else if (p.action == GooseExecutor.Action.HeadsUp) {
             acc.headsUpAt = uint48(block.timestamp);
-            emit GooseExecutor.SellHeadsUp(
-                c.account, p.hf, _value(sale), uint48(block.timestamp) + c.sellLimits.headsUpDelay
-            );
+            // Sent on time, even just before a price freeze; a sale whose wait ends while prices are held goes when
+            // they reopen, if the health is still below the line (decision, 2026-10-14). The heads-up says when.
+            uint256 sellAfter = NyCalendar.nextOpen(holiday, block.timestamp + c.sellLimits.headsUpDelay);
+            emit GooseExecutor.SellHeadsUp(c.account, p.hf, _value(sale), uint48(sellAfter));
         } else if (p.action == GooseExecutor.Action.Sell) {
             if (gasleft() < SELL_GAS + CHECKS_GAS) {
                 p.action = GooseExecutor.Action.Defer;

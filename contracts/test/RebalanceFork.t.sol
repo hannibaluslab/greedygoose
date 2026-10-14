@@ -5,7 +5,6 @@ import {Vm} from "forge-std/Vm.sol";
 import {console} from "forge-std/console.sol";
 import {GooseExecutor} from "../src/GooseExecutor.sol";
 import {IAeroRouter, IERC20} from "../src/IProtocols.sol";
-import {NyCalendar} from "../src/NyCalendar.sol";
 import {Trade} from "../src/RebalanceRules.sol";
 import {RebalanceJob} from "../src/jobs/RebalanceJob.sol";
 import {SellForkBase} from "./ProtectSellFork.t.sol";
@@ -58,12 +57,6 @@ abstract contract RebalanceForkBase is SellForkBase {
     /// The account's free stock in `r`, in USDC units at Aave's price.
     function _value(address a, uint256 r) internal view returns (uint256) {
         return IERC20(STOCKS[r]).balanceOf(a) * _price(r) / 1e10;
-    }
-
-    /// `nyTime` seconds past midnight New York time, on the next Tuesday after `ts`.
-    function _tuesdayAt(uint256 ts, uint256 nyTime) internal pure returns (uint256) {
-        uint256 utc = _nextTuesday(ts);
-        return utc / 1 days * 1 days + nyTime + NyCalendar.offset(utc);
     }
 
     function _list(uint256 a, uint256 b) internal pure returns (uint256[] memory l) {
