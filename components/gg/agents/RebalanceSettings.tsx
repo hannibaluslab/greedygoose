@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { isAddressEqual } from "viem";
 import { useAccount } from "wagmi";
 import { toast } from "sonner";
 import { CardTitle, ManageCard, MixSlider } from "@/components/gg/Manage";
@@ -37,7 +38,7 @@ export function RebalanceSettings({ account, onDone }: { account: `0x${string}`;
   const { data } = usePosition(account);
   const agents = useAgents(account);
   const settings = useAgentSettings(account);
-  const { isConnected } = useAccount();
+  const { address, isConnected } = useAccount();
   const fee = useFeeSupport();
   const onSaved = useCallback(() => {
     toast.success("Your mix is saved");
@@ -58,6 +59,7 @@ export function RebalanceSettings({ account, onDone }: { account: `0x${string}`;
       capMaxRaw={agents.capMaxRaw}
       configured={configured}
       connected={isConnected}
+      preview={!address || !isAddressEqual(address, account)}
       running={status === "on" || status === "starting"}
       feeBlocked={isConnected && fee.state === "unsupported"}
       feeLoading={fee.loading}
@@ -98,7 +100,7 @@ export type SaveRequest = { weights: number[]; capRaw: bigint; plan: SavePlan };
 
 /** The settings drawn from plain values, so the dev gallery can show each state. */
 export function RebalanceSettingsView({
-  holdings, saved, options, terms, capMaxRaw, configured, connected, running, feeBlocked, feeLoading, busy, phase, error, onSave, draft,
+  holdings, saved, options, terms, capMaxRaw, configured, connected, preview = !connected, running, feeBlocked, feeLoading, busy, phase, error, onSave, draft,
 }: {
   holdings: readonly SettingsHolding[];
   /** The registry's mix, BPS by reserve id (all 0 before one is saved); null before it is read. */
@@ -108,6 +110,8 @@ export function RebalanceSettingsView({
   capMaxRaw: bigint | null;
   configured: boolean;
   connected: boolean;
+  /** Not signed in as this account (the dev preview): nothing signs. */
+  preview?: boolean;
   running: boolean;
   feeBlocked: boolean;
   feeLoading: boolean;
@@ -256,7 +260,7 @@ export function RebalanceSettingsView({
           label={configured && !running ? "Switch on with Face ID" : "Save with Face ID"}
           phase={phase}
           disabled={!plan.canSave || busy}
-          preview={configured && !connected}
+          preview={configured && preview}
           onClick={() => onSave({ weights, capRaw, plan })}
         />
         {plan.note && <p className="m-0 text-center text-xs text-subtle">{plan.note}</p>}

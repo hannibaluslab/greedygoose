@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { zeroAddress } from "viem";
-import { useReadContract, useReadContracts } from "wagmi";
+import { isAddressEqual, zeroAddress } from "viem";
+import { useAccount, useReadContract, useReadContracts } from "wagmi";
 import { useGrantPermissions, usePermissions, useRevokePermissions } from "@jaw.id/wagmi";
 import { CHAIN_ID } from "@/lib/chain";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
@@ -64,7 +64,13 @@ export function useAgents(account: `0x${string}`) {
   });
   const grant = useGrantPermissions();
   const revoke = useRevokePermissions();
+  const { address: signer } = useAccount();
   const nowSec = useNowSec();
+
+  /** Grants and revokes are the account's own, like useTx's calls: never while another address is shown (`?as=`). */
+  function ownAccount() {
+    if (!signer || !isAddressEqual(signer, account)) throw new Error("Only the signed-in account can do this");
+  }
 
   /** The registry: the job bits, failures in a row and the back-off, and each job's stored grant (with its stock limits). */
   const stored = useMemo(() => {
@@ -192,6 +198,7 @@ export function useAgents(account: `0x${string}`) {
    */
   async function turnOn(job: AgentJob, capRaw: bigint, limitsRaw?: StockLimits) {
     if (!executor) throw new Error("Agents aren't available yet");
+    ownAccount();
     await grant.mutateAsync({
       address: account,
       chainId: CHAIN_ID,
@@ -204,6 +211,7 @@ export function useAgents(account: `0x${string}`) {
 
   /** Revokes every grant JAW lists for the job that hasn't ended, so nothing is left for the executor to use. */
   async function turnOff(job: AgentJob) {
+    ownAccount();
     for (const g of live[job]) {
       await revoke.mutateAsync({ address: account, chainId: CHAIN_ID, id: g.permissionId });
     }
