@@ -161,6 +161,12 @@ export function buildSaleCalls(p: {
   return assertAllowed(p.user, [...sale, ...buildRepayCalls({ user: p.user, amountRaw: repayRaw, all: repayRaw > p.debtRaw })]);
 }
 
+/** The lowest price a share sells at in this plan: what the sale pays at least (the swap's floor), per share sold. */
+export function floorPriceUsd(plan: Pick<SellPlan, "minOutRaw" | "sharesRaw">, stock: Pick<ReserveAsset, "decimals">): number {
+  const shares = Number(plan.sharesRaw) / 10 ** stock.decimals;
+  return shares > 0 ? toUsd(plan.minOutRaw) / shares : 0;
+}
+
 /** What Activity shows while it confirms: the shares taken out of backing, the sale and the repay. */
 export function saleActivity(stock: ReserveAsset, plan: SellPlan): ActivityItem[] {
   const amount = Number(plan.sharesRaw) / 10 ** stock.decimals;

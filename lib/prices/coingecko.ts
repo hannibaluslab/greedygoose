@@ -43,3 +43,23 @@ export function fromCoinRow(row: CoinRow): MarketData | null {
   const week = [...hourly, price];
   return { price, change: change / 100, day: week.slice(-25), week };
 }
+
+/**
+ * A stock's prices over the last `days` days, oldest first, for the chart's fallback:
+ *
+ *   GET /coins/{id}/market_chart?vs_currency=usd&days=… → { prices: [[ms, price], …] }
+ *
+ * The same points JAW's /history answers with (measured 2026-10-14: equal, point for point, at 1, 30 and 365 days).
+ */
+export async function fetchCoinChart(id: string, days: number): Promise<number[]> {
+  const res = await fetch(`${API}/coins/${encodeURIComponent(id)}/market_chart?vs_currency=usd&days=${days}`, {
+    headers: { accept: "application/json" },
+  });
+  if (!res.ok) throw new Error(`CoinGecko request failed (${res.status})`);
+  const body = (await res.json()) as { prices?: unknown };
+  if (!Array.isArray(body.prices)) throw new Error("CoinGecko answered without prices");
+  return body.prices.flatMap((p) => {
+    const price = Array.isArray(p) ? p[1] : undefined;
+    return typeof price === "number" && Number.isFinite(price) && price > 0 ? [price] : [];
+  });
+}

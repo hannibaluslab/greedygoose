@@ -7,16 +7,14 @@ import { TabBar } from "@/components/gg/TabBar";
 import { TabHeader } from "@/components/gg/Screen";
 import { BalanceHero, TodayChange, TodayPending } from "@/components/gg/BalanceHero";
 import { Button } from "@/components/gg/Button";
-import { BuySheet } from "@/components/gg/BuySheet";
-import { CreditBuySheet } from "@/components/gg/CreditBuySheet";
 import { CreditSheet } from "@/components/gg/CreditSheet";
+import { StockSheets, useStockSheets } from "@/components/gg/StockSheets";
 import { HoldingList, HoldingRow } from "@/components/gg/Holding";
 import { ValueLine } from "@/components/gg/ValueLine";
 import { CreditIcon, TradeIcon } from "@/components/gg/icons";
 import { MarketBanner } from "@/components/ui/MarketBanner";
 import { useMarketPrices } from "@/hooks/useMarketPrices";
 import { usePosition, type PositionData } from "@/hooks/usePosition";
-import { useSheetSubject } from "@/hooks/useSheetSubject";
 import { aprToApy } from "@/lib/aave/math";
 import { formatUsd } from "@/lib/formatting";
 import { dayChange, weekValue } from "@/lib/prices/market";
@@ -27,19 +25,16 @@ export default function PortfolioPage() {
 
 /**
  * Design board "10 · Portfolio (Invest tab)" (PortfolioPage.dc.html). Market opens Flow 1's sheet
- * (F1-3 → F1-4 → confirm); /buy lands here with ?market, or ?s=SYMBOL for one stock's Buy step. Credit Buy
- * opens Flow 2's sheet (F2-2 → F2-3 … F2-6). The status pill opens the Credit sheet (HomeCreditSlide).
+ * (F1-3 → the stock's sheet → F1-4 → confirm); /buy lands here with ?market, or ?s=SYMBOL for one stock's Buy
+ * step. Credit Buy opens Flow 2's sheet (F2-2 → F2-3 … F2-6). A holding row opens its stock's sheet. The status
+ * pill opens the Credit sheet (HomeCreditSlide).
  * Today's change, the value line and each row's day come from market prices (plan item 8), with the
  * markets-closed banner under the line at weekends. Not drawn yet: "Your mix" (the Rebalancer, item 9).
  */
 function Portfolio({ address }: { address: `0x${string}` }) {
   const { data, isError, refetch } = usePosition(address);
   const params = useSearchParams();
-  const market = useSheetSubject<{ symbol: string | null }>(
-    params.has("s") ? { symbol: params.get("s") } : params.has("market") ? { symbol: null } : null,
-  );
-  const openMarket = () => market.show({ symbol: null });
-  const [creditBuy, setCreditBuy] = useState(false);
+  const stocks = useStockSheets(params.has("s") ? { symbol: params.get("s") } : params.has("market") ? { symbol: null } : null);
   const [credit, setCredit] = useState(false);
 
   return (
@@ -57,14 +52,11 @@ function Portfolio({ address }: { address: `0x${string}` }) {
         ) : !data ? (
           <div aria-busy className="h-[300px] animate-pulse rounded-[22px] bg-chip" />
         ) : (
-          <Loaded data={data} openMarket={openMarket} openCreditBuy={() => setCreditBuy(true)} />
+          <Loaded data={data} openMarket={stocks.openMarket} openCreditBuy={stocks.openCreditBuy} openStock={stocks.openStock} />
         )}
       </div>
       <TabBar />
-      {data && market.subject && (
-        <BuySheet key={market.key} open={market.open} user={address} data={data} symbol={market.subject.symbol} onClose={market.close} />
-      )}
-      {data && <CreditBuySheet open={creditBuy} user={address} data={data} onClose={() => setCreditBuy(false)} />}
+      {data && <StockSheets sheets={stocks} user={address} data={data} />}
       {data && (
         <CreditSheet
           open={credit}
@@ -74,7 +66,7 @@ function Portfolio({ address }: { address: `0x${string}` }) {
           // The Market is already on this page: Buy more swaps the sheets instead of navigating to itself.
           onBuyMore={() => {
             setCredit(false);
-            openMarket();
+            stocks.openMarket();
           }}
         />
       )}
@@ -82,7 +74,9 @@ function Portfolio({ address }: { address: `0x${string}` }) {
   );
 }
 
-function Loaded({ data, openMarket, openCreditBuy }: { data: PositionData; openMarket: () => void; openCreditBuy: () => void }) {
+function Loaded({
+  data, openMarket, openCreditBuy, openStock,
+}: { data: PositionData; openMarket: () => void; openCreditBuy: () => void; openStock: (symbol: string) => void }) {
   const held = data.holdings.filter((h) => h.freeShares + h.lockedShares > 0);
   const market = useMarketPrices(held);
   const priced = held.map((h) => ({ valueUsd: h.freeUsd + h.lockedUsd, ...market.bySymbol[h.symbol] }));
@@ -131,7 +125,7 @@ function Loaded({ data, openMarket, openCreditBuy }: { data: PositionData; openM
                 backs={backs}
                 today={m?.change}
                 spark={m?.day}
-                href={backs > 0 ? `/free-up?s=${h.symbol}` : "/use-credit"}
+                onClick={() => openStock(h.symbol)}
                 note={h.paused || h.frozen ? "Aave has paused this stock for now." : undefined}
               />
             );

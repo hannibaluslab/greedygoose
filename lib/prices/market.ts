@@ -24,6 +24,45 @@ export function agreesWithAave(price: number, aaveUsd: number): boolean {
   return isPrice(price) && isPrice(aaveUsd) && Math.abs(price / aaveUsd - 1) <= PRICE_TOLERANCE;
 }
 
+/**
+ * The stock sheet's chart ranges (NYM's range control) and the days of history each asks for. JAW and CoinGecko
+ * answer with the same points: every 5 minutes over a day, hourly over 7 and 30 days, daily over 365 (only since
+ * the stock's token launched, so a year can be shorter).
+ */
+export const RANGES = { "1D": 1, "1W": 7, "1M": 30, "1Y": 365 } as const;
+
+export type Range = keyof typeof RANGES;
+
+export const isRange = (r: string | null | undefined): r is Range => !!r && Object.hasOwn(RANGES, r);
+
+const DAY_MS = 86_400_000;
+
+/**
+ * The day a 1Y line starts when it holds less than a year: the stock's token launched inside it (the seven launched in
+ * mid-August 2026). Its points are daily closes at 00:00 UTC, then the current price, so `points` of them start
+ * points − 2 days before today (UTC). Null for a full year, for the other ranges, and before the clock is known.
+ */
+export function yearLineStart(range: Range, points: number, nowMs: number): Date | null {
+  if (range !== "1Y" || points < 2 || points > RANGES["1Y"] || nowMs <= 0) return null;
+  return new Date(Math.floor(nowMs / DAY_MS) * DAY_MS - (points - 2) * DAY_MS);
+}
+
+/**
+ * A 1Y line shorter than a year starts on the token's first day of market data, and that day's close is the first
+ * print of a new, thin market rather than the stock's price: METAc's was $784 on 2026-08-18, in JAW's and CoinGecko's
+ * history alike, against $545 the next day and $572 on Aave's feed a week later. The line starts the day after, so
+ * yearLineStart still reads its first day from how many points are left.
+ */
+export function afterFirstDay(range: Range, points: number[]): number[] {
+  return range === "1Y" && points.length > 2 && points.length <= RANGES["1Y"] ? points.slice(1) : points;
+}
+
+/** A price line to draw, if it has two points or more and its last price agrees with Aave's (as `checked`). */
+export function checkedLine(points: readonly number[] | undefined, aaveUsd: number): number[] | undefined {
+  if (!points || points.length < 2 || !points.every(isPrice)) return undefined;
+  return agreesWithAave(points[points.length - 1], aaveUsd) ? [...points] : undefined;
+}
+
 /** The data, if its price and the week's last price both agree with Aave's and there are lines to draw. */
 export function checked(data: MarketData | undefined, aaveUsd: number): MarketData | undefined {
   if (!data || !Number.isFinite(data.change) || data.change <= -1 || data.day.length < 2 || data.week.length < 2) return undefined;

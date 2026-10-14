@@ -5,6 +5,7 @@ import { StockAvatar } from "./StockAvatar";
 import { Tap } from "./Tap";
 import { ChevronRight, LockIcon, PlusIcon, UnlockIcon } from "./icons";
 import { formatShares, formatSignedPct, formatUsd } from "@/lib/formatting";
+import { wholePct } from "@/lib/holding";
 import { LINE_POINTS, downsample } from "@/lib/prices/market";
 
 /** Stocks earn no yield (D19): the holding pieces carry no APY. What a holding shows instead is how much of it backs credit. */
@@ -22,19 +23,16 @@ type HoldingProps = {
   onClick?: () => void;
 };
 
-/** Whole percent, never "0%" for a holding that does back something. */
-const backsPct = (backs: number) => Math.max(1, Math.round(backs * 100));
-
 /**
  * "33% backs Credit Buy" or "Not backing credit". `compact` is the Home rail's small chip
  * (the figure and a closed or open padlock); the words go to screen readers and the tooltip.
  */
 export function BacksChip({ backs, compact = false }: { backs: number; compact?: boolean }) {
-  const words = backs > 0 ? `${backsPct(backs)}% backs Credit Buy` : "Not backing credit";
+  const words = backs > 0 ? `${wholePct(backs)}% backs Credit Buy` : "Not backing credit";
   if (compact) {
     return backs > 0 ? (
       <span title={words} className="num inline-flex h-4 items-center gap-[3px] whitespace-nowrap rounded-[8px] bg-ground pl-1.5 pr-[5px] text-[9.5px] font-semibold text-ink-2">
-        <span aria-hidden>{backsPct(backs)}%</span>
+        <span aria-hidden>{wholePct(backs)}%</span>
         <LockIcon />
         <span className="sr-only">{words}</span>
       </span>

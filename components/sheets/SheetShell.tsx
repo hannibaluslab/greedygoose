@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import { ArrowLeftIcon, CloseIcon } from "@/components/gg/icons";
 import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
 import { useBodyScrollLock, useKeyboardLift } from "@/hooks/useSheetViewport";
@@ -180,7 +180,10 @@ export function SheetShell({
         modal={false}
       >
         <DrawerContent
-          style={{ maxHeight: `${maxHeightVh}dvh`, minHeight: topPx ? `calc(100dvh - ${topPx}px)` : undefined }}
+          // The cap is a class reading a variable, not an inline max-height: useKeyboardLift clears the drawer's
+          // inline max-height whenever no keyboard is up, which left a sheet taller than the screen running off its top.
+          className="max-h-(--sheet-max-h)"
+          style={{ "--sheet-max-h": `${maxHeightVh}dvh`, minHeight: topPx ? `calc(100dvh - ${topPx}px)` : undefined } as CSSProperties}
           // dismissible={false} also makes vaul ignore Escape, so close here.
           onEscapeKeyDown={() => onOpenChange(false)}
         >

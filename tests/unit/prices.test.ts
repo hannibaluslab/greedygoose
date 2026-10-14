@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { fromCoinRow, type CoinRow } from "@/lib/prices/coingecko";
 import { jawMarketData } from "@/lib/prices/jaw";
 import {
-  PRICE_TOLERANCE, agreesWithAave, checked, dayChange, downsample, moveUsd, pickMarketData, weekValue, type MarketData,
+  PRICE_TOLERANCE, RANGES, afterFirstDay, agreesWithAave, checked, checkedLine, dayChange, downsample, isRange, moveUsd, pickMarketData, weekValue, yearLineStart,
+  type MarketData,
 } from "@/lib/prices/market";
 const line = (from: number, to: number, n = 24) => Array.from({ length: n }, (_, i) => from + ((to - from) * i) / (n - 1));
 const data = (price: number, change = 0.01, week = line(price * 0.95, price, 169)): MarketData => ({
@@ -202,5 +203,76 @@ describe("downsample", () => {
 
   it("leaves short series alone", () => {
     expect(downsample([1, 2, 3], 7)).toEqual([1, 2, 3]);
+  });
+});
+
+describe("the chart's ranges", () => {
+  it("asks for a day, a week, a month and a year of history", () => {
+    expect(RANGES).toEqual({ "1D": 1, "1W": 7, "1M": 30, "1Y": 365 });
+  });
+
+  it("isRange accepts those four only", () => {
+    for (const r of ["1D", "1W", "1M", "1Y"]) expect(isRange(r)).toBe(true);
+    for (const r of ["1H", "ALL", "1d", "toString", "", null, undefined]) expect(isRange(r)).toBe(false);
+  });
+});
+
+describe("checkedLine (a chart line, checked against Aave)", () => {
+  it("keeps a line that ends within 2% of Aave's price", () => {
+    const month = line(212.86, 229.13, 721);
+    expect(checkedLine(month, AAVE.NVDAc)).toEqual(month);
+  });
+
+  it("drops a line that ends on another token's price", () => {
+    expect(checkedLine(line(5.1, 5.38, 289), AAVE.METAc)).toBeUndefined();
+  });
+
+  it("drops a line with fewer than two points, or a bad point anywhere", () => {
+    expect(checkedLine([229.13], AAVE.NVDAc)).toBeUndefined();
+    expect(checkedLine([], AAVE.NVDAc)).toBeUndefined();
+    expect(checkedLine(undefined, AAVE.NVDAc)).toBeUndefined();
+    expect(checkedLine([220, 0, 229.13], AAVE.NVDAc)).toBeUndefined();
+    expect(checkedLine([220, Number.NaN, 229.13], AAVE.NVDAc)).toBeUndefined();
+  });
+
+  it("never hands back the caller's array", () => {
+    const points = [220, 229.13];
+    expect(checkedLine(points, AAVE.NVDAc)).not.toBe(points);
+  });
+});
+
+describe("yearLineStart (a 1Y line shorter than a year)", () => {
+  // JAW's and CoinGecko's NVDAc year at 2026-10-14 09:11 UTC: 59 points, the first a close at 2026-08-18 00:00 UTC.
+  const now = Date.UTC(2026, 9, 14, 9, 11);
+
+  it("is the first daily close's day", () => {
+    expect(yearLineStart("1Y", 59, now)?.toISOString()).toBe("2026-08-18T00:00:00.000Z");
+  });
+
+  it("is null for a full year, the other ranges, too few points and an unknown clock", () => {
+    expect(yearLineStart("1Y", 366, now)).toBeNull();
+    expect(yearLineStart("1M", 59, now)).toBeNull();
+    expect(yearLineStart("1D", 289, now)).toBeNull();
+    expect(yearLineStart("1Y", 1, now)).toBeNull();
+    expect(yearLineStart("1Y", 59, 0)).toBeNull();
+  });
+});
+
+describe("afterFirstDay (a young token's year starts the day after its first)", () => {
+  // JAW's and CoinGecko's METAc year at 2026-10-14: 59 points, the first a $784 close on 2026-08-18, then $545.
+  const metaYear = [784.47, 545.34, 552.78, ...line(546.83, 763.17, 55), 765.9];
+  const now = Date.UTC(2026, 9, 14, 9, 11);
+
+  it("drops the first day's close, so the year starts on the second day", () => {
+    const year = afterFirstDay("1Y", metaYear);
+    expect(year).toEqual(metaYear.slice(1));
+    expect(yearLineStart("1Y", year.length, now)?.toISOString()).toBe("2026-08-19T00:00:00.000Z");
+  });
+
+  it("leaves a full year, the other ranges and a line too short to cut alone", () => {
+    const full = line(500, 765.9, 366);
+    expect(afterFirstDay("1Y", full)).toBe(full);
+    for (const r of ["1D", "1W", "1M"] as const) expect(afterFirstDay(r, metaYear)).toBe(metaYear);
+    expect(afterFirstDay("1Y", [545.34, 765.9])).toEqual([545.34, 765.9]);
   });
 });

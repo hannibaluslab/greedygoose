@@ -10,6 +10,7 @@ import { QuickAction } from "@/components/gg/QuickAction";
 import { CashCard, CreditCard } from "@/components/gg/Cards";
 import { AddStockCard, HoldingCard } from "@/components/gg/Holding";
 import { CreditSheet } from "@/components/gg/CreditSheet";
+import { StockSheets, useStockSheets } from "@/components/gg/StockSheets";
 import { ValueLine } from "@/components/gg/ValueLine";
 import { TotalBalanceSheet, YieldSheet } from "@/components/gg/InfoSheets";
 import { Button } from "@/components/gg/Button";
@@ -32,11 +33,12 @@ type Sheet = "total" | "yield" | "credit";
  * Design board "2 · Home · portfolio: Rail" (HomeUpliftRail.dc.html), with its sheets: Total balance (HomeInfo),
  * Average yield (HomeYieldInfo) and Credit (HomeCreditSlide). Today's change, the line and each holding's day come
  * from market prices (plan item 8). The board's all-time return is left out: it needs what Sam paid, which only the
- * PnL engine will read from the chain (plan item 7).
+ * PnL engine will read from the chain (plan item 7). A holding card opens its stock's sheet.
  */
 function Home({ address }: { address: `0x${string}` }) {
   const { data, isError, refetch } = usePosition(address);
   const [sheet, setSheet] = useState<Sheet | null>(null);
+  const stocks = useStockSheets();
   const close = () => setSheet(null);
   const apy = data ? aprToApy(data.savingsApr) : 0;
 
@@ -53,7 +55,7 @@ function Home({ address }: { address: `0x${string}` }) {
         </div>
       )}
 
-      {!data ? <Skeleton /> : <Loaded data={data} apy={apy} open={setSheet} />}
+      {!data ? <Skeleton /> : <Loaded data={data} apy={apy} open={setSheet} openStock={stocks.openStock} />}
 
       <TabBar />
       {data && (
@@ -61,13 +63,16 @@ function Home({ address }: { address: `0x${string}` }) {
           <TotalBalanceSheet open={sheet === "total"} onClose={close} cashUsd={data.cashUsd} stocksUsd={data.stocksUsd} debtUsd={data.debtUsd} />
           <YieldSheet open={sheet === "yield"} onClose={close} cashUsd={data.cashUsd} savingsUsd={data.savingsUsd} apy={apy} />
           <CreditSheet open={sheet === "credit"} onClose={close} account={address} data={data} />
+          <StockSheets sheets={stocks} user={address} data={data} />
         </>
       )}
     </div>
   );
 }
 
-function Loaded({ data, apy, open }: { data: PositionData; apy: number; open: (sheet: Sheet) => void }) {
+function Loaded({
+  data, apy, open, openStock,
+}: { data: PositionData; apy: number; open: (sheet: Sheet) => void; openStock: (symbol: string) => void }) {
   const held = data.holdings.filter((h) => h.freeShares + h.lockedShares > 0);
   const market = useMarketPrices(held);
   const priced = held.map((h) => ({ valueUsd: h.freeUsd + h.lockedUsd, ...market.bySymbol[h.symbol] }));
@@ -144,7 +149,7 @@ function Loaded({ data, apy, open }: { data: PositionData; apy: number; open: (s
                   spark={m?.day}
                   pending={market.loading}
                   shares={h.freeShares + h.lockedShares}
-                  href="/portfolio"
+                  onClick={() => openStock(h.symbol)}
                 />
               );
             })}
