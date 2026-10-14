@@ -13,10 +13,14 @@ export type Words = readonly (string | { status: Exclude<Status, "none"> })[];
 
 export type AgentName = "Cash Agent" | "Protection" | "Rebalancer" | "Entry agent" | "Agents";
 
-/** Where an agent's limits are changed (the Manage boards: ManageCredit for Protection, Manage for the mix). */
+/**
+ * Where each agent is managed: the Manage boards' Credit tab for Protection (ManageCredit) and Your mix for the
+ * Rebalancer (Manage). No board draws the Entry agent's.
+ */
 export const MANAGE = {
   protection: { href: "/manage/credit", label: "Change Protection's limits" },
   mix: { href: "/manage", label: "Change your mix" },
+  entry: { href: "/manage/entry", label: "Change the Entry agent's limit" },
 } as const;
 
 /** One agent move as the Agents board draws it: who, one line on what changed, and the details on tap. */
