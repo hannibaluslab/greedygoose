@@ -17,10 +17,19 @@ import { rawToShares, sharesToRaw } from "@/lib/tokens/b20";
 import { formatShares, formatUsd } from "@/lib/formatting";
 import type { ReserveAsset } from "@/lib/tokens/registry";
 
-/** "Free up shares": withdraw a stock from Aave back to the user's account. */
+/** "Free up shares": withdraw a stock from Aave back to the user's account. `onBack` when opened from the stock's sheet. */
 export function UnlockSheet({
-  open, user, stock, holding, data, cf, onClose,
-}: { open: boolean; user: `0x${string}`; stock: ReserveAsset; holding: Holding; data: PositionData; cf: number | undefined; onClose: () => void }) {
+  open, user, stock, holding, data, cf, onClose, onBack,
+}: {
+  open: boolean;
+  user: `0x${string}`;
+  stock: ReserveAsset;
+  holding: Holding;
+  data: PositionData;
+  cf: number | undefined;
+  onClose: () => void;
+  onBack?: () => void;
+}) {
   const { isConnected } = useAccount();
   const fee = useFeeSupport();
   const tx = useTx();
@@ -46,7 +55,12 @@ export function UnlockSheet({
   const feeBlocked = isConnected && fee.state === "unsupported";
 
   return (
-    <SheetShell open={open} onOpenChange={(next) => !next && onClose()} title={`Free up ${stock.name}`}>
+    <SheetShell
+      open={open}
+      onOpenChange={(next) => !next && onClose()}
+      title={`Free up ${stock.name}`}
+      onBack={onBack && !tx.busy && tx.phase !== "done" ? onBack : undefined}
+    >
       <SheetSteps stepKey={tx.phase === "done" ? "done" : "amount"} className="flex flex-col gap-3">
         {tx.phase === "done" ? (
           <TxDone title={`${ticker} freed up`} body="It’s back in your account as a free stock." txHash={tx.txHash} onDone={onClose} />

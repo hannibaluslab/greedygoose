@@ -41,17 +41,30 @@ const wholeUsd = (n: number) => formatUsdTrim(Math.max(0, Math.floor(n)));
  * Design boards "F2 · 3–6" (F2-3-Pick-stock … F2-6-Confirm): Credit Buy in one drawer. Pick a stock (your holdings
  * first), pick the holding that backs it, choose how much credit, then confirm with Face ID: put the backing in use,
  * take the credit and buy, in one batch (useCreditBuy). Once it lands it goes Home with the "Bought" toast (F2-7).
+ * Opened from a stock's sheet, the stock is already picked: it starts at F2-4, and Back returns to that sheet.
  */
-export function CreditBuySheet({ open, user, data, onClose }: { open: boolean; user: `0x${string}`; data: PositionData; onClose: () => void }) {
+export function CreditBuySheet({
+  open, user, data, symbol, onClose, onBack,
+}: {
+  open: boolean;
+  user: `0x${string}`;
+  data: PositionData;
+  /** The stock to buy, picked already (resolved through the registry only); F2-3's picker otherwise. */
+  symbol?: string | null;
+  onClose: () => void;
+  /** Where Back goes from the first step when the stock was picked already (the stock's sheet). */
+  onBack?: () => void;
+}) {
+  const preset = EQUITIES.find((e) => e.symbol === symbol) ?? null;
   const { isConnected } = useAccount();
   const cfs = useCollateralFactors(data.holdings);
   const protect = useAgents(user).status.protect;
   const fee = useFeeSupport();
   const { creditBuy, phase, error, reset, busy, txHash } = useCreditBuy();
 
-  const [step, setStep] = useState<Step>("pick");
+  const [step, setStep] = useState<Step>(preset ? "back" : "pick");
   const [direction, setDirection] = useState<"forward" | "back">("forward");
-  const [stock, setStock] = useState<ReserveAsset | null>(null);
+  const [stock, setStock] = useState<ReserveAsset | null>(preset);
   const [picked, setPicked] = useState<string | null>(null);
   const [raw, setRaw] = useState("");
   const [ack, setAck] = useState(false);
@@ -62,18 +75,6 @@ export function CreditBuySheet({ open, user, data, onClose }: { open: boolean; u
     // The extra confirmation is for the plan on screen; any step away asks again.
     setAck(false);
   };
-  // Every opening starts at the first step.
-  const [wasOpen, setWasOpen] = useState(open);
-  if (open !== wasOpen) {
-    setWasOpen(open);
-    if (open) {
-      setStep("pick");
-      setStock(null);
-      setPicked(null);
-      setRaw("");
-      setAck(false);
-    }
-  }
   const close = () => {
     onClose();
     if (!busy) reset();
@@ -122,7 +123,8 @@ export function CreditBuySheet({ open, user, data, onClose }: { open: boolean; u
   // F2-4 lists what can back it first, then what can't, and why.
   const backRows = [...held].sort((a, b) => Number(!!optionOf(options, b)) - Number(!!optionOf(options, a)));
   const title = step === "pick" ? "Credit Buy" : step === "confirm" ? "Confirm" : `Credit Buy ${stock?.name ?? ""}`;
-  const back = step === "back" ? "pick" : step === "amount" ? "back" : step === "confirm" ? "amount" : null;
+  const back = step === "back" ? (preset ? null : "pick") : step === "amount" ? "back" : step === "confirm" ? "amount" : null;
+  const leave = step === "back" && preset ? onBack : undefined;
 
   return (
     <SheetShell
@@ -131,7 +133,7 @@ export function CreditBuySheet({ open, user, data, onClose }: { open: boolean; u
       title={title}
       // F2-3 opens the picker as tall as F1-3's Market (188px from the top), however few stocks there are.
       topPx={step === "pick" ? 188 : undefined}
-      onBack={back ? () => !busy && go(back) : undefined}
+      onBack={leave ?? (back ? () => !busy && go(back) : undefined)}
     >
       <SheetSteps stepKey={step} direction={direction} className="flex flex-col gap-3">
         {step === "pick" ? (

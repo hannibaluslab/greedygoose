@@ -37,13 +37,14 @@ const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompar
 const inWords = (parts: string[]) => (parts.length < 2 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`);
 
 /**
- * Flow 1 in one drawer: Market (F1-3) → Buy (F1-4) → Confirm (F2-6's layout; there is no
- * F1-5 board), then Home with the "Bought …" toast (F1-6). More than your cash (decision 1): Review is
- * blocked and one button takes credit for the other part, so the review becomes one batch: withdraw
- * savings, take credit, approve, swap.
+ * Flow 1: Market (F1-3) → the stock's sheet → Buy (F1-4) → Confirm (F2-6's layout; there is no
+ * F1-5 board), then Home with the "Bought …" toast (F1-6). A Market row opens the stock's sheet
+ * (StockSheets), whose Buy opens this sheet again at the Buy step. More than your cash (decision 1):
+ * Review is blocked and one button takes credit for the other part, so the review becomes one batch:
+ * withdraw savings, take credit, approve, swap.
  */
 export function BuySheet({
-  open, user, data, symbol: initial, onClose,
+  open, user, data, symbol: initial, onClose, onStock, onBack,
 }: {
   open: boolean;
   user: `0x${string}`;
@@ -51,9 +52,13 @@ export function BuySheet({
   /** Open at this stock's Buy step (resolved through the registry only); the Market list otherwise. */
   symbol: string | null;
   onClose: () => void;
+  /** A Market row: open that stock's sheet. */
+  onStock: (symbol: string) => void;
+  /** Opened from the stock's sheet: Back on the Buy step returns there. The Market otherwise. */
+  onBack?: () => void;
 }) {
   const { isConnected } = useAccount();
-  const [symbol, setSymbol] = useState(() => EQUITIES.find((e) => e.symbol === initial)?.symbol ?? null);
+  const symbol = EQUITIES.find((e) => e.symbol === initial)?.symbol ?? null;
   const [step, setStep] = useState<Step>(symbol ? "amount" : "market");
   const [direction, setDirection] = useState<"forward" | "back">("forward");
   const [raw, setRaw] = useState("");
@@ -105,13 +110,11 @@ export function BuySheet({
         ? "Stock markets are closed. You can still buy, but the price can jump when they reopen."
         : null);
 
-  const pick = (next: string) => {
-    if (next !== symbol) setRaw("");
-    setSymbol(next);
-    go("amount");
-  };
   const back = () => {
-    if (step === "amount") go("market");
+    if (step === "amount") {
+      if (onBack) onBack();
+      else go("market");
+    }
     else if (busy) onClose();
     else {
       if (phase === "failed") reset();
@@ -142,7 +145,7 @@ export function BuySheet({
                 name={h.name}
                 priceUsd={h.priceUsd}
                 ownedUsd={h.freeRaw + h.lockedRaw > 0n ? h.freeUsd + h.lockedUsd : 0}
-                onClick={() => pick(h.symbol)}
+                onClick={() => onStock(h.symbol)}
               />
             ))}
           </MarketList>
