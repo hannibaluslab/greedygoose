@@ -70,7 +70,7 @@ export function AttentionCard({ card, onRenew }: { card: AgentCard; onRenew: (ag
     );
   const single = card.actions.length === 1 && card.actions[0].kind === "renew";
   return (
-    <section aria-label={`${card.agent} needs you`} className={`flex flex-col gap-3 rounded-[22px] p-3.5 ${TONE[card.tone]}`}>
+    <section aria-label={`From ${card.agent}`} className={`flex flex-col gap-3 rounded-[22px] p-3.5 ${TONE[card.tone]}`}>
       <div className="flex items-center gap-2.5">
         <AgentMark agent={card.agent} size={32} />
         <div className="flex min-w-0 grow flex-col gap-0.5">
