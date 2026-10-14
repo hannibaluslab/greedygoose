@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { encodeAbiParameters, encodeEventTopics, erc20Abi, getAbiItem, type Log } from "viem";
+import { detailMoves } from "@/components/gg/Activity";
 import { decodeActivity } from "@/lib/activity/decode";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
+import { GUARDIAN } from "@/lib/guardian/config";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
 type Address = `0x${string}`;
@@ -19,6 +21,12 @@ const withdrawEvent = (who: Address, amount: bigint) => {
   const ev = getAbiItem({ abi: spokeAbi, name: "Withdraw" });
   const topics = encodeEventTopics({ abi: [ev], eventName: "Withdraw", args: { reserveId: BigInt(nvda.reserveId), caller: who, user: who } });
   return log(AAVE.SPOKE, topics, encodeAbiParameters([{ type: "uint256" }, { type: "uint256" }], [amount, amount]));
+};
+const repayEvent = (who: Address, amount: bigint) => {
+  const ev = getAbiItem({ abi: spokeAbi, name: "Repay" });
+  const topics = encodeEventTopics({ abi: [ev], eventName: "Repay", args: { reserveId: BigInt(USDC.reserveId), caller: who, user: who } });
+  const premium = { type: "tuple", components: [{ type: "int256" }, { type: "int256" }, { type: "uint256" }] } as const;
+  return log(AAVE.SPOKE, topics, encodeAbiParameters([{ type: "uint256" }, { type: "uint256" }, premium], [amount, amount, [0n, 0n, 0n]]));
 };
 
 describe("decodeActivity: sales", () => {
@@ -51,5 +59,57 @@ describe("decodeActivity: sales", () => {
   it("another account's sale in the same bundle isn't the user's", () => {
     const logs = [transfer(nvda.address, other, pool, 2_000_000n), transfer(USDC.address, pool, other, 4_580_000n)];
     expect(decodeActivity(logs, user)).toEqual([]);
+  });
+});
+
+describe("decodeActivity: a savings withdrawal paying for the move (D15)", () => {
+  // Aave V3 sends the USDC from the aToken contract to the account; the fee buffer stays behind in the wallet.
+  const fromSavings = (raw: bigint, to: Address = user) => transfer(USDC.address, GUARDIAN.AUSDC, to, raw);
+
+  it("a repay from savings is one repay, with what came out of savings on it", () => {
+    const logs = [fromSavings(10_500_000n), repayEvent(user, 10_000_000n), transfer(USDC.address, user, AAVE.HUB, 10_000_000n)];
+    expect(decodeActivity(logs, user)).toEqual([{ kind: "repay", symbol: "USDC", amount: 10, fromSavingsUsd: 10.5 }]);
+  });
+
+  it("a buy from savings is one buy, paid what the swap took", () => {
+    const logs = [fromSavings(1_500_000n), transfer(USDC.address, user, pool, 1_000_000n), transfer(nvda.address, pool, user, 436_000n)];
+    expect(decodeActivity(logs, user)).toEqual([{ kind: "buy", symbol: "NVDAc", amount: 0.00436, paidUsd: 1, fromSavingsUsd: 1.5 }]);
+  });
+
+  it("a Credit Buy whose cash part came from savings keeps it on the buy", () => {
+    const borrow = getAbiItem({ abi: spokeAbi, name: "Borrow" });
+    const borrowLog = log(
+      AAVE.SPOKE,
+      encodeEventTopics({ abi: [borrow], eventName: "Borrow", args: { reserveId: BigInt(USDC.reserveId), caller: user, user } }),
+      encodeAbiParameters([{ type: "uint256" }, { type: "uint256" }], [200_000_000n, 200_000_000n]),
+    );
+    const logs = [
+      fromSavings(100_500_000n),
+      borrowLog,
+      transfer(USDC.address, AAVE.HUB, user, 200_000_000n),
+      transfer(USDC.address, user, pool, 300_000_000n),
+      transfer(nvda.address, pool, user, 130_000_000n),
+    ];
+    const items = decodeActivity(logs, user);
+    expect(items.map((i) => i.kind)).toEqual(["borrow", "buy"]);
+    expect(items[1]).toMatchObject({ kind: "buy", paidUsd: 300, fromSavingsUsd: 100.5 });
+  });
+
+  it("a withdrawal on its own is still a move out of savings", () => {
+    expect(decodeActivity([fromSavings(5_000_000n)], user)).toEqual([{ kind: "unsave", symbol: "USDC", amount: 5 }]);
+  });
+
+  it("another account's withdrawal in the same bundle isn't the user's", () => {
+    const logs = [fromSavings(5_000_000n, other), repayEvent(user, 1_000_000n)];
+    expect(decodeActivity(logs, user)).toEqual([{ kind: "repay", symbol: "USDC", amount: 1 }]);
+  });
+});
+
+describe("detailMoves (a row's details)", () => {
+  it("lists the withdrawal after the move it paid for, and leaves other moves alone", () => {
+    const repay = { kind: "repay" as const, symbol: "USDC", amount: 10, fromSavingsUsd: 10.5 };
+    const supply = { kind: "supply" as const, symbol: "NVDAc", amount: 0.1 };
+    expect(detailMoves([repay])).toEqual([repay, { kind: "unsave", symbol: "USDC", amount: 10.5 }]);
+    expect(detailMoves([supply])).toEqual([supply]);
   });
 });

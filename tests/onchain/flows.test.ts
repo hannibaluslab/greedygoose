@@ -12,6 +12,7 @@ import { buildBorrowCalls, buildLoanCalls, buildRepayCalls, buildSupplyCalls, bu
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { AAVE } from "@/lib/aave/addresses";
 import { CASH_STUCK, explainRevert } from "@/lib/aave/errors";
+import { decodeActivity } from "@/lib/activity/decode";
 import { cashRaw, cashShort, payFromCash, readCash, type Cash } from "@/lib/cash";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { buildWithdrawSavingsCalls } from "@/lib/guardian/permission";
@@ -121,6 +122,8 @@ describe("savings-first batches from a $0 wallet", () => {
     return {
       statuses: r.results.slice(0, -1).map((x) => x.status),
       walletAfter: decodeFunctionResult({ abi: erc20Abi, functionName: "balanceOf", data: r.results.at(-1)!.data }),
+      /** What Activity shows for it: the batch's events, as its receipt would carry them. */
+      activity: decodeActivity(r.results.flatMap((x) => x.logs ?? []), user),
     };
   }
 
@@ -150,6 +153,10 @@ describe("savings-first batches from a $0 wallet", () => {
     const r = await simulateFromEmptyWallet(calls);
     expect(r.statuses).toEqual(["success", "success", "success"]);
     expect(r.walletAfter).toBe(feeBuffer);
+    // One Activity row: the buy, with the savings withdrawal that paid for it on it, not a move of its own.
+    expect(r.activity).toEqual([
+      { kind: "buy", symbol: "NVDAc", amount: Number(quote.amountOut) / 1e8, paidUsd: 1, fromSavingsUsd: 1 + CASH.feeBufferUsd },
+    ]);
   });
 
   it("repay $1: withdraw from savings → approve → repay, fee buffer left in the wallet", async () => {
@@ -162,6 +169,9 @@ describe("savings-first batches from a $0 wallet", () => {
     const r = await simulateFromEmptyWallet(calls);
     expect(r.statuses).toEqual(["success", "success", "success"]);
     expect(r.walletAfter).toBe(feeBuffer);
+    expect(r.activity).toEqual([
+      { kind: "repay", symbol: "USDC", amount: Number(amountRaw) / 1e6, fromSavingsUsd: Number(amountRaw + feeBuffer) / 1e6 },
+    ]);
   });
 
   it("a withdrawal savings can't serve reads as cash that can't move right now", async () => {

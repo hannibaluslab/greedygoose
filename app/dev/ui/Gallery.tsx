@@ -52,7 +52,8 @@ const MARKET = [
 const HOUR = 3_600_000;
 /** Activity rows the way useActivity hands them over, timed from now so they group under Today and a weekday. */
 const MOVES = (now: number): ActivityRow[] => [
-  { key: "repay", time: now - HOUR, status: "done", items: [{ kind: "repay", symbol: "USDC", amount: 180 }] },
+  // Paid from savings: one row, with the withdrawal under its details.
+  { key: "repay", time: now - HOUR, status: "done", items: [{ kind: "repay", symbol: "USDC", amount: 180, fromSavingsUsd: 180.5 }] },
   { key: "save", time: now - 2 * HOUR, status: "pending", items: [{ kind: "save", symbol: "USDC", amount: 40 }] },
   { key: "buy", time: now - 50 * HOUR, status: "done", items: [{ kind: "buy", symbol: "NVDAc", amount: 0.112, paidUsd: 20 }] },
 ];
