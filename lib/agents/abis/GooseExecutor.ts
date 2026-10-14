@@ -39,6 +39,21 @@ export const gooseExecutorAbi = [
             "internalType": "uint256"
           },
           {
+            "name": "oracle",
+            "type": "address",
+            "internalType": "contract IAaveOracle"
+          },
+          {
+            "name": "router",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "stocks",
+            "type": "address[7]",
+            "internalType": "address[7]"
+          },
+          {
             "name": "capMax",
             "type": "uint160",
             "internalType": "uint160"
@@ -114,6 +129,53 @@ export const gooseExecutorAbi = [
                 "name": "maxSavesPerDay",
                 "type": "uint8",
                 "internalType": "uint8"
+              }
+            ]
+          },
+          {
+            "name": "sellLimits",
+            "type": "tuple",
+            "internalType": "struct SellLimits",
+            "components": [
+              {
+                "name": "headsUpHf",
+                "type": "uint64",
+                "internalType": "uint64"
+              },
+              {
+                "name": "nowHf",
+                "type": "uint64",
+                "internalType": "uint64"
+              },
+              {
+                "name": "targetHf",
+                "type": "uint64",
+                "internalType": "uint64"
+              },
+              {
+                "name": "headsUpDelay",
+                "type": "uint32",
+                "internalType": "uint32"
+              },
+              {
+                "name": "floorBps",
+                "type": "uint16",
+                "internalType": "uint16"
+              },
+              {
+                "name": "actFloorBps",
+                "type": "uint16",
+                "internalType": "uint16"
+              },
+              {
+                "name": "poolCap",
+                "type": "uint64",
+                "internalType": "uint64"
+              },
+              {
+                "name": "maxSlice",
+                "type": "uint64",
+                "internalType": "uint64"
               }
             ]
           }
@@ -215,6 +277,19 @@ export const gooseExecutorAbi = [
   },
   {
     "type": "function",
+    "name": "ORACLE",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract IAaveOracle"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "PAGE_SIZE",
     "inputs": [],
     "outputs": [
@@ -222,6 +297,19 @@ export const gooseExecutorAbi = [
         "name": "",
         "type": "uint32",
         "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "ROUTER",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "stateMutability": "view"
@@ -305,6 +393,16 @@ export const gooseExecutorAbi = [
         "name": "savesToday",
         "type": "uint8",
         "internalType": "uint8"
+      },
+      {
+        "name": "headsUpAt",
+        "type": "uint48",
+        "internalType": "uint48"
+      },
+      {
+        "name": "keepMix",
+        "type": "bool",
+        "internalType": "bool"
       }
     ],
     "stateMutability": "view"
@@ -910,7 +1008,7 @@ export const gooseExecutorAbi = [
           {
             "name": "reason",
             "type": "uint8",
-            "internalType": "enum ProtectCase"
+            "internalType": "uint8"
           },
           {
             "name": "off",
@@ -918,6 +1016,30 @@ export const gooseExecutorAbi = [
             "internalType": "enum GooseExecutor.OffReason"
           }
         ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pools",
+    "inputs": [
+      {
+        "name": "reserveId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "start",
+        "type": "uint48",
+        "internalType": "uint48"
+      },
+      {
+        "name": "sold",
+        "type": "uint208",
+        "internalType": "uint208"
       }
     ],
     "stateMutability": "view"
@@ -1021,6 +1143,11 @@ export const gooseExecutorAbi = [
         "name": "cap",
         "type": "uint160",
         "internalType": "uint160"
+      },
+      {
+        "name": "t",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [],
@@ -1049,13 +1176,98 @@ export const gooseExecutorAbi = [
         "internalType": "address"
       },
       {
+        "name": "frozen_",
+        "type": "bool",
+        "internalType": "bool"
+      },
+      {
         "name": "preFreeze",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "deferred",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "sellLimits",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "headsUpHf",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "nowHf",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "targetHf",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "headsUpDelay",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "floorBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "actFloorBps",
+        "type": "uint16",
+        "internalType": "uint16"
+      },
+      {
+        "name": "poolCap",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "maxSlice",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "setKeepMix",
+    "inputs": [
+      {
+        "name": "on",
         "type": "bool",
         "internalType": "bool"
       }
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "stocks",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address[7]",
+        "internalType": "address[7]"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -1276,6 +1488,25 @@ export const gooseExecutorAbi = [
   },
   {
     "type": "event",
+    "name": "KeepMixSet",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "on",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "OwnerSet",
     "inputs": [
       {
@@ -1352,6 +1583,49 @@ export const gooseExecutorAbi = [
   },
   {
     "type": "event",
+    "name": "ProtectSold",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "shares",
+        "type": "uint256[7]",
+        "indexed": false,
+        "internalType": "uint256[7]"
+      },
+      {
+        "name": "repaid",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "hfBefore",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "hfAfter",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "atOnce",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "RunDeferred",
     "inputs": [
       {
@@ -1408,6 +1682,56 @@ export const gooseExecutorAbi = [
     "anonymous": false
   },
   {
+    "type": "event",
+    "name": "SellHeadsUp",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "hf",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "sellValue",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "sellAfter",
+        "type": "uint48",
+        "indexed": false,
+        "internalType": "uint48"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "SellHeadsUpCleared",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "hf",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
     "type": "error",
     "name": "AccountNotAllowed",
     "inputs": []
@@ -1415,6 +1739,16 @@ export const gooseExecutorAbi = [
   {
     "type": "error",
     "name": "AlreadyBootstrapped",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "BackingMoved",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "BadTerms",
     "inputs": []
   },
   {
@@ -1445,6 +1779,11 @@ export const gooseExecutorAbi = [
   {
     "type": "error",
     "name": "HealthLower",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "HealthNotHigher",
     "inputs": []
   },
   {
@@ -1515,6 +1854,11 @@ export const gooseExecutorAbi = [
   {
     "type": "error",
     "name": "StillOn",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "StockMoved",
     "inputs": []
   },
   {

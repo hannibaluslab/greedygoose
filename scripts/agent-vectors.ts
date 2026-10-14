@@ -9,12 +9,12 @@
  */
 import { writeFileSync } from "node:fs";
 import { encodeAbiParameters, hashTypedData, keccak256, parseUnits, toHex, type Address } from "viem";
-import { CASH, CASH_AGENT } from "@/config/risk";
+import { CASH, CASH_AGENT, PROTECT_SELL } from "@/config/risk";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { inWeekendWindow, planGuardian, planSave } from "@/lib/guardian/plan";
 import { planSell, sellAmounts, sellTiming, type SellBook } from "@/lib/guardian/sell";
 import { marketState } from "@/lib/market-hours";
-import { agentPermission, JOBS } from "@/lib/agents/permissions";
+import { agentPermission, JOBS, sellPermission, STOCK_LIMIT_UNIT, type StockLimits } from "@/lib/agents/permissions";
 
 const WAD = 10n ** 18n;
 const RAY = 10n ** 27n;
@@ -162,6 +162,25 @@ export function hashInput(i: number) {
   };
 }
 
+/** Protect · sell hash inputs: a hash input plus a daily limit per stock, a third of them never-sell, at least one
+ *  for sale. Mirrors Vectors.sellHashInput. */
+export function sellHashInput(i: number) {
+  const r = (f: number) => rand("sell-hash", i, f);
+  const first = Number(r(6) % 7n);
+  const limitsRaw: StockLimits = Array.from({ length: 7 }, (_, k) =>
+    k !== first && r(7 + k) % 3n === 0n ? 0n : (1n + (r(14 + k) % 1_000_000n)) * STOCK_LIMIT_UNIT,
+  );
+  const start = 1_700_000_000n + (r(2) % 300_000_000n);
+  return {
+    account: toHex(r(1) % 2n ** 160n, { size: 20 }) as Address,
+    start,
+    end: start + 1n + (r(3) % 400_000_000n),
+    salt: r(4),
+    cap: 1n + (r(5) % 5_000_000n),
+    limitsRaw,
+  };
+}
+
 function protectVectors() {
   const kinds: number[] = [];
   const checkKind: number[] = [];
@@ -257,43 +276,54 @@ function sellVectors() {
   return { amounts, counts: hex(counts), reserves: hex(reserves), shares, minOuts, timings: hex(timings) };
 }
 
-/** The manager's EIP-712 hash (getHash) of the permission JAW grants for each input. */
+/** The manager's EIP-712 hash (getHash) of a permission, as `getHash` computes it on Base. */
+function managerHash(p: ReturnType<typeof agentPermission>) {
+  return hashTypedData({
+    domain: { name: "JustaPermissionManager", version: "1", chainId: 8453, verifyingContract: GUARDIAN.PERMISSION_MANAGER },
+    types: {
+      Permission: [
+        { name: "account", type: "address" },
+        { name: "spender", type: "address" },
+        { name: "start", type: "uint48" },
+        { name: "end", type: "uint48" },
+        { name: "salt", type: "uint256" },
+        { name: "calls", type: "CallPermission[]" },
+        { name: "spends", type: "SpendLimit[]" },
+      ],
+      CallPermission: [
+        { name: "target", type: "address" },
+        { name: "selector", type: "bytes4" },
+        { name: "checker", type: "address" },
+      ],
+      SpendLimit: [
+        { name: "token", type: "address" },
+        { name: "allowance", type: "uint160" },
+        { name: "unit", type: "uint8" },
+        { name: "multiplier", type: "uint16" },
+      ],
+    },
+    primaryType: "Permission",
+    message: p,
+  });
+}
+
+/** The manager's hash of the permission JAW grants for each input, for the Cash jobs and for Protect · sell. */
 function hashVectors() {
   const hashes = [];
   for (let i = 0; i < HASH_COUNT; i++) {
     const v = hashInput(i);
-    const p = agentPermission(v.job, { account: v.account, spender: HASH_SPENDER, start: Number(v.start), end: Number(v.end), salt: v.salt, capRaw: v.cap });
-    hashes.push(
-      hashTypedData({
-        domain: { name: "JustaPermissionManager", version: "1", chainId: 8453, verifyingContract: GUARDIAN.PERMISSION_MANAGER },
-        types: {
-          Permission: [
-            { name: "account", type: "address" },
-            { name: "spender", type: "address" },
-            { name: "start", type: "uint48" },
-            { name: "end", type: "uint48" },
-            { name: "salt", type: "uint256" },
-            { name: "calls", type: "CallPermission[]" },
-            { name: "spends", type: "SpendLimit[]" },
-          ],
-          CallPermission: [
-            { name: "target", type: "address" },
-            { name: "selector", type: "bytes4" },
-            { name: "checker", type: "address" },
-          ],
-          SpendLimit: [
-            { name: "token", type: "address" },
-            { name: "allowance", type: "uint160" },
-            { name: "unit", type: "uint8" },
-            { name: "multiplier", type: "uint16" },
-          ],
-        },
-        primaryType: "Permission",
-        message: p,
-      }),
+    hashes.push(managerHash(agentPermission(v.job, { account: v.account, spender: HASH_SPENDER, start: Number(v.start), end: Number(v.end), salt: v.salt, capRaw: v.cap })));
+  }
+  const sellHashes = [];
+  for (let i = 0; i < HASH_COUNT; i++) {
+    const v = sellHashInput(i);
+    sellHashes.push(
+      managerHash(
+        sellPermission({ account: v.account, spender: HASH_SPENDER, start: Number(v.start), end: Number(v.end), salt: v.salt, capRaw: v.cap, limitsRaw: v.limitsRaw }),
+      ),
     );
   }
-  return { spender: HASH_SPENDER, hashes };
+  return { spender: HASH_SPENDER, hashes, sellHashes };
 }
 
 /** config/risk.ts in on-chain units: the executor's deploy defaults must match. */
@@ -310,6 +340,16 @@ function defaultsVector() {
     keepBack: usdc(CASH.keepBackUsd),
     weekendWindow: CASH_AGENT.weekendWindowSec.toString(),
     maxSavesPerDay: CASH_AGENT.maxSavesPerDay.toString(),
+    sell: {
+      headsUpHf: wad(PROTECT_SELL.headsUpHf),
+      nowHf: wad(PROTECT_SELL.nowHf),
+      targetHf: wad(PROTECT_SELL.targetHf),
+      headsUpDelay: PROTECT_SELL.headsUpDelaySec.toString(),
+      floorBps: PROTECT_SELL.floorBps.toString(),
+      actFloorBps: PROTECT_SELL.actFloorBps.toString(),
+      poolCap: usdc(PROTECT_SELL.poolCapUsd),
+      maxSlice: usdc(PROTECT_SELL.maxSliceUsd),
+    },
   };
 }
 

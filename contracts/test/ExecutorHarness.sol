@@ -8,16 +8,16 @@ import {IJustaPermissionManager as PM} from "../src/IJustaPermissionManager.sol"
 contract ExecutorHarness is GooseExecutor {
     constructor(Config memory c) GooseExecutor(c) {}
 
-    function permissionFor(Job job, address account, Grant memory g, uint256 salt)
+    function permissionFor(Job job, address account, Grant memory g, uint256 salt, uint256 t)
         external
         view
         returns (PM.Permission memory)
     {
-        return _permission(job, account, g, salt);
+        return _permission(job, account, g, salt, t);
     }
 
-    function preFreeze(uint256 ts) external view returns (bool) {
-        return _preFreeze(ts);
+    function preFreeze(uint256 ts) external view returns (bool preFreeze_) {
+        (, preFreeze_) = _clock(ts);
     }
 
     /// Skips the 7-day queue, for calendar tests only.

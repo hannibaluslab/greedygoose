@@ -14,11 +14,13 @@ import {JobBase} from "./JobBase.sol";
 /// @dev A linked library: its code runs as GooseExecutor, the spender, exactly as if it were inlined there.
 library SaveJob {
     /// The template the user approved: approve USDC, supply it to savings.
-    function permission(GooseExecutor.Env memory e, address account, GooseExecutor.Grant memory g, uint256 salt)
-        public
-        view
-        returns (PM.Permission memory p)
-    {
+    function permission(
+        GooseExecutor.Env memory e,
+        address account,
+        GooseExecutor.Grant memory g,
+        uint256 salt,
+        uint256 // no terms
+    ) public view returns (PM.Permission memory p) {
         p.account = account;
         p.spender = address(this); // the executor: this code runs in its context
         p.start = g.start;
@@ -34,28 +36,24 @@ library SaveJob {
     /// What a run would do now: save, prune a dead permission, or nothing.
     function plan(
         GooseExecutor.Env memory e,
-        address account,
-        GooseExecutor.Grant memory g,
-        uint256 salt,
-        Amounts memory a,
-        GooseExecutor.Account memory acc
-    ) public view returns (GooseExecutor.Plan memory p) {
-        return _plan(e, account, permission(e, account, g, salt), a, _savesToday(acc));
+        GooseExecutor.Ctx memory c,
+        GooseExecutor.Account storage acc,
+        mapping(uint256 => GooseExecutor.PoolUse) storage
+    ) public view returns (GooseExecutor.Plan memory) {
+        return _plan(e, c, permission(e, c.account, c.grant, c.salt, 0), _savesToday(acc));
     }
 
     /// Plans, and saves when there is something to save. Counts the save against today's number.
     function run(
         GooseExecutor.Env memory e,
+        GooseExecutor.Ctx memory c,
         GooseExecutor.Account storage acc,
-        address account,
-        GooseExecutor.Grant memory g,
-        uint256 salt,
-        Amounts memory a
+        mapping(uint256 => GooseExecutor.PoolUse) storage
     ) external returns (GooseExecutor.Plan memory p) {
-        PM.Permission memory perm = permission(e, account, g, salt);
-        p = _plan(e, account, perm, a, _savesToday(acc));
+        PM.Permission memory perm = permission(e, c.account, c.grant, c.salt, 0);
+        p = _plan(e, c, perm, _savesToday(acc));
         if (p.action != GooseExecutor.Action.Save) return p;
-        _save(e, account, perm, p.amount);
+        _save(e, c.account, perm, p.amount);
         uint32 today = uint32(NyCalendar.day(block.timestamp));
         if (acc.savesDay != today) {
             acc.savesDay = today;
@@ -66,17 +64,17 @@ library SaveJob {
 
     function _plan(
         GooseExecutor.Env memory e,
-        address account,
+        GooseExecutor.Ctx memory c,
         PM.Permission memory perm,
-        Amounts memory a,
         uint256 savesToday
     ) internal view returns (GooseExecutor.Plan memory p) {
         p.job = GooseExecutor.Job.Save;
-        uint256 cash = e.usdc.balanceOf(account);
+        Amounts memory a = c.amounts;
+        uint256 cash = e.usdc.balanceOf(c.account);
         if (cash < uint256(a.keepBack) + a.minSave) return p;
-        SaveCase c;
-        (c, p.amount) = CashRules.planSave(cash, JobBase.capLeft(e.manager, perm, 0), savesToday, a);
-        if (c != SaveCase.Save) return p;
+        SaveCase kind;
+        (kind, p.amount) = CashRules.planSave(cash, JobBase.capLeft(e.manager, perm, 0), savesToday, a);
+        if (kind != SaveCase.Save) return p;
         (bool alive, GooseExecutor.OffReason off) = JobBase.alive(e.manager, perm);
         if (!alive) {
             p.action = GooseExecutor.Action.Prune;
@@ -87,7 +85,7 @@ library SaveJob {
         p.action = GooseExecutor.Action.Save;
     }
 
-    function _savesToday(GooseExecutor.Account memory acc) internal view returns (uint256) {
+    function _savesToday(GooseExecutor.Account storage acc) internal view returns (uint256) {
         return acc.savesDay == NyCalendar.day(block.timestamp) ? acc.savesToday : 0;
     }
 

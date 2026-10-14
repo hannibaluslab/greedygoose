@@ -45,7 +45,7 @@ abstract contract ExecutorForkBase is ForkBase {
     function _permission(address account, GooseExecutor.Job job, uint160 cap) internal returns (PM.Permission memory) {
         uint48 start = uint48(vm.getBlockTimestamp());
         return x.permissionFor(
-            job, account, GooseExecutor.Grant(start, start + 365 days, cap), uint256(keccak256(abi.encode(++salts)))
+            job, account, GooseExecutor.Grant(start, start + 365 days, cap), uint256(keccak256(abi.encode(++salts))), 0
         );
     }
 
@@ -56,7 +56,7 @@ abstract contract ExecutorForkBase is ForkBase {
     }
 
     function _register(GooseExecutor.Job job, PM.Permission memory p, uint160 cap) internal {
-        x.register(job, p.account, p.start, p.end, p.salt, cap);
+        x.register(job, p.account, p.start, p.end, p.salt, cap, 0);
     }
 
     /// $100 of savings and a loan at health 1.30, with Protect on.
@@ -75,6 +75,19 @@ abstract contract ExecutorForkBase is ForkBase {
         vm.prank(fake);
         MANAGER.approve(p);
         _register(GooseExecutor.Job.Protect, p, 1_000e6);
+    }
+
+    /// Protect · sell on for every stock, with a daily limit of a hundredth of a share each.
+    function _turnOnSell(address account) internal {
+        uint256 t;
+        for (uint256 r; r < 7; ++r) {
+            t |= uint256(100) << (32 * r);
+        }
+        uint48 start = uint48(vm.getBlockTimestamp());
+        GooseExecutor.Grant memory g = GooseExecutor.Grant(start, start + 365 days, 5e6);
+        uint256 salt = uint256(keccak256(abi.encode(++salts)));
+        _grantThroughAccount(x.permissionFor(GooseExecutor.Job.ProtectSell, account, g, salt, t));
+        x.register(GooseExecutor.Job.ProtectSell, account, g.start, g.end, salt, g.cap, t);
     }
 
     function _withSavings(address account, uint256 amount) internal {
@@ -265,7 +278,8 @@ contract GooseExecutorForkTest is ExecutorForkBase {
         address alice = _newJawAccount("alice");
         PM.Permission memory p = _permission(alice, GooseExecutor.Job.Protect, 5e6);
         bytes memory forged = abi.encode(
-            GooseExecutor.Mode.Register, abi.encode(GooseExecutor.Job.Protect, alice, p.start, p.end, p.salt, uint160(5e6))
+            GooseExecutor.Mode.Register,
+            abi.encode(GooseExecutor.Job.Protect, alice, p.start, p.end, p.salt, uint160(5e6), uint256(0))
         );
         vm.prank(forwarder);
         vm.expectRevert(GooseExecutor.NotApproved.selector);
@@ -281,17 +295,33 @@ contract GooseExecutorForkTest is ExecutorForkBase {
     }
 
     /// GooseExecutor.md §3: the app's grant (lib/agents/permissions.ts, hashed in scripts/agent-vectors.ts) and the
-    /// executor's template give the same manager hash on 50 random inputs.
+    /// executor's template give the same manager hash on 50 random inputs per kind: the Cash Agent's jobs, and
+    /// Protect · sell with its stock limits.
     function test_templates_hash_like_the_apps_builder() public {
         vm.etch(Vectors.HASH_SPENDER, address(x).code);
         ExecutorHarness h = ExecutorHarness(Vectors.HASH_SPENDER);
-        bytes32[] memory hashes = vm.parseJsonBytes32Array(vm.readFile("test/vectors/permissions.json"), ".hashes");
+        string memory json = vm.readFile("test/vectors/permissions.json");
+        bytes32[] memory hashes = vm.parseJsonBytes32Array(json, ".hashes");
         assertEq(hashes.length, 50);
         for (uint256 i; i < hashes.length; ++i) {
             Vectors.Hash memory v = Vectors.hashInput(i);
-            PM.Permission memory p =
-                h.permissionFor(GooseExecutor.Job(v.job), v.account, GooseExecutor.Grant(v.start, v.end, v.cap), v.salt);
+            PM.Permission memory p = h.permissionFor(
+                GooseExecutor.Job(v.job), v.account, GooseExecutor.Grant(v.start, v.end, v.cap), v.salt, 0
+            );
             assertEq(MANAGER.getHash(p), hashes[i], string.concat("vector ", vm.toString(i)));
+        }
+        bytes32[] memory sellHashes = vm.parseJsonBytes32Array(json, ".sellHashes");
+        assertEq(sellHashes.length, 50);
+        for (uint256 i; i < sellHashes.length; ++i) {
+            Vectors.SellHash memory v = Vectors.sellHashInput(i);
+            uint256 t;
+            for (uint256 r; r < 7; ++r) {
+                t |= v.limits[r] / 1e4 << (32 * r);
+            }
+            PM.Permission memory p = h.permissionFor(
+                GooseExecutor.Job.ProtectSell, v.account, GooseExecutor.Grant(v.start, v.end, v.cap), v.salt, t
+            );
+            assertEq(MANAGER.getHash(p), sellHashes[i], string.concat("sell vector ", vm.toString(i)));
         }
     }
 
@@ -477,7 +507,7 @@ contract GooseExecutorForkTest is ExecutorForkBase {
         for (uint8 n = 1; n <= 8; ++n) {
             vm.warp(_failOnce(address(fake), n));
         }
-        (uint8 jobs,,,,,) = x.accounts(address(fake));
+        (uint8 jobs,,,,,,,) = x.accounts(address(fake));
         assertEq(jobs, 0, "Stuck after eight");
     }
 
@@ -487,11 +517,11 @@ contract GooseExecutorForkTest is ExecutorForkBase {
         one[0] = fake;
         _run(one);
         uint8 fails;
-        (, , fails, cooldownUntil,,) = x.accounts(fake);
+        (,, fails, cooldownUntil,,,,) = x.accounts(fake);
         assertEq(fails, n);
         assertEq(cooldownUntil, vm.getBlockTimestamp() + (10 minutes << (n - 1)));
         _run(one);
-        (, , fails,,,) = x.accounts(fake);
+        (,, fails,,,,,) = x.accounts(fake);
         assertEq(fails, n, "skipped while cooling down, not a failure");
     }
 
@@ -536,10 +566,10 @@ contract GooseExecutorForkTest is ExecutorForkBase {
     }
 }
 
-
 /// The deploy's PAGE_SIZE holds: a full page of the costliest accounts that need nothing checks in under 8.5M gas.
 /// Each is in Watch with savings too small to repay from, so Protect pays for every read (debt, account data, savings,
-/// both limits) and finds no move; Save is on with nothing above the keep-back. The page is built in setUp, which
+/// both limits) and finds no move; Protect · sell is on for all seven stocks and waits, above the heads-up line, on the
+/// health Protect read; Save is on with nothing above the keep-back. The page is built in setUp, which
 /// forge runs as its own transaction, so the check pays cold storage, as a real one does. The next page comes up on the
 /// next block, and a second shard owns it alone.
 contract ExecutorPageForkTest is ExecutorForkBase {
@@ -560,6 +590,7 @@ contract ExecutorPageForkTest is ExecutorForkBase {
             USDC.transfer(attacker, drawn); // the credit leaves the wallet
             _turnOn(a, GooseExecutor.Job.Protect, 5e6);
             _turnOn(a, GooseExecutor.Job.Save, 5e6);
+            _turnOnSell(a);
         }
         nextPage = _inWatch("next page");
         vm.roll(vm.getBlockNumber() + vm.getBlockNumber() % 2); // even: shard 0 of 1 scans page 0

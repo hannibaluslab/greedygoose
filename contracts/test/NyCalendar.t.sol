@@ -4,7 +4,7 @@ pragma solidity 0.8.28;
 import {Test} from "forge-std/Test.sol";
 import {GooseExecutor} from "../src/GooseExecutor.sol";
 import {IJustaPermissionManager} from "../src/IJustaPermissionManager.sol";
-import {IAaveV3Pool, IERC20, ISpoke} from "../src/IProtocols.sol";
+import {IAaveOracle, IAaveV3Pool, IERC20, ISpoke} from "../src/IProtocols.sol";
 import {NyCalendar} from "../src/NyCalendar.sol";
 import {DeployExecutor} from "../script/DeployExecutor.s.sol";
 import {ExecutorHarness} from "./ExecutorHarness.sol";
@@ -33,12 +33,16 @@ contract NyCalendarTest is Test {
                 usdc: IERC20(makeAddr("usdc")),
                 aUsdc: IERC20(makeAddr("ausdc")),
                 usdcReserveId: 7,
+                oracle: IAaveOracle(makeAddr("oracle")),
+                router: makeAddr("router"),
+                stocks: d.baseStocks(),
                 capMax: 5e6,
                 pageSize: 48,
                 owner: address(this),
                 codehashes: none,
                 thresholds: d.thresholds(),
-                amounts: d.amounts()
+                amounts: d.amounts(),
+                sellLimits: d.sellLimits()
             })
         );
     }

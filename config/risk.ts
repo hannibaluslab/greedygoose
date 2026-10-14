@@ -35,6 +35,26 @@ export const CASH_AGENT = {
 } as const;
 
 /**
+ * Protect · sell's numbers (D18): when savings can't keep the credit Safe, Protect sells backing stock. Locked with
+ * Adrian on 2026-10-13 (plan item 1): a heads-up below 1.25 on a weekday and the sale 30 minutes later, at once below
+ * 1.10, back to 1.4. The floors and the pool numbers follow the expert panel (eval/protect-panel.json): 1% under Aave's
+ * price normally, 3% in Act, about 2% of a pool's USDC depth per 10 minutes, and each swap near 1% of it (the
+ * Aerodrome pools hold $0.44M–1.57M, 2026-10-14). All wait on calibration (plan item 6 step 9). GooseExecutor holds
+ * the live values within hard bounds (contracts/src/SellRules.sol); a change waits the public 7-day delay.
+ */
+export const PROTECT_SELL = {
+  headsUpHf: 1.25,
+  nowHf: RISK.watchMin,
+  targetHf: 1.4,
+  headsUpDelaySec: 30 * 60,
+  floorBps: 100,
+  actFloorBps: 300,
+  /** All accounts together, into one stock's pool, per 10 minutes. */
+  poolCapUsd: 10_000,
+  maxSliceUsd: 5_000,
+} as const;
+
+/**
  * Savings-first spending (D15): a buy or repay takes what it needs from savings in the same batch.
  * Cautious defaults. M0's real $0-wallet test (plan item 1 step 0) settles both numbers.
  */

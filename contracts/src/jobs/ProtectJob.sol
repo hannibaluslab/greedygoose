@@ -4,7 +4,7 @@ pragma solidity 0.8.28;
 import {GooseExecutor} from "../GooseExecutor.sol";
 import {IJustaPermissionManager as PM} from "../IJustaPermissionManager.sol";
 import {IAaveV3Pool, IERC20, ISpoke} from "../IProtocols.sol";
-import {CashRules, ProtectCase, Thresholds} from "../CashRules.sol";
+import {CashRules, ProtectCase} from "../CashRules.sol";
 import {JobBase} from "./JobBase.sol";
 
 /// @title ProtectJob
@@ -14,11 +14,13 @@ import {JobBase} from "./JobBase.sol";
 library ProtectJob {
     /// The template the user approved: withdraw savings, approve USDC, repay. Both daily limits use the one cap:
     /// without the aUSDC one, a withdrawal of savings to someone else would be charged nothing (MANAGER-NOTES §1).
-    function permission(GooseExecutor.Env memory e, address account, GooseExecutor.Grant memory g, uint256 salt)
-        public
-        view
-        returns (PM.Permission memory p)
-    {
+    function permission(
+        GooseExecutor.Env memory e,
+        address account,
+        GooseExecutor.Grant memory g,
+        uint256 salt,
+        uint256 // no terms
+    ) public view returns (PM.Permission memory p) {
         p.account = account;
         p.spender = address(this); // the executor: this code runs in its context
         p.start = g.start;
@@ -36,50 +38,45 @@ library ProtectJob {
     /// What a run would do now: repay, prune a dead permission, or nothing.
     function plan(
         GooseExecutor.Env memory e,
-        address account,
-        GooseExecutor.Grant memory g,
-        uint256 salt,
-        Thresholds memory t,
-        uint256 minRepay,
-        bool preFreeze
-    ) public view returns (GooseExecutor.Plan memory p) {
-        return _plan(e, account, permission(e, account, g, salt), t, minRepay, preFreeze);
+        GooseExecutor.Ctx memory c,
+        GooseExecutor.Account storage,
+        mapping(uint256 => GooseExecutor.PoolUse) storage
+    ) public view returns (GooseExecutor.Plan memory) {
+        return _plan(e, c, permission(e, c.account, c.grant, c.salt, 0));
     }
 
     /// Plans, and repays when there is something to repay.
     function run(
         GooseExecutor.Env memory e,
-        address account,
-        GooseExecutor.Grant memory g,
-        uint256 salt,
-        Thresholds memory t,
-        uint256 minRepay,
-        bool preFreeze
+        GooseExecutor.Ctx memory c,
+        GooseExecutor.Account storage,
+        mapping(uint256 => GooseExecutor.PoolUse) storage
     ) external returns (GooseExecutor.Plan memory p) {
-        PM.Permission memory perm = permission(e, account, g, salt);
-        p = _plan(e, account, perm, t, minRepay, preFreeze);
-        if (p.action == GooseExecutor.Action.Repay) _repay(e, account, perm, p);
+        PM.Permission memory perm = permission(e, c.account, c.grant, c.salt, 0);
+        p = _plan(e, c, perm);
+        if (p.action == GooseExecutor.Action.Repay) _repay(e, c.account, perm, p);
     }
 
     /// A port of planGuardian (lib/guardian/plan.ts:40-78). Cheap reads first: most accounts owe nothing or are
     /// healthy, and the permission's status is only paid for when there is a move to make.
-    function _plan(
-        GooseExecutor.Env memory e,
-        address account,
-        PM.Permission memory perm,
-        Thresholds memory t,
-        uint256 minRepay,
-        bool preFreeze
-    ) internal view returns (GooseExecutor.Plan memory p) {
+    function _plan(GooseExecutor.Env memory e, GooseExecutor.Ctx memory c, PM.Permission memory perm)
+        internal
+        view
+        returns (GooseExecutor.Plan memory p)
+    {
         p.job = GooseExecutor.Job.Protect;
-        if (e.spoke.getUserTotalDebt(e.usdcReserveId, account) == 0) return p;
-        ISpoke.UserAccountData memory d = e.spoke.getUserAccountData(account);
-        (ProtectCase why, uint256 need, uint256 debt) =
-            CashRules.protectNeed(d.totalCollateralValue, d.avgCollateralFactor, d.totalDebtValueRay, preFreeze, t);
+        p.hf = type(uint256).max; // the health is passed on to the next job, so it needn't read it again
+        if (e.spoke.getUserTotalDebt(e.usdcReserveId, c.account) == 0) return p;
+        ISpoke.UserAccountData memory d = e.spoke.getUserAccountData(c.account);
+        p.hf = d.healthFactor;
+        (ProtectCase why, uint256 need, uint256 debt) = CashRules.protectNeed(
+            d.totalCollateralValue, d.avgCollateralFactor, d.totalDebtValueRay, c.preFreeze, c.thresholds
+        );
         if (why < ProtectCase.Watch) return p;
-        uint256 savings = e.aUsdc.balanceOf(account);
+        uint256 savings = e.aUsdc.balanceOf(c.account);
         if (savings == 0) return p; // NoSavings, before paying for the two limit reads
-        (why, p.amount) = CashRules.protectAmount(why, need, debt, savings, _capLeft(e.manager, perm), minRepay);
+        (why, p.amount) =
+            CashRules.protectAmount(why, need, debt, savings, _capLeft(e.manager, perm), c.amounts.minRepay);
         if (why < ProtectCase.Watch) return p;
         (bool alive, GooseExecutor.OffReason off) = JobBase.alive(e.manager, perm);
         if (!alive) {
@@ -89,8 +86,7 @@ library ProtectJob {
             return p;
         }
         p.action = GooseExecutor.Action.Repay;
-        p.reason = why;
-        p.hf = d.healthFactor;
+        p.reason = uint8(why);
     }
 
     /// Protect is charged on both limits: the approve amount in USDC, and the savings' drop in aUSDC, which Aave's
@@ -126,6 +122,6 @@ library ProtectJob {
         }
         // If the debt was smaller than the amount, the spoke took less; the rest stays in the wallet for Save.
         if (e.usdc.balanceOf(account) < cashBefore) revert GooseExecutor.CashLower();
-        emit GooseExecutor.ProtectRepaid(account, p.amount, p.hf, hfAfter, p.reason);
+        emit GooseExecutor.ProtectRepaid(account, p.amount, p.hf, hfAfter, ProtectCase(p.reason));
     }
 }

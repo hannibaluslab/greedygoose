@@ -62,6 +62,15 @@ library Vectors {
         uint32 headsUpDelay;
     }
 
+    struct SellHash {
+        address account;
+        uint48 start;
+        uint48 end;
+        uint256 salt;
+        uint160 cap;
+        uint256[7] limits; // raw shares, by reserve id
+    }
+
     function rand(string memory tag, uint256 i, uint256 field) internal pure returns (uint256) {
         return uint256(keccak256(abi.encode(tag, i, field)));
     }
@@ -154,6 +163,20 @@ library Vectors {
         v.frozen = rand("timing", i, 4) % 4 == 0;
         v.nowHf = uint64(between(rand("timing", i, 5), 1.02e18, v.headsUpHf));
         v.headsUpDelay = uint32(between(rand("timing", i, 6), 600, 7_200));
+    }
+
+    /// A third of the stocks never-sell, at least one for sale.
+    function sellHashInput(uint256 i) internal pure returns (SellHash memory v) {
+        uint256 first = rand("sell-hash", i, 6) % 7;
+        for (uint256 k; k < 7; ++k) {
+            if (k != first && rand("sell-hash", i, 7 + k) % 3 == 0) continue;
+            v.limits[k] = (1 + rand("sell-hash", i, 14 + k) % 1_000_000) * 1e4;
+        }
+        v.account = address(uint160(rand("sell-hash", i, 1)));
+        v.start = uint48(1_700_000_000 + rand("sell-hash", i, 2) % 300_000_000);
+        v.end = v.start + 1 + uint48(rand("sell-hash", i, 3) % 400_000_000);
+        v.salt = rand("sell-hash", i, 4);
+        v.cap = uint160(1 + rand("sell-hash", i, 5) % 5_000_000);
     }
 
     function hashInput(uint256 i) internal pure returns (Hash memory v) {

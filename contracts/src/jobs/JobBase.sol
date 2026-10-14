@@ -31,6 +31,12 @@ library JobBase {
         }
     }
 
+    /// Aave's health factor for the account: the largest number when it owes nothing, without the account-data read.
+    function health(GooseExecutor.Env memory e, address account) internal view returns (uint256) {
+        if (e.spoke.getUserTotalDebt(e.usdcReserveId, account) == 0) return type(uint256).max;
+        return e.spoke.getUserAccountData(account).healthFactor;
+    }
+
     /// What's left of today's limit on spend `i`.
     function capLeft(PM manager, PM.Permission memory perm, uint256 i) internal view returns (uint256) {
         uint256 cap = perm.spends[i].allowance;
