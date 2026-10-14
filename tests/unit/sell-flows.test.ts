@@ -4,7 +4,7 @@ import { CASH } from "@/config/risk";
 import { assertAllowed, swapOf } from "@/lib/allowlist";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
-import { SELL_BLOCKED, buildSaleCalls, planSell, saleActivity, saleRepayRaw, type SellHolding, type SellPosition } from "@/lib/sell";
+import { SELL_BLOCKED, buildSaleCalls, floorPriceUsd, planSell, saleActivity, saleRepayRaw, type SellHolding, type SellPosition } from "@/lib/sell";
 import { minOut } from "@/lib/swap/buy";
 import type { SellQuote } from "@/lib/swap/sell";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
@@ -194,3 +194,21 @@ describe("saleActivity", () => {
   });
 });
 
+
+describe("floorPriceUsd (the review's lowest price)", () => {
+  it("is what the sale pays at least, per share: the quote less 1% when that's over Aave's floor", () => {
+    // 0.4 NVDA for $99.50: at least $98.505, so $246.26 a share (Aave's floor is $225).
+    const p = plan("free", quote);
+    expect(p.minOutRaw).toBe(minOut(usd(99.5)));
+    expect(floorPriceUsd(p, nvda)).toBeCloseTo(98.505 / 0.4, 6);
+  });
+
+  it("is Aave's price less 10% when the pool pays less than that", () => {
+    const thin: SellQuote = { ...quote, amountOut: usd(80) };
+    expect(floorPriceUsd(plan("free", thin), nvda)).toBeCloseTo(price * 0.9, 6);
+  });
+
+  it("is 0 for no shares", () => {
+    expect(floorPriceUsd({ minOutRaw: usd(1), sharesRaw: 0n }, nvda)).toBe(0);
+  });
+});
