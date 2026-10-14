@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { decodeFunctionData, maxUint256, parseUnits } from "viem";
 import { CASH } from "@/config/risk";
-import { maxSpendRaw, payFromCash, savingsWithdrawal } from "@/lib/cash";
+import { cantRepay, maxSpendRaw, payFromCash, savingsWithdrawal } from "@/lib/cash";
 import { buildRepayCalls } from "@/lib/aave/tx";
 import { aaveV3PoolAbi } from "@/lib/guardian/abis";
 import { GUARDIAN } from "@/lib/guardian/config";
@@ -86,5 +86,24 @@ describe("payFromCash", () => {
 
   it("refuses more than the cash can pay", () => {
     expect(() => payFromCash(user, usd(10), { walletRaw: usd(4), savingsRaw: usd(6), saveOn: true }, repay)).toThrow(/More than your cash/);
+  });
+});
+
+describe("cantRepay (the Repay screen with no amount to offer)", () => {
+  it("asks for money when there's no cash", () => {
+    expect(cantRepay({ walletRaw: 0n, savingsRaw: 0n, saveOn: false })).toBe("Add money to your cash to repay.");
+  });
+
+  it("says the fee buffer stays for the network fee when cash is no more than it, in savings or the wallet", () => {
+    const words = `Repaying needs more than $${CASH.feeBufferUsd.toFixed(2)} in your cash: that much stays for the network fee.`;
+    expect(cantRepay({ walletRaw: fee / 2n, savingsRaw: 0n, saveOn: false })).toBe(words);
+    expect(cantRepay({ walletRaw: 0n, savingsRaw: fee, saveOn: true })).toBe(words);
+    expect(maxSpendRaw({ walletRaw: 0n, savingsRaw: fee, saveOn: true })).toBe(0n);
+  });
+
+  it("never says USDC or wallet", () => {
+    for (const c of [{ walletRaw: 0n, savingsRaw: 0n, saveOn: false }, { walletRaw: fee, savingsRaw: 0n, saveOn: false }]) {
+      expect(cantRepay(c)).not.toMatch(/USDC|wallet|account/i);
+    }
   });
 });

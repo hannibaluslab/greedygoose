@@ -3,6 +3,7 @@ import { CASH } from "@/config/risk";
 import { assertAllowed } from "@/lib/allowlist";
 import type { Call } from "@/lib/aave/tx";
 import { buildWithdrawSavingsCalls } from "@/lib/guardian/permission";
+import { formatUsd } from "@/lib/formatting";
 import { USDC } from "@/lib/tokens/registry";
 
 /**
@@ -35,6 +36,16 @@ export function savingsWithdrawal(amountRaw: bigint, c: Cash): { raw: bigint; al
   const need = amountRaw + feeBufferRaw - fromWallet;
   if (need <= 0n || c.savingsRaw === 0n) return null;
   return need < c.savingsRaw ? { raw: need, all: false } : { raw: c.savingsRaw, all: true };
+}
+
+/**
+ * Why the Repay screen offers no amount (maxSpendRaw is 0): there's no cash, or no more than the fee buffer, which
+ * stays for the network fee. Cash counts savings and wallet USDC alike (D15).
+ */
+export function cantRepay(c: Cash): string {
+  return cashRaw(c) === 0n
+    ? "Add money to your cash to repay."
+    : `Repaying needs more than ${formatUsd(CASH.feeBufferUsd)} in your cash: that much stays for the network fee.`;
 }
 
 /**

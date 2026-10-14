@@ -13,7 +13,7 @@ import { useTx } from "@/hooks/useTx";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { buildRepayCalls, fullRepayAmount } from "@/lib/aave/tx";
 import { repayChips } from "@/lib/aave/loan";
-import { maxSpendRaw, payFromCash, toUsd } from "@/lib/cash";
+import { cantRepay, maxSpendRaw, payFromCash, toUsd } from "@/lib/cash";
 import { USDC } from "@/lib/tokens/registry";
 import { StatusBar, StatusPill } from "@/components/gg/Status";
 import { ChevronRight, SlidersIcon } from "@/components/gg/icons";
@@ -103,7 +103,7 @@ function Repay({ address }: { address: `0x${string}` }) {
         {data.debtUsd === 0 ? (
           <p className="m-0 pb-4 text-[15px] text-ink-mid">You don’t owe anything.</p>
         ) : maxRepay === 0 ? (
-          <p className="m-0 pb-4 text-[15px] text-ink-mid">Add money to your cash to repay. <Link href="/receive" className="underline">Add money</Link></p>
+          <p className="m-0 pb-4 text-[15px] text-ink-mid">{cantRepay(data.cash)} <Link href="/receive" className="underline">Add money</Link></p>
         ) : (
           <>
             <div role="radiogroup" aria-label="Amount to repay" className="grid grid-cols-3 gap-2">
