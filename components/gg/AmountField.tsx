@@ -17,16 +17,19 @@ export function amountFontSize(value: string): number {
 
 /**
  * The canvas amount card (F1-4, F2-5): label with the money's source on the right, a round badge,
- * "$" + amount, optional MAX, a hint under it.
+ * "$" + amount, optional MAX, a hint under it. With `unit`, an amount of shares: the ticker after
+ * the number instead of the "$" before it (the stock sheet's sell step).
  */
 export function AmountField({
-  label, source, badge, value, onValue, decimals, onMax, hint, ...rest
+  label, source, badge, unit, value, onValue, decimals, onMax, hint, ...rest
 }: {
   label?: string;
   /** Where the money comes from, top right: an `AmountSource` pill ("Cash", "Against NVIDIA"). */
   source?: ReactNode;
-  /** The 30px round mark before the amount: an `AmountBadge`. */
+  /** The 30px round mark before the amount: an `AmountBadge`, or the stock's badge for shares. */
   badge?: ReactNode;
+  /** Shares of this ticker rather than dollars. */
+  unit?: string;
   onMax?: () => void;
   hint?: ReactNode;
 } & Omit<ComponentProps<typeof AmountInput>, "id" | "style" | "className">) {
@@ -48,9 +51,11 @@ export function AmountField({
       <div className="flex h-[30px] items-center gap-2.5">
         {badge}
         <div className="num flex min-w-0 flex-1 items-center font-semibold">
-          <span aria-hidden className="mr-0.5 text-subtle transition-[font-size] duration-150 ease-out" style={{ fontSize: Math.round(size * 0.72) }}>
-            $
-          </span>
+          {!unit && (
+            <span aria-hidden className="mr-0.5 text-subtle transition-[font-size] duration-150 ease-out" style={{ fontSize: Math.round(size * 0.72) }}>
+              $
+            </span>
+          )}
           <AmountInput
             id={id}
             value={value}
@@ -61,6 +66,7 @@ export function AmountField({
             style={{ fontSize: size }}
             {...rest}
           />
+          {unit && <span className="ml-1 shrink-0 text-sm font-semibold text-subtle">{unit}</span>}
         </div>
         {onMax && (
           <button type="button" onClick={onMax} className="h-7 shrink-0 rounded-[14px] bg-[rgba(15,14,11,0.06)] px-2.5 text-xs font-semibold text-ink-mid">
@@ -112,16 +118,25 @@ export function AmountArrow() {
 
 /** What arrives (F1-4, F2-5): "You get (estimated)", the stock's badge, its shares to 4 places and the price. `shares` null while quoting. */
 export function YouGet({ symbol, shares, priceUsd }: { symbol: string; shares: number | null; priceUsd: number }) {
+  return <Arrives mark={<StockAvatar symbol={symbol} />} amount={shares === null ? null : shares.toFixed(4)} unit={tickerOf(symbol)} priceUsd={priceUsd} />;
+}
+
+/** What a sale pays, in YouGet's card: the cash badge, dollars and the price a share. `usd` null while quoting. */
+export function YouGetCash({ usd, priceUsd }: { usd: number | null; priceUsd: number }) {
+  return <Arrives mark={<AmountBadge kind="cash" />} amount={usd === null ? null : formatUsd(usd)} unit="Cash" priceUsd={priceUsd} />;
+}
+
+function Arrives({ mark, amount, unit, priceUsd }: { mark: ReactNode; amount: string | null; unit: string; priceUsd: number }) {
   return (
     <div className="flex flex-col gap-2 rounded-[16px] border border-line-field bg-card p-3.5 leading-[normal]">
       <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">You get (estimated)</span>
       <div className="flex items-center gap-2.5">
-        <StockAvatar symbol={symbol} />
+        {mark}
         <div className="min-w-0 flex-1">
           <div className="num text-2xl font-semibold leading-[1.1] tracking-[-0.03em]" aria-live="polite">
-            {shares === null ? "…" : shares.toFixed(4)}
+            {amount ?? "…"}
           </div>
-          <div className="text-[12px] text-subtle">{tickerOf(symbol)}</div>
+          <div className="text-[12px] text-subtle">{unit}</div>
         </div>
         <div className="text-right">
           <div className="text-[12px] text-subtle">Price</div>
