@@ -5,6 +5,8 @@ import {Vm} from "forge-std/Vm.sol";
 import {console} from "forge-std/console.sol";
 import {GooseExecutor} from "../src/GooseExecutor.sol";
 import {IAeroFactory, IAeroRouter, IERC20} from "../src/IProtocols.sol";
+import {NyCalendar} from "../src/NyCalendar.sol";
+import {JobBase} from "../src/jobs/JobBase.sol";
 import {SellJob} from "../src/jobs/SellJob.sol";
 import {ExecutorForkBase} from "./GooseExecutorFork.t.sol";
 import {IJustaPermissionManager as PM} from "./IJustaPermissionManager.sol";
@@ -97,6 +99,12 @@ abstract contract SellForkBase is ExecutorForkBase {
         return x.ORACLE().getReservePrice(r);
     }
 
+    /// Aave's price for stock `r`: its Aerodrome pool's, times `bps` / 10,000.
+    function _priceAt(uint256 r, uint256 bps) internal {
+        uint256 price = JobBase.poolPrice(x.env(), r) * bps / 10_000;
+        vm.mockCall(address(x.ORACLE()), abi.encodeWithSignature("getReservePrice(uint256)", r), abi.encode(price));
+    }
+
     function _withdrawals(Vm.Log[] memory logs) internal pure returns (uint256 n) {
         bytes32 withdraw = keccak256("Withdraw(uint256,address,address,uint256,uint256)");
         for (uint256 i; i < logs.length; ++i) {
@@ -135,6 +143,23 @@ abstract contract SellForkBase is ExecutorForkBase {
         uint256 d = ts / 1 days + 1;
         return (d + (12 - d % 7) % 7) * 1 days + 15 hours; // day 5 (1970-01-06) was a Tuesday
     }
+
+    /// `nyTime` seconds past midnight New York time, on the next Tuesday after `ts`.
+    function _tuesdayAt(uint256 ts, uint256 nyTime) internal pure returns (uint256) {
+        uint256 utc = _nextTuesday(ts);
+        return utc / 1 days * 1 days + nyTime + NyCalendar.offset(utc);
+    }
+
+    /// The sale time the run's SellHeadsUp gave.
+    function _sellAfter(Vm.Log[] memory logs) internal view returns (uint256) {
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == address(x) && logs[i].topics[0] == GooseExecutor.SellHeadsUp.selector) {
+                (,, uint48 sellAfter) = abi.decode(logs[i].data, (uint256, uint256, uint48));
+                return sellAfter;
+            }
+        }
+        revert("no SellHeadsUp");
+    }
 }
 
 /// Protect · sell against the real JAW manager, the Aave V4 Equities Hub and Aerodrome's stock pools on a Base fork,
@@ -155,9 +180,9 @@ contract ProtectSellForkTest is SellForkBase {
         uint256 backing = SPOKE.getUserSuppliedAssets(NVDA, a);
 
         assertEq(uint8(x.planOf(a).action), uint8(GooseExecutor.Action.HeadsUp));
-        vm.expectEmit(true, false, false, false, address(x));
-        emit GooseExecutor.SellHeadsUp(a, 0, 0, 0);
+        vm.recordLogs();
         _run(_check());
+        assertEq(_sellAfter(vm.getRecordedLogs()), vm.getBlockTimestamp() + 30 minutes, "the heads-up says when");
         assertEq(SPOKE.getUserSuppliedAssets(NVDA, a), backing, "nothing sold yet");
         assertEq(_headsUpAt(a), vm.getBlockTimestamp());
         assertEq(_check().length, 0, "waiting");
@@ -229,6 +254,58 @@ contract ProtectSellForkTest is SellForkBase {
         assertEq(uint8(x.planOf(a).action), uint8(GooseExecutor.Action.Sell));
     }
 
+    /// A heads-up just before the Friday freeze goes out on time. Its 30 minutes end while prices are held, so it gives
+    /// Sunday 20:00 New York as the sale time, and the sale waits for it: nothing on Friday night or over the
+    /// weekend, then the sale at the reopen, the health still below the line.
+    function test_a_heads_up_before_the_friday_freeze_sells_when_prices_reopen() public {
+        uint256 friday = _tuesdayAt(vm.getBlockTimestamp(), 19 hours + 45 minutes) + 3 days;
+        vm.warp(friday);
+        address a = _owing("a", NVDA, 10e8, 1.2e18);
+        _sellOn(a, _limits(NVDA, 5e8));
+        uint256 backing = SPOKE.getUserSuppliedAssets(NVDA, a);
+        vm.recordLogs();
+        _run(_check());
+        // Sunday 20:00 in New York: two days and 15 minutes on, give or take a time-zone switch that weekend.
+        uint256 reopen = friday + 2 days + 15 minutes + NyCalendar.offset(friday + 2 days) - NyCalendar.offset(friday);
+        assertEq(_sellAfter(vm.getRecordedLogs()), reopen, "the sale time is the reopen");
+        assertTrue(x.frozen(reopen - 1));
+        assertFalse(x.frozen(reopen));
+
+        vm.warp(friday + 30 minutes);
+        assertEq(uint8(x.planOf(a).action), uint8(GooseExecutor.Action.None), "Friday 20:15: prices are held");
+        vm.warp(reopen - 1);
+        assertEq(_check().length, 0, "nor over the weekend");
+        assertEq(SPOKE.getUserSuppliedAssets(NVDA, a), backing);
+        vm.warp(reopen);
+        GooseExecutor.Plan memory plan = x.planOf(a);
+        assertEq(uint8(plan.action), uint8(GooseExecutor.Action.Sell), "the reopen: still below the line");
+        assertEq(plan.reason, 0, "after the heads-up, at the normal floor");
+        _run(_check());
+        _assertBackTo1_4(a);
+    }
+
+    /// The same heads-up, answered over the weekend (the account adds backing): it is cleared while prices are held,
+    /// and nothing sells at the reopen.
+    function test_a_heads_up_answered_over_the_weekend_sells_nothing_at_the_reopen() public {
+        uint256 friday = _tuesdayAt(vm.getBlockTimestamp(), 19 hours + 45 minutes) + 3 days;
+        vm.warp(friday);
+        address a = _owing("a", NVDA, 10e8, 1.2e18);
+        _sellOn(a, _limits(NVDA, 5e8));
+        vm.recordLogs();
+        _run(_check());
+        uint256 reopen = _sellAfter(vm.getRecordedLogs());
+        vm.warp(friday + 1 days); // Saturday
+        _backWith(a, NVDA, 3e8);
+        vm.expectEmit(true, false, false, false, address(x));
+        emit GooseExecutor.SellHeadsUpCleared(a, 0);
+        _run(_check());
+        assertEq(_headsUpAt(a), 0);
+        uint256 backing = SPOKE.getUserSuppliedAssets(NVDA, a);
+        vm.warp(reopen);
+        assertEq(_check().length, 0, "back above the line: no sale");
+        assertEq(SPOKE.getUserSuppliedAssets(NVDA, a), backing);
+    }
+
     /// A heads-up that the account answers (it adds backing) is cleared, so a later fall gets a new one.
     function test_a_heads_up_clears_when_the_health_is_back() public {
         address a = _owing("a", NVDA, 10e8, 1.2e18);
@@ -242,27 +319,67 @@ contract ProtectSellForkTest is SellForkBase {
         assertEq(_headsUpAt(a), 0);
     }
 
-    /// The pool trades more than the Act floor under Aave's price: the swap can't meet its minimum, the run fails,
-    /// and nothing moves. (Aerodrome's NVIDIA pool is deep: $230k sold into it moves it 0.2%, so the test lifts
-    /// Aave's price 4% instead, which is the same gap.)
-    function test_below_the_floor_the_sale_fails_and_nothing_moves() public {
+    /// NVIDIA's pool trades 3.8% under Aave's price, more than even the Act floor: its swap couldn't meet its minimum,
+    /// so NVIDIA isn't for sale. With nothing else to sell there is nothing to do, and a run that lists the account
+    /// anyway moves nothing and doesn't count as a failure. (Aerodrome's NVIDIA pool is deep: $230k sold into it moves
+    /// it 0.2%, so the test sets Aave's price 4% above the pool's instead, which is the same gap.)
+    function test_a_stock_whose_pool_cannot_fill_is_skipped_and_the_run_does_not_fail() public {
+        _priceAt(NVDA, 10_400);
         address a = _owing("a", NVDA, 10e8, 1.05e18);
         _sellOn(a, _limits(NVDA, 5e8));
-        vm.mockCall(
-            address(x.ORACLE()),
-            abi.encodeWithSignature("getReservePrice(uint256)", NVDA),
-            abi.encode(_price(NVDA) * 104 / 100)
-        );
-        assertLt(SPOKE.getUserAccountData(a).healthFactor, 1.1e18, "still in Act at Aave's new price");
         uint256 backing = SPOKE.getUserSuppliedAssets(NVDA, a);
         uint256 debt = SPOKE.getUserTotalDebt(USDC_RESERVE, a);
-        address[] memory work = _check();
-        vm.recordLogs();
+        assertEq(uint8(x.planOf(a).action), uint8(GooseExecutor.Action.None));
+        assertEq(_check().length, 0);
+        address[] memory work = new address[](1);
+        work[0] = a;
         _run(work);
-        (,, uint8 fails,,,,,,) = x.accounts(a);
-        assertEq(fails, 1, "RunFailed");
+        (,, uint8 fails, uint48 cooldownUntil,,,,,) = x.accounts(a);
+        assertEq(fails, 0, "no RunFailed");
+        assertEq(cooldownUntil, 0);
         assertEq(SPOKE.getUserSuppliedAssets(NVDA, a), backing);
         assertEq(SPOKE.getUserTotalDebt(USDC_RESERVE, a), debt);
+
+        vm.clearMockedCalls(); // the pool is back in line with Aave's price
+        assertEq(uint8(x.planOf(a).action), uint8(GooseExecutor.Action.Sell));
+    }
+
+    /// Tesla (65%) would go first, but its pool can't fill: the sale moves on to NVIDIA, back to 1.4, in the same run.
+    function test_the_sale_moves_on_to_the_next_stock_when_a_pool_cannot_fill() public {
+        _priceAt(TSLA, 10_400);
+        address a = _newJawAccount("a");
+        _backWith(a, TSLA, 3e8);
+        _backWith(a, NVDA, 6e8);
+        _drawTo(a, 1.05e18);
+        _sellOn(a, _limits(TSLA, 3e8) | _limits(NVDA, 5e8));
+        uint256 tesla = SPOKE.getUserSuppliedAssets(TSLA, a);
+        uint256 nvidia = SPOKE.getUserSuppliedAssets(NVDA, a);
+        _run(_check());
+        assertEq(SPOKE.getUserSuppliedAssets(TSLA, a), tesla, "Tesla's pool can't fill: not sold");
+        assertLt(SPOKE.getUserSuppliedAssets(NVDA, a), nvidia, "NVIDIA instead");
+        (,, uint8 fails,,,,,,) = x.accounts(a);
+        assertEq(fails, 0);
+        _assertBackTo1_4(a);
+        _assertHoldsNothing();
+    }
+
+    /// The room a pool gets follows the floor: 1.5% under Aave's price is too far for a sale after a heads-up (1%),
+    /// so at 1.20 there is no heads-up, but within an Act sale's 3%, so at 1.08 it sells at once.
+    function test_a_pool_too_far_for_the_normal_floor_still_fills_an_act_sale() public {
+        _priceAt(NVDA, 10_150);
+        address watch = _owing("watch", NVDA, 10e8, 1.2e18);
+        _sellOn(watch, _limits(NVDA, 5e8));
+        assertEq(uint8(x.planOf(watch).action), uint8(GooseExecutor.Action.None), "no heads-up: nothing it may sell");
+        address act = _owing("act", NVDA, 10e8, 1.08e18);
+        _sellOn(act, _limits(NVDA, 5e8));
+        GooseExecutor.Plan memory plan = x.planOf(act);
+        assertEq(uint8(plan.action), uint8(GooseExecutor.Action.Sell));
+        assertEq(plan.reason, 1, "at once, at the Act floor");
+        address[] memory work = _check();
+        assertEq(work.length, 1);
+        assertEq(work[0], act);
+        _run(work);
+        _assertBackTo1_4(act);
     }
 
     // ================================================================== which stock, how much

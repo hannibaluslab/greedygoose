@@ -70,7 +70,7 @@ contract GooseExecutorTest is Test {
         new GooseExecutor(c);
 
         c = _config();
-        c.entryLimits.floorBps = 101; // under 99% of face value
+        c.entryLimits.floorBps = 51; // under 99.5% of face value
         vm.expectRevert(GooseExecutor.OutOfBounds.selector);
         new GooseExecutor(c);
 
@@ -316,6 +316,41 @@ contract GooseExecutorTest is Test {
         (uint16 floor_,, uint64 maxSwap) = x.entryLimits();
         assertEq(floor_, 30);
         assertEq(maxSwap, 25_000e6);
+    }
+
+    /// Bounds may only tighten (decision, 2026-10-14): the Rebalancer's swap floor and pool gap can only get stricter
+    /// through the delay, checked when a change is queued and again when it lands; Entry's floor never goes under
+    /// 99.5% of face value.
+    function test_the_rebalancers_floor_and_pool_gap_only_get_stricter() public {
+        RebalanceLimits memory looserFloor = deploy.rebalanceLimits();
+        looserFloor.floorBps = 51;
+        RebalanceLimits memory looserGap = deploy.rebalanceLimits();
+        looserGap.poolGapBps = 51;
+        RebalanceLimits memory stricter = deploy.rebalanceLimits();
+        (stricter.floorBps, stricter.poolGapBps) = (40, 30);
+        RebalanceLimits memory between = deploy.rebalanceLimits();
+        (between.floorBps, between.poolGapBps) = (45, 45);
+        vm.startPrank(owner);
+        vm.expectRevert(GooseExecutor.OutOfBounds.selector);
+        x.queueChange(GooseExecutor.Change.SetRebalanceLimits, abi.encode(looserFloor));
+        vm.expectRevert(GooseExecutor.OutOfBounds.selector);
+        x.queueChange(GooseExecutor.Change.SetRebalanceLimits, abi.encode(looserGap));
+        x.queueChange(GooseExecutor.Change.SetRebalanceLimits, abi.encode(stricter));
+        x.queueChange(GooseExecutor.Change.SetRebalanceLimits, abi.encode(between)); // stricter than today's too
+        vm.warp(vm.getBlockTimestamp() + 7 days);
+        x.applyChange(GooseExecutor.Change.SetRebalanceLimits, abi.encode(stricter), 0);
+        (,, uint16 gap, uint16 floor_,,) = x.rebalanceLimits();
+        assertEq(abi.encode(floor_, gap), abi.encode(uint16(40), uint16(30)));
+        vm.expectRevert(GooseExecutor.OutOfBounds.selector);
+        x.applyChange(GooseExecutor.Change.SetRebalanceLimits, abi.encode(between), 1); // looser than it is now
+        bytes memory backToTheDefaults = abi.encode(deploy.rebalanceLimits());
+        vm.expectRevert(GooseExecutor.OutOfBounds.selector);
+        x.queueChange(GooseExecutor.Change.SetRebalanceLimits, backToTheDefaults);
+
+        vm.expectRevert(GooseExecutor.OutOfBounds.selector);
+        x.queueChange(GooseExecutor.Change.SetEntryLimits, abi.encode(EntryLimits(51, 1e6, 10_000e6)));
+        x.queueChange(GooseExecutor.Change.SetEntryLimits, abi.encode(EntryLimits(50, 1e6, 10_000e6)));
+        vm.stopPrank();
     }
 
     /// One Face ID: the account writes its own mix to the registry. It must add up to 100%, or be all 0 to clear it.

@@ -82,7 +82,7 @@ interface IAeroRouter {
     function factory() external view returns (address);
 }
 
-/// Aerodrome Slipstream's pool factory and pools: where the Rebalancer reads a stock pool's price.
+/// Aerodrome Slipstream's pool factory and pools: where Protect · sell and the Rebalancer read a stock pool's price.
 interface IAeroFactory {
     function getPool(address tokenA, address tokenB, int24 tickSpacing) external view returns (address);
 }

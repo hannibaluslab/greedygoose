@@ -50,8 +50,22 @@ library NyCalendar {
         do {
             ++d; // a Saturday is at most five sessions away
         } while (!closed(holiday, d));
-        // 20:00 on a weekday evening, hours away from any time-zone switch (Sundays, 02:00), so a 5-hour guess at
-        // the UTC time finds the right offset.
+        return start(d);
+    }
+
+    /// When prices are next live: `ts` itself while they are, otherwise 20:00 New York before the next open session.
+    function nextOpen(mapping(uint32 => bool) storage holiday, uint256 ts) internal view returns (uint256) {
+        uint256 d = session(ts);
+        if (!closed(holiday, d)) return ts;
+        do {
+            ++d; // past the weekend and any holiday next to it
+        } while (closed(holiday, d));
+        return start(d);
+    }
+
+    /// When session `d` starts: 20:00 New York the evening before, hours away from any time-zone switch (Sundays,
+    /// 02:00), so a 5-hour guess at the UTC time finds the right offset.
+    function start(uint256 d) internal pure returns (uint256) {
         uint256 local = (d - 1) * DAY + CLOSE;
         return local + offset(local + 5 hours);
     }

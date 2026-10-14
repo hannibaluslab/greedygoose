@@ -280,7 +280,8 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     event Saved(address indexed account, uint256 amount);
     event ProtectRepaid(address indexed account, uint256 amount, uint256 hfBefore, uint256 hfAfter, ProtectCase reason);
     /// A sale comes `sellAfter` unless the health is back above the heads-up line by then: the app's "Add $X, or
-    /// Protect sells $Y". `sellValue` is the stock it would sell now, in USDC at Aave's price.
+    /// Protect sells $Y". `sellValue` is the stock it would sell now, in USDC at Aave's price. When the wait ends while
+    /// prices are held, `sellAfter` is when they reopen.
     event SellHeadsUp(address indexed account, uint256 hf, uint256 sellValue, uint48 sellAfter);
     event SellHeadsUpCleared(address indexed account, uint256 hf);
     /// `shares` by reserve id; `repaid` in USDC units; `atOnce` when it sold without a heads-up, below the Act line.
@@ -827,7 +828,7 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     function _runJob(Job job, Ctx memory c) internal returns (Plan memory) {
         if (job == Job.Save) return SaveJob.run(_env(), c, accounts[c.account], pools);
         if (job == Job.Protect) return ProtectJob.run(_env(), c, accounts[c.account], pools);
-        if (job == Job.ProtectSell) return SellJob.run(_env(), c, accounts[c.account], pools);
+        if (job == Job.ProtectSell) return SellJob.run(_env(), c, accounts[c.account], pools, holiday);
         if (job == Job.Rebalance) return RebalanceJob.run(_env(), c, accounts[c.account], mixes);
         return EntryJob.run(_env(), c, accounts[c.account], entryWaits);
     }
@@ -929,7 +930,9 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         if (kind == Change.SetThresholds) return ProtectJob.checkThresholds(abi.decode(value, (Thresholds)));
         if (kind == Change.SetAmounts) return SaveJob.checkAmounts(abi.decode(value, (Amounts)));
         if (kind == Change.SetSellLimits) return SellJob.checkLimits(abi.decode(value, (SellLimits)));
-        if (kind == Change.SetRebalanceLimits) return RebalanceJob.checkLimits(abi.decode(value, (RebalanceLimits)));
+        if (kind == Change.SetRebalanceLimits) {
+            return RebalanceJob.checkChange(abi.decode(value, (RebalanceLimits)), rebalanceLimits);
+        }
         if (kind == Change.SetEntryLimits) return EntryJob.checkLimits(abi.decode(value, (EntryLimits)));
         if (kind == Change.SetHoliday) {
             (uint32 day,) = abi.decode(value, (uint32, bool));

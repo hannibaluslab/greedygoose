@@ -4,6 +4,7 @@ pragma solidity 0.8.28;
 import {GooseExecutor} from "../GooseExecutor.sol";
 import {IJustaPermissionManager as PM} from "../IJustaPermissionManager.sol";
 import {IAeroRouter, IERC20, ISpoke} from "../IProtocols.sol";
+import {NyCalendar} from "../NyCalendar.sol";
 import {Book, Holding, SellLimits, SellRules, SellTiming, Slice} from "../SellRules.sol";
 import {JobBase} from "./JobBase.sol";
 
@@ -23,6 +24,9 @@ library SellJob {
     uint256 internal constant CHECKS_GAS = 400_000;
     /// The pool cap counts every account's sales into one stock's pool over this window.
     uint48 internal constant POOL_WINDOW = 10 minutes;
+    /// A stock is for sale only while its pool sits no more than the floor less this under Aave's price: the room for
+    /// the pools' 0.05% fee and a slice's price impact (a $5,000 slice moves each pool under 0.01%, 2026-10-14).
+    uint256 internal constant POOL_ROOM_BPS = 25;
 
     /// What a planned sale carries to its batch.
     struct Sale {
@@ -99,12 +103,13 @@ library SellJob {
     }
 
     /// Plans, then makes the move: a sale, a heads-up, or clearing one. A sale that wouldn't fit in the gas left is
-    /// deferred to the next run.
+    /// deferred to the next run. `holiday` is the executor's calendar, for the time a heads-up gives.
     function run(
         GooseExecutor.Env memory e,
         GooseExecutor.Ctx memory c,
         GooseExecutor.Account storage acc,
-        mapping(uint256 => GooseExecutor.PoolUse) storage pools
+        mapping(uint256 => GooseExecutor.PoolUse) storage pools,
+        mapping(uint32 => bool) storage holiday
     ) external returns (GooseExecutor.Plan memory p) {
         Sale memory sale;
         (p, sale) = _plan(e, c, acc, pools);
@@ -113,9 +118,10 @@ library SellJob {
             emit GooseExecutor.SellHeadsUpCleared(c.account, p.hf);
         } else if (p.action == GooseExecutor.Action.HeadsUp) {
             acc.headsUpAt = uint48(block.timestamp);
-            emit GooseExecutor.SellHeadsUp(
-                c.account, p.hf, _value(sale), uint48(block.timestamp) + c.sellLimits.headsUpDelay
-            );
+            // Sent on time, even just before a price freeze; a sale whose wait ends while prices are held goes when
+            // they reopen, if the health is still below the line (decision, 2026-10-14). The heads-up says when.
+            uint256 sellAfter = NyCalendar.nextOpen(holiday, block.timestamp + c.sellLimits.headsUpDelay);
+            emit GooseExecutor.SellHeadsUp(c.account, p.hf, _value(sale), uint48(sellAfter));
         } else if (p.action == GooseExecutor.Action.Sell) {
             if (gasleft() < SELL_GAS + CHECKS_GAS) {
                 p.action = GooseExecutor.Action.Defer;
@@ -154,9 +160,9 @@ library SellJob {
         sale.perm = permission(e, c.account, c.grant, c.salt, c.terms);
         uint256 usdcLeft = JobBase.capLeft(e.manager, sale.perm, 0);
         if (usdcLeft == 0 || e.spoke.getReserve(e.usdcReserveId).flags & JobBase.PAUSED != 0) return (p, sale);
-        Book memory b = _book(e, c, sale, pools, usdcLeft);
-        b.debt = JobBase.ceilDiv(e.spoke.getUserAccountData(c.account).totalDebtValueRay, 1e27);
         uint256 floor = sale.atOnce ? c.sellLimits.actFloorBps : c.sellLimits.floorBps;
+        Book memory b = _book(e, c, sale, pools, usdcLeft, floor);
+        b.debt = JobBase.ceilDiv(e.spoke.getUserAccountData(c.account).totalDebtValueRay, 1e27);
         uint256[7] memory take = SellRules.amounts(b, c.sellLimits.targetHf, floor, acc.keepMix);
         sale.slices = SellRules.slices(b, take, floor, c.sellLimits.maxSlice);
         for (uint256 i; i < sale.slices.length; ++i) {
@@ -178,14 +184,15 @@ library SellJob {
     }
 
     /// The account's backing, read the way Aave counts it after a withdrawal: each collateral reserve at its current
-    /// config's factor. A stock is for sale when the grant lists it, its reserve isn't paused, and its limit, the
-    /// pool's window and the USDC limit leave room.
+    /// config's factor. A stock is for sale when the grant lists it, its reserve isn't paused, its pool can fill at
+    /// `floor`, and its limit, the pool's window and the USDC limit leave room.
     function _book(
         GooseExecutor.Env memory e,
         GooseExecutor.Ctx memory c,
         Sale memory sale,
         mapping(uint256 => GooseExecutor.PoolUse) storage pools,
-        uint256 usdcLeft
+        uint256 usdcLeft,
+        uint256 floor
     ) internal view returns (Book memory b) {
         b.usdcPrice = e.oracle.getReservePrice(e.usdcReserveId);
         b.usdcLeft = usdcLeft;
@@ -195,7 +202,7 @@ library SellJob {
             (b.stocks[r], paused) = _holding(e, c.account, r);
             sale.prices[r] = b.stocks[r].price;
             if (JobBase.stockLimit(c.terms, r) == 0) continue;
-            if (b.stocks[r].shares > 0 && !paused) {
+            if (b.stocks[r].shares > 0 && !paused && _fills(e, r, b.stocks[r].price, floor)) {
                 b.stocks[r].limit = JobBase.capLeft(e.manager, sale.perm, spend);
                 b.stocks[r].poolLeft = _poolLeft(pools[r], c.sellLimits.poolCap);
             }
@@ -219,6 +226,17 @@ library SellJob {
         h.shares = shares;
         h.price = e.oracle.getReservePrice(r);
         paused = res.flags & JobBase.PAUSED != 0;
+    }
+
+    /// Whether stock r's pool can fill a sale at `floorBps` under Aave's `price`: it sits no more than the floor, less
+    /// POOL_ROOM_BPS, under it. A stock whose pool can't is left out, so the sale moves on to the next one instead of
+    /// failing the run; a pool above Aave's price only pays more. Read before every sale and heads-up.
+    function _fills(GooseExecutor.Env memory e, uint256 r, uint256 price, uint256 floorBps)
+        internal
+        view
+        returns (bool)
+    {
+        return JobBase.poolPrice(e, r) * SellRules.BPS >= price * (SellRules.BPS + POOL_ROOM_BPS - floorBps);
     }
 
     /// Takes each slice's stock out of Aave, swaps exactly that on Aerodrome to the account with Aave's price minus the
