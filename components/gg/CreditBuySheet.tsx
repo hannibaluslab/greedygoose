@@ -129,6 +129,8 @@ export function CreditBuySheet({ open, user, data, onClose }: { open: boolean; u
       open={open}
       onOpenChange={(next) => !next && close()}
       title={title}
+      // F2-3 opens the picker as tall as F1-3's Market (188px from the top), however few stocks there are.
+      topPx={step === "pick" ? 188 : undefined}
       onBack={back ? () => !busy && go(back) : undefined}
     >
       <SheetSteps stepKey={step} direction={direction} className="flex flex-col gap-3">
