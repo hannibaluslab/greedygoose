@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { decodeFunctionData, encodeErrorResult, erc20Abi } from "viem";
+import { decodeFunctionData, encodeAbiParameters, encodeErrorResult, erc20Abi, toFunctionSelector } from "viem";
 import { buildBorrowCalls, buildLoanCalls, buildRepayCalls, buildSupplyCalls, fullRepayAmount } from "@/lib/aave/tx";
 import { CASH_STUCK, explainRevert } from "@/lib/aave/errors";
 import { buildAddSavingsCalls, buildWithdrawSavingsCalls } from "@/lib/guardian/permission";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { AAVE } from "@/lib/aave/addresses";
+import { buildBuyCalls } from "@/lib/swap/buy";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
 const user = "0x000000000000000000000000000000000000dEaD";
@@ -61,6 +62,21 @@ describe("explainRevert", () => {
     expect(explainRevert(undefined, "x", withdraw)).toBe(CASH_STUCK);
     const [, supply] = buildAddSavingsCalls(user, 1_500_000n);
     expect(explainRevert("0x12345678", "fallback", supply)).toBe("fallback");
+  });
+  it("reads the swap routers' reverts, on either venue", () => {
+    const revert = (message: string) => `${toFunctionSelector("Error(string)")}${encodeAbiParameters([{ type: "string" }], [message]).slice(2)}` as const;
+    const quote = { venue: "aerodrome" as const, pool: 10, amountIn: 1_000_000n, amountOut: 1n };
+    const [approve, aero] = buildBuyCalls({ user, stock: nvda, quote });
+    const [, uni] = buildBuyCalls({ user, stock: nvda, quote: { ...quote, venue: "uniswap", pool: 3000 } });
+    for (const swap of [aero, uni]) {
+      expect(explainRevert(revert("Too little received"), "x", swap)).toMatch(/price moved more than 1%/);
+      expect(explainRevert(revert("Transaction too old"), "x", swap)).toMatch(/took too long/);
+      expect(explainRevert(revert("STF"), "x", swap)).toMatch(/cash moved/);
+      expect(explainRevert(revert("SPL"), "fallback", swap)).toBe("fallback");
+      expect(explainRevert("0x", "fallback", swap)).toBe("fallback");
+    }
+    // The same string from a call that isn't a swap stays the caller's fallback.
+    expect(explainRevert(revert("STF"), "fallback", approve)).toBe("fallback");
   });
 });
 
