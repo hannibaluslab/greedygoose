@@ -52,4 +52,5 @@ export const FriendsIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, 
 export const PayIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M4 12l16-8-6 16-3-7z" /></svg>;
 export const ArrowLeftIcon = ({ size = 18, ...r }: P) => <svg {...base(size, 2, r)}><path d="M19 12H5M11 6l-6 6 6 6" /></svg>;
 export const CloseIcon = ({ size = 16, ...r }: P) => <svg {...base(size, 2, r)}><path d="M6 6l12 12M18 6L6 18" /></svg>;
+export const CopyIcon = ({ size = 18, ...r }: P) => <svg {...base(size, 1.8, r)}><path d="M9 9h10v10H9zM5 15V5h10" /></svg>;
 export const TrendUpIcon = ({ size = 10, ...r }: P) => <svg {...base(size, 2.6, r)}><path d="M4 16l6-6 4 4 6-6M14 8h6v6" /></svg>;
