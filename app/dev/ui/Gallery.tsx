@@ -16,7 +16,8 @@ import { NETWORK_FEE_ROW, Summary } from "@/components/gg/Summary";
 import { FaceIdButton } from "@/components/gg/TxUi";
 import { CreditIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/icons";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
-import type { Status } from "@/lib/risk/status";
+import { homeStatus, type Status } from "@/lib/risk/status";
+import { boughtLine } from "@/lib/activity/bought";
 import { formatUsd, formatUsdTrim } from "@/lib/formatting";
 
 // Sample figures for the gallery only, the boards' own (HomeUpliftRail, PortfolioPage, F1-4, F2-6).
@@ -104,7 +105,14 @@ export function Gallery() {
       <Section title="Cash and Credit cards" kit="cards">
         <div className="grid grid-cols-2 gap-2.5">
           <CashCard cashUsd={CASH} apy={CASH_APY} note="2 in Quarantine" onClick={noop} />
-          <CreditCard debtUsd={600} status="safe" monthlyCostUsd={3} onClick={noop} />
+          <CreditCard debtUsd={600} status="safe" monthlyCostUsd={3} availableUsd={1100} onClick={noop} />
+        </div>
+      </Section>
+
+      <Section title="Credit card · nothing owed (F2-1)" kit="credit-card-none">
+        <div className="grid grid-cols-2 gap-2.5">
+          <CashCard cashUsd={40} apy={CASH_APY} onClick={noop} />
+          <CreditCard debtUsd={0} status={homeStatus("none")} monthlyCostUsd={0} availableUsd={1700} onClick={noop} />
         </div>
       </Section>
 
@@ -208,8 +216,9 @@ export function Gallery() {
       </Section>
 
       <Section title="Toast" kit="toast">
-        <div className="grid grid-cols-2 gap-2.5">
-          <Button variant="white" onClick={() => toast.success("Bought 0.1120 NVDA")}>Success</Button>
+        <div className="grid grid-cols-3 gap-2.5">
+          <Button variant="white" onClick={() => toast.success(boughtLine(0.112, "NVDAc"))}>Bought</Button>
+          <Button variant="white" onClick={() => toast.success(boughtLine(1.35, "AAPLc", true))}>On credit</Button>
           <Button variant="white" onClick={() => toast("Address copied")}>Plain</Button>
         </div>
       </Section>

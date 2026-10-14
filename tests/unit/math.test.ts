@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { borrowApr, monthlyCost, projectHealth, summarize } from "@/lib/aave/math";
+import { aprToApy, borrowApr, monthlyCost, projectHealth, summarize } from "@/lib/aave/math";
 import { RAY, VALUE_PER_USD, WAD } from "@/lib/aave/addresses";
 
 const usd = (n: number) => BigInt(n) * VALUE_PER_USD;
@@ -54,5 +54,13 @@ describe("withdraw limits", () => {
   });
   it("never below zero when already over", () => {
     expect(maxWithdrawUsd({ collateralUsd: 1000, avgCf: 0.5, debtUsd: 600, cf: 0.5, lockedUsd: 1000 })).toBe(0);
+  });
+});
+
+describe("aprToApy", () => {
+  it("compounds Aave's per-second APR into the APY the boards show", () => {
+    expect(aprToApy(0)).toBe(0);
+    expect(aprToApy(0.0383)).toBeCloseTo(0.03904, 5);
+    expect(aprToApy(0.1)).toBeCloseTo(Math.E ** 0.1 - 1, 6);
   });
 });

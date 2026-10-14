@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { needsExtraConfirm, statusFor } from "@/lib/risk/status";
+import { homeStatus, needsExtraConfirm, statusFor } from "@/lib/risk/status";
 
 describe("statusFor", () => {
   it("is none without debt", () => {
@@ -21,5 +21,13 @@ describe("statusFor", () => {
     expect(needsExtraConfirm("none")).toBe(false);
     expect(needsExtraConfirm("watch")).toBe(true);
     expect(needsExtraConfirm("act")).toBe(true);
+  });
+});
+
+describe("homeStatus", () => {
+  it("shows Safe for nothing owed and keeps the bands as they are", () => {
+    expect(homeStatus("none")).toBe("safe");
+    expect(homeStatus("watch")).toBe("watch");
+    expect(homeStatus("act")).toBe("act");
   });
 });

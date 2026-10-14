@@ -10,6 +10,12 @@ export function statusFor(healthFactor: number | null, bands: RiskBands = RISK):
   return "act";
 }
 
+/**
+ * Home always shows one of the three words (canvas "Turn on credit"), so nothing owed reads Safe there (F2-1):
+ * the health factor is unbounded, above every band.
+ */
+export const homeStatus = (s: Status): Exclude<Status, "none"> => (s === "none" ? "safe" : s);
+
 /** Actions that end in Watch or Act need an extra explicit confirmation. */
 export const needsExtraConfirm = (after: Status) => after === "watch" || after === "act";
 

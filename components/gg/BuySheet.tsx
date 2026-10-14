@@ -7,17 +7,18 @@ import { useAccount } from "wagmi";
 import { StockAvatar, tickerOf } from "./StockAvatar";
 import { useBuyQuote } from "@/hooks/useBuyQuote";
 import { useBuy } from "@/hooks/useBuy";
+import { useBoughtHome } from "@/hooks/useBoughtHome";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { BUY_LIMITS, minOut, quoteEconomics } from "@/lib/swap/buy";
 import { VENUE_LABEL } from "@/lib/swap/venues";
 import { marketState } from "@/lib/market-hours";
-import { FaceIdButton, TxDone, TxError } from "./TxUi";
+import { FaceIdButton, TxError } from "./TxUi";
 import { formatUsd } from "@/lib/formatting";
 import { cashRaw, maxSpendRaw, savingsWithdrawal, toUsd, type Cash } from "@/lib/cash";
 import { CASH } from "@/config/risk";
 import type { ReserveAsset } from "@/lib/tokens/registry";
 
-/** Design board "F1 · 4 · Buy sheet" (F1-4-Buy.dc.html), plus Review and result steps. */
+/** Design board "F1 · 4 · Buy sheet" (F1-4-Buy.dc.html) and its Review step; a landed buy goes Home (F1-6). */
 export function BuySheet({
   open, user, stock, oraclePriceUsd, cash, onClose,
 }: { open: boolean; user: `0x${string}`; stock: ReserveAsset; oraclePriceUsd: number; cash: Cash; onClose: () => void }) {
@@ -33,6 +34,7 @@ export function BuySheet({
   const quote = useBuyQuote(stock, amount);
   const fee = useFeeSupport();
   const { buy, phase, error, reset, txHash } = useBuy();
+  useBoughtHome({ phase, user, symbol: stock.symbol, txHash, onClose });
 
   const q = quote.data ?? null;
   const econ = q ? quoteEconomics(q, stock, oraclePriceUsd) : null;
@@ -61,15 +63,8 @@ export function BuySheet({
       title={step === "review" ? "Review buy" : `Buy ${stock.name}`}
       onBack={() => (step === "review" && phase === "idle" ? go("amount") : onClose())}
     >
-      <SheetSteps stepKey={phase === "done" ? "done" : step} direction={direction} className="flex flex-col gap-3">
-        {phase === "done" ? (
-          <TxDone
-            title={`You bought ${econ ? econ.shares.toFixed(4) : ""} ${ticker}`}
-            body="It’s in your account now. It can back credit when you need cash."
-            txHash={txHash}
-            onDone={onClose}
-          />
-        ) : step === "amount" ? (
+      <SheetSteps stepKey={step} direction={direction} className="flex flex-col gap-3">
+        {step === "amount" ? (
           <>
             <div className="flex flex-col gap-2 rounded-2xl border border-ink bg-card p-3.5">
               <div className="flex items-center justify-between">

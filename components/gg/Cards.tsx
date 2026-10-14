@@ -42,10 +42,14 @@ export function CashCard({
   );
 }
 
-/** The Credit card next to Cash (HomeUpliftRail): what's owed, the status pill and the monthly cost. */
+/**
+ * The Credit card next to Cash (HomeUpliftRail): what's owed, the status pill and the monthly cost. With nothing
+ * owed, the credit available takes the cost's place (F2-1), rounded down so it's never shown as more than it is.
+ */
 export function CreditCard({
-  debtUsd, status, monthlyCostUsd, href, onClick,
-}: { debtUsd: number; status: Status; monthlyCostUsd: number; href?: string; onClick?: () => void }) {
+  debtUsd, status, monthlyCostUsd, availableUsd, href, onClick,
+}: { debtUsd: number; status: Status; monthlyCostUsd: number; availableUsd: number; href?: string; onClick?: () => void }) {
+  const owes = debtUsd > 0;
   return (
     <Tap href={href} onClick={onClick} className={`${CARD} bg-card text-left text-ink shadow-card-elev`}>
       <span className="flex w-full items-center justify-between">
@@ -58,8 +62,8 @@ export function CreditCard({
         <span className="text-[13px] text-subtle">owed</span>
       </span>
       <span className="mt-auto flex w-full items-baseline justify-between text-[12px]">
-        <span className="text-subtle">Cost</span>
-        <span className="num font-semibold">{formatUsdTrim(monthlyCostUsd)} / month</span>
+        <span className="text-subtle">{owes ? "Cost" : "Available"}</span>
+        <span className="num font-semibold">{owes ? `${formatUsdTrim(monthlyCostUsd)} / month` : formatUsdTrim(Math.floor(availableUsd))}</span>
       </span>
     </Tap>
   );
