@@ -2,6 +2,8 @@
 
 Next.js version notes: @AGENTS.md
 
+> **JustaLab decisions come first.** Read @docs/JUSTALAB-DECISIONS.md before anything below. Where it conflicts with this file or `docs/PARKED.md`, it wins (agents in scope, no server, JAW permission screens, cash is savings, five tabs, no "borrow" or "lock" on screen).
+
 ## Mission
 
 A consumer app on **Base** that lets eligible users borrow **USDC** against their **Coinbase tokenized stocks**, using **JAW.id** smart accounts and the **Aave V4 Equities Hub**.
