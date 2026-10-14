@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { isAddressEqual } from "viem";
 import { useAccount } from "wagmi";
 import { toast } from "sonner";
@@ -29,6 +30,7 @@ import {
   AGENTS,
   agentCards,
   agentItems,
+  agentParam,
   allOffCopy,
   confirmFor,
   longDateText,
@@ -77,9 +79,11 @@ function Agents({ address }: { address: `0x${string}` }) {
   const runner = useAgentRun(agents);
   const live = !!GOOSE_EXECUTOR;
 
-  // The sheet keeps its last agent while it slides away.
-  const [open, setOpen] = useState<Open | null>(null);
-  const [shown, setShown] = useState(false);
+  // The sheet keeps its last agent while it slides away. A link can name one (`/agents?agent=protect`): its sheet
+  // opens on arrival, as a row's tap opens it.
+  const linked = agentParam(useSearchParams().get("agent"));
+  const [open, setOpen] = useState<Open | null>(linked && { agent: linked, action: null, direct: false });
+  const [shown, setShown] = useState(!!linked);
   const [allOff, setAllOff] = useState(false);
   const [picked, setPicked] = useState<Partial<Record<Agent, number>>>({});
 

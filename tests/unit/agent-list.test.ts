@@ -4,6 +4,7 @@ import {
   AGENTS,
   agentCards,
   agentItems,
+  agentParam,
   agentStatus,
   allOffCopy,
   confirmFor,
@@ -182,5 +183,12 @@ describe("confirmFor: the confirm step, before JAW's own screen", () => {
         expect([c.title, c.lead, c.button, c.note, ...c.rows.map((r) => r.value)].join(" ")).not.toMatch(ON_SCREEN);
       }
     }
+  });
+});
+
+describe("agentParam (/agents?agent=…)", () => {
+  it("names one of the four agents, and nothing else", () => {
+    expect(AGENTS.map(agentParam)).toEqual([...AGENTS]);
+    expect([null, "", "Protect", "sell", "entry", "manage"].map(agentParam)).toEqual([null, null, null, null, null, null]);
   });
 });

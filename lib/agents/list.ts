@@ -25,6 +25,9 @@ export const AGENT_JOBS: Record<Agent, readonly [AgentJob, ...AgentJob[]]> = {
 
 export const agentOf = (job: AgentJob): Agent => AGENTS.find((a) => AGENT_JOBS[a].includes(job))!;
 
+/** The agent a link names (`/agents?agent=protect`), or null for anything else. */
+export const agentParam = (value: string | null): Agent | null => AGENTS.find((a) => a === value) ?? null;
+
 /** Who made a move in the activity: an agent, or "Agents" for a run that didn't go through. */
 export type AgentName = "Save" | "Protect" | "Rebalance" | "Receive" | "Agents";
 export const AGENT_NAME: Record<Agent, Exclude<AgentName, "Agents">> = {
