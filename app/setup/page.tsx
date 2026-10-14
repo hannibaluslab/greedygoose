@@ -27,9 +27,11 @@ function Setup({ address }: { address: `0x${string}` }) {
   const settled = setup.save !== "loading";
   const needed = finishSetupShown(setup.save);
 
+  // Home asks again with its small card once the registry can be read, so a read that fails doesn't hold sign-up here.
+  const leave = (settled && !needed && !setup.earning.busy) || (!settled && setup.unreadable);
   useEffect(() => {
-    if (settled && !needed && !setup.earning.busy) router.replace("/home");
-  }, [settled, needed, setup.earning.busy, router]);
+    if (leave) router.replace("/home");
+  }, [leave, router]);
 
   if (!needed) return <div aria-busy className="min-h-dvh" />;
   return (

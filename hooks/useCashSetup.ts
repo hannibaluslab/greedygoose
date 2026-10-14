@@ -41,6 +41,8 @@ export function useCashSetup(account: `0x${string}`) {
     save: agents.status.save,
     /** Other dollars converting on their own. */
     entry: agents.status.entry,
+    /** The executor's registry couldn't be read, so whether earning is set up isn't known yet. */
+    unreadable: agents.unreadable,
     preview,
     /** "Finish setting up": your cash starts earning. */
     earning: view(earning),

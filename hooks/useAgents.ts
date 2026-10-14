@@ -228,6 +228,8 @@ export function useAgents(account: `0x${string}`) {
     faceIdsOff: (jobs: readonly AgentJob[]) => jobs.reduce((n, job) => n + live[job].length, 0),
     /** The most any limit may be on this executor, once read. */
     capMaxRaw: capMax.data ?? null,
+    /** The registry couldn't be read (every status stays "loading" until it is). */
+    unreadable: registry.isError && !registry.data,
     /** Failed runs in a row, and when the executor tries again: it backs off, then switches the account off at eight. */
     fails: stored?.fails ?? 0,
     cooldownUntil: stored?.cooldownUntil ?? 0,
