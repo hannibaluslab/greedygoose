@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAccount, useConnect } from "wagmi";
 import { FaceIdIcon } from "@/components/gg/icons";
 import { ATTESTATION_TEXT, ELIGIBILITY_MODE, hasAttested, recordAttestation } from "@/lib/eligibility";
+import { SIGN_IN_CONNECTOR_TYPE } from "@/lib/jaw/config";
 
 const noopSubscribe = () => () => {};
 
@@ -26,7 +27,7 @@ export default function Welcome() {
     if (needsAttest && !attested) return;
     recordAttestation();
     reset();
-    const jaw = connectors.find((c) => c.type === "jaw");
+    const jaw = connectors.find((c) => c.type === SIGN_IN_CONNECTOR_TYPE);
     if (jaw) connect({ connector: jaw });
   };
   const rejected = error && /reject|denied|cancel/i.test(error.message);
