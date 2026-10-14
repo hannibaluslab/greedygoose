@@ -16,7 +16,15 @@ import { inWeekendWindow, planGuardian, planSave } from "@/lib/guardian/plan";
 import { planRebalance, rebalanceTrades, type RebalanceHolding } from "@/lib/guardian/rebalance";
 import { planSell, sellAmounts, sellTiming, type SellBook } from "@/lib/guardian/sell";
 import { marketState } from "@/lib/market-hours";
-import { agentPermission, JOBS, sellPermission, STOCK_LIMIT_UNIT, type StockLimits } from "@/lib/agents/permissions";
+import {
+  agentPermission,
+  entryPermission,
+  JOBS,
+  rebalancePermission,
+  sellPermission,
+  STOCK_LIMIT_UNIT,
+  type StockLimits,
+} from "@/lib/agents/permissions";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 
 const WAD = 10n ** 18n;
@@ -252,6 +260,38 @@ export function sellHashInput(i: number) {
   };
 }
 
+/** Rebalancer hash inputs: a weekly USDC limit and a weekly limit per stock, a third of them unsellable, at least one
+ *  sellable. Mirrors Vectors.rebalanceHashInput. */
+export function rebalanceHashInput(i: number) {
+  const r = (f: number) => rand("rebalance-hash", i, f);
+  const first = Number(r(6) % 7n);
+  const limitsRaw: StockLimits = Array.from({ length: 7 }, (_, k) =>
+    k !== first && r(7 + k) % 3n === 0n ? 0n : (1n + (r(14 + k) % 1_000_000n)) * STOCK_LIMIT_UNIT,
+  );
+  const start = 1_700_000_000n + (r(2) % 300_000_000n);
+  return {
+    account: toHex(r(1) % 2n ** 160n, { size: 20 }) as Address,
+    start,
+    end: start + 1n + (r(3) % 400_000_000n),
+    salt: r(4),
+    cap: 1n + (r(5) % 5_000_000n),
+    limitsRaw,
+  };
+}
+
+/** Entry hash inputs. Mirrors Vectors.entryHashInput. */
+export function entryHashInput(i: number) {
+  const r = (f: number) => rand("entry-hash", i, f);
+  const start = 1_700_000_000n + (r(2) % 300_000_000n);
+  return {
+    account: toHex(r(1) % 2n ** 160n, { size: 20 }) as Address,
+    start,
+    end: start + 1n + (r(3) % 400_000_000n),
+    salt: r(4),
+    cap: 1n + (r(5) % 5_000_000n),
+  };
+}
+
 function protectVectors() {
   const kinds: number[] = [];
   const checkKind: number[] = [];
@@ -432,7 +472,23 @@ function hashVectors() {
       ),
     );
   }
-  return { spender: HASH_SPENDER, hashes, sellHashes };
+  const rebalanceHashes = [];
+  for (let i = 0; i < HASH_COUNT; i++) {
+    const v = rebalanceHashInput(i);
+    rebalanceHashes.push(
+      managerHash(
+        rebalancePermission({ account: v.account, spender: HASH_SPENDER, start: Number(v.start), end: Number(v.end), salt: v.salt, capRaw: v.cap, limitsRaw: v.limitsRaw }),
+      ),
+    );
+  }
+  const entryHashes = [];
+  for (let i = 0; i < HASH_COUNT; i++) {
+    const v = entryHashInput(i);
+    entryHashes.push(
+      managerHash(entryPermission({ account: v.account, spender: HASH_SPENDER, start: Number(v.start), end: Number(v.end), salt: v.salt, capRaw: v.cap })),
+    );
+  }
+  return { spender: HASH_SPENDER, hashes, sellHashes, rebalanceHashes, entryHashes };
 }
 
 /** config/risk.ts in on-chain units: the executor's deploy defaults must match. */

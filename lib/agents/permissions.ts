@@ -3,8 +3,9 @@ import type { PermissionsDetail } from "@jaw.id/wagmi";
 import { AAVE } from "@/lib/aave/addresses";
 import { GUARDIAN, SEL } from "@/lib/guardian/config";
 import { PERIOD, type GuardianPermission } from "@/lib/guardian/permission";
-import { AERODROME } from "@/lib/swap/venues";
+import { AERODROME, AERODROME_V1, SPARK_PSM3, UNISWAP } from "@/lib/swap/venues";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
+import { ENTRY_COINS } from "@/lib/tokens/stables";
 
 /** The agents' jobs, in GooseExecutor's order (enum Job): the index is the job's id on-chain. */
 export const JOBS = ["save", "protect"] as const;
@@ -129,13 +130,14 @@ export const STOCK_LIMIT_UNIT = 10_000n;
 /** A daily limit per stock, in raw shares, by reserve id (EQUITIES order). 0 = never sell that stock. */
 export type StockLimits = readonly bigint[];
 
-function sellable(limitsRaw: StockLimits) {
+/** The stocks a grant may sell, each with its limit, in reserve order. `job` names the agent in the error. */
+function sellable(limitsRaw: StockLimits, job = "Protect") {
   if (limitsRaw.length !== EQUITIES.length) throw new Error("One limit per stock");
   if (limitsRaw.some((l) => l < 0n || l % STOCK_LIMIT_UNIT !== 0n || l / STOCK_LIMIT_UNIT >= 2n ** 32n)) {
     throw new Error("Stock limits are whole units of 1e-4 share");
   }
   const stocks = EQUITIES.filter((_, i) => limitsRaw[i] > 0n);
-  if (stocks.length === 0) throw new Error("Protect needs at least one stock it may sell");
+  if (stocks.length === 0) throw new Error(`${job} needs at least one stock it may sell`);
   return stocks.map((e) => ({ stock: e.address, limitRaw: limitsRaw[e.reserveId] }));
 }
 
@@ -196,8 +198,121 @@ export function sellPermission(p: {
   };
 }
 
-/** The `terms` the executor's `register` takes for Protect · sell: each stock's limit in units, 32 bits a stock. */
-export function sellTerms(limitsRaw: StockLimits): bigint {
+/**
+ * The `terms` the executor's `register` takes for Protect · sell and the Rebalancer: each stock's limit in units,
+ * 32 bits a stock.
+ */
+export function stockTerms(limitsRaw: StockLimits): bigint {
   sellable(limitsRaw);
   return limitsRaw.reduce((t, l, r) => t | ((l / STOCK_LIMIT_UNIT) << BigInt(32 * r)), 0n);
+}
+
+/*
+ * The Rebalancer (GooseExecutor's Job.Rebalance, id 3): keeps the mix of free stock on target, selling what grew too
+ * big to buy what fell short. Its own JAW grant. It has no Aave call at all, so savings and backing are out of its
+ * reach; the executor's post-checks keep the wallet's USDC from going down and every stock it buys in the mix.
+ */
+
+/**
+ * What the Rebalancer may call, in GooseExecutor's order (RebalanceJob.permission): approve each stock it may sell to
+ * Aerodrome's router, approve USDC for the buys, swap. A stock with no limit can still be bought into the mix, but
+ * never sold.
+ */
+function rebalanceCalls(limitsRaw: StockLimits) {
+  return [
+    ...sellable(limitsRaw, "The Rebalancer").map(({ stock }) => ({ target: stock, selector: SEL.approve })),
+    { target: USDC.address, selector: SEL.approve },
+    { target: AERODROME.ROUTER, selector: SEL.aeroSwap },
+  ] as const;
+}
+
+/** Weekly limits: USDC on the buy leg (the boards' "sells up to $X a week"), then each stock's own, in shares. */
+function rebalanceSpends(capRaw: bigint, limitsRaw: StockLimits) {
+  return [
+    { token: USDC.address, allowance: capRaw },
+    ...sellable(limitsRaw, "The Rebalancer").map(({ stock, limitRaw }) => ({ token: stock, allowance: limitRaw })),
+  ];
+}
+
+/** What the app sends to JAW's `useGrantPermissions` to switch the Rebalancer on, with weekly limits. */
+export function rebalanceGrant(capRaw: bigint, limitsRaw: StockLimits): PermissionsDetail {
+  if (capRaw <= 0n) throw new Error("Weekly limit must be positive");
+  return {
+    calls: rebalanceCalls(limitsRaw).map(({ target, selector }) => ({ target, selector })),
+    spends: rebalanceSpends(capRaw, limitsRaw).map(({ token, allowance }) => ({ token, allowance: allowance.toString(), unit: "week" })),
+  };
+}
+
+/** The permission JAW's grant puts on-chain for `rebalanceGrant(capRaw, limitsRaw)`; GooseExecutor rebuilds it. */
+export function rebalancePermission(p: {
+  account: Address;
+  spender: Address;
+  start: number;
+  end: number;
+  salt: bigint;
+  capRaw: bigint;
+  limitsRaw: StockLimits;
+}): GuardianPermission {
+  return {
+    account: p.account,
+    spender: p.spender,
+    start: p.start,
+    end: p.end,
+    salt: p.salt,
+    calls: rebalanceCalls(p.limitsRaw).map(({ target, selector }) => ({ target, selector, checker: zeroAddress })),
+    spends: rebalanceSpends(p.capRaw, p.limitsRaw).map(({ token, allowance }) => ({ token, allowance, unit: PERIOD.Week, multiplier: 1 })),
+  };
+}
+
+/*
+ * The Entry agent on Base (GooseExecutor's Job.Entry, id 4): a whitelisted stablecoin in the wallet becomes USDC in the
+ * same wallet, at 99.5% of face value or better. Its own JAW grant.
+ */
+
+/** Each coin's swap, at the venue lib/tokens/stables.ts names for it. */
+const ENTRY_SWAPS = [
+  { target: AERODROME_V1.ROUTER, selector: SEL.aeroSwap },
+  { target: UNISWAP.SWAP_ROUTER_02, selector: SEL.uniSwap },
+  { target: SPARK_PSM3.PSM3, selector: SEL.psmSwap },
+] as const;
+
+/**
+ * What Entry may call, in GooseExecutor's order (EntryJob.permission): approve each coin to its venue, then the three
+ * venues' swaps. Daily limits: one per coin, all at the same face value (`capRaw` in USDC units, decimals adjusted).
+ */
+function entryCalls() {
+  return [...ENTRY_COINS.map((c) => ({ target: c.address, selector: SEL.approve })), ...ENTRY_SWAPS];
+}
+
+function entrySpends(capRaw: bigint) {
+  return ENTRY_COINS.map((c) => ({ token: c.address, allowance: capRaw * 10n ** BigInt(c.decimals - USDC.decimals) }));
+}
+
+/** What the app sends to JAW's `useGrantPermissions` to switch Entry on, with a daily limit per coin in USDC units. */
+export function entryGrant(capRaw: bigint): PermissionsDetail {
+  if (capRaw <= 0n) throw new Error("Daily limit must be positive");
+  return {
+    calls: entryCalls().map(({ target, selector }) => ({ target, selector })),
+    spends: entrySpends(capRaw).map(({ token, allowance }) => ({ token, allowance: allowance.toString(), unit: "day" })),
+  };
+}
+
+/** The permission JAW's grant puts on-chain for `entryGrant(capRaw)`; GooseExecutor rebuilds the same struct. */
+export function entryPermission(p: {
+  account: Address;
+  spender: Address;
+  start: number;
+  end: number;
+  salt: bigint;
+  capRaw: bigint;
+}): GuardianPermission {
+  return {
+    account: p.account,
+    spender: p.spender,
+    start: p.start,
+    end: p.end,
+    salt: p.salt,
+    calls: entryCalls().map(({ target, selector }) => ({ target, selector, checker: zeroAddress })),
+    spends: entrySpends(p.capRaw).map(({ token, allowance }) => ({ token, allowance, unit: PERIOD.Day, multiplier: 1 })),
+  };
 }

@@ -5,18 +5,23 @@ import {
   agentGrant,
   agentPermission,
   dailyLimitRaw,
+  entryGrant,
+  entryPermission,
   readAgentGrant,
+  rebalanceGrant,
+  rebalancePermission,
   sellGrant,
   sellPermission,
-  sellTerms,
+  stockTerms,
   type ListedPermission,
 } from "@/lib/agents/permissions";
 import { jobStatus } from "@/lib/agents/status";
 import { PERIOD } from "@/lib/guardian/permission";
 import { GUARDIAN, SEL } from "@/lib/guardian/config";
 import { AAVE } from "@/lib/aave/addresses";
-import { AERODROME } from "@/lib/swap/venues";
+import { AERODROME, AERODROME_V1, SPARK_PSM3, UNISWAP } from "@/lib/swap/venues";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
+import { ENTRY_COINS } from "@/lib/tokens/stables";
 import { agentVectors } from "@/scripts/agent-vectors";
 
 const executor = "0x00000000000000000000000000000000000E5EC0" as const;
@@ -97,13 +102,76 @@ describe("sellGrant (Protect · sell, its own JAW grant)", () => {
     const p = sellPermission({ account, spender: executor, start: 1, end: 2, salt: 7n, capRaw: 5_000_000n, limitsRaw: limits });
     expect(p.calls.every((c) => c.checker === zeroAddress)).toBe(true);
     expect(p.spends.map((s) => [s.unit, s.multiplier])).toEqual(p.spends.map(() => [PERIOD.Day, 1]));
-    expect(sellTerms(limits)).toBe((25_000n << 160n) | (10_000n << 192n));
+    expect(stockTerms(limits)).toBe((25_000n << 160n) | (10_000n << 192n));
   });
 
   it("refuses a grant that sells nothing, or limits that aren't whole units of 1e-4 share", () => {
     expect(() => sellGrant(5_000_000n, limits.map(() => 0n))).toThrow(/at least one/);
     expect(() => sellGrant(5_000_000n, limits.map((l) => (l ? l + 1n : 0n)))).toThrow(/whole units/);
     expect(() => sellGrant(0n, limits)).toThrow(/positive/);
+  });
+});
+
+describe("rebalanceGrant (the Rebalancer, its own JAW grant)", () => {
+  // NVIDIA and Tesla it may sell, with weekly limits; the other five it may only buy into the mix.
+  const limits = EQUITIES.map((e) => (e.symbol === "NVDAc" ? 250_000_000n : e.symbol === "TSLAc" ? 100_000_000n : 0n));
+  const nvda = EQUITIES[5].address;
+  const tsla = EQUITIES[6].address;
+
+  it("may approve the stocks it may sell and USDC to Aerodrome's router, and swap: no Aave call at all", () => {
+    expect(rebalanceGrant(500_000_000n, limits)).toEqual({
+      calls: [
+        { target: nvda, selector: SEL.approve },
+        { target: tsla, selector: SEL.approve },
+        { target: USDC.address, selector: SEL.approve },
+        { target: AERODROME.ROUTER, selector: SEL.aeroSwap },
+      ],
+      spends: [
+        { token: USDC.address, allowance: "500000000", unit: "week" },
+        { token: nvda, allowance: "250000000", unit: "week" },
+        { token: tsla, allowance: "100000000", unit: "week" },
+      ],
+    });
+  });
+
+  it("lands on-chain with checker 0 and Week × 1, and packs the limits like Protect · sell's", () => {
+    const p = rebalancePermission({ account, spender: executor, start: 1, end: 2, salt: 7n, capRaw: 500_000_000n, limitsRaw: limits });
+    expect(p.calls.every((c) => c.checker === zeroAddress)).toBe(true);
+    expect(p.spends.map((s) => [s.unit, s.multiplier])).toEqual(p.spends.map(() => [PERIOD.Week, 1]));
+    expect(stockTerms(limits)).toBe((25_000n << 160n) | (10_000n << 192n));
+  });
+
+  it("refuses a grant that may sell nothing, or a zero limit", () => {
+    expect(() => rebalanceGrant(500_000_000n, limits.map(() => 0n))).toThrow(/Rebalancer needs at least one/);
+    expect(() => rebalanceGrant(0n, limits)).toThrow(/positive/);
+  });
+});
+
+describe("entryGrant (the Entry agent on Base, its own JAW grant)", () => {
+  it("may approve each coin and swap it at its venue, with a daily limit per coin at the same face value", () => {
+    expect(entryGrant(1_000_000_000n)).toEqual({
+      calls: [
+        ...ENTRY_COINS.map((c) => ({ target: c.address, selector: SEL.approve })),
+        { target: AERODROME_V1.ROUTER, selector: SEL.aeroSwap },
+        { target: UNISWAP.SWAP_ROUTER_02, selector: SEL.uniSwap },
+        { target: SPARK_PSM3.PSM3, selector: SEL.psmSwap },
+      ],
+      spends: [
+        { token: ENTRY_COINS[0].address, allowance: "1000000000", unit: "day" },
+        { token: ENTRY_COINS[1].address, allowance: "1000000000000000000000", unit: "day" },
+        { token: ENTRY_COINS[2].address, allowance: "1000000000", unit: "day" },
+        { token: ENTRY_COINS[3].address, allowance: "1000000000000000000000", unit: "day" },
+      ],
+    });
+  });
+
+  it("uses the selectors the deployed venues expose, and lands on-chain with checker 0 and Day × 1", () => {
+    expect(toFunctionSelector("exactInputSingle((address,address,uint24,address,uint256,uint256,uint160))")).toBe(SEL.uniSwap);
+    expect(toFunctionSelector("swapExactIn(address,address,uint256,uint256,address,uint256)")).toBe(SEL.psmSwap);
+    const p = entryPermission({ account, spender: executor, start: 1, end: 2, salt: 7n, capRaw: 1_000_000_000n });
+    expect(p.calls.every((c) => c.checker === zeroAddress)).toBe(true);
+    expect(p.spends.map((s) => [s.unit, s.multiplier])).toEqual(p.spends.map(() => [PERIOD.Day, 1]));
+    expect(() => entryGrant(0n)).toThrow(/positive/);
   });
 });
 
