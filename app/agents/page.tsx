@@ -9,12 +9,17 @@ import { useActivity } from "@/hooks/useActivity";
 import { useAgentFeed, type HeadsUp } from "@/hooks/useAgentFeed";
 import { useAgents } from "@/hooks/useAgents";
 import { useNowSec } from "@/hooks/useNowSec";
-import { usePosition, type PositionData } from "@/hooks/usePosition";
+import { usePosition } from "@/hooks/usePosition";
+import { AAVE } from "@/lib/aave/addresses";
+import { spokeAbi } from "@/lib/aave/abis/ISpoke";
+import { summarize } from "@/lib/aave/math";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { agentList, mixOnTarget } from "@/lib/agents/list";
+import { toUsd } from "@/lib/cash";
 import { CHAIN_ID } from "@/lib/chain";
 import { formatUsdTrim } from "@/lib/formatting";
+import { statusFor } from "@/lib/risk/status";
 
 export default function AgentsPage() {
   return <RequireAccount>{(address) => <Agents address={address} />}</RequireAccount>;
@@ -57,7 +62,7 @@ function Agents({ address }: { address: `0x${string}` }) {
 
   return (
     <AgentsView
-      headsUp={pending && position && <PendingSale sale={pending} position={position} nowSec={nowSec} />}
+      headsUp={pending && <PendingSale account={address} sale={pending} nowSec={nowSec} />}
       agents={list.agents}
       reason={list.reason}
       feed={
@@ -80,31 +85,27 @@ function Agents({ address }: { address: `0x${string}` }) {
 
 /**
  * The pending sale, in the board's words. "Add $X" is what brings the credit to where the sale would (Protect · sell's
- * target, read live); "$Y" is the stock the heads-up said it would sell. A sale due while prices are held waits for
- * them to reopen.
+ * target, read live), rounded up so it's enough; "$Y" is the stock the heads-up said it would sell. A sale due while prices are held waits for
+ * them to reopen. It reads only what it needs, so the warning never waits on the rest of the account.
  */
-function PendingSale({ sale, position, nowSec }: { sale: HeadsUp; position: PositionData; nowSec: number }) {
+function PendingSale({ account, sale, nowSec }: { account: `0x${string}`; sale: HeadsUp; nowSec: number }) {
   const executor = { address: GOOSE_EXECUTOR ?? zeroAddress, abi: gooseExecutorAbi, chainId: CHAIN_ID } as const;
   const reads = useReadContracts({
     contracts: [
       { ...executor, functionName: "sellLimits" },
       { ...executor, functionName: "frozen", args: [BigInt(sale.sellAfter)] },
+      { address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserAccountData", args: [account], chainId: CHAIN_ID },
     ],
     allowFailure: false,
-    query: { enabled: !!GOOSE_EXECUTOR },
+    query: { enabled: !!GOOSE_EXECUTOR, refetchInterval: 20_000 },
   });
-  if (!reads.data || (position.status !== "watch" && position.status !== "act")) return null;
-  const [limits, frozen] = reads.data;
-  const targetHf = Number(limits[2]) / 1e18;
-  const add = Math.ceil(position.debtUsd - (position.collateralUsd * position.avgCf) / targetHf);
+  if (!reads.data) return null;
+  const [limits, frozen, data] = reads.data;
+  const credit = summarize(data);
+  const status = statusFor(credit.healthFactor);
+  if (status !== "watch" && status !== "act") return null;
+  const add = Math.ceil(credit.debtUsd - (credit.collateralUsd * credit.avgCf) / (Number(limits[2]) / 1e18));
   if (add <= 0) return null;
   const when = frozen ? "when prices reopen" : sale.sellAfter > nowSec ? `in ${Math.ceil((sale.sellAfter - nowSec) / 60)} min` : "now";
-  return (
-    <HeadsUpCard
-      add={formatUsdTrim(add)}
-      sell={formatUsdTrim(Math.ceil(Number(sale.sellValueRaw) / 1e6))}
-      when={when}
-      status={position.status}
-    />
-  );
+  return <HeadsUpCard add={formatUsdTrim(add)} sell={formatUsdTrim(toUsd(sale.sellValueRaw))} when={when} status={status} />;
 }
