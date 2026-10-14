@@ -2,31 +2,21 @@
 
 import type { ReactNode } from "react";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
-import { Button } from "./Button";
 import { LimitChips } from "./LimitChips";
 import { AgentPill } from "./Status";
-import { NETWORK_FEE_ROW, Summary } from "./Summary";
+import { NETWORK_FEE_ROW } from "./Summary";
 import { TxButton, TxError } from "./TxUi";
 import { ShieldIcon } from "./icons";
-import { AGENT_COPY, type AgentItem, type ConfirmCopy, type SheetAction } from "@/lib/agents/list";
+import { AGENT_COPY, type AgentItem, type SheetAction } from "@/lib/agents/list";
 import type { AgentStatus } from "@/lib/agents/status";
+import { stepsNote } from "@/lib/formatting";
 
 /*
  * An agent's sheet (Adrian, 2026-10-15): what it does and never does, its state and next move, its limit, its own
- * settings, when it stops, what it did, and a way to switch it on or off. Every change is its own JAW screen, said on
- * a confirm step in the same sheet (SheetSteps).
+ * settings, when it stops, what it did, and a way to switch it on or off. The sheet already says what a change does,
+ * so there is no confirm step of ours: Switch on, Renew and Turn off open JAW's own sheet straight away, once a grant
+ * or revoke (a small line says "2 steps" when there are more).
  */
-
-/** The confirm step, with what's needed to sign it. */
-export type ConfirmView = ConfirmCopy & {
-  busy: boolean;
-  error: string | null;
-  /** Why it can't go ahead now (not live, network fees), under the button; null when it can. */
-  blocked: string | null;
-  /** The dev preview (`?as=`): nothing can be signed. */
-  preview: boolean;
-  onConfirm: () => void;
-};
 
 export type LimitView = {
   options: readonly number[];
@@ -49,16 +39,20 @@ const PILL: Record<AgentStatus, { text: string; tone: "on" | "neutral" }> = {
 const Label = ({ children }: { children: ReactNode }) => <h3 className="label m-0 px-1">{children}</h3>;
 
 export function AgentSheet({
-  open, onClose, item, confirm, onBack, live, stops, limit, settings, settingsSave = false, activity, onAction,
+  open, onClose, item, live, busy, error, preview, offSteps, stops, limit, settings, settingsSave = false, activity, onAction,
 }: {
   open: boolean;
   onClose: () => void;
   item: AgentItem;
-  /** The confirm step when one is open; the sheet's own step otherwise. */
-  confirm: ConfirmView | null;
-  /** Back from the confirm step to the sheet, when the sheet led to it. */
-  onBack?: () => void;
   live: boolean;
+  /** JAW's sheet is open for one of this sheet's changes: its buttons wait. */
+  busy: boolean;
+  /** What went wrong with the last change, if it didn't go through. */
+  error: string | null;
+  /** The dev preview (`?as=`): nothing can be signed. */
+  preview: boolean;
+  /** How many times turning it off opens JAW's sheet: once for each grant JAW lists. */
+  offSteps: number;
   /** "Oct 15, 2027": when its grant ends, while it has one. */
   stops: string | null;
   /** The limits it offers; without them the sheet shows the one it runs with. */
@@ -67,7 +61,7 @@ export function AgentSheet({
   settings?: ReactNode;
   /**
    * The settings carry the limit and their own Save, which also switches the agent on (Protect, Rebalance): the sheet
-   * then shows no limit of its own and no Switch on, so there is one limit and one Face ID button on screen.
+   * then shows no limit of its own and no Switch on, so there is one limit and one button to JAW's sheet on screen.
    */
   settingsSave?: boolean;
   activity: ReactNode;
@@ -75,84 +69,91 @@ export function AgentSheet({
 }) {
   const copy = AGENT_COPY[item.agent];
   const on = item.status === "on" || item.status === "starting";
+  const per = limit?.per ?? "day";
   return (
-    <SheetShell
-      open={open}
-      onOpenChange={(next) => !next && onClose()}
-      title={confirm ? confirm.title : item.name}
-      description={confirm ? undefined : copy.lead}
-      onBack={confirm && !confirm.busy ? onBack : undefined}
-    >
-      <SheetSteps stepKey={confirm ? `confirm:${confirm.title}` : "main"} direction={confirm ? "forward" : "back"} className="flex flex-col gap-3.5">
-        {confirm ? (
-          <AgentConfirm confirm={confirm} />
-        ) : (
-          <>
-            <p className="m-0 flex items-start gap-2 rounded-[16px] bg-card-bone px-3 py-2.5 text-[13px] leading-[1.4] text-ink-2">
-              <ShieldIcon size={14} className="mt-0.5 shrink-0 text-pos" />
-              {copy.never}
-            </p>
+    <SheetShell open={open} onOpenChange={(next) => !next && onClose()} title={item.name} description={copy.lead}>
+      <SheetSteps stepKey="main" className="flex flex-col gap-3.5">
+        <p className="m-0 flex items-start gap-2 rounded-[16px] bg-card-bone px-3 py-2.5 text-[13px] leading-[1.4] text-ink-2">
+          <ShieldIcon size={14} className="mt-0.5 shrink-0 text-pos" />
+          {copy.never}
+        </p>
 
-            <div className="flex flex-col gap-1.5 rounded-[22px] bg-card px-4 py-3.5 shadow-card-elev">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-[15px] font-semibold">Status</span>
-                <AgentPill tone={PILL[item.status].tone}>{PILL[item.status].text}</AgentPill>
-              </div>
-              <p className="num m-0 text-sm leading-[1.4] text-ink-2">{item.line}</p>
-              {stops && (
-                <p className="m-0 flex items-center gap-1.5 border-t border-hairline pt-2.5 text-[13px] text-ink-mid">
-                  Stops on {stops}
-                  <span aria-hidden>·</span>
-                  <button type="button" disabled={!live} onClick={() => onAction("renew")} className="font-semibold text-ink underline-offset-2 hover:underline disabled:opacity-45">
-                    Renew
-                  </button>
-                </p>
-              )}
-            </div>
-
-            {!settingsSave && (
-              <section className="flex flex-col gap-2">
-                <Label>Limit</Label>
-                {limit && limit.options.length > 1 ? (
-                  <div className="flex flex-col gap-2.5 rounded-[22px] bg-card px-4 py-3.5 shadow-card-elev">
-                    <LimitChips label={`${item.name} can move up to, a ${limit.per}`} options={limit.options} value={limit.value} onChange={limit.onChange} per={`a ${limit.per}`} size="sm" />
-                    {limit.changed &&
-                      (on ? (
-                        <Button variant="dark" disabled={!live} onClick={() => onAction("limit")}>
-                          Save the new limit
-                        </Button>
-                      ) : (
-                        <span className="text-xs text-subtle">It starts on this limit when you switch it on.</span>
-                      ))}
-                  </div>
-                ) : (
-                  <p className="num m-0 rounded-[22px] bg-card px-4 py-3.5 text-[15px] font-semibold shadow-card-elev">{item.limit}</p>
-                )}
-              </section>
-            )}
-
-            {settings}
-
-            <section className="flex flex-col gap-2">
-              <Label>What it did</Label>
-              {activity}
-            </section>
-
-            {on ? (
-              <button type="button" disabled={!live} onClick={() => onAction("off")} className="flex h-11 items-center justify-center text-sm font-semibold text-act disabled:opacity-45">
-                Turn off {item.name}
+        <div className="flex flex-col gap-1.5 rounded-[22px] bg-card px-4 py-3.5 shadow-card-elev">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[15px] font-semibold">Status</span>
+            <AgentPill tone={PILL[item.status].tone}>{PILL[item.status].text}</AgentPill>
+          </div>
+          <p className="num m-0 text-sm leading-[1.4] text-ink-2">{item.line}</p>
+          {stops && (
+            <p className="m-0 flex items-center gap-1.5 border-t border-hairline pt-2.5 text-[13px] text-ink-mid">
+              Stops on {stops}
+              <span aria-hidden>·</span>
+              <button type="button" disabled={!live || busy} onClick={() => onAction("renew")} className="font-semibold text-ink underline-offset-2 hover:underline disabled:opacity-45">
+                Renew
               </button>
+            </p>
+          )}
+        </div>
+
+        {!settingsSave && (
+          <section className="flex flex-col gap-2">
+            <Label>{per === "week" ? "Weekly limit" : "Daily limit"}</Label>
+            {limit && limit.options.length > 1 ? (
+              <div className="flex flex-col gap-2.5 rounded-[22px] bg-card px-4 py-3.5 shadow-card-elev">
+                <LimitChips label={per === "week" ? "Weekly limit" : "Daily limit"} options={limit.options} value={limit.value} onChange={limit.onChange} per={`a ${limit.per}`} size="sm" />
+                <span className="text-xs leading-[1.4] text-subtle">{neverMoreThan(item.name, per)}</span>
+                {limit.changed &&
+                  (on ? (
+                    <TxButton label="Save" size="md" phase={busy ? "signing" : "idle"} preview={preview} disabled={!live} onClick={() => onAction("limit")} />
+                  ) : (
+                    <span className="text-xs text-subtle">It starts on this limit when you switch it on.</span>
+                  ))}
+              </div>
             ) : (
-              !settingsSave && (
-                <div className="flex flex-col gap-2">
-                  <Button disabled={!live || item.status === "loading"} onClick={() => onAction("on")}>
-                    Switch on {item.name}
-                  </Button>
-                  {!live && <p className="m-0 text-center text-xs text-subtle">Not live yet</p>}
-                </div>
-              )
+              <p className="num m-0 rounded-[22px] bg-card px-4 py-3.5 text-[15px] font-semibold shadow-card-elev">{item.limit}</p>
             )}
-          </>
+          </section>
+        )}
+
+        {settings}
+
+        <section className="flex flex-col gap-2">
+          <Label>What it did</Label>
+          {activity}
+        </section>
+
+        <TxError error={error} />
+        {(on || !settingsSave) && (
+          <div className="flex items-center justify-between px-1 text-[13px]">
+            <span className="text-ink-mid">{NETWORK_FEE_ROW.label}</span>
+            <span className="font-semibold">{NETWORK_FEE_ROW.value}</span>
+          </div>
+        )}
+        {on ? (
+          <div className="flex flex-col items-center gap-0.5">
+            <button
+              type="button"
+              disabled={!live || busy}
+              aria-busy={busy}
+              onClick={() => onAction("off")}
+              className="flex h-11 items-center justify-center px-4 text-sm font-semibold text-act disabled:opacity-45"
+            >
+              Turn off
+            </button>
+            {stepsNote(offSteps) && <span className="text-xs text-subtle">{stepsNote(offSteps)}</span>}
+          </div>
+        ) : (
+          !settingsSave && (
+            <TxButton
+              label="Switch on"
+              size="md"
+              phase={busy ? "signing" : "idle"}
+              preview={live && preview}
+              note={live ? null : "Not live yet"}
+              disabled={!live || item.status === "loading"}
+              onClick={() => onAction("on")}
+            />
+          )
         )}
       </SheetSteps>
     </SheetShell>
@@ -189,22 +190,5 @@ export function ReceiveCoins({ coins }: { coins: readonly ReceiveCoin[] }) {
   );
 }
 
-/** The confirm step: what changes, then JAW's own screen behind one Face ID button. */
-export function AgentConfirm({ confirm }: { confirm: ConfirmView }) {
-  return (
-    <>
-      <p className="m-0 text-[15px] leading-[1.45] text-ink-2">{confirm.lead}</p>
-      <Summary rows={[...confirm.rows, NETWORK_FEE_ROW]} />
-      <TxError error={confirm.error} />
-      <TxButton
-        label={confirm.button}
-        size="md"
-        phase={confirm.busy ? "signing" : "idle"}
-        preview={confirm.preview}
-        disabled={!!confirm.blocked}
-        onClick={confirm.onConfirm}
-      />
-      <p className="m-0 text-center text-xs text-subtle">{confirm.blocked ?? confirm.note}</p>
-    </>
-  );
-}
+/** The line under a limit: "Protect never moves more than this in a day." */
+export const neverMoreThan = (name: string, per: "day" | "week") => `${name} never moves more than this in a ${per}.`;

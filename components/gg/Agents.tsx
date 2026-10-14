@@ -10,6 +10,7 @@ import { TabBar } from "./TabBar";
 import { ChevronRight, PadlockIcon } from "./icons";
 import { NOT_LIVE, type Agent, type AgentCard, type AgentItem, type CardAction } from "@/lib/agents/list";
 import type { AgentJob } from "@/lib/agents/permissions";
+import { stepsNote } from "@/lib/formatting";
 import { EQUITIES } from "@/lib/tokens/registry";
 
 /*
@@ -55,8 +56,15 @@ const TONE: Record<AgentCard["tone"], string> = {
   plain: "bg-card shadow-card-elev",
 };
 
-/** A card that needs the user: one sentence, and one or two ways to act on it. */
-export function AttentionCard({ card, onRenew }: { card: AgentCard; onRenew: (agent: Agent, jobs: AgentJob[]) => void }) {
+/** A card that needs the user: one sentence, and one or two ways to act on it. Renew opens JAW's own sheet. */
+export function AttentionCard({
+  card, onRenew, disabled = false,
+}: {
+  card: AgentCard;
+  onRenew: (agent: Agent, jobs: AgentJob[]) => void;
+  /** A change is on JAW's sheet already. */
+  disabled?: boolean;
+}) {
   const urgent = card.tone !== "plain";
   const button = (a: CardAction, i: number) =>
     a.kind === "link" ? (
@@ -64,7 +72,13 @@ export function AttentionCard({ card, onRenew }: { card: AgentCard; onRenew: (ag
         {a.label}
       </Button>
     ) : (
-      <button key="renew" type="button" onClick={() => onRenew(a.agent, a.jobs)} className="flex h-9 shrink-0 items-center rounded-[18px] bg-ink px-4 text-sm font-semibold text-on-ink">
+      <button
+        key="renew"
+        type="button"
+        disabled={disabled}
+        onClick={() => onRenew(a.agent, a.jobs)}
+        className="flex h-9 shrink-0 items-center rounded-[18px] bg-ink px-4 text-sm font-semibold text-on-ink disabled:opacity-45"
+      >
         Renew
       </button>
     );
@@ -104,7 +118,7 @@ export function MixBar({ mixBps }: { mixBps: readonly number[] }) {
 
 /**
  * One agent: its mark, name and what it does, its switch, then what it does next and its limit. The row opens the
- * agent's sheet; the switch opens its confirm step (one Face ID, JAW's own screen).
+ * agent's sheet; the switch opens JAW's own sheet for the grant at the limit shown, or for the revoke.
  */
 export function AgentRow({
   item, switchable, onOpen, onSwitch, extra,
@@ -139,15 +153,15 @@ export function AgentRow({
   );
 }
 
-/** "Turn off all agents", honest about how many Face IDs it takes. */
-export function TurnOffAll({ faceIds, live, disabled, onClick }: { faceIds: number; live: boolean; disabled: boolean; onClick: () => void }) {
-  const note = !live ? "Not live yet" : faceIds === 0 ? "None of them is on." : faceIds === 1 ? "One Face ID" : `${faceIds} Face IDs, one for each limit you signed`;
+/** "Turn off all agents": straight to JAW's own sheet, once for each grant that's on ("3 steps"). */
+export function TurnOffAll({ steps, live, disabled, onClick }: { steps: number; live: boolean; disabled: boolean; onClick: () => void }) {
+  const note = !live ? "Not live yet" : steps === 0 ? "None of them is on." : stepsNote(steps);
   return (
     <div className="flex flex-col items-center gap-0.5">
-      <button type="button" disabled={disabled || faceIds === 0} onClick={onClick} className="flex h-11 items-center px-4 text-sm font-semibold text-act disabled:text-ink-mid disabled:opacity-60">
+      <button type="button" disabled={disabled || steps === 0} onClick={onClick} className="flex h-11 items-center px-4 text-sm font-semibold text-act disabled:text-ink-mid disabled:opacity-60">
         Turn off all agents
       </button>
-      <span className="text-xs text-subtle">{note}</span>
+      {note && <span className="text-xs text-subtle">{note}</span>}
     </div>
   );
 }

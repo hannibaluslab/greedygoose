@@ -6,8 +6,6 @@ import {
   agentItems,
   agentParam,
   agentStatus,
-  allOffCopy,
-  confirmFor,
   nextLine,
   NOT_LIVE,
   type CardsInput,
@@ -149,40 +147,6 @@ describe("agentCards: only when something needs the user", () => {
     };
     expect(agentCards(everything).map((c) => c.key)).toEqual(["heads-up", "fails", "stopped-save", "expiring-protect", "waiting-USDe"]);
     for (const c of agentCards(everything)) expect(`${c.text} ${c.sub ?? ""}`).not.toMatch(ON_SCREEN);
-  });
-});
-
-describe("confirmFor: the confirm step, before JAW's own screen", () => {
-  const until = NOW + 365 * DAY;
-  it("says switching on is one Face ID, with the limit and how long it lasts", () => {
-    const c = confirmFor({ kind: "on", agent: "save", limit: "$1,000 a day", untilSec: until, faceIds: 1 });
-    expect(c).toMatchObject({ title: "Switch on Save", button: "Switch on with Face ID", note: "One Face ID" });
-    expect(c.lead).toBe("Save puts idle cash into savings, up to $1,000 a day. JAW shows the limit on its own screen before you sign.");
-    expect(c.rows).toEqual([
-      { label: "Limit", value: "$1,000 a day" },
-      { label: "Until", value: expect.stringMatching(/^\w{3} \d{1,2}, \d{4}$/) },
-    ]);
-  });
-
-  it("counts a Face ID for each grant turning off takes, and names the change of limit", () => {
-    expect(confirmFor({ kind: "off", agent: "protect", limit: "$300 a day", untilSec: until, faceIds: 2 }).note).toBe(
-      "2 Face IDs, one for each limit you signed",
-    );
-    expect(confirmFor({ kind: "limit", agent: "save", limit: "$5,000 a day", from: "$1,000 a day", untilSec: until, faceIds: 1 }).rows[0]).toEqual({
-      label: "Limit",
-      value: "$1,000 a day → $5,000 a day",
-    });
-    expect(confirmFor({ kind: "renew", agent: "receive", limit: "$1,000 a day", untilSec: until, faceIds: 1 }).title).toBe("Renew Receive");
-    expect(allOffCopy(4)).toMatchObject({ title: "Turn off all agents", note: "4 Face IDs, one for each limit you signed" });
-  });
-
-  it("uses none of the words the screens leave out", () => {
-    for (const agent of AGENTS) {
-      for (const kind of ["on", "off", "limit", "renew"] as const) {
-        const c = confirmFor({ kind, agent, limit: "$1 a day", from: "$2 a day", untilSec: until, faceIds: 1 });
-        expect([c.title, c.lead, c.button, c.note, ...c.rows.map((r) => r.value)].join(" ")).not.toMatch(ON_SCREEN);
-      }
-    }
   });
 });
 
