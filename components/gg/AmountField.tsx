@@ -29,7 +29,8 @@ export function AmountField({
           {label}
         </label>
       )}
-      <div className="flex items-center gap-2.5">
+      {/* Fixed height: the card stays put while the number steps down. */}
+      <div className="flex h-[30px] items-center gap-2.5">
         <div className="num flex min-w-0 flex-1 items-center font-semibold">
           <span aria-hidden className="mr-0.5 text-subtle transition-[font-size] duration-150 ease-out" style={{ fontSize: Math.round(size * 0.72) }}>
             $
