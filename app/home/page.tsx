@@ -84,7 +84,7 @@ function Home({ address }: { address: `0x${string}` }) {
                 <FinishSetupCard
                   rate={rateText(apy)}
                   grant={setup.earning}
-                  onStart={() => setup.startEarning(() => toast.success(`Your cash is earning ${rateText(apy)}`))}
+                  onStart={() => setup.startEarning(() => toast.success(`Your cash starts earning ${rateText(apy)}`))}
                 />
               )}
             </>

@@ -40,7 +40,7 @@ function Setup({ address }: { address: `0x${string}` }) {
       grant={setup.earning}
       onStart={() =>
         setup.startEarning(() => {
-          if (rate) toast.success(`Your cash is earning ${rate}`);
+          if (rate) toast.success(`Your cash starts earning ${rate}`);
           router.replace("/home");
         })
       }

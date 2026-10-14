@@ -74,7 +74,14 @@ export function FinishSetupCard({ rate, grant, onStart }: { rate: string | null;
           <span className="text-[15px] font-semibold leading-[1.3]">Finish setting up</span>
           <span className="num text-[13px] leading-[1.3] text-ink-2">Your cash starts earning{rate ? ` ${rate}` : ""}</span>
         </span>
-        <button type="button" onClick={onStart} disabled={grant.busy || grant.preview || !!grant.blocked} aria-busy={grant.busy} className={PILL}>
+        <button
+          type="button"
+          onClick={onStart}
+          disabled={grant.busy || grant.preview || !!grant.blocked}
+          aria-busy={grant.busy}
+          aria-label="Start earning with Face ID"
+          className={PILL}
+        >
           <FaceIdIcon size={16} />
           {grant.busy ? "Face ID…" : "Start earning"}
         </button>
@@ -188,10 +195,14 @@ export function ConvertSheet({
   // Whether the next question is asked is settled once the conversion lands, so the grant switching it on doesn't
   // swap the step under the user.
   const [ask] = useState(() => askAutomatic(setup.entry));
+  // The coins signed for: a coin that wasn't at a fair price stays as it is, so it's left out of what's said after.
+  const [sent, setSent] = useState<readonly ConvertQuote[]>([]);
   const landed = tx.phase === "done";
-  const got = quotes.data?.filter((q) => q.fair).reduce((t, q) => t + q.outRaw, 0n) ?? 0n;
+  const got = sent.reduce((t, q) => t + q.outRaw, 0n);
   const close = () => {
-    if (landed) toast.success(`${arrivedText(coins)} is cash now`);
+    if (landed && sent.length) {
+      toast.success(`${arrivedText(sent.map((q) => ({ coin: q.coin, raw: q.amountIn })))} ${sent.length === 2 ? "are" : "is"} cash now`);
+    }
     onClose();
   };
   return (
@@ -206,7 +217,9 @@ export function ConvertSheet({
             onConfirm={() => {
               if (tx.phase === "failed") tx.reset();
               setup.resetAutomatic();
-              void tx.convert(user, quotes.data ?? []);
+              const shown = quotes.data ?? [];
+              setSent(shown.filter((q) => q.fair));
+              void tx.convert(user, shown);
             }}
           />
         ) : ask ? (
