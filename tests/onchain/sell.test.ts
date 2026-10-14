@@ -2,7 +2,8 @@
  * Simulates sell batches on Base mainnet (eth_simulateV1), from real accounts. Nothing is signed or
  * sent. Plans come from live reads (Aave's prices, collateral factors and the position), quotes from
  * the live pools, the same way the app gets them. To try a sale in Watch or near Aave's limit, the
- * simulation first takes credit for the account, in the same simulated block.
+ * simulation first takes credit for the account, in the same simulated block; a small loan is taken
+ * the same way, backed by a stock the account supplies first.
  */
 import { describe, expect, it } from "vitest";
 import { createPublicClient, decodeFunctionResult, encodeFunctionData, erc20Abi, http, parseUnits, type Log } from "viem";
@@ -12,7 +13,7 @@ import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { aaveOracleAbi } from "@/lib/aave/abis/IAaveOracle";
 import { explainRevert } from "@/lib/aave/errors";
 import { priceToUsd, summarize, type AccountData } from "@/lib/aave/math";
-import { buildBorrowCalls, type Call } from "@/lib/aave/tx";
+import { buildBorrowCalls, buildLoanCalls, type Call } from "@/lib/aave/tx";
 import { decodeActivity } from "@/lib/activity/decode";
 import { buildSaleCalls, planSell, type SellFrom, type SellHolding, type SellPosition } from "@/lib/sell";
 import { quotePool, quoteSwap, signingQuote } from "@/lib/swap/buy";
@@ -40,16 +41,17 @@ const uint = (x: { data: Address }) => decodeFunctionResult({ abi: erc20Abi, fun
 const account = (x: { data: Address }) =>
   summarize(decodeFunctionResult({ abi: spokeAbi, functionName: "getUserAccountData", data: x.data }) as AccountData);
 
-/** What usePosition and useCollateralFactors read for one stock, as planSell takes it. */
-async function holdingOf(user: Address, stock: ReserveAsset): Promise<SellHolding & { cf: number }> {
+/** What usePosition and useCollateralFactors read for one stock, as planSell takes it, after `before` when given. */
+async function holdingOf(user: Address, stock: ReserveAsset, before: Call[] = []): Promise<SellHolding & { cf: number }> {
   const id = BigInt(stock.reserveId);
-  const [freeRaw, lockedRaw, price, cfg, reserve] = await Promise.all([
-    client.readContract({ address: stock.address, abi: erc20Abi, functionName: "balanceOf", args: [user] }),
-    client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserSuppliedAssets", args: [id, user] }),
+  const [held, price, cfg, reserve] = await Promise.all([
+    client.simulateCalls({ account: user, calls: [...plain(before), balanceRead(stock.address, user), suppliedRead(stock, user)] }),
     client.readContract({ address: AAVE.SPOKE_ORACLE, abi: aaveOracleAbi, functionName: "getReservePrice", args: [id] }),
     client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getReserveConfig", args: [id] }),
     client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getReserve", args: [id] }),
   ]);
+  expect(held.results.every((x) => x.status === "success")).toBe(true);
+  const [freeRaw, lockedRaw] = held.results.slice(before.length).map(uint);
   const dyn = await client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getDynamicReserveConfig", args: [id, reserve.dynamicConfigKey] });
   const priceUsd = priceToUsd(price);
   return { priceUsd, freeRaw, lockedRaw, lockedUsd: (Number(lockedRaw) / 10 ** stock.decimals) * priceUsd, paused: cfg.paused, cf: dyn.collateralFactor / 10_000 };
@@ -86,7 +88,7 @@ async function quoteToSign(stock: ReserveAsset, sharesRaw: bigint): Promise<Sell
 
 /** Plans the sale on live reads, as a sell screen would. */
 async function planned(from: SellFrom, user: Address, stock: ReserveAsset, sharesRaw: bigint, before: Call[] = []) {
-  const [holding, position, quote] = await Promise.all([holdingOf(user, stock), positionOf(user, before), quoteToSign(stock, sharesRaw)]);
+  const [holding, position, quote] = await Promise.all([holdingOf(user, stock, before), positionOf(user, before), quoteToSign(stock, sharesRaw)]);
   const plan = planSell({ from, stock, holding, cf: holding.cf, position, quote });
   const calls = () => buildSaleCalls({ from, user, stock, quote, oraclePriceUsd: holding.priceUsd, debtRaw: position.debtRaw });
   return { holding, position, quote, plan, calls };
@@ -197,14 +199,17 @@ describe("repaying by selling a holding on Base (plan item 7 step 9)", () => {
   }
 
   it("a small loan: one sale repays all of it", async () => {
-    const position = await positionOf(backer);
+    // A $5 loan backed by $20 of NVDA, taken first in the same simulated block: the backer's own loan is live and moves.
+    const free = await holdingOf(newcomer, nvda);
+    const before = buildLoanCalls({ user: newcomer, locks: [{ stock: nvda, raw: sharesFor(20, free, nvda) }], borrowRaw: parseUnits("5", 6) });
+    const position = await positionOf(newcomer, before);
     expect(position.debtRaw).toBeGreaterThan(0n);
-    const { plan, calls } = await planned("repay", backer, nvda, sharesFor(position.debtUsd + 2, await holdingOf(backer, nvda), nvda));
+    const { plan, calls } = await planned("repay", newcomer, nvda, sharesFor(position.debtUsd + 2, free, nvda), before);
     expect(plan.block).toBeUndefined();
     expect(plan.after).toBe("none");
     const built = calls();
     expect(built).toHaveLength(6); // … repay, then the leftover allowance back to 0
-    const r = await simulateSale(backer, nvda, built);
+    const r = await simulateSale(newcomer, nvda, built, before);
     expect(r.statuses.every((s) => s === "success")).toBe(true);
     expect(r.debtAfter).toBe(0n);
   });
