@@ -19,17 +19,29 @@ interface IJustaPermissionManager {
         SpendLimit[] spends;
     }
     struct Call { address target; uint256 value; bytes data; }
+    struct PeriodSpend { uint48 start; uint48 end; uint160 spend; }
+
+    event PermissionApproved(bytes32 indexed permissionHash, Permission permission);
 
     function approve(Permission calldata permission) external returns (bool);
     function revoke(Permission calldata permission) external;
     function executeBatch(Permission calldata permission, Call[] calldata calls) external;
     function isApproved(Permission calldata permission) external view returns (bool);
+    function getCurrentPeriod(Permission calldata permission, SpendLimit calldata spendLimit)
+        external
+        view
+        returns (PeriodSpend memory);
     function getHash(Permission calldata permission) external view returns (bytes32);
 }
 
 /// JAW's account factory (the SDK's FACTORY_ADDRESS). Owners are ABI-encoded addresses or 64-byte passkeys.
 interface IJawFactory {
     function createAccount(bytes[] calldata owners, uint256 nonce) external payable returns (address);
+}
+
+/// JustanAccount, the contract behind every JAW account.
+interface IJustanAccount {
+    function executeBatch(IJustaPermissionManager.Call[] calldata calls) external;
 }
 
 interface IAaveV3Pool {
@@ -48,5 +60,6 @@ interface ISpokeLite {
 interface IERC20Lite {
     function approve(address spender, uint256 amount) external returns (bool);
     function balanceOf(address who) external view returns (uint256);
+    function allowance(address owner, address spender) external view returns (uint256);
     function transfer(address to, uint256 amount) external returns (bool);
 }

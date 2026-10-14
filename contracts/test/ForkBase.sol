@@ -6,6 +6,7 @@ import {StockDouble} from "./StockDouble.sol";
 import {
     IJustaPermissionManager as PM,
     IJawFactory,
+    IJustanAccount,
     IAaveV3Pool,
     ISpokeLite,
     IERC20Lite
@@ -17,6 +18,8 @@ import {
 abstract contract ForkBase is Test {
     PM constant MANAGER = PM(0xf1b40E3D5701C04d86F7828f0EB367B9C90901D8);
     IJawFactory constant JAW_FACTORY = IJawFactory(0x5803c076563C85799989d42Fc00292A8aE52fa9E);
+    /// EntryPoint v0.8 (JustanAccount.entryPoint()): it calls account.executeBatch in every JAW user operation.
+    address constant ENTRY_POINT = 0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108;
     IAaveV3Pool constant POOL = IAaveV3Pool(0xA238Dd80C259a72e81d7e4664a9801593F98d1c5);
     ISpokeLite constant SPOKE = ISpokeLite(0x17905Db0e4A3514467539956c084180616AE7B8D);
     address constant HUB = 0xa4d5947Eb727A052bae69C593FfC84247EC9864E;
@@ -74,6 +77,15 @@ abstract contract ForkBase is Test {
         USDC.approve(address(POOL), amount);
         POOL.supply(address(USDC), amount, account, 0);
         vm.stopPrank();
+    }
+
+    /// Approve a permission the way JAW's grant lands on-chain: a user operation whose execution is
+    /// account.executeBatch([manager.approve(permission)]), called by the EntryPoint.
+    function _grantThroughAccount(PM.Permission memory p) internal {
+        PM.Call[] memory calls = new PM.Call[](1);
+        calls[0] = PM.Call(address(MANAGER), 0, abi.encodeCall(PM.approve, (p)));
+        vm.prank(ENTRY_POINT);
+        IJustanAccount(p.account).executeBatch(calls);
     }
 
     function _hexQuantity(uint256 v) internal pure returns (string memory) {
