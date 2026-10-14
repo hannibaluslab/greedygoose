@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { decodeFunctionData, maxUint256, parseUnits } from "viem";
 import { CASH } from "@/config/risk";
-import { cantRepay, maxSpendRaw, payFromCash, savingsWithdrawal } from "@/lib/cash";
+import { cantRepay, cashShort, maxSpendRaw, payFromCash, readCash, saveRuns, savingsWithdrawal } from "@/lib/cash";
 import { buildRepayCalls } from "@/lib/aave/tx";
 import { aaveV3PoolAbi } from "@/lib/guardian/abis";
 import { GUARDIAN } from "@/lib/guardian/config";
@@ -89,6 +89,25 @@ describe("payFromCash", () => {
   });
 });
 
+describe("cashShort (the cash read again right before Face ID)", () => {
+  const c = { walletRaw: usd(4), savingsRaw: usd(6), saveOn: true };
+
+  it("lets a spend through while it and the fee buffer fit, to the last unit", () => {
+    expect(cashShort(usd(10) - fee, c)).toBeNull();
+    expect(cashShort(usd(1), c)).toBeNull();
+  });
+
+  it("stops a spend the cash no longer covers, saying what's there now", () => {
+    expect(cashShort(usd(10) - fee + 1n, c)).toBe("Your cash moved since you started. You have $10.00 now: check the amount and try again.");
+    expect(cashShort(usd(300), { walletRaw: 0n, savingsRaw: usd(120.5), saveOn: false })).toMatch(/You have \$120\.50 now/);
+  });
+
+  it("counts savings and wallet alike (D15)", () => {
+    expect(cashShort(usd(5), { walletRaw: 0n, savingsRaw: usd(5) + fee, saveOn: true })).toBeNull();
+    expect(cashShort(usd(5), { walletRaw: usd(5) + fee, savingsRaw: 0n, saveOn: true })).toBeNull();
+  });
+});
+
 describe("cantRepay (the Repay screen with no amount to offer)", () => {
   it("asks for money when there's no cash", () => {
     expect(cantRepay({ walletRaw: 0n, savingsRaw: 0n, saveOn: false })).toBe("Add money to your cash to repay.");
@@ -105,5 +124,34 @@ describe("cantRepay (the Repay screen with no amount to offer)", () => {
     for (const c of [{ walletRaw: 0n, savingsRaw: 0n, saveOn: false }, { walletRaw: fee, savingsRaw: 0n, saveOn: false }]) {
       expect(cantRepay(c)).not.toMatch(/USDC|wallet|account/i);
     }
+  });
+});
+
+describe("saveRuns", () => {
+  it("reads Save's bit from the executor's job bits (JOBS' order: save, protect)", () => {
+    expect(saveRuns(0)).toBe(false);
+    expect(saveRuns(0b01)).toBe(true);
+    expect(saveRuns(0b10)).toBe(false);
+    expect(saveRuns(0b11)).toBe(true);
+  });
+});
+
+describe("readCash", () => {
+  it("reads wallet USDC and savings for the account in one multicall; Save is off until the executor is set", async () => {
+    const asked: unknown[] = [];
+    const client = {
+      multicall: async ({ contracts }: { contracts: unknown[] }) => {
+        asked.push(...contracts);
+        return [usd(2), usd(30)];
+      },
+      readContract: async () => {
+        throw new Error("no executor is configured in tests");
+      },
+    } as unknown as Parameters<typeof readCash>[0];
+    expect(await readCash(client, user)).toEqual({ walletRaw: usd(2), savingsRaw: usd(30), saveOn: false });
+    expect(asked).toMatchObject([
+      { address: USDC.address, functionName: "balanceOf", args: [user] },
+      { address: GUARDIAN.AUSDC, functionName: "balanceOf", args: [user] },
+    ]);
   });
 });

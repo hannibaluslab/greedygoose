@@ -2,8 +2,8 @@
 
 import { TxStop, useTx } from "./useTx";
 import { useSigningQuote } from "./useBuyQuote";
+import { useSigningCash } from "./useSigningCash";
 import { buildCreditBuyCalls, creditBuyActivity, creditBuyStop, type CreditPlan } from "@/lib/creditBuy";
-import type { Cash } from "@/lib/cash";
 import type { BuyQuote } from "@/lib/swap/buy";
 import type { ReserveAsset } from "@/lib/tokens/registry";
 
@@ -14,7 +14,6 @@ export type CreditBuyInput = {
   quote: BuyQuote;
   /** planCredit for the credit the review shows. */
   plan: CreditPlan;
-  cash: Cash;
   /** The extra confirmation when it ends in Watch or Act (D2). */
   confirmedRisk: boolean;
 };
@@ -24,15 +23,18 @@ export const CREDIT_BUY_FALLBACK =
 
 /**
  * The Credit Buy batch, built right before Face ID: the review's blocks and extra confirmation
- * still hold, and the quote is read again (useSigningQuote) before buildCreditBuyCalls.
+ * still hold, and the quote and the cash are read again (useSigningQuote, useSigningCash) before
+ * buildCreditBuyCalls. Cash pays what the quote spends past the credit, and the network fee.
  */
 export function useCreditBuyBatch() {
   const quoteToSign = useSigningQuote();
+  const cashToSign = useSigningCash();
   return async (p: CreditBuyInput) => {
     const stop = creditBuyStop(p.plan, p.confirmedRisk);
     if (stop) throw new TxStop(stop);
     const quote = await quoteToSign(p.stock, p.quote);
-    return buildCreditBuyCalls({ user: p.user, stock: p.stock, quote, creditRaw: p.plan.creditRaw, backing: p.plan.backing, cash: p.cash });
+    const cash = await cashToSign(p.user, quote.amountIn - p.plan.creditRaw);
+    return buildCreditBuyCalls({ user: p.user, stock: p.stock, quote, creditRaw: p.plan.creditRaw, backing: p.plan.backing, cash });
   };
 }
 

@@ -209,7 +209,7 @@ export function BuySheet({
                   disabled={!!blocker || (over && !plan) || (!!plan?.extraConfirm && !ack) || feeBlocked || fee.loading || phase === "done"}
                   onClick={() => {
                     if (phase === "failed") reset();
-                    void buy({ user, stock, quote: q, cash, credit: plan ? { plan, confirmedRisk: ack } : undefined });
+                    void buy({ user, stock, quote: q, credit: plan ? { plan, confirmedRisk: ack } : undefined });
                   }}
                 />
               }

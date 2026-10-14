@@ -320,7 +320,7 @@ export function CreditBuySheet({
                   disabled={feeBlocked || fee.loading || !!blocker || (plan.extraConfirm && !ack)}
                   onClick={() => {
                     if (phase !== "idle") reset();
-                    void creditBuy({ user, stock, quote: q, plan, cash: data.cash, confirmedRisk: ack });
+                    void creditBuy({ user, stock, quote: q, plan, confirmedRisk: ack });
                   }}
                 />
               </div>

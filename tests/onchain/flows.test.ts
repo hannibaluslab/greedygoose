@@ -12,7 +12,7 @@ import { buildBorrowCalls, buildLoanCalls, buildRepayCalls, buildSupplyCalls, bu
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { AAVE } from "@/lib/aave/addresses";
 import { CASH_STUCK, explainRevert } from "@/lib/aave/errors";
-import { payFromCash, type Cash } from "@/lib/cash";
+import { cashRaw, cashShort, payFromCash, readCash, type Cash } from "@/lib/cash";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { buildWithdrawSavingsCalls } from "@/lib/guardian/permission";
 import { aeroQuoterAbi } from "@/lib/swap/abis";
@@ -170,5 +170,32 @@ describe("savings-first batches from a $0 wallet", () => {
     expect(r.status).toBe("failure");
     expect(r.data).toBe(toFunctionSelector("NotEnoughAvailableUserBalance()"));
     expect(explainRevert(r.data, "fallback", withdraw)).toBe(CASH_STUCK);
+  });
+});
+
+/** The cash read again right before Face ID (useSigningCash), from the same live account. */
+describe("the cash a batch is signed with (readCash)", () => {
+  const balance = (token: `0x${string}`) => client.readContract({ address: token, abi: erc20Abi, functionName: "balanceOf", args: [user] });
+
+  it("reads what usePosition reads: wallet USDC and savings", async () => {
+    const savingsBefore = await balance(GUARDIAN.AUSDC);
+    const [c, walletRaw] = await Promise.all([readCash(client, user), balance(USDC.address)]);
+    const savingsAfter = await balance(GUARDIAN.AUSDC);
+    expect(c.walletRaw).toBe(walletRaw);
+    // Savings earn by the second, so the read lands between the two around it.
+    expect(c.savingsRaw).toBeGreaterThanOrEqual(savingsBefore);
+    expect(c.savingsRaw).toBeLessThanOrEqual(savingsAfter);
+    expect(c.saveOn).toBe(false);
+  });
+
+  it("a repay built from it simulates, and a spend past it is stopped in words", async () => {
+    const c = await readCash(client, user);
+    const owed = await client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserTotalDebt", args: [BigInt(USDC.reserveId), user] });
+    expect(owed, "the test account owes nothing to repay").toBeGreaterThan(0n);
+    const amountRaw = owed < 1_000_000n ? owed : 1_000_000n;
+    expect(cashShort(amountRaw, c)).toBeNull();
+    const r = await simulate(payFromCash(user, amountRaw, c, buildRepayCalls({ user, amountRaw, all: false })));
+    expect(r.results.every((x) => x.status === "success")).toBe(true);
+    expect(cashShort(cashRaw(c), c)).toMatch(/^Your cash moved since you started\. You have \$[\d,]+\.\d\d now/);
   });
 });
