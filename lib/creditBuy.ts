@@ -32,6 +32,21 @@ export function backingOptions(
   });
 }
 
+/**
+ * What backs credit once a Credit Buy lands: the holdings `adding` puts in use and every holding already in use,
+ * `lead` first (the one picked to back it) when it is among them.
+ */
+export function backers<H extends { symbol: string; lockedRaw: bigint }>(holdings: readonly H[], adding: readonly string[], lead?: string): H[] {
+  const backs = holdings.filter((h) => adding.includes(h.symbol) || h.lockedRaw > 0n);
+  const rank = (h: H) => (h.symbol === lead ? 0 : adding.includes(h.symbol) ? 1 : 2);
+  return backs.sort((a, b) => rank(a) - rank(b));
+}
+
+/** Names for one short line: "NVIDIA", "NVIDIA and Tesla", "NVIDIA and 3 more". */
+export function shortNames(names: readonly string[]): string {
+  return names.length <= 2 ? names.join(" and ") : `${names[0]} and ${names.length - 1} more`;
+}
+
 /** The position fields the plan reads (usePosition's data has them all). */
 export type CreditPosition = {
   collateralUsd: number;
