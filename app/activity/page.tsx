@@ -3,41 +3,13 @@
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { TabBar } from "@/components/gg/TabBar";
 import { TabHeader } from "@/components/gg/Screen";
-import { StockAvatar, tickerOf } from "@/components/gg/StockAvatar";
+import { ActivityAvatar, describeActivity } from "@/components/gg/Activity";
 import { useActivity, type ActivityRow } from "@/hooks/useActivity";
 import type { ActivityItem } from "@/lib/activity/decode";
-import { findByAddress, ALL_RESERVES } from "@/lib/tokens/registry";
 import { txUrl } from "@/lib/chain";
-import { formatShares, formatUsd } from "@/lib/formatting";
 
 export default function ActivityPage() {
   return <RequireAccount>{(address) => <Activity address={address} />}</RequireAccount>;
-}
-
-function describe(i: ActivityItem): { title: string; amount: string; sign: "+" | "−" | "" } {
-  const r = ALL_RESERVES.find((x) => x.symbol === i.symbol) ?? findByAddress(i.symbol);
-  const name = r?.kind === "equity" ? r.name : "USDC";
-  const shares = `${formatShares(i.amount)} ${tickerOf(i.symbol)}`;
-  switch (i.kind) {
-    case "buy":
-      return { title: `Bought ${name}`, amount: `${shares} · ${formatUsd(i.paidUsd ?? 0)}`, sign: "" };
-    case "supply":
-      return { title: `Backed credit with ${name}`, amount: r?.kind === "equity" ? shares : formatUsd(i.amount), sign: "" };
-    case "withdraw":
-      return { title: `Freed up ${name}`, amount: r?.kind === "equity" ? shares : formatUsd(i.amount), sign: "" };
-    case "borrow":
-      return { title: "Used credit", amount: formatUsd(i.amount), sign: "+" };
-    case "repay":
-      return { title: "Repaid credit", amount: formatUsd(i.amount), sign: "−" };
-    case "receive":
-      return { title: `Received ${name}`, amount: r?.kind === "equity" ? shares : formatUsd(i.amount), sign: "+" };
-    case "send":
-      return { title: `Sent ${name}`, amount: r?.kind === "equity" ? shares : formatUsd(i.amount), sign: "−" };
-    case "save":
-      return { title: "Added to savings", amount: formatUsd(i.amount), sign: "" };
-    case "unsave":
-      return { title: "Moved savings to cash", amount: formatUsd(i.amount), sign: "" };
-  }
 }
 
 const when = (ms: number) =>
@@ -75,15 +47,11 @@ function Activity({ address }: { address: `0x${string}` }) {
 function Row({ row, last }: { row: ActivityRow; last: boolean }) {
   const items = row.items.length ? row.items : [{ kind: "send", symbol: "USDC", amount: 0 } as ActivityItem];
   const main = items[0];
-  const d = describe(main);
+  const d = describeActivity(main);
   const extra = items.length - 1;
   return (
     <li className={`flex items-center gap-2.5 px-0.5 py-3.5 ${last ? "" : "border-b border-[#e7e1d2]"}`}>
-      {main.symbol === "USDC" ? (
-        <span aria-hidden className="flex size-10 shrink-0 items-center justify-center rounded-full bg-safe text-[15px] font-bold text-white">$</span>
-      ) : (
-        <StockAvatar symbol={main.symbol} size={40} />
-      )}
+      <ActivityAvatar symbol={main.symbol} size={40} />
       <div className="min-w-0 grow">
         <div className="truncate text-[15px] font-semibold leading-[1.25]">
           {row.items.length ? d.title : "Transaction"}
