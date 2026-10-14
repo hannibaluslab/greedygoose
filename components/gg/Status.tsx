@@ -1,24 +1,45 @@
 import { STATUS_LABEL, type Status } from "@/lib/risk/status";
 import type { GuardianStatus } from "@/hooks/useGuardian";
 
-const PILL: Record<Status, { bg: string; fg: string }> = {
-  none: { bg: "rgba(15,14,11,0.05)", fg: "#5a564e" },
-  safe: { bg: "#d6e7dc", fg: "#1f6a4a" },
-  watch: { bg: "#f6ead0", fg: "#8a6a1f" },
-  act: { bg: "#f3dcd7", fg: "#8e2a1d" },
+const PILL: Record<Status, string> = {
+  none: "bg-pill text-ink-mid",
+  safe: "bg-pos-soft text-pos",
+  watch: "bg-watch-soft text-watch-ink",
+  act: "bg-neg-soft text-neg",
 };
 
-/** Pill sizes from the design: sm = Home card (20px), md = sheet/portfolio (22–26px). */
-export function StatusPill({ status, size = "md" }: { status: Status; size?: "sm" | "md" | "lg" }) {
-  const { bg, fg } = PILL[status];
-  const h = size === "sm" ? 20 : size === "md" ? 24 : 26;
+/** Pill sizes from the boards, smallest first. */
+const SIZE = {
+  sm: { h: 20, px: 8, font: 11, dot: 5, gap: 5 }, // Home Credit card (HomeUpliftRail)
+  row: { h: 22, px: 8, font: 11.5, dot: 5, gap: 5 }, // a summary row (F2-6 "Status")
+  header: { h: 22, px: 9, font: 12, dot: 6, gap: 5 }, // page header (PortfolioPage)
+  md: { h: 24, px: 10, font: 12, dot: 6, gap: 5 }, // Credit sheet (HomeCreditSlide)
+  lg: { h: 26, px: 10, font: 12, dot: 6, gap: 6 }, // Credit page (CreditOn)
+} as const;
+
+export type StatusPillSize = keyof typeof SIZE;
+
+export function StatusPill({ status, size = "md" }: { status: Status; size?: StatusPillSize }) {
+  const { h, px, font, dot, gap } = SIZE[size];
   return (
     <span
-      className="inline-flex shrink-0 items-center font-bold"
-      style={{ height: h, padding: size === "sm" ? "0 8px" : "0 10px", borderRadius: h / 2, background: bg, color: fg, fontSize: size === "sm" ? 11 : 12, gap: size === "sm" ? 5 : 6 }}
+      className={`inline-flex shrink-0 items-center whitespace-nowrap font-bold ${PILL[status]}`}
+      style={{ height: h, padding: `0 ${px}px`, borderRadius: h / 2, fontSize: font, gap }}
     >
-      <span aria-hidden style={{ width: size === "sm" ? 5 : 6, height: size === "sm" ? 5 : 6, borderRadius: 3, background: fg }} />
+      <span aria-hidden className="rounded-[3px] bg-current" style={{ width: dot, height: dot }} />
       {STATUS_LABEL[status]}
+    </span>
+  );
+}
+
+/**
+ * "Safe → Watch" on a review screen (F2-6). Geist has no "→", so the arrow is set in the system
+ * font, as the board draws it, rather than the Arial-based fallback next/font puts after Geist.
+ */
+export function StatusChange({ from, to }: { from: Status; to: Status }) {
+  return (
+    <span className="whitespace-nowrap">
+      <StatusPill status={from} size="row" /> <span className="font-[system-ui] font-medium text-subtle">→</span> <StatusPill status={to} size="row" />
     </span>
   );
 }

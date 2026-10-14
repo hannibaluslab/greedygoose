@@ -14,12 +14,14 @@ export function Money({
 }
 
 /** Card-sized amount: "$2,000" + small grey ".00". */
-export function MoneyCompact({ value, size = 17, centsClass = "text-subtle" }: { value: number; size?: number; centsClass?: string }) {
+export function MoneyCompact({
+  value, size = 17, centsSize, centsClass = "text-subtle", lineHeight = 1.15,
+}: { value: number; size?: number; centsSize?: number; centsClass?: string; lineHeight?: number | "normal" }) {
   const [int, cents] = value.toFixed(2).split(".");
   return (
-    <span className="num inline-flex items-baseline font-semibold" style={{ fontSize: size, letterSpacing: "-0.03em", lineHeight: 1.15 }}>
+    <span className="num inline-flex items-baseline font-semibold" style={{ fontSize: size, letterSpacing: "-0.03em", lineHeight }}>
       ${Number(int).toLocaleString("en-US")}
-      <span className={centsClass} style={{ fontSize: Math.round(size * 0.62), letterSpacing: "-0.01em" }}>.{cents}</span>
+      <span className={centsClass} style={{ fontSize: centsSize ?? Math.round(size * 0.62), letterSpacing: "-0.01em" }}>.{cents}</span>
     </span>
   );
 }

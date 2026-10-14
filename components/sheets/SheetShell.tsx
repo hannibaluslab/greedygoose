@@ -1,7 +1,7 @@
 "use client";
 
-import { ArrowLeft, X } from "lucide-react";
 import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
+import { ArrowLeftIcon, CloseIcon } from "@/components/gg/icons";
 import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
 import { useBodyScrollLock, useKeyboardLift } from "@/hooks/useSheetViewport";
 
@@ -182,7 +182,7 @@ export function SheetShell({
                 onClick={onBack}
                 className="-ml-1.5 grid size-8 shrink-0 place-items-center rounded-full text-ink transition hover:bg-pill touch:active:scale-95"
               >
-                <ArrowLeft size={18} strokeWidth={2} />
+                <ArrowLeftIcon />
               </button>
             )}
             <div className="min-w-0 flex-1">
@@ -202,7 +202,7 @@ export function SheetShell({
                 onClick={() => onOpenChange(false)}
                 className="ml-1 grid size-8 shrink-0 place-items-center rounded-full bg-[rgba(15,14,11,0.06)] text-ink transition hover:bg-pill-strong touch:active:scale-95"
               >
-                <X size={16} strokeWidth={2} />
+                <CloseIcon />
               </button>
             )}
           </div>
