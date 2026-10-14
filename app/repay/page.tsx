@@ -38,8 +38,6 @@ function Repay({ address }: { address: `0x${string}` }) {
   const paid = useRef<string | null>(null);
 
   const options = useMemo(() => (data ? repayChips(Math.min(toUsd(maxSpendRaw(data.cash)), data.debtUsd)) : []), [data]);
-  // Until a chip is tapped, the larger of the two amounts is picked, as drawn.
-  const picked = choice ?? options.at(-1) ?? null;
 
   useEffect(() => {
     if (tx.phase !== "done" || paid.current === null) return;
@@ -54,6 +52,8 @@ function Repay({ address }: { address: `0x${string}` }) {
 
   const maxSpend = maxSpendRaw(data.cash);
   const maxRepay = Math.min(toUsd(maxSpend), data.debtUsd);
+  // Until a chip is tapped, the larger of the two amounts is picked, as drawn; All when it's the only chip.
+  const picked = choice ?? options.at(-1) ?? (maxRepay > 0 ? "all" : null);
   const amount = picked === "all" ? maxRepay : picked ?? 0;
   const amountRaw =
     picked === "all" ? fullRepayAmount(data.debtRaw, maxSpend) : parseUnits(amount.toFixed(USDC.decimals), USDC.decimals);
