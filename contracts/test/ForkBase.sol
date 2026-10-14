@@ -48,18 +48,23 @@ abstract contract ForkBase is Test {
     /// B20 stocks can't run in Foundry's EVM (see StockDouble). Swap in the double and give the hub the balance it
     /// really holds at this block, read from the node: the hub checks its balance covers its books on every supply.
     function _useStockDouble(address stock) internal {
+        uint256 hubBalance = _realBalance(stock, HUB);
+        vm.etch(stock, type(StockDouble).runtimeCode);
+        deal(stock, HUB, hubBalance);
+    }
+
+    /// A stock's balance at `holder` on Base at this block, read from the node (the fork can't run B20 code).
+    function _realBalance(address stock, address holder) internal returns (uint256) {
         string memory params = string.concat(
             '[{"to":"',
             vm.toString(stock),
             '","data":"',
-            vm.toString(abi.encodeWithSignature("balanceOf(address)", HUB)),
+            vm.toString(abi.encodeWithSignature("balanceOf(address)", holder)),
             '"},"',
             _hexQuantity(block.number),
             '"]'
         );
-        uint256 hubBalance = abi.decode(vm.rpc("eth_call", params), (uint256));
-        vm.etch(stock, type(StockDouble).runtimeCode);
-        deal(stock, HUB, hubBalance);
+        return abi.decode(vm.rpc("eth_call", params), (uint256));
     }
 
     /// A new account from JAW's factory, with the owners JAW's SDK gives every account: the user's signer and the
@@ -96,21 +101,21 @@ abstract contract ForkBase is Test {
     /// `_useStockDouble` for every stock first.
     function _backWithAllStocks(address account, uint256 sharesRaw) internal {
         for (uint256 r; r < STOCKS.length; ++r) {
-            deal(STOCKS[r], account, sharesRaw);
-            vm.startPrank(account);
-            IERC20Lite(STOCKS[r]).approve(address(SPOKE), sharesRaw);
-            SPOKE.supply(r, sharesRaw, account);
-            SPOKE.setUsingAsCollateral(r, true, account);
-            vm.stopPrank();
+            _backWith(account, r, sharesRaw);
         }
     }
 
     function _backWithNvda(address account, uint256 sharesRaw) internal {
-        deal(NVDAC, account, sharesRaw);
+        _backWith(account, NVDAC_RESERVE, sharesRaw);
+    }
+
+    /// Back a credit line with `sharesRaw` of the stock at reserve `r`, as the account itself.
+    function _backWith(address account, uint256 r, uint256 sharesRaw) internal {
+        deal(STOCKS[r], account, sharesRaw);
         vm.startPrank(account);
-        IERC20Lite(NVDAC).approve(address(SPOKE), sharesRaw);
-        SPOKE.supply(NVDAC_RESERVE, sharesRaw, account);
-        SPOKE.setUsingAsCollateral(NVDAC_RESERVE, true, account);
+        IERC20Lite(STOCKS[r]).approve(address(SPOKE), sharesRaw);
+        SPOKE.supply(r, sharesRaw, account);
+        SPOKE.setUsingAsCollateral(r, true, account);
         vm.stopPrank();
     }
 
