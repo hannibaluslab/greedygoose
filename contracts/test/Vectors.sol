@@ -2,6 +2,7 @@
 pragma solidity 0.8.28;
 
 import {Thresholds} from "../src/CashRules.sol";
+import {Book, Holding} from "../src/SellRules.sol";
 
 /// The inputs behind contracts/test/vectors/*.json, drawn exactly as scripts/agent-vectors.ts draws them:
 /// uint256(keccak256(abi.encode(tag, i, field))). The JSON carries what the TypeScript reference decided for each.
@@ -41,6 +42,24 @@ library Vectors {
         uint48 end;
         uint256 salt;
         uint160 cap;
+    }
+
+    struct Sell {
+        Book book;
+        uint256 targetHf;
+        uint256 floorBps;
+        bool keepMix;
+        uint256 maxSlice;
+    }
+
+    struct Timing {
+        uint256 hf;
+        uint256 headsUpAt;
+        uint256 now_;
+        bool frozen;
+        uint64 headsUpHf;
+        uint64 nowHf;
+        uint32 headsUpDelay;
     }
 
     function rand(string memory tag, uint256 i, uint256 field) internal pure returns (uint256) {
@@ -99,6 +118,42 @@ library Vectors {
         uint256 d = CALENDAR_START / 1 days + rand("calendar", i, 1) % CALENDAR_DAYS;
         uint256 friday = d - (d + 6) % 7; // 1970-01-02 (day 1) was a Friday
         return friday * 1 days + 15 hours + rand("calendar", i, 2) % 12 hours;
+    }
+
+    /// Holdings from 0.01 to 10,000 shares at $100–1,000, health from 0.95 to 1.6, and limits, pool windows and the USDC
+    /// limit that bind a fifth of the time.
+    function sellInput(uint256 i) internal pure returns (Sell memory v) {
+        uint256 power;
+        for (uint256 k; k < 7; ++k) {
+            uint256 f = 10 + 12 * k;
+            Holding memory h = v.book.stocks[k];
+            h.shares = rand("sell", i, f) % 3 == 0 ? 0 : spread(rand("sell", i, f + 1), rand("sell", i, f + 2), 6, 11);
+            h.price = between(rand("sell", i, f + 3), 1e10, 1e11);
+            h.cf = between(rand("sell", i, f + 4), 5_000, 8_500);
+            uint256 kind = rand("sell", i, f + 5) % 4;
+            h.limit = kind == 0 ? 0 : kind == 1 ? spread(rand("sell", i, f + 6), rand("sell", i, f + 7), 5, 10) : 1e13;
+            h.poolLeft =
+                rand("sell", i, f + 8) % 5 == 0 ? spread(rand("sell", i, f + 9), rand("sell", i, f + 10), 5, 9) : 1e12;
+            power += h.cf * h.shares * h.price * 1e10;
+        }
+        v.book.usdcPrice = between(rand("sell", i, 0), 99_500_000, 100_500_000);
+        uint256 hf = between(rand("sell", i, 1), 0.95e18, 1.6e18);
+        v.book.debt = (power * 1e14 + hf - 1) / hf;
+        v.book.usdcLeft = rand("sell", i, 2) % 5 == 0 ? spread(rand("sell", i, 3), rand("sell", i, 4), 5, 9) : 1e13;
+        v.targetHf = between(rand("sell", i, 5), 1.3e18, 1.6e18);
+        v.floorBps = between(rand("sell", i, 6), 25, 500);
+        v.keepMix = rand("sell", i, 7) % 3 == 0;
+        v.maxSlice = between(rand("sell", i, 8), 100e6, 50_000e6);
+    }
+
+    function timingInput(uint256 i) internal pure returns (Timing memory v) {
+        v.now_ = 1_792_000_000;
+        v.headsUpHf = uint64(between(rand("timing", i, 0), 1.1e18, 1.5e18));
+        v.hf = between(rand("timing", i, 1), 0.9e18, 1.6e18);
+        v.headsUpAt = rand("timing", i, 2) % 3 == 0 ? 0 : v.now_ - rand("timing", i, 3) % 7_200;
+        v.frozen = rand("timing", i, 4) % 4 == 0;
+        v.nowHf = uint64(between(rand("timing", i, 5), 1.02e18, v.headsUpHf));
+        v.headsUpDelay = uint32(between(rand("timing", i, 6), 600, 7_200));
     }
 
     function hashInput(uint256 i) internal pure returns (Hash memory v) {

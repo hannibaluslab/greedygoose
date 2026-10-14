@@ -12,6 +12,7 @@ import { encodeAbiParameters, hashTypedData, keccak256, parseUnits, toHex, type 
 import { CASH, CASH_AGENT } from "@/config/risk";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { inWeekendWindow, planGuardian, planSave } from "@/lib/guardian/plan";
+import { planSell, sellAmounts, sellTiming, type SellBook } from "@/lib/guardian/sell";
 import { marketState } from "@/lib/market-hours";
 import { agentPermission, JOBS } from "@/lib/agents/permissions";
 
@@ -39,6 +40,8 @@ export const PROTECT_COUNT = 1000;
 export const SAVE_COUNT = 1000;
 export const CALENDAR_COUNT = 10_000;
 export const HASH_COUNT = 50;
+export const SELL_COUNT = 600;
+export const TIMING_COUNT = 1000;
 /** Where Vectors.sol's hash test puts the executor, so both sides know the spender. */
 export const HASH_SPENDER: Address = "0x0000000000000000000000000000000000600dE5";
 
@@ -93,6 +96,56 @@ export function calendarTime(i: number): bigint {
   const d = CALENDAR_START / DAY + (r(1) % (CALENDAR_RANGE / DAY));
   const friday = d - ((d + 6n) % 7n); // 1970-01-02 (day 1) was a Friday
   return friday * DAY + 15n * 3600n + (r(2) % (12n * 3600n));
+}
+
+/** Protect · sell inputs: a book and the options. Mirrors Vectors.sellInput. Holdings from 0.01 to 10,000 shares at
+ *  $100–1,000, health from 0.95 to 1.6, and limits, pool windows and the USDC limit that bind a fifth of the time. */
+export function sellInput(i: number) {
+  const r = (f: number) => rand("sell", i, f);
+  const stocks = Array.from({ length: 7 }, (_, k) => {
+    const f = (j: number) => r(10 + 12 * k + j);
+    const sharesRaw = f(0) % 3n === 0n ? 0n : spread(f(1), f(2), 6n, 11n);
+    const kind = f(5) % 4n;
+    return {
+      sharesRaw,
+      price: between(f(3), 10n ** 10n, 10n ** 11n),
+      cfBps: between(f(4), 5_000n, 8_500n),
+      limitRaw: kind === 0n ? 0n : kind === 1n ? spread(f(6), f(7), 5n, 10n) : 10n ** 13n,
+      poolLeftRaw: f(8) % 5n === 0n ? spread(f(9), f(10), 5n, 9n) : 10n ** 12n,
+    };
+  });
+  const usdcPrice = between(r(0), 99_500_000n, 100_500_000n);
+  const hf = between(r(1), (WAD * 95n) / 100n, (WAD * 16n) / 10n);
+  const power = stocks.reduce((p, s) => p + s.cfBps * s.sharesRaw * s.price * 10n ** 10n, 0n);
+  const book: SellBook = {
+    stocks,
+    debtValue: ceilDiv(power * 10n ** 14n, hf),
+    usdcPrice,
+    usdcLeftRaw: r(2) % 5n === 0n ? spread(r(3), r(4), 5n, 9n) : 10n ** 13n,
+  };
+  return {
+    book,
+    targetHf: between(r(5), (WAD * 13n) / 10n, (WAD * 16n) / 10n),
+    floorBps: between(r(6), 25n, 500n),
+    keepMix: r(7) % 3n === 0n,
+    maxSliceRaw: between(r(8), 100n * 10n ** 6n, 50_000n * 10n ** 6n),
+  };
+}
+
+/** Protect · sell timing inputs. Mirrors Vectors.timingInput. */
+export function timingInput(i: number) {
+  const r = (f: number) => rand("timing", i, f);
+  const now = 1_792_000_000n;
+  const headsUpHf = between(r(0), (WAD * 11n) / 10n, (WAD * 15n) / 10n);
+  return {
+    hf: between(r(1), (WAD * 9n) / 10n, (WAD * 16n) / 10n),
+    headsUpAt: r(2) % 3n === 0n ? 0n : now - (r(3) % 7_200n),
+    now,
+    frozen: r(4) % 4n === 0n,
+    headsUpHf,
+    nowHf: between(r(5), (WAD * 102n) / 100n, headsUpHf),
+    headsUpDelaySec: between(r(6), 600n, 7_200n),
+  };
 }
 
 /** Permission-hash inputs. Mirrors Vectors.hashInput. */
@@ -177,6 +230,33 @@ function calendarVectors() {
   return { window: hex(window), frozen: hex(frozen) };
 }
 
+/** What planSell decides for each input: the amounts per stock, then the slices, flattened. */
+function sellVectors() {
+  const amounts: string[] = [];
+  const counts: number[] = [];
+  const reserves: number[] = [];
+  const shares: string[] = [];
+  const minOuts: string[] = [];
+  for (let i = 0; i < SELL_COUNT; i++) {
+    const v = sellInput(i);
+    for (const a of sellAmounts(v.book, v)) amounts.push(a.toString());
+    const { slices } = planSell(v.book, v);
+    counts.push(slices.length);
+    for (const s of slices) {
+      reserves.push(s.reserveId);
+      shares.push(s.sharesRaw.toString());
+      minOuts.push(s.minOutRaw.toString());
+    }
+  }
+  const timings: number[] = [];
+  for (let i = 0; i < TIMING_COUNT; i++) {
+    const v = timingInput(i);
+    const t = sellTiming(v.hf, v.headsUpAt, v.now, v.frozen, v);
+    timings.push(["wait", "heads-up", "clear", "sell"].indexOf(t.timing) * 2 + (t.atOnce ? 1 : 0));
+  }
+  return { amounts, counts: hex(counts), reserves: hex(reserves), shares, minOuts, timings: hex(timings) };
+}
+
 /** The manager's EIP-712 hash (getHash) of the permission JAW grants for each input. */
 function hashVectors() {
   const hashes = [];
@@ -239,6 +319,7 @@ export function agentVectors(): Record<string, unknown> {
     "protect.json": protectVectors(),
     "save.json": saveVectors(),
     "calendar.json": calendarVectors(),
+    "sell.json": sellVectors(),
     "permissions.json": hashVectors(),
     "defaults.json": defaultsVector(),
   };
