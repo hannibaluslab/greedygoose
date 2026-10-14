@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run tests/unit",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "verify:registry": "vitest run tests/onchain",
     "guardian:e2e": "tsx scripts/guardian-e2e.ts",
     "guardian:keeper": "tsx keeper/run.ts",
@@ -36,5 +36,8 @@
     "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^5.0.3"
+  },
+  "engines": {
+    "node": ">=22.12"
   }
 }
