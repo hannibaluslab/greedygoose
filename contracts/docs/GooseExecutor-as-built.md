@@ -171,4 +171,3 @@ The coins and venues are Base mainnet's, fixed in `EntryJob` and checked against
 **Gas.** The manager's batch costs 200k–320k (one approve and one swap, under `ACCOUNT_GAS`), a one-account run 750k–890k.
 
 **Fork tests** (`test/EntryFork.t.sol`), against the real manager and venues: each coin from $1,000 to at least $995 of USDC in the same wallet (USDT $998.63, USDe $999.57, USDbC $999.93, USDS $1,000); $25,000 of USDT in three runs; a $1,000 daily limit holding $3,000 of USDbC to $1,000 a day; at a 99.9% floor, USDT waiting while USDbC converts; a swap to someone else (`BelowFloor`); and the manager refusing a coin past its limit and GHO, which the grant doesn't list.
-

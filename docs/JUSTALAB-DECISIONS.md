@@ -64,4 +64,3 @@ Legal is cleared. No step waits on a legal view.
 - **GHO is not in Entry:** Base has no GHO/USDC liquidity.
 - **An Entry swap below 99.5% waits an hour** (`EntryWaiting`) and isn't a run failure; the other coins go on.
 - **Entry's coins and venues are fixed in `EntryJob`** (Base mainnet). Another chain gets its own Entry library.
-
