@@ -1,11 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useEffectEvent, useMemo, useState, type ReactNode } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useMemo, useState, type ReactNode } from "react";
 import { parseUnits } from "viem";
 import { useAccount } from "wagmi";
-import { toast } from "sonner";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { AmountArrow, AmountBadge, AmountField, AmountSource, YouGet } from "./AmountField";
 import { Button } from "./Button";
@@ -15,6 +13,7 @@ import { NETWORK_FEE_ROW, Summary } from "./Summary";
 import { FaceIdButton, TxError } from "./TxUi";
 import { ChevronRight, LockIcon } from "./icons";
 import { useAgents } from "@/hooks/useAgents";
+import { useBoughtHome } from "@/hooks/useBoughtHome";
 import { useBuyQuote } from "@/hooks/useBuyQuote";
 import { useCreditBuy } from "@/hooks/useCreditBuy";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
@@ -45,12 +44,10 @@ const wholeUsd = (n: number) => formatUsdTrim(Math.max(0, Math.floor(n)));
  */
 export function CreditBuySheet({ open, user, data, onClose }: { open: boolean; user: `0x${string}`; data: PositionData; onClose: () => void }) {
   const { isConnected } = useAccount();
-  const router = useRouter();
-  const pathname = usePathname();
   const cfs = useCollateralFactors(data.holdings);
   const protect = useAgents(user).status.protect;
   const fee = useFeeSupport();
-  const { creditBuy, phase, error, reset, busy } = useCreditBuy();
+  const { creditBuy, phase, error, reset, busy, txHash } = useCreditBuy();
 
   const [step, setStep] = useState<Step>("pick");
   const [direction, setDirection] = useState<"forward" | "back">("forward");
@@ -58,7 +55,6 @@ export function CreditBuySheet({ open, user, data, onClose }: { open: boolean; u
   const [picked, setPicked] = useState<string | null>(null);
   const [raw, setRaw] = useState("");
   const [ack, setAck] = useState(false);
-  const [bought, setBought] = useState<string | null>(null);
 
   const go = (next: Step) => {
     setDirection(ORDER.indexOf(next) > ORDER.indexOf(step) ? "forward" : "back");
@@ -76,7 +72,6 @@ export function CreditBuySheet({ open, user, data, onClose }: { open: boolean; u
       setPicked(null);
       setRaw("");
       setAck(false);
-      setBought(null);
     }
   }
   const close = () => {
@@ -84,15 +79,8 @@ export function CreditBuySheet({ open, user, data, onClose }: { open: boolean; u
     if (!busy) reset();
   };
 
-  // F2-6 → F2-7: once the batch lands (and the chain is re-read), Home with the toast.
-  const landed = useEffectEvent((message: string) => {
-    toast.success(message);
-    onClose();
-    if (pathname !== "/home") router.push("/home");
-  });
-  useEffect(() => {
-    if (phase === "done" && bought) landed(bought);
-  }, [phase, bought]);
+  // F2-6 → F2-7: once the batch lands, Home with "Bought … with Credit Buy", the shares read from the receipt.
+  useBoughtHome({ phase, user, symbol: stock?.symbol ?? "", txHash, credit: true, onClose });
 
   const held = data.holdings.filter((h) => h.freeShares + h.lockedShares > 0).sort((a, b) => valueOf(b) - valueOf(a));
   const others = EQUITIES.filter((e) => !held.some((h) => h.symbol === e.symbol)).sort((a, b) => a.name.localeCompare(b.name));
@@ -326,7 +314,6 @@ export function CreditBuySheet({ open, user, data, onClose }: { open: boolean; u
                   disabled={feeBlocked || fee.loading || !!plan.block || (plan.extraConfirm && !ack)}
                   onClick={() => {
                     if (phase !== "idle") reset();
-                    setBought(`Bought ${econ.shares.toFixed(4)} ${tickerOf(stock.symbol)} with Credit Buy`);
                     void creditBuy({ user, stock, quote: q, plan, cash: data.cash, confirmedRisk: ack });
                   }}
                 />
