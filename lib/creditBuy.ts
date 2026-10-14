@@ -1,11 +1,11 @@
-import { decodeFunctionData, erc20Abi, isAddressEqual, parseUnits } from "viem";
+import { decodeFunctionData, erc20Abi, isAddressEqual } from "viem";
 import { CASH } from "@/config/risk";
 import { swapOf } from "@/lib/allowlist";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { autoFill, combinedLoan, fillRaw } from "@/lib/aave/loan";
 import { buildLoanCalls, type Call } from "@/lib/aave/tx";
-import { cashRaw, maxSpendRaw, payFromCash, toUsd, type Cash } from "@/lib/cash";
+import { cashRaw, feeBufferRaw, maxSpendRaw, payFromCash, toUsd, type Cash } from "@/lib/cash";
 import { formatUsd } from "@/lib/formatting";
 import { marketState } from "@/lib/market-hours";
 import type { ActivityItem } from "@/lib/activity/decode";
@@ -48,11 +48,8 @@ export const CREDIT_BLOCKED: Record<CreditBlock, string> = {
   paused: "Aave isn’t giving new USDC credit right now.",
   "no-liquidity": "Aave doesn’t have enough USDC for this right now. Try a smaller amount.",
   "too-much": "That’s more credit than your stocks can back right now. Try a smaller amount.",
-  fee: `Leave ${formatUsd(CASH.feeBufferUsd)} in cash for the network fee.`,
+  fee: `The network fee is paid from your cash. Top up ${formatUsd(CASH.feeBufferUsd)} first.`,
 };
-
-/** Weekends: Aave allows credit and the pools trade, but prices are held until markets reopen (CLAUDE.md › Market hours). */
-export const PRICE_MAY_MOVE = "Stock markets are closed. You can still buy, but prices may move when they reopen.";
 
 export type CreditPlan = {
   creditRaw: bigint;
@@ -66,7 +63,7 @@ export type CreditPlan = {
   /** Most credit with every option in use: staying Safe, and the MAX (99.5% of Aave's limit, as /use-credit). */
   maxSafeUsd: number;
   maxUsd: number;
-  /** Markets are closed: allowed, and the review says the price may move. */
+  /** Markets are closed: still allowed (Aave allows it), and the review must say the price may move when they reopen (CLAUDE.md › Market hours). */
   priceMayMove: boolean;
   /** Why it can't go ahead. */
   block?: CreditBlock;
@@ -98,7 +95,7 @@ export function planCredit(p: { position: CreditPosition; options: BackingOption
   if (pos.borrowPaused) block = "paused";
   else if (creditUsd > pos.usdcLiquidity) block = "no-liquidity";
   else if (creditUsd > maxUsd) block = "too-much";
-  else if (cashRaw(p.cash) < parseUnits(CASH.feeBufferUsd.toFixed(USDC.decimals), USDC.decimals)) block = "fee";
+  else if (cashRaw(p.cash) < feeBufferRaw) block = "fee";
 
   return {
     creditRaw: p.creditRaw,

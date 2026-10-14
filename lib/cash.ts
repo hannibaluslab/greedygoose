@@ -10,7 +10,7 @@ export type Cash = { walletRaw: bigint; savingsRaw: bigint };
 
 const usdcRaw = (usd: number) => parseUnits(usd.toFixed(USDC.decimals), USDC.decimals);
 const keepBackRaw = usdcRaw(CASH.keepBackUsd);
-const feeBufferRaw = usdcRaw(CASH.feeBufferUsd);
+export const feeBufferRaw = usdcRaw(CASH.feeBufferUsd);
 
 export const cashRaw = (c: Cash) => c.walletRaw + c.savingsRaw;
 export const toUsd = (raw: bigint) => Number(raw) / 10 ** USDC.decimals;

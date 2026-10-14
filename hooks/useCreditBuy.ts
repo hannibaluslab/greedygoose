@@ -19,7 +19,6 @@ export type CreditBuyInput = {
   confirmedRisk: boolean;
 };
 
-export const CREDIT_BUY_FAILED = "The Credit Buy didn’t go through on Base. Nothing moved except any network fee.";
 export const CREDIT_BUY_FALLBACK =
   "This Credit Buy would fail right now — the price or Aave’s limits may have moved. Try a smaller amount in a moment.";
 
@@ -42,7 +41,7 @@ export function useCreditBuyBatch() {
  * the wallet. Status before → after and the extra confirmation come from `plan` (planCredit).
  */
 export function useCreditBuy() {
-  const tx = useTx(CREDIT_BUY_FAILED);
+  const tx = useTx("The Credit Buy didn’t go through on Base. Nothing moved except any network fee.");
   const batch = useCreditBuyBatch();
   const creditBuy = (p: CreditBuyInput) => tx.run(p.user, () => batch(p), CREDIT_BUY_FALLBACK, creditBuyActivity(p));
   return { ...tx, creditBuy };
