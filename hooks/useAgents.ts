@@ -8,15 +8,12 @@ import { CHAIN_ID } from "@/lib/chain";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import {
-  CASH_JOBS,
-  dailyLimitRaw,
   JOBS,
   jobGrant,
   readAgentGrant,
   readStockLimits,
   type AgentGrant,
   type AgentJob,
-  type CashJob,
   type StockLimits,
 } from "@/lib/agents/permissions";
 import { jobStatus, type AgentStatus, type Stored } from "@/lib/agents/status";
@@ -142,10 +139,6 @@ export function useAgents(account: `0x${string}`) {
   return {
     status,
     terms,
-    /** The daily limit a Cash job is switched on with (`turnOn`), once the executor's CAP_MAX is read. */
-    limitRaw: Object.fromEntries(
-      CASH_JOBS.map((job) => [job, capMax.data === undefined ? null : dailyLimitRaw(job, capMax.data)]),
-    ) as Record<CashJob, bigint | null>,
     /** The most any limit may be on this executor, once read. */
     capMaxRaw: capMax.data ?? null,
     /** Failed runs in a row: the executor backs off, then switches the account off at eight. */

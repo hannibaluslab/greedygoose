@@ -6,7 +6,8 @@ import { useAccount } from "wagmi";
 import { toast } from "sonner";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { Button } from "@/components/gg/Button";
-import { ChoiceRow, LimitChips, ManageCard, ManageSkeleton, ManageTop, SaveFooter } from "@/components/gg/Manage";
+import { LimitChips } from "@/components/gg/LimitChips";
+import { ChoiceRow, ManageCard, ManageSkeleton, ManageTop, SaveFooter } from "@/components/gg/Manage";
 import { StockAvatar } from "@/components/gg/StockAvatar";
 import { Switch } from "@/components/gg/Switch";
 import { ShieldIcon } from "@/components/gg/icons";
@@ -18,7 +19,7 @@ import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { useManageSave } from "@/hooks/useManageSave";
 import { usePosition, type PositionData } from "@/hooks/usePosition";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
-import { limitRaw, STOCK_LIMIT_USD, stockLimitsRaw } from "@/lib/agents/permissions";
+import { limitRaw, LIMIT_USD, stockLimitsRaw } from "@/lib/agents/permissions";
 import { buildSetKeepMixCalls } from "@/lib/agents/settings";
 import { toUsd } from "@/lib/cash";
 import { formatUsdShort, formatUsdTrim, inWords } from "@/lib/formatting";
@@ -78,7 +79,7 @@ function CreditForm({
   const neverSaved = terms?.limitsRaw ? EQUITIES.filter((e) => terms.limitsRaw![e.reserveId] === 0n).map((e) => e.reserveId) : [];
   const never = chosenNever ?? neverSaved;
   const keepMix = chosenKeepMix ?? keepMixSaved ?? false;
-  const limitUsd = chosenUsd ?? (terms ? toUsd(terms.capRaw) : STOCK_LIMIT_USD.sell.start);
+  const limitUsd = chosenUsd ?? (terms ? toUsd(terms.capRaw) : LIMIT_USD.sell.start);
   const capRaw = limitRaw(limitUsd, agents.capMaxRaw ?? BigInt(limitUsd) * 10n ** 6n);
   const sellable = EQUITIES.map((e) => !never.includes(e.reserveId));
   const keepMixChanged = configured && keepMixSaved !== null && keepMix !== keepMixSaved;
@@ -152,7 +153,7 @@ function CreditForm({
         </div>
         <div className="flex flex-col gap-2.5 pb-3.5">
           <span className="text-[15px] font-semibold">Can sell up to</span>
-          <LimitChips label="Protection can sell up to, a day" options={STOCK_LIMIT_USD.sell.options} value={limitUsd} onChange={setChosenUsd} per="a day" size="md" />
+          <LimitChips label="Protection can sell up to, a day" options={LIMIT_USD.sell.options} value={limitUsd} onChange={setChosenUsd} per="a day" size="md" />
         </div>
         <ChoiceRow label="Sells first" value={ORDER.find((o) => o.keepMix === keepMix)!.label} onClick={() => setSheet("order")} />
         <ChoiceRow

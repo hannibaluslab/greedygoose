@@ -44,31 +44,23 @@ const LIMITED: Record<CashJob, readonly Address[]> = {
 };
 
 /**
- * The daily limit each job is switched on with: Protection's is the boards' "up to $300 a day" (HomeCreditSlide,
- * Agents). Save only moves the account's own USDC into its own savings, so its limit is wider. Both wait on the
- * calibration pass (plan item 6 step 9).
+ * The limits an agent's sheet offers and the one each job is switched on with, in dollars a day (a week for the
+ * Rebalancer) (Adrian, 2026-10-15): Save $250 / $1,000 / $5,000; Protect $100 / $300 / $500, for repaying from cash
+ * and for selling backing stock alike; the Rebalancer $250 / $500 / $1,000; Receive (Entry) $1,000 a day, with no
+ * other offer. All wait on the calibration pass (plan item 6 step 9).
  */
-export const DAILY_LIMIT_USD: Record<CashJob, number> = { save: 1_000, protect: 300 };
-
-/**
- * The limits Manage offers for the jobs that sell stock, and the one each starts on: Protect · sell "can sell up to
- * $300 a day" (ManageCredit), the Rebalancer "up to $500 a week" (Manage). Both wait on calibration (plan item 6
- * step 9).
- */
-export const STOCK_LIMIT_USD: Record<StockJob, { options: readonly number[]; start: number }> = {
-  sell: { options: [100, 300, 500], start: 300 },
-  rebalance: { options: [250, 500, 1_000], start: 500 },
+export const LIMIT_USD: Record<AgentJob, { options: readonly number[]; start: number; per: "day" | "week" }> = {
+  save: { options: [250, 1_000, 5_000], start: 1_000, per: "day" },
+  protect: { options: [100, 300, 500], start: 300, per: "day" },
+  sell: { options: [100, 300, 500], start: 300, per: "day" },
+  rebalance: { options: [250, 500, 1_000], start: 500, per: "week" },
+  entry: { options: [], start: 1_000, per: "day" },
 };
 
 /** A dollar limit in USDC units, never above the executor's `CAP_MAX` (a D13 test deploy allows $5). */
 export function limitRaw(usd: number, capMaxRaw: bigint): bigint {
   const raw = BigInt(usd) * 10n ** BigInt(USDC.decimals);
   return raw < capMaxRaw ? raw : capMaxRaw;
-}
-
-/** A Cash job's daily limit in USDC units, never above the executor's `CAP_MAX`. */
-export function dailyLimitRaw(job: CashJob, capMaxRaw: bigint): bigint {
-  return limitRaw(DAILY_LIMIT_USD[job], capMaxRaw);
 }
 
 /** What the app sends to JAW's `useGrantPermissions` to switch `job` on, with a daily limit in USDC units. */

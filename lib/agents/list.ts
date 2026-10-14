@@ -1,6 +1,6 @@
 import { maxUint256 } from "viem";
 import { MANAGE, type AgentName } from "@/lib/agents/feed";
-import { STOCK_LIMIT_USD, type AgentJob } from "@/lib/agents/permissions";
+import { LIMIT_USD, type AgentJob } from "@/lib/agents/permissions";
 import type { AgentStatus } from "@/lib/agents/status";
 import { rebalanceTrades, type RebalanceOptions } from "@/lib/guardian/rebalance";
 import { STATUS_LABEL, type Status } from "@/lib/risk/status";
@@ -63,14 +63,14 @@ export function agentList(i: AgentListInput): { agents: AgentItem[]; reason: str
   const guards =
     s.protect === "on" && s.sell !== "on"
       ? `repays up to ${usd(i.capRaw.protect!)} a day`
-      : `sells up to ${usdOf(i.capRaw.sell, STOCK_LIMIT_USD.sell.start)} a day`;
+      : `sells up to ${usdOf(i.capRaw.sell, LIMIT_USD.sell.start)} a day`;
 
   return {
     agents: [
       {
         agent: "Rebalancer",
         pill: rebalancePill,
-        sub: `Keeps your mix · sells up to ${usdOf(i.capRaw.rebalance, STOCK_LIMIT_USD.rebalance.start)} a week`,
+        sub: `Keeps your mix · sells up to ${usdOf(i.capRaw.rebalance, LIMIT_USD.rebalance.start)} a week`,
         href: MANAGE.mix.href,
         opens: "Open your mix",
       },
