@@ -7,6 +7,7 @@ import { GUARDIAN, GUARDIAN_CHECKER, GUARDIAN_KEEPER, guardianConfigured } from 
 import { justanAccountAbi, permissionManagerAbi } from "@/lib/guardian/abis";
 import { approveGuardianCall, buildGuardianPermission, revokeGuardianCall, toTuple, type Call } from "@/lib/guardian/permission";
 import { readGuardian, subscribeGuardian, writeGuardian } from "@/lib/guardian/store";
+import { useNowSec } from "@/hooks/useNowSec";
 
 export type GuardianStatus = "unconfigured" | "off" | "on" | "loading";
 
@@ -94,14 +95,4 @@ function assertGuardianCalls(account: `0x${string}`, calls: Call[]): Call[] {
     if (!ok || c.value !== 0n) throw new Error(`Blocked: unexpected target ${c.to}`);
   }
   return calls;
-}
-
-/** Current time in seconds, refreshed every minute (render-safe; no Date.now() during render). */
-const subscribeMinute = (cb: () => void) => {
-  const id = setInterval(cb, 60_000);
-  return () => clearInterval(id);
-};
-const minuteNow = () => Math.floor(Date.now() / 60_000) * 60;
-function useNowSec() {
-  return useSyncExternalStore(subscribeMinute, minuteNow, () => 0);
 }

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { toHex, zeroAddress } from "viem";
 import { agentGrant, agentPermission, readAgentGrant, type ListedPermission } from "@/lib/agents/permissions";
+import { jobStatus } from "@/lib/agents/status";
 import { PERIOD } from "@/lib/guardian/permission";
 import { GUARDIAN, SEL } from "@/lib/guardian/config";
 import { AAVE } from "@/lib/aave/addresses";
@@ -97,5 +98,29 @@ describe("contracts/test/vectors", () => {
       const committed = JSON.parse(readFileSync(new URL(`../../contracts/test/vectors/${name}`, import.meta.url), "utf8"));
       expect(committed, name).toEqual(JSON.parse(JSON.stringify(data)));
     }
+  });
+});
+
+describe("jobStatus", () => {
+  const stored = { start: 100, end: 1_000, cap: 5_000_000n };
+  const empty = { start: 0, end: 0, cap: 0n };
+  const grant = { job: "save" as const, permissionId: "0x01" as const, capRaw: 5_000_000n, start: 100, end: 1_000, salt: 1n };
+
+  it("is on while the executor runs the grant JAW still lists", () => {
+    expect(jobStatus("save", [1, stored, empty], [grant], 500, false)).toBe("on");
+  });
+  it("is starting between JAW's grant and the executor's registration", () => {
+    expect(jobStatus("save", [0, empty, empty], [grant], 500, false)).toBe("starting");
+    expect(jobStatus("save", [1, { ...stored, start: 50 }, empty], [grant], 500, false)).toBe("starting"); // a newer grant
+  });
+  it("is off at once after a revoke, before the registry catches up", () => {
+    expect(jobStatus("save", [1, stored, empty], [], 500, false)).toBe("off");
+  });
+  it("is off past the grant's end, and per job", () => {
+    expect(jobStatus("save", [1, stored, empty], [grant], 1_001, false)).toBe("off");
+    expect(jobStatus("protect", [1, stored, empty], [grant], 500, false)).toBe("off");
+  });
+  it("trusts the registry when JAW's list can't be read", () => {
+    expect(jobStatus("save", [1, stored, empty], [], 500, true)).toBe("on");
   });
 });
