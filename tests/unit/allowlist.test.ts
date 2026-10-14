@@ -20,15 +20,18 @@ const approve = (token: `0x${string}`, spender: `0x${string}`) => ({
   data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [spender, 1n] }),
   value: 0n,
 });
-const swap = (tokenOut: `0x${string}`, recipient: `0x${string}`) => ({
-  to: UNISWAP.SWAP_ROUTER_02,
-  data: encodeFunctionData({
+const exactInputSingle = (tokenOut: `0x${string}`, recipient: `0x${string}`) =>
+  encodeFunctionData({
     abi: swapRouter02Abi,
     functionName: "exactInputSingle",
     args: [{ tokenIn: USDC.address, tokenOut, fee: 3000, recipient, amountIn: 1n, amountOutMinimum: 1n, sqrtPriceLimitX96: 0n }],
-  }),
+  });
+const multicall = (data: `0x${string}`[]) => ({
+  to: UNISWAP.SWAP_ROUTER_02,
+  data: encodeFunctionData({ abi: swapRouter02Abi, functionName: "multicall", args: [1_600n, data] }),
   value: 0n,
 });
+const swap = (tokenOut: `0x${string}`, recipient: `0x${string}`) => multicall([exactInputSingle(tokenOut, recipient)]);
 
 describe("assertAllowed (one allowlist for every user batch)", () => {
   it("passes what the builders make, savings withdrawals included", () => {
@@ -87,5 +90,18 @@ describe("assertAllowed (one allowlist for every user batch)", () => {
     expect(() => assertAllowed(user, [withdrawStock])).toThrow(/unexpected arguments/);
     expect(() => assertAllowed(user, [swap(nvda.address, user)])).not.toThrow();
     expect(() => assertAllowed(user, [swap(attacker, user)])).toThrow(/unexpected arguments/);
+  });
+
+  it("takes Uniswap swaps only with their deadline, one swap per multicall", () => {
+    const bare = { to: UNISWAP.SWAP_ROUTER_02, data: exactInputSingle(nvda.address, user), value: 0n };
+    expect(() => assertAllowed(user, [bare])).toThrow(/unexpected call/);
+    expect(() => assertAllowed(user, [multicall([exactInputSingle(nvda.address, attacker)])])).toThrow(/unexpected arguments/);
+    expect(() => assertAllowed(user, [multicall([exactInputSingle(nvda.address, user), exactInputSingle(nvda.address, user)])])).toThrow(
+      /unexpected arguments/,
+    );
+    const nested = multicall([multicall([exactInputSingle(nvda.address, user)]).data]);
+    expect(() => assertAllowed(user, [nested])).toThrow(/unexpected arguments/);
+    const transferInside = multicall([encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [attacker, 1n] })]);
+    expect(() => assertAllowed(user, [transferInside])).toThrow(/unexpected arguments/);
   });
 });

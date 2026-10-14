@@ -38,8 +38,9 @@ export const bestQuote = (quotes: BuyQuote[]): BuyQuote | null =>
 export type Call = { to: `0x${string}`; data: Hex; value: bigint };
 
 /**
- * Exact-amount approve to the chosen router + exactInputSingle, recipient = the user.
- * Targets come only from the registry; anything else throws before the wallet sees it.
+ * Exact-amount approve to the chosen router + exactInputSingle, recipient = the user, with the
+ * deadline on both venues (Uniswap's through multicall). Targets come only from the registry;
+ * anything else throws before the wallet sees it.
  */
 export function buildBuyCalls(p: { user: `0x${string}`; stock: ReserveAsset; quote: BuyQuote; nowSec?: number }): Call[] {
   const { user, stock, quote } = p;
@@ -51,6 +52,7 @@ export function buildBuyCalls(p: { user: `0x${string}`; stock: ReserveAsset; quo
     value: 0n,
   };
   const amountOutMinimum = minOut(quote.amountOut);
+  const deadline = BigInt((p.nowSec ?? Math.floor(Date.now() / 1000)) + BUY_LIMITS.deadlineSec);
   const data =
     quote.venue === "aerodrome"
       ? encodeFunctionData({
@@ -62,7 +64,7 @@ export function buildBuyCalls(p: { user: `0x${string}`; stock: ReserveAsset; quo
               tokenOut: stock.address,
               tickSpacing: quote.pool,
               recipient: user,
-              deadline: BigInt((p.nowSec ?? Math.floor(Date.now() / 1000)) + BUY_LIMITS.deadlineSec),
+              deadline,
               amountIn: quote.amountIn,
               amountOutMinimum,
               sqrtPriceLimitX96: 0n,
@@ -71,17 +73,26 @@ export function buildBuyCalls(p: { user: `0x${string}`; stock: ReserveAsset; quo
         })
       : encodeFunctionData({
           abi: swapRouter02Abi,
-          functionName: "exactInputSingle",
+          functionName: "multicall",
           args: [
-            {
-              tokenIn: USDC.address,
-              tokenOut: stock.address,
-              fee: quote.pool,
-              recipient: user,
-              amountIn: quote.amountIn,
-              amountOutMinimum,
-              sqrtPriceLimitX96: 0n,
-            },
+            deadline,
+            [
+              encodeFunctionData({
+                abi: swapRouter02Abi,
+                functionName: "exactInputSingle",
+                args: [
+                  {
+                    tokenIn: USDC.address,
+                    tokenOut: stock.address,
+                    fee: quote.pool,
+                    recipient: user,
+                    amountIn: quote.amountIn,
+                    amountOutMinimum,
+                    sqrtPriceLimitX96: 0n,
+                  },
+                ],
+              }),
+            ],
           ],
         });
   return assertAllowed(user, [approve, { to: router, data, value: 0n }]);

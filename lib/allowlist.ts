@@ -25,6 +25,17 @@ const swapToUser: ArgsCheck = (args, user) => {
   const p = args[0] as { tokenIn: unknown; tokenOut: unknown; recipient: unknown };
   return is(p.recipient, user) && oneOf(p.tokenIn, TOKENS) && oneOf(p.tokenOut, TOKENS);
 };
+/** Uniswap's router takes the deadline through multicall(deadline, data): one call inside, and it must be that swap. */
+const swapWithDeadline: ArgsCheck = (args, user) => {
+  const data = args[1] as readonly Hex[];
+  if (data.length !== 1) return false;
+  try {
+    const inner = decodeFunctionData({ abi: swapRouter02Abi, data: data[0] });
+    return inner.functionName === "exactInputSingle" && swapToUser(inner.args, user);
+  } catch {
+    return false;
+  }
+};
 
 /**
  * The one allowlist for user-signed batches (CLAUDE.md › Transaction safety): each target, the only
@@ -46,7 +57,7 @@ const RULES: readonly Rule[] = [
     functions: { withdraw: (args, user) => is(args[0], USDC.address) && is(args[2], user) },
   },
   { targets: [AERODROME.ROUTER], abi: aeroRouterAbi, functions: { exactInputSingle: swapToUser } },
-  { targets: [UNISWAP.SWAP_ROUTER_02], abi: swapRouter02Abi, functions: { exactInputSingle: swapToUser } },
+  { targets: [UNISWAP.SWAP_ROUTER_02], abi: swapRouter02Abi, functions: { multicall: swapWithDeadline } },
 ];
 
 export function assertAllowed<C extends { to: Address; data: Hex; value: bigint }>(user: Address, calls: C[]): C[] {

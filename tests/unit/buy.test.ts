@@ -23,18 +23,25 @@ describe("minOut", () => {
 });
 
 describe("buildBuyCalls", () => {
-  it("approves exactly amountIn to the router, then swaps to the user", () => {
-    const [approve, swap] = buildBuyCalls({ user, stock: aapl, quote });
+  it("approves exactly amountIn to the router, then swaps to the user before a 10-minute deadline", () => {
+    const [approve, swap] = buildBuyCalls({ user, stock: aapl, quote, nowSec: 1_000 });
     expect(approve.to).toBe(USDC.address);
     const a = decodeFunctionData({ abi: erc20Abi, data: approve.data });
     expect(a.functionName).toBe("approve");
     expect(a.args).toEqual([UNISWAP.SWAP_ROUTER_02, 100_000_000n]);
 
     expect(swap.to).toBe(UNISWAP.SWAP_ROUTER_02);
-    const s = decodeFunctionData({ abi: swapRouter02Abi, data: swap.data });
-    const params = s.args[0];
+    const m = decodeFunctionData({ abi: swapRouter02Abi, data: swap.data });
+    expect(m.functionName).toBe("multicall");
+    const [deadline, inner] = m.args as readonly [bigint, readonly `0x${string}`[]];
+    expect(deadline).toBe(1_600n);
+    expect(inner).toHaveLength(1);
+    const s = decodeFunctionData({ abi: swapRouter02Abi, data: inner[0] });
+    expect(s.functionName).toBe("exactInputSingle");
+    const params = (s.args as readonly [{ tokenIn: string; tokenOut: string; fee: number; recipient: string; amountOutMinimum: bigint }])[0];
     expect(params.tokenIn).toBe(USDC.address);
     expect(params.tokenOut).toBe(aapl.address);
+    expect(params.fee).toBe(3000);
     expect(params.recipient).toBe(user);
     expect(params.amountOutMinimum).toBe(minOut(29_554_521n));
   });
