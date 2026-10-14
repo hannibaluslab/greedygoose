@@ -9,6 +9,7 @@ import { Button } from "@/components/gg/Button";
 import { CashCard, CreditCard } from "@/components/gg/Cards";
 import { AddStockCard, HoldingCard, HoldingList, HoldingRow } from "@/components/gg/Holding";
 import { MixCard } from "@/components/gg/Manage";
+import { ProtectDemo } from "./ProtectDemos";
 import { MarketList, MarketRow } from "@/components/gg/Market";
 import { QuickAction } from "@/components/gg/QuickAction";
 import { TabHeader } from "@/components/gg/Screen";
@@ -316,6 +317,18 @@ export function Gallery() {
 
       <Section title="Manage · Your mix" kit="manage-mix">
         <MixDemo />
+      </Section>
+
+      <Section title="Protect settings · not live yet" kit="protect-not-live">
+        <ProtectDemo state="not-live" />
+      </Section>
+
+      <Section title="Protect settings · on, Tesla never sold" kit="protect-on">
+        <ProtectDemo state="on" />
+      </Section>
+
+      <Section title="Protect settings · selling off" kit="protect-sell-off">
+        <ProtectDemo state="sell-off" />
       </Section>
 
       <Section title="Sparklines" kit="sparklines">
