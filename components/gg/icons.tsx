@@ -33,9 +33,6 @@ export const UnlockIcon = ({ size = 8, ...r }: P) => (
     <path d="M3 4.8V3.4a2 2 0 0 1 3.9-.6" fill="none" stroke="currentColor" strokeWidth="1.3" />
   </svg>
 );
-export const FaceIdIcon = ({ size = 20, ...r }: P) => (
-  <svg {...base(size, 1.8, r)}><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M9 9v1M15 9v1M12 9v4h-1M9 16c1.5 1 4.5 1 6 0" /></svg>
-);
 export const SlidersIcon = ({ size = 18, ...r }: P) => (
   <svg {...base(size, 1.8, r)}><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></svg>
 );

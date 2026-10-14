@@ -1,16 +1,15 @@
 "use client";
 
-import { useState } from "react";
 import { toast } from "sonner";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { AddMoneyView } from "@/components/gg/AddMoney";
-import { ArrivedCard, ConvertSheet } from "@/components/gg/CashSetup";
+import { TurnIntoCash } from "@/components/gg/CashSetup";
 import { useAccountName } from "@/hooks/useAccountName";
 import { useCashSetup } from "@/hooks/useCashSetup";
 import { useEntryBalances } from "@/hooks/useEntryBalances";
 import { usePosition } from "@/hooks/usePosition";
 import { aprToApy } from "@/lib/aave/math";
-import { arrivedCoins, arrivedView, rateText, type Arrived } from "@/lib/cashSetup";
+import { arrivedCoins, arrivedView, rateText } from "@/lib/cashSetup";
 
 export default function ReceivePage() {
   return <RequireAccount>{(address) => <AddMoney address={address} />}</RequireAccount>;
@@ -22,7 +21,6 @@ function AddMoney({ address }: { address: `0x${string}` }) {
   const { data: name } = useAccountName(address);
   const setup = useCashSetup(address);
   const arrived = arrivedView(arrivedCoins(useEntryBalances(address)), setup.entry);
-  const [converting, setConverting] = useState<{ coins: Arrived[]; open: boolean; key: number } | null>(null);
   const earning = setup.save === "on" || setup.save === "starting";
   const copy = async () => {
     try {
@@ -34,24 +32,12 @@ function AddMoney({ address }: { address: `0x${string}` }) {
   };
 
   return (
-    <>
-      <AddMoneyView
-        address={address}
-        name={name ?? null}
-        rate={earning && data ? rateText(aprToApy(data.savingsApr)) : null}
-        arrived={arrived.kind === "ask" && <ArrivedCard text={arrived.text} onConvert={() => setConverting({ coins: arrived.coins, open: true, key: Date.now() })} />}
-        onCopy={() => void copy()}
-      />
-      {converting && (
-        <ConvertSheet
-          key={converting.key}
-          open={converting.open}
-          onClose={() => setConverting({ ...converting, open: false })}
-          user={address}
-          coins={converting.coins}
-          setup={setup}
-        />
-      )}
-    </>
+    <AddMoneyView
+      address={address}
+      name={name ?? null}
+      rate={earning && data ? rateText(aprToApy(data.savingsApr)) : null}
+      arrived={<TurnIntoCash user={address} view={arrived} setup={setup} />}
+      onCopy={() => void copy()}
+    />
   );
 }

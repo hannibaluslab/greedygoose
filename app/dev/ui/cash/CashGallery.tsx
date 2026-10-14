@@ -7,7 +7,7 @@ import { AddMoneyView } from "@/components/gg/AddMoney";
 import { AgentsFeed } from "@/components/gg/Agents";
 import { BalanceHero, TodayChange } from "@/components/gg/BalanceHero";
 import { CashCard, CreditCard } from "@/components/gg/Cards";
-import { ArrivedCard, AutomaticStep, ConvertReview, FinishSetupCard, FinishSetupStep } from "@/components/gg/CashSetup";
+import { ArrivedCard, AutomaticStep, cashNowText, FinishSetupCard, FinishSetupStep } from "@/components/gg/CashSetup";
 import { QuickAction } from "@/components/gg/QuickAction";
 import { TabHeader } from "@/components/gg/Screen";
 import { TabBar } from "@/components/gg/TabBar";
@@ -29,10 +29,10 @@ import { ENTRY_COINS } from "@/lib/tokens/stables";
  * Dev only: earning and other dollars becoming cash (D20), in each state, from fixtures run through the app's own
  * rules and words (arrivedView, arrivedText, describeAgentEvent). Nothing here reads the chain or signs.
  *   /dev/ui/cash?view=signup      the sign-up's last step, "Finish setting up"
- *   ?view=home                    Home with "120 USDT arrived · Turn into cash" and the finish card
+ *   ?view=home                    Home with "120 USDT arrived · Turn into cash" (its one screen) and the finish card
  *   ?view=arriving                Home once other dollars convert on their own: the Cash card says "arriving"
- *   ?view=convert                 the review, one Face ID
- *   ?view=auto                    "Do this automatically next time?"
+ *   ?view=convert                 "Turn into cash" with one coin under the floor: it stays as it is
+ *   ?view=auto                    once it lands, "Do this automatically next time?"
  *   ?view=done                    converted, with nothing to ask (no executor, or it already converts on its own)
  *   ?view=pay | pay-setup         Pay while the cash earns, and before earning is set up
  *   ?view=activity                Activity with the cash's own events
@@ -45,6 +45,8 @@ const [USDT, USDE] = ENTRY_COINS;
 /** 120 USDT in the wallet, and nothing else: what the Entry coins' balances would read. */
 const BALANCES = [usdc(120), 0n, 0n, 0n];
 const QUOTES: ConvertQuote[] = [{ coin: USDT, amountIn: usdc(120), minOut: convertFloorRaw(USDT, usdc(120)), outRaw: usdc(119.83), fair: true }];
+/** 50 USDe its venue pays under 99.5% for right now. */
+const UNFAIR: ConvertQuote = { coin: USDE, amountIn: 50n * 10n ** 18n, minOut: convertFloorRaw(USDE, 50n * 10n ** 18n), outRaw: usdc(49.1), fair: false };
 const GRANT: GrantView = { busy: false, error: null, blocked: null, preview: false };
 const ZERO_TX = `0x${"0".repeat(64)}` as const;
 const noop = () => toast("Dev gallery: nothing is signed");
@@ -67,13 +69,9 @@ export function CashGallery() {
   // Home: before other dollars convert on their own they're asked about; after, the Cash card says they're arriving.
   const arrived = arrivedView(arrivedCoins(BALANCES), view === "arriving" ? "on" : "off");
   const sheet =
-    view === "convert" ? (
-      <Sheet title="Turn into cash">
-        <ConvertReview quotes={QUOTES} phase="idle" error={null} preview={false} onConfirm={noop} />
-      </Sheet>
-    ) : view === "auto" ? (
+    view === "auto" ? (
       <Sheet title="Do this automatically next time?">
-        <AutomaticStep grant={GRANT} onYes={noop} onNo={noop} />
+        <AutomaticStep landed={cashNowText(QUOTES)} grant={GRANT} onYes={noop} onNo={noop} />
       </Sheet>
     ) : view === "done" ? (
       <Sheet title="Turn into cash">
@@ -86,7 +84,17 @@ export function CashGallery() {
       cards={
         view !== "arriving" && (
           <>
-            {arrived.kind === "ask" && <ArrivedCard text={arrived.text} onConvert={noop} />}
+            {/* Once a conversion lands the coins are cash, so the card is gone behind "auto" and "done". */}
+            {arrived.kind === "ask" && view !== "auto" && view !== "done" && (
+              <ArrivedCard
+                text={view === "convert" ? "120 USDT and 50 USDe" : arrived.text}
+                quotes={view === "convert" ? [...QUOTES, UNFAIR] : QUOTES}
+                phase="idle"
+                error={null}
+                preview={false}
+                onConvert={noop}
+              />
+            )}
             {view === "home" && <FinishSetupCard rate={RATE} grant={GRANT} onStart={noop} />}
           </>
         )

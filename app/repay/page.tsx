@@ -15,12 +15,12 @@ import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { useSigningCash } from "@/hooks/useSigningCash";
 import { buildRepayCalls, fullRepayAmount } from "@/lib/aave/tx";
 import { repayChips } from "@/lib/aave/loan";
-import { cantRepay, maxSpendRaw, payFromCash, savingsWithdrawal, toUsd } from "@/lib/cash";
+import { cantRepay, maxSpendRaw, payFromCash, toUsd } from "@/lib/cash";
 import { USDC } from "@/lib/tokens/registry";
 import { StatusBar, StatusPill } from "@/components/gg/Status";
 import { ChevronRight, SlidersIcon } from "@/components/gg/icons";
 import { usePosition } from "@/hooks/usePosition";
-import { formatUsd, formatUsdTrim } from "@/lib/formatting";
+import { formatUsdTrim } from "@/lib/formatting";
 
 export default function RepayPage() {
   return <RequireAccount>{(address) => <Repay address={address} />}</RequireAccount>;
@@ -29,8 +29,9 @@ export default function RepayPage() {
 /**
  * Design board "5b · Repay" (CreditOn.dc.html): it opens on the larger amount ($300), and a landed repay goes Home,
  * as the board's button does, with a toast like a buy's (F1-6). Repay opens JAW's own sheet straight away: this screen
- * already says what you owe after, the fee and what comes out of savings. The batch is built with the cash read again
- * right before signing (useSigningCash), so cash that moved since shows in words instead of a batch that can't pay.
+ * already says what you owe after and the fee, paid from your cash as one pot (D20). The batch is built with the cash
+ * read again right before signing (useSigningCash), so cash that moved since shows in words instead of a batch that
+ * can't pay.
  */
 function Repay({ address }: { address: `0x${string}` }) {
   const { isConnected } = useAccount();
@@ -69,8 +70,6 @@ function Repay({ address }: { address: `0x${string}` }) {
   const owed = (usd: number) => formatUsdTrim(Math.ceil(usd));
   const coversAll = picked === "all" && maxSpend >= data.debtRaw;
   const feeBlocked = isConnected && fee.state === "unsupported";
-  // D7: the batch takes from savings what the wallet can't pay; the screen says so.
-  const fromSavings = amountRaw > 0n ? savingsWithdrawal(amountRaw, data.cash) : null;
 
   const submit = () => {
     if (tx.phase === "failed") tx.reset();
@@ -130,11 +129,6 @@ function Repay({ address }: { address: `0x${string}` }) {
               <Line label="You owe after" value={owed(after)} />
               <Line label={NETWORK_FEE_ROW.label} value={NETWORK_FEE_ROW.value} />
             </div>
-            {fromSavings && (
-              <p className="m-0 -mt-1.5 pb-3.5 text-xs leading-snug text-subtle">
-                {formatUsd(toUsd(fromSavings.raw))} of it comes out of savings, in the same step.
-              </p>
-            )}
           </>
         )}
       </WhiteCard>

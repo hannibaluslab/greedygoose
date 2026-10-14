@@ -9,7 +9,7 @@ import { TabBar } from "@/components/gg/TabBar";
 import { BalanceHero, TodayChange, TodayPending } from "@/components/gg/BalanceHero";
 import { QuickAction } from "@/components/gg/QuickAction";
 import { CashCard, CreditCard } from "@/components/gg/Cards";
-import { ArrivedCard, ConvertSheet, FinishSetupCard } from "@/components/gg/CashSetup";
+import { FinishSetupCard, TurnIntoCash } from "@/components/gg/CashSetup";
 import { AddStockCard, HoldingCard } from "@/components/gg/Holding";
 import { CreditSheet } from "@/components/gg/CreditSheet";
 import { StockSheets, useStockSheets } from "@/components/gg/StockSheets";
@@ -23,7 +23,7 @@ import { useEntryBalances } from "@/hooks/useEntryBalances";
 import { useMarketPrices } from "@/hooks/useMarketPrices";
 import { usePosition, type PositionData } from "@/hooks/usePosition";
 import { aprToApy } from "@/lib/aave/math";
-import { arrivedCoins, arrivedView, finishSetupShown, rateText, type Arrived, type ArrivedView } from "@/lib/cashSetup";
+import { arrivedCoins, arrivedView, finishSetupShown, rateText, type ArrivedView } from "@/lib/cashSetup";
 import { homeStatus } from "@/lib/risk/status";
 import { formatUsd, formatUsdTrim } from "@/lib/formatting";
 import { dayChange, weekValue } from "@/lib/prices/market";
@@ -52,8 +52,6 @@ function Home({ address }: { address: `0x${string}` }) {
   const apy = data ? aprToApy(data.savingsApr) : 0;
   const setup = useCashSetup(address);
   const arrived = arrivedView(arrivedCoins(useEntryBalances(address)), setup.entry);
-  // The coins a conversion was opened with, kept while its sheet is up.
-  const [converting, setConverting] = useState<{ coins: Arrived[]; open: boolean; key: number } | null>(null);
 
   return (
     <div className="relative min-h-dvh">
@@ -79,7 +77,7 @@ function Home({ address }: { address: `0x${string}` }) {
           arrived={arrived}
           cards={
             <>
-              {arrived.kind === "ask" && <ArrivedCard text={arrived.text} onConvert={() => setConverting({ coins: arrived.coins, open: true, key: Date.now() })} />}
+              <TurnIntoCash user={address} view={arrived} setup={setup} />
               {finishSetupShown(setup.save) && (
                 <FinishSetupCard
                   rate={rateText(apy)}
@@ -100,16 +98,6 @@ function Home({ address }: { address: `0x${string}` }) {
           <CreditSheet open={sheet === "credit"} onClose={close} account={address} data={data} />
           <StockSheets sheets={stocks} user={address} data={data} />
         </>
-      )}
-      {converting && (
-        <ConvertSheet
-          key={converting.key}
-          open={converting.open}
-          onClose={() => setConverting({ ...converting, open: false })}
-          user={address}
-          coins={converting.coins}
-          setup={setup}
-        />
       )}
     </div>
   );
