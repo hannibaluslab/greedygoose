@@ -14,20 +14,21 @@ const TABS = [
   { href: "/receive", label: "Pay", Icon: PayIcon, match: ["/receive"] },
 ];
 
-/** Floating dark pill tab bar with the fade behind it, as in the design. */
+/** Floating dark pill tab bar with the fade behind it, as in the design. The board's 24px under it sat over the home
+ * indicator; in a Safari tab the page already ends above Safari's bar, so it floats 8px over the bottom inset. */
 export function TabBar() {
   const path = usePathname();
   return (
     <>
-      <div aria-hidden className="h-[104px]" />
+      <div aria-hidden className="h-[calc(env(safe-area-inset-bottom)+88px)]" />
       <div
         aria-hidden
-        className="pointer-events-none fixed inset-x-0 bottom-0 h-[120px]"
+        className="pointer-events-none fixed inset-x-0 bottom-0 h-[calc(env(safe-area-inset-bottom)+104px)]"
         style={{ background: "linear-gradient(to bottom, rgba(244,242,236,0), #f4f2ec 70%)" }}
       />
       <nav
         aria-label="Main"
-        className="fixed bottom-6 left-1/2 grid h-14 w-[calc(min(100vw,430px)-28px)] -translate-x-1/2 rounded-[28px] px-1.5"
+        className="fixed bottom-[calc(env(safe-area-inset-bottom)+8px)] left-1/2 grid h-14 w-[calc(min(100vw,430px)-28px)] -translate-x-1/2 rounded-[28px] px-1.5"
         style={{ gridTemplateColumns: `repeat(${TABS.length}, minmax(0,1fr))`, background: "rgba(20,19,15,0.94)", boxShadow: "0 16px 48px -16px rgba(0,0,0,0.4)" }}
       >
         {TABS.map(({ href, label, Icon, match }) => {
