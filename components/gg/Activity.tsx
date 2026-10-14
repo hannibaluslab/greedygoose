@@ -17,6 +17,8 @@ export function describeActivity(i: ActivityItem): { title: string; amount: stri
   switch (i.kind) {
     case "buy":
       return { title: `Bought ${name}`, amount: `${shares} · ${formatUsd(i.paidUsd ?? 0)}`, sign: "" };
+    case "sell":
+      return { title: `Sold ${name}`, amount: `${shares} · ${formatUsd(i.receivedUsd ?? 0)}`, sign: "" };
     case "supply":
       return { title: `Backed credit with ${name}`, amount: r?.kind === "equity" ? shares : formatUsd(i.amount), sign: "" };
     case "withdraw":

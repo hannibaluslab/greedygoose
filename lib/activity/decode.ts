@@ -4,7 +4,7 @@ import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { ALL_RESERVES, EQUITIES, USDC, findByAddress } from "@/lib/tokens/registry";
 import { GUARDIAN } from "@/lib/guardian/config";
 
-export type ActivityKind = "supply" | "withdraw" | "borrow" | "repay" | "buy" | "receive" | "send" | "save" | "unsave";
+export type ActivityKind = "supply" | "withdraw" | "borrow" | "repay" | "buy" | "sell" | "receive" | "send" | "save" | "unsave";
 
 export type ActivityItem = {
   kind: ActivityKind;
@@ -14,6 +14,8 @@ export type ActivityItem = {
   amount: number;
   /** For buys: USDC paid. */
   paidUsd?: number;
+  /** For sells: USDC received. */
+  receivedUsd?: number;
 };
 
 const byReserveId = (id: bigint) => ALL_RESERVES.find((r) => BigInt(r.reserveId) === id);
@@ -51,7 +53,9 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
   });
   const touchesAave = (addr?: `0x${string}`) => !!addr && (isAddressEqual(addr, AAVE.HUB) || isAddressEqual(addr, AAVE.SPOKE));
   let usdcOut = 0n;
+  const usdcIn: bigint[] = [];
   const stockIn: { symbol: string; raw: bigint; decimals: number }[] = [];
+  const stockOut: { symbol: string; raw: bigint; decimals: number }[] = [];
   for (const t of transfers) {
     const { from, to, value } = t.args as { from?: `0x${string}`; to?: `0x${string}`; value?: bigint };
     if (value === undefined) continue;
@@ -70,8 +74,8 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
     }
     if (token.kind === "debt" && from && isAddressEqual(from, user)) usdcOut += value;
     if (token.kind === "equity" && to && isAddressEqual(to, user)) stockIn.push({ symbol: token.symbol, raw: value, decimals: token.decimals });
-    if (token.kind === "equity" && from && isAddressEqual(from, user)) items.push({ kind: "send", symbol: token.symbol, amount: units(value, token.decimals) });
-    if (token.kind === "debt" && to && isAddressEqual(to, user)) items.push({ kind: "receive", symbol: token.symbol, amount: units(value, token.decimals) });
+    if (token.kind === "equity" && from && isAddressEqual(from, user)) stockOut.push({ symbol: token.symbol, raw: value, decimals: token.decimals });
+    if (token.kind === "debt" && to && isAddressEqual(to, user)) usdcIn.push(value);
   }
   for (const s of stockIn) {
     items.push(
@@ -80,7 +84,17 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
         : { kind: "receive", symbol: s.symbol, amount: units(s.raw, s.decimals) },
     );
   }
+  // Stock out and USDC in, in one transaction, is a sale (the app sells one stock per batch).
+  const receivedRaw = usdcIn.reduce((a, v) => a + v, 0n);
+  for (const s of stockOut) {
+    items.push(
+      receivedRaw > 0n
+        ? { kind: "sell", symbol: s.symbol, amount: units(s.raw, s.decimals), receivedUsd: units(receivedRaw, USDC.decimals) }
+        : { kind: "send", symbol: s.symbol, amount: units(s.raw, s.decimals) },
+    );
+  }
   if (stockIn.length === 0 && usdcOut > 0n) items.push({ kind: "send", symbol: USDC.symbol, amount: units(usdcOut, USDC.decimals) });
+  if (stockOut.length === 0) for (const v of usdcIn) items.push({ kind: "receive", symbol: USDC.symbol, amount: units(v, USDC.decimals) });
   return items;
 }
 
