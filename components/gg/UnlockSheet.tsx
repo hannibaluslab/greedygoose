@@ -1,8 +1,8 @@
 "use client";
 
-import { Sheet } from "./Sheet";
 import { AmountInput } from "./AmountInput";
 import { useState } from "react";
+import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { useAccount } from "wagmi";
 import { StockAvatar, tickerOf } from "./StockAvatar";
 import { StatusPill } from "./Status";
@@ -19,15 +19,14 @@ import type { ReserveAsset } from "@/lib/tokens/registry";
 
 /** Withdraw ("unlock") a stock from Aave back to the user's account. */
 export function UnlockSheet({
-  user, stock, holding, data, cf, onClose,
-}: { user: `0x${string}`; stock: ReserveAsset; holding: Holding; data: PositionData; cf: number | undefined; onClose: () => void }) {
+  open, user, stock, holding, data, cf, onClose,
+}: { open: boolean; user: `0x${string}`; stock: ReserveAsset; holding: Holding; data: PositionData; cf: number | undefined; onClose: () => void }) {
   const { isConnected } = useAccount();
   const fee = useFeeSupport();
   const tx = useTx();
   const [raw, setRaw] = useState("");
   const [all, setAll] = useState(false);
   const [ack, setAck] = useState(false);
-
 
   const ticker = tickerOf(stock.symbol);
   const lockedShares = rawToShares(holding.lockedRaw, holding.multiplier, stock.decimals);
@@ -47,15 +46,8 @@ export function UnlockSheet({
   const feeBlocked = isConnected && fee.state === "unsupported";
 
   return (
-    <Sheet label={`Unlock ${stock.name}`} onClose={onClose}>
-        <div className="flex items-center gap-2.5 pt-1">
-          <StockAvatar symbol={stock.symbol} />
-          <h2 className="m-0 min-w-0 flex-1 text-xl font-semibold tracking-[-0.02em]">Unlock {stock.name}</h2>
-          <button type="button" aria-label="Close" onClick={onClose} className="flex size-8 shrink-0 items-center justify-center rounded-2xl bg-[rgba(15,14,11,0.06)]">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="M6 6l12 12M18 6L6 18" /></svg>
-          </button>
-        </div>
-
+    <SheetShell open={open} onOpenChange={(next) => !next && onClose()} title={`Unlock ${stock.name}`}>
+      <SheetSteps stepKey={tx.phase === "done" ? "done" : "amount"} className="flex flex-col gap-3">
         {tx.phase === "done" ? (
           <TxDone title={`${ticker} unlocked`} body="It’s back in your account as a free stock." txHash={tx.txHash} onDone={onClose} />
         ) : (
@@ -66,6 +58,7 @@ export function UnlockSheet({
                 <span className="text-xs text-subtle">Can unlock: {formatShares(Math.max(0, maxShares))}</span>
               </div>
               <div className="flex items-center gap-2.5">
+                <StockAvatar symbol={stock.symbol} />
                 <label className="num flex flex-1 items-center">
                   <span className="sr-only">Number of shares</span>
                   <AmountInput
@@ -134,6 +127,7 @@ export function UnlockSheet({
             />
           </>
         )}
-    </Sheet>
+      </SheetSteps>
+    </SheetShell>
   );
 }

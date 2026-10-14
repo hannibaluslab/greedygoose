@@ -1,8 +1,8 @@
 "use client";
 
-import { Sheet } from "./Sheet";
 import { AmountInput } from "./AmountInput";
 import { useState } from "react";
+import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { useAccount } from "wagmi";
 import { StockAvatar, tickerOf } from "./StockAvatar";
 import { useBuyQuote } from "@/hooks/useBuyQuote";
@@ -17,25 +17,22 @@ import { cashRaw, maxSpendRaw, savingsWithdrawal, toUsd, type Cash } from "@/lib
 import { CASH } from "@/config/risk";
 import type { ReserveAsset } from "@/lib/tokens/registry";
 
-const ArrowLeft = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M19 12H5M11 6l-6 6 6 6" /></svg>
-);
-const Close = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="M6 6l12 12M18 6L6 18" /></svg>
-);
-
 /** Design board "F1 · 4 · Buy sheet" (F1-4-Buy.dc.html), plus Review and result steps. */
 export function BuySheet({
-  user, stock, oraclePriceUsd, cash, onClose,
-}: { user: `0x${string}`; stock: ReserveAsset; oraclePriceUsd: number; cash: Cash; onClose: () => void }) {
+  open, user, stock, oraclePriceUsd, cash, onClose,
+}: { open: boolean; user: `0x${string}`; stock: ReserveAsset; oraclePriceUsd: number; cash: Cash; onClose: () => void }) {
   const { isConnected } = useAccount();
   const [raw, setRaw] = useState("");
   const [step, setStep] = useState<"amount" | "review">("amount");
+  const [direction, setDirection] = useState<"forward" | "back">("forward");
+  const go = (next: "amount" | "review") => {
+    setDirection(next === "review" ? "forward" : "back");
+    setStep(next);
+  };
   const amount = Math.max(0, Number(raw.replace(/[^0-9.]/g, "")) || 0);
   const quote = useBuyQuote(stock, amount);
   const fee = useFeeSupport();
   const { buy, phase, error, reset, txHash } = useBuy();
-
 
   const q = quote.data ?? null;
   const econ = q ? quoteEconomics(q, stock, oraclePriceUsd) : null;
@@ -58,24 +55,13 @@ export function BuySheet({
   const canReview = amount > 0 && !!q && !blocker && !quote.isFetching;
 
   return (
-    <Sheet label={`Buy ${stock.name}`} onClose={onClose}>
-        <div className="flex items-center gap-1.5 pt-1">
-          <button
-            type="button"
-            aria-label="Back"
-            onClick={() => (step === "review" && phase === "idle" ? setStep("amount") : onClose())}
-            className="-ml-1.5 flex size-8 shrink-0 items-center justify-center rounded-2xl text-ink"
-          >
-            <ArrowLeft />
-          </button>
-          <h2 className="m-0 min-w-0 flex-1 text-xl font-semibold tracking-[-0.02em]">
-            {step === "review" ? "Review buy" : `Buy ${stock.name}`}
-          </h2>
-          <button type="button" aria-label="Close" onClick={onClose} className="flex size-8 shrink-0 items-center justify-center rounded-2xl bg-[rgba(15,14,11,0.06)] text-ink">
-            <Close />
-          </button>
-        </div>
-
+    <SheetShell
+      open={open}
+      onOpenChange={(next) => !next && onClose()}
+      title={step === "review" ? "Review buy" : `Buy ${stock.name}`}
+      onBack={() => (step === "review" && phase === "idle" ? go("amount") : onClose())}
+    >
+      <SheetSteps stepKey={phase === "done" ? "done" : step} direction={direction} className="flex flex-col gap-3">
         {phase === "done" ? (
           <TxDone
             title={`You bought ${econ ? econ.shares.toFixed(4) : ""} ${ticker}`}
@@ -156,7 +142,7 @@ export function BuySheet({
             <button
               type="button"
               disabled={!canReview}
-              onClick={() => setStep("review")}
+              onClick={() => go("review")}
               className="mt-1 h-[52px] rounded-[26px] bg-ink text-[15px] font-semibold text-on-ink disabled:opacity-45"
               style={{ boxShadow: canReview ? "0 0 0 3px #f4f2ec, 0 0 0 6px #0e0d0b" : undefined }}
             >
@@ -202,7 +188,8 @@ export function BuySheet({
             </>
           )
         )}
-    </Sheet>
+      </SheetSteps>
+    </SheetShell>
   );
 }
 

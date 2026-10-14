@@ -5,7 +5,6 @@ import { parseUnits } from "viem";
 import { useAccount } from "wagmi";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { SubHeader, WhiteCard } from "@/components/gg/Screen";
-import { Sheet } from "@/components/gg/Sheet";
 import { AmountInput } from "@/components/gg/AmountInput";
 import { BottomBar } from "@/components/gg/BottomBar";
 import { StatusPill } from "@/components/gg/Status";
@@ -14,6 +13,8 @@ import { FaceIdButton, TxDone, TxError } from "@/components/gg/TxUi";
 import { usePosition, type PositionData } from "@/hooks/usePosition";
 import { useGuardian } from "@/hooks/useGuardian";
 import { useTx } from "@/hooks/useTx";
+import { useSheetSubject } from "@/hooks/useSheetSubject";
+import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { planGuardian, GUARDIAN_DEFAULTS } from "@/lib/guardian/plan";
 import { buildAddSavingsCalls, buildWithdrawSavingsCalls } from "@/lib/guardian/permission";
 import { USDC } from "@/lib/tokens/registry";
@@ -31,7 +32,7 @@ function Guardian({ address }: { address: `0x${string}` }) {
   const g = useGuardian(address);
   const tx = useTx();
   const [cap, setCap] = useState(50);
-  const [sheet, setSheet] = useState<"add" | "withdraw" | null>(null);
+  const sheet = useSheetSubject<"add" | "withdraw">();
 
   if (!data) return <div className="px-5 pt-[54px]"><div aria-busy className="h-[520px] animate-pulse rounded-[22px] bg-chip" /></div>;
 
@@ -95,10 +96,10 @@ function Guardian({ address }: { address: `0x${string}` }) {
         <div className="num text-[38px] font-semibold leading-none tracking-[-0.04em]">{formatUsd(data.savingsUsd)}</div>
         <p className="m-0 text-[13px] text-ink-mid">Guardian only ever pays from here, never from your cash or stocks.</p>
         <div className="grid grid-cols-2 gap-2.5">
-          <button type="button" onClick={() => setSheet("add")} disabled={data.usdcBalance <= 0} className="h-11 rounded-[22px] bg-ink text-[14px] font-semibold text-on-ink disabled:opacity-45">
+          <button type="button" onClick={() => sheet.show("add")} disabled={data.usdcBalance <= 0} className="h-11 rounded-[22px] bg-ink text-[14px] font-semibold text-on-ink disabled:opacity-45">
             Add from cash
           </button>
-          <button type="button" onClick={() => setSheet("withdraw")} disabled={data.savingsUsd <= 0} className="h-11 rounded-[22px] bg-chip text-[14px] font-semibold disabled:opacity-45">
+          <button type="button" onClick={() => sheet.show("withdraw")} disabled={data.savingsUsd <= 0} className="h-11 rounded-[22px] bg-chip text-[14px] font-semibold disabled:opacity-45">
             Move to cash
           </button>
         </div>
@@ -186,7 +187,9 @@ function Guardian({ address }: { address: `0x${string}` }) {
         )}
       </BottomBar>
 
-      {sheet && <SavingsSheet address={address} data={data} mode={sheet} onClose={() => setSheet(null)} />}
+      {sheet.subject && (
+        <SavingsSheet key={sheet.key} open={sheet.open} address={address} data={data} mode={sheet.subject} onClose={sheet.close} />
+      )}
     </div>
   );
 }
@@ -208,7 +211,9 @@ function Preview({ data, stress }: { data: PositionData; stress: ReturnType<type
   );
 }
 
-function SavingsSheet({ address, data, mode, onClose }: { address: `0x${string}`; data: PositionData; mode: "add" | "withdraw"; onClose: () => void }) {
+function SavingsSheet({
+  open, address, data, mode, onClose,
+}: { open: boolean; address: `0x${string}`; data: PositionData; mode: "add" | "withdraw"; onClose: () => void }) {
   const { isConnected } = useAccount();
   const tx = useTx();
   const [raw, setRaw] = useState("");
@@ -218,42 +223,43 @@ function SavingsSheet({ address, data, mode, onClose }: { address: `0x${string}`
   const tooMuch = amount > max + 1e-9;
 
   return (
-    <Sheet label={mode === "add" ? "Add to savings" : "Move savings to cash"} onClose={onClose}>
-      <h2 className="m-0 text-xl font-semibold tracking-[-0.02em]">{mode === "add" ? "Add to savings" : "Move savings to cash"}</h2>
-      {tx.phase === "done" ? (
-        <TxDone title="Done" body={mode === "add" ? "Your savings buffer is bigger and earning." : "The USDC is back in your cash."} txHash={tx.txHash} onDone={onClose} />
-      ) : (
-        <>
-          <div className="flex flex-col gap-2 rounded-2xl border border-ink bg-card p-3.5">
-            <span className="text-xs text-subtle">{mode === "add" ? `Cash available: ${formatUsd(data.usdcBalance)}` : `In savings: ${formatUsd(data.savingsUsd)}`}</span>
-            <div className="flex items-center gap-2">
-              <span className="text-[22px] font-semibold text-subtle">$</span>
-              <AmountInput autoFocus value={raw} onValue={setRaw} className="text-[30px] font-semibold leading-none tracking-[-0.03em]" />
-              <button type="button" onClick={() => setRaw(String(Math.floor(max * 100) / 100))} className="h-7 rounded-[14px] bg-chip px-2.5 text-xs font-semibold text-ink-mid">
-                MAX
-              </button>
+    <SheetShell open={open} onOpenChange={(next) => !next && onClose()} title={mode === "add" ? "Add to savings" : "Move savings to cash"}>
+      <SheetSteps stepKey={tx.phase === "done" ? "done" : "amount"} className="flex flex-col gap-3">
+        {tx.phase === "done" ? (
+          <TxDone title="Done" body={mode === "add" ? "Your savings buffer is bigger and earning." : "The USDC is back in your cash."} txHash={tx.txHash} onDone={onClose} />
+        ) : (
+          <>
+            <div className="flex flex-col gap-2 rounded-2xl border border-ink bg-card p-3.5">
+              <span className="text-xs text-subtle">{mode === "add" ? `Cash available: ${formatUsd(data.usdcBalance)}` : `In savings: ${formatUsd(data.savingsUsd)}`}</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[22px] font-semibold text-subtle">$</span>
+                <AmountInput autoFocus value={raw} onValue={setRaw} className="text-[30px] font-semibold leading-none tracking-[-0.03em]" />
+                <button type="button" onClick={() => setRaw(String(Math.floor(max * 100) / 100))} className="h-7 rounded-[14px] bg-chip px-2.5 text-xs font-semibold text-ink-mid">
+                  MAX
+                </button>
+              </div>
             </div>
-          </div>
-          {tooMuch && <p role="status" className="m-0 text-[13px] text-act">That’s more than you have.</p>}
-          <TxError error={tx.error} />
-          <FaceIdButton
-            label={mode === "add" ? `Save ${formatUsd(amount)} with Face ID` : `Move ${all ? "all" : formatUsd(amount)} with Face ID`}
-            phase={tx.phase}
-            preview={!isConnected}
-            disabled={amount <= 0 || tooMuch}
-            onClick={() => {
-              if (tx.phase === "failed") tx.reset();
-              const amountRaw = parseUnits(amount.toFixed(USDC.decimals), USDC.decimals);
-              void tx.run(
-                address,
-                mode === "add" ? buildAddSavingsCalls(address, amountRaw) : buildWithdrawSavingsCalls(address, amountRaw, all),
-                undefined,
-                [{ kind: mode === "add" ? "save" : "unsave", symbol: "USDC", amount }],
-              );
-            }}
-          />
-        </>
-      )}
-    </Sheet>
+            {tooMuch && <p role="status" className="m-0 text-[13px] text-act">That’s more than you have.</p>}
+            <TxError error={tx.error} />
+            <FaceIdButton
+              label={mode === "add" ? `Save ${formatUsd(amount)} with Face ID` : `Move ${all ? "all" : formatUsd(amount)} with Face ID`}
+              phase={tx.phase}
+              preview={!isConnected}
+              disabled={amount <= 0 || tooMuch}
+              onClick={() => {
+                if (tx.phase === "failed") tx.reset();
+                const amountRaw = parseUnits(amount.toFixed(USDC.decimals), USDC.decimals);
+                void tx.run(
+                  address,
+                  mode === "add" ? buildAddSavingsCalls(address, amountRaw) : buildWithdrawSavingsCalls(address, amountRaw, all),
+                  undefined,
+                  [{ kind: mode === "add" ? "save" : "unsave", symbol: "USDC", amount }],
+                );
+              }}
+            />
+          </>
+        )}
+      </SheetSteps>
+    </SheetShell>
   );
 }

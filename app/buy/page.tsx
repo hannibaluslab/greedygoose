@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { SubHeader } from "@/components/gg/Screen";
@@ -9,6 +8,7 @@ import { StockAvatar } from "@/components/gg/StockAvatar";
 import { ChevronRight } from "@/components/gg/icons";
 import { MarketBanner } from "@/components/ui/MarketBanner";
 import { usePosition } from "@/hooks/usePosition";
+import { useSheetSubject } from "@/hooks/useSheetSubject";
 import { EQUITIES } from "@/lib/tokens/registry";
 import { formatShares, formatUsd } from "@/lib/formatting";
 
@@ -19,10 +19,9 @@ export default function BuyPage() {
 /** Market list (design "F1 · 3 · Market"): every supported stock with Aave's price; tap to buy. */
 function Market({ address }: { address: `0x${string}` }) {
   const { data } = usePosition(address);
-  const initial = useSearchParams().get("s");
-  const [selected, setSelected] = useState<string | null>(initial);
-  const stock = EQUITIES.find((e) => e.symbol === selected);
-  const holding = data?.holdings.find((h) => h.symbol === selected);
+  const sheet = useSheetSubject(useSearchParams().get("s"));
+  const stock = EQUITIES.find((e) => e.symbol === sheet.subject);
+  const holding = data?.holdings.find((h) => h.symbol === sheet.subject);
 
   return (
     <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[54px]">
@@ -40,7 +39,7 @@ function Market({ address }: { address: `0x${string}` }) {
         <ul className="num m-0 list-none rounded-[22px] bg-card px-[18px] py-0.5 shadow-[0_1px_3px_rgba(14,13,11,0.06)]">
           {data.holdings.map((h, i) => (
             <li key={h.symbol} className={i < data.holdings.length - 1 ? "border-b border-[#e7e1d2]" : ""}>
-              <button type="button" onClick={() => setSelected(h.symbol)} className="flex w-full items-center gap-2.5 px-0.5 py-3.5 text-left">
+              <button type="button" onClick={() => sheet.show(h.symbol)} className="flex w-full items-center gap-2.5 px-0.5 py-3.5 text-left">
                 <StockAvatar symbol={h.symbol} size={40} />
                 <div className="min-w-0 grow">
                   <div className="text-[15px] font-semibold leading-[1.25]">{h.name}</div>
@@ -64,7 +63,15 @@ function Market({ address }: { address: `0x${string}` }) {
       </p>
 
       {stock && holding && data && (
-        <BuySheet user={address} stock={stock} oraclePriceUsd={holding.priceUsd} cash={data.cash} onClose={() => setSelected(null)} />
+        <BuySheet
+          key={sheet.key}
+          open={sheet.open}
+          user={address}
+          stock={stock}
+          oraclePriceUsd={holding.priceUsd}
+          cash={data.cash}
+          onClose={sheet.close}
+        />
       )}
     </div>
   );

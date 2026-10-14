@@ -42,7 +42,7 @@ function Home({ address }: { address: `0x${string}` }) {
       {!data ? <Skeleton /> : <Loaded data={data} guardian={guardian} openCredit={() => setSheet(true)} />}
 
       <TabBar />
-      {sheet && data && <CreditSheet data={data} guardian={guardian} onClose={() => setSheet(false)} />}
+      {data && <CreditSheet open={sheet} data={data} guardian={guardian} onClose={() => setSheet(false)} />}
     </div>
   );
 }

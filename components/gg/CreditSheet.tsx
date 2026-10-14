@@ -1,7 +1,7 @@
 "use client";
 
-import { Sheet } from "./Sheet";
 import Link from "next/link";
+import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { ChevronRight, ShieldIcon, SlidersIcon } from "./icons";
 import { StatusBar, StatusPill } from "./Status";
 import type { PositionData } from "@/hooks/usePosition";
@@ -9,20 +9,22 @@ import type { GuardianStatus } from "@/hooks/useGuardian";
 import { formatUsd } from "@/lib/formatting";
 
 /** Design board "2c · Credit sheet" (HomeCreditSlide.dc.html). */
-export function CreditSheet({ data, onClose, guardian }: { data: PositionData; onClose: () => void; guardian: GuardianStatus }) {
-
+export function CreditSheet({ open, data, onClose, guardian }: { open: boolean; data: PositionData; onClose: () => void; guardian: GuardianStatus }) {
   const limit = data.debtUsd + data.availableUsd;
   const usedPct = limit > 0 ? Math.min(100, (data.debtUsd / limit) * 100) : 0;
 
   return (
-    <Sheet label={"Credit"} onClose={onClose}>
-        <div className="flex items-center justify-between">
-          <h2 className="m-0 text-2xl font-semibold tracking-[-0.02em]">Credit</h2>
-          <Link href="/credit" aria-label="Credit details" className="-mr-1.5 flex size-10 items-center justify-center rounded-[20px] bg-chip">
-            <SlidersIcon />
-          </Link>
-        </div>
-
+    <SheetShell
+      open={open}
+      onOpenChange={(next) => !next && onClose()}
+      title="Credit"
+      headerRight={
+        <Link href="/credit" aria-label="Credit details" className="flex size-8 items-center justify-center rounded-full bg-chip">
+          <SlidersIcon size={16} />
+        </Link>
+      }
+    >
+      <SheetSteps stepKey="credit" className="flex flex-col gap-3">
         <div className="flex flex-col gap-3.5 rounded-[22px] bg-card p-4 shadow-[0_1px_3px_rgba(14,13,11,0.06)]">
           <div className="flex items-center justify-between">
             <div className="num flex items-baseline gap-1.5">
@@ -82,6 +84,7 @@ export function CreditSheet({ data, onClose, guardian }: { data: PositionData; o
             Repay
           </Link>
         </div>
-    </Sheet>
+      </SheetSteps>
+    </SheetShell>
   );
 }

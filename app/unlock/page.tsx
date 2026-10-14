@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { SubHeader } from "@/components/gg/Screen";
@@ -8,6 +7,7 @@ import { UnlockSheet } from "@/components/gg/UnlockSheet";
 import { StockAvatar } from "@/components/gg/StockAvatar";
 import { ChevronRight, LockIcon } from "@/components/gg/icons";
 import { useCollateralFactors, usePosition } from "@/hooks/usePosition";
+import { useSheetSubject } from "@/hooks/useSheetSubject";
 import { EQUITIES } from "@/lib/tokens/registry";
 import { formatShares, formatUsd } from "@/lib/formatting";
 
@@ -18,10 +18,10 @@ export default function UnlockPage() {
 function Unlock({ address }: { address: `0x${string}` }) {
   const { data } = usePosition(address);
   const cfs = useCollateralFactors(data?.holdings);
-  const [selected, setSelected] = useState<string | null>(useSearchParams().get("s"));
+  const sheet = useSheetSubject(useSearchParams().get("s"));
   const locked = data?.holdings.filter((h) => h.lockedUsd >= 0.01) ?? [];
-  const stock = EQUITIES.find((e) => e.symbol === selected);
-  const holding = data?.holdings.find((h) => h.symbol === selected);
+  const stock = EQUITIES.find((e) => e.symbol === sheet.subject);
+  const holding = data?.holdings.find((h) => h.symbol === sheet.subject);
 
   return (
     <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[54px]">
@@ -38,7 +38,7 @@ function Unlock({ address }: { address: `0x${string}` }) {
         <ul className="num m-0 list-none rounded-[22px] bg-card px-[18px] py-0.5 shadow-[0_1px_3px_rgba(14,13,11,0.06)]">
           {locked.map((h, i) => (
             <li key={h.symbol} className={i < locked.length - 1 ? "border-b border-[#e7e1d2]" : ""}>
-              <button type="button" onClick={() => setSelected(h.symbol)} className="flex w-full items-center gap-2.5 px-0.5 py-3.5 text-left">
+              <button type="button" onClick={() => sheet.show(h.symbol)} className="flex w-full items-center gap-2.5 px-0.5 py-3.5 text-left">
                 <StockAvatar symbol={h.symbol} size={40} />
                 <div className="min-w-0 grow">
                   <div className="text-[15px] font-semibold leading-[1.25]">{h.name}</div>
@@ -52,7 +52,16 @@ function Unlock({ address }: { address: `0x${string}` }) {
         </ul>
       )}
       {stock && holding && data && (
-        <UnlockSheet user={address} stock={stock} holding={holding} data={data} cf={cfs?.[stock.symbol]} onClose={() => setSelected(null)} />
+        <UnlockSheet
+          key={sheet.key}
+          open={sheet.open}
+          user={address}
+          stock={stock}
+          holding={holding}
+          data={data}
+          cf={cfs?.[stock.symbol]}
+          onClose={sheet.close}
+        />
       )}
     </div>
   );
