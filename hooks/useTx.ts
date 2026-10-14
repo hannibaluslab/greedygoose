@@ -48,10 +48,10 @@ export function useTx(failedOnChain = "This didn’t go through on Base. Nothing
     setPhase("simulating");
     try {
       const sim = await client!.simulateCalls({ account: user, calls: calls.map(({ to, data }) => ({ to, data })) });
-      const bad = sim.results.find((r) => r.status !== "success");
-      if (bad) {
+      const bad = sim.results.findIndex((r) => r.status !== "success");
+      if (bad >= 0) {
         setPhase("failed");
-        setError(explainRevert(bad.data, fallback));
+        setError(explainRevert(sim.results[bad].data, fallback, calls[bad]));
         return;
       }
     } catch {

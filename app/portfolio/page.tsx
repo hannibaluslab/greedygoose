@@ -42,7 +42,7 @@ function Portfolio({ address }: { address: `0x${string}` }) {
               <span className="label pb-1">Portfolio</span>
               <Divided className="pb-1"><span className="label">Cash available</span></Divided>
               <Money value={data.stocksUsd} size={46} dollarSize={22} centsSize={19} />
-              <Divided className="self-stretch"><span className="text-[30px] font-semibold leading-none tracking-[-0.03em]">{formatUsd(data.usdcBalance).replace(/\.\d+$/, "")}</span></Divided>
+              <Divided className="self-stretch"><span className="text-[30px] font-semibold leading-none tracking-[-0.03em]">{formatUsd(data.cashUsd).replace(/\.\d+$/, "")}</span></Divided>
               <div className="pt-[5px] text-[13px] text-muted">
                 <span className="font-semibold text-ink">{formatUsd(data.collateralUsd)}</span> as collateral
               </div>

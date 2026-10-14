@@ -1,7 +1,8 @@
-import { encodeFunctionData, erc20Abi, isAddressEqual, maxUint256, type Hex } from "viem";
+import { encodeFunctionData, erc20Abi, maxUint256, type Hex } from "viem";
 import { AAVE } from "./addresses";
 import { spokeAbi } from "./abis/ISpoke";
-import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
+import { assertAllowed } from "@/lib/allowlist";
+import { USDC, type ReserveAsset } from "@/lib/tokens/registry";
 
 export type Call = { to: `0x${string}`; data: Hex; value: bigint };
 
@@ -75,18 +76,8 @@ export function buildRepayCalls(p: { user: `0x${string}`; amountRaw: bigint; all
   return assertAllowed(calls);
 }
 
-/** Amount to send for a full repay: debt + 0.05% + 1 unit, never more than the wallet holds. */
-export function fullRepayAmount(debtRaw: bigint, balanceRaw: bigint): bigint {
+/** Amount to send for a full repay: debt + 0.05% + 1 unit, never more than the cash can pay (`maxSpendRaw`). */
+export function fullRepayAmount(debtRaw: bigint, maxSpendRaw: bigint): bigint {
   const withBuffer = debtRaw + debtRaw / 2000n + 1n;
-  return withBuffer < balanceRaw ? withBuffer : balanceRaw;
-}
-
-const ALLOWED: readonly `0x${string}`[] = [AAVE.SPOKE, USDC.address, ...EQUITIES.map((e) => e.address)];
-
-export function assertAllowed(calls: Call[]): Call[] {
-  for (const c of calls) {
-    if (!ALLOWED.some((a) => isAddressEqual(a, c.to))) throw new Error(`Blocked: unexpected target ${c.to}`);
-    if (c.value !== 0n) throw new Error("Blocked: unexpected value");
-  }
-  return calls;
+  return withBuffer < maxSpendRaw ? withBuffer : maxSpendRaw;
 }

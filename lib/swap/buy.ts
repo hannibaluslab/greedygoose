@@ -1,6 +1,7 @@
-import { encodeFunctionData, erc20Abi, isAddressEqual, type Hex } from "viem";
-import { AERODROME, ROUTERS, UNISWAP, type Venue } from "./venues";
+import { encodeFunctionData, erc20Abi, type Hex } from "viem";
+import { AERODROME, UNISWAP, type Venue } from "./venues";
 import { aeroRouterAbi, swapRouter02Abi } from "./abis";
+import { assertAllowed } from "@/lib/allowlist";
 import { USDC, type ReserveAsset } from "@/lib/tokens/registry";
 
 /** Buy guardrails (CLAUDE.md › Buy stocks). */
@@ -83,16 +84,5 @@ export function buildBuyCalls(p: { user: `0x${string}`; stock: ReserveAsset; quo
             },
           ],
         });
-  const calls: Call[] = [approve, { to: router, data, value: 0n }];
-  assertAllowed(calls);
-  return calls;
-}
-
-const ALLOWED_TARGETS: readonly `0x${string}`[] = [USDC.address, ...ROUTERS];
-
-export function assertAllowed(calls: Call[]) {
-  for (const c of calls) {
-    if (!ALLOWED_TARGETS.some((a) => isAddressEqual(a, c.to))) throw new Error(`Blocked: unexpected target ${c.to}`);
-    if (c.value !== 0n) throw new Error("Blocked: unexpected value");
-  }
+  return assertAllowed([approve, { to: router, data, value: 0n }]);
 }

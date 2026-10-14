@@ -10,6 +10,7 @@ import { FaceIdButton, TxDone, TxError } from "@/components/gg/TxUi";
 import { useTx } from "@/hooks/useTx";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { buildRepayCalls, fullRepayAmount } from "@/lib/aave/tx";
+import { maxSpendRaw, payFromCash, savingsWithdrawal, toUsd } from "@/lib/cash";
 import { USDC } from "@/lib/tokens/registry";
 import { StatusBar, StatusPill } from "@/components/gg/Status";
 import { ChevronRight, SlidersIcon } from "@/components/gg/icons";
@@ -31,7 +32,7 @@ function Repay({ address }: { address: `0x${string}` }) {
 
   const options = useMemo(() => {
     if (!data) return [];
-    const max = Math.min(data.usdcBalance, data.debtUsd);
+    const max = Math.min(toUsd(maxSpendRaw(data.cash)), data.debtUsd);
     const half = Math.floor(max / 2);
     const quarter = Math.floor(max / 4);
     return [quarter, half].filter((v, i, a) => v > 0 && a.indexOf(v) === i);
@@ -41,22 +42,21 @@ function Repay({ address }: { address: `0x${string}` }) {
     return <div className="px-5 pt-[54px]"><div aria-busy className="h-[420px] animate-pulse rounded-[22px] bg-chip" /></div>;
   }
 
-  const maxRepay = Math.min(data.usdcBalance, data.debtUsd);
+  const maxSpend = maxSpendRaw(data.cash);
+  const maxRepay = Math.min(toUsd(maxSpend), data.debtUsd);
   const amount = choice === "all" ? maxRepay : choice ?? 0;
+  const amountRaw =
+    choice === "all" ? fullRepayAmount(data.debtRaw, maxSpend) : parseUnits(amount.toFixed(USDC.decimals), USDC.decimals);
+  const fromSavings = amountRaw > 0n ? savingsWithdrawal(amountRaw, data.cash) : null;
   const after = Math.max(0, data.debtUsd - amount);
-  const coversAll = choice === "all" && data.usdcBalanceRaw >= data.debtRaw;
+  const coversAll = choice === "all" && maxSpend >= data.debtRaw;
   const feeBlocked = isConnected && fee.state === "unsupported";
 
   const submit = () => {
     if (tx.phase === "failed") tx.reset();
-    const amountRaw =
-      choice === "all"
-        ? fullRepayAmount(data.debtRaw, data.usdcBalanceRaw)
-        : parseUnits(amount.toFixed(USDC.decimals), USDC.decimals);
     setPaid(amount);
-    void tx.run(address, buildRepayCalls({ user: address, amountRaw, all: choice === "all" }), undefined, [
-      { kind: "repay", symbol: "USDC", amount },
-    ]);
+    const calls = payFromCash(address, amountRaw, data.cash, buildRepayCalls({ user: address, amountRaw, all: choice === "all" }));
+    void tx.run(address, calls, undefined, [{ kind: "repay", symbol: "USDC", amount }]);
   };
 
   if (tx.phase === "done") {
@@ -104,7 +104,7 @@ function Repay({ address }: { address: `0x${string}` }) {
 
       <WhiteCard className="flex flex-col gap-3.5 px-[18px] pb-1 pt-[18px]">
         <div className="text-[17px] font-semibold">
-          Repay from cash <span className="font-medium text-subtle">({formatUsd(data.usdcBalance)})</span>
+          Repay from cash <span className="font-medium text-subtle">({formatUsd(data.cashUsd)})</span>
         </div>
         {data.debtUsd === 0 ? (
           <p className="m-0 pb-4 text-[15px] text-muted">You don’t owe anything.</p>
@@ -118,6 +118,7 @@ function Repay({ address }: { address: `0x${string}` }) {
               ))}
               <Chip selected={choice === "all"} onClick={() => setChoice("all")}>{maxRepay >= data.debtUsd ? "All" : "All cash"}</Chip>
             </div>
+            {fromSavings && <Line label="From savings" value={formatUsd(toUsd(fromSavings.raw))} />}
             <Line label="You owe after" value={formatUsd(after)} />
           </>
         )}

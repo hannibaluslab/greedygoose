@@ -48,7 +48,7 @@ function Home({ address }: { address: `0x${string}` }) {
 }
 
 function Loaded({ data, guardian, openCredit }: { data: PositionData; guardian: GuardianStatus; openCredit: () => void }) {
-  const total = data.stocksUsd + data.usdcBalance;
+  const total = data.stocksUsd + data.cashUsd;
   const held = data.holdings.filter((h) => h.freeShares + h.lockedShares > 0);
   const stocksUsd = data.stocksUsd;
 
@@ -59,7 +59,7 @@ function Loaded({ data, guardian, openCredit }: { data: PositionData; guardian: 
         <div className="num grid grid-cols-[auto_1fr] items-baseline px-[16.75px]">
           <div className="flex items-center gap-1.5 pb-1">
             <span className="label">Total balance</span>
-            <span title="Your stocks plus your USDC. What you owe is shown separately." className="-m-1 flex size-6 items-center justify-center text-subtle">
+            <span title="Your stocks plus your cash. What you owe is shown separately." className="-m-1 flex size-6 items-center justify-center text-subtle">
               <InfoIcon />
             </span>
           </div>
@@ -93,7 +93,7 @@ function Loaded({ data, guardian, openCredit }: { data: PositionData; guardian: 
       {/* Cash + Credit cards. */}
       <section className="grid grid-cols-2 gap-2.5 px-5 pt-[18px]">
         <Link
-          href={data.usdcBalance >= 1 ? "/buy" : "/receive"}
+          href={data.cashUsd >= 1 ? "/buy" : "/receive"}
           className="flex flex-col gap-2 rounded-[22px] bg-ink px-4 py-3.5 text-on-ink no-underline"
           style={{ boxShadow: "0 16px 32px -18px rgba(0,0,0,0.5)" }}
         >
@@ -103,9 +103,9 @@ function Loaded({ data, guardian, openCredit }: { data: PositionData; guardian: 
               USDC
             </span>
           </div>
-          <MoneyCompact value={data.usdcBalance} size={26} centsClass="text-[#a8a294]" />
+          <MoneyCompact value={data.cashUsd} size={26} centsClass="text-[#a8a294]" />
           <div className="-mt-1 flex flex-wrap items-center gap-1 text-[11px] text-[#a8a294]">
-            <span>{data.usdcBalance >= 1 ? "Buy stocks with it" : "Add USDC on Base"}</span>
+            <span>{data.cashUsd >= 1 ? "Buy stocks with it" : "Add USDC on Base"}</span>
             <ChevronRight size={12} />
           </div>
         </Link>
@@ -151,7 +151,7 @@ function Loaded({ data, guardian, openCredit }: { data: PositionData; guardian: 
           <div className="mb-4 flex flex-col gap-3 rounded-[22px] bg-card p-4 shadow-[0_1px_3px_rgba(14,13,11,0.06)]">
             <p className="m-0 text-[15px]">You don’t hold any supported stocks yet.</p>
             <Link href="/buy" className="flex h-11 items-center justify-center rounded-[22px] bg-chip text-[15px] font-semibold no-underline">
-              {data.usdcBalance >= 1 ? `Buy stocks with your ${formatUsd(data.usdcBalance)}` : "Buy stocks"}
+              {data.cashUsd >= 1 ? `Buy stocks with your ${formatUsd(data.cashUsd)}` : "Buy stocks"}
             </Link>
           </div>
         ) : (

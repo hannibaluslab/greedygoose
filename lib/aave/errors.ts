@@ -1,6 +1,7 @@
-import { decodeErrorResult, type Hex } from "viem";
+import { decodeErrorResult, isAddressEqual, type Hex } from "viem";
 import { spokeAbi } from "./abis/ISpoke";
 import { hubAbi } from "./abis/IHub";
+import { GUARDIAN, SEL } from "@/lib/guardian/config";
 
 const PLAIN: Record<string, string> = {
   HealthFactorBelowThreshold: "This would put your loan past what Aave allows. Try a smaller amount.",
@@ -13,8 +14,18 @@ const PLAIN: Record<string, string> = {
   MaximumUserReservesExceeded: "You’ve reached Aave’s limit on how many markets one account can use.",
 };
 
-/** Turn a revert into consumer language (CLAUDE.md › Error handling). */
-export function explainRevert(data: Hex | undefined, fallback: string): string {
+/**
+ * A savings withdrawal (Aave V3 Pool.withdraw) reverts when the pool is short of free USDC, is paused,
+ * or the savings balance read is stale (NotEnoughAvailableUserBalance). Each time, the cash can't come out now.
+ */
+export const CASH_STUCK = "Cash can’t be moved right now. Try again soon, or use credit.";
+
+const isSavingsWithdrawal = (call: { to: `0x${string}`; data: Hex }) =>
+  isAddressEqual(call.to, GUARDIAN.AAVE_V3_POOL) && call.data.slice(0, 10) === SEL.withdraw;
+
+/** Turn a revert into consumer language (CLAUDE.md › Error handling). `call` is the call that reverted. */
+export function explainRevert(data: Hex | undefined, fallback: string, call?: { to: `0x${string}`; data: Hex }): string {
+  if (call && isSavingsWithdrawal(call)) return CASH_STUCK;
   if (!data || data === "0x") return fallback;
   for (const abi of [spokeAbi, hubAbi]) {
     try {
