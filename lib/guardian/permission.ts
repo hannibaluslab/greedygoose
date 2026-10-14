@@ -5,8 +5,8 @@ import { USDC } from "@/lib/tokens/registry";
 import { GUARDIAN, GUARDIAN_SALT, SEL } from "./config";
 import { aaveV3PoolAbi, permissionManagerAbi } from "./abis";
 
-/** PeriodUnit enum in JustaPermissionManager. */
-export const PERIOD = { Minute: 0, Hour: 1, Day: 2, Week: 3, Month: 4, Year: 5, Forever: 6 } as const;
+/** PeriodUnit enum in JustaPermissionManager (JustaPermissionManager.sol:206-213). There is no Year. */
+export const PERIOD = { Minute: 0, Hour: 1, Day: 2, Week: 3, Month: 4, Forever: 5 } as const;
 
 export type GuardianPermission = {
   account: `0x${string}`;

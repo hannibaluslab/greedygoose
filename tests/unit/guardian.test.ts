@@ -67,6 +67,9 @@ describe("permission + calls", () => {
     expect(p.spends).toEqual([{ token: USDC.address, allowance: 50_000_000n, unit: PERIOD.Day, multiplier: 1 }]);
     expect(() => buildGuardianPermission({ account: user, spender: user, checker, dailyCapRaw: 0n, start: 1, end: 2 })).toThrow();
   });
+  it("period units match the manager's enum (Day = 2, Forever = 5, no Year)", () => {
+    expect(PERIOD).toEqual({ Minute: 0, Hour: 1, Day: 2, Week: 3, Month: 4, Forever: 5 });
+  });
   it("rescue calls withdraw to the user and repay the user's own loan", () => {
     const [w, a, r] = buildRescueCalls(user, 1_000_000n);
     expect(decodeFunctionData({ abi: aaveV3PoolAbi, data: w.data }).args).toEqual([USDC.address, 1_000_000n, user]);
