@@ -1,9 +1,10 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { useNowSec } from "./useNowSec";
 import type { Holding } from "./usePosition";
 import { fetchJawQuotes, fetchJawWeeks, jawMarketData } from "@/lib/prices/jaw";
-import { pickMarketData, type MarketMap } from "@/lib/prices/market";
+import { pickMarketData, priceTolerance, type MarketMap } from "@/lib/prices/market";
 
 /** The CoinGecko fallback, through the app's own stateless route. */
 async function fetchFallback(symbols: readonly string[], signal: AbortSignal): Promise<MarketMap> {
@@ -14,13 +15,14 @@ async function fetchFallback(symbols: readonly string[], signal: AbortSignal): P
 
 /**
  * Market data for the stocks held, each with Aave's price (plan item 8): today's change and the lines. JAW's comes
- * first; a stock whose JAW price isn't within 2% of Aave's, or that JAW didn't answer for, comes from CoinGecko through
- * /api/prices, checked the same way. `complete` once every stock held has data; `loading` until each stock has data or
+ * first; a stock whose JAW price isn't within 2% of Aave's (10% while markets are closed), or that JAW didn't answer
+ * for, comes from CoinGecko through /api/prices, checked the same way. `complete` once every stock held has data; `loading` until each stock has data or
  * has failed both. Information only: values and credit use Aave's prices.
  */
 export function useMarketPrices(held: readonly Pick<Holding, "symbol" | "priceUsd">[]) {
   const symbols = held.map((h) => h.symbol);
   const enabled = symbols.length > 0;
+  const tolerance = priceTolerance(useNowSec() * 1000);
 
   const quotes = useQuery({
     queryKey: ["marketQuotes", symbols],
@@ -42,7 +44,7 @@ export function useMarketPrices(held: readonly Pick<Holding, "symbol" | "priceUs
 
   const jawSettled = !quotes.isPending && !weeks.isPending;
   const jaw = quotes.data && weeks.data ? jawMarketData(quotes.data, weeks.data) : undefined;
-  const { missing } = pickMarketData(held, jaw);
+  const { missing } = pickMarketData(held, tolerance, jaw);
 
   const fallback = useQuery({
     queryKey: ["marketFallback", missing],
@@ -52,7 +54,7 @@ export function useMarketPrices(held: readonly Pick<Holding, "symbol" | "priceUs
     queryFn: ({ signal }) => fetchFallback(missing, signal),
   });
 
-  const picked = pickMarketData(held, jaw, fallback.data);
+  const picked = pickMarketData(held, tolerance, jaw, fallback.data);
   const fallbackSettled = missing.length === 0 || !fallback.isPending;
   return {
     bySymbol: picked.data,

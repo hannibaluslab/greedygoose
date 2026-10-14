@@ -6,7 +6,7 @@ import { ChevronDown, ChevronRight } from "./icons";
 import type { ActivityRow } from "@/hooks/useActivity";
 import type { ActivityItem } from "@/lib/activity/decode";
 import { txUrl } from "@/lib/chain";
-import { ALL_RESERVES, findByAddress } from "@/lib/tokens/registry";
+import { ALL_RESERVES, USDC, findByAddress } from "@/lib/tokens/registry";
 import { formatShares, formatUsd } from "@/lib/formatting";
 
 /** One decoded move in words: what happened, then its amount and sign. */
@@ -36,6 +36,14 @@ export function describeActivity(i: ActivityItem): { title: string; amount: stri
     case "unsave":
       return { title: "Moved out of savings", amount: formatUsd(i.amount), sign: "" };
   }
+}
+
+/**
+ * A row's moves for its details: each item, and after a buy or repay paid from savings, that withdrawal as it
+ * happened ("Moved out of savings"). The row itself counts the items only, so it never shows as one more.
+ */
+export function detailMoves(items: readonly ActivityItem[]): ActivityItem[] {
+  return items.flatMap((i) => (i.fromSavingsUsd ? [i, { kind: "unsave" as const, symbol: USDC.symbol, amount: i.fromSavingsUsd }] : [i]));
 }
 
 /** The round mark beside a move: the stock's badge, or a green $ for USDC. */
@@ -119,7 +127,7 @@ function Move({ row, last, open, onToggle }: { row: ActivityRow; last: boolean; 
       {open && (
         <div className="mt-2 rounded-[16px] bg-card-bone px-3 pt-2.5 text-[13px] leading-[1.35]">
           <dl className="num m-0 grid grid-cols-[82px_minmax(0,1fr)] gap-y-[5px]">
-            {row.items.map((item, i) => {
+            {detailMoves(row.items).map((item, i) => {
               const x = describeActivity(item);
               return (
                 <Detail key={i} label={i === 0 ? "What" : ""}>

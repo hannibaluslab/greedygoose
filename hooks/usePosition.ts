@@ -13,8 +13,7 @@ import { statusFor } from "@/lib/risk/status";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
-import { JOBS } from "@/lib/agents/permissions";
-import { cashRaw, toUsd, type Cash } from "@/lib/cash";
+import { cashRaw, saveRuns, toUsd, type Cash } from "@/lib/cash";
 
 /** Aave V3 getReserveData — only `currentLiquidityRate` (index 2, RAY) is used. */
 const v3ReserveAbi = [
@@ -146,7 +145,7 @@ export function usePosition(user: `0x${string}` | undefined) {
     const s = summarize(account);
     const apr = borrowApr(drawnRate, riskPremium);
     const debtUsd = Number(debtRaw) / 10 ** USDC.decimals;
-    const cash: Cash = { walletRaw: usdcBal, savingsRaw, saveOn: ((agents?.[0] ?? 0) & (1 << JOBS.indexOf("save"))) !== 0 };
+    const cash: Cash = { walletRaw: usdcBal, savingsRaw, saveOn: saveRuns(agents?.[0] ?? 0) };
     return {
       holdings,
       stocksUsd: holdings.reduce((a, h) => a + h.freeUsd + h.lockedUsd, 0),

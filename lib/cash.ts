@@ -1,7 +1,13 @@
-import { parseUnits } from "viem";
+import { erc20Abi, parseUnits, type Address, type PublicClient, type Transport } from "viem";
 import { CASH } from "@/config/risk";
 import { assertAllowed } from "@/lib/allowlist";
 import type { Call } from "@/lib/aave/tx";
+import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
+import { GOOSE_EXECUTOR } from "@/lib/agents/config";
+import { JOBS } from "@/lib/agents/permissions";
+import type { CHAIN } from "@/lib/chain";
+import { formatUsd } from "@/lib/formatting";
+import { GUARDIAN } from "@/lib/guardian/config";
 import { buildWithdrawSavingsCalls } from "@/lib/guardian/permission";
 import { USDC } from "@/lib/tokens/registry";
 
@@ -17,6 +23,27 @@ export const feeBufferRaw = usdcRaw(CASH.feeBufferUsd);
 
 export const cashRaw = (c: Cash) => c.walletRaw + c.savingsRaw;
 export const toUsd = (raw: bigint) => Number(raw) / 10 ** USDC.decimals;
+
+/** Whether Save runs for the account, from the job bits of GooseExecutor's `accounts(account)`. */
+export const saveRuns = (jobs: number) => (jobs & (1 << JOBS.indexOf("save"))) !== 0;
+
+/**
+ * The account's cash as Base has it now: wallet USDC, savings and whether Save runs, the balances usePosition reads
+ * every 15 s. For the batch built right before Face ID (useSigningCash).
+ */
+export async function readCash(client: PublicClient<Transport, typeof CHAIN>, user: Address): Promise<Cash> {
+  const [[walletRaw, savingsRaw], account] = await Promise.all([
+    client.multicall({
+      allowFailure: false,
+      contracts: [
+        { address: USDC.address, abi: erc20Abi, functionName: "balanceOf", args: [user] },
+        { address: GUARDIAN.AUSDC, abi: erc20Abi, functionName: "balanceOf", args: [user] },
+      ],
+    }),
+    GOOSE_EXECUTOR ? client.readContract({ address: GOOSE_EXECUTOR, abi: gooseExecutorAbi, functionName: "accounts", args: [user] }) : undefined,
+  ]);
+  return { walletRaw, savingsRaw, saveOn: saveRuns(account?.[0] ?? 0) };
+}
 
 /** The most one buy or repay can spend: the fee buffer stays behind for the network fee. */
 export function maxSpendRaw(c: Cash): bigint {
@@ -35,6 +62,25 @@ export function savingsWithdrawal(amountRaw: bigint, c: Cash): { raw: bigint; al
   const need = amountRaw + feeBufferRaw - fromWallet;
   if (need <= 0n || c.savingsRaw === 0n) return null;
   return need < c.savingsRaw ? { raw: need, all: false } : { raw: c.savingsRaw, all: true };
+}
+
+/**
+ * Why the Repay screen offers no amount (maxSpendRaw is 0): there's no cash, or no more than the fee buffer, which
+ * stays for the network fee. Cash counts savings and wallet USDC alike (D15).
+ */
+export function cantRepay(c: Cash): string {
+  return cashRaw(c) === 0n
+    ? "Add money to your cash to repay."
+    : `Repaying needs more than ${formatUsd(CASH.feeBufferUsd)} in your cash: that much stays for the network fee.`;
+}
+
+/**
+ * Why a spend of `amountRaw` can't be signed with the cash there is now, `c`: it and the network fee no longer fit,
+ * because cash moved since the review (another app spent it, or Protect repaid from savings). Null when they fit.
+ */
+export function cashShort(amountRaw: bigint, c: Cash): string | null {
+  if (amountRaw + feeBufferRaw <= cashRaw(c)) return null;
+  return `Your cash moved since you started. You have ${formatUsd(toUsd(cashRaw(c)))} now: check the amount and try again.`;
 }
 
 /**

@@ -11,9 +11,10 @@ import { Line, SubHeader, WhiteCard } from "@/components/gg/Screen";
 import { FaceIdButton, TxError } from "@/components/gg/TxUi";
 import { useTx } from "@/hooks/useTx";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
+import { useSigningCash } from "@/hooks/useSigningCash";
 import { buildRepayCalls, fullRepayAmount } from "@/lib/aave/tx";
 import { repayChips } from "@/lib/aave/loan";
-import { maxSpendRaw, payFromCash, toUsd } from "@/lib/cash";
+import { cantRepay, maxSpendRaw, payFromCash, toUsd } from "@/lib/cash";
 import { USDC } from "@/lib/tokens/registry";
 import { StatusBar, StatusPill } from "@/components/gg/Status";
 import { ChevronRight, SlidersIcon } from "@/components/gg/icons";
@@ -26,7 +27,8 @@ export default function RepayPage() {
 
 /**
  * Design board "5b · Repay" (CreditOn.dc.html): it opens on the larger amount ($300), and a landed repay goes Home,
- * as the board's button does, with a toast like a buy's (F1-6).
+ * as the board's button does, with a toast like a buy's (F1-6). The batch is built with the cash read again right
+ * before Face ID (useSigningCash), so cash that moved since shows in words instead of a batch that can't pay.
  */
 function Repay({ address }: { address: `0x${string}` }) {
   const { isConnected } = useAccount();
@@ -34,6 +36,7 @@ function Repay({ address }: { address: `0x${string}` }) {
   const { data } = usePosition(address);
   const tx = useTx();
   const fee = useFeeSupport();
+  const cashToSign = useSigningCash();
   const [choice, setChoice] = useState<number | "all" | null>(null);
   const paid = useRef<string | null>(null);
 
@@ -52,8 +55,10 @@ function Repay({ address }: { address: `0x${string}` }) {
 
   const maxSpend = maxSpendRaw(data.cash);
   const maxRepay = Math.min(toUsd(maxSpend), data.debtUsd);
-  // Until a chip is tapped, the larger of the two amounts is picked, as drawn; All when it's the only chip.
-  const picked = choice ?? options.at(-1) ?? (maxRepay > 0 ? "all" : null);
+  // Until a chip is tapped, the larger of the two amounts is picked, as drawn; All when it's the only chip. A tapped
+  // amount that's no longer offered (the cash fell since) goes back to that too.
+  const chosen = choice === "all" || (choice !== null && options.includes(choice)) ? choice : null;
+  const picked = chosen ?? options.at(-1) ?? (maxRepay > 0 ? "all" : null);
   const amount = picked === "all" ? maxRepay : picked ?? 0;
   const amountRaw =
     picked === "all" ? fullRepayAmount(data.debtRaw, maxSpend) : parseUnits(amount.toFixed(USDC.decimals), USDC.decimals);
@@ -66,8 +71,13 @@ function Repay({ address }: { address: `0x${string}` }) {
   const submit = () => {
     if (tx.phase === "failed") tx.reset();
     paid.current = coversAll ? "Repaid all your credit" : `Repaid ${formatUsdTrim(amount)}`;
-    const calls = payFromCash(address, amountRaw, data.cash, buildRepayCalls({ user: address, amountRaw, all: picked === "all" }));
-    void tx.run(address, calls, undefined, [{ kind: "repay", symbol: "USDC", amount }]);
+    const all = picked === "all";
+    void tx.run(
+      address,
+      async () => payFromCash(address, amountRaw, await cashToSign(address, amountRaw), buildRepayCalls({ user: address, amountRaw, all })),
+      undefined,
+      [{ kind: "repay", symbol: "USDC", amount }],
+    );
   };
 
   return (
@@ -103,7 +113,7 @@ function Repay({ address }: { address: `0x${string}` }) {
         {data.debtUsd === 0 ? (
           <p className="m-0 pb-4 text-[15px] text-ink-mid">You don’t owe anything.</p>
         ) : maxRepay === 0 ? (
-          <p className="m-0 pb-4 text-[15px] text-ink-mid">Add money to your cash to repay. <Link href="/receive" className="underline">Add money</Link></p>
+          <p className="m-0 pb-4 text-[15px] text-ink-mid">{cantRepay(data.cash)} <Link href="/receive" className="underline">Add money</Link></p>
         ) : (
           <>
             <div role="radiogroup" aria-label="Amount to repay" className="grid grid-cols-3 gap-2">

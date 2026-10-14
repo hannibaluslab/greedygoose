@@ -12,7 +12,8 @@ import { buildBorrowCalls, buildLoanCalls, buildRepayCalls, buildSupplyCalls, bu
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { AAVE } from "@/lib/aave/addresses";
 import { CASH_STUCK, explainRevert } from "@/lib/aave/errors";
-import { payFromCash, type Cash } from "@/lib/cash";
+import { decodeActivity } from "@/lib/activity/decode";
+import { cashRaw, cashShort, payFromCash, readCash, type Cash } from "@/lib/cash";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { buildWithdrawSavingsCalls } from "@/lib/guardian/permission";
 import { aeroQuoterAbi } from "@/lib/swap/abis";
@@ -121,6 +122,8 @@ describe("savings-first batches from a $0 wallet", () => {
     return {
       statuses: r.results.slice(0, -1).map((x) => x.status),
       walletAfter: decodeFunctionResult({ abi: erc20Abi, functionName: "balanceOf", data: r.results.at(-1)!.data }),
+      /** What Activity shows for it: the batch's events, as its receipt would carry them. */
+      activity: decodeActivity(r.results.flatMap((x) => x.logs ?? []), user),
     };
   }
 
@@ -150,6 +153,10 @@ describe("savings-first batches from a $0 wallet", () => {
     const r = await simulateFromEmptyWallet(calls);
     expect(r.statuses).toEqual(["success", "success", "success"]);
     expect(r.walletAfter).toBe(feeBuffer);
+    // One Activity row: the buy, with the savings withdrawal that paid for it on it, not a move of its own.
+    expect(r.activity).toEqual([
+      { kind: "buy", symbol: "NVDAc", amount: Number(quote.amountOut) / 1e8, paidUsd: 1, fromSavingsUsd: 1 + CASH.feeBufferUsd },
+    ]);
   });
 
   it("repay $1: withdraw from savings → approve → repay, fee buffer left in the wallet", async () => {
@@ -162,6 +169,9 @@ describe("savings-first batches from a $0 wallet", () => {
     const r = await simulateFromEmptyWallet(calls);
     expect(r.statuses).toEqual(["success", "success", "success"]);
     expect(r.walletAfter).toBe(feeBuffer);
+    expect(r.activity).toEqual([
+      { kind: "repay", symbol: "USDC", amount: Number(amountRaw) / 1e6, fromSavingsUsd: Number(amountRaw + feeBuffer) / 1e6 },
+    ]);
   });
 
   it("a withdrawal savings can't serve reads as cash that can't move right now", async () => {
@@ -170,5 +180,32 @@ describe("savings-first batches from a $0 wallet", () => {
     expect(r.status).toBe("failure");
     expect(r.data).toBe(toFunctionSelector("NotEnoughAvailableUserBalance()"));
     expect(explainRevert(r.data, "fallback", withdraw)).toBe(CASH_STUCK);
+  });
+});
+
+/** The cash read again right before Face ID (useSigningCash), from the same live account. */
+describe("the cash a batch is signed with (readCash)", () => {
+  const balance = (token: `0x${string}`) => client.readContract({ address: token, abi: erc20Abi, functionName: "balanceOf", args: [user] });
+
+  it("reads what usePosition reads: wallet USDC and savings", async () => {
+    const savingsBefore = await balance(GUARDIAN.AUSDC);
+    const [c, walletRaw] = await Promise.all([readCash(client, user), balance(USDC.address)]);
+    const savingsAfter = await balance(GUARDIAN.AUSDC);
+    expect(c.walletRaw).toBe(walletRaw);
+    // Savings earn by the second, so the read lands between the two around it.
+    expect(c.savingsRaw).toBeGreaterThanOrEqual(savingsBefore);
+    expect(c.savingsRaw).toBeLessThanOrEqual(savingsAfter);
+    expect(c.saveOn).toBe(false);
+  });
+
+  it("a repay built from it simulates, and a spend past it is stopped in words", async () => {
+    const c = await readCash(client, user);
+    const owed = await client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserTotalDebt", args: [BigInt(USDC.reserveId), user] });
+    expect(owed, "the test account owes nothing to repay").toBeGreaterThan(0n);
+    const amountRaw = owed < 1_000_000n ? owed : 1_000_000n;
+    expect(cashShort(amountRaw, c)).toBeNull();
+    const r = await simulate(payFromCash(user, amountRaw, c, buildRepayCalls({ user, amountRaw, all: false })));
+    expect(r.results.every((x) => x.status === "success")).toBe(true);
+    expect(cashShort(cashRaw(c), c)).toMatch(/^Your cash moved since you started\. You have \$[\d,]+\.\d\d now/);
   });
 });

@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { fromCoinRow, type CoinRow } from "@/lib/prices/coingecko";
 import { jawMarketData } from "@/lib/prices/jaw";
 import {
-  PRICE_TOLERANCE, RANGES, afterFirstDay, agreesWithAave, checked, checkedLine, dayChange, downsample, isRange, moveUsd, pickMarketData, weekValue, yearLineStart,
-  type MarketData,
+  PRICE_TOLERANCE, RANGES, afterFirstDay, agreesWithAave, checked, checkedLine, dayChange, downsample, isRange, moveUsd, pickMarketData,
+  priceTolerance, weekValue, yearLineStart, type MarketData,
 } from "@/lib/prices/market";
 const line = (from: number, to: number, n = 24) => Array.from({ length: n }, (_, i) => from + ((to - from) * i) / (n - 1));
 const data = (price: number, change = 0.01, week = line(price * 0.95, price, 169)): MarketData => ({
@@ -12,48 +12,88 @@ const data = (price: number, change = 0.01, week = line(price * 0.95, price, 169
 
 // Aave's oracle on Base, 2026-10-14 (getReservePrice, 8 decimals), and what JAW's /markets answered the same hour.
 const AAVE = { NVDAc: 229.15, METAc: 767.02, AAPLc: 342.1 };
+const OPEN = PRICE_TOLERANCE.open;
+const CLOSED = PRICE_TOLERANCE.closed;
 
 describe("agreesWithAave (within 2% of the oracle)", () => {
   it("accepts a price up to 2% either side", () => {
-    expect(agreesWithAave(229.46, AAVE.NVDAc)).toBe(true);
-    expect(PRICE_TOLERANCE).toBe(0.02);
-    expect(agreesWithAave(101.99, 100)).toBe(true);
-    expect(agreesWithAave(98.01, 100)).toBe(true);
+    expect(agreesWithAave(229.46, AAVE.NVDAc, OPEN)).toBe(true);
+    expect(OPEN).toBe(0.02);
+    expect(agreesWithAave(101.99, 100, OPEN)).toBe(true);
+    expect(agreesWithAave(98.01, 100, OPEN)).toBe(true);
   });
 
   it("rejects a price more than 2% off", () => {
-    expect(agreesWithAave(102.1, 100)).toBe(false);
-    expect(agreesWithAave(97.9, 100)).toBe(false);
+    expect(agreesWithAave(102.1, 100, OPEN)).toBe(false);
+    expect(agreesWithAave(97.9, 100, OPEN)).toBe(false);
   });
 
   it("rejects JAW's META, another token at about $5", () => {
-    expect(agreesWithAave(5.38, AAVE.METAc)).toBe(false);
+    expect(agreesWithAave(5.38, AAVE.METAc, OPEN)).toBe(false);
   });
 
   it("rejects missing, zero and non-finite prices on either side", () => {
     for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
-      expect(agreesWithAave(bad, 100)).toBe(false);
-      expect(agreesWithAave(100, bad)).toBe(false);
+      expect(agreesWithAave(bad, 100, OPEN)).toBe(false);
+      expect(agreesWithAave(100, bad, OPEN)).toBe(false);
     }
+  });
+});
+
+describe("while US markets are closed (within 10%)", () => {
+  // 2026-10-12 is a Monday. EDT = UTC-4. Aave's price holds Friday 20:00 ET's close until Sunday 20:00 ET.
+  const at = (iso: string) => priceTolerance(Date.parse(iso));
+
+  it("is 2% while markets are open and 10% from Friday 20:00 ET to Sunday 20:00 ET", () => {
+    expect(CLOSED).toBe(0.1);
+    expect(at("2026-10-14T15:00:00Z")).toBe(OPEN); // Wed
+    expect(at("2026-10-16T23:59:00Z")).toBe(OPEN); // Fri 19:59 ET
+    expect(at("2026-10-17T00:00:00Z")).toBe(CLOSED); // Fri 20:00 ET
+    expect(at("2026-10-17T18:00:00Z")).toBe(CLOSED); // Sat
+    expect(at("2026-10-18T23:59:00Z")).toBe(CLOSED); // Sun 19:59 ET
+    expect(at("2026-10-19T00:00:00Z")).toBe(OPEN); // Sun 20:00 ET
+  });
+
+  it("is the open band, the stricter, before the clock is known", () => {
+    expect(priceTolerance(0)).toBe(OPEN);
+  });
+
+  it("accepts a weekend price that drifted up to 10% from Friday's close, and no further", () => {
+    expect(agreesWithAave(109.9, 100, CLOSED)).toBe(true);
+    expect(agreesWithAave(90.1, 100, CLOSED)).toBe(true);
+    expect(agreesWithAave(110.1, 100, CLOSED)).toBe(false);
+    expect(agreesWithAave(89.9, 100, CLOSED)).toBe(false);
+  });
+
+  it("still rejects JAW's META, another token at about $5", () => {
+    expect(agreesWithAave(5.38, AAVE.METAc, CLOSED)).toBe(false);
+    expect(checkedLine(line(5.1, 5.38, 289), AAVE.METAc, CLOSED)).toBeUndefined();
+  });
+
+  it("keeps JAW's answer for a stock 6% off, where the open band would ask CoinGecko", () => {
+    const held = [{ symbol: "NVDAc", priceUsd: 200 }];
+    const jaw = { NVDAc: data(212) };
+    expect(pickMarketData(held, OPEN, jaw).missing).toEqual(["NVDAc"]);
+    expect(pickMarketData(held, CLOSED, jaw).data.NVDAc).toBe(jaw.NVDAc);
   });
 });
 
 describe("checked", () => {
   it("keeps data whose price and last weekly price agree with Aave's", () => {
     const d = data(229.46);
-    expect(checked(d, AAVE.NVDAc)).toBe(d);
+    expect(checked(d, AAVE.NVDAc, OPEN)).toBe(d);
   });
 
   it("drops data whose week ends on another token's price", () => {
-    expect(checked(data(229.46, 0.01, line(5, 5.4, 169)), AAVE.NVDAc)).toBeUndefined();
+    expect(checked(data(229.46, 0.01, line(5, 5.4, 169)), AAVE.NVDAc, OPEN)).toBeUndefined();
   });
 
   it("drops data with no line to draw or an impossible change", () => {
-    expect(checked({ ...data(229.46), day: [229.46] }, AAVE.NVDAc)).toBeUndefined();
-    expect(checked({ ...data(229.46), week: [] }, AAVE.NVDAc)).toBeUndefined();
-    expect(checked({ ...data(229.46), change: Number.NaN }, AAVE.NVDAc)).toBeUndefined();
-    expect(checked({ ...data(229.46), change: -1 }, AAVE.NVDAc)).toBeUndefined();
-    expect(checked(undefined, AAVE.NVDAc)).toBeUndefined();
+    expect(checked({ ...data(229.46), day: [229.46] }, AAVE.NVDAc, OPEN)).toBeUndefined();
+    expect(checked({ ...data(229.46), week: [] }, AAVE.NVDAc, OPEN)).toBeUndefined();
+    expect(checked({ ...data(229.46), change: Number.NaN }, AAVE.NVDAc, OPEN)).toBeUndefined();
+    expect(checked({ ...data(229.46), change: -1 }, AAVE.NVDAc, OPEN)).toBeUndefined();
+    expect(checked(undefined, AAVE.NVDAc, OPEN)).toBeUndefined();
   });
 });
 
@@ -65,7 +105,7 @@ describe("pickMarketData: JAW first, CoinGecko for what JAW gets wrong", () => {
 
   it("asks CoinGecko only for the stock whose JAW price is off", () => {
     const jaw = { NVDAc: data(229.46), METAc: data(5.38) };
-    const { data: picked, missing } = pickMarketData(held, jaw);
+    const { data: picked, missing } = pickMarketData(held, OPEN, jaw);
     expect(Object.keys(picked)).toEqual(["NVDAc"]);
     expect(missing).toEqual(["METAc"]);
   });
@@ -73,25 +113,25 @@ describe("pickMarketData: JAW first, CoinGecko for what JAW gets wrong", () => {
   it("takes CoinGecko's answer when it agrees with Aave's", () => {
     const jaw = { NVDAc: data(229.46), METAc: data(5.38) };
     const fallback = { METAc: data(766.12) };
-    const { data: picked, missing } = pickMarketData(held, jaw, fallback);
+    const { data: picked, missing } = pickMarketData(held, OPEN, jaw, fallback);
     expect(picked.NVDAc.price).toBe(229.46);
     expect(picked.METAc.price).toBe(766.12);
     expect(missing).toEqual([]);
   });
 
   it("prefers JAW when both answer", () => {
-    const { data: picked } = pickMarketData(held.slice(0, 1), { NVDAc: data(229.46) }, { NVDAc: data(229.43) });
+    const { data: picked } = pickMarketData(held.slice(0, 1), OPEN, { NVDAc: data(229.46) }, { NVDAc: data(229.43) });
     expect(picked.NVDAc.price).toBe(229.46);
   });
 
   it("leaves a stock blank when neither agrees with Aave", () => {
-    const { data: picked, missing } = pickMarketData(held, { METAc: data(5.38) }, { METAc: data(800) });
+    const { data: picked, missing } = pickMarketData(held, OPEN, { METAc: data(5.38) }, { METAc: data(800) });
     expect(picked.METAc).toBeUndefined();
     expect(missing).toEqual(["NVDAc", "METAc"]);
   });
 
   it("sends every stock to CoinGecko when JAW doesn't answer", () => {
-    expect(pickMarketData(held, undefined).missing).toEqual(["NVDAc", "METAc"]);
+    expect(pickMarketData(held, OPEN, undefined).missing).toEqual(["NVDAc", "METAc"]);
   });
 });
 
@@ -179,7 +219,7 @@ describe("the CoinGecko fallback (fromCoinRow)", () => {
     expect(out.week.at(-1)).toBe(766.42);
     expect(out.day).toHaveLength(25);
     expect(out.day).toEqual(out.week.slice(-25));
-    expect(checked(out, AAVE.METAc)).toBe(out);
+    expect(checked(out, AAVE.METAc, OPEN)).toBe(out);
   });
 
   it("drops gaps in the line and rows with no price or change", () => {
@@ -189,7 +229,7 @@ describe("the CoinGecko fallback (fromCoinRow)", () => {
   });
 
   it("a row with no line can't pass the check", () => {
-    expect(checked(fromCoinRow({ ...row, sparkline_in_7d: null })!, AAVE.METAc)).toBeUndefined();
+    expect(checked(fromCoinRow({ ...row, sparkline_in_7d: null })!, AAVE.METAc, OPEN)).toBeUndefined();
   });
 });
 
@@ -220,24 +260,24 @@ describe("the chart's ranges", () => {
 describe("checkedLine (a chart line, checked against Aave)", () => {
   it("keeps a line that ends within 2% of Aave's price", () => {
     const month = line(212.86, 229.13, 721);
-    expect(checkedLine(month, AAVE.NVDAc)).toEqual(month);
+    expect(checkedLine(month, AAVE.NVDAc, OPEN)).toEqual(month);
   });
 
   it("drops a line that ends on another token's price", () => {
-    expect(checkedLine(line(5.1, 5.38, 289), AAVE.METAc)).toBeUndefined();
+    expect(checkedLine(line(5.1, 5.38, 289), AAVE.METAc, OPEN)).toBeUndefined();
   });
 
   it("drops a line with fewer than two points, or a bad point anywhere", () => {
-    expect(checkedLine([229.13], AAVE.NVDAc)).toBeUndefined();
-    expect(checkedLine([], AAVE.NVDAc)).toBeUndefined();
-    expect(checkedLine(undefined, AAVE.NVDAc)).toBeUndefined();
-    expect(checkedLine([220, 0, 229.13], AAVE.NVDAc)).toBeUndefined();
-    expect(checkedLine([220, Number.NaN, 229.13], AAVE.NVDAc)).toBeUndefined();
+    expect(checkedLine([229.13], AAVE.NVDAc, OPEN)).toBeUndefined();
+    expect(checkedLine([], AAVE.NVDAc, OPEN)).toBeUndefined();
+    expect(checkedLine(undefined, AAVE.NVDAc, OPEN)).toBeUndefined();
+    expect(checkedLine([220, 0, 229.13], AAVE.NVDAc, OPEN)).toBeUndefined();
+    expect(checkedLine([220, Number.NaN, 229.13], AAVE.NVDAc, OPEN)).toBeUndefined();
   });
 
   it("never hands back the caller's array", () => {
     const points = [220, 229.13];
-    expect(checkedLine(points, AAVE.NVDAc)).not.toBe(points);
+    expect(checkedLine(points, AAVE.NVDAc, OPEN)).not.toBe(points);
   });
 });
 

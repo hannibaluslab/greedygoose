@@ -3,8 +3,19 @@
  * Values, credit and limits use Aave's oracle (CLAUDE.md, "Oracle"), never these.
  */
 
-/** How far a market price may sit from Aave's for the same stock before it's taken for another token. */
-export const PRICE_TOLERANCE = 0.02;
+import { marketState } from "@/lib/market-hours";
+
+/**
+ * How far a market price may sit from Aave's for the same stock before it's taken for another token: 2%, and 10% while
+ * US markets are closed. Aave's price holds Friday's close then (CLAUDE.md, "Prices") while the tokens trade on, so a
+ * real price drifts from it over the weekend; another token is still far outside (JAW's META, about $5 against $767).
+ */
+export const PRICE_TOLERANCE = { open: 0.02, closed: 0.1 } as const;
+
+/** The band at `nowMs`. Before the clock is known (0), the open one, the stricter. */
+export function priceTolerance(nowMs: number): number {
+  return nowMs > 0 && !marketState(new Date(nowMs)).open ? PRICE_TOLERANCE.closed : PRICE_TOLERANCE.open;
+}
 
 /** As many points as the boards draw: the Home rail card's line, the Invest row's, the hero line over the week. */
 export const LINE_POINTS = { card: 11, row: 7, hero: 13 } as const;
@@ -19,9 +30,9 @@ export type MarketMap = Record<string, MarketData>;
 
 const isPrice = (n: number) => Number.isFinite(n) && n > 0;
 
-/** True when a market price is within 2% of Aave's price for the stock, so both price the same token. */
-export function agreesWithAave(price: number, aaveUsd: number): boolean {
-  return isPrice(price) && isPrice(aaveUsd) && Math.abs(price / aaveUsd - 1) <= PRICE_TOLERANCE;
+/** True when a market price is within `tolerance` of Aave's price for the stock, so both price the same token. */
+export function agreesWithAave(price: number, aaveUsd: number, tolerance: number): boolean {
+  return isPrice(price) && isPrice(aaveUsd) && Math.abs(price / aaveUsd - 1) <= tolerance;
 }
 
 /**
@@ -58,30 +69,33 @@ export function afterFirstDay(range: Range, points: number[]): number[] {
 }
 
 /** A price line to draw, if it has two points or more and its last price agrees with Aave's (as `checked`). */
-export function checkedLine(points: readonly number[] | undefined, aaveUsd: number): number[] | undefined {
+export function checkedLine(points: readonly number[] | undefined, aaveUsd: number, tolerance: number): number[] | undefined {
   if (!points || points.length < 2 || !points.every(isPrice)) return undefined;
-  return agreesWithAave(points[points.length - 1], aaveUsd) ? [...points] : undefined;
+  return agreesWithAave(points[points.length - 1], aaveUsd, tolerance) ? [...points] : undefined;
 }
 
 /** The data, if its price and the week's last price both agree with Aave's and there are lines to draw. */
-export function checked(data: MarketData | undefined, aaveUsd: number): MarketData | undefined {
+export function checked(data: MarketData | undefined, aaveUsd: number, tolerance: number): MarketData | undefined {
   if (!data || !Number.isFinite(data.change) || data.change <= -1 || data.day.length < 2 || data.week.length < 2) return undefined;
-  return agreesWithAave(data.price, aaveUsd) && agreesWithAave(data.week[data.week.length - 1], aaveUsd) ? data : undefined;
+  const agrees = (price: number) => agreesWithAave(price, aaveUsd, tolerance);
+  return agrees(data.price) && agrees(data.week[data.week.length - 1]) ? data : undefined;
 }
 
 /**
- * JAW's answer for each stock where it agrees with Aave, then CoinGecko's where JAW's didn't (`fallback`, checked the
- * same way). `missing` lists the stocks with no usable data yet: the ones to ask CoinGecko for, or to leave blank.
+ * JAW's answer for each stock where it agrees with Aave within `tolerance` (priceTolerance), then CoinGecko's where
+ * JAW's didn't (`fallback`, checked the same way). `missing` lists the stocks with no usable data yet: the ones to ask
+ * CoinGecko for, or to leave blank.
  */
 export function pickMarketData(
   stocks: readonly { symbol: string; priceUsd: number }[],
+  tolerance: number,
   jaw: MarketMap | undefined,
   fallback?: MarketMap,
 ): { data: MarketMap; missing: string[] } {
   const data: MarketMap = {};
   const missing: string[] = [];
   for (const { symbol, priceUsd } of stocks) {
-    const ok = checked(jaw?.[symbol], priceUsd) ?? checked(fallback?.[symbol], priceUsd);
+    const ok = checked(jaw?.[symbol], priceUsd, tolerance) ?? checked(fallback?.[symbol], priceUsd, tolerance);
     if (ok) data[symbol] = ok;
     else missing.push(symbol);
   }
