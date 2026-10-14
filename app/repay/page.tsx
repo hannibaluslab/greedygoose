@@ -65,7 +65,7 @@ function Repay({ address }: { address: `0x${string}` }) {
         <SubHeader label="Credit" />
         <TxDone
           title={`You repaid ${formatUsd(paid)}`}
-          body={coversAll ? "Your credit is fully repaid. You can free up your shares any time." : "Your loan is smaller now and costs less each month."}
+          body={coversAll ? "Your credit is fully repaid. You can free up your stocks any time." : "Your loan is smaller now and costs less each month."}
           txHash={tx.txHash}
           onDone={() => {
             tx.reset();
