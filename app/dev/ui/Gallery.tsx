@@ -17,6 +17,7 @@ import { StockAvatar } from "@/components/gg/StockAvatar";
 import { NETWORK_FEE_ROW, Summary } from "@/components/gg/Summary";
 import { Switch } from "@/components/gg/Switch";
 import { FaceIdButton } from "@/components/gg/TxUi";
+import { ValueLine } from "@/components/gg/ValueLine";
 import { CreditIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/icons";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { useNowSec } from "@/hooks/useNowSec";
@@ -113,6 +114,14 @@ export function Gallery() {
         </div>
       </Section>
 
+      <Section title="Value line · ready, loading, unavailable" kit="value-line">
+        <div className="flex flex-col gap-4">
+          <ValueLine points={LINE_INVEST} height={34} loading={false} onRetry={noop} />
+          <ValueLine points={null} height={34} loading onRetry={noop} />
+          <ValueLine points={null} height={34} loading={false} onRetry={noop} />
+        </div>
+      </Section>
+
       <Section title="Quick actions" kit="quick-actions">
         <div className="grid grid-cols-4 gap-2">
           <QuickAction label="Trade" icon={<TradeIcon />} onClick={noop} />
@@ -140,6 +149,14 @@ export function Gallery() {
         <div className="flex justify-between gap-2 pb-4 pt-0.5">
           {HOLDINGS.map(({ symbol, name, valueUsd, backs, today, card }) => (
             <HoldingCard key={symbol} symbol={symbol} name={name} valueUsd={valueUsd} backs={backs} today={today} spark={card} onClick={noop} />
+          ))}
+        </div>
+      </Section>
+
+      <Section title="Holding cards · market prices loading" kit="holding-cards-pending">
+        <div className="flex justify-between gap-2 pb-4 pt-0.5">
+          {HOLDINGS.map(({ symbol, name, valueUsd, backs, shares }) => (
+            <HoldingCard key={symbol} symbol={symbol} name={name} valueUsd={valueUsd} backs={backs} shares={shares} pending onClick={noop} />
           ))}
         </div>
       </Section>

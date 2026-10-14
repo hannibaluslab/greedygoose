@@ -5,19 +5,22 @@ import { useState } from "react";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { Header } from "@/components/gg/Header";
 import { TabBar } from "@/components/gg/TabBar";
-import { BalanceHero } from "@/components/gg/BalanceHero";
+import { BalanceHero, TodayChange, TodayPending } from "@/components/gg/BalanceHero";
 import { QuickAction } from "@/components/gg/QuickAction";
 import { CashCard, CreditCard } from "@/components/gg/Cards";
 import { AddStockCard, HoldingCard } from "@/components/gg/Holding";
 import { CreditSheet } from "@/components/gg/CreditSheet";
+import { ValueLine } from "@/components/gg/ValueLine";
 import { TotalBalanceSheet, YieldSheet } from "@/components/gg/InfoSheets";
 import { Button } from "@/components/gg/Button";
 import { ChevronRight, CreditIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/icons";
 import { MarketBanner } from "@/components/ui/MarketBanner";
+import { useMarketPrices } from "@/hooks/useMarketPrices";
 import { usePosition, type PositionData } from "@/hooks/usePosition";
 import { aprToApy } from "@/lib/aave/math";
 import { homeStatus } from "@/lib/risk/status";
 import { formatUsd, formatUsdTrim } from "@/lib/formatting";
+import { dayChange, weekValue } from "@/lib/prices/market";
 
 export default function HomePage() {
   return <RequireAccount>{(address) => <Home address={address} />}</RequireAccount>;
@@ -27,8 +30,9 @@ type Sheet = "total" | "yield" | "credit";
 
 /**
  * Design board "2 · Home · portfolio: Rail" (HomeUpliftRail.dc.html), with its sheets: Total balance (HomeInfo),
- * Average yield (HomeYieldInfo) and Credit (HomeCreditSlide). Today's change, the all-time return, the return
- * line and each holding's day stay hidden until price history and the PnL engine exist (plan items 7 and 8).
+ * Average yield (HomeYieldInfo) and Credit (HomeCreditSlide). Today's change, the line and each holding's day come
+ * from market prices (plan item 8). The board's all-time return is left out: it needs what Sam paid, which only the
+ * PnL engine will read from the chain (plan item 7).
  */
 function Home({ address }: { address: `0x${string}` }) {
   const { data, isError, refetch } = usePosition(address);
@@ -65,6 +69,9 @@ function Home({ address }: { address: `0x${string}` }) {
 
 function Loaded({ data, apy, open }: { data: PositionData; apy: number; open: (sheet: Sheet) => void }) {
   const held = data.holdings.filter((h) => h.freeShares + h.lockedShares > 0);
+  const market = useMarketPrices(held);
+  const priced = held.map((h) => ({ valueUsd: h.freeUsd + h.lockedUsd, ...market.bySymbol[h.symbol] }));
+  const today = dayChange(priced, data.stocksUsd + data.cashUsd);
 
   return (
     <>
@@ -73,6 +80,7 @@ function Loaded({ data, apy, open }: { data: PositionData; apy: number; open: (s
           label="Total balance"
           info={{ label: "What’s in your total balance", onClick: () => open("total") }}
           value={data.stocksUsd + data.cashUsd}
+          sub={today ? <TodayChange usd={today.usd} pct={today.pct} /> : market.loading ? <TodayPending /> : undefined}
           side={{
             // D19: stocks earn no yield, so the average yield is the cash rate.
             label: "Average yield",
@@ -81,6 +89,7 @@ function Loaded({ data, apy, open }: { data: PositionData; apy: number; open: (s
             unit: "APY",
           }}
         />
+        {held.length > 0 && <ValueLine points={weekValue(priced)} height={68} loading={market.loading} onRetry={market.retry} />}
         <MarketBanner />
       </section>
 
@@ -123,6 +132,7 @@ function Loaded({ data, apy, open }: { data: PositionData; apy: number; open: (s
           <div className={`-mx-5 flex ${held.length < 2 ? "justify-start" : "justify-between"} gap-2 overflow-x-auto px-5 pb-4 pt-0.5 [scrollbar-width:none]`}>
             {held.map((h) => {
               const valueUsd = h.freeUsd + h.lockedUsd;
+              const m = market.bySymbol[h.symbol];
               return (
                 <HoldingCard
                   key={h.symbol}
@@ -130,6 +140,9 @@ function Loaded({ data, apy, open }: { data: PositionData; apy: number; open: (s
                   name={h.name}
                   valueUsd={valueUsd}
                   backs={valueUsd > 0 ? h.lockedUsd / valueUsd : 0}
+                  today={m?.change}
+                  spark={m?.day}
+                  pending={market.loading}
                   shares={h.freeShares + h.lockedShares}
                   href="/portfolio"
                 />

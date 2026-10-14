@@ -5,17 +5,21 @@ import { useSearchParams } from "next/navigation";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { TabBar } from "@/components/gg/TabBar";
 import { TabHeader } from "@/components/gg/Screen";
-import { BalanceHero } from "@/components/gg/BalanceHero";
+import { BalanceHero, TodayChange, TodayPending } from "@/components/gg/BalanceHero";
 import { Button } from "@/components/gg/Button";
 import { BuySheet } from "@/components/gg/BuySheet";
 import { CreditBuySheet } from "@/components/gg/CreditBuySheet";
 import { CreditSheet } from "@/components/gg/CreditSheet";
 import { HoldingList, HoldingRow } from "@/components/gg/Holding";
+import { ValueLine } from "@/components/gg/ValueLine";
 import { CreditIcon, TradeIcon } from "@/components/gg/icons";
+import { MarketBanner } from "@/components/ui/MarketBanner";
+import { useMarketPrices } from "@/hooks/useMarketPrices";
 import { usePosition, type PositionData } from "@/hooks/usePosition";
 import { useSheetSubject } from "@/hooks/useSheetSubject";
 import { aprToApy } from "@/lib/aave/math";
 import { formatUsd } from "@/lib/formatting";
+import { dayChange, weekValue } from "@/lib/prices/market";
 
 export default function PortfolioPage() {
   return <RequireAccount>{(address) => <Portfolio address={address} />}</RequireAccount>;
@@ -25,8 +29,8 @@ export default function PortfolioPage() {
  * Design board "10 · Portfolio (Invest tab)" (PortfolioPage.dc.html). Market opens Flow 1's sheet
  * (F1-3 → F1-4 → confirm); /buy lands here with ?market, or ?s=SYMBOL for one stock's Buy step. Credit Buy
  * opens Flow 2's sheet (F2-2 → F2-3 … F2-6). The status pill opens the Credit sheet (HomeCreditSlide).
- * Not drawn yet: today's change and the value line (price history, plan item 8) and "Your mix" (the
- * Rebalancer, item 9) have no data source.
+ * Today's change, the value line and each row's day come from market prices (plan item 8), with the
+ * markets-closed banner under the line at weekends. Not drawn yet: "Your mix" (the Rebalancer, item 9).
  */
 function Portfolio({ address }: { address: `0x${string}` }) {
   const { data, isError, refetch } = usePosition(address);
@@ -80,18 +84,26 @@ function Portfolio({ address }: { address: `0x${string}` }) {
 
 function Loaded({ data, openMarket, openCreditBuy }: { data: PositionData; openMarket: () => void; openCreditBuy: () => void }) {
   const held = data.holdings.filter((h) => h.freeShares + h.lockedShares > 0);
+  const market = useMarketPrices(held);
+  const priced = held.map((h) => ({ valueUsd: h.freeUsd + h.lockedUsd, ...market.bySymbol[h.symbol] }));
+  const today = dayChange(priced, data.stocksUsd);
   return (
     <>
-      <BalanceHero
-        label="Portfolio"
-        value={data.stocksUsd}
-        side={{
-          label: "Cash available",
-          // Whole dollars, as drawn ("$400"), and never more than there is.
-          value: formatUsd(Math.floor(data.cashUsd)).replace(/\.00$/, ""),
-          sub: <><span className="font-semibold text-pos">{(aprToApy(data.savingsApr) * 100).toFixed(1)}%</span> APY</>,
-        }}
-      />
+      <section className="flex flex-col gap-2.5">
+        <BalanceHero
+          label="Portfolio"
+          value={data.stocksUsd}
+          sub={today ? <TodayChange usd={today.usd} pct={today.pct} /> : market.loading ? <TodayPending /> : undefined}
+          side={{
+            label: "Cash available",
+            // Whole dollars, as drawn ("$400"), and never more than there is.
+            value: formatUsd(Math.floor(data.cashUsd)).replace(/\.00$/, ""),
+            sub: <><span className="font-semibold text-pos">{(aprToApy(data.savingsApr) * 100).toFixed(1)}%</span> APY</>,
+          }}
+        />
+        {held.length > 0 && <ValueLine points={weekValue(priced)} height={34} loading={market.loading} onRetry={market.retry} />}
+        <MarketBanner />
+      </section>
 
       <div className="grid grid-cols-2 gap-2.5">
         <Button variant="white" icon={<TradeIcon size={18} strokeWidth={1.8} />} onClick={openMarket}>Market</Button>
@@ -108,6 +120,7 @@ function Loaded({ data, openMarket, openCreditBuy }: { data: PositionData; openM
           held.map((h) => {
             const value = h.freeUsd + h.lockedUsd;
             const backs = value > 0 ? h.lockedUsd / value : 0;
+            const m = market.bySymbol[h.symbol];
             return (
               <HoldingRow
                 key={h.symbol}
@@ -116,6 +129,8 @@ function Loaded({ data, openMarket, openCreditBuy }: { data: PositionData; openM
                 valueUsd={value}
                 shares={h.freeShares + h.lockedShares}
                 backs={backs}
+                today={m?.change}
+                spark={m?.day}
                 href={backs > 0 ? `/free-up?s=${h.symbol}` : "/use-credit"}
                 note={h.paused || h.frozen ? "Aave has paused this stock for now." : undefined}
               />
@@ -124,7 +139,7 @@ function Loaded({ data, openMarket, openCreditBuy }: { data: PositionData; openM
         )}
       </HoldingList>
       <p className="m-0 px-1 text-xs leading-snug text-subtle">
-        Prices are Aave’s protocol prices. Tokenized stocks track the share price; they are not company shares and carry no voting rights.
+        Values use Aave’s prices. Today’s change and the lines use market prices, for information only. Tokenized stocks track the share price; they are not company shares and carry no voting rights.
       </p>
     </>
   );
