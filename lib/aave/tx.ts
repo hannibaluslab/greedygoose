@@ -76,8 +76,8 @@ export function buildRepayCalls(p: { user: `0x${string}`; amountRaw: bigint; all
   return assertAllowed(calls);
 }
 
-/** Amount to send for a full repay: debt + 0.05% + 1 unit, never more than the wallet holds. */
-export function fullRepayAmount(debtRaw: bigint, balanceRaw: bigint): bigint {
+/** Amount to send for a full repay: debt + 0.05% + 1 unit, never more than the cash can pay (`maxSpendRaw`). */
+export function fullRepayAmount(debtRaw: bigint, maxSpendRaw: bigint): bigint {
   const withBuffer = debtRaw + debtRaw / 2000n + 1n;
-  return withBuffer < balanceRaw ? withBuffer : balanceRaw;
+  return withBuffer < maxSpendRaw ? withBuffer : maxSpendRaw;
 }

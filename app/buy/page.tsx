@@ -30,7 +30,7 @@ function Market({ address }: { address: `0x${string}` }) {
       <div className="flex flex-col gap-1">
         <h1 className="m-0 text-[30px] font-semibold tracking-[-0.03em]">Buy stocks</h1>
         <p className="m-0 text-sm text-muted">
-          With your cash{data ? <> · <span className="num font-semibold text-ink">{formatUsd(data.usdcBalance)}</span> available</> : null}
+          With your cash{data ? <> · <span className="num font-semibold text-ink">{formatUsd(data.cashUsd)}</span> available</> : null}
         </p>
       </div>
       <MarketBanner />
@@ -64,7 +64,7 @@ function Market({ address }: { address: `0x${string}` }) {
       </p>
 
       {stock && holding && data && (
-        <BuySheet user={address} stock={stock} oraclePriceUsd={holding.priceUsd} cashUsd={data.usdcBalance} onClose={() => setSelected(null)} />
+        <BuySheet user={address} stock={stock} oraclePriceUsd={holding.priceUsd} cash={data.cash} onClose={() => setSelected(null)} />
       )}
     </div>
   );

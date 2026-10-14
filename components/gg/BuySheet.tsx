@@ -13,6 +13,8 @@ import { VENUE_LABEL } from "@/lib/swap/venues";
 import { marketState } from "@/lib/market-hours";
 import { FaceIdButton, TxDone, TxError } from "./TxUi";
 import { formatUsd } from "@/lib/formatting";
+import { cashRaw, maxSpendRaw, savingsWithdrawal, toUsd, type Cash } from "@/lib/cash";
+import { CASH } from "@/config/risk";
 import type { ReserveAsset } from "@/lib/tokens/registry";
 
 const ArrowLeft = () => (
@@ -24,8 +26,8 @@ const Close = () => (
 
 /** Design board "F1 · 4 · Buy sheet" (F1-4-Buy.dc.html), plus Review and result steps. */
 export function BuySheet({
-  user, stock, oraclePriceUsd, cashUsd, onClose,
-}: { user: `0x${string}`; stock: ReserveAsset; oraclePriceUsd: number; cashUsd: number; onClose: () => void }) {
+  user, stock, oraclePriceUsd, cash, onClose,
+}: { user: `0x${string}`; stock: ReserveAsset; oraclePriceUsd: number; cash: Cash; onClose: () => void }) {
   const { isConnected } = useAccount();
   const [raw, setRaw] = useState("");
   const [step, setStep] = useState<"amount" | "review">("amount");
@@ -37,12 +39,16 @@ export function BuySheet({
 
   const q = quote.data ?? null;
   const econ = q ? quoteEconomics(q, stock, oraclePriceUsd) : null;
+  const cashUsd = toUsd(cashRaw(cash));
+  const maxUsd = toUsd(maxSpendRaw(cash));
+  const fromSavings = q ? savingsWithdrawal(q.amountIn, cash) : null;
   const closed = !marketState().open;
   const ticker = tickerOf(stock.symbol);
 
   let blocker: string | null = null;
   if (amount > 0 && amount < BUY_LIMITS.minUsd) blocker = `Minimum buy is ${formatUsd(BUY_LIMITS.minUsd)}.`;
   else if (amount > cashUsd) blocker = "That’s more than your cash.";
+  else if (amount > maxUsd) blocker = `Leave ${formatUsd(CASH.feeBufferUsd)} for the network fee.`;
   else if (amount > 0 && quote.isSuccess && q === null) blocker = `There’s no market for ${stock.name} right now.`;
   else if (econ && econ.premium > BUY_LIMITS.blockPremium)
     blocker = `Too big for the market right now: you’d pay ${(econ.premium * 100).toFixed(1)}% over Aave’s price. Try a smaller amount.`;
@@ -100,7 +106,7 @@ export function BuySheet({
                 </label>
                 <button
                   type="button"
-                  onClick={() => setRaw((Math.floor(cashUsd * 100) / 100).toString())}
+                  onClick={() => setRaw((Math.floor(maxUsd * 100) / 100).toString())}
                   className="flex h-7 items-center rounded-[14px] bg-[rgba(15,14,11,0.06)] px-2.5 text-xs font-semibold text-muted"
                 >
                   MAX
@@ -163,6 +169,7 @@ export function BuySheet({
             <>
               <div className="num rounded-[22px] bg-card px-4 py-0.5 shadow-[0_1px_3px_rgba(14,13,11,0.06)]">
                 <Row label="You pay" value={formatUsd(econ.usd)} />
+                {fromSavings && <Row label="From savings" value={formatUsd(toUsd(fromSavings.raw))} />}
                 <Row label="You get (estimated)" value={`${econ.shares.toFixed(4)} ${ticker}`} />
                 <Row label="At least" value={`${(Number(minOut(q.amountOut)) / 10 ** stock.decimals).toFixed(4)} ${ticker}`} />
                 <Row label="Price per share" value={formatUsd(econ.price)} />
@@ -171,7 +178,8 @@ export function BuySheet({
                 <Row label="Network fee" value="Paid in USDC" last />
               </div>
               <p className="m-0 text-xs leading-snug text-subtle">
-                You approve exactly {formatUsd(econ.usd)} USDC for the {VENUE_LABEL[q.venue]} router and swap it in one Face ID step. If the
+                {fromSavings ? `You take ${formatUsd(toUsd(fromSavings.raw))} from savings, approve` : "You approve"} exactly{" "}
+                {formatUsd(econ.usd)} USDC for the {VENUE_LABEL[q.venue]} router and swap it in one Face ID step. If the
                 price moves more than {BUY_LIMITS.slippageBps / 100}%, the buy is cancelled. {stock.name} here is a tokenized
                 stock: it tracks the share price; it is not company shares or voting rights.
               </p>
@@ -188,7 +196,7 @@ export function BuySheet({
                 disabled={feeBlocked || fee.loading}
                 onClick={() => {
                   if (phase === "failed") reset();
-                  void buy({ user, stock, quote: q });
+                  void buy({ user, stock, quote: q, cash });
                 }}
               />
             </>

@@ -11,7 +11,7 @@ import { borrowApr, monthlyCost, priceToUsd, summarize, type AccountData } from 
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { statusFor } from "@/lib/risk/status";
 import { GUARDIAN } from "@/lib/guardian/config";
-import { cashRaw, type Cash } from "@/lib/cash";
+import { cashRaw, toUsd, type Cash } from "@/lib/cash";
 
 /** Aave V3 getReserveData — only `currentLiquidityRate` (index 2, RAY) is used. */
 const v3ReserveAbi = [
@@ -161,7 +161,7 @@ export function usePosition(user: `0x${string}` | undefined) {
       savingsApr: Number(v3Reserve.currentLiquidityRate) / 1e27,
       /** Cash (D15): wallet USDC plus savings. Every screen shows this as the user's cash. */
       cash,
-      cashUsd: Number(cashRaw(cash)) / 10 ** USDC.decimals,
+      cashUsd: toUsd(cashRaw(cash)),
       debtRaw,
       usdcLiquidity: Number(liquidity) / 10 ** USDC.decimals,
       borrowPaused: usdcCfg.paused || usdcCfg.frozen || !usdcCfg.borrowable,
