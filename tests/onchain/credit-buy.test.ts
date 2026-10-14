@@ -135,6 +135,24 @@ describe("Credit Buy batches simulate on mainnet", () => {
     expect(r.hfAfter!).toBeCloseTo(plan.hfAfter, 1);
   });
 
+  it("the sheet's pick (F2-4): only the holding picked to back it goes in use", async () => {
+    const { position, options, cash } = await live(newcomer);
+    // CreditBuySheet's default pick: the holding with the most free stock.
+    const [picked] = [...options].sort((a, b) => b.freeUsd - a.freeUsd);
+    const creditRaw = usd(5);
+    const plan = planCredit({ position, options: [picked], creditRaw, cash });
+    expect(plan.block).toBeUndefined();
+    expect(plan.after).toBe("safe");
+    expect(plan.backing.map((b) => b.stock.symbol)).toEqual([picked.stock.symbol]);
+
+    const quote = await quoteToSign(aapl, creditRaw);
+    const calls = buildCreditBuyCalls({ user: newcomer, stock: aapl, quote, creditRaw: plan.creditRaw, backing: plan.backing, cash });
+    const r = await simulateCreditBuy(newcomer, aapl, calls);
+    expect(r.statuses.every((s) => s === "success")).toBe(true);
+    expect(r.debtAdded).toBeGreaterThanOrEqual(creditRaw);
+    expect(r.hfAfter!).toBeGreaterThanOrEqual(1.5);
+  });
+
   it("already backing: take credit → approve → swap, the credit spent in full", async () => {
     const { position, options, cash } = await live(backer);
     expect(position.collateralUsd).toBeGreaterThan(0);
