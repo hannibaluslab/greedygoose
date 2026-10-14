@@ -21,7 +21,8 @@ import {IAaveOracle} from "../src/IProtocols.sol";
 ///
 /// Then, in one session (contracts/docs/GooseExecutor.md §9):
 ///   1. register the run upkeep on automation.chain.link: custom logic, target = the executor, checkData =
-///      abi.encode(uint256(0), uint256(1)) (shard 0 of 1);
+///      abi.encode(uint256(0), uint256(1)) (shard 0 of 1), gas limit 5,000,000 (Base's most). A sale needs about
+///      3.7M of it; with less, every sale is deferred, and since sales are listed first, nothing after one runs;
 ///   2. register the registration upkeep: log trigger, emitter = the manager, topic0 = PermissionApproved
 ///      (0x84b07255c6c3e177513e059044c77d305a6aecf39fbe512d64dcd3cebb59d5ea), target = the executor;
 ///   3. the owner calls bootstrap([run upkeep forwarder, registration upkeep forwarder]). Any later forwarder waits
