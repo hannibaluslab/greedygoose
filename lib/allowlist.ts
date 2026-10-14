@@ -6,9 +6,10 @@ import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import { isMix } from "@/lib/agents/mix";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { aaveV3PoolAbi } from "@/lib/guardian/abis";
-import { aeroRouterAbi, swapRouter02Abi } from "@/lib/swap/abis";
-import { AERODROME, ROUTERS, UNISWAP } from "@/lib/swap/venues";
+import { aeroRouterAbi, psm3Abi, swapRouter02Abi } from "@/lib/swap/abis";
+import { AERODROME, AERODROME_V1, ROUTERS, SPARK_PSM3, UNISWAP } from "@/lib/swap/venues";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
+import { ENTRY_COINS, type EntryVenue } from "@/lib/tokens/stables";
 
 type Address = `0x${string}`;
 /** True when a call's arguments keep the money with `user`. */
@@ -21,13 +22,30 @@ const oneOf = (a: unknown, list: readonly Address[]) => list.some((b) => is(a, b
 const TOKENS: readonly Address[] = [USDC.address, ...EQUITIES.map((e) => e.address)];
 const SPENDERS: readonly Address[] = [AAVE.SPOKE, ...ROUTERS];
 
+/** Where each Entry coin is converted (lib/tokens/stables.ts), and the coins converted at a kind of venue. */
+const venueOf = (v: EntryVenue): Address => (v.kind === "psm3" ? v.psm : v.router);
+const ENTRY_AT = (kind: EntryVenue["kind"]): readonly Address[] => ENTRY_COINS.filter((c) => c.venue.kind === kind).map((c) => c.address);
+
 /** Aave V4 spoke calls: the third argument (onBehalfOf) is the position, and it must be the user's. */
 const forUser: ArgsCheck = (args, user) => is(args[2], user);
-/** A swap between registry tokens that pays out to the user. */
-const swapToUser: ArgsCheck = (args, user) => {
-  const p = args[0] as { tokenIn: unknown; tokenOut: unknown; recipient: unknown };
-  return is(p.recipient, user) && oneOf(p.tokenIn, TOKENS) && oneOf(p.tokenOut, TOKENS);
-};
+/**
+ * A swap that pays out to the user: between registry tokens, or (`entry`) one of the Entry coins converted on this
+ * router into USDC.
+ */
+const swapToUser =
+  (entry: readonly Address[] = []): ArgsCheck =>
+  (args, user) => {
+    const p = args[0] as { tokenIn: unknown; tokenOut: unknown; recipient: unknown };
+    if (!is(p.recipient, user)) return false;
+    return (oneOf(p.tokenIn, TOKENS) && oneOf(p.tokenOut, TOKENS)) || (oneOf(p.tokenIn, entry) && is(p.tokenOut, USDC.address));
+  };
+/** An Entry coin into USDC for the user, and nothing else (Aerodrome's first deployment, PSM3). */
+const convertToUser =
+  (entry: readonly Address[]): ArgsCheck =>
+  (args, user) => {
+    const p = args[0] as { tokenIn: unknown; tokenOut: unknown; recipient: unknown };
+    return is(p.recipient, user) && oneOf(p.tokenIn, entry) && is(p.tokenOut, USDC.address);
+  };
 /** The swap inside Uniswap's multicall(deadline, data): exactly one call, and it must be exactInputSingle. */
 function innerSwap(data: readonly Hex[]): readonly unknown[] | null {
   if (data.length !== 1) return null;
@@ -41,7 +59,7 @@ function innerSwap(data: readonly Hex[]): readonly unknown[] | null {
 /** Uniswap's router takes the deadline through multicall: one swap inside, to the user. */
 const swapWithDeadline: ArgsCheck = (args, user) => {
   const inner = innerSwap(args[1] as readonly Hex[]);
-  return !!inner && swapToUser(inner, user);
+  return !!inner && swapToUser(ENTRY_AT("uniswap"))(inner, user);
 };
 
 /**
@@ -49,11 +67,13 @@ const swapWithDeadline: ArgsCheck = (args, user) => {
  * functions it may be called with, and what their arguments must say. Money only moves between the
  * user's own pockets: an approve names only the spoke or a router, every position, withdrawal and
  * swap pays the user, and savings come out only as USDC. Buys, repays and savings-first batches mix
- * targets, so each target is held to its own functions. GooseExecutor's settings move no money and apply to the
- * signer alone (`msg.sender`): a mix must add up to 100% (or clear it).
+ * targets, so each target is held to its own functions. An Entry coin is approved only to the venue that converts
+ * it, and converted only into USDC (D20). GooseExecutor's settings move no money and apply to the signer alone
+ * (`msg.sender`): a mix must add up to 100% (or clear it).
  */
 const RULES: readonly Rule[] = [
   { targets: TOKENS, abi: erc20Abi, functions: { approve: (args) => oneOf(args[0], SPENDERS) } },
+  ...ENTRY_COINS.map((c) => ({ targets: [c.address], abi: erc20Abi, functions: { approve: (args: readonly unknown[]) => is(args[0], venueOf(c.venue)) } })),
   {
     targets: [AAVE.SPOKE],
     abi: spokeAbi,
@@ -64,8 +84,17 @@ const RULES: readonly Rule[] = [
     abi: aaveV3PoolAbi,
     functions: { withdraw: (args, user) => is(args[0], USDC.address) && is(args[2], user) },
   },
-  { targets: [AERODROME.ROUTER], abi: aeroRouterAbi, functions: { exactInputSingle: swapToUser } },
+  { targets: [AERODROME.ROUTER], abi: aeroRouterAbi, functions: { exactInputSingle: swapToUser() } },
+  { targets: [AERODROME_V1.ROUTER], abi: aeroRouterAbi, functions: { exactInputSingle: convertToUser(ENTRY_AT("aerodrome")) } },
   { targets: [UNISWAP.SWAP_ROUTER_02], abi: swapRouter02Abi, functions: { multicall: swapWithDeadline } },
+  {
+    targets: [SPARK_PSM3.PSM3],
+    abi: psm3Abi,
+    functions: {
+      // swapExactIn(assetIn, assetOut, amountIn, minAmountOut, receiver, referralCode)
+      swapExactIn: (args, user) => convertToUser(ENTRY_AT("psm3"))([{ tokenIn: args[0], tokenOut: args[1], recipient: args[4] }], user),
+    },
+  },
   ...(GOOSE_EXECUTOR
     ? [
         {

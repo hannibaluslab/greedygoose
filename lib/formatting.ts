@@ -7,6 +7,8 @@ export const formatUsdShort = (n: number) => (Math.abs(n) >= 1000 ? usd0.format(
 export const formatUsdTrim = (n: number) => usd.format(n).replace(/\.00$/, "");
 export const formatShares = (n: number) =>
   n.toLocaleString("en-US", { maximumFractionDigits: n < 1 ? 4 : 2 });
+/** A dollar coin's amount, to the cent: "120", "1,000.5" (USDT, USDe…). */
+export const formatCoin = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 export const formatPct = (n: number) => `${(n * 100).toFixed(2)}%`;
 export const shortAddress = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 /** "a", "a and b", "a, b and c". */

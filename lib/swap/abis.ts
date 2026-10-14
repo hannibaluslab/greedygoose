@@ -114,3 +114,33 @@ export const aeroRouterAbi = [
     outputs: [{ name: "amountOut", type: "uint256" }],
   },
 ] as const;
+
+/* Spark PSM3 on Base (spark-psm src/PSM3.sol): swapExactIn selector 0x1a019e37, present in the deployed bytecode
+   (tests/onchain/entry.test.ts). previewSwapExactIn is the quote. */
+export const psm3Abi = [
+  {
+    type: "function",
+    name: "swapExactIn",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "assetIn", type: "address" },
+      { name: "assetOut", type: "address" },
+      { name: "amountIn", type: "uint256" },
+      { name: "minAmountOut", type: "uint256" },
+      { name: "receiver", type: "address" },
+      { name: "referralCode", type: "uint256" },
+    ],
+    outputs: [{ name: "amountOut", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "previewSwapExactIn",
+    stateMutability: "view",
+    inputs: [
+      { name: "assetIn", type: "address" },
+      { name: "assetOut", type: "address" },
+      { name: "amountIn", type: "uint256" },
+    ],
+    outputs: [{ name: "amountOut", type: "uint256" }],
+  },
+] as const;

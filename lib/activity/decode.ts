@@ -2,9 +2,10 @@ import { erc20Abi, isAddressEqual, parseEventLogs, type Log } from "viem";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { ALL_RESERVES, EQUITIES, USDC, findByAddress } from "@/lib/tokens/registry";
+import { ENTRY_COINS } from "@/lib/tokens/stables";
 import { GUARDIAN } from "@/lib/guardian/config";
 
-export type ActivityKind = "supply" | "withdraw" | "borrow" | "repay" | "buy" | "sell" | "receive" | "send" | "save" | "unsave";
+export type ActivityKind = "supply" | "withdraw" | "borrow" | "repay" | "buy" | "sell" | "receive" | "send" | "save" | "unsave" | "convert";
 
 export type ActivityItem = {
   kind: ActivityKind;
@@ -14,7 +15,7 @@ export type ActivityItem = {
   amount: number;
   /** For buys: USDC paid. */
   paidUsd?: number;
-  /** For sells: USDC received. */
+  /** For sells, and for other dollars turned into cash (`convert`, `symbol` is the coin's): USDC received. */
   receivedUsd?: number;
   /** For a buy or a repay: what came out of savings in the same batch to pay for it (cash is savings, D15). */
   fromSavingsUsd?: number;
@@ -98,8 +99,26 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
         : { kind: "send", symbol: s.symbol, amount: units(s.raw, s.decimals) },
     );
   }
+  // Other dollars out and USDC in is a conversion into cash (lib/swap/entry.ts): each swap pays the user once, in the
+  // order the coins went out.
+  const coinsOut = parseEventLogs({
+    abi: erc20Abi,
+    logs: logs.filter((l) => ENTRY_COINS.some((c) => isAddressEqual(c.address, l.address))),
+    eventName: "Transfer",
+    strict: false,
+  }).flatMap((t) => {
+    const { from, value } = t.args as { from?: `0x${string}`; value?: bigint };
+    const coin = ENTRY_COINS.find((c) => isAddressEqual(c.address, t.address))!;
+    return from && value !== undefined && isAddressEqual(from, user) ? [{ coin, value }] : [];
+  });
+  const converted = usdcIn.length >= coinsOut.length ? coinsOut : [];
+  converted.forEach(({ coin, value }, i) =>
+    items.push({ kind: "convert", symbol: coin.symbol, amount: units(value, coin.decimals), receivedUsd: units(usdcIn[i], USDC.decimals) }),
+  );
   if (stockIn.length === 0 && usdcOut > 0n) items.push({ kind: "send", symbol: USDC.symbol, amount: units(usdcOut, USDC.decimals) });
-  if (stockOut.length === 0) for (const v of usdcIn) items.push({ kind: "receive", symbol: USDC.symbol, amount: units(v, USDC.decimals) });
+  if (stockOut.length === 0) {
+    for (const v of usdcIn.slice(converted.length)) items.push({ kind: "receive", symbol: USDC.symbol, amount: units(v, USDC.decimals) });
+  }
   if (fromSavings > 0n) {
     const paid = items.find((i) => i.kind === "buy" || i.kind === "repay");
     if (paid) paid.fromSavingsUsd = units(fromSavings, USDC.decimals);

@@ -7,7 +7,7 @@ import { marketState } from "@/lib/market-hours";
 import { statusFor, type Status } from "@/lib/risk/status";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
-import { formatShares, formatUsdTrim } from "@/lib/formatting";
+import { formatCoin, formatShares, formatUsdTrim } from "@/lib/formatting";
 
 /** A line of the feed: plain words, and Safe / Watch / Act in their colour. */
 export type Words = readonly (string | { status: Exclude<Status, "none"> })[];
@@ -147,8 +147,7 @@ function errorName(reason: Hex): string {
 function coin(address: `0x${string}`) {
   return ENTRY_COINS.find((c) => isAddressEqual(c.address, address));
 }
-const coinAmount = (raw: bigint, decimals: number) =>
-  (Number(raw) / 10 ** decimals).toLocaleString("en-US", { maximumFractionDigits: 2 });
+const coinAmount = (raw: bigint, decimals: number) => formatCoin(Number(raw) / 10 ** decimals);
 
 /**
  * The Agents board's words for one executor event at `time` (seconds). Plain words and dollars, no health factor

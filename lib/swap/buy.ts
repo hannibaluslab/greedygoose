@@ -104,6 +104,57 @@ export function signingQuote(shown: BuyQuote, fresh: BuyQuote): BuyQuote | null 
 
 export type Call = { to: `0x${string}`; data: Hex; value: bigint };
 
+/** An exact-amount approve of `token` to `spender`. */
+export const approveCall = (token: `0x${string}`, spender: `0x${string}`, amount: bigint): Call => ({
+  to: token,
+  data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [spender, amount] }),
+  value: 0n,
+});
+
+/**
+ * A router's exactInputSingle paying `recipient`, with the deadline on both venues (Uniswap's through multicall).
+ * `router` is Aerodrome Slipstream's (either deployment: the same call) or Uniswap's SwapRouter02; `pool` is the tick
+ * spacing or the fee tier.
+ */
+export function exactInputCall(p: {
+  venue: Venue;
+  router: `0x${string}`;
+  tokenIn: `0x${string}`;
+  tokenOut: `0x${string}`;
+  pool: number;
+  recipient: `0x${string}`;
+  amountIn: bigint;
+  amountOutMinimum: bigint;
+  deadline: bigint;
+}): Call {
+  const { tokenIn, tokenOut, recipient, amountIn, amountOutMinimum } = p;
+  const data =
+    p.venue === "aerodrome"
+      ? encodeFunctionData({
+          abi: aeroRouterAbi,
+          functionName: "exactInputSingle",
+          args: [{ tokenIn, tokenOut, tickSpacing: p.pool, recipient, deadline: p.deadline, amountIn, amountOutMinimum, sqrtPriceLimitX96: 0n }],
+        })
+      : encodeFunctionData({
+          abi: swapRouter02Abi,
+          functionName: "multicall",
+          args: [
+            p.deadline,
+            [
+              encodeFunctionData({
+                abi: swapRouter02Abi,
+                functionName: "exactInputSingle",
+                args: [{ tokenIn, tokenOut, fee: p.pool, recipient, amountIn, amountOutMinimum, sqrtPriceLimitX96: 0n }],
+              }),
+            ],
+          ],
+        });
+  return { to: p.router, data, value: 0n };
+}
+
+/** A swap's deadline, BUY_LIMITS.deadlineSec from now (or from `nowSec`). */
+export const swapDeadline = (nowSec?: number) => BigInt((nowSec ?? Math.floor(Date.now() / 1000)) + BUY_LIMITS.deadlineSec);
+
 /**
  * Exact-amount approve to the chosen router + exactInputSingle, recipient = the user, with the
  * deadline on both venues (Uniswap's through multicall). A buy approves USDC and receives `stock`; a
@@ -122,55 +173,20 @@ export function buildSwapCalls(p: {
   if (stock.kind !== "equity") throw new Error("Not a supported stock");
   const { tokenIn, tokenOut } = pair(stock, p.side);
   const router = quote.venue === "aerodrome" ? AERODROME.ROUTER : UNISWAP.SWAP_ROUTER_02;
-  const approve: Call = {
-    to: tokenIn,
-    data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [router, quote.amountIn] }),
-    value: 0n,
-  };
-  const deadline = BigInt((p.nowSec ?? Math.floor(Date.now() / 1000)) + BUY_LIMITS.deadlineSec);
-  const data =
-    quote.venue === "aerodrome"
-      ? encodeFunctionData({
-          abi: aeroRouterAbi,
-          functionName: "exactInputSingle",
-          args: [
-            {
-              tokenIn,
-              tokenOut,
-              tickSpacing: quote.pool,
-              recipient: user,
-              deadline,
-              amountIn: quote.amountIn,
-              amountOutMinimum,
-              sqrtPriceLimitX96: 0n,
-            },
-          ],
-        })
-      : encodeFunctionData({
-          abi: swapRouter02Abi,
-          functionName: "multicall",
-          args: [
-            deadline,
-            [
-              encodeFunctionData({
-                abi: swapRouter02Abi,
-                functionName: "exactInputSingle",
-                args: [
-                  {
-                    tokenIn,
-                    tokenOut,
-                    fee: quote.pool,
-                    recipient: user,
-                    amountIn: quote.amountIn,
-                    amountOutMinimum,
-                    sqrtPriceLimitX96: 0n,
-                  },
-                ],
-              }),
-            ],
-          ],
-        });
-  return assertAllowed(user, [approve, { to: router, data, value: 0n }]);
+  return assertAllowed(user, [
+    approveCall(tokenIn, router, quote.amountIn),
+    exactInputCall({
+      venue: quote.venue,
+      router,
+      tokenIn,
+      tokenOut,
+      pool: quote.pool,
+      recipient: user,
+      amountIn: quote.amountIn,
+      amountOutMinimum,
+      deadline: swapDeadline(p.nowSec),
+    }),
+  ]);
 }
 
 /** Buy `stock` with USDC: at least the quote less BUY_LIMITS' slippage. */

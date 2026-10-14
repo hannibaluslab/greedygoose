@@ -1,9 +1,11 @@
 import { decodeErrorResult, isAddressEqual, type Hex } from "viem";
 import { spokeAbi } from "./abis/ISpoke";
 import { hubAbi } from "./abis/IHub";
+import { swapOf } from "@/lib/allowlist";
 import { GUARDIAN, SEL } from "@/lib/guardian/config";
 import { BUY_LIMITS } from "@/lib/swap/buy";
-import { ROUTERS } from "@/lib/swap/venues";
+import { AERODROME_V1, ROUTERS, SPARK_PSM3 } from "@/lib/swap/venues";
+import { ENTRY_COINS } from "@/lib/tokens/stables";
 
 const PLAIN: Record<string, string> = {
   HealthFactorBelowThreshold: "This would put your loan past what Aave allows. Try a smaller amount.",
@@ -37,10 +39,20 @@ const ROUTER_PLAIN: Record<string, string> = {
 
 const isSwap = (call: { to: `0x${string}` }) => ROUTERS.some((r) => isAddressEqual(r, call.to));
 
+/**
+ * Other dollars into cash (lib/swap/entry.ts): its floor is face value less 0.5%, not a quote less a buy's slippage, so
+ * a revert there keeps the conversion's own words (the caller's fallback).
+ */
+function isConversion(call: { to: `0x${string}`; data: Hex }): boolean {
+  if (isAddressEqual(call.to, AERODROME_V1.ROUTER) || isAddressEqual(call.to, SPARK_PSM3.PSM3)) return true;
+  const swap = swapOf(call);
+  return !!swap && ENTRY_COINS.some((c) => isAddressEqual(c.address, swap.params.tokenIn));
+}
+
 /** Turn a revert into consumer language (CLAUDE.md › Error handling). `call` is the call that reverted. */
 export function explainRevert(data: Hex | undefined, fallback: string, call?: { to: `0x${string}`; data: Hex }): string {
   if (call && isSavingsWithdrawal(call)) return CASH_STUCK;
-  if (!data || data === "0x") return fallback;
+  if (!data || data === "0x" || (call && isConversion(call))) return fallback;
   if (call && isSwap(call)) {
     try {
       const { errorName, args } = decodeErrorResult({ abi: [], data });

@@ -10,7 +10,8 @@ import type { MoveBy, Words } from "@/lib/agents/feed";
 import { STATUS_LABEL } from "@/lib/risk/status";
 import { txUrl } from "@/lib/chain";
 import { ALL_RESERVES, USDC, findByAddress } from "@/lib/tokens/registry";
-import { formatShares, formatUsd } from "@/lib/formatting";
+import { ENTRY_COINS } from "@/lib/tokens/stables";
+import { formatCoin, formatShares, formatUsd } from "@/lib/formatting";
 
 /** One decoded move in words: what happened, then its amount and sign. */
 export function describeActivity(i: ActivityItem): { title: string; amount: string; sign: "+" | "−" | "" } {
@@ -38,6 +39,8 @@ export function describeActivity(i: ActivityItem): { title: string; amount: stri
       return { title: "Moved into savings", amount: formatUsd(i.amount), sign: "" };
     case "unsave":
       return { title: "Moved out of savings", amount: formatUsd(i.amount), sign: "" };
+    case "convert":
+      return { title: `Turned ${i.symbol} into cash`, amount: `${formatCoin(i.amount)} ${i.symbol} · ${formatUsd(i.receivedUsd ?? 0)}`, sign: "" };
   }
 }
 
@@ -49,9 +52,9 @@ export function detailMoves(items: readonly ActivityItem[]): ActivityItem[] {
   return items.flatMap((i) => (i.fromSavingsUsd ? [i, { kind: "unsave" as const, symbol: USDC.symbol, amount: i.fromSavingsUsd }] : [i]));
 }
 
-/** The round mark beside a move: the stock's badge, or a green $ for USDC. */
+/** The round mark beside a move: the stock's badge, or a green $ for USDC and the other dollars that become cash. */
 export function ActivityAvatar({ symbol, size }: { symbol: string; size: number }) {
-  if (symbol !== "USDC") return <StockAvatar symbol={symbol} size={size} />;
+  if (symbol !== USDC.symbol && !ENTRY_COINS.some((c) => c.symbol === symbol)) return <StockAvatar symbol={symbol} size={size} />;
   return (
     <span
       aria-hidden
