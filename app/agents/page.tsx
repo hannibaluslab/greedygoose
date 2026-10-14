@@ -12,7 +12,7 @@ import { ChevronRight, PadlockIcon, RebalanceIcon, ShieldIcon } from "@/componen
 import { useAgents } from "@/hooks/useAgents";
 import { useActivity } from "@/hooks/useActivity";
 import { useNowSec } from "@/hooks/useNowSec";
-import { DAILY_LIMIT_USD, JOBS, type AgentJob } from "@/lib/agents/permissions";
+import { CASH_JOBS, DAILY_LIMIT_USD, type CashJob } from "@/lib/agents/permissions";
 import { toUsd } from "@/lib/cash";
 import { formatUsdTrim } from "@/lib/formatting";
 
@@ -54,7 +54,7 @@ function Agents({ address }: { address: `0x${string}` }) {
   );
 }
 
-const JOB: Record<AgentJob, { name: string; does: string }> = {
+const JOB: Record<CashJob, { name: string; does: string }> = {
   save: { name: "Save", does: "Puts new cash into savings so it earns" },
   protect: { name: "Protection", does: "Repays from your cash if credit reaches Watch" },
 };
@@ -63,7 +63,7 @@ const JOB: Record<AgentJob, { name: string; does: string }> = {
 function CashAgent({ address }: { address: `0x${string}` }) {
   const { isConnected } = useAccount();
   const agents = useAgents(address);
-  const s = Object.values(agents.status);
+  const s = CASH_JOBS.map((job) => agents.status[job]);
   const pill = s.includes("unconfigured")
     ? "Not live yet"
     : s.includes("loading")
@@ -75,12 +75,12 @@ function CashAgent({ address }: { address: `0x${string}` }) {
           : "Off";
   const cancelled = /reject|denied|cancel/i.test(agents.error?.message ?? "");
 
-  const limit = (job: AgentJob) => {
-    const raw = agents.capRaw[job] ?? agents.limitRaw[job];
+  const limit = (job: CashJob) => {
+    const raw = agents.terms[job]?.capRaw ?? agents.limitRaw[job];
     return formatUsdTrim(raw === null ? DAILY_LIMIT_USD[job] : toUsd(raw));
   };
   // The hook keeps the error for the screen; nothing else to do with a rejection here.
-  const toggle = (job: AgentJob, on: boolean) =>
+  const toggle = (job: CashJob, on: boolean) =>
     void (on ? agents.turnOn(job, agents.limitRaw[job]!) : agents.turnOff(job)).catch(() => {});
 
   return (
@@ -91,7 +91,7 @@ function CashAgent({ address }: { address: `0x${string}` }) {
         <ChevronRight size={16} className="shrink-0 text-subtle" />
       </Link>
       <div className="mt-2.5 border-t border-hairline">
-        {JOBS.map((job, i) => {
+        {CASH_JOBS.map((job, i) => {
           const status = agents.status[job];
           const checked = status === "on" || status === "starting";
           return (

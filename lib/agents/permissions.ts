@@ -8,15 +8,20 @@ import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 
 /** The agents' jobs, in GooseExecutor's order (enum Job): the index is the job's id on-chain. */
-export const JOBS = ["save", "protect"] as const;
+export const JOBS = ["save", "protect", "sell", "rebalance", "entry"] as const;
 export type AgentJob = (typeof JOBS)[number];
+/** The Cash Agent's two jobs (the Agents switches): one daily USDC limit each. */
+export const CASH_JOBS = ["save", "protect"] as const;
+export type CashJob = (typeof CASH_JOBS)[number];
+/** The jobs whose grant carries a limit per stock: Protect · sell (a day) and the Rebalancer (a week). */
+export type StockJob = "sell" | "rebalance";
 
 /**
  * What each job may call, in the order of GooseExecutor's templates (`_permission`). JAW's screen grants every call
  * with checker 0 (D14), so the manager pins no argument: the executor builds each call for the account alone and
  * its post-checks revert anything else.
  */
-const CALLS: Record<AgentJob, readonly { target: Address; selector: Hex }[]> = {
+const CALLS: Record<CashJob, readonly { target: Address; selector: Hex }[]> = {
   save: [
     { target: USDC.address, selector: SEL.approve },
     { target: GUARDIAN.AAVE_V3_POOL, selector: SEL.supply },
@@ -33,7 +38,7 @@ const CALLS: Record<AgentJob, readonly { target: Address; selector: Hex }[]> = {
  * a withdrawal of savings to someone else moves no USDC from the account, so a USDC limit alone would charge it
  * nothing (contracts/docs/MANAGER-NOTES.md §1).
  */
-const LIMITED: Record<AgentJob, readonly Address[]> = {
+const LIMITED: Record<CashJob, readonly Address[]> = {
   save: [USDC.address],
   protect: [USDC.address, GUARDIAN.AUSDC],
 };
@@ -43,16 +48,31 @@ const LIMITED: Record<AgentJob, readonly Address[]> = {
  * Agents). Save only moves the account's own USDC into its own savings, so its limit is wider. Both wait on the
  * calibration pass (plan item 6 step 9).
  */
-export const DAILY_LIMIT_USD: Record<AgentJob, number> = { save: 1_000, protect: 300 };
+export const DAILY_LIMIT_USD: Record<CashJob, number> = { save: 1_000, protect: 300 };
 
-/** A job's daily limit in USDC units, never above the executor's `CAP_MAX` (a D13 test deploy allows $5). */
-export function dailyLimitRaw(job: AgentJob, capMaxRaw: bigint): bigint {
-  const raw = BigInt(DAILY_LIMIT_USD[job]) * 10n ** BigInt(USDC.decimals);
+/**
+ * The limits Manage offers for the jobs that sell stock, and the one each starts on: Protect · sell "can sell up to
+ * $300 a day" (ManageCredit), the Rebalancer "up to $500 a week" (Manage). Both wait on calibration (plan item 6
+ * step 9).
+ */
+export const STOCK_LIMIT_USD: Record<StockJob, { options: readonly number[]; start: number }> = {
+  sell: { options: [100, 300, 500], start: 300 },
+  rebalance: { options: [250, 500, 1_000], start: 500 },
+};
+
+/** A dollar limit in USDC units, never above the executor's `CAP_MAX` (a D13 test deploy allows $5). */
+export function limitRaw(usd: number, capMaxRaw: bigint): bigint {
+  const raw = BigInt(usd) * 10n ** BigInt(USDC.decimals);
   return raw < capMaxRaw ? raw : capMaxRaw;
 }
 
+/** A Cash job's daily limit in USDC units, never above the executor's `CAP_MAX`. */
+export function dailyLimitRaw(job: CashJob, capMaxRaw: bigint): bigint {
+  return limitRaw(DAILY_LIMIT_USD[job], capMaxRaw);
+}
+
 /** What the app sends to JAW's `useGrantPermissions` to switch `job` on, with a daily limit in USDC units. */
-export function agentGrant(job: AgentJob, capRaw: bigint): PermissionsDetail {
+export function agentGrant(job: CashJob, capRaw: bigint): PermissionsDetail {
   if (capRaw <= 0n) throw new Error("Daily limit must be positive");
   return {
     calls: CALLS[job].map(({ target, selector }) => ({ target, selector })),
@@ -65,7 +85,7 @@ export function agentGrant(job: AgentJob, capRaw: bigint): PermissionsDetail {
  * JAW's SDK picks (core rpc/permissions.js apiPermissionsToPermission). GooseExecutor rebuilds the same struct.
  */
 export function agentPermission(
-  job: AgentJob,
+  job: CashJob,
   p: { account: Address; spender: Address; start: number; end: number; salt: bigint; capRaw: bigint },
 ): GuardianPermission {
   return {
@@ -79,49 +99,10 @@ export function agentPermission(
   };
 }
 
-/** A permission as JAW's `usePermissions` lists it (the relay's record). */
-export type ListedPermission = {
-  permissionId: string;
-  spender: string;
-  start: number;
-  end: number;
-  salt: string;
-  calls: { target: string; selector: string; checker?: string }[];
-  spends: { token: string; allowance: string; unit: string; multiplier: number }[];
-};
-
-export type AgentGrant = { job: AgentJob; permissionId: Hex; capRaw: bigint; start: number; end: number; salt: bigint };
-
-/** Reads a listed permission as one of ours: the executor as spender and exactly one job's template. */
-export function readAgentGrant(p: ListedPermission, executor: Address): AgentGrant | null {
-  if (!isAddressEqual(p.spender as Address, executor) || p.spends.length === 0) return null;
-  const capRaw = BigInt(p.spends[0].allowance);
-  if (capRaw <= 0n) return null;
-  const job = JOBS.find(
-    (j) =>
-      p.calls.length === CALLS[j].length &&
-      CALLS[j].every(
-        (c, i) =>
-          isAddressEqual(p.calls[i].target as Address, c.target) &&
-          p.calls[i].selector.toLowerCase() === c.selector &&
-          (!p.calls[i].checker || isAddressEqual(p.calls[i].checker as Address, zeroAddress)),
-      ) &&
-      p.spends.length === LIMITED[j].length &&
-      LIMITED[j].every(
-        (token, i) =>
-          isAddressEqual(p.spends[i].token as Address, token) &&
-          p.spends[i].unit === "day" &&
-          p.spends[i].multiplier === 1 &&
-          BigInt(p.spends[i].allowance) === capRaw,
-      ),
-  );
-  return job ? { job, permissionId: p.permissionId as Hex, capRaw, start: p.start, end: p.end, salt: BigInt(p.salt) } : null;
-}
-
 /*
  * Protect · sell (GooseExecutor's Job.ProtectSell, id 2): when savings can't keep the credit Safe, the executor sells
  * some of the stock that backs it and repays. Its own JAW grant, so selling can be switched off alone (decision 5);
- * not one of the Cash Agent switches in `JOBS`.
+ * not one of the Cash Agent switches (`CASH_JOBS`).
  */
 
 /** A stock's daily limit is a whole number of these raw units (1e-4 share): the executor packs all seven in one word. */
@@ -315,4 +296,130 @@ export function entryPermission(p: {
     calls: entryCalls().map(({ target, selector }) => ({ target, selector, checker: zeroAddress })),
     spends: entrySpends(p.capRaw).map(({ token, allowance }) => ({ token, allowance, unit: PERIOD.Day, multiplier: 1 })),
   };
+}
+
+/*
+ * Every job, as JAW's screen grants it and lists it.
+ */
+
+/** What the app sends to JAW's `useGrantPermissions` to switch `job` on: its limit, and one a stock for a StockJob. */
+export function jobGrant(job: AgentJob, capRaw: bigint, limitsRaw?: StockLimits): PermissionsDetail {
+  if (job === "save" || job === "protect") return agentGrant(job, capRaw);
+  if (job === "entry") return entryGrant(capRaw);
+  if (!limitsRaw) throw new Error("One limit per stock");
+  return job === "sell" ? sellGrant(capRaw, limitsRaw) : rebalanceGrant(capRaw, limitsRaw);
+}
+
+/**
+ * Each stock's limit in a Protect · sell or Rebalancer grant, from the dollar limit `capRaw`: shares worth twice it at
+ * Aave's price now, so a stock that falls after the grant can still be sold up to the dollar limit (the USDC limit is
+ * the one that binds). Held 1% under the executor's bound (twice CAP_MAX, JobBase.STOCK_LIMIT_CAPS), so a price tick
+ * before registration doesn't refuse it. `pricesRaw` are Aave's prices by reserve id (8 decimals); a stock `sellable`
+ * leaves out gets 0, so the grant has no approve for it.
+ */
+export function stockLimitsRaw(capRaw: bigint, capMaxRaw: bigint, pricesRaw: readonly bigint[], sellable: readonly boolean[]): StockLimits {
+  const bound = (2n * capMaxRaw * 99n) / 100n;
+  const worth = 2n * capRaw < bound ? 2n * capRaw : bound;
+  return EQUITIES.map((e) => {
+    if (!sellable[e.reserveId] || pricesRaw[e.reserveId] <= 0n) return 0n;
+    const shares = (worth * 10n ** 10n) / pricesRaw[e.reserveId];
+    return (shares / STOCK_LIMIT_UNIT) * STOCK_LIMIT_UNIT;
+  });
+}
+
+/** A permission as JAW's `usePermissions` lists it (the relay's record). */
+export type ListedPermission = {
+  permissionId: string;
+  spender: string;
+  start: number;
+  end: number;
+  salt: string;
+  calls: { target: string; selector: string; checker?: string }[];
+  spends: { token: string; allowance: string; unit: string; multiplier: number }[];
+};
+
+export type AgentGrant = {
+  job: AgentJob;
+  permissionId: Hex;
+  capRaw: bigint;
+  start: number;
+  end: number;
+  salt: bigint;
+  /** Protect · sell and the Rebalancer: each stock's limit in raw shares, by reserve id; 0 = it may not sell it. */
+  limitsRaw?: StockLimits;
+};
+
+/** Where a job's stock limits start among its spends: after USDC and aUSDC (Protect · sell), USDC (the Rebalancer). */
+const FIRST_STOCK_SPEND: Record<StockJob, number> = { sell: 2, rebalance: 1 };
+
+/** The stock limits a `job` grant's spends carry, by reserve id; null if one of them isn't a stock. */
+export function readStockLimits(job: StockJob, spends: readonly { token: string; allowance: string | bigint }[]): StockLimits | null {
+  const limits: bigint[] = EQUITIES.map(() => 0n);
+  for (const s of spends.slice(FIRST_STOCK_SPEND[job])) {
+    const stock = EQUITIES.find((e) => isAddressEqual(e.address, s.token as Address));
+    if (!stock) return null;
+    limits[stock.reserveId] = BigInt(s.allowance);
+  }
+  return limits;
+}
+
+/** The limit and the stock limits a job's grant would carry, read off its spends; null if they can't be a job's. */
+function readTerms(job: AgentJob, spends: ListedPermission["spends"]): { capRaw: bigint; limitsRaw?: StockLimits } | null {
+  const first = BigInt(spends[0].allowance);
+  if (job === "save" || job === "protect") return { capRaw: first };
+  if (job === "entry") return { capRaw: first / 10n ** BigInt(ENTRY_COINS[0].decimals - USDC.decimals) };
+  const limitsRaw = readStockLimits(job, spends);
+  return limitsRaw && { capRaw: first, limitsRaw };
+}
+
+/** True when a listed permission is exactly `want`, as JAW's screen grants it: checker 0 and × 1 everywhere. */
+function isTemplate(p: ListedPermission, want: PermissionsDetail): boolean {
+  const calls = want.calls ?? [];
+  const spends = want.spends ?? [];
+  return (
+    p.calls.length === calls.length &&
+    calls.every(
+      (c, i) =>
+        isAddressEqual(p.calls[i].target as Address, c.target) &&
+        p.calls[i].selector.toLowerCase() === c.selector?.toLowerCase() &&
+        (!p.calls[i].checker || isAddressEqual(p.calls[i].checker as Address, zeroAddress)),
+    ) &&
+    p.spends.length === spends.length &&
+    spends.every(
+      (s, i) =>
+        isAddressEqual(p.spends[i].token as Address, s.token) &&
+        p.spends[i].unit === s.unit &&
+        p.spends[i].multiplier === 1 &&
+        BigInt(p.spends[i].allowance) === BigInt(s.allowance),
+    )
+  );
+}
+
+/**
+ * Reads a listed permission as one of ours: the executor as spender and exactly one job's template, rebuilt from the
+ * limits it lists (`jobGrant`), so a grant JAW stored for anything else never counts as an agent.
+ */
+export function readAgentGrant(p: ListedPermission, executor: Address): AgentGrant | null {
+  if (!isAddressEqual(p.spender as Address, executor) || p.spends.length === 0) return null;
+  for (const job of JOBS) {
+    const terms = readTerms(job, p.spends);
+    if (!terms || terms.capRaw <= 0n) continue;
+    let want: PermissionsDetail;
+    try {
+      want = jobGrant(job, terms.capRaw, terms.limitsRaw);
+    } catch {
+      continue; // not this job's shape (a stock limit off the unit, no stock to sell)
+    }
+    if (!isTemplate(p, want)) continue;
+    return {
+      job,
+      permissionId: p.permissionId as Hex,
+      capRaw: terms.capRaw,
+      start: p.start,
+      end: p.end,
+      salt: BigInt(p.salt),
+      ...(terms.limitsRaw && { limitsRaw: terms.limitsRaw }),
+    };
+  }
+  return null;
 }

@@ -6,24 +6,22 @@ import { JOBS, type AgentGrant, type AgentJob } from "@/lib/agents/permissions";
  */
 export type AgentStatus = "unconfigured" | "loading" | "off" | "starting" | "on";
 
-type Stored = { start: number; end: number; cap: bigint };
-/** GooseExecutor.jobsOf: the job bits and each job's stored grant. */
-export type Registry = readonly [jobs: number, save: Stored, protect: Stored, ...rest: unknown[]];
+/** A job's grant as the executor stores it: what the user signed that its template doesn't fix. */
+export type Stored = { start: number; end: number; cap: bigint };
 
 /**
- * Whether the executor runs `job`: registered, not past its end, and with that same grant still in JAW's list,
- * where a revoke shows at once (the registry only learns of it on the next run). If JAW's list can't be read, the
- * registry alone decides.
+ * Whether the executor runs `job`: registered (its bit in `jobs`, GooseExecutor.jobsOf), not past its end, and with
+ * that same grant still in JAW's list, where a revoke shows at once (the registry only learns of it on the next run).
+ * If JAW's list can't be read, the registry alone decides.
  */
 export function jobStatus(
   job: AgentJob,
-  registry: Registry,
+  jobs: number,
+  stored: Stored,
   granted: readonly AgentGrant[],
   nowSec: number,
   listUnreadable: boolean,
 ): Exclude<AgentStatus, "unconfigured" | "loading"> {
-  const [jobs, save, protect] = registry;
-  const stored = job === "save" ? save : protect;
   const live = granted.filter((g) => g.job === job && g.end >= nowSec);
   const registered = (jobs & (1 << JOBS.indexOf(job))) !== 0 && stored.end >= nowSec;
   const stillGranted =
