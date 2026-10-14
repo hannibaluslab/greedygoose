@@ -2,6 +2,7 @@
 pragma solidity 0.8.28;
 
 import {Thresholds} from "../src/CashRules.sol";
+import {Coin} from "../src/EntryRules.sol";
 import {RebalanceBook, RebalanceHolding, RebalanceLimits} from "../src/RebalanceRules.sol";
 import {Book, Holding} from "../src/SellRules.sol";
 
@@ -76,6 +77,13 @@ library Vectors {
         RebalanceBook book;
         bool[7] tradable;
         RebalanceLimits l;
+    }
+
+    struct Entry {
+        Coin[] coins;
+        uint16 floorBps;
+        uint64 minEntry;
+        uint64 maxSwap;
     }
 
     function rand(string memory tag, uint256 i, uint256 field) internal pure returns (uint256) {
@@ -241,6 +249,31 @@ library Vectors {
         uint256 kind = rand("rebalance", i, f + 5) % 4;
         if (kind == 1) h.sellLeft = spread(rand("rebalance", i, f + 6), rand("rebalance", i, f + 7), 4, 9);
         else if (kind > 1) h.sellLeft = 1e18;
+    }
+
+    /// The four coins with balances from dust to $900k, daily limits that bind half the time, a coin waiting a fifth of
+    /// the time.
+    function entryInput(uint256 i) internal pure returns (Entry memory v) {
+        uint8[4] memory decimals = [6, 18, 6, 18];
+        v.coins = new Coin[](4);
+        for (uint256 k; k < 4; ++k) {
+            uint256 f = 10 + 10 * k;
+            uint256 scale = 10 ** (decimals[k] - 6);
+            Coin memory c = v.coins[k];
+            c.decimals = decimals[k];
+            if (rand("entry", i, f) % 3 != 0) {
+                c.balance = spread(rand("entry", i, f + 1), rand("entry", i, f + 2), 4, 11) * scale
+                    + rand("entry", i, f + 4) % scale;
+            }
+            uint256 kind = rand("entry", i, f + 3) % 4;
+            c.limitLeft = kind == 0
+                ? 0
+                : kind == 1 ? spread(rand("entry", i, f + 5), rand("entry", i, f + 6), 5, 10) * scale : 1e30;
+            c.waiting = rand("entry", i, f + 7) % 5 == 0;
+        }
+        v.floorBps = uint16(between(rand("entry", i, 0), 10, 100));
+        v.minEntry = uint64(between(rand("entry", i, 1), 100_000, 100_000_000));
+        v.maxSwap = uint64(between(rand("entry", i, 2), 100e6, 100_000e6));
     }
 
     function hashInput(uint256 i) internal pure returns (Hash memory v) {

@@ -11,11 +11,13 @@ import { writeFileSync } from "node:fs";
 import { encodeAbiParameters, hashTypedData, keccak256, parseUnits, toHex, type Address } from "viem";
 import { CASH, CASH_AGENT, PROTECT_SELL } from "@/config/risk";
 import { GUARDIAN } from "@/lib/guardian/config";
+import { planEntry, type EntryCoin } from "@/lib/guardian/entry";
 import { inWeekendWindow, planGuardian, planSave } from "@/lib/guardian/plan";
 import { planRebalance, rebalanceTrades, type RebalanceHolding } from "@/lib/guardian/rebalance";
 import { planSell, sellAmounts, sellTiming, type SellBook } from "@/lib/guardian/sell";
 import { marketState } from "@/lib/market-hours";
 import { agentPermission, JOBS, sellPermission, STOCK_LIMIT_UNIT, type StockLimits } from "@/lib/agents/permissions";
+import { ENTRY_COINS } from "@/lib/tokens/stables";
 
 const WAD = 10n ** 18n;
 const RAY = 10n ** 27n;
@@ -44,6 +46,7 @@ export const HASH_COUNT = 50;
 export const SELL_COUNT = 600;
 export const TIMING_COUNT = 1000;
 export const REBALANCE_COUNT = 800;
+export const ENTRY_COUNT = 1000;
 /** Where Vectors.sol's hash test puts the executor, so both sides know the spender. */
 export const HASH_SPENDER: Address = "0x0000000000000000000000000000000000600dE5";
 
@@ -190,6 +193,29 @@ export function rebalanceInput(i: number) {
     floorBps: between(r(27), 10n, 300n),
     minTradeRaw: between(r(28), 10n ** 6n, 100n * 10n ** 6n),
     maxSliceRaw: between(r(29), 100n * 10n ** 6n, 50_000n * 10n ** 6n),
+  };
+}
+
+/** Entry inputs: the four coins with balances from dust to $900k, daily limits that bind half the time, a coin
+ *  waiting a fifth of the time. Mirrors Vectors.entryInput. */
+export function entryInput(i: number) {
+  const r = (f: number) => rand("entry", i, f);
+  const coins: EntryCoin[] = ENTRY_COINS.map((c, k) => {
+    const f = (j: number) => r(10 + 10 * k + j);
+    const scale = 10n ** BigInt(c.decimals - 6);
+    const kind = f(3) % 4n;
+    return {
+      balanceRaw: f(0) % 3n === 0n ? 0n : spread(f(1), f(2), 4n, 11n) * scale + (f(4) % scale),
+      decimals: c.decimals,
+      limitLeftRaw: kind === 0n ? 0n : kind === 1n ? spread(f(5), f(6), 5n, 10n) * scale : 10n ** 30n,
+      waiting: f(7) % 5n === 0n,
+    };
+  });
+  return {
+    coins,
+    floorBps: between(r(0), 10n, 100n),
+    minEntryRaw: between(r(1), 100_000n, 100_000_000n),
+    maxSwapRaw: between(r(2), 100n * 10n ** 6n, 100_000n * 10n ** 6n),
   };
 }
 
@@ -344,6 +370,21 @@ function rebalanceVectors() {
   return { counts: hex(counts), planned: hex(planned), reserves: hex(reserves), buys: hex(buys), amountIns, minOuts };
 }
 
+/** What planEntry decides for each input: the coin (255 for none), what it swaps and the floor. */
+function entryVectors() {
+  const indexes: number[] = [];
+  const amountIns: string[] = [];
+  const minOuts: string[] = [];
+  for (let i = 0; i < ENTRY_COUNT; i++) {
+    const v = entryInput(i);
+    const m = planEntry(v.coins, v);
+    indexes.push(m ? m.index : 255);
+    amountIns.push(m ? m.amountIn.toString() : "0");
+    minOuts.push(m ? m.minOut.toString() : "0");
+  }
+  return { indexes: hex(indexes), amountIns, minOuts };
+}
+
 /** The manager's EIP-712 hash (getHash) of a permission, as `getHash` computes it on Base. */
 function managerHash(p: ReturnType<typeof agentPermission>) {
   return hashTypedData({
@@ -429,6 +470,7 @@ export function agentVectors(): Record<string, unknown> {
     "calendar.json": calendarVectors(),
     "sell.json": sellVectors(),
     "rebalance.json": rebalanceVectors(),
+    "entry.json": entryVectors(),
     "permissions.json": hashVectors(),
     "defaults.json": defaultsVector(),
   };
