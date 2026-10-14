@@ -18,9 +18,12 @@ const PROTECT: Record<Exclude<AgentStatus, "on">, string> = {
   starting: "Starting",
 };
 
-/** Design board "2c · Credit sheet" (HomeCreditSlide.dc.html). Protection is the Cash Agent's Protect job. */
-export function CreditSheet({ open, account, data, onClose }: { open: boolean; account: `0x${string}`; data: PositionData; onClose: () => void }) {
-  const agents = useAgents(account);
+/**
+ * Design board "2c · Credit sheet" (HomeCreditSlide.dc.html). Protection is the Cash Agent's Protect job. The rate
+ * sits under the cost (CLAUDE.md: always show the rate and the monthly cost).
+ */
+export function CreditSheet({ open, address, data, onClose }: { open: boolean; address: `0x${string}`; data: PositionData; onClose: () => void }) {
+  const agents = useAgents(address);
   const limit = data.debtUsd + data.availableUsd;
   const usedPct = limit > 0 ? Math.min(100, (data.debtUsd / limit) * 100) : 0;
   // Rounded up, as on Home's Credit card: what's owed is never shown as less than it is.
@@ -53,9 +56,12 @@ export function CreditSheet({ open, account, data, onClose }: { open: boolean; a
         </div>
 
         <div className="num rounded-[22px] bg-card px-4 py-0.5 leading-[normal] shadow-card-elev">
-          <div className="flex items-center justify-between border-b border-hairline py-3 text-[15px]">
-            <span className="text-ink-mid">Cost</span>
-            <span className="font-semibold">{formatUsdTrim(data.monthlyCostUsd)} / month</span>
+          <div className="flex flex-col gap-1 border-b border-hairline py-3">
+            <div className="flex items-center justify-between text-[15px]">
+              <span className="text-ink-mid">Cost</span>
+              <span className="font-semibold">{formatUsdTrim(data.monthlyCostUsd)} / month</span>
+            </div>
+            <span className="text-xs text-subtle">{(data.apr * 100).toFixed(2)}% a year, variable</span>
           </div>
           <div className="flex flex-col gap-2 border-b border-hairline py-3">
             <div className="flex justify-between text-[15px]">
