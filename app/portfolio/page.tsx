@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { TabBar } from "@/components/gg/TabBar";
@@ -9,17 +10,27 @@ import { StatusPill } from "@/components/gg/Status";
 import { StockAvatar } from "@/components/gg/StockAvatar";
 import { BackIcon, ChevronRight, LockIcon, PlusIcon, TradeIcon, UnlockIcon } from "@/components/gg/icons";
 import { MenuButton } from "@/components/gg/MenuButton";
+import { BuySheet } from "@/components/gg/BuySheet";
 import { usePosition } from "@/hooks/usePosition";
+import { useSheetSubject } from "@/hooks/useSheetSubject";
 import { formatShares, formatUsd } from "@/lib/formatting";
 
 export default function PortfolioPage() {
   return <RequireAccount>{(address) => <Portfolio address={address} />}</RequireAccount>;
 }
 
-/** Design board "10 · Portfolio (Invest tab)" (PortfolioPage.dc.html). */
+/**
+ * Design board "10 · Portfolio (Invest tab)" (PortfolioPage.dc.html). Its Market button opens Flow 1's
+ * sheet (F1-3 → F1-4 → confirm); /buy lands here with ?market, or ?s=SYMBOL for one stock's Buy step.
+ */
 function Portfolio({ address }: { address: `0x${string}` }) {
   const { data } = usePosition(address);
   const held = data?.holdings.filter((h) => h.freeShares + h.lockedShares > 0) ?? [];
+  const params = useSearchParams();
+  const market = useSheetSubject<{ symbol: string | null }>(
+    params.has("s") ? { symbol: params.get("s") } : params.has("market") ? { symbol: null } : null,
+  );
+  const openMarket = () => market.show({ symbol: null });
 
   return (
     <div className="relative min-h-dvh">
@@ -51,9 +62,9 @@ function Portfolio({ address }: { address: `0x${string}` }) {
             </section>
 
             <div className="grid grid-cols-2 gap-2.5">
-              <Link href="/buy" className="flex h-[52px] items-center justify-center gap-2 rounded-[26px] bg-card text-[15px] font-semibold no-underline shadow-[0_1px_3px_rgba(14,13,11,0.06)]">
+              <button type="button" onClick={openMarket} className="flex h-[52px] items-center justify-center gap-2 rounded-[26px] bg-card text-[15px] font-semibold shadow-[0_1px_3px_rgba(14,13,11,0.06)]">
                 <TradeIcon size={18} />Buy stocks
-              </Link>
+              </button>
               <Link
                 href="/use-credit"
                 className="flex h-[52px] items-center justify-center gap-2 rounded-[26px] bg-brand text-[15px] font-bold no-underline"
@@ -68,7 +79,7 @@ function Portfolio({ address }: { address: `0x${string}` }) {
               {held.length === 0 ? (
                 <div className="rounded-[22px] bg-card p-4 text-[15px] shadow-[0_1px_3px_rgba(14,13,11,0.06)]">
                   You don’t hold any supported stocks yet.{" "}
-                  <Link href="/buy" className="font-semibold underline">Buy stocks</Link>
+                  <button type="button" onClick={openMarket} className="font-semibold underline">Buy stocks</button>
                 </div>
               ) : (
                 <div className="num rounded-[22px] bg-card px-[18px] py-0.5 shadow-[0_1px_3px_rgba(14,13,11,0.06)]">
@@ -115,6 +126,9 @@ function Portfolio({ address }: { address: `0x${string}` }) {
         )}
       </div>
       <TabBar />
+      {data && market.subject && (
+        <BuySheet key={market.key} open={market.open} user={address} data={data} symbol={market.subject.symbol} onClose={market.close} />
+      )}
     </div>
   );
 }
