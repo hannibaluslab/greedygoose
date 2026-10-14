@@ -29,7 +29,7 @@ const ORDER: Step[] = ["stock", "sell", "review"];
 
 /**
  * One stock in a sheet: NYM's CoinDetailSheet in the GreedyGoose kit, opened from the Home rail, the Invest rows and
- * the Market. The stock's market price and today's move, your shares and how they split, the price chart, its share
+ * the Market. The stock's market price and today's move, your holding and how it splits, the price chart, its share
  * of your portfolio and Aave's price (stocks earn no yield, D19), the actions, and this stock's moves. Selling free
  * shares is a step inside this sheet (useSell); Buy, Credit Buy and Free up shares open their own flows, which come
  * back here (StockSheets). For a stock you don't own: Buy and Credit Buy only.

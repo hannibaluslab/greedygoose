@@ -69,14 +69,17 @@ export function StockHeader({ holding, market }: { holding: Holding; market: Mar
   );
 }
 
-/** Your position: the shares, what they're worth at Aave's price, and how they split between backing credit and free. */
+/**
+ * Your holding of the stock (the boards' "Your holdings"; never "your shares", CLAUDE.md › Compliance): how many, what
+ * they're worth at Aave's price, and how they split between backing credit and free.
+ */
 export function StockPosition({ holding }: { holding: Holding }) {
   const ticker = tickerOf(holding.symbol);
   const { backsPct, freePct } = holdingSplit(holding);
   return (
     <section className="num flex flex-col gap-3 rounded-[22px] bg-card p-4 leading-[normal] shadow-card-elev">
       <div className="flex items-center justify-between">
-        <span className="label">Your shares</span>
+        <span className="label">Your holding</span>
         <span className="text-xs text-subtle">At Aave’s price</span>
       </div>
       <div className="flex items-baseline justify-between gap-3">
