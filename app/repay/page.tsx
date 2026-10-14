@@ -1,12 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { parseUnits } from "viem";
 import { useAccount } from "wagmi";
+import { toast } from "sonner";
 import Link from "next/link";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { Line, SubHeader, WhiteCard } from "@/components/gg/Screen";
-import { FaceIdButton, TxDone, TxError } from "@/components/gg/TxUi";
+import { FaceIdButton, TxError } from "@/components/gg/TxUi";
 import { useTx } from "@/hooks/useTx";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { buildRepayCalls, fullRepayAmount } from "@/lib/aave/tx";
@@ -22,16 +24,29 @@ export default function RepayPage() {
   return <RequireAccount>{(address) => <Repay address={address} />}</RequireAccount>;
 }
 
-/** Design board "5b · Repay" (CreditOn.dc.html). */
+/**
+ * Design board "5b · Repay" (CreditOn.dc.html): it opens on the larger amount ($300), and a landed repay goes Home,
+ * as the board's button does, with a toast like a buy's (F1-6).
+ */
 function Repay({ address }: { address: `0x${string}` }) {
   const { isConnected } = useAccount();
+  const router = useRouter();
   const { data } = usePosition(address);
   const tx = useTx();
   const fee = useFeeSupport();
   const [choice, setChoice] = useState<number | "all" | null>(null);
-  const [paid, setPaid] = useState(0);
+  const paid = useRef<string | null>(null);
 
   const options = useMemo(() => (data ? repayChips(Math.min(toUsd(maxSpendRaw(data.cash)), data.debtUsd)) : []), [data]);
+  // Until a chip is tapped, the larger of the two amounts is picked, as drawn.
+  const picked = choice ?? options.at(-1) ?? null;
+
+  useEffect(() => {
+    if (tx.phase !== "done" || paid.current === null) return;
+    toast.success(paid.current);
+    paid.current = null;
+    router.push("/home");
+  }, [tx.phase, router]);
 
   if (!data) {
     return <div className="px-5 pt-[54px]"><div aria-busy className="h-[420px] animate-pulse rounded-[22px] bg-chip" /></div>;
@@ -39,38 +54,21 @@ function Repay({ address }: { address: `0x${string}` }) {
 
   const maxSpend = maxSpendRaw(data.cash);
   const maxRepay = Math.min(toUsd(maxSpend), data.debtUsd);
-  const amount = choice === "all" ? maxRepay : choice ?? 0;
+  const amount = picked === "all" ? maxRepay : picked ?? 0;
   const amountRaw =
-    choice === "all" ? fullRepayAmount(data.debtRaw, maxSpend) : parseUnits(amount.toFixed(USDC.decimals), USDC.decimals);
+    picked === "all" ? fullRepayAmount(data.debtRaw, maxSpend) : parseUnits(amount.toFixed(USDC.decimals), USDC.decimals);
   const after = Math.max(0, data.debtUsd - amount);
   // Owed amounts are rounded up, as on Home's Credit card: never shown as less than they are.
   const owed = (usd: number) => formatUsdTrim(Math.ceil(usd));
-  const coversAll = choice === "all" && maxSpend >= data.debtRaw;
+  const coversAll = picked === "all" && maxSpend >= data.debtRaw;
   const feeBlocked = isConnected && fee.state === "unsupported";
 
   const submit = () => {
     if (tx.phase === "failed") tx.reset();
-    setPaid(amount);
-    const calls = payFromCash(address, amountRaw, data.cash, buildRepayCalls({ user: address, amountRaw, all: choice === "all" }));
+    paid.current = coversAll ? "Repaid all your credit" : `Repaid ${formatUsdTrim(amount)}`;
+    const calls = payFromCash(address, amountRaw, data.cash, buildRepayCalls({ user: address, amountRaw, all: picked === "all" }));
     void tx.run(address, calls, undefined, [{ kind: "repay", symbol: "USDC", amount }]);
   };
-
-  if (tx.phase === "done") {
-    return (
-      <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[54px]">
-        <SubHeader label="Credit" />
-        <TxDone
-          title={`You repaid ${formatUsdTrim(paid)}`}
-          body={coversAll ? "Your credit is fully repaid. You can free up your stocks any time." : "Your loan is smaller now and costs less each month."}
-          txHash={tx.txHash}
-          onDone={() => {
-            tx.reset();
-            setChoice(null);
-          }}
-        />
-      </div>
-    );
-  }
 
   return (
     <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[54px]">
@@ -110,9 +108,9 @@ function Repay({ address }: { address: `0x${string}` }) {
           <>
             <div role="radiogroup" aria-label="Amount to repay" className="grid grid-cols-3 gap-2">
               {options.map((v) => (
-                <Chip key={v} selected={choice === v} onClick={() => setChoice(v)}>{formatUsdTrim(v)}</Chip>
+                <Chip key={v} selected={picked === v} onClick={() => setChoice(v)}>{formatUsdTrim(v)}</Chip>
               ))}
-              <Chip selected={choice === "all"} onClick={() => setChoice("all")}>{maxRepay >= data.debtUsd ? "All" : "All cash"}</Chip>
+              <Chip selected={picked === "all"} onClick={() => setChoice("all")}>{maxRepay >= data.debtUsd ? "All" : "All cash"}</Chip>
             </div>
             <Line label="You owe after" value={owed(after)} />
           </>
