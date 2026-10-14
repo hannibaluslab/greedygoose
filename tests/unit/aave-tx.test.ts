@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { decodeFunctionData, encodeErrorResult, erc20Abi } from "viem";
 import { buildBorrowCalls, buildLoanCalls, buildRepayCalls, buildSupplyCalls, fullRepayAmount } from "@/lib/aave/tx";
-import { explainRevert } from "@/lib/aave/errors";
+import { CASH_STUCK, explainRevert } from "@/lib/aave/errors";
+import { buildAddSavingsCalls, buildWithdrawSavingsCalls } from "@/lib/guardian/permission";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { AAVE } from "@/lib/aave/addresses";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
@@ -53,6 +54,13 @@ describe("explainRevert", () => {
     const data = encodeErrorResult({ abi: spokeAbi, errorName: "HealthFactorBelowThreshold" });
     expect(explainRevert(data, "x")).toMatch(/past what Aave allows/);
     expect(explainRevert("0x12345678", "fallback")).toBe("fallback");
+  });
+  it("a failed savings withdrawal means the cash can't move right now", () => {
+    const [withdraw] = buildWithdrawSavingsCalls(user, 1_500_000n, false);
+    expect(explainRevert("0x47bc4b2c", "x", withdraw)).toBe(CASH_STUCK); // NotEnoughAvailableUserBalance()
+    expect(explainRevert(undefined, "x", withdraw)).toBe(CASH_STUCK);
+    const [, supply] = buildAddSavingsCalls(user, 1_500_000n);
+    expect(explainRevert("0x12345678", "fallback", supply)).toBe("fallback");
   });
 });
 
