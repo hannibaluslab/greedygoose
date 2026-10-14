@@ -45,7 +45,7 @@ function Portfolio({ address }: { address: `0x${string}` }) {
               <Money value={data.stocksUsd} size={46} dollarSize={22} centsSize={19} />
               <Divided className="self-stretch"><span className="text-[30px] font-semibold leading-none tracking-[-0.03em]">{formatUsd(data.cashUsd).replace(/\.\d+$/, "")}</span></Divided>
               <div className="pt-[5px] text-[13px] text-ink-mid">
-                <span className="font-semibold text-ink">{formatUsd(data.collateralUsd)}</span> as collateral
+                <span className="font-semibold text-ink">{formatUsd(data.collateralUsd)}</span> backs credit
               </div>
               <Divided className="pt-[5px] text-[13px] text-ink-mid">USDC</Divided>
             </section>
@@ -59,7 +59,7 @@ function Portfolio({ address }: { address: `0x${string}` }) {
                 className="flex h-[52px] items-center justify-center gap-2 rounded-[26px] bg-brand text-[15px] font-bold no-underline"
                 style={{ boxShadow: "0 0 14px rgba(212,255,60,0.32)" }}
               >
-                <PlusIcon size={18} />Add collateral
+                <PlusIcon size={18} />Use credit
               </Link>
             </div>
 
@@ -95,9 +95,9 @@ function Portfolio({ address }: { address: `0x${string}` }) {
                         <div className="mt-2.5 flex items-center gap-1.5">
                           <Chip>{formatShares(h.freeShares)} free</Chip>
                           {lockedPct > 0 ? (
-                            <Chip className="ml-auto text-ink-mid"><LockIcon size={10} />{lockedPct}% is collateral</Chip>
+                            <Chip className="ml-auto text-ink-mid"><LockIcon size={10} />{lockedPct}% backs credit</Chip>
                           ) : (
-                            <Chip className="ml-auto text-ink-mid"><UnlockIcon size={10} />Not collateral</Chip>
+                            <Chip className="ml-auto text-ink-mid"><UnlockIcon size={10} />Not backing credit</Chip>
                           )}
                           <ChevronRight className="shrink-0 text-[#b9b3a6]" />
                         </div>

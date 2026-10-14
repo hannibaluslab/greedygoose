@@ -42,10 +42,10 @@ export default function Welcome() {
       <div className="flex grow flex-col justify-center gap-4">
         <div className="font-mono text-xs uppercase tracking-[0.08em] text-ink-mid">Stocks · credit · Base</div>
         <h1 className="m-0 text-[40px] font-semibold leading-[1.05] tracking-[-0.03em] [text-wrap:pretty]">
-          Your stocks stay yours. Borrow against them in one tap.
+          Your stocks stay yours. Use them for credit in one tap.
         </h1>
         <p className="m-0 text-base leading-[1.45] text-ink-mid [text-wrap:pretty]">
-          Hold NVIDIA, Apple and more. Use them to borrow dollars when you need cash, without selling anything.
+          Hold NVIDIA, Apple and more. When you need dollars, they back your credit, so you don’t sell anything.
         </p>
       </div>
 

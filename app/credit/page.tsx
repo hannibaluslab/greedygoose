@@ -38,14 +38,14 @@ function Credit({ address }: { address: `0x${string}` }) {
             <div className="flex flex-col">
               <Line label="Cost" value={`${formatUsd(data.monthlyCostUsd)} / month`} />
               <Line label="Credit available" value={formatUsd(data.availableUsd)} />
-              <Line label="Your collateral" value={formatUsd(data.collateralUsd)} />
+              <Line label="Backed by" value={`${formatUsd(data.collateralUsd)} of stocks`} />
             </div>
           </WhiteCard>
 
           <WhiteCard className="px-[18px] pb-1 pt-1">
-            <Line first label="Borrow rate" value={`${formatPct(data.apr)} a year, variable`} />
+            <Line first label="Credit rate" value={`${formatPct(data.apr)} a year, variable`} />
             <Line label="Health factor" value={data.healthFactor === null ? "—" : data.healthFactor.toFixed(2)} />
-            <Line label="USDC left to borrow on Aave" value={formatUsd(data.usdcLiquidity)} />
+            <Line label="USDC Aave can still lend" value={formatUsd(data.usdcLiquidity)} />
             <Line label="Network" value="Base" />
           </WhiteCard>
 
@@ -58,14 +58,14 @@ function Credit({ address }: { address: `0x${string}` }) {
             <ChevronRight className="text-subtle" />
           </Link>
 
-          {data.borrowPaused && <p role="status" className="m-0 text-[13px] text-act">Borrowing is paused on Aave right now.</p>}
+          {data.borrowPaused && <p role="status" className="m-0 text-[13px] text-act">Aave has paused new credit right now.</p>}
 
           <div className="grid grid-cols-2 gap-2.5">
-            <Link href="/use-credit" className="flex h-[52px] items-center justify-center rounded-[26px] bg-card text-[15px] font-semibold no-underline shadow-[0_1px_3px_rgba(14,13,11,0.06)]">Add collateral</Link>
-            <Link href="/free-up" className="flex h-[52px] items-center justify-center rounded-[26px] bg-card text-[15px] font-semibold no-underline shadow-[0_1px_3px_rgba(14,13,11,0.06)]">Unlock stocks</Link>
+            <Link href="/use-credit" className="flex h-[52px] items-center justify-center rounded-[26px] bg-card text-[15px] font-semibold no-underline shadow-[0_1px_3px_rgba(14,13,11,0.06)]">Add backing</Link>
+            <Link href="/free-up" className="flex h-[52px] items-center justify-center rounded-[26px] bg-card text-[15px] font-semibold no-underline shadow-[0_1px_3px_rgba(14,13,11,0.06)]">Free up shares</Link>
           </div>
           <div className="grid grid-cols-2 gap-2.5">
-            <Link href="/use-credit" className="flex h-[52px] items-center justify-center rounded-[26px] bg-chip text-[15px] font-semibold no-underline">Get a loan</Link>
+            <Link href="/use-credit" className="flex h-[52px] items-center justify-center rounded-[26px] bg-chip text-[15px] font-semibold no-underline">Use credit</Link>
             <Link href="/repay" className="flex h-[52px] items-center justify-center rounded-[26px] bg-brand text-[15px] font-bold no-underline" style={{ boxShadow: "0 0 14px rgba(212,255,60,0.32)" }}>Repay</Link>
           </div>
         </>

@@ -8,7 +8,7 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 
 export const metadata: Metadata = {
   title: "GreedyGoose",
-  description: "Borrow USDC against your tokenized stocks without selling them.",
+  description: "USDC credit backed by your tokenized stocks, without selling them.",
 };
 
 // viewportFit cover: the canvas is drawn edge to edge, so the page runs under the status bar and

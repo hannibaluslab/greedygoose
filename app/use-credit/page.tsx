@@ -44,7 +44,7 @@ type Line = { holding: Holding; stock: ReserveAsset; cf: number };
 /** Holdings worth less than this are tucked away so dust doesn’t crowd the screen. */
 const SMALL_USD = 1;
 
-/** Raw units to lock for a fraction (0–1) of the free balance. 100% = exactly the free balance. */
+/** Raw units to put in use for a fraction (0–1) of the free balance. 100% = exactly the free balance. */
 const rawFor = (h: Holding, f: number) =>
   f >= 0.9999 ? h.freeRaw : f <= 0 ? 0n : (h.freeRaw * BigInt(Math.round(f * 1_000_000))) / 1_000_000n;
 const usdFor = (h: Holding, raw: bigint, decimals: number) => (Number(raw) / 10 ** decimals) * h.priceUsd;
@@ -119,13 +119,13 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
   if (tx.phase === "done" && sent) {
     return (
       <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[54px]">
-        <SubHeader label="Loan" />
+        <SubHeader label="Credit" />
         <TxDone
-          title={sent.borrowed > 0 ? `You borrowed ${formatUsd(sent.borrowed)}` : "Collateral locked"}
+          title={sent.borrowed > 0 ? `You used ${formatUsd(sent.borrowed)} of credit` : "Backing added"}
           body={
             <>
-              {sent.locked.length > 0 && <>Locked {sent.locked.join(", ")}. </>}
-              {sent.borrowed > 0 ? "The USDC is in your account now." : "You can borrow against it any time."}
+              {sent.locked.length > 0 && <>{sent.locked.join(", ")} now {sent.locked.length > 1 ? "back" : "backs"} your credit. </>}
+              {sent.borrowed > 0 ? "The USDC is in your account now." : "You can use credit against it any time."}
             </>
           }
           txHash={tx.txHash}
@@ -145,10 +145,10 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
   if (lines.length === 0 && data.collateralUsd === 0) {
     return (
       <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[54px]">
-        <SubHeader label="Loan" />
-        <h1 className="m-0 text-[30px] font-semibold tracking-[-0.03em]">Get a loan</h1>
+        <SubHeader label="Credit" />
+        <h1 className="m-0 text-[30px] font-semibold tracking-[-0.03em]">Use credit</h1>
         <WhiteCard className="flex flex-col gap-3 p-[18px]">
-          <p className="m-0 text-[15px]">You need stocks to borrow against. Buy some with your USDC, or receive them.</p>
+          <p className="m-0 text-[15px]">Credit needs stocks to back it. Buy some with your USDC, or receive them.</p>
           <Link href="/buy" className="flex h-[52px] items-center justify-center rounded-[26px] bg-brand text-[15px] font-bold no-underline">Buy stocks</Link>
         </WhiteCard>
       </div>
@@ -157,7 +157,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
 
   const summary = (
     <WhiteCard className="num px-4 py-0.5">
-      <Row label="Borrowing power" value={formatUsd(calc.powerUsd)} />
+      <Row label="Credit limit" value={formatUsd(calc.powerUsd)} />
       <Row label="You owe after" value={formatUsd(data.debtUsd + amount)} />
       <Row label="Cost" value={`about ${formatUsd(monthlyCost(data.debtUsd + amount, data.apr))} / month`} />
       <Row label="Rate" value={`${(data.apr * 100).toFixed(2)}% a year, variable`} />
@@ -170,10 +170,10 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
 
   return (
     <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[54px]">
-      <SubHeader label="Loan" />
+      <SubHeader label="Credit" />
       <div className="flex flex-col gap-1">
-        <h1 className="m-0 text-[30px] font-semibold tracking-[-0.03em]">{review ? "Review" : "Get a loan"}</h1>
-        {!review && <p className="m-0 text-sm text-ink-mid">Choose what to lock and how much to borrow. Nothing is sold.</p>}
+        <h1 className="m-0 text-[30px] font-semibold tracking-[-0.03em]">{review ? "Review" : "Use credit"}</h1>
+        {!review && <p className="m-0 text-sm text-ink-mid">Choose what backs it and how much to take. Nothing is sold.</p>}
       </div>
       <MarketBanner />
 
@@ -183,16 +183,16 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
             <div className="flex items-center gap-3 rounded-2xl bg-card px-4 py-3 shadow-[0_1px_3px_rgba(14,13,11,0.06)]">
               <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-full bg-ink text-on-ink"><LockIcon size={12} /></span>
               <span className="flex flex-1 flex-col">
-                <span className="text-[15px] font-semibold">Already locked</span>
+                <span className="text-[15px] font-semibold">Already backing</span>
                 <span className="num text-[12.5px] text-ink-mid">{formatUsd(data.collateralUsd)} · you owe {formatUsd(data.debtUsd)}</span>
               </span>
-              <Link href="/free-up" className="text-[13px] font-semibold text-ink-mid underline">Unlock</Link>
+              <Link href="/free-up" className="text-[13px] font-semibold text-ink-mid underline">Free up</Link>
             </div>
           )}
 
           {lines.length > 0 && (
             <div className="flex flex-col gap-2">
-              <span className="label px-1">Lock more</span>
+              <span className="label px-1">Back it with more</span>
               {locks.filter((l) => showSmall || l.holding.freeUsd >= SMALL_USD || l.raw > 0n).map((l) => {
                 const f = fractions[l.stock.symbol] ?? 0;
                 const shares = rawToShares(l.raw, l.holding.multiplier, l.stock.decimals);
@@ -212,7 +212,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
                       </span>
                       <span className="flex shrink-0 flex-col text-right">
                         <span className="text-lg font-bold leading-[1.1] tracking-[-0.02em]">{formatUsd(l.usd)}</span>
-                        <span className="whitespace-nowrap text-[11.5px] text-ink-mid">{on ? `${formatShares(shares)} ${tickerOf(l.stock.symbol)}` : "not locking"}</span>
+                        <span className="whitespace-nowrap text-[11.5px] text-ink-mid">{on ? `${formatShares(shares)} ${tickerOf(l.stock.symbol)}` : "not in use"}</span>
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -222,7 +222,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
                         max={100}
                         step={1}
                         value={Math.round(f * 100)}
-                        aria-label={`Share of ${l.holding.name} to lock`}
+                        aria-label={`Share of ${l.holding.name} to put in use`}
                         onChange={(e) => {
                           setAck(false);
                           setFractions((s) => ({ ...s, [l.stock.symbol]: Number(e.target.value) / 100 }));
@@ -250,7 +250,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
           )}
 
           <WhiteCard className="flex flex-col gap-3 p-[18px] focus-within:shadow-[0_0_0_1.5px_#0e0d0b]">
-            <label htmlFor="amount" className="text-[15px] font-semibold">How much USDC to borrow?</label>
+            <label htmlFor="amount" className="text-[15px] font-semibold">How much USDC do you need?</label>
             <div className="flex items-center gap-2">
               <span className="text-[38px] font-semibold text-ink-mid">$</span>
               <AmountInput
@@ -275,13 +275,13 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
             </div>
             <p className={`m-0 text-[13px] ${overLimit ? "text-act" : "text-ink-mid"}`}>
               {overLimit
-                ? `Aave won’t lend that much against these stocks. Lock more, or borrow up to ${formatUsd(hardMax)}.`
+                ? `Aave won’t lend that much against these stocks. Back it with more, or take up to ${formatUsd(hardMax)}.`
                 : `Up to ${formatUsd(hardMax)} (Aave’s limit). Stay under ${formatUsd(safeMax)} to be Safe.`}
             </p>
             {hardMax > 0 && <LoanMeter amount={amount} safe={safeMax} watch={watchMax} limit={hardMax} />}
             {needsFill && (
               <button type="button" onClick={fill} className="h-11 rounded-[22px] bg-ink text-[14px] font-semibold text-on-ink">
-                Lock enough for {formatUsd(amount)} automatically
+                Pick enough backing for {formatUsd(amount)}
               </button>
             )}
           </WhiteCard>
@@ -299,7 +299,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
               className="h-[52px] rounded-[26px] bg-ink text-[15px] font-semibold text-on-ink disabled:opacity-45"
               style={{ boxShadow: ready ? "0 0 0 3px #f4f2ec, 0 0 0 6px #0e0d0b" : undefined }}
             >
-              {nothing ? "Choose stocks or an amount" : amount > 0 ? `Review · borrow ${formatUsd(amount)}` : "Review · lock only"}
+              {nothing ? "Choose stocks or an amount" : amount > 0 ? `Review · ${formatUsd(amount)} of credit` : "Review · add backing only"}
             </button>
           </BottomBar>
         </>
@@ -312,7 +312,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
                 <li key={l.stock.symbol} className="flex items-center justify-between border-b border-hairline py-3 text-[15px]">
                   <span className="flex items-center gap-2">
                     <StockAvatar symbol={l.stock.symbol} size={24} />
-                    Lock {formatShares(rawToShares(l.raw, l.holding.multiplier, l.stock.decimals))} {tickerOf(l.stock.symbol)}
+                    Put {formatShares(rawToShares(l.raw, l.holding.multiplier, l.stock.decimals))} {tickerOf(l.stock.symbol)} in use
                   </span>
                   <span className="font-semibold">{formatUsd(l.usd)}</span>
                 </li>
@@ -321,7 +321,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
                 <li className="flex items-center justify-between py-3 text-[15px]">
                   <span className="flex items-center gap-2">
                     <span aria-hidden className="flex size-6 items-center justify-center rounded-full bg-safe text-xs font-bold text-white">$</span>
-                    Borrow USDC to your account
+                    USDC credit to your account
                   </span>
                   <span className="font-semibold">{formatUsd(amount)}</span>
                 </li>
@@ -336,15 +336,15 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
             </label>
           )}
           <p className="m-0 text-xs leading-snug text-subtle">
-            Locked stocks stay in your account’s Aave position; nothing is sold. If they fall too far, Aave can sell part of
-            them to repay the loan. {!marketState().open && "Stock prices are paused until markets reopen and can jump when they do. "}
+            Shares in use stay in your account’s Aave position; nothing is sold. If they fall too far, Aave can sell part of
+            them to repay what you owe. {!marketState().open && "Stock prices are paused until markets reopen and can jump when they do. "}
             Tokenized stocks track the share price; they are not company shares.
           </p>
           {feeBlocked && <p role="alert" className="m-0 text-[13px] text-act">Your account can’t pay network fees in USDC on Base right now.</p>}
           <TxError error={tx.error} />
           <BottomBar>
             <FaceIdButton
-              label={amount > 0 ? `Borrow ${formatUsd(amount)} with Face ID` : "Lock with Face ID"}
+              label={amount > 0 ? `Use ${formatUsd(amount)} of credit with Face ID` : "Add backing with Face ID"}
               phase={tx.phase}
               preview={!isConnected}
               disabled={!ready || (risky && !ack) || feeBlocked || fee.loading}
@@ -362,7 +362,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
                     locks: chosen.map((l) => ({ stock: l.stock, raw: l.raw })),
                     borrowRaw: amount > 0 ? parseUnits(amount.toFixed(USDC.decimals), USDC.decimals) : 0n,
                   }),
-                  "This would fail right now — prices may have moved. Try a slightly smaller loan or lock a bit more.",
+                  "This would fail right now — prices may have moved. Try a little less credit, or back it with a bit more.",
                   [
                     ...chosen.map((l) => ({ kind: "supply" as const, symbol: l.stock.symbol, amount: Number(l.raw) / 10 ** l.stock.decimals })),
                     ...(amount > 0 ? [{ kind: "borrow" as const, symbol: "USDC", amount }] : []),

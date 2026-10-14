@@ -65,7 +65,7 @@ export function BuySheet({
         {phase === "done" ? (
           <TxDone
             title={`You bought ${econ ? econ.shares.toFixed(4) : ""} ${ticker}`}
-            body="It’s in your account now. You can use it as collateral to borrow USDC."
+            body="It’s in your account now. It can back credit when you need cash."
             txHash={txHash}
             onDone={onClose}
           />
@@ -171,7 +171,7 @@ export function BuySheet({
               </p>
               {feeBlocked && (
                 <p role="alert" className="m-0 text-[13px] text-act">
-                  Your account can’t pay network fees in USDC on Base right now, so this buy is blocked.
+                  Your account can’t pay network fees in USDC on Base right now, so this buy can’t go through.
                 </p>
               )}
               <TxError error={error} />

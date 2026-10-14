@@ -65,7 +65,7 @@ function Repay({ address }: { address: `0x${string}` }) {
         <SubHeader label="Credit" />
         <TxDone
           title={`You repaid ${formatUsd(paid)}`}
-          body={coversAll ? "Your loan is fully repaid. You can unlock your stocks any time." : "Your loan is smaller now and costs less each month."}
+          body={coversAll ? "Your credit is fully repaid. You can free up your shares any time." : "Your loan is smaller now and costs less each month."}
           txHash={tx.txHash}
           onDone={() => {
             tx.reset();
@@ -125,7 +125,7 @@ function Repay({ address }: { address: `0x${string}` }) {
       </WhiteCard>
 
       <Link href="/use-credit" className="flex h-11 items-center gap-1.5 self-center px-3 text-[15px] font-semibold text-ink no-underline">
-        Borrow more <ChevronRight size={16} className="text-subtle" />
+        Use more credit <ChevronRight size={16} className="text-subtle" />
       </Link>
 
       <div className="grow" />

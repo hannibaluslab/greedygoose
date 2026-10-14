@@ -22,11 +22,11 @@ function describe(i: ActivityItem): { title: string; amount: string; sign: "+" |
     case "buy":
       return { title: `Bought ${name}`, amount: `${shares} · ${formatUsd(i.paidUsd ?? 0)}`, sign: "" };
     case "supply":
-      return { title: `Locked ${name} as collateral`, amount: r?.kind === "equity" ? shares : formatUsd(i.amount), sign: "" };
+      return { title: `Backed credit with ${name}`, amount: r?.kind === "equity" ? shares : formatUsd(i.amount), sign: "" };
     case "withdraw":
-      return { title: `Unlocked ${name}`, amount: r?.kind === "equity" ? shares : formatUsd(i.amount), sign: "" };
+      return { title: `Freed up ${name}`, amount: r?.kind === "equity" ? shares : formatUsd(i.amount), sign: "" };
     case "borrow":
-      return { title: "Borrowed USDC", amount: formatUsd(i.amount), sign: "+" };
+      return { title: "Used credit", amount: formatUsd(i.amount), sign: "+" };
     case "repay":
       return { title: "Repaid credit", amount: formatUsd(i.amount), sign: "−" };
     case "receive":
@@ -58,7 +58,7 @@ function Activity({ address }: { address: `0x${string}` }) {
         </div>
       ) : rows.length === 0 ? (
         <div className="rounded-[22px] bg-card p-4 text-[15px] text-ink-mid shadow-[0_1px_3px_rgba(14,13,11,0.06)]">
-          Nothing yet. Buys, collateral, borrowing and repayments made in GreedyGoose show up here.
+          Nothing yet. Buys, backing, credit and repayments made in GreedyGoose show up here.
         </div>
       ) : (
         <ol className="num m-0 list-none rounded-[22px] bg-card px-[18px] py-0.5 shadow-[0_1px_3px_rgba(14,13,11,0.06)]">

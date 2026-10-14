@@ -134,8 +134,8 @@ function Guardian({ address }: { address: `0x${string}` }) {
         <div className="mb-2 mt-4 font-semibold">What it can never do</div>
         <ul className="m-0 flex list-none flex-col gap-1.5 p-0 text-ink-mid">
           <li>✕ Send money anywhere else, or pay anyone else’s loan</li>
-          <li>✕ Sell, move or lock your stocks</li>
-          <li>✕ Borrow, or touch your cash</li>
+          <li>✕ Sell or move your stocks, or change what backs your credit</li>
+          <li>✕ Use credit, or touch your cash</li>
           <li>✕ Spend more than your daily limit</li>
         </ul>
         <p className="m-0 mt-3 text-xs text-subtle">

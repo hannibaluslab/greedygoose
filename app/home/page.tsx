@@ -86,7 +86,7 @@ function Loaded({ data, guardian, openCredit }: { data: PositionData; guardian: 
       <section className="grid grid-cols-4 gap-2 px-5 pt-3.5">
         <Action href="/buy" label="Buy" icon={<TradeIcon />} />
         <Action href="/receive" label="Receive" icon={<ReceiveIcon />} />
-        <Action href="/use-credit" label="Get a loan" icon={<CreditIcon />} />
+        <Action href="/use-credit" label="Use credit" icon={<CreditIcon />} />
         <Action href="/repay" label="Repay" icon={<RepayIcon />} />
       </section>
 
@@ -169,11 +169,11 @@ function Loaded({ data, guardian, openCredit }: { data: PositionData; guardian: 
                   <div className="flex items-center justify-between">
                     <StockAvatar symbol={h.symbol} />
                     {lockedPct > 0 ? (
-                      <span title={`${lockedPct}% is collateral`} className="num inline-flex h-4 items-center gap-[3px] whitespace-nowrap rounded-[8px] bg-ground pl-1.5 pr-[5px] text-[9.5px] font-semibold text-ink-2">
+                      <span title={`${lockedPct}% backs credit`} className="num inline-flex h-4 items-center gap-[3px] whitespace-nowrap rounded-[8px] bg-ground pl-1.5 pr-[5px] text-[9.5px] font-semibold text-ink-2">
                         {lockedPct}%<LockIcon />
                       </span>
                     ) : (
-                      <span title="Not collateral" className="inline-flex h-4 w-5 items-center justify-center rounded-[8px] border border-dashed border-[rgba(14,13,11,0.22)] text-subtle">
+                      <span title="Not backing credit" className="inline-flex h-4 w-5 items-center justify-center rounded-[8px] border border-dashed border-[rgba(14,13,11,0.22)] text-subtle">
                         <UnlockIcon />
                       </span>
                     )}

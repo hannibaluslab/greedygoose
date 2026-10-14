@@ -10,7 +10,7 @@ export function LoanMeter({ amount, safe, watch, limit }: { amount: number; safe
   const pct = (v: number) => `${Math.min(100, Math.max(0, (v / limit) * 100))}%`;
   const at = Math.min(amount, limit);
   return (
-    <div className="flex flex-col gap-2" role="img" aria-label={`Borrowing ${formatUsd(amount)}. Safe up to ${formatUsd(safe)}, Watch up to ${formatUsd(watch)}, Aave's limit ${formatUsd(limit)}.`}>
+    <div className="flex flex-col gap-2" role="img" aria-label={`Using ${formatUsd(amount)} of credit. Safe up to ${formatUsd(safe)}, Watch up to ${formatUsd(watch)}, Aave's limit ${formatUsd(limit)}.`}>
       <div className="relative h-2.5 overflow-visible rounded-full">
         <div className="absolute inset-y-0 left-0 rounded-l-full bg-safe" style={{ width: pct(safe) }} />
         <div className="absolute inset-y-0 bg-watch" style={{ left: pct(safe), width: `calc(${pct(watch)} - ${pct(safe)})` }} />

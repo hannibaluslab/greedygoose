@@ -25,15 +25,15 @@ function Unlock({ address }: { address: `0x${string}` }) {
 
   return (
     <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[54px]">
-      <SubHeader label="Collateral" back="/portfolio" />
+      <SubHeader label="Credit" back="/portfolio" />
       <div className="flex flex-col gap-1">
-        <h1 className="m-0 text-[30px] font-semibold tracking-[-0.03em]">Unlock stocks</h1>
-        <p className="m-0 text-sm text-ink-mid">Take collateral back to your account. Aave keeps enough to cover what you owe.</p>
+        <h1 className="m-0 text-[30px] font-semibold tracking-[-0.03em]">Free up shares</h1>
+        <p className="m-0 text-sm text-ink-mid">Take shares out of backing. Aave keeps enough to cover what you owe.</p>
       </div>
       {!data ? (
         <div aria-busy className="h-[300px] animate-pulse rounded-[22px] bg-chip" />
       ) : locked.length === 0 ? (
-        <div className="rounded-[22px] bg-card p-4 text-[15px] shadow-[0_1px_3px_rgba(14,13,11,0.06)]">Nothing is locked as collateral.</div>
+        <div className="rounded-[22px] bg-card p-4 text-[15px] shadow-[0_1px_3px_rgba(14,13,11,0.06)]">No shares are backing credit.</div>
       ) : (
         <ul className="num m-0 list-none rounded-[22px] bg-card px-[18px] py-0.5 shadow-[0_1px_3px_rgba(14,13,11,0.06)]">
           {locked.map((h, i) => (
@@ -42,7 +42,7 @@ function Unlock({ address }: { address: `0x${string}` }) {
                 <StockAvatar symbol={h.symbol} size={40} />
                 <div className="min-w-0 grow">
                   <div className="text-[15px] font-semibold leading-[1.25]">{h.name}</div>
-                  <div className="mt-0.5 inline-flex items-center gap-1 text-[13px] font-medium text-ink-mid"><LockIcon size={9} />{formatShares(h.lockedShares)} locked</div>
+                  <div className="mt-0.5 inline-flex items-center gap-1 text-[13px] font-medium text-ink-mid"><LockIcon size={9} />{formatShares(h.lockedShares)} in use</div>
                 </div>
                 <div className="text-[15px] font-semibold">{formatUsd(h.lockedUsd)}</div>
                 <ChevronRight className="shrink-0 text-[#b9b3a6]" />

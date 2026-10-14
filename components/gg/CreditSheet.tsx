@@ -55,7 +55,7 @@ export function CreditSheet({ open, data, onClose, guardian }: { open: boolean; 
             </div>
           </div>
           <div className="flex items-center justify-between border-b border-hairline py-3 text-[15px]">
-            <span className="text-ink-mid">Borrow rate</span>
+            <span className="text-ink-mid">Credit rate</span>
             <span className="font-semibold">{(data.apr * 100).toFixed(2)}% a year</span>
           </div>
           <Link href="/guardian" className="flex items-center justify-between py-3 text-[15px] no-underline">
@@ -74,7 +74,7 @@ export function CreditSheet({ open, data, onClose, guardian }: { open: boolean; 
 
         <div className="grid grid-cols-2 gap-2.5">
           <Link href="/use-credit" className="flex h-[52px] items-center justify-center rounded-[26px] bg-chip text-[15px] font-semibold text-ink no-underline">
-            Get a loan
+            Use credit
           </Link>
           <Link
             href="/repay"

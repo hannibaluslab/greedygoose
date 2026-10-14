@@ -17,7 +17,7 @@ import { rawToShares, sharesToRaw } from "@/lib/tokens/b20";
 import { formatShares, formatUsd } from "@/lib/formatting";
 import type { ReserveAsset } from "@/lib/tokens/registry";
 
-/** Withdraw ("unlock") a stock from Aave back to the user's account. */
+/** "Free up shares": withdraw a stock from Aave back to the user's account. */
 export function UnlockSheet({
   open, user, stock, holding, data, cf, onClose,
 }: { open: boolean; user: `0x${string}`; stock: ReserveAsset; holding: Holding; data: PositionData; cf: number | undefined; onClose: () => void }) {
@@ -46,16 +46,16 @@ export function UnlockSheet({
   const feeBlocked = isConnected && fee.state === "unsupported";
 
   return (
-    <SheetShell open={open} onOpenChange={(next) => !next && onClose()} title={`Unlock ${stock.name}`}>
+    <SheetShell open={open} onOpenChange={(next) => !next && onClose()} title={`Free up ${stock.name}`}>
       <SheetSteps stepKey={tx.phase === "done" ? "done" : "amount"} className="flex flex-col gap-3">
         {tx.phase === "done" ? (
-          <TxDone title={`${ticker} unlocked`} body="It’s back in your account as a free stock." txHash={tx.txHash} onDone={onClose} />
+          <TxDone title={`${ticker} freed up`} body="It’s back in your account as a free stock." txHash={tx.txHash} onDone={onClose} />
         ) : (
           <>
             <div className="flex flex-col gap-2 rounded-2xl border border-ink bg-card p-3.5">
               <div className="flex items-center justify-between">
                 <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">Shares</span>
-                <span className="text-xs text-subtle">Can unlock: {formatShares(Math.max(0, maxShares))}</span>
+                <span className="text-xs text-subtle">Can free up: {formatShares(Math.max(0, maxShares))}</span>
               </div>
               <div className="flex items-center gap-2.5">
                 <StockAvatar symbol={stock.symbol} />
@@ -86,7 +86,7 @@ export function UnlockSheet({
                   {canAll ? "ALL" : "MAX"}
                 </button>
               </div>
-              <span className="num text-xs text-subtle">Worth {formatUsd(usd)} at Aave’s price · {formatShares(lockedShares)} locked</span>
+              <span className="num text-xs text-subtle">Worth {formatUsd(usd)} at Aave’s price · {formatShares(lockedShares)} in use</span>
             </div>
 
             <div className="num rounded-[22px] bg-card px-4 py-0.5 shadow-[0_1px_3px_rgba(14,13,11,0.06)]">
@@ -101,9 +101,9 @@ export function UnlockSheet({
             </div>
 
             {data.debtUsd > 0 && maxUsd <= 0 && (
-              <p role="status" className="m-0 text-[13px] text-act">Your loan needs all of this collateral. Repay some first to unlock it.</p>
+              <p role="status" className="m-0 text-[13px] text-act">Your credit needs all of these shares. Repay some first to free them up.</p>
             )}
-            {tooMuch && <p role="status" className="m-0 text-[13px] text-act">That’s more than you can unlock while you owe {formatUsd(data.debtUsd)}.</p>}
+            {tooMuch && <p role="status" className="m-0 text-[13px] text-act">That’s more than you can free up while you owe {formatUsd(data.debtUsd)}.</p>}
             {risky && !tooMuch && (
               <label className="flex items-start gap-2.5 rounded-2xl bg-act-bg px-4 py-3 text-[13px] leading-snug text-act">
                 <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-px size-[18px] shrink-0 accent-[#8e2a1d]" />
@@ -114,7 +114,7 @@ export function UnlockSheet({
             {feeBlocked && <p role="alert" className="m-0 text-[13px] text-act">Your account can’t pay network fees in USDC on Base right now.</p>}
             <TxError error={tx.error} />
             <FaceIdButton
-              label={amountRaw > 0n ? `Unlock ${all ? "all" : formatShares(shares)} ${ticker} with Face ID` : `Unlock ${ticker} with Face ID`}
+              label={amountRaw > 0n ? `Free up ${all ? "all" : formatShares(shares)} ${ticker} with Face ID` : `Free up ${ticker} with Face ID`}
               phase={tx.phase}
               preview={!isConnected}
               disabled={amountRaw === 0n || tooMuch || (risky && !ack) || holding.paused || feeBlocked || fee.loading || cf === undefined}
