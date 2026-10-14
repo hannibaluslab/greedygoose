@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { fromCoinRow, type CoinRow } from "@/lib/prices/coingecko";
 import { jawMarketData } from "@/lib/prices/jaw";
 import {
-  PRICE_TOLERANCE, RANGES, agreesWithAave, checked, checkedLine, dayChange, downsample, isRange, moveUsd, pickMarketData, weekValue, yearLineStart,
+  PRICE_TOLERANCE, RANGES, afterFirstDay, agreesWithAave, checked, checkedLine, dayChange, downsample, isRange, moveUsd, pickMarketData, weekValue, yearLineStart,
   type MarketData,
 } from "@/lib/prices/market";
 const line = (from: number, to: number, n = 24) => Array.from({ length: n }, (_, i) => from + ((to - from) * i) / (n - 1));
@@ -255,5 +255,24 @@ describe("yearLineStart (a 1Y line shorter than a year)", () => {
     expect(yearLineStart("1D", 289, now)).toBeNull();
     expect(yearLineStart("1Y", 1, now)).toBeNull();
     expect(yearLineStart("1Y", 59, 0)).toBeNull();
+  });
+});
+
+describe("afterFirstDay (a young token's year starts the day after its first)", () => {
+  // JAW's and CoinGecko's METAc year at 2026-10-14: 59 points, the first a $784 close on 2026-08-18, then $545.
+  const metaYear = [784.47, 545.34, 552.78, ...line(546.83, 763.17, 55), 765.9];
+  const now = Date.UTC(2026, 9, 14, 9, 11);
+
+  it("drops the first day's close, so the year starts on the second day", () => {
+    const year = afterFirstDay("1Y", metaYear);
+    expect(year).toEqual(metaYear.slice(1));
+    expect(yearLineStart("1Y", year.length, now)?.toISOString()).toBe("2026-08-19T00:00:00.000Z");
+  });
+
+  it("leaves a full year, the other ranges and a line too short to cut alone", () => {
+    const full = line(500, 765.9, 366);
+    expect(afterFirstDay("1Y", full)).toBe(full);
+    for (const r of ["1D", "1W", "1M"] as const) expect(afterFirstDay(r, metaYear)).toBe(metaYear);
+    expect(afterFirstDay("1Y", [545.34, 765.9])).toEqual([545.34, 765.9]);
   });
 });

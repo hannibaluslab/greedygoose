@@ -47,6 +47,16 @@ export function yearLineStart(range: Range, points: number, nowMs: number): Date
   return new Date(Math.floor(nowMs / DAY_MS) * DAY_MS - (points - 2) * DAY_MS);
 }
 
+/**
+ * A 1Y line shorter than a year starts on the token's first day of market data, and that day's close is the first
+ * print of a new, thin market rather than the stock's price: METAc's was $784 on 2026-08-18, in JAW's and CoinGecko's
+ * history alike, against $545 the next day and $572 on Aave's feed a week later. The line starts the day after, so
+ * yearLineStart still reads its first day from how many points are left.
+ */
+export function afterFirstDay(range: Range, points: number[]): number[] {
+  return range === "1Y" && points.length > 2 && points.length <= RANGES["1Y"] ? points.slice(1) : points;
+}
+
 /** A price line to draw, if it has two points or more and its last price agrees with Aave's (as `checked`). */
 export function checkedLine(points: readonly number[] | undefined, aaveUsd: number): number[] | undefined {
   if (!points || points.length < 2 || !points.every(isPrice)) return undefined;

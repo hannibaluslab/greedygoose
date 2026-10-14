@@ -3,13 +3,13 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { Holding } from "./usePosition";
 import { fetchJawHistory } from "@/lib/prices/jaw";
-import { RANGES, checkedLine, type Range } from "@/lib/prices/market";
+import { RANGES, afterFirstDay, checkedLine, type Range } from "@/lib/prices/market";
 
 /** The CoinGecko fallback, through the app's own stateless route. */
 async function fetchFallback(symbol: string, range: Range, signal: AbortSignal): Promise<number[]> {
   const res = await fetch(`/api/prices/history?s=${encodeURIComponent(symbol)}&r=${range}`, { signal });
   if (!res.ok) throw new Error(`price history route failed (${res.status})`);
-  return res.json();
+  return afterFirstDay(range, await res.json());
 }
 
 /** The densest range (1D) moves every 5 minutes; the others hourly or daily. */
@@ -17,7 +17,8 @@ const FRESH_MS = 300_000;
 
 /**
  * One stock's market prices over a chart range, as useMarketPrices reads today's: JAW's history first, and CoinGecko's
- * through /api/prices/history when JAW's doesn't end within 2% of Aave's price (the META trap) or doesn't answer.
+ * through /api/prices/history when JAW's doesn't end within 2% of Aave's price (the META trap) or doesn't answer. A
+ * young token's year starts the day after its first (afterFirstDay).
  * While a new range loads, the last range's line stays up with `stale` set, as NYM's chart fades it. Information
  * only: values and credit use Aave's prices.
  */
@@ -30,7 +31,7 @@ export function usePriceHistory(stock: Pick<Holding, "symbol" | "priceUsd">, ran
     // One retry, then CoinGecko: a JAW outage shouldn't hold the chart for TanStack's three.
     retry: 1,
     placeholderData: keepPreviousData,
-    queryFn: ({ signal }) => fetchJawHistory(symbol, RANGES[range], signal),
+    queryFn: async ({ signal }) => afterFirstDay(range, await fetchJawHistory(symbol, RANGES[range], signal)),
   });
   const fromJaw = jaw.isPlaceholderData ? undefined : checkedLine(jaw.data, priceUsd);
   const needFallback = !jaw.isPending && !jaw.isPlaceholderData && !fromJaw;
