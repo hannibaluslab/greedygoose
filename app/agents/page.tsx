@@ -79,12 +79,9 @@ function CashAgent({ address }: { address: `0x${string}` }) {
     const raw = agents.capRaw[job] ?? agents.limitRaw[job];
     return formatUsdTrim(raw === null ? DAILY_LIMIT_USD[job] : toUsd(raw));
   };
-  const toggle = (job: AgentJob, on: boolean) => {
-    const limitRaw = agents.limitRaw[job];
-    // The hook keeps the error for the screen; nothing else to do with the rejection here.
-    if (!on) void agents.turnOff(job).catch(() => {});
-    else if (limitRaw !== null) void agents.turnOn(job, limitRaw).catch(() => {});
-  };
+  // The hook keeps the error for the screen; nothing else to do with a rejection here.
+  const toggle = (job: AgentJob, on: boolean) =>
+    void (on ? agents.turnOn(job, agents.limitRaw[job]!) : agents.turnOff(job)).catch(() => {});
 
   return (
     <div className="rounded-[22px] bg-card px-3 pt-2.5 shadow-card-elev">
@@ -96,6 +93,7 @@ function CashAgent({ address }: { address: `0x${string}` }) {
       <div className="mt-2.5 border-t border-hairline">
         {JOBS.map((job, i) => {
           const status = agents.status[job];
+          const checked = status === "on" || status === "starting";
           return (
             <div key={job} className={`flex items-center gap-3 py-[13px] ${i ? "border-t border-hairline" : ""}`}>
               <div className="flex grow flex-col gap-0.5">
@@ -106,8 +104,11 @@ function CashAgent({ address }: { address: `0x${string}` }) {
               </div>
               <Switch
                 label={JOB[job].name}
-                checked={status === "on" || status === "starting"}
-                disabled={!isConnected || status === "unconfigured" || status === "loading" || agents.busy}
+                checked={checked}
+                // Switching on needs the executor's CAP_MAX, so the limit asked for can register.
+                disabled={
+                  !isConnected || status === "unconfigured" || status === "loading" || agents.busy || (!checked && agents.limitRaw[job] === null)
+                }
                 onChange={(on) => toggle(job, on)}
               />
             </div>
