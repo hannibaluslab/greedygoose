@@ -6,6 +6,14 @@ const nextConfig: NextConfig = {
   // The floating dev badge overlaps the tab bar while testing on a phone.
   devIndicators: false,
   cacheComponents: true,
+  // Renamed routes (D17: no "borrow", "lock" or "unlock" on screen). Old links keep working, query included.
+  // Temporary (307), so browsers don't cache them while route names can still change.
+  redirects: async () => [
+    { source: "/loan", destination: "/use-credit", permanent: false },
+    { source: "/borrow", destination: "/use-credit", permanent: false },
+    { source: "/collateral", destination: "/use-credit", permanent: false },
+    { source: "/unlock", destination: "/free-up", permanent: false },
+  ],
   partialPrefetching: true,
   turbopack: {
     rules: {

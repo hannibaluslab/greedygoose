@@ -55,7 +55,7 @@ function Portfolio({ address }: { address: `0x${string}` }) {
                 <TradeIcon size={18} />Buy stocks
               </Link>
               <Link
-                href="/loan"
+                href="/use-credit"
                 className="flex h-[52px] items-center justify-center gap-2 rounded-[26px] bg-brand text-[15px] font-bold no-underline"
                 style={{ boxShadow: "0 0 14px rgba(212,255,60,0.32)" }}
               >
@@ -78,7 +78,7 @@ function Portfolio({ address }: { address: `0x${string}` }) {
                     return (
                       <Link
                         key={h.symbol}
-                        href={lockedPct > 0 ? `/unlock?s=${h.symbol}` : "/loan"}
+                        href={lockedPct > 0 ? `/free-up?s=${h.symbol}` : "/use-credit"}
                         className={`block px-0.5 py-3.5 text-ink no-underline ${i < held.length - 1 ? "border-b border-[#e7e1d2]" : ""}`}
                       >
                         <div className="flex items-center gap-2.5">

@@ -73,7 +73,7 @@ export function CreditSheet({ open, data, onClose, guardian }: { open: boolean; 
         </div>
 
         <div className="grid grid-cols-2 gap-2.5">
-          <Link href="/loan" className="flex h-[52px] items-center justify-center rounded-[26px] bg-chip text-[15px] font-semibold text-ink no-underline">
+          <Link href="/use-credit" className="flex h-[52px] items-center justify-center rounded-[26px] bg-chip text-[15px] font-semibold text-ink no-underline">
             Get a loan
           </Link>
           <Link

@@ -124,7 +124,7 @@ function Repay({ address }: { address: `0x${string}` }) {
         )}
       </WhiteCard>
 
-      <Link href="/loan" className="flex h-11 items-center gap-1.5 self-center px-3 text-[15px] font-semibold text-ink no-underline">
+      <Link href="/use-credit" className="flex h-11 items-center gap-1.5 self-center px-3 text-[15px] font-semibold text-ink no-underline">
         Borrow more <ChevronRight size={16} className="text-subtle" />
       </Link>
 

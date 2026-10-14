@@ -86,7 +86,7 @@ function Loaded({ data, guardian, openCredit }: { data: PositionData; guardian: 
       <section className="grid grid-cols-4 gap-2 px-5 pt-3.5">
         <Action href="/buy" label="Buy" icon={<TradeIcon />} />
         <Action href="/receive" label="Receive" icon={<ReceiveIcon />} />
-        <Action href="/loan" label="Get a loan" icon={<CreditIcon />} />
+        <Action href="/use-credit" label="Get a loan" icon={<CreditIcon />} />
         <Action href="/repay" label="Repay" icon={<RepayIcon />} />
       </section>
 

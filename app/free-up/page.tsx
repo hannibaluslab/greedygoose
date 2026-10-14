@@ -11,7 +11,7 @@ import { useSheetSubject } from "@/hooks/useSheetSubject";
 import { EQUITIES } from "@/lib/tokens/registry";
 import { formatShares, formatUsd } from "@/lib/formatting";
 
-export default function UnlockPage() {
+export default function FreeUpPage() {
   return <RequireAccount>{(address) => <Unlock address={address} />}</RequireAccount>;
 }
 

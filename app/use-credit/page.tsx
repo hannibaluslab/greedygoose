@@ -26,7 +26,7 @@ import { marketState } from "@/lib/market-hours";
 import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
 import { formatShares, formatUsd } from "@/lib/formatting";
 
-export default function LoanPage() {
+export default function UseCreditPage() {
   return <RequireAccount>{(address) => <Loan address={address} />}</RequireAccount>;
 }
 
@@ -186,7 +186,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
                 <span className="text-[15px] font-semibold">Already locked</span>
                 <span className="num text-[12.5px] text-ink-mid">{formatUsd(data.collateralUsd)} · you owe {formatUsd(data.debtUsd)}</span>
               </span>
-              <Link href="/unlock" className="text-[13px] font-semibold text-ink-mid underline">Unlock</Link>
+              <Link href="/free-up" className="text-[13px] font-semibold text-ink-mid underline">Unlock</Link>
             </div>
           )}
 
