@@ -4,8 +4,9 @@ import { useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { FeedCard, FeedDays } from "@/components/gg/Activity";
-import { AgentSheet, ReceiveCoins, type ConfirmView } from "@/components/gg/AgentSheet";
+import { AgentConfirm, AgentSheet, ReceiveCoins, type ConfirmView } from "@/components/gg/AgentSheet";
 import { AgentRow, AgentsFeed, AgentsView, AttentionCard, MixBar, TurnOffAll } from "@/components/gg/Agents";
+import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import type { AgentRow as FeedAgentRow } from "@/hooks/useAgentFeed";
 import { useNowSec } from "@/hooks/useNowSec";
 import type { AgentEvent } from "@/lib/agents/events";
@@ -15,6 +16,7 @@ import {
   AGENT_NAME,
   agentCards,
   agentItems,
+  allOffCopy,
   confirmFor,
   longDateText,
   limitText,
@@ -39,6 +41,7 @@ import { RebalanceStateBody } from "../RebalanceDemo";
  *   ?view=rows                    each row state
  *   ?view=notlive                 today: no executor configured
  *   &sheet=save|protect|rebalance|receive [&step=on|off|limit|renew]   a sheet open, or its confirm step
+ *   &sheet=all-off                "Turn off all agents" and its Face ID count
  */
 
 const usdc = (x: number) => BigInt(Math.round(x * 1e6));
@@ -127,6 +130,7 @@ export function AgentsGallery() {
     return a && a in AGENT_JOBS ? { agent: a, step: step && ["on", "off", "limit", "renew"].includes(step) ? step : null } : null;
   });
   const [picked, setPicked] = useState<number | null>(params.get("step") === "limit" ? 5_000 : null);
+  const [allOff, setAllOff] = useState(params.get("sheet") === "all-off");
   if (!nowSec) return null;
 
   const live = view !== "notlive";
@@ -161,6 +165,8 @@ export function AgentsGallery() {
     : [];
 
   const open = (agent: Agent, step: SheetAction | null) => setSheet({ agent, step });
+  // One Face ID for each grant that's on: every job but Save on the cards view, all five otherwise.
+  const allOffIds = live ? JOBS.filter((j) => status[j] !== "off").length : 0;
   const row = (item: AgentItem, mix = live) => (
     <AgentRow
       key={`${item.agent}-${item.status}`}
@@ -192,8 +198,22 @@ export function AgentsGallery() {
             onShowEarlier={() => {}}
           />
         }
-        turnOffAll={<TurnOffAll faceIds={live ? (cardsView ? 4 : 5) : 0} live={live} disabled={false} onClick={() => toast("Dev gallery: nothing is signed")} />}
+        turnOffAll={<TurnOffAll faceIds={allOffIds} live={live} disabled={false} onClick={() => setAllOff(true)} />}
       />
+      <SheetShell open={allOff} onOpenChange={setAllOff} title="Turn off all agents">
+        <SheetSteps stepKey="all-off" className="flex flex-col gap-3.5">
+          <AgentConfirm
+            confirm={{
+              ...allOffCopy(allOffIds),
+              busy: false,
+              error: null,
+              blocked: live ? null : "Not live yet",
+              preview: false,
+              onConfirm: () => toast("Dev gallery: nothing is signed"),
+            }}
+          />
+        </SheetSteps>
+      </SheetShell>
       {sheet && (
         <GallerySheet
           agent={sheet.agent}
