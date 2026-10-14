@@ -11,7 +11,9 @@ export const metadata: Metadata = {
   description: "Borrow USDC against your tokenized stocks without selling them.",
 };
 
-export const viewport: Viewport = { themeColor: "#f4f2ec", width: "device-width", initialScale: 1 };
+// viewportFit cover: the canvas is drawn edge to edge, so the page runs under the status bar and
+// home indicator, and fixed bars and sheets pad themselves with env(safe-area-inset-*).
+export const viewport: Viewport = { themeColor: "#f4f2ec", width: "device-width", initialScale: 1, viewportFit: "cover" };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

@@ -260,8 +260,13 @@ select {
   font-size: 16px;
 }
 
+/* Reduced motion: nothing animates or transitions. `*` reaches the vaul drawer, the sheet
+   overlay (tw-animate-css), the sheet step slides and sonner's toasts; `!important` also beats
+   the inline transitions vaul sets while it opens and closes the drawer. */
 @media (prefers-reduced-motion: reduce) {
-  * {
+  *,
+  *::before,
+  *::after {
     animation: none !important;
     transition: none !important;
   }
@@ -274,10 +279,6 @@ select {
 .gg-sheet { animation: gg-sheet-up 260ms cubic-bezier(0.22, 1, 0.36, 1) both; }
 /* Opacity only: a transform here would re-anchor the fixed tab bar / bottom bar mid-animation. */
 .gg-page { animation: gg-fade-in 200ms ease-out both; }
-
-/* Press feedback on every tappable thing. */
-button:not(:disabled), a[href] { -webkit-tap-highlight-color: transparent; transition: transform 120ms ease, opacity 120ms ease, background-color 160ms ease; }
-button:not(:disabled):active, a[href]:active { transform: scale(0.98); }
 
 /* Sheet keyboard gap. When the keyboard opens, SheetShell lifts the drawer to sit flush above
    it; vaul's own `::after` (background: inherit) would then paint the strip below the drawer,
