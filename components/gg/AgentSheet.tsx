@@ -2,13 +2,14 @@
 
 import type { ReactNode } from "react";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
-import { LimitChips } from "./LimitChips";
+import { LimitChips, neverMoreThan } from "./LimitChips";
 import { AgentPill } from "./Status";
 import { NETWORK_FEE_ROW } from "./Summary";
 import { TxButton, TxError } from "./TxUi";
 import { ShieldIcon } from "./icons";
-import { AGENT_COPY, type AgentItem, type SheetAction } from "@/lib/agents/list";
+import { AGENT_COPY, AGENT_JOBS, limitText, type AgentItem, type SheetAction } from "@/lib/agents/list";
 import type { AgentStatus } from "@/lib/agents/status";
+import { LIMIT_USD } from "@/lib/agents/permissions";
 import { stepsNote } from "@/lib/formatting";
 
 /*
@@ -26,6 +27,8 @@ export type LimitView = {
   onChange: (usd: number) => void;
   /** The pick differs from what it runs with, so saving it is a new grant. */
   changed: boolean;
+  /** Dev only: "Test version: up to $5" when the executor's CAP_MAX is under the pick (testCapNote). */
+  note: string | null;
 };
 
 const PILL: Record<AgentStatus, { text: string; tone: "on" | "neutral" }> = {
@@ -69,7 +72,7 @@ export function AgentSheet({
 }) {
   const copy = AGENT_COPY[item.agent];
   const on = item.status === "on" || item.status === "starting";
-  const per = limit?.per ?? "day";
+  const per = limit?.per ?? LIMIT_USD[AGENT_JOBS[item.agent][0]].per;
   return (
     <SheetShell open={open} onOpenChange={(next) => !next && onClose()} title={item.name} description={copy.lead}>
       <SheetSteps stepKey="main" className="flex flex-col gap-3.5">
@@ -100,8 +103,15 @@ export function AgentSheet({
             <Label>{per === "week" ? "Weekly limit" : "Daily limit"}</Label>
             {limit && limit.options.length > 1 ? (
               <div className="flex flex-col gap-2.5 rounded-[22px] bg-card px-4 py-3.5 shadow-card-elev">
-                <LimitChips label={per === "week" ? "Weekly limit" : "Daily limit"} options={limit.options} value={limit.value} onChange={limit.onChange} per={`a ${limit.per}`} size="sm" />
                 <span className="text-xs leading-[1.4] text-subtle">{neverMoreThan(item.name, per)}</span>
+                <LimitChips
+                  label={per === "week" ? "Weekly limit" : "Daily limit"}
+                  options={limit.options}
+                  value={limit.value}
+                  onChange={(usd) => usd !== null && limit.onChange(usd)}
+                  size="sm"
+                />
+                {limit.note && <span className="text-xs leading-[1.4] text-subtle">{limit.note}</span>}
                 {limit.changed &&
                   (on ? (
                     <TxButton label="Save" size="md" phase={busy ? "signing" : "idle"} preview={preview} disabled={!live} onClick={() => onAction("limit")} />
@@ -110,7 +120,7 @@ export function AgentSheet({
                   ))}
               </div>
             ) : (
-              <p className="num m-0 rounded-[22px] bg-card px-4 py-3.5 text-[15px] font-semibold shadow-card-elev">{item.limit}</p>
+              <p className="num m-0 rounded-[22px] bg-card px-4 py-3.5 text-[15px] font-semibold shadow-card-elev">{limitText(item.limitUsd, AGENT_JOBS[item.agent][0])}</p>
             )}
           </section>
         )}
@@ -189,6 +199,3 @@ export function ReceiveCoins({ coins }: { coins: readonly ReceiveCoin[] }) {
     </section>
   );
 }
-
-/** The line under a limit: "Protect never moves more than this in a day." */
-export const neverMoreThan = (name: string, per: "day" | "week") => `${name} never moves more than this in a ${per}.`;

@@ -5,7 +5,7 @@ import { isAddressEqual } from "viem";
 import { useAccount } from "wagmi";
 import { toast } from "sonner";
 import { CardTitle, ManageCard, SaveFooter } from "@/components/gg/Manage";
-import { LimitChips } from "@/components/gg/LimitChips";
+import { LimitChips, neverMoreThan } from "@/components/gg/LimitChips";
 import { StockAvatar } from "@/components/gg/StockAvatar";
 import { NETWORK_FEE_ROW } from "@/components/gg/Summary";
 import { Switch } from "@/components/gg/Switch";
@@ -16,9 +16,8 @@ import { usePosition } from "@/hooks/usePosition";
 import { useProtectSave } from "@/hooks/useProtectSave";
 import type { TxPhase } from "@/hooks/useTx";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
-import { limitRaw } from "@/lib/agents/permissions";
+import { LIMIT_USD, limitRaw, testCapNote } from "@/lib/agents/permissions";
 import {
-  PROTECT_LIMIT_USD,
   protectSteps,
   savedChoice,
   stepCount,
@@ -127,6 +126,8 @@ export function ProtectSettingsView({
   live, preview, saved, backsUsd, pricesRaw, capMaxRaw, sellGrants, feeBlocked, waiting = false, phase, error, busy, onSave,
 }: ProtectSettingsViewProps) {
   const [chosen, setChosen] = useState<Partial<ProtectChoice>>({});
+  // A Custom limit that isn't a number of dollars yet: nothing to save until it is.
+  const [limitTyped, setLimitTyped] = useState(true);
   const start = savedChoice(saved);
   const choice: ProtectChoice = { ...start, ...chosen };
   const set = (c: Partial<ProtectChoice>) => setChosen((p) => ({ ...p, ...c }));
@@ -142,7 +143,8 @@ export function ProtectSettingsView({
 
   // While repaying from cash is off, saving switches Protect on (protectSteps).
   const off = saved.repayCapRaw === null;
-  const canSave = live && !preview && !feeBlocked && !waiting && !busy && !plan.blocked && steps.length > 0 && capMaxRaw !== null;
+  const canSave =
+    live && limitTyped && !preview && !feeBlocked && !waiting && !busy && !plan.blocked && steps.length > 0 && capMaxRaw !== null;
   const note = !live
     ? "Not live yet"
     : feeBlocked
@@ -167,20 +169,30 @@ export function ProtectSettingsView({
   return (
     <div className="flex flex-col gap-3.5 leading-[normal]">
       <ManageCard className="flex flex-col gap-3 px-4 py-3.5">
-        <CardTitle title="Repay from your cash" sub="Always first. Your cash pays before any stock is sold." />
+        <CardTitle title="Daily limit" sub={neverMoreThan("Protect", "day")} />
         <LimitChips
-          label="Protect’s limit, a day"
-          options={PROTECT_LIMIT_USD.options}
+          label="Daily limit"
+          options={LIMIT_USD.protect.options}
           value={choice.limitUsd}
-          onChange={(usd) => set({ limitUsd: usd })}
-          per="a day"
+          onChange={(usd) => {
+            setLimitTyped(usd !== null);
+            if (usd !== null) set({ limitUsd: usd });
+          }}
           size="md"
+          custom
         />
+        {limitTyped && testCapNote(choice.limitUsd, capMaxRaw) && (
+          <span className="text-xs leading-[1.4] text-subtle">{testCapNote(choice.limitUsd, capMaxRaw)}</span>
+        )}
         {live && off && <span className="text-xs leading-[1.4] text-subtle">Off now. It starts on this limit when you switch it on.</span>}
       </ManageCard>
 
       <ManageCard className="flex flex-col px-4 py-0.5">
-        <div className="flex items-center gap-3 py-[13px]">
+        <div className="flex flex-col gap-0.5 py-[13px]">
+          <span className="text-[15px] font-semibold">Repay from your cash</span>
+          <span className="text-xs leading-[1.35] text-subtle">Always first. Your cash pays before any stock is sold.</span>
+        </div>
+        <div className="flex items-center gap-3 border-t border-hairline py-[13px]">
           <div className="flex grow flex-col gap-0.5">
             <span className="text-[15px] font-semibold">Sell stock if cash isn’t enough</span>
             <span className="text-xs leading-[1.35] text-subtle">Only stock that backs your credit, up to {formatUsdTrim(sellUsd)} a day</span>
@@ -247,7 +259,7 @@ export function ProtectSettingsView({
         )}
       </ManageCard>
 
-      {lines.length > 0 && (
+      {limitTyped && lines.length > 0 && (
         <div className="flex flex-col gap-1.5 rounded-[16px] bg-card-bone px-[13px] pb-3 pt-[11px] text-[13px]">
           <span className="font-semibold">{off ? "Switching on does" : "Saving does"}</span>
           <ul className="m-0 flex list-none flex-col gap-1 p-0 text-ink-2">

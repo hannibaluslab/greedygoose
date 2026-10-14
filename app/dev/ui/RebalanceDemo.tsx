@@ -28,7 +28,7 @@ const TARGET: MixRow[] = [
   { reserveId: 0, bps: 2_500 },
   { reserveId: 6, bps: 2_500 },
 ];
-const TERMS = { capRaw: 500_000_000n, limitsRaw: EQUITIES.map((e) => (SAVED[e.reserveId] > 0 ? 1n : 0n)) };
+const TERMS = { capRaw: 100_000_000n, limitsRaw: EQUITIES.map((e) => (SAVED[e.reserveId] > 0 ? 1n : 0n)) };
 const noop = () => {};
 const noopSubscribe = () => () => {};
 const previewAs = () => {

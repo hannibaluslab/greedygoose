@@ -59,11 +59,11 @@ describe("Protect's never-sell grant", () => {
 describe("protectSteps", () => {
   it("starts on what's saved: no change, nothing to save", () => {
     expect(protectSteps(fullOn, savedChoice(fullOn), ctx)).toEqual({ steps: [], blocked: null });
-    expect(savedChoice(off)).toEqual({ limitUsd: 300, sellOn: false, keepMix: false, never: [] });
+    expect(savedChoice(off)).toEqual({ limitUsd: 100, sellOn: false, keepMix: false, never: [] });
   });
 
   it("while it's off, saving switches it on: repay from cash at the limit on screen, then selling if chosen", () => {
-    expect(protectSteps(off, savedChoice(off), ctx)).toEqual({ steps: [{ kind: "grant", job: "protect", capRaw: usdc(300) }], blocked: null });
+    expect(protectSteps(off, savedChoice(off), ctx)).toEqual({ steps: [{ kind: "grant", job: "protect", capRaw: usdc(100) }], blocked: null });
     const { steps } = protectSteps(off, { ...savedChoice(off), limitUsd: 500, sellOn: true, never: [TESLA] }, ctx);
     expect(steps).toEqual([
       { kind: "grant", job: "protect", capRaw: usdc(500) },

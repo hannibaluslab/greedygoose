@@ -5,7 +5,7 @@ import { isAddressEqual } from "viem";
 import { useAccount } from "wagmi";
 import { toast } from "sonner";
 import { CardTitle, ManageCard, MixSlider } from "@/components/gg/Manage";
-import { LimitChips } from "@/components/gg/LimitChips";
+import { LimitChips, neverMoreThan } from "@/components/gg/LimitChips";
 import { StockAvatar, tickerOf } from "@/components/gg/StockAvatar";
 import { NETWORK_FEE_ROW } from "@/components/gg/Summary";
 import { TxButton, TxError } from "@/components/gg/TxUi";
@@ -18,7 +18,7 @@ import { usePosition } from "@/hooks/usePosition";
 import type { TxPhase } from "@/hooks/useTx";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { MIX_WHOLE, mixWeights, nowPercents, previewTrades, rebalanceOptions, startingMix, type MixHolding, type MixRow } from "@/lib/agents/mix";
-import { limitRaw, LIMIT_USD, stockLimitsRaw } from "@/lib/agents/permissions";
+import { limitRaw, LIMIT_USD, stockLimitsRaw, testCapNote } from "@/lib/agents/permissions";
 import { rebalanceSave, tradeLines, type RebalanceTerms, type SavePlan } from "@/lib/agents/rebalanceSettings";
 import { buildSetMixCalls } from "@/lib/agents/settings";
 import { toUsd } from "@/lib/cash";
@@ -124,6 +124,8 @@ export function RebalanceSettingsView({
 }) {
   const [edited, setEdited] = useState<MixRow[] | null>(draft ?? null);
   const [chosenUsd, setChosenUsd] = useState<number | null>(null);
+  // A Custom limit that isn't a number of dollars yet: nothing to save until it is.
+  const [limitTyped, setLimitTyped] = useState(true);
   const [adding, setAdding] = useState(false);
 
   const rows = edited ?? startingMix(holdings, saved);
@@ -131,7 +133,7 @@ export function RebalanceSettingsView({
   const sum = weights.reduce((a, b) => a + b, 0);
   const whole = rows.length > 0 && sum === MIX_WHOLE;
 
-  // The limit: the grant's while it has one, $500 a week before.
+  // The limit: the grant's while it has one, $100 a week before (LIMIT_USD).
   const limitUsd = chosenUsd ?? (terms ? toUsd(terms.capRaw) : LIMIT_USD.rebalance.start);
   const capRaw = limitRaw(limitUsd, capMaxRaw ?? BigInt(limitUsd) * 10n ** 6n);
   const trades = whole ? previewTrades({ holdings, rows, capRaw, capMaxRaw, options }) : [];
@@ -230,16 +232,19 @@ export function RebalanceSettingsView({
       </ManageCard>
 
       <ManageCard>
-        <CardTitle title="Its limit" sub="Can sell up to" />
+        <CardTitle title="Weekly limit" sub={neverMoreThan("Rebalance", "week")} />
         <LimitChips
-          label="The Rebalancer can sell up to, a week"
+          label="Weekly limit"
           options={LIMIT_USD.rebalance.options}
           value={limitUsd}
-          onChange={setChosenUsd}
-          per="a week"
+          onChange={(usd) => {
+            setLimitTyped(usd !== null);
+            if (usd !== null) setChosenUsd(usd);
+          }}
           size="sm"
+          custom
         />
-        <span className="text-xs leading-[1.4] text-subtle">Sells what grew too big to buy what fell short.</span>
+        {limitTyped && testCapNote(limitUsd, capMaxRaw) && <span className="text-xs leading-[1.4] text-subtle">{testCapNote(limitUsd, capMaxRaw)}</span>}
       </ManageCard>
 
       <ManageCard>
@@ -261,7 +266,7 @@ export function RebalanceSettingsView({
           phase={phase}
           steps={plan.steps}
           note={plan.note}
-          disabled={!plan.canSave || busy}
+          disabled={!plan.canSave || !limitTyped || busy}
           preview={configured && preview}
           onClick={() => onSave({ weights, capRaw, plan })}
         />

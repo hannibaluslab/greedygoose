@@ -42,15 +42,19 @@ describe("the four agents", () => {
     expect(NOT_LIVE).not.toMatch(ON_SCREEN);
   });
 
-  it("starts each on its limit, and shows the grant's once it has one", () => {
+  it("starts each on its limit, reading as a limit, and shows the grant's once it has one", () => {
     expect(agentItems({ status: jobs("off"), capRaw: none, next: nexts }).map((i) => i.limit)).toEqual([
-      "$1,000 a day",
-      "$300 a day",
-      "$500 a week",
-      "$1,000 a day",
+      "Limit $1,000 a day",
+      "Limit $100 a day",
+      "Limit $100 a week",
+      "Limit $1,000 a day",
     ]);
-    const capRaw = { ...none, save: 5_000_000_000n, protect: 100_000_000n };
-    expect(agentItems({ status: jobs("on"), capRaw, next: nexts }).slice(0, 2).map((i) => i.limit)).toEqual(["$5,000 a day", "$100 a day"]);
+    const capRaw = { ...none, save: 5_000_000_000n, protect: 25_000_000n, rebalance: 1_234_000_000n };
+    expect(agentItems({ status: jobs("on"), capRaw, next: nexts }).slice(0, 3).map((i) => i.limit)).toEqual([
+      "Limit $5,000 a day",
+      "Limit $25 a day",
+      "Limit $1,234 a week",
+    ]);
   });
 
   it("reads Protect from both its jobs: on when either runs", () => {

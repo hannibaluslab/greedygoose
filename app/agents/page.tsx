@@ -40,7 +40,7 @@ import {
 } from "@/lib/agents/list";
 import { rebalanceOptions } from "@/lib/agents/mix";
 import { agentNexts, defaultNumbers } from "@/lib/agents/next";
-import { JOBS, LIMIT_USD, limitRaw, stockLimitsRaw, type AgentJob } from "@/lib/agents/permissions";
+import { JOBS, LIMIT_USD, limitRaw, stockLimitsRaw, testCapNote, type AgentJob } from "@/lib/agents/permissions";
 import { toUsd } from "@/lib/cash";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
@@ -226,6 +226,7 @@ function Agents({ address }: { address: `0x${string}` }) {
             per: LIMIT_USD.save.per,
             onChange: (usd) => setPicked((p) => ({ ...p, save: usd })),
             changed: picked.save !== undefined && picked.save !== item.limitUsd,
+            note: testCapNote(limitUsd("save"), capMax),
           }
         : undefined;
     const activity = feed.rows.filter((r) => r.agent === name);

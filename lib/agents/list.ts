@@ -67,7 +67,7 @@ export function agentStatus(agent: Agent, status: Readonly<Record<AgentJob, Agen
   return (["unconfigured", "loading", "on", "starting"] as const).find((x) => s.includes(x)) ?? "off";
 }
 
-/** "$1,000 a day", "$500 a week". */
+/** "$100 a day", "$100 a week". */
 export const limitText = (usd: number, job: AgentJob) => `${formatUsdTrim(usd)} a ${LIMIT_USD[job].per}`;
 const usdOf = (raw: bigint) => Number(raw) / 10 ** USDC.decimals;
 
@@ -94,7 +94,7 @@ export type AgentItem = {
   /** The switch: on while the agent runs or is starting. */
   on: boolean;
   line: string;
-  /** "$1,000 a day": the grant's limit while it has one, the one it starts on otherwise. */
+  /** "Limit $100 a day": the grant's limit while it has one, the one it starts on otherwise. */
   limit: string;
   limitUsd: number;
 };
@@ -120,7 +120,7 @@ export function agentItems(i: AgentItemsInput): AgentItem[] {
       status,
       on: status === "on" || status === "starting",
       line: nextLine(status, i.next[agent]),
-      limit: limitText(limitUsd, job),
+      limit: `Limit ${limitText(limitUsd, job)}`,
       limitUsd,
     };
   });

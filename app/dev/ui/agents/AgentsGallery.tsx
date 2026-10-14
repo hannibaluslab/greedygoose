@@ -261,7 +261,7 @@ function GallerySheet({
       stops={item.on ? longDateText(nowSec + 200 * 86_400) : null}
       limit={
         agent === "save"
-          ? { options: LIMIT_USD.save.options, value: limitUsd, per: "day", onChange: onPick, changed: picked !== null && picked !== item.limitUsd }
+          ? { options: LIMIT_USD.save.options, value: limitUsd, per: "day", onChange: onPick, changed: picked !== null && picked !== item.limitUsd, note: null }
           : undefined
       }
       settings={

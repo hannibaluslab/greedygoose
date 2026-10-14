@@ -8,9 +8,6 @@ import { LIMIT_USD, limitRaw, stockLimitsRaw, type StockLimits } from "@/lib/age
  * `keepMix`) and the never-sell list (stocks left out of the sell grant). Pure, so the steps a save takes are tested.
  */
 
-/** Protect's daily limit chips; it starts on the boards' "$300 a day". Both wait on calibration (plan item 6 step 9). */
-export const PROTECT_LIMIT_USD = { options: [100, 300, 500], start: LIMIT_USD.protect.start } as const;
-
 /** What the chain says Protect runs with now. */
 export type ProtectSaved = {
   /** Repay from cash: its grant's daily limit while on (or starting), null while off. */
@@ -36,11 +33,11 @@ export function neverSellOf(limitsRaw: StockLimits | null | undefined): number[]
   return limitsRaw ? EQUITIES.filter((e) => limitsRaw[e.reserveId] === 0n).map((e) => e.reserveId) : [];
 }
 
-/** The screen's starting point: Protect's limit is the repay grant's, else the sell grant's, else $300. */
+/** The screen's starting point: Protect's limit is the repay grant's, else the sell grant's, else $100 (LIMIT_USD). */
 export function savedChoice(saved: ProtectSaved): ProtectChoice {
   const capRaw = saved.repayCapRaw ?? saved.sell?.capRaw ?? null;
   return {
-    limitUsd: capRaw === null ? PROTECT_LIMIT_USD.start : toUsd(capRaw),
+    limitUsd: capRaw === null ? LIMIT_USD.protect.start : toUsd(capRaw),
     sellOn: saved.sell !== null,
     keepMix: saved.keepMix ?? false,
     never: neverSellOf(saved.sell?.limitsRaw),
