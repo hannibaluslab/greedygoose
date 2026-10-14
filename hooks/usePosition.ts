@@ -57,6 +57,8 @@ export type Holding = {
   name: string;
   reserveId: number;
   priceUsd: number;
+  /** Aave's oracle price, 8 decimals (what the agents' rules take). */
+  priceRaw: bigint;
   /** Shares shown to the user (raw × uiMultiplier). */
   freeShares: number;
   lockedShares: number;
@@ -124,6 +126,7 @@ export function usePosition(user: `0x${string}` | undefined) {
         name: e.name,
         reserveId: e.reserveId,
         priceUsd,
+        priceRaw: price,
         freeShares: toShares(bal),
         lockedShares: toShares(supplied),
         // Oracle price already reflects the multiplier, so value raw units × price.

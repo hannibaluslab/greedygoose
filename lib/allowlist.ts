@@ -1,6 +1,9 @@
 import { decodeFunctionData, erc20Abi, isAddressEqual, type Abi, type Hex } from "viem";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
+import { GOOSE_EXECUTOR } from "@/lib/agents/config";
+import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
+import { isMix } from "@/lib/agents/mix";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { aaveV3PoolAbi } from "@/lib/guardian/abis";
 import { aeroRouterAbi, swapRouter02Abi } from "@/lib/swap/abis";
@@ -46,7 +49,8 @@ const swapWithDeadline: ArgsCheck = (args, user) => {
  * functions it may be called with, and what their arguments must say. Money only moves between the
  * user's own pockets: an approve names only the spoke or a router, every position, withdrawal and
  * swap pays the user, and savings come out only as USDC. Buys, repays and savings-first batches mix
- * targets, so each target is held to its own functions.
+ * targets, so each target is held to its own functions. GooseExecutor's settings move no money and apply to the
+ * signer alone (`msg.sender`): a mix must add up to 100% (or clear it).
  */
 const RULES: readonly Rule[] = [
   { targets: TOKENS, abi: erc20Abi, functions: { approve: (args) => oneOf(args[0], SPENDERS) } },
@@ -62,6 +66,15 @@ const RULES: readonly Rule[] = [
   },
   { targets: [AERODROME.ROUTER], abi: aeroRouterAbi, functions: { exactInputSingle: swapToUser } },
   { targets: [UNISWAP.SWAP_ROUTER_02], abi: swapRouter02Abi, functions: { multicall: swapWithDeadline } },
+  ...(GOOSE_EXECUTOR
+    ? [
+        {
+          targets: [GOOSE_EXECUTOR],
+          abi: gooseExecutorAbi,
+          functions: { setMix: (args: readonly unknown[]) => isMix(args[0] as readonly number[]), setKeepMix: () => true },
+        },
+      ]
+    : []),
 ];
 
 export function assertAllowed<C extends { to: Address; data: Hex; value: bigint }>(user: Address, calls: C[]): C[] {

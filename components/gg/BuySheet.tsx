@@ -21,7 +21,7 @@ import { CASH } from "@/config/risk";
 import { monthlyCost } from "@/lib/aave/math";
 import { maxSpendRaw, savingsWithdrawal, toUsd } from "@/lib/cash";
 import { CREDIT_BLOCKED, backingOptions, planCredit, splitCash, type CreditPlan } from "@/lib/creditBuy";
-import { formatShares, formatUsd } from "@/lib/formatting";
+import { formatShares, formatUsd, inWords } from "@/lib/formatting";
 import { marketState } from "@/lib/market-hours";
 import { STATUS_LABEL } from "@/lib/risk/status";
 import { BUY_LIMITS, minOut, quoteEconomics } from "@/lib/swap/buy";
@@ -33,8 +33,6 @@ type Step = "market" | "amount" | "review";
 const ORDER: Step[] = ["market", "amount", "review"];
 
 const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
-/** "a", "a and b", "a, b and c". */
-const inWords = (parts: string[]) => (parts.length < 2 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`);
 
 /**
  * Flow 1: Market (F1-3) → the stock's sheet → Buy (F1-4) → Confirm (F2-6's layout; there is no
