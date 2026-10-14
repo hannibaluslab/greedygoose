@@ -102,7 +102,8 @@ export function AmountBadge({ kind }: { kind: "cash" | "credit" }) {
 export function AmountArrow() {
   return (
     <span aria-hidden className="relative z-[1] -my-2.5 flex justify-center">
-      <span className="flex size-[34px] items-center justify-center rounded-[17px] border border-line-field bg-ground text-ink">
+      {/* The boards' 34px circle sits inside its 1px border (content-box): 36px across. */}
+      <span className="flex size-9 items-center justify-center rounded-[18px] border border-line-field bg-ground text-ink">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M6 13l6 6 6-6" /></svg>
       </span>
     </span>
