@@ -1,6 +1,6 @@
 import { toUsd } from "@/lib/cash";
 import { EQUITIES } from "@/lib/tokens/registry";
-import { DAILY_LIMIT_USD, limitRaw, stockLimitsRaw, type StockLimits } from "@/lib/agents/permissions";
+import { LIMIT_USD, limitRaw, stockLimitsRaw, type StockLimits } from "@/lib/agents/permissions";
 
 /*
  * Protect's settings (the agent sheet, docs/agents-redesign): one daily limit, repay from cash (Job.Protect, always
@@ -9,7 +9,7 @@ import { DAILY_LIMIT_USD, limitRaw, stockLimitsRaw, type StockLimits } from "@/l
  */
 
 /** Protect's daily limit chips; it starts on the boards' "$300 a day". Both wait on calibration (plan item 6 step 9). */
-export const PROTECT_LIMIT_USD = { options: [100, 300, 500], start: DAILY_LIMIT_USD.protect } as const;
+export const PROTECT_LIMIT_USD = { options: [100, 300, 500], start: LIMIT_USD.protect.start } as const;
 
 /** What the chain says Protect runs with now. */
 export type ProtectSaved = {

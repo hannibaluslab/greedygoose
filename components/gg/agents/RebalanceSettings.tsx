@@ -3,7 +3,8 @@
 import { useCallback, useState } from "react";
 import { useAccount } from "wagmi";
 import { toast } from "sonner";
-import { CardTitle, LimitChips, ManageCard, MixSlider } from "@/components/gg/Manage";
+import { CardTitle, ManageCard, MixSlider } from "@/components/gg/Manage";
+import { LimitChips } from "@/components/gg/LimitChips";
 import { StockAvatar, tickerOf } from "@/components/gg/StockAvatar";
 import { NETWORK_FEE_ROW } from "@/components/gg/Summary";
 import { FaceIdButton, TxError } from "@/components/gg/TxUi";
@@ -16,7 +17,7 @@ import { usePosition } from "@/hooks/usePosition";
 import type { TxPhase } from "@/hooks/useTx";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { MIX_WHOLE, mixWeights, nowPercents, previewTrades, rebalanceOptions, startingMix, type MixHolding, type MixRow } from "@/lib/agents/mix";
-import { limitRaw, STOCK_LIMIT_USD, stockLimitsRaw } from "@/lib/agents/permissions";
+import { limitRaw, LIMIT_USD, stockLimitsRaw } from "@/lib/agents/permissions";
 import { rebalanceSave, tradeLines, type RebalanceTerms, type SavePlan } from "@/lib/agents/rebalanceSettings";
 import { buildSetMixCalls } from "@/lib/agents/settings";
 import { toUsd } from "@/lib/cash";
@@ -126,7 +127,7 @@ export function RebalanceSettingsView({
   const whole = rows.length > 0 && sum === MIX_WHOLE;
 
   // The limit: the grant's while it has one, $500 a week before.
-  const limitUsd = chosenUsd ?? (terms ? toUsd(terms.capRaw) : STOCK_LIMIT_USD.rebalance.start);
+  const limitUsd = chosenUsd ?? (terms ? toUsd(terms.capRaw) : LIMIT_USD.rebalance.start);
   const capRaw = limitRaw(limitUsd, capMaxRaw ?? BigInt(limitUsd) * 10n ** 6n);
   const trades = whole ? previewTrades({ holdings, rows, capRaw, capMaxRaw, options }) : [];
   const lines = tradeLines(trades, holdings);
@@ -227,7 +228,7 @@ export function RebalanceSettingsView({
         <CardTitle title="Its limit" sub="Can sell up to" />
         <LimitChips
           label="The Rebalancer can sell up to, a week"
-          options={STOCK_LIMIT_USD.rebalance.options}
+          options={LIMIT_USD.rebalance.options}
           value={limitUsd}
           onChange={setChosenUsd}
           per="a week"
