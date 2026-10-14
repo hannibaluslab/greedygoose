@@ -193,8 +193,9 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     /// Most gas one account's Cash run may use, all included: an account starts only with this much left.
     uint256 internal constant RUN_GAS = ACCOUNT_GAS + RESERVE_GAS;
     /// Most gas one account's run may use with a sale: planning it, SellJob's batch, its post-checks. A sale that
-    /// doesn't find enough left is deferred to the next run.
-    uint256 internal constant MAX_RUN_GAS = 4_200_000;
+    /// doesn't find enough left is deferred to the next run. The costliest, seven stocks behind the credit and six
+    /// slices, plans in about 1.4M and runs in about 4.0M, so in a 5M perform it must get nearly all the gas.
+    uint256 internal constant MAX_RUN_GAS = 4_600_000;
     /// The jobs, in the order a run tries them: Protect from savings, then by selling, the Rebalancer, Entry, Save.
     uint8 internal constant JOBS = 5;
     /// `checkUpkeep` stops scanning below this.
@@ -549,11 +550,9 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
             try this.runAccount{gas: gas < MAX_RUN_GAS ? gas : MAX_RUN_GAS}(account, frozen_, preFreeze) returns (
                 bool deferred
             ) {
-                if (deferred) {
-                    emit RunDeferred(account);
-                    return;
-                }
-                if (a.fails != 0) accounts[account].fails = 0;
+                // A deferred sale doesn't hold up the accounts after it: the next check lists it again.
+                if (deferred) emit RunDeferred(account);
+                else if (a.fails != 0) accounts[account].fails = 0;
             } catch (bytes memory reason) {
                 _fail(account, reason);
             }

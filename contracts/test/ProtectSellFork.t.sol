@@ -592,3 +592,79 @@ contract ProtectSellGasForkTest is SellForkBase {
         assertGt(SPOKE.getUserAccountData(a).healthFactor, 1.05e18);
     }
 }
+
+/// The costliest account to plan a sale for, measured cold: backed by all seven stocks, with Protect from savings (a
+/// cent of savings, so it reads everything and finds no repay), Protect · sell on every stock and Save on. Planning
+/// its sale costs about 1.4M, so its sale must still find SellJob's 3M after planning inside the run upkeep's 5M (with
+/// MAX_RUN_GAS at 4.2M it was deferred on every run, and the run stopped there, so no account after it ever ran), and
+/// its check must stay under CHECK_RESERVE, so the scan's gas stop keeps a check of any page under Base's 10M.
+contract ProtectSellSevenStockGasForkTest is SellForkBase {
+    address act; // 1.01: a sale at once
+    address watch; // 1.20: a heads-up, which plans the whole sale
+    address cash; // in Watch with savings: a Protect repay
+
+    function setUp() public {
+        _setUpSell();
+        act = _sevenStocks("act", 1.01e18);
+        watch = _sevenStocks("watch", 1.2e18);
+        cash = _inWatch("cash");
+    }
+
+    function _sevenStocks(string memory name, uint256 hf) internal returns (address a) {
+        a = _newJawAccount(name);
+        _withSavings(a, 0.01e6);
+        _backWithAllStocks(a, 1e8);
+        _drawTo(a, hf);
+        _turnOn(a, GooseExecutor.Job.Protect, 1_000e6);
+        _turnOn(a, GooseExecutor.Job.Save, 5e6);
+        uint256 t;
+        for (uint256 r; r < 7; ++r) {
+            t |= _limits(r, 1e8);
+        }
+        _sellOn(a, t);
+    }
+
+    function test_a_cold_seven_stock_sale_fits_a_5M_perform() public {
+        address[] memory one = new address[](1);
+        one[0] = act;
+        bytes memory performData = abi.encode(GooseExecutor.Mode.Run, abi.encode(one));
+        vm.recordLogs();
+        vm.prank(forwarder);
+        uint256 before = gasleft();
+        x.performUpkeep{gas: 5_000_000}(performData);
+        uint256 gas = before - gasleft();
+        uint256 slices = _withdrawals(vm.getRecordedLogs());
+        console.log("seven stocks from 1.01, cold, in a 5M perform: slices, gas", slices, gas);
+        assertGt(slices, 0, "sold, not deferred");
+        (,, uint8 fails,,,,,,) = x.accounts(act);
+        assertEq(fails, 0);
+        assertGt(SPOKE.getUserAccountData(act).healthFactor, 1.05e18);
+    }
+
+    /// A sale that can't fit (here a perform given only 4M) is deferred, and the accounts after it still run.
+    function test_a_deferred_sale_does_not_hold_up_the_accounts_after_it() public {
+        address[] memory two = new address[](2);
+        (two[0], two[1]) = (act, cash);
+        bytes memory performData = abi.encode(GooseExecutor.Mode.Run, abi.encode(two));
+        uint256 backing = SPOKE.getUserAccountData(act).totalCollateralValue;
+        vm.expectEmit(true, false, false, false, address(x));
+        emit GooseExecutor.RunDeferred(act);
+        vm.prank(forwarder);
+        x.performUpkeep{gas: 4_000_000}(performData);
+        assertEq(SPOKE.getUserAccountData(act).totalCollateralValue, backing, "the sale waits for the next run");
+        (,, uint8 fails,,,,,,) = x.accounts(act);
+        assertEq(fails, 0, "a deferral isn't a failure");
+        assertGt(SPOKE.getUserAccountData(cash).healthFactor, 1.6e18, "the next account was repaid in the same run");
+    }
+
+    /// Under CHECK_RESERVE less what the scan's try keeps back (1/64), so the scan can always afford the costliest
+    /// account it starts.
+    function test_a_cold_seven_stock_heads_up_plan_stays_under_the_check_reserve() public view {
+        uint256 before = gasleft();
+        GooseExecutor.Plan memory p = x.planOf(watch);
+        uint256 gas = before - gasleft();
+        console.log("seven stocks at 1.20, cold planOf gas", gas);
+        assertEq(uint8(p.action), uint8(GooseExecutor.Action.HeadsUp));
+        assertLt(gas, 1_450_000, "under CHECK_RESERVE (1.5M) less 1/64");
+    }
+}
