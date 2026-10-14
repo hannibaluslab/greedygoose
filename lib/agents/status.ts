@@ -1,14 +1,16 @@
-import { JOBS, type AgentGrant, type AgentJob } from "@/lib/agents/permissions";
+import { EXECUTOR_JOBS, type AgentGrant, type ExecutorJob } from "@/lib/agents/permissions";
 
 /**
+ * - "unconfigured": no executor is set (NEXT_PUBLIC_GOOSE_EXECUTOR), so no agent can be switched on yet.
  * - "starting": JAW granted it and the executor hasn't registered it yet (its log-trigger upkeep does that).
  * - "on": the executor runs it with a grant JAW still lists.
  */
 export type AgentStatus = "unconfigured" | "loading" | "off" | "starting" | "on";
 
 type Stored = { start: number; end: number; cap: bigint };
-/** GooseExecutor.jobsOf: the job bits and each job's stored grant. */
-export type Registry = readonly [jobs: number, save: Stored, protect: Stored, ...rest: unknown[]];
+
+/** What GooseExecutor's registry holds for one account: the job bits, and each job's stored grant (`permissionOf`). */
+export type Registry = { jobs: number; grants: Readonly<Record<ExecutorJob, Stored>> };
 
 /**
  * Whether the executor runs `job`: registered, not past its end, and with that same grant still in JAW's list,
@@ -16,16 +18,15 @@ export type Registry = readonly [jobs: number, save: Stored, protect: Stored, ..
  * registry alone decides.
  */
 export function jobStatus(
-  job: AgentJob,
+  job: ExecutorJob,
   registry: Registry,
   granted: readonly AgentGrant[],
   nowSec: number,
   listUnreadable: boolean,
 ): Exclude<AgentStatus, "unconfigured" | "loading"> {
-  const [jobs, save, protect] = registry;
-  const stored = job === "save" ? save : protect;
+  const stored = registry.grants[job];
   const live = granted.filter((g) => g.job === job && g.end >= nowSec);
-  const registered = (jobs & (1 << JOBS.indexOf(job))) !== 0 && stored.end >= nowSec;
+  const registered = (registry.jobs & (1 << EXECUTOR_JOBS.indexOf(job))) !== 0 && stored.end >= nowSec;
   const stillGranted =
     listUnreadable || live.some((g) => g.start === stored.start && g.end === stored.end && g.capRaw === stored.cap);
   if (registered && stillGranted) return "on";

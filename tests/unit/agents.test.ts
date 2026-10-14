@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { toFunctionSelector, toHex, zeroAddress } from "viem";
+import type { PermissionsDetail } from "@jaw.id/wagmi";
 import {
   agentGrant,
   agentPermission,
@@ -15,7 +16,7 @@ import {
   stockTerms,
   type ListedPermission,
 } from "@/lib/agents/permissions";
-import { jobStatus } from "@/lib/agents/status";
+import { jobStatus, type Registry } from "@/lib/agents/status";
 import { PERIOD } from "@/lib/guardian/permission";
 import { GUARDIAN, SEL } from "@/lib/guardian/config";
 import { AAVE } from "@/lib/aave/addresses";
@@ -177,19 +178,20 @@ describe("entryGrant (the Entry agent on Base, its own JAW grant)", () => {
 
 describe("readAgentGrant (JAW's usePermissions listing)", () => {
   /** A listing as JAW's relay stores a grant: lowercase-insensitive addresses, hex allowance and salt. */
-  const listed = (job: "save" | "protect", over: Partial<ListedPermission> = {}): ListedPermission => {
-    const grant = agentGrant(job, 5_000_000n);
-    return {
-      permissionId: "0x" + "ab".repeat(32),
-      spender: executor.toLowerCase(),
-      start: 100,
-      end: 200,
-      salt: toHex(12345n),
-      calls: grant.calls!.map((c) => ({ target: c.target.toLowerCase(), selector: c.selector!, checker: zeroAddress })),
-      spends: grant.spends!.map((s) => ({ token: s.token.toLowerCase(), allowance: toHex(BigInt(s.allowance)), unit: "day", multiplier: 1 })),
-      ...over,
-    };
-  };
+  const listing = (grant: PermissionsDetail, over: Partial<ListedPermission> = {}): ListedPermission => ({
+    permissionId: "0x" + "ab".repeat(32),
+    spender: executor.toLowerCase(),
+    start: 100,
+    end: 200,
+    salt: toHex(12345n),
+    calls: grant.calls!.map((c) => ({ target: c.target.toLowerCase(), selector: c.selector!, checker: zeroAddress })),
+    spends: grant.spends!.map((s) => ({ token: s.token.toLowerCase(), allowance: toHex(BigInt(s.allowance)), unit: s.unit, multiplier: 1 })),
+    ...over,
+  });
+  const listed = (job: "save" | "protect", over: Partial<ListedPermission> = {}) => listing(agentGrant(job, 5_000_000n), over);
+  // Protect may sell NVIDIA and Tesla; the Rebalancer may sell Apple.
+  const sellLimits = EQUITIES.map((e) => (e.symbol === "NVDAc" ? 250_000_000n : e.symbol === "TSLAc" ? 100_000_000n : 0n));
+  const rebalanceLimits = EQUITIES.map((e) => (e.symbol === "AAPLc" ? 50_000_000n : 0n));
 
   it("reads our grants: job, limit, window and salt", () => {
     expect(readAgentGrant(listed("save"), executor)).toEqual({
@@ -203,6 +205,15 @@ describe("readAgentGrant (JAW's usePermissions listing)", () => {
     expect(readAgentGrant(listed("protect"), executor)?.job).toBe("protect");
   });
 
+  it("reads Protect · sell, the Rebalancer and Entry, whatever stocks a grant may sell", () => {
+    expect(readAgentGrant(listing(sellGrant(300_000_000n, sellLimits)), executor)).toMatchObject({ job: "sell", capRaw: 300_000_000n });
+    expect(readAgentGrant(listing(rebalanceGrant(500_000_000n, rebalanceLimits)), executor)).toMatchObject({
+      job: "rebalance",
+      capRaw: 500_000_000n,
+    });
+    expect(readAgentGrant(listing(entryGrant(1_000_000_000n)), executor)).toMatchObject({ job: "entry", capRaw: 1_000_000_000n });
+  });
+
   it("ignores anyone else's spender and anything that isn't exactly a job's template", () => {
     expect(readAgentGrant(listed("save", { spender: account }), executor)).toBeNull();
     const p = listed("protect");
@@ -211,6 +222,13 @@ describe("readAgentGrant (JAW's usePermissions listing)", () => {
     expect(readAgentGrant({ ...p, spends: [p.spends[0], { ...p.spends[1], allowance: toHex(4_000_000n) }] }, executor)).toBeNull();
     expect(readAgentGrant({ ...p, spends: p.spends.map((s) => ({ ...s, unit: "week" })) }, executor)).toBeNull();
     expect(readAgentGrant({ ...p, spends: [p.spends[0]] }, executor)).toBeNull();
+    // A sale whose stock limit has no approve, or a stock approved twice.
+    const sale = listing(sellGrant(300_000_000n, sellLimits));
+    expect(readAgentGrant({ ...sale, calls: sale.calls.filter((_, i) => i !== 1) }, executor)).toBeNull();
+    expect(readAgentGrant({ ...sale, spends: [...sale.spends.slice(0, 3), sale.spends[2]] }, executor)).toBeNull();
+    // The Rebalancer's limits are a week's: a day's is no template.
+    const mix = listing(rebalanceGrant(500_000_000n, rebalanceLimits));
+    expect(readAgentGrant({ ...mix, spends: mix.spends.map((s) => ({ ...s, unit: "day" })) }, executor)).toBeNull();
   });
 });
 
@@ -226,24 +244,33 @@ describe("contracts/test/vectors", () => {
 describe("jobStatus", () => {
   const stored = { start: 100, end: 1_000, cap: 5_000_000n };
   const empty = { start: 0, end: 0, cap: 0n };
+  const registry = (jobs: number, save = stored, rebalance = empty): Registry => ({
+    jobs,
+    grants: { save, protect: empty, sell: empty, rebalance, entry: empty },
+  });
   const grant = { job: "save" as const, permissionId: "0x01" as const, capRaw: 5_000_000n, start: 100, end: 1_000, salt: 1n };
 
   it("is on while the executor runs the grant JAW still lists", () => {
-    expect(jobStatus("save", [1, stored, empty], [grant], 500, false)).toBe("on");
+    expect(jobStatus("save", registry(1), [grant], 500, false)).toBe("on");
   });
   it("is starting between JAW's grant and the executor's registration", () => {
-    expect(jobStatus("save", [0, empty, empty], [grant], 500, false)).toBe("starting");
-    expect(jobStatus("save", [1, { ...stored, start: 50 }, empty], [grant], 500, false)).toBe("starting"); // a newer grant
+    expect(jobStatus("save", registry(0, empty), [grant], 500, false)).toBe("starting");
+    expect(jobStatus("save", registry(1, { ...stored, start: 50 }), [grant], 500, false)).toBe("starting"); // a newer grant
   });
   it("is off at once after a revoke, before the registry catches up", () => {
-    expect(jobStatus("save", [1, stored, empty], [], 500, false)).toBe("off");
+    expect(jobStatus("save", registry(1), [], 500, false)).toBe("off");
   });
   it("is off past the grant's end, and per job", () => {
-    expect(jobStatus("save", [1, stored, empty], [grant], 1_001, false)).toBe("off");
-    expect(jobStatus("protect", [1, stored, empty], [grant], 500, false)).toBe("off");
+    expect(jobStatus("save", registry(1), [grant], 1_001, false)).toBe("off");
+    expect(jobStatus("protect", registry(1), [grant], 500, false)).toBe("off");
   });
   it("trusts the registry when JAW's list can't be read", () => {
-    expect(jobStatus("save", [1, stored, empty], [], 500, true)).toBe("on");
+    expect(jobStatus("save", registry(1), [], 500, true)).toBe("on");
+  });
+  it("reads each job's bit in GooseExecutor's order: the Rebalancer is bit 3", () => {
+    const weekly = { ...grant, job: "rebalance" as const };
+    expect(jobStatus("rebalance", registry(1 << 3, empty, stored), [weekly], 500, false)).toBe("on");
+    expect(jobStatus("rebalance", registry(1 << 2, empty, stored), [weekly], 500, false)).toBe("starting");
   });
 });
 
