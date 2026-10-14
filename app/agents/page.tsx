@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { isAddressEqual } from "viem";
 import { useAccount } from "wagmi";
@@ -10,9 +10,9 @@ import { FeedCard, FeedDays } from "@/components/gg/Activity";
 import { AgentConfirm, AgentSheet, type ConfirmView } from "@/components/gg/AgentSheet";
 import { ProtectSettings } from "@/components/gg/agents/ProtectSettings";
 import { RebalanceSettings } from "@/components/gg/agents/RebalanceSettings";
-import { AgentRow, AgentsFeed, AgentsView, AttentionCard, MixBar, TurnOffAll, type FeedError } from "@/components/gg/Agents";
+import { AgentRow, AgentsFeed, AgentsView, AttentionCard, MixBar, TurnOffAll } from "@/components/gg/Agents";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
-import { useActivity } from "@/hooks/useActivity";
+import { useAccountFeed } from "@/hooks/useAccountFeed";
 import { useAgentFeed } from "@/hooks/useAgentFeed";
 import { useAgentRun, type AgentStep } from "@/hooks/useAgentRun";
 import { GRANT_SECONDS, useAgents } from "@/hooks/useAgents";
@@ -71,7 +71,7 @@ function Agents({ address }: { address: `0x${string}` }) {
   const settings = useAgentSettings(address);
   const { data: position } = usePosition(address);
   const feed = useAgentFeed(address);
-  const yours = useActivity(address);
+  const all = useAccountFeed(address, feed);
   const nowSec = useNowSec();
   const headsUp = useHeadsUp(address, feed.headsUp, settings, nowSec);
   const runner = useAgentRun(agents);
@@ -124,12 +124,6 @@ function Agents({ address }: { address: `0x${string}` }) {
     cooldownUntil: agents.cooldownUntil,
   });
 
-  // The user's own moves cover the same days as the agents' moves read so far.
-  const rows = useMemo(
-    () => [...feed.rows, ...yours.rows.filter((r) => r.time >= feed.since)].sort((a, b) => b.time - a.time),
-    [feed.rows, feed.since, yours.rows],
-  );
-  const error: FeedError = yours.isError && (feed.isError || !live) ? "all" : feed.isError ? "agents" : yours.isError ? "yours" : null;
 
   /** The limit an agent will run with: its grant's, else the one it starts on. */
   const limitUsd = (agent: Agent) => items.find((i) => i.agent === agent)!.limitUsd;
@@ -262,16 +256,8 @@ function Agents({ address }: { address: `0x${string}` }) {
         feed={
           <AgentsFeed
             empty="Nothing yet. Your buys, credit and repayments show up here, and so will what your agents do."
-            rows={rows}
             nowMs={nowSec * 1000}
-            loading={yours.isLoading || feed.isLoading}
-            error={error}
-            onRetry={() => {
-              void yours.refetch();
-              feed.refetch();
-            }}
-            more={feed.more}
-            onShowEarlier={feed.showEarlier}
+            {...all}
           />
         }
         turnOffAll={<TurnOffAll faceIds={allOffIds} live={live} disabled={agents.busy} onClick={() => (runner.reset(), setAllOff(true))} />}

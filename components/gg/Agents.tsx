@@ -157,15 +157,19 @@ export type FeedError = "all" | "agents" | "yours" | null;
 
 const NOTICE: Record<Exclude<FeedError, null>, string> = {
   all: "We couldn’t load your activity.",
-  agents: "We couldn’t load what your agents did.",
+  // The executor's rows: the agents' moves and the cash's own events (D20).
+  agents: "We couldn’t load all of your activity.",
   yours: "We couldn’t load your own moves.",
 };
 
-/** What they did, and why: the user's moves and the agents', by day, with loading, empty and error states. */
+/**
+ * What they did, and why: the user's moves and the executor's, by day, with loading, empty and error states. Activity
+ * draws it with no title of its own.
+ */
 export function AgentsFeed({
   title = "What they did, and why", empty, rows, nowMs, loading, error, onRetry, more, onShowEarlier,
 }: {
-  title?: string;
+  title?: string | null;
   empty: string;
   rows: readonly FeedRow[];
   nowMs: number;
@@ -183,7 +187,7 @@ export function AgentsFeed({
   );
   return (
     <section className="flex flex-col gap-1.5">
-      <h2 className="label m-0 px-1">{title}</h2>
+      {title && <h2 className="label m-0 px-1">{title}</h2>}
       <FeedCard>
         {loading ? (
           <div aria-busy className="flex flex-col gap-3 py-3.5">
