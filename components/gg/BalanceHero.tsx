@@ -13,6 +13,7 @@ type Column = { label: string; info?: Info; sub?: ReactNode };
 export function BalanceHero({
   label, info, value, sub, side,
 }: Column & { value: number; side: Column & { value: ReactNode; unit?: string } }) {
+  const k = fit(value);
   return (
     <div className="num grid grid-cols-[auto_1fr] items-baseline px-[16.75px] leading-[normal]">
       <div className="flex items-center gap-1.5 pb-1">
@@ -24,7 +25,7 @@ export function BalanceHero({
         {side.info && <InfoButton {...side.info} />}
       </Divided>
 
-      <Money value={value} size={46} dollarSize={22} centsSize={19} />
+      <Money value={value} size={46 * k} dollarSize={22 * k} centsSize={19 * k} />
       <Divided className="flex items-baseline justify-center gap-1 self-stretch">
         <span className="text-[30px] font-semibold leading-none tracking-[-0.03em]">{side.value}</span>
         {side.unit && <span className="text-[13px] font-medium text-subtle">{side.unit}</span>}
@@ -38,6 +39,19 @@ export function BalanceHero({
       )}
     </div>
   );
+}
+
+/**
+ * The board's "$5,000.00" fills the left column exactly (157px at 46px), and "Average yield" with its info dot
+ * fills the right one. Each extra digit adds 27px and each extra comma 8px, so a longer total shrinks by that much
+ * and the right column keeps its room.
+ */
+function fit(value: number) {
+  // Rounded to the cent first, as Money draws it.
+  const int = Number(Math.abs(value).toFixed(2).split(".")[0]).toLocaleString("en-US");
+  const digits = int.replace(/,/g, "").length;
+  const width = 157 + 27 * (digits - 4) + 8 * (int.length - digits - 1);
+  return Math.min(1, 157 / width);
 }
 
 /** "+$38.20 · +0.76% today", green up and red down. */

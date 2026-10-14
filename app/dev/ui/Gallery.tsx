@@ -16,7 +16,7 @@ import { NETWORK_FEE_ROW, Summary } from "@/components/gg/Summary";
 import { FaceIdButton } from "@/components/gg/TxUi";
 import { CreditIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/icons";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
-import type { Status } from "@/lib/risk/status";
+import { homeStatus, type Status } from "@/lib/risk/status";
 import { formatUsd, formatUsdTrim } from "@/lib/formatting";
 
 // Sample figures for the gallery only, the boards' own (HomeUpliftRail, PortfolioPage, F1-4, F2-6).
@@ -104,7 +104,14 @@ export function Gallery() {
       <Section title="Cash and Credit cards" kit="cards">
         <div className="grid grid-cols-2 gap-2.5">
           <CashCard cashUsd={CASH} apy={CASH_APY} note="2 in Quarantine" onClick={noop} />
-          <CreditCard debtUsd={600} status="safe" monthlyCostUsd={3} onClick={noop} />
+          <CreditCard debtUsd={600} status="safe" monthlyCostUsd={3} availableUsd={1100} onClick={noop} />
+        </div>
+      </Section>
+
+      <Section title="Credit card · nothing owed (F2-1)" kit="credit-card-none">
+        <div className="grid grid-cols-2 gap-2.5">
+          <CashCard cashUsd={40} apy={CASH_APY} onClick={noop} />
+          <CreditCard debtUsd={0} status={homeStatus("none")} monthlyCostUsd={0} availableUsd={1700} onClick={noop} />
         </div>
       </Section>
 
