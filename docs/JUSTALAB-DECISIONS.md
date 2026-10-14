@@ -172,3 +172,11 @@ JAW's own sheet shows the Review and asks for Face ID, so the app shows no confi
 - **Earning is asked when money comes in, not at sign-up.** At $0 there's nothing to earn on and nothing to pay JAW's fee with. Sign-up goes straight Home (`/setup` is gone and redirects there). Home's card shows once the account has $1 or more of cash and no Save grant: "Your $100 arrived · Start earning 4.6% on it." with one "Start earning" (board 2g). This replaces "The welcome's one Continue still sends a new account to `/setup`" above.
 - **The empty portfolio fills Home down to the tab bar:** the board's dashed "add a stock" card, grown, with the seven stocks and one Buy stocks button.
 - **Home's round mark is the GreedyGoose logo,** not the name's initial.
+
+## Credit Buy opens on what you can use (Adrian, 2026-10-15)
+
+"Credit buy should open the slider, tell him how much he can borrow and show under the market so he can select which one he wants to buy with a credit."
+
+- **Home's Credit Buy opens the Credit Buy sheet,** the same one as Invest's (`StockSheets`). The Credit sheet still opens from Home's Credit card.
+- **F2-3 starts with one number, "You can use up to $X",** then "Your holdings" and "Other stocks". A Credit Buy is backed by one free holding plus what already backs credit (F2-4), so $X is the largest of F2-4's per-stock figures, not their sum (`creditAvailable`, on `planCredit`'s MAX: net of what's owed, within what Aave can lend).
+- **$0 says why in one line** (no stock yet, nothing that can back credit, all in use, new credit paused, nothing to lend), and a stock tapped there opens its Buy step with cash; its Back returns to F2-3. Under the $1 minimum buy counts as $0. Opened from a stock's sheet, Credit Buy still starts at F2-4.

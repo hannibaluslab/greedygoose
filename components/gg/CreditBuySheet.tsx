@@ -18,7 +18,7 @@ import { useCreditBuy } from "@/hooks/useCreditBuy";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { useCollateralFactors, type Holding, type PositionData } from "@/hooks/usePosition";
 import { monthlyCost } from "@/lib/aave/math";
-import { CREDIT_BLOCKED, backers, backingOptions, planCredit, shortNames, type BackingOption } from "@/lib/creditBuy";
+import { CREDIT_BLOCKED, NO_CREDIT, backers, backingOptions, creditAvailable, planCredit, shortNames, type BackingOption } from "@/lib/creditBuy";
 import { formatShares, formatUsd, formatUsdTrim, inWords } from "@/lib/formatting";
 import { STATUS_LABEL, type Status } from "@/lib/risk/status";
 import { BUY_LIMITS, quoteEconomics } from "@/lib/swap/buy";
@@ -38,15 +38,17 @@ const MIN_BACKING_USD = 1;
 const wholeUsd = (n: number) => formatUsdTrim(Math.max(0, Math.floor(n)));
 
 /**
- * Design boards "F2 · 3–5" (F2-3-Pick-stock … F2-5-Amount): Credit Buy in one drawer. Pick a stock (your holdings
- * first), pick the holding that backs it, choose how much credit, then Credit Buy opens JAW's own sheet: put the
- * backing in use, take the credit and buy, in one batch (useCreditBuy). F2-6's confirm is folded into the amount step
+ * Design boards "F2 · 3–5" (F2-3-Pick-stock … F2-5-Amount): Credit Buy in one drawer. F2-3 opens on how much credit
+ * one buy can use right now (Adrian, 2026-10-15: creditAvailable), then the stocks to pick from (your holdings first),
+ * then pick the holding that backs it, choose how much credit, then Credit Buy opens JAW's own sheet: put the
+ * backing in use, take the credit and buy, in one batch (useCreditBuy). With $0 to use, F2-3 says why, and a stock
+ * tapped there opens its Buy step with cash (`onBuyWithCash`). F2-6's confirm is folded into the amount step
  * (Adrian, 2026-10-15): what goes in use and the risk in small print, the risk tick when it ends in Watch or Act.
  * Once it lands it goes Home with the "Bought" toast (F2-7).
  * Opened from a stock's sheet, the stock is already picked: it starts at F2-4, and Back returns to that sheet.
  */
 export function CreditBuySheet({
-  open, user, data, symbol, onClose, onBack,
+  open, user, data, symbol, onClose, onBack, onBuyWithCash,
 }: {
   open: boolean;
   user: `0x${string}`;
@@ -56,6 +58,8 @@ export function CreditBuySheet({
   onClose: () => void;
   /** Where Back goes from the first step when the stock was picked already (the stock's sheet). */
   onBack?: () => void;
+  /** F2-3 with no credit to use: a stock tapped opens its Buy step with cash. */
+  onBuyWithCash: (symbol: string) => void;
 }) {
   const preset = EQUITIES.find((e) => e.symbol === symbol) ?? null;
   const { isConnected } = useAccount();
@@ -95,6 +99,16 @@ export function CreditBuySheet({
   );
   // The holding with the most free stock is picked until Sam picks another (F2-4).
   const chosen = options.find((o) => o.stock.symbol === picked) ?? options[0] ?? null;
+  // F2-3's number: the largest of F2-4's figures. Owning no stock needs no collateral factors to say $0.
+  const available = cfs || held.length === 0 ? creditAvailable({ position: data, options, cash: data.cash, holdsStock: held.length > 0 }) : null;
+  const pickStock = (s: ReserveAsset) => {
+    if (available?.why) {
+      onBuyWithCash(s.symbol);
+      return;
+    }
+    setStock(s);
+    go("back");
+  };
 
   const amount = Math.max(0, Number(raw) || 0);
   const creditRaw = parseUnits(amount.toFixed(USDC.decimals), USDC.decimals);
@@ -139,13 +153,9 @@ export function CreditBuySheet({
     >
       <SheetSteps stepKey={step} direction={direction} className="flex flex-col gap-3">
         {step === "pick" ? (
-          held.length === 0 ? (
-            <>
-              <p className="m-0 text-[15px] leading-snug">Credit Buy needs a stock to back it. Buy one with your cash first.</p>
-              <Button variant="dark" href="/buy">Buy stocks</Button>
-            </>
-          ) : (
-            <div className="flex flex-col gap-4 pt-1">
+          <div className="flex flex-col gap-4 pt-1">
+            <CreditHero usd={available ? available.usd : null} line={available?.why ? NO_CREDIT[available.why] : "In credit, backed by the stocks you own."} />
+            {held.length > 0 && (
               <PickList title="Your holdings">
                 {held.map((h) => (
                   <PickRow
@@ -154,31 +164,19 @@ export function CreditBuySheet({
                     name={h.name}
                     owned={valueOf(h)}
                     priceUsd={h.priceUsd}
-                    onClick={() => {
-                      setStock(EQUITIES.find((e) => e.symbol === h.symbol)!);
-                      go("back");
-                    }}
+                    onClick={() => pickStock(EQUITIES.find((e) => e.symbol === h.symbol)!)}
                   />
                 ))}
               </PickList>
-              {others.length > 0 && (
-                <PickList title="Other stocks">
-                  {others.map((e) => (
-                    <PickRow
-                      key={e.symbol}
-                      symbol={e.symbol}
-                      name={e.name}
-                      priceUsd={priceOf(e.symbol)}
-                      onClick={() => {
-                        setStock(e);
-                        go("back");
-                      }}
-                    />
-                  ))}
-                </PickList>
-              )}
-            </div>
-          )
+            )}
+            {others.length > 0 && (
+              <PickList title={held.length > 0 ? "Other stocks" : "Stocks"}>
+                {others.map((e) => (
+                  <PickRow key={e.symbol} symbol={e.symbol} name={e.name} priceUsd={priceOf(e.symbol)} onClick={() => pickStock(e)} />
+                ))}
+              </PickList>
+            )}
+          </div>
         ) : step === "back" && stock ? (
           !cfs ? (
             <div aria-busy className="h-[180px] animate-pulse rounded-[16px] bg-chip" />
@@ -334,6 +332,27 @@ function riskNote(backers: string[], protectOn: boolean): string {
   return one
     ? `If ${one} falls, you can repay. If it falls too far, Aave can sell part of it to repay what you owe.`
     : "If your stocks fall, you can repay. If they fall too far, Aave can sell part of them to repay what you owe.";
+}
+
+/**
+ * F2-3's head (Adrian, 2026-10-15): the most one Credit Buy can use, in whole dollars as the sheet's credit figures,
+ * drawn like the balance hero's figure; a pulse while the collateral factors load. One plain line under it.
+ */
+function CreditHero({ usd, line }: { usd: number | null; line: string }) {
+  return (
+    <div className="flex flex-col gap-1.5 px-1 leading-[normal]">
+      <span className="label">You can use up to</span>
+      {usd === null ? (
+        <span aria-busy aria-label="Loading" className="h-[42px] w-[150px] animate-pulse rounded-xl bg-chip" />
+      ) : (
+        <span className="num inline-flex items-baseline">
+          <span className="text-[22px] font-medium text-ink-mid">$</span>
+          <span className="text-[44px] font-semibold leading-none tracking-[-0.04em]">{Math.floor(usd).toLocaleString("en-US")}</span>
+        </span>
+      )}
+      <p className="m-0 text-pretty text-[13px] leading-[1.4] text-ink-mid">{line}</p>
+    </div>
+  );
 }
 
 /** F2-3's titled white list. */

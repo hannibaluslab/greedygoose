@@ -10,7 +10,7 @@ import { formatUsd } from "@/lib/formatting";
 import { marketState } from "@/lib/market-hours";
 import type { ActivityItem } from "@/lib/activity/decode";
 import { STATUS_LABEL, needsExtraConfirm, statusFor, type Status } from "@/lib/risk/status";
-import { buildBuyCalls, type BuyQuote } from "@/lib/swap/buy";
+import { BUY_LIMITS, buildBuyCalls, type BuyQuote } from "@/lib/swap/buy";
 import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
 
 type Address = `0x${string}`;
@@ -124,6 +124,38 @@ export function planCredit(p: { position: CreditPosition; options: BackingOption
     priceMayMove: !marketState(p.now).open,
     block,
   };
+}
+
+/** Why a Credit Buy can use nothing right now (F2-3's zero state). */
+export type NoCredit = "no-stocks" | "cant-back" | "all-in-use" | "paused" | "no-liquidity";
+
+/** F2-3's line under "$0": why, and that cash still buys (a stock tapped there opens its Buy step). */
+export const NO_CREDIT: Record<NoCredit, string> = {
+  "no-stocks": "Credit comes from the stocks you own. Buy one with cash first.",
+  "cant-back": "Your stocks can’t back credit right now. You can still buy with cash.",
+  "all-in-use": "Your stocks already back what you owe. Repay some to use more, or buy with cash.",
+  paused: "New credit is paused right now. You can still buy with cash.",
+  "no-liquidity": "There’s no credit to give out right now. You can still buy with cash.",
+};
+
+/**
+ * F2-3's big number: the most one Credit Buy can use right now. A Credit Buy is backed by one free holding plus what
+ * already backs credit (F2-4), so this is the largest of F2-4's per-stock figures (planCredit's MAX with that one
+ * option), or the room on what already backs credit when nothing free can back it. Net of what's owed and capped by
+ * what Aave can lend (combinedLoan). Under the minimum buy, or while new credit is paused, it is $0 with the reason.
+ * `options` are the ones F2-4 lists; `holdsStock` is whether the account owns any stock, free or in use.
+ */
+export function creditAvailable(p: { position: CreditPosition; options: BackingOption[]; cash: Cash; holdsStock: boolean }): { usd: number; why?: NoCredit } {
+  const maxWith = (options: BackingOption[]) => planCredit({ position: p.position, options, creditRaw: 0n, cash: p.cash }).maxUsd;
+  const usd = Math.max(maxWith([]), ...p.options.map((o) => maxWith([o])));
+  const why = ((): NoCredit | undefined => {
+    if (!p.holdsStock) return "no-stocks";
+    if (p.position.borrowPaused) return "paused";
+    if (usd >= BUY_LIMITS.minUsd) return undefined;
+    if (p.position.usdcLiquidity < BUY_LIMITS.minUsd) return "no-liquidity";
+    return p.options.length === 0 && p.position.collateralUsd <= 0 ? "cant-back" : "all-in-use";
+  })();
+  return why ? { usd: 0, why } : { usd };
 }
 
 /** Why a Credit Buy on screen can't be signed: a block, or a Watch/Act ending without the extra confirmation (D2). */

@@ -8,7 +8,8 @@ import { FILL_MARGIN, fillRaw } from "@/lib/aave/loan";
 import { buildBorrowCalls } from "@/lib/aave/tx";
 import { payFromCash } from "@/lib/cash";
 import {
-  CREDIT_BLOCKED, assertCreditBuy, backers, backingOptions, buildCreditBuyCalls, creditBuyActivity, creditBuyStop, planCredit, shortNames, splitCash,
+  CREDIT_BLOCKED, NO_CREDIT, assertCreditBuy, backers, backingOptions, buildCreditBuyCalls, creditAvailable, creditBuyActivity, creditBuyStop, planCredit,
+  shortNames, splitCash,
   type BackingOption, type CreditPosition,
 } from "@/lib/creditBuy";
 import { aaveV3PoolAbi } from "@/lib/guardian/abis";
@@ -194,6 +195,52 @@ describe("planCredit (Leo's loan maths: autoFill, combinedLoan, status)", () => 
     expect(p.block).toBeUndefined();
     expect(p.priceMayMove).toBe(true);
     expect(plan(300).priceMayMove).toBe(false);
+  });
+});
+
+describe("creditAvailable (F2-3's \"You can use up to\")", () => {
+  const fresh: CreditPosition = { collateralUsd: 0, avgCf: 0, debtUsd: 0, healthFactor: null, usdcLiquidity: 1_000_000, borrowPaused: false };
+  const nvdaFree: BackingOption = { stock: nvda, freeRaw: 1_120_000_000n, freeUsd: 2_000, cf: 0.7 };
+  const msftFree: BackingOption = { stock: msft, freeRaw: 100_000_000n, freeUsd: 500, cf: 0.78 };
+  const avail = (position: CreditPosition, options: BackingOption[], holdsStock = true) =>
+    creditAvailable({ position, options, cash: walletCash, holdsStock });
+  const perStock = (position: CreditPosition, o: BackingOption) => planCredit({ position, options: [o], creditRaw: 0n, cash: walletCash }).maxUsd;
+
+  it("is the largest of F2-4's per-stock figures, not their sum: one buy is backed by one free holding", () => {
+    expect(avail(fresh, [nvdaFree])).toEqual({ usd: 1_393 }); // $2,000 × 70%, at 99.5% of the limit
+    const both = avail(fresh, [msftFree, nvdaFree]);
+    expect(both).toEqual({ usd: Math.max(perStock(fresh, nvdaFree), perStock(fresh, msftFree)) });
+    expect(both.usd).toBe(1_393);
+  });
+
+  it("counts what already backs credit, net of what's owed", () => {
+    const backed: CreditPosition = { ...fresh, collateralUsd: 1_000, avgCf: 0.7, debtUsd: 300, healthFactor: 2.33 };
+    // (1,000 × 0.7 + 2,000 × 0.7 − 300) × 99.5%
+    expect(avail(backed, [nvdaFree]).usd).toBe(1_791);
+    // Everything in use: the room on it alone.
+    expect(avail(backed, [])).toEqual({ usd: 398 });
+  });
+
+  it("never more than there is to lend", () => {
+    expect(avail({ ...fresh, usdcLiquidity: 500 }, [nvdaFree]).usd).toBe(497.5);
+  });
+
+  it("$0 with the reason: no stock, nothing that can back credit, everything in use, paused, nothing to lend", () => {
+    expect(avail(fresh, [], false)).toEqual({ usd: 0, why: "no-stocks" });
+    expect(avail(fresh, [])).toEqual({ usd: 0, why: "cant-back" });
+    const full: CreditPosition = { ...fresh, collateralUsd: 1_000, avgCf: 0.7, debtUsd: 700, healthFactor: 1 };
+    expect(avail(full, [])).toEqual({ usd: 0, why: "all-in-use" });
+    expect(avail({ ...fresh, borrowPaused: true }, [nvdaFree])).toEqual({ usd: 0, why: "paused" });
+    expect(avail({ ...fresh, usdcLiquidity: 0 }, [nvdaFree])).toEqual({ usd: 0, why: "no-liquidity" });
+  });
+
+  it("under the minimum buy is $0: no Credit Buy fits in it", () => {
+    const nearly: CreditPosition = { ...fresh, collateralUsd: 1_000, avgCf: 0.7, debtUsd: 699.5, healthFactor: 1 };
+    expect(avail(nearly, [])).toEqual({ usd: 0, why: "all-in-use" });
+  });
+
+  it("says why in plain words, without the words D17 keeps off screen or Aave's", () => {
+    for (const line of Object.values(NO_CREDIT)) expect(line).not.toMatch(/borrow|loan|lock|aave|collateral|health/i);
   });
 });
 

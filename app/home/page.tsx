@@ -76,6 +76,7 @@ function Home({ address }: { address: `0x${string}` }) {
           apy={apy}
           open={setSheet}
           openStock={stocks.openStock}
+          openCreditBuy={stocks.openCreditBuy}
           arrived={arrived}
           dim={startEarningShown(setup.save, data.cashUsd)}
           cards={
@@ -108,12 +109,14 @@ function Home({ address }: { address: `0x${string}` }) {
 }
 
 function Loaded({
-  data, apy, open, openStock, arrived, cards, dim,
+  data, apy, open, openStock, openCreditBuy, arrived, cards, dim,
 }: {
   data: PositionData;
   apy: number;
   open: (sheet: Sheet) => void;
   openStock: (symbol: string) => void;
+  /** The Credit Buy quick action: F2-3, the same sheet as Invest's (StockSheets). */
+  openCreditBuy: () => void;
   arrived: ArrivedView;
   /** What needs the user about their cash: other dollars to turn into cash, starting to earn. */
   cards: ReactNode;
@@ -169,7 +172,7 @@ function Loaded({
       <section className="grid grid-cols-4 gap-2 px-5 pt-[22px]">
         <QuickAction href="/buy" label="Trade" icon={<TradeIcon />} />
         <QuickAction href="/receive" label="Top up" icon={<PlusIcon />} />
-        <QuickAction onClick={() => open("credit")} label="Credit Buy" icon={<CreditIcon />} />
+        <QuickAction onClick={openCreditBuy} label="Credit Buy" icon={<CreditIcon />} />
         <QuickAction href="/repay" label="Repay" icon={<RepayIcon />} />
       </section>
 
