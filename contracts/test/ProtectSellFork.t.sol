@@ -5,6 +5,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {console} from "forge-std/console.sol";
 import {GooseExecutor} from "../src/GooseExecutor.sol";
 import {IAeroRouter, IERC20} from "../src/IProtocols.sol";
+import {SellJob} from "../src/jobs/SellJob.sol";
 import {ExecutorForkBase} from "./GooseExecutorFork.t.sol";
 import {IJustaPermissionManager as PM, IAeroFactory} from "./IJustaPermissionManager.sol";
 
@@ -31,6 +32,17 @@ abstract contract SellForkBase is ExecutorForkBase {
     }
 
     // ================================================================== helpers
+
+    /// Runs `calls` through the manager as the executor, with `account`'s Protect · sell permission, under the sale's
+    /// post-checks, so tests can show what they catch. `sold` is what the batch claims to sell, by reserve id.
+    function sellWith(address account, uint256[7] calldata sold, PM.Call[] calldata calls) external {
+        PM.Permission memory p = x.permissionOf(account, GooseExecutor.Job.ProtectSell);
+        SellJob.Before memory b =
+            SellJob.snapshot(x.env(), account, sold, SPOKE.getUserAccountData(account).healthFactor);
+        vm.prank(address(x));
+        MANAGER.executeBatch(p, calls);
+        SellJob.check(x.env(), account, b);
+    }
 
     /// A fresh JAW account backing a credit line with `sharesRaw` of stock `r`, drawn to health `hf`.
     function _owing(string memory name, uint256 r, uint256 sharesRaw, uint256 hf) internal returns (address a) {
@@ -337,7 +349,7 @@ contract ProtectSellForkTest is SellForkBase {
         calls[2] = PM.Call(address(USDC), 0, abi.encodeCall(IERC20.approve, (address(SPOKE), minOut)));
         calls[3] = _repay(a, minOut);
         vm.expectRevert(GooseExecutor.StockMoved.selector);
-        x.sellWith(a, [uint256(0), 0, 0, 0, 0, 0, 0], calls);
+        this.sellWith(a, [uint256(0), 0, 0, 0, 0, 0, 0], calls);
     }
 
     function test_a_sale_to_someone_else_reverts() public {
@@ -351,7 +363,7 @@ contract ProtectSellForkTest is SellForkBase {
         calls[3] = PM.Call(address(USDC), 0, abi.encodeCall(IERC20.approve, (address(SPOKE), minOut)));
         calls[4] = _repay(a, minOut); // paid from the wallet's cash instead
         vm.expectRevert(GooseExecutor.CashLower.selector);
-        x.sellWith(a, [uint256(0), 0, 0, 0, 0, 1e8, 0], calls);
+        this.sellWith(a, [uint256(0), 0, 0, 0, 0, 1e8, 0], calls);
     }
 
     function test_backing_taken_out_and_left_unsold_reverts() public {
@@ -360,7 +372,7 @@ contract ProtectSellForkTest is SellForkBase {
         PM.Call[] memory calls = new PM.Call[](1);
         calls[0] = _withdraw(a, 0.5e8);
         vm.expectRevert(GooseExecutor.DebtNotLower.selector);
-        x.sellWith(a, [uint256(0), 0, 0, 0, 0, 0.5e8, 0], calls);
+        this.sellWith(a, [uint256(0), 0, 0, 0, 0, 0.5e8, 0], calls);
     }
 
     function test_the_manager_refuses_to_sell_a_never_sell_stock_or_past_a_stocks_limit() public {
@@ -372,11 +384,11 @@ contract ProtectSellForkTest is SellForkBase {
         PM.Call[] memory calls = new PM.Call[](1);
         calls[0] = PM.Call(STOCKS[AAPL], 0, abi.encodeCall(IERC20.approve, (address(ROUTER), 1)));
         vm.expectPartialRevert(UNAUTHORIZED_CALL);
-        x.sellWith(a, [uint256(0), 0, 0, 0, 0, 0, 0], calls);
+        this.sellWith(a, [uint256(0), 0, 0, 0, 0, 0, 0], calls);
 
         calls[0] = PM.Call(NVDAC, 0, abi.encodeCall(IERC20.approve, (address(ROUTER), 0.5e8 + 1)));
         vm.expectPartialRevert(EXCEEDED_SPEND);
-        x.sellWith(a, [uint256(0), 0, 0, 0, 0, 0, 0], calls);
+        this.sellWith(a, [uint256(0), 0, 0, 0, 0, 0, 0], calls);
     }
 
     // ================================================================== registration

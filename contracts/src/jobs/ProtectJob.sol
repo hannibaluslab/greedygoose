@@ -4,7 +4,7 @@ pragma solidity 0.8.28;
 import {GooseExecutor} from "../GooseExecutor.sol";
 import {IJustaPermissionManager as PM} from "../IJustaPermissionManager.sol";
 import {IAaveV3Pool, IERC20, ISpoke} from "../IProtocols.sol";
-import {CashRules, ProtectCase} from "../CashRules.sol";
+import {CashRules, ProtectCase, Thresholds} from "../CashRules.sol";
 import {JobBase} from "./JobBase.sol";
 
 /// @title ProtectJob
@@ -33,6 +33,10 @@ library ProtectJob {
         p.spends = new PM.SpendLimit[](2);
         p.spends[0] = PM.SpendLimit(address(e.usdc), g.cap, PM.PeriodUnit.Day, 1);
         p.spends[1] = PM.SpendLimit(address(e.aUsdc), g.cap, PM.PeriodUnit.Day, 1);
+    }
+
+    function checkThresholds(Thresholds memory t) public pure {
+        if (!CashRules.thresholdsOk(t)) revert GooseExecutor.OutOfBounds();
     }
 
     /// What a run would do now: repay, prune a dead permission, or nothing.

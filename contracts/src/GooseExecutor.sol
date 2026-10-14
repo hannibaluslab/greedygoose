@@ -192,24 +192,6 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     uint256 internal constant HOLIDAY_HORIZON = 800;
     uint32 internal constant MAX_PAGE_SIZE = 200;
 
-    // Hard bounds (D18). Nothing can change them.
-    uint64 internal constant TRIGGER_HF_MIN = 1.2e18;
-    uint64 internal constant TRIGGER_HF_MAX = 2e18;
-    uint64 internal constant TARGET_GAP_MIN = 0.05e18;
-    uint64 internal constant TARGET_HF_MAX = 2.5e18;
-    uint64 internal constant STRESS_DROP_MIN = 0.05e18;
-    uint64 internal constant STRESS_DROP_MAX = 0.3e18;
-    uint64 internal constant STRESS_FLOOR_HF_MIN = 1.02e18;
-    uint64 internal constant MIN_REPAY_MIN = 0.05e6;
-    uint64 internal constant MIN_REPAY_MAX = 50e6;
-    uint64 internal constant MIN_SAVE_MIN = 0.1e6;
-    uint64 internal constant MIN_SAVE_MAX = 100e6;
-    uint64 internal constant KEEP_BACK_MAX = 5e6;
-    uint32 internal constant WEEKEND_WINDOW_MIN = 1 hours;
-    uint32 internal constant WEEKEND_WINDOW_MAX = 12 hours;
-    uint8 internal constant MAX_SAVES_MIN = 1;
-    uint8 internal constant MAX_SAVES_MAX = 24;
-
     // ------------------------------------------------------------------ immutables
 
     PM public immutable MANAGER;
@@ -350,8 +332,8 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
             if (c.stocks[r] == address(0)) revert ZeroValue();
         }
         if (c.capMax == 0 || c.pageSize == 0 || c.pageSize > MAX_PAGE_SIZE) revert OutOfBounds();
-        _checkThresholds(c.thresholds);
-        _checkAmounts(c.amounts);
+        ProtectJob.checkThresholds(c.thresholds);
+        SaveJob.checkAmounts(c.amounts);
         SellJob.checkLimits(c.sellLimits);
         MANAGER = c.manager;
         AAVE_V3_POOL = c.aaveV3Pool;
@@ -877,8 +859,8 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     }
 
     function _checkChange(Change kind, bytes calldata value) internal view {
-        if (kind == Change.SetThresholds) return _checkThresholds(abi.decode(value, (Thresholds)));
-        if (kind == Change.SetAmounts) return _checkAmounts(abi.decode(value, (Amounts)));
+        if (kind == Change.SetThresholds) return ProtectJob.checkThresholds(abi.decode(value, (Thresholds)));
+        if (kind == Change.SetAmounts) return SaveJob.checkAmounts(abi.decode(value, (Amounts)));
         if (kind == Change.SetSellLimits) return SellJob.checkLimits(abi.decode(value, (SellLimits)));
         if (kind == Change.SetHoliday) {
             (uint32 day,) = abi.decode(value, (uint32, bool));
@@ -891,22 +873,5 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
             return;
         }
         if (abi.decode(value, (address)) == address(0)) revert ZeroValue(); // AddForwarder, SetOwner
-    }
-
-    function _checkThresholds(Thresholds memory t) internal pure {
-        if (
-            t.triggerHf < TRIGGER_HF_MIN || t.triggerHf > TRIGGER_HF_MAX || t.targetHf < t.triggerHf + TARGET_GAP_MIN
-                || t.targetHf > TARGET_HF_MAX || t.stressDrop < STRESS_DROP_MIN || t.stressDrop > STRESS_DROP_MAX
-                || t.stressFloorHf < STRESS_FLOOR_HF_MIN || t.stressFloorHf > t.triggerHf
-        ) revert OutOfBounds();
-    }
-
-    function _checkAmounts(Amounts memory a) internal pure {
-        if (
-            a.minRepay < MIN_REPAY_MIN || a.minRepay > MIN_REPAY_MAX || a.minSave < MIN_SAVE_MIN
-                || a.minSave > MIN_SAVE_MAX || a.keepBack > KEEP_BACK_MAX || a.weekendWindow < WEEKEND_WINDOW_MIN
-                || a.weekendWindow > WEEKEND_WINDOW_MAX || a.maxSavesPerDay < MAX_SAVES_MIN
-                || a.maxSavesPerDay > MAX_SAVES_MAX
-        ) revert OutOfBounds();
     }
 }

@@ -33,6 +33,10 @@ library SaveJob {
         p.spends[0] = PM.SpendLimit(address(e.usdc), g.cap, PM.PeriodUnit.Day, 1);
     }
 
+    function checkAmounts(Amounts memory a) public pure {
+        if (!CashRules.amountsOk(a)) revert GooseExecutor.OutOfBounds();
+    }
+
     /// What a run would do now: save, prune a dead permission, or nothing.
     function plan(
         GooseExecutor.Env memory e,
