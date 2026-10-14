@@ -7,6 +7,7 @@ import { BalanceHero, TodayChange } from "@/components/gg/BalanceHero";
 import { Button } from "@/components/gg/Button";
 import { CashCard, CreditCard } from "@/components/gg/Cards";
 import { HoldingCard, HoldingList, HoldingRow } from "@/components/gg/Holding";
+import { MarketList, MarketRow } from "@/components/gg/Market";
 import { QuickAction } from "@/components/gg/QuickAction";
 import { TabHeader } from "@/components/gg/Screen";
 import { Sparkline } from "@/components/gg/Sparkline";
@@ -36,6 +37,12 @@ const HOLDINGS = [
     card: [3, 6, 4, 9, 7, 12, 10, 15, 13, 17, 19], row: [2, 6.4, 4.7, 13.1, 10.9, 18.9, 22] },
 ];
 const NVDA = { symbol: "NVDA", name: "NVIDIA", price: 178.57 };
+// F1-3's rows with a price (Apple, NVIDIA owned), and Tesla at F1-3's price as PortfolioMarket's not-owned row.
+const MARKET = [
+  { symbol: "AAPL", name: "Apple", price: 222.22, owned: 1200 },
+  { symbol: "NVDA", name: "NVIDIA", price: 178.57, owned: 2000 },
+  { symbol: "TSLA", name: "Tesla", price: 378.38, owned: 0 },
+];
 const PILL_SIZES: StatusPillSize[] = ["sm", "row", "header", "md", "lg"];
 const STATUSES: Status[] = ["safe", "watch", "act", "none"];
 
@@ -130,6 +137,12 @@ export function Gallery() {
             <HoldingRow key={symbol} symbol={symbol} name={name} valueUsd={valueUsd} shares={shares} backs={backs} today={today} spark={row} onClick={noop} />
           ))}
         </HoldingList>
+      </Section>
+
+      <Section title="Market rows" kit="market-rows">
+        <MarketList>
+          {MARKET.map((m) => <MarketRow key={m.symbol} symbol={m.symbol} name={m.name} priceUsd={m.price} ownedUsd={m.owned} onClick={noop} />)}
+        </MarketList>
       </Section>
 
       <Section title="Status pills" kit="status-pills">
