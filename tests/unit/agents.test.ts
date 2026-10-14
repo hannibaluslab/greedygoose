@@ -8,11 +8,14 @@ import {
   dailyLimitRaw,
   entryGrant,
   entryPermission,
+  jobGrant,
   readAgentGrant,
+  readStockLimits,
   rebalanceGrant,
   rebalancePermission,
   sellGrant,
   sellPermission,
+  stockLimitsRaw,
   stockTerms,
   type ListedPermission,
 } from "@/lib/agents/permissions";
@@ -205,15 +208,6 @@ describe("readAgentGrant (JAW's usePermissions listing)", () => {
     expect(readAgentGrant(listed("protect"), executor)?.job).toBe("protect");
   });
 
-  it("reads Protect · sell, the Rebalancer and Entry, whatever stocks a grant may sell", () => {
-    expect(readAgentGrant(listing(sellGrant(300_000_000n, sellLimits)), executor)).toMatchObject({ job: "sell", capRaw: 300_000_000n });
-    expect(readAgentGrant(listing(rebalanceGrant(500_000_000n, rebalanceLimits)), executor)).toMatchObject({
-      job: "rebalance",
-      capRaw: 500_000_000n,
-    });
-    expect(readAgentGrant(listing(entryGrant(1_000_000_000n)), executor)).toMatchObject({ job: "entry", capRaw: 1_000_000_000n });
-  });
-
   it("ignores anyone else's spender and anything that isn't exactly a job's template", () => {
     expect(readAgentGrant(listed("save", { spender: account }), executor)).toBeNull();
     const p = listed("protect");
@@ -229,6 +223,90 @@ describe("readAgentGrant (JAW's usePermissions listing)", () => {
     // The Rebalancer's limits are a week's: a day's is no template.
     const mix = listing(rebalanceGrant(500_000_000n, rebalanceLimits));
     expect(readAgentGrant({ ...mix, spends: mix.spends.map((s) => ({ ...s, unit: "day" })) }, executor)).toBeNull();
+  });
+});
+
+describe("readAgentGrant for the jobs that sell stock and for Entry", () => {
+  /** A listing of `grant` as JAW's relay stores it. */
+  const listedOf = (grant: PermissionsDetail, over: Partial<ListedPermission> = {}): ListedPermission => ({
+    permissionId: "0x" + "cd".repeat(32),
+    spender: executor,
+    start: 100,
+    end: 200,
+    salt: toHex(7n),
+    calls: grant.calls!.map((c) => ({ target: c.target, selector: c.selector!, checker: zeroAddress })),
+    spends: grant.spends!.map((s) => ({ token: s.token, allowance: toHex(BigInt(s.allowance)), unit: s.unit, multiplier: 1 })),
+    ...over,
+  });
+  // Apple and Tesla may be sold; the rest are never sold.
+  const limits = EQUITIES.map((e) => (e.symbol === "AAPLc" ? 30_000n : e.symbol === "TSLAc" ? 50_000n : 0n));
+
+  it("reads Protect · sell with its stock limits, a never-sell stock at 0", () => {
+    expect(readAgentGrant(listedOf(sellGrant(300_000_000n, limits)), executor)).toMatchObject({
+      job: "sell",
+      capRaw: 300_000_000n,
+      limitsRaw: limits,
+    });
+  });
+
+  it("reads the Rebalancer, weekly, with its stock limits", () => {
+    expect(readAgentGrant(listedOf(rebalanceGrant(500_000_000n, limits)), executor)).toMatchObject({
+      job: "rebalance",
+      capRaw: 500_000_000n,
+      limitsRaw: limits,
+    });
+  });
+
+  it("reads Entry, its limit in USDC units", () => {
+    expect(readAgentGrant(listedOf(entryGrant(1_000_000_000n)), executor)).toMatchObject({ job: "entry", capRaw: 1_000_000_000n });
+  });
+
+  it("refuses a sale grant that doesn't match its own stocks: an approve without a limit, a limit off the unit", () => {
+    const p = listedOf(sellGrant(300_000_000n, limits));
+    expect(readAgentGrant({ ...p, spends: p.spends.slice(0, -1) }, executor)).toBeNull();
+    expect(readAgentGrant({ ...p, spends: p.spends.map((x, i) => (i === 2 ? { ...x, allowance: toHex(30_001n) } : x)) }, executor)).toBeNull();
+    expect(readAgentGrant({ ...p, spends: p.spends.map((x) => ({ ...x, unit: "week" })) }, executor)).toBeNull();
+  });
+});
+
+describe("jobGrant (one entry point for every job's JAW grant)", () => {
+  it("builds each job's template, and asks for stock limits where the job sells stock", () => {
+    const limits = EQUITIES.map((_, r) => (r === 5 ? 10_000n : 0n));
+    expect(jobGrant("save", 1n)).toEqual(agentGrant("save", 1n));
+    expect(jobGrant("entry", 1n)).toEqual(entryGrant(1n));
+    expect(jobGrant("sell", 1n, limits)).toEqual(sellGrant(1n, limits));
+    expect(jobGrant("rebalance", 1n, limits)).toEqual(rebalanceGrant(1n, limits));
+    expect(() => jobGrant("rebalance", 1n)).toThrow(/One limit per stock/);
+  });
+});
+
+describe("stockLimitsRaw (a grant's limit per stock, from its dollar limit)", () => {
+  const prices = EQUITIES.map(() => 200n * 10n ** 8n); // $200 a share
+  const all = EQUITIES.map(() => true);
+
+  it("is shares worth twice the dollar limit, in whole units of 1e-4 share", () => {
+    const l = stockLimitsRaw(300_000_000n, 10n ** 12n, prices, all);
+    expect(l.every((x) => x === 300_000_000n)).toBe(true); // $600 / $200 = 3 shares
+    expect(stockLimitsRaw(1_000_000n, 10n ** 12n, EQUITIES.map(() => 30_000_000_000n), all)[0]).toBe(660_000n); // $2 / $300 = 0.00667 share, rounded down to 0.0066
+  });
+
+  it("stays 1% under the executor's bound of twice CAP_MAX, so registration takes it", () => {
+    const l = stockLimitsRaw(5_000_000n, 5_000_000n, prices, all); // a $5 test deploy (D13)
+    expect((l[0] * prices[0]) / 10n ** 10n).toBeLessThanOrEqual(9_900_000n);
+    expect(stockTerms(l)).toBeGreaterThan(0n);
+  });
+
+  it("gives a stock it may not sell 0, so the grant has no approve for it", () => {
+    const l = stockLimitsRaw(300_000_000n, 10n ** 12n, prices, EQUITIES.map((e) => e.symbol !== "AAPLc"));
+    expect(l[0]).toBe(0n);
+    expect(sellGrant(300_000_000n, l).calls!.some((c) => c.target === EQUITIES[0].address)).toBe(false);
+  });
+
+  it("reads back from a grant's spends (readStockLimits)", () => {
+    const l = stockLimitsRaw(300_000_000n, 10n ** 12n, prices, EQUITIES.map((e) => e.symbol !== "METAc"));
+    expect(readStockLimits("sell", sellGrant(300_000_000n, l).spends!)).toEqual(l);
+    expect(readStockLimits("rebalance", rebalanceGrant(300_000_000n, l).spends!)).toEqual(l);
+    expect(readStockLimits("rebalance", sellGrant(300_000_000n, l).spends!)).toBeNull(); // aUSDC isn't a stock
   });
 });
 

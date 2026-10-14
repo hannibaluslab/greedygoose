@@ -15,13 +15,14 @@ import { CreditIcon } from "./icons";
 import { useBoughtHome } from "@/hooks/useBoughtHome";
 import { useBuy } from "@/hooks/useBuy";
 import { useBuyQuote } from "@/hooks/useBuyQuote";
+import { useCreditForBuying } from "@/hooks/useCreditForBuying";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { useCollateralFactors, type PositionData } from "@/hooks/usePosition";
 import { CASH } from "@/config/risk";
 import { monthlyCost } from "@/lib/aave/math";
 import { maxSpendRaw, savingsWithdrawal, toUsd } from "@/lib/cash";
 import { CREDIT_BLOCKED, backingOptions, planCredit, splitCash, type CreditPlan } from "@/lib/creditBuy";
-import { formatShares, formatUsd } from "@/lib/formatting";
+import { formatShares, formatUsd, inWords } from "@/lib/formatting";
 import { marketState } from "@/lib/market-hours";
 import { STATUS_LABEL } from "@/lib/risk/status";
 import { BUY_LIMITS, minOut, quoteEconomics } from "@/lib/swap/buy";
@@ -33,15 +34,13 @@ type Step = "market" | "amount" | "review";
 const ORDER: Step[] = ["market", "amount", "review"];
 
 const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
-/** "a", "a and b", "a, b and c". */
-const inWords = (parts: string[]) => (parts.length < 2 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`);
 
 /**
  * Flow 1: Market (F1-3) → the stock's sheet → Buy (F1-4) → Confirm (F2-6's layout; there is no
  * F1-5 board), then Home with the "Bought …" toast (F1-6). A Market row opens the stock's sheet
  * (StockSheets), whose Buy opens this sheet again at the Buy step. More than your cash (decision 1):
  * Review is blocked and one button takes credit for the other part, so the review becomes one batch:
- * withdraw savings, take credit, approve, swap.
+ * withdraw savings, take credit, approve, swap; unless "Use credit for buying" is off in Manage.
  */
 export function BuySheet({
   open, user, data, symbol: initial, onClose, onStock, onBack,
@@ -76,6 +75,7 @@ export function BuySheet({
   const fee = useFeeSupport();
   const cfs = useCollateralFactors(data.holdings);
   const { buy, phase, error, reset, busy, txHash } = useBuy();
+  const [creditForBuying] = useCreditForBuying(user);
 
   const q = quote.data ?? null;
   const econ = q && stock ? quoteEconomics(q, stock, oraclePriceUsd) : null;
@@ -98,6 +98,7 @@ export function BuySheet({
   else if (stock && amount > 0 && quote.isSuccess && q === null) blocker = `There’s no market for ${stock.name} right now.`;
   else if (econ && econ.premium > BUY_LIMITS.blockPremium)
     blocker = `Too big for the market right now: you’d pay ${(econ.premium * 100).toFixed(1)}% over Aave’s price. Try a smaller amount.`;
+  else if (over && !creditForBuying) blocker = "Credit for buying is off in Manage.";
   else if (plan?.block) blocker = CREDIT_BLOCKED[plan.block];
   const warnPremium = !!econ && econ.premium > BUY_LIMITS.warnPremium && !blocker;
   const feeBlocked = isConnected && fee.state === "unsupported";

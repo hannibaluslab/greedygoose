@@ -20,7 +20,7 @@ function protection(status: AgentStatus, capRaw: bigint | null) {
 
 /**
  * Design board "2c · Credit sheet" (HomeCreditSlide.dc.html). The rate sits under the cost (CLAUDE.md: always show
- * the rate and the monthly cost); the settings button opens the Credit page until ManageCredit is built.
+ * the rate and the monthly cost); the settings button and the Protection row open Manage's Credit tab (ManageCredit).
  */
 export function CreditSheet({
   open, account, data, onClose, onBuyMore,
@@ -46,7 +46,7 @@ export function CreditSheet({
       look="info"
       title="Credit"
       headerRight={
-        <Link href="/credit" aria-label="Credit details" className="-mr-1.5 flex size-10 items-center justify-center rounded-full bg-pill text-ink">
+        <Link href="/manage/credit" aria-label="Credit settings" className="-mr-1.5 flex size-10 items-center justify-center rounded-full bg-pill text-ink">
           <SlidersIcon strokeWidth={2} />
         </Link>
       }
@@ -84,7 +84,7 @@ export function CreditSheet({
               <span>Room {formatUsdTrim(data.availableUsd)}</span>
             </div>
           </div>
-          <Link href="/agents" className="flex items-center justify-between py-3 text-[15px] text-ink no-underline">
+          <Link href="/manage/credit" className="flex items-center justify-between py-3 text-[15px] text-ink no-underline">
             <span className="flex items-center gap-2 text-ink-mid">
               <span aria-hidden className="flex size-[22px] items-center justify-center rounded-[11px] bg-brand text-ink">
                 <ShieldIcon />

@@ -11,9 +11,9 @@ export type AgentStatus = "unconfigured" | "loading" | "off" | "starting" | "on"
 export type Stored = { start: number; end: number; cap: bigint };
 
 /**
- * Whether the executor runs `job`: registered (its bit in `jobs`, from the registry's `accounts`), not past its end,
- * and with that same grant still in JAW's list, where a revoke shows at once (the registry only learns of it on the
- * next run). If JAW's list can't be read, the registry alone decides.
+ * Whether the executor runs `job`: registered (its bit in `jobs`, GooseExecutor.jobsOf), not past its end, and with
+ * that same grant still in JAW's list, where a revoke shows at once (the registry only learns of it on the next run).
+ * If JAW's list can't be read, the registry alone decides.
  */
 export function jobStatus(
   job: AgentJob,

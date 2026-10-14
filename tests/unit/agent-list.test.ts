@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { agentList, mixOnTarget, type AgentListInput } from "@/lib/agents/list";
+import { rebalanceOptions } from "@/lib/agents/mix";
 import type { AgentJob } from "@/lib/agents/permissions";
 import type { AgentStatus } from "@/lib/agents/status";
 
@@ -53,17 +54,22 @@ describe("agentList (the Agents board's list)", () => {
 
 describe("mixOnTarget (the Rebalancer's band)", () => {
   // 50/50 NVIDIA and Apple, both priced $100.
-  const mix = [5000n, 0n, 0n, 0n, 0n, 5000n, 0n];
+  const mix = [5000, 0, 0, 0, 0, 5000, 0];
   const prices = [100e8, 0, 0, 0, 0, 100e8, 0].map(BigInt);
   const shares = (apple: number, nvidia: number) => [apple, 0, 0, 0, 0, nvidia, 0].map((s) => BigInt(Math.round(s * 1e8)));
+  const options = rebalanceOptions(); // the deploy defaults (config/risk.ts REBALANCER)
 
   it("is on target inside the band (the smaller of 20% of the target and 5 points) and off past it", () => {
-    expect(mixOnTarget(mix, shares(5, 5), prices)).toBe(true);
-    expect(mixOnTarget(mix, shares(4.6, 5.4), prices)).toBe(true); // 54%: 4 points off
-    expect(mixOnTarget(mix, shares(4.4, 5.6), prices)).toBe(false); // 56%: 6 points off
+    expect(mixOnTarget(mix, shares(5, 5), prices, options)).toBe(true);
+    expect(mixOnTarget(mix, shares(4.6, 5.4), prices, options)).toBe(true); // 54%: 4 points off
+    expect(mixOnTarget(mix, shares(4.4, 5.6), prices, options)).toBe(false); // 56%: 6 points off
+  });
+
+  it("follows the executor's live band", () => {
+    expect(mixOnTarget(mix, shares(4.6, 5.4), prices, { ...options, bandMaxBps: 300n })).toBe(false); // 4 points off a 3-point band
   });
 
   it("has no answer without a mix", () => {
-    expect(mixOnTarget(mix.map(() => 0n), shares(5, 5), prices)).toBeNull();
+    expect(mixOnTarget(mix.map(() => 0), shares(5, 5), prices, options)).toBeNull();
   });
 });

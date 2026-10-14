@@ -85,7 +85,7 @@ function Repay({ address }: { address: `0x${string}` }) {
       <SubHeader
         label="Credit"
         right={
-          <Link href="/credit" aria-label="Credit details" className="flex size-9 items-center justify-center rounded-[18px] bg-chip">
+          <Link href="/manage/credit" aria-label="Credit settings" className="flex size-9 items-center justify-center rounded-[18px] bg-chip">
             <SlidersIcon />
           </Link>
         }

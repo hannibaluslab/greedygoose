@@ -1,9 +1,8 @@
 import { maxUint256 } from "viem";
-import { REBALANCER } from "@/config/risk";
 import { MANAGE, type AgentName } from "@/lib/agents/feed";
-import { SELL_LIMIT_USD, type AgentJob } from "@/lib/agents/permissions";
+import { STOCK_LIMIT_USD, type AgentJob } from "@/lib/agents/permissions";
 import type { AgentStatus } from "@/lib/agents/status";
-import { rebalanceTrades } from "@/lib/guardian/rebalance";
+import { rebalanceTrades, type RebalanceOptions } from "@/lib/guardian/rebalance";
 import { STATUS_LABEL, type Status } from "@/lib/risk/status";
 import { USDC } from "@/lib/tokens/registry";
 import { formatUsdTrim } from "@/lib/formatting";
@@ -64,14 +63,14 @@ export function agentList(i: AgentListInput): { agents: AgentItem[]; reason: str
   const guards =
     s.protect === "on" && s.sell !== "on"
       ? `repays up to ${usd(i.capRaw.protect!)} a day`
-      : `sells up to ${usdOf(i.capRaw.sell, SELL_LIMIT_USD.sell.usd)} a day`;
+      : `sells up to ${usdOf(i.capRaw.sell, STOCK_LIMIT_USD.sell.start)} a day`;
 
   return {
     agents: [
       {
         agent: "Rebalancer",
         pill: rebalancePill,
-        sub: `Keeps your mix · sells up to ${usdOf(i.capRaw.rebalance, SELL_LIMIT_USD.rebalance.usd)} a week`,
+        sub: `Keeps your mix · sells up to ${usdOf(i.capRaw.rebalance, STOCK_LIMIT_USD.rebalance.start)} a week`,
         href: MANAGE.mix.href,
         opens: "Open your mix",
       },
@@ -91,20 +90,16 @@ export function agentList(i: AgentListInput): { agents: AgentItem[]; reason: str
 
 /**
  * Whether the account's free stock sits inside the Rebalancer's band for its mix: no trade the rule would make, with
- * no limit in the way. Prices are Aave's, 8 decimals; shares raw, by reserve id. Null when no mix is set.
+ * no limit in the way. The mix is in BPS and prices are Aave's, 8 decimals, both by reserve id; shares raw. `options`
+ * are the rule's (`rebalanceOptions`). Null when no mix is set.
  */
-export function mixOnTarget(mixBps: readonly bigint[], freeRaw: readonly bigint[], pricesRaw: readonly bigint[]): boolean | null {
-  if (mixBps.every((w) => w === 0n)) return null;
-  const stocks = mixBps.map((weightBps, r) => ({ sharesRaw: freeRaw[r], price: pricesRaw[r], weightBps, sellLeftRaw: maxUint256 }));
-  const trades = rebalanceTrades(
-    { stocks, usdcLeftRaw: maxUint256 },
-    {
-      bandBps: BigInt(Math.round(REBALANCER.bandOfTarget * 10_000)),
-      bandMaxBps: BigInt(REBALANCER.bandMaxPoints * 100),
-      floorBps: BigInt(REBALANCER.floorBps),
-      minTradeRaw: BigInt(REBALANCER.minTradeUsd) * 10n ** BigInt(USDC.decimals),
-      maxSliceRaw: BigInt(REBALANCER.maxSliceUsd) * 10n ** BigInt(USDC.decimals),
-    },
-  );
-  return trades.length === 0;
+export function mixOnTarget(
+  mixBps: readonly number[],
+  freeRaw: readonly bigint[],
+  pricesRaw: readonly bigint[],
+  options: RebalanceOptions,
+): boolean | null {
+  if (mixBps.every((w) => w === 0)) return null;
+  const stocks = mixBps.map((w, r) => ({ sharesRaw: freeRaw[r], price: pricesRaw[r], weightBps: BigInt(w), sellLeftRaw: maxUint256 }));
+  return rebalanceTrades({ stocks, usdcLeftRaw: maxUint256 }, options).length === 0;
 }

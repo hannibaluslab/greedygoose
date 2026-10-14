@@ -88,3 +88,16 @@ Legal is cleared. No step waits on a legal view.
 - **Words.** A Save reads "$40 added to your cash" (plan item 1). A repay from savings reads "Your cash: $120 used" (plan §6's "From your cash: $X", in the board's 82px label column). A sale leaves cash "Not touched", or "Not used · +$X" when its swaps brought in more than their floors.
 - **"Why" says only what the executor knew:** the status, a sale at once or after the heads-up, the weekend. The board's "Tesla fell 9% overnight" would need price history the event doesn't carry.
 - **The heads-up card:** "Add $X" is the repay that brings the health to Protect · sell's target (read live), rounded up; "$Y" is the heads-up's own sale value. "in N min" counts to its `sellAfter`; when the executor's calendar says that falls in a price freeze, it reads "when prices reopen". It shows only while the registry's `headsUpAt` is that heads-up's time, and reads only the spoke's account data, so the warning never waits on the rest of the account.
+
+## From the Manage build (2026-10-14)
+
+- **Manage is two tabs:** Your mix (Manage board) and Credit (ManageCredit). "Every month" (ManageMonthly: Auto buy, Auto top up) stays parked, so the tab control has two. The titles are the boards' own ("Agents" on Your mix, "Manage" on Credit).
+- **Saving a tab is at most two Face IDs, each only when needed:** the registry setting through `useTx` (`setMix`, `setKeepMix`), then the job's new JAW grant on JAW's own screen (D14: a grant is its own user operation). A grant replaced this way stays in JAW's list; the executor only runs the newest registered one, and Turn off revokes them all.
+- **Stock limits in a grant** (Protect · sell, the Rebalancer) are shares worth twice the dollar limit at Aave's price when granted, held 1% under the executor's registration bound (twice `CAP_MAX`). A stock that falls after the grant can still be sold up to the dollar limit, which is what binds (`stockLimitsRaw`).
+- **The Rebalancer's grant** may sell the stocks in the mix. Saving a mix with a stock the grant can't sell asks for a new grant.
+- **Protection's "Can sell up to"** is the Protect · sell grant's daily limit. Protect from savings keeps its own $300 a day.
+- **The never-sell list is the Protect · sell grant:** the grant lists all seven stocks except the never-sell ones, so a stock bought and used as backing later is covered without a new grant. GooseExecutor has no registry setter for the list; changing it is a new grant.
+- **"What happens"** is the Rebalancer's own rule (`lib/guardian/rebalance.ts`) on today's free shares, with a fresh week at the chosen limit. Shares backing credit are left out, and the line says so.
+- **"Use credit for buying"** only changes what the Buy sheet offers past your cash (decision 1). It moves nothing, so it lives in this browser and takes no Face ID.
+- **Turn off credit:** while anything is owed, it says "Repay the $X first". Once nothing is owed, it revokes both Protect grants.
+- **Pause has nothing to call yet:** GooseExecutor has no pause for one account (its `pause` stops every run), so "Pause the Rebalancer" and "Pause Protection" show disabled.

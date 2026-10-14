@@ -9,6 +9,9 @@ export const formatShares = (n: number) =>
   n.toLocaleString("en-US", { maximumFractionDigits: n < 1 ? 4 : 2 });
 export const formatPct = (n: number) => `${(n * 100).toFixed(2)}%`;
 export const shortAddress = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
+/** "a", "a and b", "a, b and c". */
+export const inWords = (parts: readonly string[]) =>
+  parts.length < 2 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`;
 
 /** Sign for a change: "−" (U+2212, as on the boards) below zero, "+" otherwise, judged on the rounded figure. */
 const sign = (n: number, shown: string) => (n < 0 && Number(shown) !== 0 ? "−" : "+");

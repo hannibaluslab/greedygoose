@@ -19,11 +19,12 @@ export function SubHeader({ label, right, back = "/home" }: { label: string; rig
 
 /**
  * Top of a tab screen (PortfolioPage): an optional back chevron, the title, then on the right the
- * credit status pill (a link or a button when given somewhere to go) and the header menu.
+ * credit status pill (a link or a button when given somewhere to go) and the header menu, which
+ * Manage's boards leave out (`menu={false}`).
  */
 export function TabHeader({
-  title, back, status, statusHref, onStatus,
-}: { title: string; back?: string; status?: Status; statusHref?: string; onStatus?: () => void }) {
+  title, back, status, statusHref, onStatus, menu = true,
+}: { title: string; back?: string; status?: Status; statusHref?: string; onStatus?: () => void; menu?: boolean }) {
   return (
     <div className="flex items-center justify-between leading-[normal]">
       <div className="flex items-center">
@@ -36,7 +37,7 @@ export function TabHeader({
             <StatusPill status={status} size="header" />
           </Tap>
         )}
-        <MenuButton />
+        {menu && <MenuButton />}
       </div>
     </div>
   );

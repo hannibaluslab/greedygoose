@@ -8,6 +8,7 @@ import { AgentsFeed, AgentsView, HeadsUpCard, type FeedError } from "@/component
 import { useActivity } from "@/hooks/useActivity";
 import { useAgentFeed, type HeadsUp } from "@/hooks/useAgentFeed";
 import { useAgents } from "@/hooks/useAgents";
+import { useAgentSettings } from "@/hooks/useAgentSettings";
 import { useNowSec } from "@/hooks/useNowSec";
 import { usePosition } from "@/hooks/usePosition";
 import { AAVE } from "@/lib/aave/addresses";
@@ -28,11 +29,13 @@ export default function AgentsPage() {
 
 /**
  * Design board "7 · Agents" (Agents.dc.html). Each agent's state comes from the executor's registry and JAW's list
- * (useAgents, D14); with no executor configured, every agent is "Not live yet". The activity merges the user's own
- * moves (JAW's history) with the agents' (GooseExecutor's events, read from the chain).
+ * (useAgents, D14) and its settings (useAgentSettings: the mix, the pending heads-up); with no executor configured,
+ * every agent is "Not live yet". The activity merges the user's own moves (JAW's history) with the agents'
+ * (GooseExecutor's events, read from the chain).
  */
 function Agents({ address }: { address: `0x${string}` }) {
   const agents = useAgents(address);
+  const settings = useAgentSettings(address);
   const { data: position } = usePosition(address);
   const feed = useAgentFeed(address);
   const yours = useActivity(address);
@@ -40,20 +43,24 @@ function Agents({ address }: { address: `0x${string}` }) {
 
   const onTarget = useMemo(
     () =>
-      agents.mixBps && position
+      settings && position
         ? mixOnTarget(
-            agents.mixBps,
+            settings.mixBps,
             position.holdings.map((h) => h.freeRaw),
-            position.holdings.map((h) => BigInt(Math.round(h.priceUsd * 1e8))),
+            position.holdings.map((h) => h.priceRaw),
+            settings.options,
           )
         : null,
-    [agents.mixBps, position],
+    [settings, position],
   );
   const capRaw = Object.fromEntries(JOBS.map((job) => [job, agents.terms[job]?.capRaw ?? null])) as Record<AgentJob, bigint | null>;
-  const list = agentList({ status: agents.status, capRaw, credit: position?.status ?? "none", onTarget });
+  // The Rebalancer's pill waits for its mix, so a mix being read never shows as "No mix yet".
+  const status = GOOSE_EXECUTOR && !settings ? { ...agents.status, rebalance: "loading" as const } : agents.status;
+  const list = agentList({ status, capRaw, credit: position?.status ?? "none", onTarget });
 
   // The registry still holds the heads-up the event announced: a sale cut short, or one cleared, has moved it.
-  const pending = feed.headsUp && agents.headsUpAt !== 0 && feed.headsUp.sentAt === agents.headsUpAt ? feed.headsUp : null;
+  const headsUpAt = settings?.headsUpAt ?? 0;
+  const pending = feed.headsUp && headsUpAt !== 0 && feed.headsUp.sentAt === headsUpAt ? feed.headsUp : null;
 
   // The user's own moves cover the same days as the agents' moves read so far.
   const rows = useMemo(
