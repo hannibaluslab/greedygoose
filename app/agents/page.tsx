@@ -13,6 +13,7 @@ import { useAgents } from "@/hooks/useAgents";
 import { useActivity } from "@/hooks/useActivity";
 import { useNowSec } from "@/hooks/useNowSec";
 import { CASH_JOBS, DAILY_LIMIT_USD, type CashJob } from "@/lib/agents/permissions";
+import type { AgentStatus } from "@/lib/agents/status";
 import { toUsd } from "@/lib/cash";
 import { formatUsdTrim } from "@/lib/formatting";
 
@@ -22,9 +23,9 @@ export default function AgentsPage() {
 
 /**
  * Design board "7 · Agents" (Agents.dc.html). The Cash Agent's two jobs switch on and off through JAW's own
- * permission screens (useAgents, D14); it shows "Not live yet" until GooseExecutor is deployed. The Rebalancer comes
- * later. Activity is the account's own moves, from JAW's history and Base receipts; agents' moves join it once the
- * executor runs.
+ * permission screens (useAgents, D14); it shows "Not live yet" until GooseExecutor is deployed. The Rebalancer opens
+ * its mix in Manage. Activity is the account's own moves, from JAW's history and Base receipts; agents' moves join it
+ * once the executor runs.
  */
 function Agents({ address }: { address: `0x${string}` }) {
   return (
@@ -36,10 +37,7 @@ function Agents({ address }: { address: `0x${string}` }) {
 
       <div className="flex flex-col gap-2">
         <CashAgent address={address} />
-        <div className="flex items-center gap-2.5 rounded-[22px] bg-card px-3 py-2.5 shadow-card-elev">
-          <AgentMark tone="bone"><RebalanceIcon /></AgentMark>
-          <AgentTitle name="Rebalancer" pill={<AgentPill>Coming later</AgentPill>} sub="Keeps your mix" />
-        </div>
+        <Rebalancer address={address} />
       </div>
 
       <Feed address={address} />
@@ -59,12 +57,9 @@ const JOB: Record<CashJob, { name: string; does: string }> = {
   protect: { name: "Protection", does: "Repays from your cash if credit reaches Watch" },
 };
 
-/** Save and Protection, each its own JAW grant and Face ID. Cash is savings (D15), so both work on the user's cash. */
-function CashAgent({ address }: { address: `0x${string}` }) {
-  const { isConnected } = useAccount();
-  const agents = useAgents(address);
-  const s = CASH_JOBS.map((job) => agents.status[job]);
-  const pill = s.includes("unconfigured")
+/** An agent's pill from its jobs' states: on when any of them runs. */
+function pillFor(s: AgentStatus[]) {
+  return s.includes("unconfigured")
     ? "Not live yet"
     : s.includes("loading")
       ? "…"
@@ -73,6 +68,13 @@ function CashAgent({ address }: { address: `0x${string}` }) {
         : s.includes("starting")
           ? "Starting"
           : "Off";
+}
+
+/** Save and Protection, each its own JAW grant and Face ID. Cash is savings (D15), so both work on the user's cash. */
+function CashAgent({ address }: { address: `0x${string}` }) {
+  const { isConnected } = useAccount();
+  const agents = useAgents(address);
+  const pill = pillFor(CASH_JOBS.map((job) => agents.status[job]));
   const cancelled = /reject|denied|cancel/i.test(agents.error?.message ?? "");
 
   const limit = (job: CashJob) => {
@@ -125,6 +127,22 @@ function CashAgent({ address }: { address: `0x${string}` }) {
         </p>
       )}
     </div>
+  );
+}
+
+/** The Rebalancer's row opens its mix and limit in Manage (the board's tap goes to Manage.dc.html). */
+function Rebalancer({ address }: { address: `0x${string}` }) {
+  const pill = pillFor([useAgents(address).status.rebalance]);
+  return (
+    <Link
+      href="/manage"
+      aria-label={`Rebalancer, ${pill}. Open your mix`}
+      className="flex items-center gap-2.5 rounded-[22px] bg-card px-3 py-2.5 text-ink no-underline shadow-card-elev"
+    >
+      <AgentMark tone="bone"><RebalanceIcon /></AgentMark>
+      <AgentTitle name="Rebalancer" pill={<AgentPill on={pill === "On"}>{pill}</AgentPill>} sub="Keeps your mix" />
+      <ChevronRight size={16} className="shrink-0 text-subtle" />
+    </Link>
   );
 }
 
