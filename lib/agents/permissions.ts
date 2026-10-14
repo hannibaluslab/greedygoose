@@ -8,15 +8,18 @@ import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 
 /** The agents' jobs, in GooseExecutor's order (enum Job): the index is the job's id on-chain. */
-export const JOBS = ["save", "protect"] as const;
+export const JOBS = ["save", "protect", "sell", "rebalance", "entry"] as const;
 export type AgentJob = (typeof JOBS)[number];
+/** The Cash Agent's two jobs (the Agents switches): one daily USDC limit each. */
+export const CASH_JOBS = ["save", "protect"] as const;
+export type CashJob = (typeof CASH_JOBS)[number];
 
 /**
  * What each job may call, in the order of GooseExecutor's templates (`_permission`). JAW's screen grants every call
  * with checker 0 (D14), so the manager pins no argument: the executor builds each call for the account alone and
  * its post-checks revert anything else.
  */
-const CALLS: Record<AgentJob, readonly { target: Address; selector: Hex }[]> = {
+const CALLS: Record<CashJob, readonly { target: Address; selector: Hex }[]> = {
   save: [
     { target: USDC.address, selector: SEL.approve },
     { target: GUARDIAN.AAVE_V3_POOL, selector: SEL.supply },
@@ -33,7 +36,7 @@ const CALLS: Record<AgentJob, readonly { target: Address; selector: Hex }[]> = {
  * a withdrawal of savings to someone else moves no USDC from the account, so a USDC limit alone would charge it
  * nothing (contracts/docs/MANAGER-NOTES.md §1).
  */
-const LIMITED: Record<AgentJob, readonly Address[]> = {
+const LIMITED: Record<CashJob, readonly Address[]> = {
   save: [USDC.address],
   protect: [USDC.address, GUARDIAN.AUSDC],
 };
@@ -43,16 +46,22 @@ const LIMITED: Record<AgentJob, readonly Address[]> = {
  * Agents). Save only moves the account's own USDC into its own savings, so its limit is wider. Both wait on the
  * calibration pass (plan item 6 step 9).
  */
-export const DAILY_LIMIT_USD: Record<AgentJob, number> = { save: 1_000, protect: 300 };
+export const DAILY_LIMIT_USD: Record<CashJob, number> = { save: 1_000, protect: 300 };
+
+/**
+ * What the agent list says each agent may sell until its own grant says otherwise: the Agents board's "sells up to
+ * $300 a day" for Protect · sell (the same as Protect's, decision 5) and "sells up to $500 a week" for the Rebalancer.
+ */
+export const SELL_LIMIT_USD = { sell: { usd: 300, per: "day" }, rebalance: { usd: 500, per: "week" } } as const;
 
 /** A job's daily limit in USDC units, never above the executor's `CAP_MAX` (a D13 test deploy allows $5). */
-export function dailyLimitRaw(job: AgentJob, capMaxRaw: bigint): bigint {
+export function dailyLimitRaw(job: CashJob, capMaxRaw: bigint): bigint {
   const raw = BigInt(DAILY_LIMIT_USD[job]) * 10n ** BigInt(USDC.decimals);
   return raw < capMaxRaw ? raw : capMaxRaw;
 }
 
 /** What the app sends to JAW's `useGrantPermissions` to switch `job` on, with a daily limit in USDC units. */
-export function agentGrant(job: AgentJob, capRaw: bigint): PermissionsDetail {
+export function agentGrant(job: CashJob, capRaw: bigint): PermissionsDetail {
   if (capRaw <= 0n) throw new Error("Daily limit must be positive");
   return {
     calls: CALLS[job].map(({ target, selector }) => ({ target, selector })),
@@ -65,7 +74,7 @@ export function agentGrant(job: AgentJob, capRaw: bigint): PermissionsDetail {
  * JAW's SDK picks (core rpc/permissions.js apiPermissionsToPermission). GooseExecutor rebuilds the same struct.
  */
 export function agentPermission(
-  job: AgentJob,
+  job: CashJob,
   p: { account: Address; spender: Address; start: number; end: number; salt: bigint; capRaw: bigint },
 ): GuardianPermission {
   return {
@@ -90,38 +99,66 @@ export type ListedPermission = {
   spends: { token: string; allowance: string; unit: string; multiplier: number }[];
 };
 
+/** One of ours in JAW's list. `capRaw` is the first limit, the one the executor stores: USDC units, a week's for the Rebalancer. */
 export type AgentGrant = { job: AgentJob; permissionId: Hex; capRaw: bigint; start: number; end: number; salt: bigint };
+
+/** A listing's limit per stock, by reserve id, from its spends after the first `skip` (USDC's, and aUSDC's for a sale). */
+function listedStockLimits(p: ListedPermission, skip: number): StockLimits {
+  const spends = p.spends.slice(skip);
+  return EQUITIES.map((e) => BigInt(spends.find((s) => isAddressEqual(s.token as Address, e.address))?.allowance ?? 0));
+}
+
+/** What the app sends to switch `job` on with the listing's own limits; null when no grant of that job carries them. */
+function templateFor(job: AgentJob, p: ListedPermission, capRaw: bigint): PermissionsDetail | null {
+  try {
+    if (job === "sell") return sellGrant(capRaw, listedStockLimits(p, 2));
+    if (job === "rebalance") return rebalanceGrant(capRaw, listedStockLimits(p, 1));
+    if (job === "entry") return entryGrant(capRaw);
+    return agentGrant(job, capRaw);
+  } catch {
+    return null;
+  }
+}
+
+/** The listing is exactly the template: every call with checker 0 and every limit × 1, in order. */
+function isTemplate(p: ListedPermission, t: PermissionsDetail): boolean {
+  const calls = t.calls ?? [];
+  const spends = t.spends ?? [];
+  return (
+    p.calls.length === calls.length &&
+    calls.every(
+      (c, i) =>
+        isAddressEqual(p.calls[i].target as Address, c.target) &&
+        p.calls[i].selector.toLowerCase() === c.selector &&
+        (!p.calls[i].checker || isAddressEqual(p.calls[i].checker as Address, zeroAddress)),
+    ) &&
+    p.spends.length === spends.length &&
+    spends.every(
+      (s, i) =>
+        isAddressEqual(p.spends[i].token as Address, s.token) &&
+        p.spends[i].unit === s.unit &&
+        p.spends[i].multiplier === 1 &&
+        BigInt(p.spends[i].allowance) === BigInt(s.allowance),
+    )
+  );
+}
 
 /** Reads a listed permission as one of ours: the executor as spender and exactly one job's template. */
 export function readAgentGrant(p: ListedPermission, executor: Address): AgentGrant | null {
   if (!isAddressEqual(p.spender as Address, executor) || p.spends.length === 0) return null;
   const capRaw = BigInt(p.spends[0].allowance);
   if (capRaw <= 0n) return null;
-  const job = JOBS.find(
-    (j) =>
-      p.calls.length === CALLS[j].length &&
-      CALLS[j].every(
-        (c, i) =>
-          isAddressEqual(p.calls[i].target as Address, c.target) &&
-          p.calls[i].selector.toLowerCase() === c.selector &&
-          (!p.calls[i].checker || isAddressEqual(p.calls[i].checker as Address, zeroAddress)),
-      ) &&
-      p.spends.length === LIMITED[j].length &&
-      LIMITED[j].every(
-        (token, i) =>
-          isAddressEqual(p.spends[i].token as Address, token) &&
-          p.spends[i].unit === "day" &&
-          p.spends[i].multiplier === 1 &&
-          BigInt(p.spends[i].allowance) === capRaw,
-      ),
-  );
+  const job = JOBS.find((j) => {
+    const t = templateFor(j, p, capRaw);
+    return t !== null && isTemplate(p, t);
+  });
   return job ? { job, permissionId: p.permissionId as Hex, capRaw, start: p.start, end: p.end, salt: BigInt(p.salt) } : null;
 }
 
 /*
  * Protect · sell (GooseExecutor's Job.ProtectSell, id 2): when savings can't keep the credit Safe, the executor sells
  * some of the stock that backs it and repays. Its own JAW grant, so selling can be switched off alone (decision 5);
- * not one of the Cash Agent switches in `JOBS`.
+ * not one of the Cash Agent switches (`CASH_JOBS`).
  */
 
 /** A stock's daily limit is a whole number of these raw units (1e-4 share): the executor packs all seven in one word. */

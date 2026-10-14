@@ -1,10 +1,14 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import Link from "next/link";
 import { StockAvatar, tickerOf } from "./StockAvatar";
-import { ChevronDown, ChevronRight } from "./icons";
+import { AgentsIcon, ChevronDown, ChevronRight, EntryIcon, RebalanceIcon, ShieldIcon } from "./icons";
 import type { ActivityRow } from "@/hooks/useActivity";
+import type { AgentRow } from "@/hooks/useAgentFeed";
 import type { ActivityItem } from "@/lib/activity/decode";
+import type { AgentName, Words } from "@/lib/agents/feed";
+import { STATUS_LABEL } from "@/lib/risk/status";
 import { txUrl } from "@/lib/chain";
 import { ALL_RESERVES, USDC, findByAddress } from "@/lib/tokens/registry";
 import { formatShares, formatUsd } from "@/lib/formatting";
@@ -60,6 +64,43 @@ export function ActivityAvatar({ symbol, size }: { symbol: string; size: number 
   );
 }
 
+/** Each agent's round mark (Agents board): the Cash Agent's lime shield, the others' bone badges. */
+const MARK: Record<AgentName, { Icon: typeof ShieldIcon; bg: string }> = {
+  "Cash Agent": { Icon: ShieldIcon, bg: "bg-brand" },
+  Protection: { Icon: ShieldIcon, bg: "bg-brand" },
+  Rebalancer: { Icon: RebalanceIcon, bg: "bg-card-bone" },
+  "Entry agent": { Icon: EntryIcon, bg: "bg-card-bone" },
+  Agents: { Icon: AgentsIcon, bg: "bg-card-bone" },
+};
+
+/** 38px on the agent list (19px icon), 32px in the activity (16px icon), as the board draws them. */
+export function AgentMark({ agent, size }: { agent: AgentName; size: 32 | 38 }) {
+  const { Icon, bg } = MARK[agent];
+  return (
+    <span aria-hidden className={`flex shrink-0 items-center justify-center rounded-full text-ink ${bg}`} style={{ width: size, height: size }}>
+      <Icon size={size === 38 ? 19 : 16} strokeWidth={size === 38 ? 1.9 : 2} />
+    </span>
+  );
+}
+
+const STATUS_TEXT = { safe: "text-pos", watch: "text-watch-ink", act: "text-neg" } as const;
+
+/**
+ * A feed line: Safe, Watch and Act in their colour and weight, as the board sets them. Geist has no "→", so the arrow
+ * is set in the system font, as the board draws it (StatusChange does the same).
+ */
+export function WordsText({ words }: { words: Words }) {
+  return words.map((w, i) =>
+    typeof w !== "string" ? (
+      <span key={i} className={`font-semibold ${STATUS_TEXT[w.status]}`}>
+        {STATUS_LABEL[w.status]}
+      </span>
+    ) : (
+      w.split("→").map((part, j) => [j > 0 && <span key={`${i}.${j}`} className="font-[system-ui]">→</span>, part])
+    ),
+  );
+}
+
 /** The Agents board's Activity card. */
 export function FeedCard({ children }: { children: ReactNode }) {
   return <div className="rounded-[22px] bg-card px-3.5 pb-0.5 shadow-card-elev">{children}</div>;
@@ -78,10 +119,14 @@ export function dayLabel(ms: number, nowMs: number) {
   return days === 0 ? "Today" : days === 1 ? "Yesterday" : days < 7 ? WEEKDAY.format(ms) : DATE.format(ms);
 }
 
+/** A row of the feed: the user's own move (JAW's history), or an agent's (GooseExecutor's events). */
+export type FeedRow = ActivityRow | AgentRow;
+const isAgentRow = (r: FeedRow): r is AgentRow => "agent" in r;
+
 /** Moves grouped by day under the board's mono labels; one opens at a time for its details. */
-export function FeedDays({ rows, nowMs }: { rows: ActivityRow[]; nowMs: number }) {
+export function FeedDays({ rows, nowMs }: { rows: readonly FeedRow[]; nowMs: number }) {
   const [open, setOpen] = useState<string | null>(null);
-  const days = rows.reduce<{ label: string; rows: ActivityRow[] }[]>((out, row) => {
+  const days = rows.reduce<{ label: string; rows: FeedRow[] }[]>((out, row) => {
     const label = dayLabel(row.time, nowMs);
     if (out.at(-1)?.label === label) out.at(-1)!.rows.push(row);
     else out.push({ label, rows: [row] });
@@ -91,15 +136,10 @@ export function FeedDays({ rows, nowMs }: { rows: ActivityRow[]; nowMs: number }
     <div key={day.label} className={d ? "border-t border-hairline pt-2.5" : "pt-2"}>
       <h3 className="m-0 font-mono text-[11px] font-medium uppercase tracking-[0.1em] text-subtle">{day.label}</h3>
       <ol className="m-0 list-none p-0">
-        {day.rows.map((row, i) => (
-          <Move
-            key={row.key}
-            row={row}
-            last={i === day.rows.length - 1}
-            open={open === row.key}
-            onToggle={() => setOpen(open === row.key ? null : row.key)}
-          />
-        ))}
+        {day.rows.map((row, i) => {
+          const props = { last: i === day.rows.length - 1, open: open === row.key, onToggle: () => setOpen(open === row.key ? null : row.key) };
+          return isAgentRow(row) ? <AgentMove key={row.key} row={row} {...props} /> : <Move key={row.key} row={row} {...props} />;
+        })}
       </ol>
     </div>
   ));
@@ -156,11 +196,61 @@ function Move({ row, last, open, onToggle }: { row: ActivityRow; last: boolean; 
   );
 }
 
-function Detail({ label, children }: { label: string; children: ReactNode }) {
+/**
+ * One agent move as the board draws Protection's: the agent · time, what changed and why on tap, then where its
+ * limits are changed and the transaction on Base.
+ */
+function AgentMove({ row, last, open, onToggle }: { row: AgentRow; last: boolean; open: boolean; onToggle: () => void }) {
+  const link = "flex h-10 items-center justify-between text-[13px] font-semibold text-ink no-underline";
+  return (
+    <li className={`py-2 ${last ? "" : "border-b border-hairline"}`}>
+      <button type="button" aria-expanded={open} onClick={onToggle} className="flex w-full items-start gap-2.5 text-left">
+        <AgentMark agent={row.agent} size={32} />
+        <span className="flex min-w-0 grow flex-col gap-0.5">
+          <span className="text-sm font-semibold leading-[1.3]">
+            {row.agent} <span className="font-normal text-subtle">· {TIME.format(row.time)}</span>
+          </span>
+          <span className="text-[13px] leading-[1.3] text-ink-2">
+            <WordsText words={row.line} />
+          </span>
+        </span>
+        <ChevronDown className={`mt-0.5 shrink-0 text-subtle ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="mt-2 rounded-[16px] bg-card-bone px-3 pt-2.5 text-[13px] leading-[1.35]">
+          {row.details.length > 0 && (
+            <dl className="num m-0 mb-1.5 grid grid-cols-[82px_minmax(0,1fr)] gap-y-[5px]">
+              {row.details.map((d) => (
+                <Detail key={d.label} label={d.label} strong={d.label !== "Why"}>
+                  <WordsText words={d.value} />
+                </Detail>
+              ))}
+            </dl>
+          )}
+          {row.manage && (
+            <Link href={row.manage.href} className={`${link} ${row.details.length ? "border-t border-hairline" : ""}`}>
+              {row.manage.label} <ChevronRight size={15} />
+            </Link>
+          )}
+          <a
+            href={txUrl(row.hash)}
+            target="_blank"
+            rel="noreferrer"
+            className={`${link} ${row.details.length || row.manage ? "border-t border-hairline" : ""}`}
+          >
+            View on Base <ChevronRight size={15} />
+          </a>
+        </div>
+      )}
+    </li>
+  );
+}
+
+function Detail({ label, strong = true, children }: { label: string; strong?: boolean; children: ReactNode }) {
   return (
     <>
       <dt className="text-ink-mid">{label}</dt>
-      <dd className="m-0 font-semibold">{children}</dd>
+      <dd className={`m-0 ${strong ? "font-semibold" : ""}`}>{children}</dd>
     </>
   );
 }
