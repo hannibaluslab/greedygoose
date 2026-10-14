@@ -8,7 +8,8 @@ import { FILL_MARGIN, fillRaw } from "@/lib/aave/loan";
 import { buildBorrowCalls } from "@/lib/aave/tx";
 import { payFromCash } from "@/lib/cash";
 import {
-  assertCreditBuy, backingOptions, buildCreditBuyCalls, planCredit, splitCash, type BackingOption, type CreditPosition,
+  CREDIT_BLOCKED, assertCreditBuy, backingOptions, buildCreditBuyCalls, creditBuyActivity, creditBuyStop, planCredit, splitCash,
+  type BackingOption, type CreditPosition,
 } from "@/lib/creditBuy";
 import { aaveV3PoolAbi } from "@/lib/guardian/abis";
 import { buildBuyCalls, minOut, type BuyQuote } from "@/lib/swap/buy";
@@ -193,6 +194,29 @@ describe("planCredit (Leo's loan maths: autoFill, combinedLoan, status)", () => 
     expect(p.block).toBeUndefined();
     expect(p.priceMayMove).toBe(true);
     expect(plan(300).priceMayMove).toBe(false);
+  });
+});
+
+describe("creditBuyStop and creditBuyActivity (what the hooks check and record)", () => {
+  const position: CreditPosition = { collateralUsd: 0, avgCf: 0, debtUsd: 0, healthFactor: null, usdcLiquidity: 1_000_000, borrowPaused: false };
+  const options: BackingOption[] = [{ stock: nvda, freeRaw: 1_120_000_000n, freeUsd: 2_000, cf: 0.7 }];
+  const plan = (creditUsd: number) => planCredit({ position, options, creditRaw: usd(creditUsd), cash: walletCash, now: new Date("2026-10-14T15:00:00Z") });
+
+  it("lets a Safe plan through, and holds Watch or Act until it's confirmed", () => {
+    expect(creditBuyStop(plan(300), false)).toBeNull();
+    expect(creditBuyStop(plan(1_100), false)).toMatch(/credit in Watch/);
+    expect(creditBuyStop(plan(1_100), true)).toBeNull();
+  });
+  it("a block stops it even when confirmed", () => {
+    expect(creditBuyStop(plan(5_000), true)).toBe(CREDIT_BLOCKED["too-much"]);
+  });
+  it("records the backing, the credit and the buy", () => {
+    const p = plan(300);
+    expect(creditBuyActivity({ stock: aapl, quote, plan: p })).toEqual([
+      { kind: "supply", symbol: "NVDAc", amount: Number(p.backing[0].raw) / 1e8 },
+      { kind: "borrow", symbol: "USDC", amount: 300 },
+      { kind: "buy", symbol: "AAPLc", amount: 1.35, paidUsd: 300 },
+    ]);
   });
 });
 

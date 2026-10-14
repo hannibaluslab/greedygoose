@@ -8,7 +8,8 @@ import { buildLoanCalls, type Call } from "@/lib/aave/tx";
 import { cashRaw, maxSpendRaw, payFromCash, toUsd, type Cash } from "@/lib/cash";
 import { formatUsd } from "@/lib/formatting";
 import { marketState } from "@/lib/market-hours";
-import { needsExtraConfirm, statusFor, type Status } from "@/lib/risk/status";
+import type { ActivityItem } from "@/lib/activity/decode";
+import { STATUS_LABEL, needsExtraConfirm, statusFor, type Status } from "@/lib/risk/status";
 import { buildBuyCalls, type BuyQuote } from "@/lib/swap/buy";
 import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
 
@@ -111,6 +112,22 @@ export function planCredit(p: { position: CreditPosition; options: BackingOption
     priceMayMove: !marketState(p.now).open,
     block,
   };
+}
+
+/** Why a reviewed Credit Buy can't be signed: a block, or a Watch/Act ending without the extra confirmation (D2). */
+export function creditBuyStop(plan: CreditPlan, confirmedRisk: boolean): string | null {
+  if (plan.block) return CREDIT_BLOCKED[plan.block];
+  if (plan.extraConfirm && !confirmedRisk) return `Confirm you understand this puts your credit in ${STATUS_LABEL[plan.after]} first.`;
+  return null;
+}
+
+/** What Activity shows while it confirms: the backing put in use, the credit taken and the buy. */
+export function creditBuyActivity(p: { stock: ReserveAsset; quote: BuyQuote; plan: CreditPlan }): ActivityItem[] {
+  return [
+    ...p.plan.backing.map((b) => ({ kind: "supply" as const, symbol: b.stock.symbol, amount: Number(b.raw) / 10 ** b.stock.decimals })),
+    { kind: "borrow", symbol: USDC.symbol, amount: toUsd(p.plan.creditRaw) },
+    { kind: "buy", symbol: p.stock.symbol, amount: Number(p.quote.amountOut) / 10 ** p.stock.decimals, paidUsd: toUsd(p.quote.amountIn) },
+  ];
 }
 
 /**
