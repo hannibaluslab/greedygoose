@@ -321,8 +321,9 @@ input[type="range"] { accent-color: var(--ink); }
 input[type="range"]::-webkit-slider-thumb { width: 22px; height: 22px; }
 
 /* Welcome (app/(marketing)/Welcome.tsx). The page is ink edge to edge, overscroll and the desktop margins
-   included, so the body takes the colour while it's on screen. */
-body:has([data-welcome]) {
+   included, so the body takes the colour while it's on screen. A class the Welcome sets, not body:has([data-welcome]):
+   with cacheComponents Next keeps the welcome mounted but hidden after sign-in, and :has() would paint every screen ink. */
+body.gg-welcome {
   background: var(--ink);
   color-scheme: dark;
 }

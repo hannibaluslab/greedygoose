@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useAccount, useBytecode, useConnect } from "wagmi";
 import { Check } from "lucide-react";
@@ -41,6 +41,13 @@ export function Welcome() {
   useEffect(() => {
     if (next) router.replace(next);
   }, [next, router]);
+
+  // The ink body (globals.css). Effects run only while the welcome is shown: once Next hides it after sign-in, the
+  // cleanup hands the body back to the ground.
+  useLayoutEffect(() => {
+    document.body.classList.add("gg-welcome");
+    return () => document.body.classList.remove("gg-welcome");
+  }, []);
 
   const start = () => {
     if (gated) return;

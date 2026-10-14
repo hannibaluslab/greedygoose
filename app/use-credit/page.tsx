@@ -34,7 +34,7 @@ function Loan({ address }: { address: `0x${string}` }) {
   const { data } = usePosition(address);
   const cfs = useCollateralFactors(data?.holdings);
   if (!data || !cfs) {
-    return <div className="px-5 pt-[54px]"><div aria-busy className="h-[520px] animate-pulse rounded-[22px] bg-chip" /></div>;
+    return <div className="px-5 pt-[calc(env(safe-area-inset-top)+8px)]"><div aria-busy className="h-[520px] animate-pulse rounded-[22px] bg-chip" /></div>;
   }
   return <LoanForm address={address} data={data} cfs={cfs} />;
 }
@@ -117,7 +117,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
 
   if (tx.phase === "done" && sent) {
     return (
-      <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[54px]">
+      <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[calc(env(safe-area-inset-top)+8px)]">
         <SubHeader label="Credit" />
         <TxDone
           title={sent.borrowed > 0 ? `You used ${formatUsd(sent.borrowed)} of credit` : "Backing added"}
@@ -142,7 +142,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
 
   if (lines.length === 0 && data.collateralUsd === 0) {
     return (
-      <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[54px]">
+      <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[calc(env(safe-area-inset-top)+8px)]">
         <SubHeader label="Credit" />
         <h1 className="m-0 text-[30px] font-semibold tracking-[-0.03em]">Use credit</h1>
         <WhiteCard className="flex flex-col gap-3 p-[18px]">
@@ -167,7 +167,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
   );
 
   return (
-    <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[54px]">
+    <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[calc(env(safe-area-inset-top)+8px)]">
       <SubHeader label="Credit" />
       <div className="flex flex-col gap-1">
         <h1 className="m-0 text-[30px] font-semibold tracking-[-0.03em]">Use credit</h1>

@@ -25,7 +25,7 @@ export function AddMoneyView({
   onCopy: () => void;
 }) {
   return (
-    <div className="relative flex min-h-dvh flex-col gap-5 px-5 pt-[60px] leading-[normal]">
+    <div className="relative flex min-h-dvh flex-col gap-5 px-5 pt-[calc(env(safe-area-inset-top)+14px)] leading-[normal]">
       <div className="flex items-center gap-3">
         <Link href="/home" aria-label="Back" className="-ml-3 flex size-11 items-center justify-center text-ink"><BackIcon /></Link>
         <h1 className="m-0 text-[28px] font-semibold tracking-[-0.02em]">Add money</h1>

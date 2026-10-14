@@ -13,7 +13,7 @@ export default function SettingsPage() {
 function Settings({ address }: { address: `0x${string}` }) {
   const { disconnect } = useDisconnect();
   return (
-    <div className="flex min-h-dvh flex-col gap-3.5 px-5 pb-[34px] pt-[54px]">
+    <div className="flex min-h-dvh flex-col gap-3.5 px-5 pb-[34px] pt-[calc(env(safe-area-inset-top)+8px)]">
       <SubHeader label="Settings" />
       <WhiteCard className="px-4 py-0.5">
         <Line first label="Account" value={<a className="underline" href={addressUrl(address)} target="_blank" rel="noreferrer">{shortAddress(address)}</a>} />

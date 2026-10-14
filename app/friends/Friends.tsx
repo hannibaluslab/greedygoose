@@ -10,7 +10,7 @@ export function Friends() {
   return (
     <RequireAccount>
       {() => (
-        <div className="relative flex min-h-dvh flex-col gap-4 px-5 pt-[54px]">
+        <div className="relative flex min-h-dvh flex-col gap-4 px-5 pt-[calc(env(safe-area-inset-top)+8px)]">
           <TabHeader title="Friends" />
           <WhiteCard className="flex flex-col gap-3 p-[18px]">
             <div className="flex items-center gap-3">

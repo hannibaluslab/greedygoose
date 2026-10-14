@@ -13,7 +13,7 @@ export function Header({ address }: { address: `0x${string}` }) {
   const { data: name, isPending } = useAccountName(address);
   const initial = name ? name.charAt(0).toUpperCase() : "G";
   return (
-    <header className="flex items-center justify-between px-5 pt-[54px]">
+    <header className="flex items-center justify-between px-5 pt-[calc(env(safe-area-inset-top)+8px)]">
       <div className="flex items-center gap-2.5">
         <span aria-hidden className="flex size-9 items-center justify-center rounded-[18px] bg-ink text-sm font-semibold text-on-ink">
           {isPending ? "" : initial}

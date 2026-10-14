@@ -53,7 +53,7 @@ function Repay({ address }: { address: `0x${string}` }) {
   }, [tx.phase, router]);
 
   if (!data) {
-    return <div className="px-5 pt-[54px]"><div aria-busy className="h-[420px] animate-pulse rounded-[22px] bg-chip" /></div>;
+    return <div className="px-5 pt-[calc(env(safe-area-inset-top)+8px)]"><div aria-busy className="h-[420px] animate-pulse rounded-[22px] bg-chip" /></div>;
   }
 
   const maxSpend = maxSpendRaw(data.cash);
@@ -84,7 +84,7 @@ function Repay({ address }: { address: `0x${string}` }) {
   };
 
   return (
-    <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[54px]">
+    <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[calc(env(safe-area-inset-top)+8px)]">
       <SubHeader
         label="Credit"
         right={

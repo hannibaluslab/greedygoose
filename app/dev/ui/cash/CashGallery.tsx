@@ -118,7 +118,7 @@ function Sheet({ title, children }: { title: string; children: ReactNode }) {
 function HomeFixture({ note, cards, sheet }: { note?: string; cards: ReactNode; sheet: ReactNode }) {
   return (
     <div className="relative min-h-dvh">
-      <header className="flex items-center justify-between px-5 pt-[54px]">
+      <header className="flex items-center justify-between px-5 pt-[calc(env(safe-area-inset-top)+8px)]">
         <div className="flex items-center gap-2.5">
           <span aria-hidden className="flex size-9 items-center justify-center rounded-[18px] bg-ink text-sm font-semibold text-on-ink">S</span>
           <div className="flex flex-col leading-[1.3]">
@@ -179,7 +179,7 @@ function ActivityFixture({ nowSec }: { nowSec: number }) {
     ...yours,
   ].sort((a, b) => b.time - a.time);
   return (
-    <div className="relative flex min-h-dvh flex-col gap-4 px-5 pt-[54px]">
+    <div className="relative flex min-h-dvh flex-col gap-4 px-5 pt-[calc(env(safe-area-inset-top)+8px)]">
       <TabHeader title="Activity" />
       <AgentsFeed title={null} empty="" rows={rows} nowMs={nowMs} loading={false} error={null} onRetry={() => {}} more={false} onShowEarlier={() => {}} />
       <TabBar />

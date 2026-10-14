@@ -12,7 +12,9 @@ export const metadata: Metadata = {
 };
 
 // viewportFit cover: the canvas is drawn edge to edge, so the page runs under the status bar and
-// home indicator, and fixed bars and sheets pad themselves with env(safe-area-inset-*).
+// home indicator, and fixed bars and sheets pad themselves with env(safe-area-inset-*). The boards' 54px top
+// included the status bar, so a screen's top is the inset plus the 8px left under it (0 in a Safari tab, where
+// the page starts below the bar; the bar's height once added to the Home Screen).
 export const viewport: Viewport = { themeColor: "#f4f2ec", width: "device-width", initialScale: 1, viewportFit: "cover" };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

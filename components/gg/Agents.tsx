@@ -30,7 +30,7 @@ export function AgentsView({
   turnOffAll: ReactNode;
 }) {
   return (
-    <div className="relative flex min-h-dvh flex-col gap-3 px-5 pt-[54px] leading-[normal]">
+    <div className="relative flex min-h-dvh flex-col gap-3 px-5 pt-[calc(env(safe-area-inset-top)+8px)] leading-[normal]">
       <TabHeader title="Agents" />
       {cards}
       <section aria-label="Your agents" className="flex flex-col gap-2">

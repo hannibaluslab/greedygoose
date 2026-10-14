@@ -24,7 +24,7 @@ function Unlock({ address }: { address: `0x${string}` }) {
   const holding = data?.holdings.find((h) => h.symbol === sheet.subject);
 
   return (
-    <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[54px]">
+    <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[calc(env(safe-area-inset-top)+8px)]">
       <SubHeader label="Credit" back="/portfolio" />
       <div className="flex flex-col gap-1">
         <h1 className="m-0 text-[30px] font-semibold tracking-[-0.03em]">Free up shares</h1>

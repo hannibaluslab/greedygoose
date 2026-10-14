@@ -70,7 +70,7 @@ export function Gallery() {
   const [on, setOn] = useState(true);
   const now = useNowSec() * 1000;
   return (
-    <div className="flex min-h-dvh flex-col gap-6 px-5 pb-12 pt-[54px]">
+    <div className="flex min-h-dvh flex-col gap-6 px-5 pb-12 pt-[calc(env(safe-area-inset-top)+8px)]">
       <div className="flex flex-col gap-1">
         <span className="label">Dev only</span>
         <h1 className="m-0 text-[30px] font-semibold leading-[1.1] tracking-[-0.03em]">UI kit</h1>

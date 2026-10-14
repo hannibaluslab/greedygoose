@@ -19,7 +19,7 @@ export default function CreditPage() {
 function Credit({ address }: { address: `0x${string}` }) {
   const { data } = usePosition(address);
   return (
-    <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[54px]">
+    <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[calc(env(safe-area-inset-top)+8px)]">
       <SubHeader label="Credit" />
       <MarketBanner />
       {!data ? (
