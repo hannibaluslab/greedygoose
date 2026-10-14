@@ -16,14 +16,14 @@ const sevenWith = (r: number, raw: bigint) => Array.from({ length: 7 }, (_, i) =
 
 function row(e: AgentEvent, ctx?: MoveContext) {
   const m = describeAgentEvent(e, at, ctx)!;
-  return { agent: m.agent, line: text(m.line), details: Object.fromEntries(m.details.map((d) => [d.label, text(d.value)])), manage: m.manage?.label };
+  return { agent: m.agent, line: text(m.line), details: Object.fromEntries(m.details.map((d) => [d.label, text(d.value)])) };
 }
 
 describe("describeAgentEvent: the Agents board's rows", () => {
   it("draws the board's sale: what sold, why, what's owed, the status, the cash and the day's limit", () => {
     const sale: AgentEvent = { kind: "sold", sharesRaw: sevenWith(6, 46_997_389n), repaidRaw: usdc(178.2), hfBefore: hf(1.08), hfAfter: hf(1.52), atOnce: true };
     expect(row(sale, { owedRaw: [usdc(780), usdc(600)], cashRaw: [usdc(400), usdc(400)], used: { spentRaw: usdc(180), capRaw: usdc(300), decimals: 6 }, pricesRaw: prices })).toEqual({
-      agent: "Protection",
+      agent: "Protect",
       line: "Sold $180 of Tesla to repay. Back to Safe.",
       details: {
         Why: "Your credit reached Act, so Protect sold at once.",
@@ -32,7 +32,6 @@ describe("describeAgentEvent: the Agents board's rows", () => {
         "Your cash": "Not touched",
         "Used today": "$180 of $300",
       },
-      manage: "Change Protection's limits",
     });
   });
 
@@ -68,7 +67,7 @@ describe("describeAgentEvent: the Agents board's rows", () => {
       { kind: "repaid", amountRaw: usdc(120), hfBefore: hf(1.3), hfAfter: hf(1.65), reason: "watch" },
       { owedRaw: [780_000_001n, 660_000_001n], used: { spentRaw: usdc(120), capRaw: usdc(300), decimals: 6 } },
     );
-    expect(r).toMatchObject({ agent: "Protection", line: "Repaid $120 from your cash. Back to Safe." });
+    expect(r).toMatchObject({ agent: "Protect", line: "Repaid $120 from your cash. Back to Safe." });
     expect(r.details).toEqual({
       Why: "Your credit reached Watch.",
       "You owe": "$780.01 → $660.01",
@@ -82,18 +81,18 @@ describe("describeAgentEvent: the Agents board's rows", () => {
     expect(weekend.details.Why).toMatch(/weekend/);
   });
 
-  it("draws the board's Rebalancer row, with the week's limit", () => {
+  it("draws a Rebalance row, with the week's limit", () => {
     const r = row(
       { kind: "rebalanced", soldRaw: sevenWith(0, 20_000_000n), boughtRaw: sevenWith(5, 27_777_778n) },
       { cashRaw: [usdc(5), usdc(5.002)], used: { spentRaw: usdc(50), capRaw: usdc(500), decimals: 6 }, pricesRaw: prices },
     );
-    expect(r).toMatchObject({ agent: "Rebalancer", line: "Sold $50 of Apple, bought $50 of NVIDIA.", manage: "Change your mix" });
+    expect(r).toMatchObject({ agent: "Rebalance", line: "Sold $50 of Apple, bought $50 of NVIDIA." });
     expect(r.details).toEqual({ Why: "Your mix drifted too far from its target.", "Your cash": "Not touched", "Used this week": "$50 of $500" });
   });
 
   it("folds a Save into the money arriving (cash is savings, D15)", () => {
     expect(row({ kind: "saved", amountRaw: usdc(40) }, { used: { spentRaw: usdc(40), capRaw: usdc(1000), decimals: 6 } })).toMatchObject({
-      agent: "Cash Agent",
+      agent: "Save",
       line: "$40 added to your cash.",
       details: { "Used today": "$40 of $1,000" },
     });
@@ -105,7 +104,7 @@ describe("describeAgentEvent: the Agents board's rows", () => {
       { kind: "converted", coin: usde.address, amountInRaw: 1_000n * 10n ** 18n, usdcOutRaw: 999_569_790n },
       { used: { spentRaw: 1_000n * 10n ** 18n, capRaw: 5_000n * 10n ** 18n, decimals: 18 } },
     );
-    expect(r).toMatchObject({ agent: "Entry agent", line: "Turned 1,000 USDe into $999.57 of cash." });
+    expect(r).toMatchObject({ agent: "Receive", line: "Turned 1,000 USDe into $999.57 of cash." });
     expect(r.details["Your cash"]).toBe("+$999.57");
     expect(r.details["Used today"]).toBe("$1,000 of $5,000");
     expect(limitOf({ kind: "converted", coin: usde.address, amountInRaw: 1n, usdcOutRaw: 1n })).toEqual({ job: "entry", spend: 1 });
@@ -115,9 +114,9 @@ describe("describeAgentEvent: the Agents board's rows", () => {
   });
 
   it("names switches, the mix and failed runs in plain words, with the executor's own error name", () => {
-    expect(row({ kind: "job-on", job: "sell", capRaw: usdc(300), end: 1_791_984_607 }).line).toBe("Protection can sell backing stock, up to $300 a day.");
-    expect(row({ kind: "job-on", job: "rebalance", capRaw: usdc(500), end: 1_791_984_607 }).line).toBe("The Rebalancer is on, up to $500 a week.");
-    expect(row({ kind: "job-off", job: "protect", reason: "stuck" }).line).toBe("Protection is off: its last runs didn't go through.");
+    expect(row({ kind: "job-on", job: "sell", capRaw: usdc(300), end: 1_791_984_607 }).line).toBe("Protect can sell backing stock, up to $300 a day.");
+    expect(row({ kind: "job-on", job: "rebalance", capRaw: usdc(500), end: 1_791_984_607 }).line).toBe("Rebalance is on, up to $500 a week.");
+    expect(row({ kind: "job-off", job: "protect", reason: "stuck" }).line).toBe("Protect is off: its last runs didn't go through.");
     expect(row({ kind: "job-off", job: "save", reason: "revoked" }).line).toBe("Save is off.");
     expect(row({ kind: "mix", weightsBps: [2500, 0, 0, 0, 0, 5000, 2500] }).line).toBe("Your mix: NVIDIA 50%, Apple 25%, Tesla 25%.");
     expect(row({ kind: "mix", weightsBps: [0, 0, 0, 0, 0, 0, 0] }).line).toBe("Your mix is cleared.");

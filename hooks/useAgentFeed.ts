@@ -8,6 +8,7 @@ import { CHAIN_ID } from "@/lib/chain";
 import { GOOSE_EXECUTOR, GOOSE_EXECUTOR_BLOCK } from "@/lib/agents/config";
 import { decodeAgentLogs, type AgentLog } from "@/lib/agents/events";
 import { describeAgentEvent, type AgentMove } from "@/lib/agents/feed";
+import type { AgentJob } from "@/lib/agents/permissions";
 import { LOG_CHUNK, logChunks, readAgentLogs, readMoveContext } from "@/lib/agents/history";
 
 /** A week of Base blocks (2 seconds each). The feed reads a week at a time, back to the executor's deploy block. */
@@ -19,6 +20,9 @@ const PARALLEL = 4;
 
 /** One agent move in the feed, at `time` (ms), with the transaction that made it. */
 export type AgentRow = AgentMove & { key: string; time: number; hash: Hex };
+
+/** A job's newest switch: on or off, whether the user turned it off, and when (seconds). */
+export type Switched = { on: boolean; byUser: boolean; at: number };
 
 /** Protect · sell's latest heads-up: what it would sell (USDC units) and when (seconds), sent at `sentAt`. */
 export type HeadsUp = { sellValueRaw: bigint; sellAfter: number; sentAt: number };
@@ -103,12 +107,28 @@ export function useAgentFeed(account: Address) {
     return e?.kind === "heads-up" && m ? { sellValueRaw: e.sellValueRaw, sellAfter: e.sellAfter, sentAt: m.time } : null;
   }, [events, moves]);
 
+  // Each job's newest switch: on, or off by the user (revoked) or by the executor (its grant ran out, it can't act, or
+  // its runs kept failing).
+  const switched = useMemo(() => {
+    const out: Partial<Record<AgentJob, Switched>> = {};
+    const seen = new Set<AgentJob>();
+    events.forEach((e, i) => {
+      if ((e.kind !== "job-on" && e.kind !== "job-off") || seen.has(e.job)) return;
+      seen.add(e.job);
+      const time = moves[i]?.data?.time; // until its block is read, the job waits rather than show an older switch
+      if (time) out[e.job] = { on: e.kind === "job-on", byUser: e.kind === "job-off" && e.reason === "revoked", at: time };
+    });
+    return out;
+  }, [events, moves]);
+
   if (!executor) {
-    return { rows: [], headsUp: null, since: 0, more: false, showEarlier: () => {}, isLoading: false, isError: false, refetch: () => {} };
+    return { rows: [], headsUp: null, switched: {} as Partial<Record<AgentJob, Switched>>, since: 0, more: false, showEarlier: () => {}, isLoading: false, isError: false, refetch: () => {} };
   }
   return {
     rows,
     headsUp,
+    /** Each job's newest switch in the weeks read so far. */
+    switched,
     /** The user's own moves older than this (ms) wait for "Show earlier", so the two lists cover the same days. */
     since: more ? (start.data ?? 0) : 0,
     /** Whether there are older weeks to read. */

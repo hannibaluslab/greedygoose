@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useAccount } from "wagmi";
 import { toast } from "sonner";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
-import { CardTitle, LimitChips, ManageCard, ManageSkeleton, ManageTop, MixCard, SaveFooter } from "@/components/gg/Manage";
+import { LimitChips } from "@/components/gg/LimitChips";
+import { CardTitle, ManageCard, ManageSkeleton, ManageTop, MixCard, SaveFooter } from "@/components/gg/Manage";
 import { MarketList, MarketRow } from "@/components/gg/Market";
 import { SheetShell } from "@/components/sheets/SheetShell";
 import { useAgents } from "@/hooks/useAgents";
@@ -15,7 +16,7 @@ import { useManageSave } from "@/hooks/useManageSave";
 import { usePosition, type PositionData } from "@/hooks/usePosition";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { MIX_WHOLE, mixWeights, nowPercents, previewTrades, rebalanceOptions, startingMix, whatHappens, type MixRow } from "@/lib/agents/mix";
-import { limitRaw, STOCK_LIMIT_USD, stockLimitsRaw } from "@/lib/agents/permissions";
+import { limitRaw, LIMIT_USD, stockLimitsRaw } from "@/lib/agents/permissions";
 import { buildSetMixCalls } from "@/lib/agents/settings";
 import { toUsd } from "@/lib/cash";
 import { formatUsdShort, formatUsdTrim } from "@/lib/formatting";
@@ -70,7 +71,7 @@ function MixForm({
   const options = settings?.options ?? rebalanceOptions();
 
   // The limit: the grant's while the Rebalancer has one, the boards' $500 a week before.
-  const limitUsd = chosenUsd ?? (terms ? toUsd(terms.capRaw) : STOCK_LIMIT_USD.rebalance.start);
+  const limitUsd = chosenUsd ?? (terms ? toUsd(terms.capRaw) : LIMIT_USD.rebalance.start);
   const capRaw = limitRaw(limitUsd, agents.capMaxRaw ?? BigInt(limitUsd) * 10n ** 6n);
   const trades = whole ? previewTrades({ holdings, rows, capRaw, capMaxRaw: agents.capMaxRaw, options }) : [];
   const backingUsd = holdings.reduce((a, h) => a + h.lockedUsd, 0);
@@ -134,7 +135,7 @@ function MixForm({
 
       <ManageCard>
         <CardTitle title="Its limit" sub="Can sell up to" />
-        <LimitChips label="The Rebalancer can sell up to, a week" options={STOCK_LIMIT_USD.rebalance.options} value={limitUsd} onChange={setChosenUsd} per="a week" size="sm" />
+        <LimitChips label="The Rebalancer can sell up to, a week" options={LIMIT_USD.rebalance.options} value={limitUsd} onChange={setChosenUsd} per="a week" size="sm" />
         <span className="text-xs leading-[1.4] text-subtle">
           Sells what grew too big to buy what fell short. <span className="whitespace-nowrap">Never uses your cash or credit.</span>
         </span>

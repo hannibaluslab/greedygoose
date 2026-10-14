@@ -5,10 +5,11 @@ import type { PermissionsDetail } from "@jaw.id/wagmi";
 import {
   agentGrant,
   agentPermission,
-  dailyLimitRaw,
   entryGrant,
   entryPermission,
   jobGrant,
+  LIMIT_USD,
+  limitRaw,
   readAgentGrant,
   readStockLimits,
   rebalanceGrant,
@@ -348,14 +349,16 @@ describe("jobStatus", () => {
   });
 });
 
-describe("dailyLimitRaw (the limit a switch turns a job on with)", () => {
-  it("is the boards' $300 a day for Protection and $1,000 for Save", () => {
-    expect(dailyLimitRaw("protect", 10n ** 12n)).toBe(300_000_000n);
-    expect(dailyLimitRaw("save", 10n ** 12n)).toBe(1_000_000_000n);
+describe("limitRaw (the limit a switch turns a job on with)", () => {
+  it("starts Protect on $300 a day, Save and Receive on $1,000, the Rebalancer on $500 a week", () => {
+    expect(limitRaw(LIMIT_USD.protect.start, 10n ** 12n)).toBe(300_000_000n);
+    expect(limitRaw(LIMIT_USD.save.start, 10n ** 12n)).toBe(1_000_000_000n);
+    expect(limitRaw(LIMIT_USD.entry.start, 10n ** 12n)).toBe(1_000_000_000n);
+    expect([LIMIT_USD.rebalance.start, LIMIT_USD.rebalance.per]).toEqual([500, "week"]);
   });
 
   it("never asks for more than the executor's CAP_MAX, so a $5 test deploy registers the grant", () => {
-    expect(dailyLimitRaw("protect", 5_000_000n)).toBe(5_000_000n);
-    expect(dailyLimitRaw("save", 5_000_000n)).toBe(5_000_000n);
+    expect(limitRaw(LIMIT_USD.protect.start, 5_000_000n)).toBe(5_000_000n);
+    expect(limitRaw(LIMIT_USD.save.start, 5_000_000n)).toBe(5_000_000n);
   });
 });

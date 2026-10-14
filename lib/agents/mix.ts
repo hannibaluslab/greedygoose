@@ -1,5 +1,5 @@
 import { REBALANCER } from "@/config/risk";
-import { stockLimitsRaw } from "@/lib/agents/permissions";
+import { stockLimitsRaw, type StockLimits } from "@/lib/agents/permissions";
 import { rebalanceTrades, type RebalanceOptions, type RebalanceTrade } from "@/lib/guardian/rebalance";
 import { formatUsdTrim, inWords } from "@/lib/formatting";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
@@ -115,9 +115,9 @@ export function rebalanceOptions(live?: {
 }
 
 /**
- * What the Rebalancer's next run would trade for `rows` on today's free stock, with a fresh weekly limit of `capRaw`
- * and the stock limits a grant at that limit carries (`stockLimitsRaw`, each mix stock may be sold). Nothing while the
- * rows don't add up to 100%.
+ * What the Rebalancer's next run would trade for `rows` on today's free stock: with what its grant's limits still allow
+ * this week (`left`), or before it has one with a fresh weekly limit of `capRaw` and the stock limits a grant at that
+ * limit carries (`stockLimitsRaw`, each mix stock may be sold). Nothing while the rows don't add up to 100%.
  */
 export function previewTrades(p: {
   holdings: readonly MixHolding[];
@@ -126,11 +126,13 @@ export function previewTrades(p: {
   /** The executor's CAP_MAX; the limit itself bounds it before the executor is read. */
   capMaxRaw: bigint | null;
   options: RebalanceOptions;
+  /** This week's USDC left and each stock's shares left, by reserve id, from the grant the executor runs. */
+  left?: { usdcRaw: bigint; stocksRaw: StockLimits };
 }): RebalanceTrade[] {
   const weights = mixWeights(p.rows);
   if (!isMix(weights) || weights.every((w) => w === 0)) return [];
   const prices = EQUITIES.map((e) => holdingOf(p.holdings, e.reserveId)?.priceRaw ?? 0n);
-  const limits = stockLimitsRaw(p.capRaw, p.capMaxRaw ?? p.capRaw, prices, weights.map((w) => w > 0));
+  const limits = p.left?.stocksRaw ?? stockLimitsRaw(p.capRaw, p.capMaxRaw ?? p.capRaw, prices, weights.map((w) => w > 0));
   return rebalanceTrades(
     {
       stocks: EQUITIES.map((e) => ({
@@ -139,7 +141,7 @@ export function previewTrades(p: {
         weightBps: BigInt(weights[e.reserveId]),
         sellLeftRaw: limits[e.reserveId],
       })),
-      usdcLeftRaw: p.capRaw,
+      usdcLeftRaw: p.left?.usdcRaw ?? p.capRaw,
     },
     p.options,
   );
