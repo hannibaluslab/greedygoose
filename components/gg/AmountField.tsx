@@ -2,7 +2,9 @@
 
 import { useId, type ComponentProps, type ReactNode } from "react";
 import { AmountInput } from "./AmountInput";
+import { StockAvatar, tickerOf } from "./StockAvatar";
 import { CreditIcon } from "./icons";
+import { formatUsd } from "@/lib/formatting";
 
 /**
  * Size ladder from NYM's amount field: the number steps down as it lengthens so it never runs
@@ -93,5 +95,38 @@ export function AmountBadge({ kind }: { kind: "cash" | "credit" }) {
     <span aria-hidden className="flex size-[30px] shrink-0 items-center justify-center rounded-[15px] bg-brand text-ink">
       <CreditIcon size={16} strokeWidth={1.8} />
     </span>
+  );
+}
+
+/** The round ↓ between what is paid and what arrives (F1-4, F2-5), overlapping both cards. */
+export function AmountArrow() {
+  return (
+    <span aria-hidden className="relative z-[1] -my-2.5 flex justify-center">
+      <span className="flex size-[34px] items-center justify-center rounded-[17px] border border-line-field bg-ground text-ink">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M6 13l6 6 6-6" /></svg>
+      </span>
+    </span>
+  );
+}
+
+/** What arrives (F1-4, F2-5): "You get (estimated)", the stock's badge, its shares to 4 places and the price. `shares` null while quoting. */
+export function YouGet({ symbol, shares, priceUsd }: { symbol: string; shares: number | null; priceUsd: number }) {
+  return (
+    <div className="flex flex-col gap-2 rounded-[16px] border border-line-field bg-card p-3.5 leading-[normal]">
+      <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">You get (estimated)</span>
+      <div className="flex items-center gap-2.5">
+        <StockAvatar symbol={symbol} />
+        <div className="min-w-0 flex-1">
+          <div className="num text-2xl font-semibold leading-[1.1] tracking-[-0.03em]" aria-live="polite">
+            {shares === null ? "…" : shares.toFixed(4)}
+          </div>
+          <div className="text-[12px] text-subtle">{tickerOf(symbol)}</div>
+        </div>
+        <div className="text-right">
+          <div className="text-[12px] text-subtle">Price</div>
+          <div className="num text-[14px] font-semibold">{formatUsd(priceUsd)}</div>
+        </div>
+      </div>
+    </div>
   );
 }
