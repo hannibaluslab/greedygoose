@@ -10,9 +10,8 @@ export function MarketList({ children }: { children: ReactNode }) {
 }
 
 /**
- * A stock in the Market sheet. One you own reads as on F1-3: "You own $2,000", the price per share
- * and a chevron. One you don't reads as on PortfolioMarket: the price under the name and a Buy pill.
- * Stocks earn no yield (D19), so neither carries the boards' APY chip.
+ * A stock in the Market sheet, as F1-3 draws every row: the name, "You own $2,000" when you hold some, the price
+ * per share and a chevron. Stocks earn no yield (D19), so the boards' APY chip is left out.
  */
 export function MarketRow({
   symbol, name, priceUsd, ownedUsd, onClick,
@@ -22,7 +21,7 @@ export function MarketRow({
   return (
     <Tap
       onClick={onClick}
-      label={owned ? `${name}, you own ${formatUsdShort(ownedUsd)}, ${price} per share` : `Buy ${name}, ${price} per share`}
+      label={owned ? `${name}, you own ${formatUsdShort(ownedUsd)}, ${price} per share` : `${name}, ${price} per share`}
       className="group flex min-h-16 w-full items-stretch pl-4 text-left text-ink"
     >
       <span className="flex items-center py-2.5">
@@ -31,25 +30,19 @@ export function MarketRow({
       <span className="ml-3 flex min-w-0 flex-1 items-center gap-3 border-b border-line-field py-2.5 pr-4 group-last:border-b-0">
         <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
           <span className="truncate text-[15px] font-semibold leading-[18px]">{name}</span>
-          {owned ? (
+          {owned && (
             <span className="flex h-[22px] items-center whitespace-nowrap text-[13px] font-medium leading-[18px] text-ink-mid">
               <span>You own <b className="font-semibold text-ink">{formatUsdShort(ownedUsd)}</b></span>
             </span>
-          ) : (
-            <span className="text-[12px] text-subtle">{price} per share</span>
           )}
         </span>
-        {owned ? (
-          <span className="flex shrink-0 items-center gap-2">
-            <span className="flex min-w-[76px] flex-col items-end gap-[3px] whitespace-nowrap">
-              <span className="text-[15px] font-semibold leading-[18px]">{price}</span>
-              <span className="text-[12px] font-medium leading-[22px] text-ink-mid">per share</span>
-            </span>
-            <ChevronRight strokeWidth={2.2} className="shrink-0 text-ink-faint" />
+        <span className="flex shrink-0 items-center gap-2">
+          <span className="flex min-w-[76px] flex-col items-end gap-[3px] whitespace-nowrap">
+            <span className="text-[15px] font-semibold leading-[18px]">{price}</span>
+            <span className="text-[12px] font-medium leading-[22px] text-ink-mid">per share</span>
           </span>
-        ) : (
-          <span aria-hidden className="flex h-[30px] shrink-0 items-center rounded-[15px] bg-pill px-3 text-[13px] font-semibold">Buy</span>
-        )}
+          <ChevronRight strokeWidth={2.2} className="shrink-0 text-ink-faint" />
+        </span>
       </span>
     </Tap>
   );

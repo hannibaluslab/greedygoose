@@ -37,7 +37,7 @@ const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompar
 const inWords = (parts: string[]) => (parts.length < 2 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`);
 
 /**
- * Flow 1 in one drawer: Market (F1-3, PortfolioMarket) → Buy (F1-4) → Confirm (F2-6's layout; there is no
+ * Flow 1 in one drawer: Market (F1-3) → Buy (F1-4) → Confirm (F2-6's layout; there is no
  * F1-5 board), then Home with the "Bought …" toast (F1-6). More than your cash (decision 1): Review is
  * blocked and one button takes credit for the other part, so the review becomes one batch: withdraw
  * savings, take credit, approve, swap.
@@ -120,8 +120,8 @@ export function BuySheet({
     }
   };
 
-  const held = data.holdings.filter((h) => h.freeRaw + h.lockedRaw > 0n).sort(byName);
-  const others = data.holdings.filter((h) => h.freeRaw + h.lockedRaw === 0n).sort(byName);
+  // F1-3: every stock in one list, A to Z, the ones you own marked "You own $X".
+  const stocks = [...data.holdings].sort(byName);
 
   return (
     <SheetShell
@@ -135,7 +135,7 @@ export function BuySheet({
       <SheetSteps stepKey={step} direction={direction} className="flex flex-col gap-3">
         {step === "market" || !stock ? (
           <MarketList>
-            {[...held, ...others].map((h) => (
+            {stocks.map((h) => (
               <MarketRow
                 key={h.symbol}
                 symbol={h.symbol}

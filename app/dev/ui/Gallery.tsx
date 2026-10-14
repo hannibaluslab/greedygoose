@@ -42,7 +42,7 @@ const HOLDINGS = [
     card: [3, 6, 4, 9, 7, 12, 10, 15, 13, 17, 19], row: [2, 6.4, 4.7, 13.1, 10.9, 18.9, 22] },
 ];
 const NVDA = { symbol: "NVDA", name: "NVIDIA", price: 178.57 };
-// F1-3's rows with a price (Apple, NVIDIA owned), and Tesla at F1-3's price as PortfolioMarket's not-owned row.
+// F1-3's rows with a price: Apple and NVIDIA owned, Tesla not.
 const MARKET = [
   { symbol: "AAPL", name: "Apple", price: 222.22, owned: 1200 },
   { symbol: "NVDA", name: "NVIDIA", price: 178.57, owned: 2000 },
