@@ -1,12 +1,22 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { toHex, zeroAddress } from "viem";
-import { agentGrant, agentPermission, dailyLimitRaw, readAgentGrant, type ListedPermission } from "@/lib/agents/permissions";
+import { toFunctionSelector, toHex, zeroAddress } from "viem";
+import {
+  agentGrant,
+  agentPermission,
+  dailyLimitRaw,
+  readAgentGrant,
+  sellGrant,
+  sellPermission,
+  sellTerms,
+  type ListedPermission,
+} from "@/lib/agents/permissions";
 import { jobStatus } from "@/lib/agents/status";
 import { PERIOD } from "@/lib/guardian/permission";
 import { GUARDIAN, SEL } from "@/lib/guardian/config";
 import { AAVE } from "@/lib/aave/addresses";
-import { USDC } from "@/lib/tokens/registry";
+import { AERODROME } from "@/lib/swap/venues";
+import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { agentVectors } from "@/scripts/agent-vectors";
 
 const executor = "0x00000000000000000000000000000000000E5EC0" as const;
@@ -50,6 +60,50 @@ describe("agentGrant (what the app sends to JAW's useGrantPermissions)", () => {
       { token: USDC.address, allowance: 5_000_000n, unit: PERIOD.Day, multiplier: 1 },
       { token: GUARDIAN.AUSDC, allowance: 5_000_000n, unit: PERIOD.Day, multiplier: 1 },
     ]);
+  });
+});
+
+describe("sellGrant (Protect · sell, its own JAW grant)", () => {
+  // NVIDIA and Tesla for sale, the other five never: a limit of 0.
+  const limits = EQUITIES.map((e) => (e.symbol === "NVDAc" ? 250_000_000n : e.symbol === "TSLAc" ? 100_000_000n : 0n));
+  const nvda = EQUITIES[5].address;
+  const tsla = EQUITIES[6].address;
+
+  it("may take stock out of Aave, approve only the stocks for sale to Aerodrome, swap, approve USDC and repay", () => {
+    expect(sellGrant(5_000_000n, limits)).toEqual({
+      calls: [
+        { target: AAVE.SPOKE, selector: SEL.spokeWithdraw },
+        { target: nvda, selector: SEL.approve },
+        { target: tsla, selector: SEL.approve },
+        { target: AERODROME.ROUTER, selector: SEL.aeroSwap },
+        { target: USDC.address, selector: SEL.approve },
+        { target: AAVE.SPOKE, selector: SEL.repay },
+      ],
+      spends: [
+        { token: USDC.address, allowance: "5000000", unit: "day" },
+        { token: GUARDIAN.AUSDC, allowance: "5000000", unit: "day" },
+        { token: nvda, allowance: "250000000", unit: "day" },
+        { token: tsla, allowance: "100000000", unit: "day" },
+      ],
+    });
+  });
+
+  it("uses the selectors the deployed spoke and router expose", () => {
+    expect(toFunctionSelector("withdraw(uint256,uint256,address)")).toBe(SEL.spokeWithdraw);
+    expect(toFunctionSelector("exactInputSingle((address,address,int24,address,uint256,uint256,uint256,uint160))")).toBe(SEL.aeroSwap);
+  });
+
+  it("lands on-chain with checker 0 and Day × 1, and packs the limits for the executor's register", () => {
+    const p = sellPermission({ account, spender: executor, start: 1, end: 2, salt: 7n, capRaw: 5_000_000n, limitsRaw: limits });
+    expect(p.calls.every((c) => c.checker === zeroAddress)).toBe(true);
+    expect(p.spends.map((s) => [s.unit, s.multiplier])).toEqual(p.spends.map(() => [PERIOD.Day, 1]));
+    expect(sellTerms(limits)).toBe((25_000n << 160n) | (10_000n << 192n));
+  });
+
+  it("refuses a grant that sells nothing, or limits that aren't whole units of 1e-4 share", () => {
+    expect(() => sellGrant(5_000_000n, limits.map(() => 0n))).toThrow(/at least one/);
+    expect(() => sellGrant(5_000_000n, limits.map((l) => (l ? l + 1n : 0n)))).toThrow(/whole units/);
+    expect(() => sellGrant(0n, limits)).toThrow(/positive/);
   });
 });
 

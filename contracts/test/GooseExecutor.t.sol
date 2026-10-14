@@ -5,8 +5,9 @@ import {Test} from "forge-std/Test.sol";
 import {Log} from "chainlink/automation/interfaces/ILogAutomation.sol";
 import {GooseExecutor} from "../src/GooseExecutor.sol";
 import {IJustaPermissionManager as PM} from "../src/IJustaPermissionManager.sol";
-import {IAaveV3Pool, IERC20, ISpoke} from "../src/IProtocols.sol";
+import {IAaveOracle, IAaveV3Pool, IERC20, ISpoke} from "../src/IProtocols.sol";
 import {Amounts, Thresholds} from "../src/CashRules.sol";
+import {SellLimits} from "../src/SellRules.sol";
 import {NyCalendar} from "../src/NyCalendar.sol";
 import {DeployExecutor} from "../script/DeployExecutor.s.sol";
 import {ExecutorHarness} from "./ExecutorHarness.sol";
@@ -55,6 +56,21 @@ contract GooseExecutorTest is Test {
         c.amounts.keepBack = 5e6 + 1;
         vm.expectRevert(GooseExecutor.OutOfBounds.selector);
         new GooseExecutor(c);
+
+        c = _config();
+        c.sellLimits.targetHf = c.sellLimits.headsUpHf; // a sale would stop at the heads-up line
+        vm.expectRevert(GooseExecutor.OutOfBounds.selector);
+        new GooseExecutor(c);
+
+        c = _config();
+        c.stocks[3] = address(0);
+        vm.expectRevert(GooseExecutor.ZeroValue.selector);
+        new GooseExecutor(c);
+
+        c = _config();
+        c.router = address(0);
+        vm.expectRevert(GooseExecutor.ZeroValue.selector);
+        new GooseExecutor(c);
     }
 
     function test_starts_with_the_deploy_defaults_and_no_forwarder() public view {
@@ -88,7 +104,7 @@ contract GooseExecutorTest is Test {
 
         vm.prank(stranger);
         vm.expectRevert(GooseExecutor.OnlySelf.selector);
-        x.runAccount(account, false);
+        x.runAccount(account, false, false);
 
         _bootstrap();
         vm.prank(forwarder);
@@ -239,6 +255,39 @@ contract GooseExecutorTest is Test {
         assertTrue(x.holiday(today + 30));
     }
 
+    function test_sell_limits_change_after_the_delay_within_bounds() public {
+        SellLimits memory l = deploy.sellLimits();
+        l.headsUpDelay = 1 hours;
+        l.actFloorBps = 250;
+        SellLimits memory bad = deploy.sellLimits();
+        bad.actFloorBps = 501; // past Aave's 5.5% liquidation bonus, with room
+        vm.startPrank(owner);
+        vm.expectRevert(GooseExecutor.OutOfBounds.selector);
+        x.queueChange(GooseExecutor.Change.SetSellLimits, abi.encode(bad));
+        x.queueChange(GooseExecutor.Change.SetSellLimits, abi.encode(l));
+        vm.expectRevert(abi.encodeWithSelector(GooseExecutor.TooEarly.selector, vm.getBlockTimestamp() + 7 days));
+        x.applyChange(GooseExecutor.Change.SetSellLimits, abi.encode(l), 0);
+        vm.warp(vm.getBlockTimestamp() + 7 days);
+        x.applyChange(GooseExecutor.Change.SetSellLimits, abi.encode(l), 0);
+        vm.stopPrank();
+        (,,, uint32 delay,, uint16 actFloor,,) = x.sellLimits();
+        assertEq(delay, 1 hours);
+        assertEq(actFloor, 250);
+    }
+
+    function test_only_the_account_itself_sets_keep_my_mix() public {
+        vm.expectEmit(true, false, false, true, address(x));
+        emit GooseExecutor.KeepMixSet(account, true);
+        vm.prank(account);
+        x.setKeepMix(true);
+        (,,,,,,, bool keepMix) = x.accounts(account);
+        assertTrue(keepMix);
+        vm.prank(stranger);
+        x.setKeepMix(false);
+        (,,,,,,, keepMix) = x.accounts(account);
+        assertTrue(keepMix, "a stranger only sets its own");
+    }
+
     function test_a_queued_change_can_be_cancelled() public {
         vm.startPrank(owner);
         (bytes32 id,) = x.queueChange(GooseExecutor.Change.AddForwarder, abi.encode(stranger));
@@ -271,9 +320,40 @@ contract GooseExecutorTest is Test {
             assertTrue(needed);
             (GooseExecutor.Mode mode, bytes memory data) = abi.decode(performData, (GooseExecutor.Mode, bytes));
             assertEq(uint8(mode), uint8(GooseExecutor.Mode.Register));
-            assertEq(data, abi.encode(job, account, p.start, p.end, p.salt, uint160(5e6)));
+            assertEq(data, abi.encode(job, account, p.start, p.end, p.salt, uint160(5e6), uint256(0)));
             assertLe(performData.length, 2000);
         }
+    }
+
+    /// Protect · sell's grant: NVIDIA and Tesla for sale with their own daily limits, the other five never.
+    function test_checkLog_turns_an_exact_sell_grant_into_a_registration() public {
+        _mockPrices(200e8);
+        uint256 t = _terms(0.02e8, 0.03e8); // $4 and $6 a day at $200: within two $5 caps
+        PM.Permission memory p = _sellGrant(5e6, t);
+        assertEq(p.calls.length, 6, "withdraw, two approves, swap, approve, repay");
+        assertEq(p.spends.length, 4, "USDC, aUSDC and the two stocks");
+        (bool needed, bytes memory performData) = x.checkLog(_log(p), "");
+        assertTrue(needed);
+        (, bytes memory data) = abi.decode(performData, (GooseExecutor.Mode, bytes));
+        assertEq(data, abi.encode(GooseExecutor.Job.ProtectSell, account, p.start, p.end, p.salt, uint160(5e6), t));
+        assertLe(performData.length, 2000);
+    }
+
+    function test_checkLog_ignores_a_sell_grant_it_would_not_register() public {
+        _mockPrices(200e8);
+        _ignored(_log(_sellGrant(5e6, _terms(0.06e8, 0.03e8))), "a stock limit worth $12, over two $5 caps");
+
+        PM.Permission memory p = _sellGrant(5e6, _terms(0.02e8, 0.03e8));
+        (p.spends[2], p.spends[3]) = (p.spends[3], p.spends[2]);
+        _ignored(_log(p), "stock limits out of reserve order");
+
+        p = _sellGrant(5e6, _terms(0.02e8, 0.03e8));
+        p.spends[2].allowance += 1;
+        _ignored(_log(p), "a stock limit that isn't whole units of 1e-4 share");
+
+        p = _sellGrant(5e6, _terms(0.02e8, 0.03e8));
+        p.calls[1].target = x.stocks()[0];
+        _ignored(_log(p), "an approve for a stock with no limit");
     }
 
     function test_checkLog_ignores_everything_else() public view {
@@ -325,6 +405,28 @@ contract GooseExecutorTest is Test {
         c.aUsdc = IERC20(makeAddr("ausdc"));
     }
 
+    /// Daily limits in raw shares for NVIDIA (reserve 5) and Tesla (6), packed as the executor's terms.
+    function _terms(uint256 nvda, uint256 tsla) internal pure returns (uint256) {
+        return nvda / 1e4 << 160 | tsla / 1e4 << 192;
+    }
+
+    function _sellGrant(uint160 cap, uint256 t) internal view returns (PM.Permission memory) {
+        uint48 start = uint48(vm.getBlockTimestamp());
+        return x.permissionFor(
+            GooseExecutor.Job.ProtectSell,
+            account,
+            GooseExecutor.Grant(start, start + 365 days, cap),
+            uint256(keccak256("salt")),
+            t
+        );
+    }
+
+    function _mockPrices(uint256 price) internal {
+        vm.mockCall(
+            address(x.ORACLE()), abi.encodeWithSelector(IAaveOracle.getReservePrice.selector), abi.encode(price)
+        );
+    }
+
     function _bootstrap() internal {
         address[] memory f = new address[](1);
         f[0] = forwarder;
@@ -334,7 +436,10 @@ contract GooseExecutorTest is Test {
 
     function _grant(GooseExecutor.Job job, uint160 cap) internal view returns (PM.Permission memory) {
         uint48 start = uint48(vm.getBlockTimestamp());
-        return x.permissionFor(job, account, GooseExecutor.Grant(start, start + 365 days, cap), uint256(keccak256("salt")));
+        return
+            x.permissionFor(
+                job, account, GooseExecutor.Grant(start, start + 365 days, cap), uint256(keccak256("salt")), 0
+            );
     }
 
     function _log(PM.Permission memory p) internal view returns (Log memory l) {

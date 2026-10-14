@@ -3,7 +3,8 @@ import type { PermissionsDetail } from "@jaw.id/wagmi";
 import { AAVE } from "@/lib/aave/addresses";
 import { GUARDIAN, SEL } from "@/lib/guardian/config";
 import { PERIOD, type GuardianPermission } from "@/lib/guardian/permission";
-import { USDC } from "@/lib/tokens/registry";
+import { AERODROME } from "@/lib/swap/venues";
+import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
 /** The agents' jobs, in GooseExecutor's order (enum Job): the index is the job's id on-chain. */
 export const JOBS = ["save", "protect"] as const;
@@ -114,4 +115,89 @@ export function readAgentGrant(p: ListedPermission, executor: Address): AgentGra
       ),
   );
   return job ? { job, permissionId: p.permissionId as Hex, capRaw, start: p.start, end: p.end, salt: BigInt(p.salt) } : null;
+}
+
+/*
+ * Protect · sell (GooseExecutor's Job.ProtectSell, id 2): when savings can't keep the credit Safe, the executor sells
+ * some of the stock that backs it and repays. Its own JAW grant, so selling can be switched off alone (decision 5);
+ * not one of the Cash Agent switches in `JOBS`.
+ */
+
+/** A stock's daily limit is a whole number of these raw units (1e-4 share): the executor packs all seven in one word. */
+export const STOCK_LIMIT_UNIT = 10_000n;
+
+/** A daily limit per stock, in raw shares, by reserve id (EQUITIES order). 0 = never sell that stock. */
+export type StockLimits = readonly bigint[];
+
+function sellable(limitsRaw: StockLimits) {
+  if (limitsRaw.length !== EQUITIES.length) throw new Error("One limit per stock");
+  if (limitsRaw.some((l) => l < 0n || l % STOCK_LIMIT_UNIT !== 0n || l / STOCK_LIMIT_UNIT >= 2n ** 32n)) {
+    throw new Error("Stock limits are whole units of 1e-4 share");
+  }
+  const stocks = EQUITIES.filter((_, i) => limitsRaw[i] > 0n);
+  if (stocks.length === 0) throw new Error("Protect needs at least one stock it may sell");
+  return stocks.map((e) => ({ stock: e.address, limitRaw: limitsRaw[e.reserveId] }));
+}
+
+/**
+ * What the sell permission may call, in GooseExecutor's order (SellJob.permission): take a stock out of Aave, approve
+ * each sellable stock to Aerodrome's router, swap, approve USDC, repay. A never-sell stock has no approve, so JAW's
+ * manager refuses any batch that would sell it.
+ */
+function sellCalls(limitsRaw: StockLimits) {
+  return [
+    { target: AAVE.SPOKE, selector: SEL.spokeWithdraw },
+    ...sellable(limitsRaw).map(({ stock }) => ({ target: stock, selector: SEL.approve })),
+    { target: AERODROME.ROUTER, selector: SEL.aeroSwap },
+    { target: USDC.address, selector: SEL.approve },
+    { target: AAVE.SPOKE, selector: SEL.repay },
+  ] as const;
+}
+
+/**
+ * Daily limits: USDC on the repay leg and aUSDC at the same cap (nothing here moves savings, so the manager bounds any
+ * savings move a batch could make through an allowance the account gave elsewhere), then each sellable stock's own.
+ */
+function sellSpends(capRaw: bigint, limitsRaw: StockLimits) {
+  return [
+    { token: USDC.address, allowance: capRaw },
+    { token: GUARDIAN.AUSDC, allowance: capRaw },
+    ...sellable(limitsRaw).map(({ stock, limitRaw }) => ({ token: stock, allowance: limitRaw })),
+  ];
+}
+
+/** What the app sends to JAW's `useGrantPermissions` to switch Protect · sell on. */
+export function sellGrant(capRaw: bigint, limitsRaw: StockLimits): PermissionsDetail {
+  if (capRaw <= 0n) throw new Error("Daily limit must be positive");
+  return {
+    calls: sellCalls(limitsRaw).map(({ target, selector }) => ({ target, selector })),
+    spends: sellSpends(capRaw, limitsRaw).map(({ token, allowance }) => ({ token, allowance: allowance.toString(), unit: "day" })),
+  };
+}
+
+/** The permission JAW's grant puts on-chain for `sellGrant(capRaw, limitsRaw)`; GooseExecutor rebuilds the same struct. */
+export function sellPermission(p: {
+  account: Address;
+  spender: Address;
+  start: number;
+  end: number;
+  salt: bigint;
+  capRaw: bigint;
+  limitsRaw: StockLimits;
+}): GuardianPermission {
+  return {
+    account: p.account,
+    spender: p.spender,
+    start: p.start,
+    end: p.end,
+    salt: p.salt,
+    calls: sellCalls(p.limitsRaw).map(({ target, selector }) => ({ target, selector, checker: zeroAddress })),
+    spends: sellSpends(p.capRaw, p.limitsRaw).map(({ token, allowance }) => ({ token, allowance, unit: PERIOD.Day, multiplier: 1 })),
+  };
+}
+
+/** The `terms` the executor's `register` takes for Protect · sell: each stock's limit in units, 32 bits a stock. */
+export function sellTerms(limitsRaw: StockLimits): bigint {
+  sellable(limitsRaw);
+  return limitsRaw.reduce((t, l, r) => t | ((l / STOCK_LIMIT_UNIT) << BigInt(32 * r)), 0n);
 }

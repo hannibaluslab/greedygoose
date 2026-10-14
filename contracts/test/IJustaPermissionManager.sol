@@ -4,7 +4,7 @@ pragma solidity ^0.8.0;
 import {IJustaPermissionManager} from "../src/IJustaPermissionManager.sol";
 import {IAaveV3Pool, IERC20, IJustanAccount, ISpoke} from "../src/IProtocols.sol";
 
-/// The test-only parts of JAW's factory, the Aave V4 spoke and ERC-20, on top of the interfaces in src.
+/// The test-only parts of JAW's factory, the Aave V4 spoke, Aerodrome and ERC-20, on top of the interfaces in src.
 
 /// JAW's account factory (the SDK's FACTORY_ADDRESS). Owners are ABI-encoded addresses or 64-byte passkeys.
 interface IJawFactory {
@@ -21,4 +21,9 @@ interface ISpokeLite is ISpoke {
 interface IERC20Lite is IERC20 {
     function allowance(address owner, address spender) external view returns (uint256);
     function transfer(address to, uint256 amount) external returns (bool);
+}
+
+/// Aerodrome Slipstream's pool factory (lib/swap/venues.ts AERODROME.FACTORY).
+interface IAeroFactory {
+    function getPool(address tokenA, address tokenB, int24 tickSpacing) external view returns (address);
 }

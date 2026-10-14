@@ -1,0 +1,431 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.28;
+
+import {Vm} from "forge-std/Vm.sol";
+import {console} from "forge-std/console.sol";
+import {GooseExecutor} from "../src/GooseExecutor.sol";
+import {IAeroRouter, IERC20} from "../src/IProtocols.sol";
+import {ExecutorForkBase} from "./GooseExecutorFork.t.sol";
+import {IJustaPermissionManager as PM, IAeroFactory} from "./IJustaPermissionManager.sol";
+
+/// Fixtures for the Protect · sell fork suites.
+abstract contract SellForkBase is ExecutorForkBase {
+    IAeroFactory constant AERO_FACTORY = IAeroFactory(0xf8f2eB4940CFE7d13603DDDD87f123820Fc061Ef);
+    IAeroRouter constant ROUTER = IAeroRouter(0x698Cb2b6dd822994581fEa6eA4Fc755d1363A92F);
+    uint256 constant AAPL = 0;
+    uint256 constant NVDA = 5;
+    uint256 constant TSLA = 6;
+    bytes4 constant UNAUTHORIZED_CALL = bytes4(keccak256("JustaPermissionManager_UnauthorizedCall(address,bytes4)"));
+    bytes4 constant EXCEEDED_SPEND = bytes4(keccak256("JustaPermissionManager_ExceededSpendLimit(uint256,uint256)"));
+
+    /// Every stock a StockDouble with the hub's and its Aerodrome pool's real balances, an executor, and a weekday.
+    function _setUpSell() internal {
+        _fork();
+        for (uint256 r; r < STOCKS.length; ++r) {
+            if (STOCKS[r] != NVDAC) _useStockDouble(STOCKS[r]);
+            address pool = AERO_FACTORY.getPool(STOCKS[r], address(USDC), 10);
+            deal(STOCKS[r], pool, _realBalance(STOCKS[r], pool));
+        }
+        x = _deploy(_config());
+        vm.warp(_nextTuesday(vm.getBlockTimestamp())); // a weekday with prices live, whenever this runs
+    }
+
+    // ================================================================== helpers
+
+    /// A fresh JAW account backing a credit line with `sharesRaw` of stock `r`, drawn to health `hf`.
+    function _owing(string memory name, uint256 r, uint256 sharesRaw, uint256 hf) internal returns (address a) {
+        a = _newJawAccount(name);
+        _backWith(a, r, sharesRaw);
+        _drawTo(a, hf);
+    }
+
+    /// Protect · sell switched on the way JAW's screen grants it, with a $1,000 USDC limit.
+    function _sellOn(address a, uint256 t) internal returns (PM.Permission memory p) {
+        p = _sellPermission(a, t);
+        _grantThroughAccount(p);
+        x.register(GooseExecutor.Job.ProtectSell, a, p.start, p.end, p.salt, 1_000e6, t);
+    }
+
+    function _sellPermission(address a, uint256 t) internal returns (PM.Permission memory) {
+        uint48 start = uint48(vm.getBlockTimestamp());
+        return x.permissionFor(
+            GooseExecutor.Job.ProtectSell,
+            a,
+            GooseExecutor.Grant(start, start + 365 days, 1_000e6),
+            uint256(keccak256(abi.encode(++salts))),
+            t
+        );
+    }
+
+    /// The terms for a daily limit of `sharesRaw` on stock `r`.
+    function _limits(uint256 r, uint256 sharesRaw) internal pure returns (uint256) {
+        return sharesRaw / 1e4 << (32 * r);
+    }
+
+    /// A run, logging its slices (withdrawals) and gas. Returns the slices.
+    function _runLogged(string memory what, address[] memory work) internal returns (uint256 slices) {
+        vm.recordLogs();
+        uint256 before = gasleft();
+        _run(work);
+        uint256 gas = before - gasleft();
+        slices = _withdrawals(vm.getRecordedLogs());
+        console.log(string.concat(what, ": slices, gas"), slices, gas);
+    }
+
+    function _assertBackTo1_4(address a) internal view {
+        assertApproxEqAbs(SPOKE.getUserAccountData(a).healthFactor, 1.4e18, 0.005e18, "back to 1.4");
+        assertGe(SPOKE.getUserAccountData(a).healthFactor, 1.399e18);
+    }
+
+    function _headsUpAt(address a) internal view returns (uint48 at) {
+        (,,,,,, at,) = x.accounts(a);
+    }
+
+    function _price(uint256 r) internal view returns (uint256) {
+        return x.ORACLE().getReservePrice(r);
+    }
+
+    function _withdrawals(Vm.Log[] memory logs) internal pure returns (uint256 n) {
+        bytes32 withdraw = keccak256("Withdraw(uint256,address,address,uint256,uint256)");
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter == address(SPOKE) && logs[i].topics[0] == withdraw) ++n;
+        }
+    }
+
+    function _withdraw(address a, uint256 sharesRaw) internal pure returns (PM.Call memory) {
+        return
+            PM.Call(address(SPOKE), 0, abi.encodeWithSignature("withdraw(uint256,uint256,address)", NVDA, sharesRaw, a));
+    }
+
+    /// The account sells `sharesRaw` of NVIDIA on Aerodrome; `to` gets the USDC.
+    function _swap(uint256 sharesRaw, uint256 minOut, address to) internal view returns (PM.Call memory) {
+        return PM.Call(
+            address(ROUTER),
+            0,
+            abi.encodeCall(
+                IAeroRouter.exactInputSingle,
+                (IAeroRouter.ExactInputSingleParams(
+                        NVDAC, address(USDC), 10, to, block.timestamp, sharesRaw, minOut, 0
+                    ))
+            )
+        );
+    }
+
+    function _repay(address a, uint256 amount) internal pure returns (PM.Call memory) {
+        return
+            PM.Call(
+                address(SPOKE), 0, abi.encodeWithSignature("repay(uint256,uint256,address)", USDC_RESERVE, amount, a)
+            );
+    }
+
+    /// 15:00 UTC on the next Tuesday after `ts`: 10:00 or 11:00 in New York, prices live.
+    function _nextTuesday(uint256 ts) internal pure returns (uint256) {
+        uint256 d = ts / 1 days + 1;
+        return (d + (12 - d % 7) % 7) * 1 days + 15 hours; // day 5 (1970-01-06) was a Tuesday
+    }
+}
+
+/// Protect · sell against the real JAW manager, the Aave V4 Equities Hub and Aerodrome's stock pools on a Base fork,
+/// with fresh JAW accounts granted the way JAW's screen grants. Every stock is a StockDouble holding the balances the
+/// hub and the pools really hold (ForkBase), so the swaps run against the pools' real liquidity and prices. Plan item 1
+/// step 12: sales from health 1.25, 1.10, 1.05 and 1.01, each ending at 1.4 or failing for a stated reason.
+contract ProtectSellForkTest is SellForkBase {
+    function setUp() public {
+        _setUpSell();
+    }
+
+    // ================================================================== the four starting healths
+
+    /// Just under 1.25 on a weekday: a heads-up, nothing sold, then 30 minutes later the sale, back to 1.4.
+    function test_at_1_25_a_heads_up_then_the_sale_30_minutes_later() public {
+        address a = _owing("a", NVDA, 10e8, 1.249e18);
+        PM.Permission memory p = _sellOn(a, _limits(NVDA, 5e8));
+        uint256 backing = SPOKE.getUserSuppliedAssets(NVDA, a);
+
+        assertEq(uint8(x.planOf(a).action), uint8(GooseExecutor.Action.HeadsUp));
+        vm.expectEmit(true, false, false, false, address(x));
+        emit GooseExecutor.SellHeadsUp(a, 0, 0, 0);
+        _run(_check());
+        assertEq(SPOKE.getUserSuppliedAssets(NVDA, a), backing, "nothing sold yet");
+        assertEq(_headsUpAt(a), vm.getBlockTimestamp());
+        assertEq(_check().length, 0, "waiting");
+
+        vm.warp(vm.getBlockTimestamp() + 30 minutes - 1);
+        assertEq(_check().length, 0, "still waiting");
+        vm.warp(vm.getBlockTimestamp() + 1);
+        GooseExecutor.Plan memory plan = x.planOf(a);
+        assertEq(uint8(plan.action), uint8(GooseExecutor.Action.Sell));
+        assertEq(plan.reason, 0, "after the heads-up, at the normal floor");
+        _runLogged("from 1.25", _check());
+
+        _assertBackTo1_4(a);
+        uint256 sold = backing - SPOKE.getUserSuppliedAssets(NVDA, a);
+        assertEq(MANAGER.getCurrentPeriod(p, p.spends[2]).spend, sold, "the stock's limit is charged what was sold");
+        assertEq(MANAGER.getCurrentPeriod(p, p.spends[0]).spend, plan.amount, "USDC's limit is charged the repay");
+        assertEq(_headsUpAt(a), 0, "cleared by the sale");
+        (, uint208 used) = x.pools(NVDA);
+        assertApproxEqAbs(used, sold * _price(NVDA) / 1e10, 1, "counted against the pool's window");
+        _assertHoldsNothing();
+        assertEq(_check().length, 0, "Safe enough again");
+    }
+
+    /// Below 1.10 (Act) it sells at once, at the wider floor.
+    function test_at_1_10_it_sells_at_once() public {
+        address a = _owing("a", NVDA, 10e8, 1.099e18);
+        _sellOn(a, _limits(NVDA, 5e8));
+        GooseExecutor.Plan memory plan = x.planOf(a);
+        assertEq(uint8(plan.action), uint8(GooseExecutor.Action.Sell));
+        assertEq(plan.reason, 1, "at once");
+        vm.expectEmit(true, false, false, false, address(x));
+        emit GooseExecutor.ProtectSold(a, [uint256(0), 0, 0, 0, 0, 0, 0], 0, 0, 0, true);
+        _runLogged("from 1.10", _check());
+        _assertBackTo1_4(a);
+        _assertHoldsNothing();
+    }
+
+    function test_at_1_05_it_sells_at_once_in_slices() public {
+        address a = _owing("a", NVDA, 10e8, 1.05e18);
+        _sellOn(a, _limits(NVDA, 5e8));
+        assertGt(_runLogged("from 1.05", _check()), 1, "more than one withdrawal: Aave checks health after each");
+        _assertBackTo1_4(a);
+    }
+
+    /// From 1.01 the sale needs more slices than a run makes (about nine): the first run leaves it still in Act, and
+    /// the next block's run finishes the job.
+    function test_at_1_01_it_takes_two_runs() public {
+        address a = _owing("a", NVDA, 10e8, 1.01e18);
+        _sellOn(a, _limits(NVDA, 5e8));
+        assertEq(_runLogged("from 1.01, first run", _check()), 6);
+        uint256 hf = SPOKE.getUserAccountData(a).healthFactor;
+        assertGt(hf, 1.05e18, "the first run helps");
+        assertLt(hf, 1.4e18, "but a run makes six slices");
+        vm.roll(vm.getBlockNumber() + 1);
+        _runLogged("from 1.01, second run", _check());
+        _assertBackTo1_4(a);
+    }
+
+    // ================================================================== when it doesn't sell
+
+    function test_never_on_a_weekend() public {
+        address a = _owing("a", NVDA, 10e8, 1.05e18);
+        _sellOn(a, _limits(NVDA, 5e8));
+        vm.warp(vm.getBlockTimestamp() + 4 days); // Saturday
+        assertTrue(x.frozen(vm.getBlockTimestamp()));
+        assertEq(uint8(x.planOf(a).action), uint8(GooseExecutor.Action.None));
+        assertEq(_check().length, 0);
+        vm.warp(vm.getBlockTimestamp() + 2 days); // Monday: prices live again
+        assertEq(uint8(x.planOf(a).action), uint8(GooseExecutor.Action.Sell));
+    }
+
+    /// A heads-up that the account answers (it adds backing) is cleared, so a later fall gets a new one.
+    function test_a_heads_up_clears_when_the_health_is_back() public {
+        address a = _owing("a", NVDA, 10e8, 1.2e18);
+        _sellOn(a, _limits(NVDA, 5e8));
+        _run(_check());
+        assertGt(_headsUpAt(a), 0);
+        _backWith(a, NVDA, 3e8);
+        vm.expectEmit(true, false, false, false, address(x));
+        emit GooseExecutor.SellHeadsUpCleared(a, 0);
+        _run(_check());
+        assertEq(_headsUpAt(a), 0);
+    }
+
+    /// The pool trades more than the Act floor under Aave's price: the swap can't meet its minimum, the run fails,
+    /// and nothing moves. (Aerodrome's NVIDIA pool is deep: $230k sold into it moves it 0.2%, so the test lifts
+    /// Aave's price 4% instead, which is the same gap.)
+    function test_below_the_floor_the_sale_fails_and_nothing_moves() public {
+        address a = _owing("a", NVDA, 10e8, 1.05e18);
+        _sellOn(a, _limits(NVDA, 5e8));
+        vm.mockCall(
+            address(x.ORACLE()),
+            abi.encodeWithSignature("getReservePrice(uint256)", NVDA),
+            abi.encode(_price(NVDA) * 104 / 100)
+        );
+        assertLt(SPOKE.getUserAccountData(a).healthFactor, 1.1e18, "still in Act at Aave's new price");
+        uint256 backing = SPOKE.getUserSuppliedAssets(NVDA, a);
+        uint256 debt = SPOKE.getUserTotalDebt(USDC_RESERVE, a);
+        address[] memory work = _check();
+        vm.recordLogs();
+        _run(work);
+        (,, uint8 fails,,,,,) = x.accounts(a);
+        assertEq(fails, 1, "RunFailed");
+        assertEq(SPOKE.getUserSuppliedAssets(NVDA, a), backing);
+        assertEq(SPOKE.getUserTotalDebt(USDC_RESERVE, a), debt);
+    }
+
+    // ================================================================== which stock, how much
+
+    function test_a_never_sell_stock_is_untouched() public {
+        address a = _newJawAccount("a");
+        _backWith(a, AAPL, 3e8);
+        _backWith(a, NVDA, 6e8);
+        _drawTo(a, 1.05e18);
+        _sellOn(a, _limits(NVDA, 5e8)); // Apple: never sell
+        uint256 apple = SPOKE.getUserSuppliedAssets(AAPL, a);
+        _run(_check());
+        assertEq(SPOKE.getUserSuppliedAssets(AAPL, a), apple);
+        _assertBackTo1_4(a);
+    }
+
+    /// Tesla's factor (65%) is the lowest, so it goes first, up to its daily limit; NVIDIA (70%) covers the rest.
+    function test_lowest_factor_first_then_spill_over_at_its_daily_limit() public {
+        address a = _newJawAccount("a");
+        _backWith(a, TSLA, 3e8);
+        _backWith(a, NVDA, 6e8);
+        _drawTo(a, 1.05e18);
+        PM.Permission memory p = _sellOn(a, _limits(TSLA, 0.2e8) | _limits(NVDA, 5e8));
+        uint256 tesla = SPOKE.getUserSuppliedAssets(TSLA, a);
+        _run(_check());
+        assertEq(tesla - SPOKE.getUserSuppliedAssets(TSLA, a), 0.2e8, "Tesla up to its limit");
+        assertEq(MANAGER.getCurrentPeriod(p, p.spends[3]).spend, 0.2e8, "Tesla's limit: spends follow reserve order");
+        _assertBackTo1_4(a);
+    }
+
+    function test_keep_my_mix_sells_the_same_share_of_each() public {
+        address a = _newJawAccount("a");
+        _backWith(a, TSLA, 3e8);
+        _backWith(a, NVDA, 6e8);
+        _drawTo(a, 1.05e18);
+        _sellOn(a, _limits(TSLA, 3e8) | _limits(NVDA, 5e8));
+        vm.prank(a);
+        x.setKeepMix(true);
+        _run(_check());
+        uint256 teslaLeft = SPOKE.getUserSuppliedAssets(TSLA, a);
+        uint256 nvidiaLeft = SPOKE.getUserSuppliedAssets(NVDA, a);
+        assertApproxEqRel(teslaLeft * 1e18 / 3e8, nvidiaLeft * 1e18 / 6e8, 0.001e18, "the same share left of each");
+        _assertBackTo1_4(a);
+    }
+
+    /// The app-wide cap: with $1,000 per pool per 10 minutes, one account's sale fills NVIDIA's window, the next
+    /// sale waits for the window to roll, and the lowest health is listed first.
+    function test_the_pool_cap_holds_every_account_and_the_lowest_health_goes_first() public {
+        GooseExecutor.Config memory c = _config();
+        c.sellLimits.poolCap = 1_000e6;
+        x = _deploy(c);
+        address big = _owing("big", NVDA, 30e8, 1.08e18);
+        _sellOn(big, _limits(NVDA, 8e8));
+        address worse = _owing("worse", NVDA, 4e8, 1.05e18);
+        _sellOn(worse, _limits(NVDA, 4e8));
+
+        address[] memory work = _check();
+        assertEq(work[0], worse, "the lowest health first");
+        assertEq(work[1], big);
+        _run(work);
+        (, uint208 used) = x.pools(NVDA);
+        assertLe(used, 1_000e6, "never past the cap");
+        assertGt(used, 900e6);
+        uint256 hf = SPOKE.getUserAccountData(big).healthFactor;
+        assertGt(hf, 1.1e18, "big is out of Act");
+        assertLt(hf, 1.4e18, "but waits for room");
+        assertEq(_check().length, 0, "the window is full");
+        // Out of Act now, but its sale was cut short: the rest goes on in the next window without a new wait.
+        vm.warp(vm.getBlockTimestamp() + 10 minutes);
+        _run(_check());
+        assertGt(SPOKE.getUserAccountData(big).healthFactor, hf + 0.02e18, "and sells more");
+    }
+
+    // ================================================================== what the post-checks and the manager catch
+
+    function test_a_batch_that_sells_free_stock_reverts() public {
+        address a = _owing("a", NVDA, 10e8, 1.05e18);
+        _sellOn(a, _limits(NVDA, 5e8));
+        deal(NVDAC, a, 1e8); // a free share in the wallet
+        uint256 minOut = 200e6;
+        PM.Call[] memory calls = new PM.Call[](4);
+        calls[0] = PM.Call(NVDAC, 0, abi.encodeCall(IERC20.approve, (address(ROUTER), 1e8)));
+        calls[1] = _swap(1e8, minOut, a);
+        calls[2] = PM.Call(address(USDC), 0, abi.encodeCall(IERC20.approve, (address(SPOKE), minOut)));
+        calls[3] = _repay(a, minOut);
+        vm.expectRevert(GooseExecutor.StockMoved.selector);
+        x.sellWith(a, [uint256(0), 0, 0, 0, 0, 0, 0], calls);
+    }
+
+    function test_a_sale_to_someone_else_reverts() public {
+        address a = _owing("a", NVDA, 10e8, 1.2e18); // the credit drawn sits in the wallet
+        _sellOn(a, _limits(NVDA, 5e8));
+        uint256 minOut = 200e6;
+        PM.Call[] memory calls = new PM.Call[](5);
+        calls[0] = _withdraw(a, 1e8);
+        calls[1] = PM.Call(NVDAC, 0, abi.encodeCall(IERC20.approve, (address(ROUTER), 1e8)));
+        calls[2] = _swap(1e8, minOut, attacker);
+        calls[3] = PM.Call(address(USDC), 0, abi.encodeCall(IERC20.approve, (address(SPOKE), minOut)));
+        calls[4] = _repay(a, minOut); // paid from the wallet's cash instead
+        vm.expectRevert(GooseExecutor.CashLower.selector);
+        x.sellWith(a, [uint256(0), 0, 0, 0, 0, 1e8, 0], calls);
+    }
+
+    function test_backing_taken_out_and_left_unsold_reverts() public {
+        address a = _owing("a", NVDA, 10e8, 1.2e18);
+        _sellOn(a, _limits(NVDA, 5e8));
+        PM.Call[] memory calls = new PM.Call[](1);
+        calls[0] = _withdraw(a, 0.5e8);
+        vm.expectRevert(GooseExecutor.DebtNotLower.selector);
+        x.sellWith(a, [uint256(0), 0, 0, 0, 0, 0.5e8, 0], calls);
+    }
+
+    function test_the_manager_refuses_to_sell_a_never_sell_stock_or_past_a_stocks_limit() public {
+        address a = _newJawAccount("a");
+        _backWith(a, AAPL, 3e8);
+        _backWith(a, NVDA, 6e8);
+        _drawTo(a, 1.05e18);
+        _sellOn(a, _limits(NVDA, 0.5e8));
+        PM.Call[] memory calls = new PM.Call[](1);
+        calls[0] = PM.Call(STOCKS[AAPL], 0, abi.encodeCall(IERC20.approve, (address(ROUTER), 1)));
+        vm.expectPartialRevert(UNAUTHORIZED_CALL);
+        x.sellWith(a, [uint256(0), 0, 0, 0, 0, 0, 0], calls);
+
+        calls[0] = PM.Call(NVDAC, 0, abi.encodeCall(IERC20.approve, (address(ROUTER), 0.5e8 + 1)));
+        vm.expectPartialRevert(EXCEEDED_SPEND);
+        x.sellWith(a, [uint256(0), 0, 0, 0, 0, 0, 0], calls);
+    }
+
+    // ================================================================== registration
+
+    function test_registration_checks_the_stock_limits() public {
+        address a = _newJawAccount("a");
+        PM.Permission memory p = _sellPermission(a, _limits(NVDA, 5e8));
+        _grantThroughAccount(p);
+        vm.expectRevert(GooseExecutor.BadTerms.selector);
+        x.register(GooseExecutor.Job.ProtectSell, a, p.start, p.end, p.salt, 1_000e6, 0);
+        vm.expectRevert(GooseExecutor.BadTerms.selector);
+        x.register(GooseExecutor.Job.Protect, a, p.start, p.end, p.salt, 1_000e6, _limits(NVDA, 5e8));
+
+        // $2,290 of NVIDIA a day: more than two $1,000 caps at Aave's price.
+        PM.Permission memory big = _sellPermission(a, _limits(NVDA, 10e8));
+        _grantThroughAccount(big);
+        vm.expectRevert(GooseExecutor.BadTerms.selector);
+        x.register(GooseExecutor.Job.ProtectSell, a, big.start, big.end, big.salt, 1_000e6, _limits(NVDA, 10e8));
+
+        vm.recordLogs();
+        _grantThroughAccount(_sellPermission(a, _limits(NVDA, 4e8)));
+        (bool needed, bytes memory performData) = x.checkLog(_chainlinkLog(vm.getRecordedLogs()[0]), "");
+        assertTrue(needed, "a JAW grant of the sell template registers through the log trigger");
+        vm.prank(forwarder);
+        x.performUpkeep(performData);
+        (uint8 jobs,,,,,,,) = x.accounts(a);
+        assertEq(jobs, 4);
+    }
+}
+
+/// The costliest sale a run makes, measured cold: the position is built in setUp, which forge runs as its own
+/// transaction. Six slices over three stocks must fit SellJob's batch cap and MAX_RUN_GAS, inside Base's 5M.
+contract ProtectSellGasForkTest is SellForkBase {
+    address a;
+
+    function setUp() public {
+        _setUpSell();
+        a = _newJawAccount("cold");
+        _backWith(a, TSLA, 1e8);
+        _backWith(a, AAPL, 1e8);
+        _backWith(a, NVDA, 6e8);
+        _drawTo(a, 1.01e18);
+        _sellOn(a, _limits(TSLA, 1e8) | _limits(AAPL, 1e8) | _limits(NVDA, 4e8));
+    }
+
+    function test_a_cold_six_slice_sale_over_three_stocks_fits() public {
+        address[] memory one = new address[](1);
+        one[0] = a;
+        assertEq(_runLogged("cold, three stocks", one), 6, "not deferred");
+        assertGt(SPOKE.getUserAccountData(a).healthFactor, 1.05e18);
+    }
+}

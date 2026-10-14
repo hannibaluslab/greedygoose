@@ -9,11 +9,12 @@
  */
 import { writeFileSync } from "node:fs";
 import { encodeAbiParameters, hashTypedData, keccak256, parseUnits, toHex, type Address } from "viem";
-import { CASH, CASH_AGENT } from "@/config/risk";
+import { CASH, CASH_AGENT, PROTECT_SELL } from "@/config/risk";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { inWeekendWindow, planGuardian, planSave } from "@/lib/guardian/plan";
+import { planSell, sellAmounts, sellTiming, type SellBook } from "@/lib/guardian/sell";
 import { marketState } from "@/lib/market-hours";
-import { agentPermission, JOBS } from "@/lib/agents/permissions";
+import { agentPermission, JOBS, sellPermission, STOCK_LIMIT_UNIT, type StockLimits } from "@/lib/agents/permissions";
 
 const WAD = 10n ** 18n;
 const RAY = 10n ** 27n;
@@ -39,6 +40,8 @@ export const PROTECT_COUNT = 1000;
 export const SAVE_COUNT = 1000;
 export const CALENDAR_COUNT = 10_000;
 export const HASH_COUNT = 50;
+export const SELL_COUNT = 600;
+export const TIMING_COUNT = 1000;
 /** Where Vectors.sol's hash test puts the executor, so both sides know the spender. */
 export const HASH_SPENDER: Address = "0x0000000000000000000000000000000000600dE5";
 
@@ -95,6 +98,56 @@ export function calendarTime(i: number): bigint {
   return friday * DAY + 15n * 3600n + (r(2) % (12n * 3600n));
 }
 
+/** Protect · sell inputs: a book and the options. Mirrors Vectors.sellInput. Holdings from 0.01 to 10,000 shares at
+ *  $100–1,000, health from 0.95 to 1.6, and limits, pool windows and the USDC limit that bind a fifth of the time. */
+export function sellInput(i: number) {
+  const r = (f: number) => rand("sell", i, f);
+  const stocks = Array.from({ length: 7 }, (_, k) => {
+    const f = (j: number) => r(10 + 12 * k + j);
+    const sharesRaw = f(0) % 3n === 0n ? 0n : spread(f(1), f(2), 6n, 11n);
+    const kind = f(5) % 4n;
+    return {
+      sharesRaw,
+      price: between(f(3), 10n ** 10n, 10n ** 11n),
+      cfBps: between(f(4), 5_000n, 8_500n),
+      limitRaw: kind === 0n ? 0n : kind === 1n ? spread(f(6), f(7), 5n, 10n) : 10n ** 13n,
+      poolLeftRaw: f(8) % 5n === 0n ? spread(f(9), f(10), 5n, 9n) : 10n ** 12n,
+    };
+  });
+  const usdcPrice = between(r(0), 99_500_000n, 100_500_000n);
+  const hf = between(r(1), (WAD * 95n) / 100n, (WAD * 16n) / 10n);
+  const power = stocks.reduce((p, s) => p + s.cfBps * s.sharesRaw * s.price * 10n ** 10n, 0n);
+  const book: SellBook = {
+    stocks,
+    debtValue: ceilDiv(power * 10n ** 14n, hf),
+    usdcPrice,
+    usdcLeftRaw: r(2) % 5n === 0n ? spread(r(3), r(4), 5n, 9n) : 10n ** 13n,
+  };
+  return {
+    book,
+    targetHf: between(r(5), (WAD * 13n) / 10n, (WAD * 16n) / 10n),
+    floorBps: between(r(6), 25n, 500n),
+    keepMix: r(7) % 3n === 0n,
+    maxSliceRaw: between(r(8), 100n * 10n ** 6n, 50_000n * 10n ** 6n),
+  };
+}
+
+/** Protect · sell timing inputs. Mirrors Vectors.timingInput. */
+export function timingInput(i: number) {
+  const r = (f: number) => rand("timing", i, f);
+  const now = 1_792_000_000n;
+  const headsUpHf = between(r(0), (WAD * 11n) / 10n, (WAD * 15n) / 10n);
+  return {
+    hf: between(r(1), (WAD * 9n) / 10n, (WAD * 16n) / 10n),
+    headsUpAt: r(2) % 3n === 0n ? 0n : now - (r(3) % 7_200n),
+    now,
+    frozen: r(4) % 4n === 0n,
+    headsUpHf,
+    nowHf: between(r(5), (WAD * 102n) / 100n, headsUpHf),
+    headsUpDelaySec: between(r(6), 600n, 7_200n),
+  };
+}
+
 /** Permission-hash inputs. Mirrors Vectors.hashInput. */
 export function hashInput(i: number) {
   const r = (f: number) => rand("hash", i, f);
@@ -106,6 +159,25 @@ export function hashInput(i: number) {
     end: start + 1n + (r(3) % 400_000_000n),
     salt: r(4),
     cap: 1n + (r(5) % 5_000_000n),
+  };
+}
+
+/** Protect · sell hash inputs: a hash input plus a daily limit per stock, a third of them never-sell, at least one
+ *  for sale. Mirrors Vectors.sellHashInput. */
+export function sellHashInput(i: number) {
+  const r = (f: number) => rand("sell-hash", i, f);
+  const first = Number(r(6) % 7n);
+  const limitsRaw: StockLimits = Array.from({ length: 7 }, (_, k) =>
+    k !== first && r(7 + k) % 3n === 0n ? 0n : (1n + (r(14 + k) % 1_000_000n)) * STOCK_LIMIT_UNIT,
+  );
+  const start = 1_700_000_000n + (r(2) % 300_000_000n);
+  return {
+    account: toHex(r(1) % 2n ** 160n, { size: 20 }) as Address,
+    start,
+    end: start + 1n + (r(3) % 400_000_000n),
+    salt: r(4),
+    cap: 1n + (r(5) % 5_000_000n),
+    limitsRaw,
   };
 }
 
@@ -177,43 +249,81 @@ function calendarVectors() {
   return { window: hex(window), frozen: hex(frozen) };
 }
 
-/** The manager's EIP-712 hash (getHash) of the permission JAW grants for each input. */
+/** What planSell decides for each input: the amounts per stock, then the slices, flattened. */
+function sellVectors() {
+  const amounts: string[] = [];
+  const counts: number[] = [];
+  const reserves: number[] = [];
+  const shares: string[] = [];
+  const minOuts: string[] = [];
+  for (let i = 0; i < SELL_COUNT; i++) {
+    const v = sellInput(i);
+    for (const a of sellAmounts(v.book, v)) amounts.push(a.toString());
+    const { slices } = planSell(v.book, v);
+    counts.push(slices.length);
+    for (const s of slices) {
+      reserves.push(s.reserveId);
+      shares.push(s.sharesRaw.toString());
+      minOuts.push(s.minOutRaw.toString());
+    }
+  }
+  const timings: number[] = [];
+  for (let i = 0; i < TIMING_COUNT; i++) {
+    const v = timingInput(i);
+    const t = sellTiming(v.hf, v.headsUpAt, v.now, v.frozen, v);
+    timings.push(["wait", "heads-up", "clear", "sell"].indexOf(t.timing) * 2 + (t.atOnce ? 1 : 0));
+  }
+  return { amounts, counts: hex(counts), reserves: hex(reserves), shares, minOuts, timings: hex(timings) };
+}
+
+/** The manager's EIP-712 hash (getHash) of a permission, as `getHash` computes it on Base. */
+function managerHash(p: ReturnType<typeof agentPermission>) {
+  return hashTypedData({
+    domain: { name: "JustaPermissionManager", version: "1", chainId: 8453, verifyingContract: GUARDIAN.PERMISSION_MANAGER },
+    types: {
+      Permission: [
+        { name: "account", type: "address" },
+        { name: "spender", type: "address" },
+        { name: "start", type: "uint48" },
+        { name: "end", type: "uint48" },
+        { name: "salt", type: "uint256" },
+        { name: "calls", type: "CallPermission[]" },
+        { name: "spends", type: "SpendLimit[]" },
+      ],
+      CallPermission: [
+        { name: "target", type: "address" },
+        { name: "selector", type: "bytes4" },
+        { name: "checker", type: "address" },
+      ],
+      SpendLimit: [
+        { name: "token", type: "address" },
+        { name: "allowance", type: "uint160" },
+        { name: "unit", type: "uint8" },
+        { name: "multiplier", type: "uint16" },
+      ],
+    },
+    primaryType: "Permission",
+    message: p,
+  });
+}
+
+/** The manager's hash of the permission JAW grants for each input, for the Cash jobs and for Protect · sell. */
 function hashVectors() {
   const hashes = [];
   for (let i = 0; i < HASH_COUNT; i++) {
     const v = hashInput(i);
-    const p = agentPermission(v.job, { account: v.account, spender: HASH_SPENDER, start: Number(v.start), end: Number(v.end), salt: v.salt, capRaw: v.cap });
-    hashes.push(
-      hashTypedData({
-        domain: { name: "JustaPermissionManager", version: "1", chainId: 8453, verifyingContract: GUARDIAN.PERMISSION_MANAGER },
-        types: {
-          Permission: [
-            { name: "account", type: "address" },
-            { name: "spender", type: "address" },
-            { name: "start", type: "uint48" },
-            { name: "end", type: "uint48" },
-            { name: "salt", type: "uint256" },
-            { name: "calls", type: "CallPermission[]" },
-            { name: "spends", type: "SpendLimit[]" },
-          ],
-          CallPermission: [
-            { name: "target", type: "address" },
-            { name: "selector", type: "bytes4" },
-            { name: "checker", type: "address" },
-          ],
-          SpendLimit: [
-            { name: "token", type: "address" },
-            { name: "allowance", type: "uint160" },
-            { name: "unit", type: "uint8" },
-            { name: "multiplier", type: "uint16" },
-          ],
-        },
-        primaryType: "Permission",
-        message: p,
-      }),
+    hashes.push(managerHash(agentPermission(v.job, { account: v.account, spender: HASH_SPENDER, start: Number(v.start), end: Number(v.end), salt: v.salt, capRaw: v.cap })));
+  }
+  const sellHashes = [];
+  for (let i = 0; i < HASH_COUNT; i++) {
+    const v = sellHashInput(i);
+    sellHashes.push(
+      managerHash(
+        sellPermission({ account: v.account, spender: HASH_SPENDER, start: Number(v.start), end: Number(v.end), salt: v.salt, capRaw: v.cap, limitsRaw: v.limitsRaw }),
+      ),
     );
   }
-  return { spender: HASH_SPENDER, hashes };
+  return { spender: HASH_SPENDER, hashes, sellHashes };
 }
 
 /** config/risk.ts in on-chain units: the executor's deploy defaults must match. */
@@ -230,6 +340,16 @@ function defaultsVector() {
     keepBack: usdc(CASH.keepBackUsd),
     weekendWindow: CASH_AGENT.weekendWindowSec.toString(),
     maxSavesPerDay: CASH_AGENT.maxSavesPerDay.toString(),
+    sell: {
+      headsUpHf: wad(PROTECT_SELL.headsUpHf),
+      nowHf: wad(PROTECT_SELL.nowHf),
+      targetHf: wad(PROTECT_SELL.targetHf),
+      headsUpDelay: PROTECT_SELL.headsUpDelaySec.toString(),
+      floorBps: PROTECT_SELL.floorBps.toString(),
+      actFloorBps: PROTECT_SELL.actFloorBps.toString(),
+      poolCap: usdc(PROTECT_SELL.poolCapUsd),
+      maxSlice: usdc(PROTECT_SELL.maxSliceUsd),
+    },
   };
 }
 
@@ -239,6 +359,7 @@ export function agentVectors(): Record<string, unknown> {
     "protect.json": protectVectors(),
     "save.json": saveVectors(),
     "calendar.json": calendarVectors(),
+    "sell.json": sellVectors(),
     "permissions.json": hashVectors(),
     "defaults.json": defaultsVector(),
   };
