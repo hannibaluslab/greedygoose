@@ -66,12 +66,12 @@ export function PriceChart({ points, height = 150, label, className = "" }: { po
         />
       </div>
 
-      {/* Price references in the right-hand gutter. */}
+      {/* Price references in the right-hand gutter, on the card's white as NYM's sit on the sheet, so the gridline stops short of each. */}
       {levels.map((lv) => (
         <span
           key={`l${lv}`}
           aria-hidden
-          className="num absolute right-0 -translate-y-1/2 font-mono text-[10px] leading-none text-subtle"
+          className="num absolute right-0 -translate-y-1/2 bg-card pl-1 font-mono text-[10px] leading-none text-subtle"
           style={{ top: top(lv) }}
         >
           {formatUsdTrim(lv)}
