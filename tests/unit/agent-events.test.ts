@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { encodeAbiParameters, encodeEventTopics, pad, type AbiEvent, type AbiParameter, type Address, type Hex, type Log } from "viem";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import { decodeAgentLogs } from "@/lib/agents/events";
+import { logChunks } from "@/lib/agents/history";
 
 const executor: Address = "0x00000000000000000000000000000000000E5EC0";
 const account: Address = "0x14087c532332dE6E971Eb2F60a252cbf511F59eA";
@@ -124,5 +125,24 @@ describe("decodeAgentLogs: what each event carries", () => {
     expect(one(log("Saved", { account: someone, amount: 1n }))).toEqual([]);
     expect(one(log("Saved", { account, amount: 1n }, { address: someone }))).toEqual([]);
     expect(decodeAgentLogs([{ ...log("Saved", { account, amount: 1n }), topics: [pad("0x99")] }], executor, account)).toEqual([]);
+  });
+});
+
+describe("logChunks: the getLogs ranges, newest first", () => {
+  it("cuts on chunk boundaries, so a finished chunk is the same request every time", () => {
+    expect(logChunks(3n, 12n, 5n)).toEqual([
+      { from: 10n, to: 12n },
+      { from: 5n, to: 9n },
+      { from: 3n, to: 4n },
+    ]);
+    expect(logChunks(10_000n, 19_999n)).toEqual([
+      { from: 15_000n, to: 19_999n },
+      { from: 10_000n, to: 14_999n },
+    ]);
+  });
+
+  it("reads one block, and nothing when the range is empty", () => {
+    expect(logChunks(7n, 7n, 5n)).toEqual([{ from: 7n, to: 7n }]);
+    expect(logChunks(8n, 7n, 5n)).toEqual([]);
   });
 });
