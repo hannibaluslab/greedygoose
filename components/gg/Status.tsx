@@ -1,6 +1,5 @@
 import { STATUS_LABEL, type Status } from "@/lib/risk/status";
 import type { GuardianStatus } from "@/hooks/useGuardian";
-import type { AgentTone } from "@/lib/agents/list";
 
 const PILL: Record<Status, string> = {
   none: "bg-pill text-ink-mid",
@@ -83,15 +82,16 @@ export function GuardianPill({ status }: { status: GuardianStatus }) {
   );
 }
 
+/** An agent pill's colour: green when it's on, neutral otherwise. */
+type AgentTone = "on" | "neutral";
+
 const AGENT_TONE: Record<AgentTone, { pill: string; dot: string }> = {
   on: { pill: "bg-pos-soft text-pos", dot: "bg-pos" },
-  watch: { pill: "bg-watch-soft text-watch-ink", dot: "bg-watch-ink" },
-  act: { pill: "bg-neg-soft text-neg", dot: "bg-neg" },
   neutral: { pill: "bg-pill text-ink-mid", dot: "bg-subtle" },
 };
 
 /**
- * An agent's state on its card (Agents board: 20px, 12px bold, 6px dot). The label is always shown, so colour is
+ * An agent's state on its sheet (Agents board: 20px, 12px bold, 6px dot). The label is always shown, so colour is
  * never the only signal.
  */
 export function AgentPill({ tone = "neutral", children }: { tone?: AgentTone; children: string }) {

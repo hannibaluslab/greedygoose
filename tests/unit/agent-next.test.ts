@@ -1,0 +1,137 @@
+import { describe, expect, it } from "vitest";
+import { agentNexts, defaultNumbers, nyDay, planNext, rebalanceCheckAt, whenText, type NextInput } from "@/lib/agents/next";
+import { rebalanceOptions } from "@/lib/agents/mix";
+import { JOBS, type AgentJob } from "@/lib/agents/permissions";
+import { USDC } from "@/lib/tokens/registry";
+import { ENTRY_COINS } from "@/lib/tokens/stables";
+
+const usdc = (x: number) => BigInt(Math.round(x * 1e6));
+const byJob = <T,>(f: (job: AgentJob) => T) => Object.fromEntries(JOBS.map((job) => [job, f(job)])) as Record<AgentJob, T>;
+const price = (usd: number) => BigInt(Math.round(usd * 1e8));
+const free = (reserveId: number, usd: number, p: number) => ({ reserveId, priceRaw: price(p), freeRaw: BigInt(Math.round((usd / p) * 1e8)) });
+/** Wednesday 2025-10-15 12:00 New York (16:00 UTC, daylight time). */
+const WED_NOON = Date.UTC(2025, 9, 15, 16) / 1000;
+
+/** $41 in the wallet, $400 in savings, $600 owed against $2,000 at a 70% factor (Safe), 50/50 Apple and NVIDIA on target. */
+function input(over: Partial<NextInput> = {}): NextInput {
+  return {
+    nowSec: WED_NOON,
+    walletRaw: usdc(41),
+    savingsRaw: usdc(400),
+    collateralUsd: 2_000,
+    avgCf: 0.7,
+    debtUsd: 600,
+    credit: "safe",
+    holdings: [free(0, 5_000, 250), free(5, 5_000, 180)],
+    mixBps: [5_000, 0, 0, 0, 0, 5_000, 0],
+    left: byJob(() => null),
+    capRaw: { save: usdc(1_000), protect: usdc(300), sell: usdc(300), rebalance: usdc(500), entry: usdc(1_000) },
+    capMaxRaw: usdc(10_000),
+    numbers: defaultNumbers(rebalanceOptions()),
+    savesToday: 0,
+    rebalanceDay: 0,
+    entryRaw: ENTRY_COINS.map(() => 0n),
+    entryRetryAt: ENTRY_COINS.map(() => 0),
+    plan: null,
+    ...over,
+  };
+}
+
+describe("agentNexts: each agent's rule on live data", () => {
+  it("Save puts the wallet above its keep-back into savings, within today's limit", () => {
+    expect(agentNexts(input()).save).toEqual({ will: "saves $40", would: "Would save $40" });
+    expect(agentNexts(input({ walletRaw: usdc(1.5) })).save).toEqual({ idle: "Nothing to save" });
+    expect(agentNexts(input({ left: { ...input().left, save: [{ token: USDC.address, leftRaw: usdc(15) }] } })).save).toEqual({
+      will: "saves $15",
+      would: "Would save $15",
+    });
+    expect(agentNexts(input({ left: { ...input().left, save: [{ token: USDC.address, leftRaw: 0n }] } })).save).toEqual({ idle: "Today’s limit is used" });
+    expect(agentNexts(input({ savesToday: 6 })).save).toEqual({ idle: "Done for today" });
+  });
+
+  it("Protect repays from savings below Safe, and says why it doesn't otherwise", () => {
+    expect(agentNexts(input()).protect).toEqual({ idle: "Safe. Nothing to do." });
+    expect(agentNexts(input({ debtUsd: 0, credit: "none" })).protect).toEqual({ idle: "Nothing owed. Nothing to do." });
+    // $1,400 of power against $1,000 owed is 1.4 (Watch); back to 1.65 needs $151.52, rounded up to the cent.
+    const watch = input({ debtUsd: 1_000, credit: "watch" });
+    expect(agentNexts(watch).protect).toEqual({ will: "repays $151.52 from your cash", would: "Would repay $151.52 from your cash" });
+    expect(agentNexts({ ...watch, savingsRaw: 0n }).protect).toEqual({ idle: "Watch. No cash to repay with" });
+    const used = { ...watch.left, protect: [{ token: USDC.address, leftRaw: 0n }, { token: USDC.address, leftRaw: 0n }] };
+    expect(agentNexts({ ...watch, left: used }).protect).toEqual({ idle: "Watch. Today’s limit is used" });
+  });
+
+  it("Rebalance checks its mix at the next window, trades when a stock breaks its band, and waits on credit that isn't Safe", () => {
+    // Thursday 10:00 New York, in the viewer's own words.
+    expect(agentNexts(input()).rebalance).toEqual({ idle: `On target. Checks ${whenText(Date.UTC(2025, 9, 16, 14) / 1000, WED_NOON)}` });
+    expect(agentNexts(input({ mixBps: null })).rebalance).toEqual({ idle: "No mix yet" });
+    // 60/40 against a 50/50 mix: Apple broke out by 10 points.
+    const drifted = input({ holdings: [free(0, 6_000, 250), free(5, 4_000, 180)] });
+    const n = agentNexts(drifted).rebalance;
+    expect(n).toMatchObject({ would: expect.stringMatching(/^Would trade \$\d+(\.\d\d)?$/) });
+    expect("will" in n && n.will).toMatch(/^trades \$\d+(\.\d\d)? (today|tomorrow) /);
+    expect(agentNexts({ ...drifted, credit: "watch" }).rebalance).toEqual({ idle: "Waits until your credit is Safe" });
+  });
+
+  it("Receive converts the first coin worth it, and says what's waiting", () => {
+    expect(agentNexts(input()).receive).toEqual({ idle: "Nothing waiting" });
+    const usdt = input({ entryRaw: [usdc(120), 0n, 0n, 0n] });
+    expect(agentNexts(usdt).receive).toEqual({ will: "turns 120 USDT into cash", would: "Would turn 120 USDT into cash" });
+    const waiting = agentNexts({ ...usdt, entryRetryAt: [WED_NOON + 3600, 0, 0, 0] }).receive;
+    expect(waiting).toEqual({ idle: expect.stringMatching(/^USDT waits until \d{1,2}:\d{2} [AP]M$/) });
+  });
+
+  it("takes the executor's plan for the job it names, and the rules for the rest", () => {
+    // Action 2 (Repay) for job 1 (Protect): $120.
+    const n = agentNexts(input({ plan: { action: 2, job: 1, amount: usdc(120), reason: 5, off: 0 } }));
+    expect(n.protect).toEqual({ will: "repays $120 from your cash", would: "Would repay $120 from your cash" });
+    expect(n.save).toEqual({ will: "saves $40", would: "Would save $40" });
+    // A sale is Protect's too; a plan with nothing to do changes nothing.
+    expect(agentNexts(input({ plan: { action: 4, job: 2, amount: usdc(90), reason: 1, off: 0 } })).protect).toMatchObject({
+      will: "sells backing stock to repay $90",
+    });
+    expect(agentNexts(input({ plan: { action: 0, job: 0, amount: 0n, reason: 0, off: 0 } }))).toEqual(agentNexts(input()));
+  });
+
+  it("names every move the executor can plan", () => {
+    const words = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((action) => planNext({ action, job: 4, amount: usdc(10), reason: 0, off: 1 })!.next);
+    expect(words[0]).toEqual({ idle: "Stopping: a year has passed since you switched it on." });
+    expect(words.slice(1).map((w) => ("will" in w ? w.will : w.idle))).toEqual([
+      "repays $10 from your cash",
+      "saves $10",
+      "sells backing stock to repay $10",
+      "sends you a heads-up before selling",
+      "clears the heads-up",
+      "finishes its last move",
+      "trades $10",
+      "turns USDT into cash",
+    ]);
+    for (const w of words) expect(JSON.stringify(w)).not.toMatch(/borrow|lock|permission|executor|upkeep|registry|spender/i);
+  });
+});
+
+describe("the Rebalancer's next window", () => {
+  it("counts New York days as the executor's calendar does", () => {
+    expect(nyDay(WED_NOON)).toBe(Date.UTC(2025, 9, 15) / 86_400_000);
+    // 02:00 UTC Thursday is still Wednesday evening in New York.
+    expect(nyDay(Date.UTC(2025, 9, 16, 2) / 1000)).toBe(Date.UTC(2025, 9, 15) / 86_400_000);
+  });
+
+  it("is 10:00 New York on the next weekday whose window hasn't passed or run", () => {
+    const at = (y: number, m: number, d: number, utcHour: number) => Date.UTC(y, m, d, utcHour) / 1000;
+    // Wednesday noon: today's window has passed, so Thursday 10:00 (14:00 UTC, daylight time).
+    expect(rebalanceCheckAt(WED_NOON, 0)).toBe(at(2025, 9, 16, 14));
+    // Wednesday 9:00: today, unless it already traded today.
+    expect(rebalanceCheckAt(at(2025, 9, 15, 13), 0)).toBe(at(2025, 9, 15, 14));
+    expect(rebalanceCheckAt(at(2025, 9, 15, 13), nyDay(WED_NOON))).toBe(at(2025, 9, 16, 14));
+    // Friday afternoon: Monday.
+    expect(rebalanceCheckAt(at(2025, 9, 17, 20), 0)).toBe(at(2025, 9, 20, 14));
+    // Standard time in December: 15:00 UTC.
+    expect(rebalanceCheckAt(at(2025, 11, 3, 12), 0)).toBe(at(2025, 11, 3, 15));
+  });
+
+  it("says when in the viewer's own day", () => {
+    expect(whenText(WED_NOON + 3600, WED_NOON)).toMatch(/^today /);
+    expect(whenText(WED_NOON + 86_400, WED_NOON)).toMatch(/^tomorrow /);
+    expect(whenText(WED_NOON + 5 * 86_400, WED_NOON)).toMatch(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) /);
+  });
+});

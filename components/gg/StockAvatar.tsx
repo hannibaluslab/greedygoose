@@ -25,3 +25,6 @@ export function StockAvatar({ symbol, size = 30, font: fontPx, weight }: { symbo
 }
 
 export const tickerOf = (symbol: string) => symbol.replace(/c$/, "");
+
+/** A stock's badge colour, for the pieces that draw it beside its badge (the mix bar). */
+export const stockColor = (symbol: string) => COLORS[tickerOf(symbol)] ?? "#2c2a25";
