@@ -17,7 +17,8 @@ export function FaceIdButton({
 }: { label: string; phase: TxPhase; disabled?: boolean; onClick: () => void; preview?: boolean; size?: ButtonSize }) {
   const text =
     phase === "simulating" ? "Checking…" : phase === "signing" ? "Confirm with Face ID…" : phase === "pending" ? "Confirming on Base…" : label;
-  const off = disabled || preview || phase === "simulating" || phase === "signing" || phase === "pending";
+  // "done" too: a sheet that closes on success (BuySheet) still shows the button while it slides out.
+  const off = disabled || preview || phase === "simulating" || phase === "signing" || phase === "pending" || phase === "done";
   return (
     <div className="flex flex-col gap-2">
       <button

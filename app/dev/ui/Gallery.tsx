@@ -17,6 +17,7 @@ import { FaceIdButton } from "@/components/gg/TxUi";
 import { CreditIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/icons";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { homeStatus, type Status } from "@/lib/risk/status";
+import { boughtLine } from "@/lib/activity/bought";
 import { formatUsd, formatUsdTrim } from "@/lib/formatting";
 
 // Sample figures for the gallery only, the boards' own (HomeUpliftRail, PortfolioPage, F1-4, F2-6).
@@ -215,8 +216,9 @@ export function Gallery() {
       </Section>
 
       <Section title="Toast" kit="toast">
-        <div className="grid grid-cols-2 gap-2.5">
-          <Button variant="white" onClick={() => toast.success("Bought 0.1120 NVDA")}>Success</Button>
+        <div className="grid grid-cols-3 gap-2.5">
+          <Button variant="white" onClick={() => toast.success(boughtLine(0.112, "NVDAc"))}>Bought</Button>
+          <Button variant="white" onClick={() => toast.success(boughtLine(1.35, "AAPLc", true))}>On credit</Button>
           <Button variant="white" onClick={() => toast("Address copied")}>Plain</Button>
         </div>
       </Section>
