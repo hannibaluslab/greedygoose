@@ -20,6 +20,7 @@
     "rehearsal:agents": "tsx scripts/rehearsal/run-agents.ts",
     "rehearsal:shock": "tsx scripts/rehearsal/price-shock.ts",
     "rehearsal:warp": "tsx scripts/rehearsal/time-warp.ts",
+    "rehearsal:prove": "tsx scripts/rehearsal/prove.ts",
     "rehearsal:check-build": "tsx scripts/rehearsal/check-build.ts"
   },
   "dependencies": {
