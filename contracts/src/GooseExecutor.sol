@@ -4,9 +4,12 @@ pragma solidity 0.8.28;
 import {AutomationCompatibleInterface} from "chainlink/automation/interfaces/AutomationCompatibleInterface.sol";
 import {ILogAutomation, Log} from "chainlink/automation/interfaces/ILogAutomation.sol";
 import {IJustaPermissionManager as PM} from "./IJustaPermissionManager.sol";
-import {IAaveV3Pool, IERC20, IJustanAccount, ISpoke} from "./IProtocols.sol";
-import {Amounts, CashRules, ProtectCase, SaveCase, Thresholds} from "./CashRules.sol";
+import {IAaveV3Pool, IERC20, ISpoke} from "./IProtocols.sol";
+import {Amounts, ProtectCase, Thresholds} from "./CashRules.sol";
 import {NyCalendar} from "./NyCalendar.sol";
+import {JobBase} from "./jobs/JobBase.sol";
+import {ProtectJob} from "./jobs/ProtectJob.sol";
+import {SaveJob} from "./jobs/SaveJob.sol";
 
 /// @title GooseExecutor
 /// @notice The GreedyGoose agent contract (contracts/docs/GooseExecutor.md). It is the spender of every agent
@@ -21,7 +24,13 @@ import {NyCalendar} from "./NyCalendar.sol";
 ///         JAW's screen grants with every checker set to 0, so the manager only enforces targets, selectors, the
 ///         spender and the daily limits. Every argument is pinned here: each call is built for the account alone, and
 ///         the post-checks revert any move that does anything else.
-/// @dev Immutable logic. A new rule is a new contract, so a new spender and a new grant for every user.
+///
+///         This contract is the core: the registry, who may run, pause and the delayed changes, the paging, the
+///         per-account try/catch and the checks every move must pass. Each job's own rule (its permission template,
+///         when and how much to move, the calls and its post-checks) is a linked library in src/jobs, so new jobs
+///         fit under the 24 KB limit (GooseExecutor-as-built.md, "Job modules").
+/// @dev Immutable logic. A new rule is a new contract, so a new spender and a new grant for every user. The job
+///      libraries' addresses are linked into this bytecode at deploy and their code can't change.
 contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     /// A job's bit in `Account.jobs` is `1 << uint8(job)`.
     enum Job {
@@ -106,10 +115,20 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         uint256 eth;
     }
 
+    /// The addresses fixed at deploy, handed to the job libraries (which can't read this contract's immutables).
+    struct Env {
+        PM manager;
+        IAaveV3Pool aaveV3Pool;
+        ISpoke spoke;
+        IERC20 usdc;
+        IERC20 aUsdc;
+        uint256 usdcReserveId;
+    }
+
     // ------------------------------------------------------------------ constants
 
     /// Most gas the manager's batch may use for one account (one Protect batch measured at about 404k).
-    uint256 public constant ACCOUNT_GAS = 1_000_000;
+    uint256 public constant ACCOUNT_GAS = JobBase.ACCOUNT_GAS;
     /// Kept per account for its reads, post-checks and bookkeeping.
     uint256 internal constant RESERVE_GAS = 300_000;
     /// Most gas one account's run may use, all included.
@@ -124,8 +143,6 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     uint8 internal constant MAX_FAILS = 8;
     /// First cooldown after a failure; it doubles with each one (10 min … about 21 h).
     uint48 internal constant BASE_COOLDOWN = 10 minutes;
-    /// aUSDC moves can be off by a unit or two from the amount (Aave's ray rounding).
-    uint256 internal constant SAVINGS_ROUNDING = 2;
     /// A holiday may be set at most this many days ahead.
     uint256 internal constant HOLIDAY_HORIZON = 800;
     uint32 internal constant MAX_PAGE_SIZE = 200;
@@ -290,7 +307,7 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         if (accounts[account].jobs & _bit(job) == 0) revert JobNotOn();
         Grant memory g = grants[account][job];
         if (block.timestamp > g.end) return _jobOff(account, job, OffReason.Expired);
-        (bool alive, OffReason off) = _alive(_permission(job, account, g, salts[account][job]));
+        (bool alive, OffReason off) = JobBase.alive(MANAGER, _permission(job, account, g, salts[account][job]));
         if (alive) revert StillOn();
         _jobOff(account, job, off);
     }
@@ -405,14 +422,20 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         for (uint8 j; j < 2; ++j) {
             Job job = j == 0 ? Job.Protect : Job.Save;
             if (accounts[account].jobs & _bit(job) == 0) continue;
-            (Plan memory p, PM.Permission memory perm) = _planJob(account, job, preFreeze);
+            Grant memory g = grants[account][job];
+            if (block.timestamp < g.start) continue; // JAW takes the start from the browser's clock
+            if (block.timestamp > g.end) {
+                _jobOff(account, job, OffReason.Expired);
+                continue;
+            }
+            Balances memory mine = _ownBalances();
+            Plan memory p = _runJob(job, account, g, preFreeze);
             if (p.action == Action.None) continue;
             if (p.action == Action.Prune) {
                 _jobOff(account, job, p.off);
                 continue;
             }
-            if (p.action == Action.Repay) _repay(account, perm, p);
-            else _save(account, perm, p.amount);
+            _checkOwnBalances(mine);
             return;
         }
     }
@@ -424,7 +447,7 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         for (uint8 j; j < 2; ++j) {
             Job job = j == 0 ? Job.Protect : Job.Save;
             if (jobs & _bit(job) == 0) continue;
-            (p,) = _planJob(account, job, preFreeze);
+            p = _planJob(account, job, preFreeze);
             if (p.action != Action.None) return p;
         }
     }
@@ -548,7 +571,7 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
 
     function _register(Job job, address account, uint48 start, uint48 end, uint256 salt, uint160 cap) internal {
         if (!allowedCodehash[account.codehash]) revert AccountNotAllowed();
-        if (!_managerOwns(account)) revert ManagerNotOwner();
+        if (!JobBase.managerOwns(MANAGER, account)) revert ManagerNotOwner();
         if (cap == 0 || cap > CAP_MAX) revert CapOutOfBounds();
         if (start >= end || block.timestamp > end) revert BadWindow();
         Grant memory g = Grant(start, end, cap);
@@ -589,124 +612,47 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         emit JobOff(account, job, reason);
     }
 
-    /// The template the user approved, with checker 0 everywhere as JAW's screen grants it (MANAGER-NOTES §5), in the
-    /// same order as the app's grant request. Both of Protect's daily limits use the one cap: without the aUSDC one, a
-    /// withdrawal of savings to someone else would be charged nothing (MANAGER-NOTES §1).
+    /// The template the user approved for `job`, with checker 0 everywhere as JAW's screen grants it (MANAGER-NOTES
+    /// §5), in the same order as the app's grant request (lib/agents/permissions.ts).
     function _permission(Job job, address account, Grant memory g, uint256 salt)
         internal
         view
-        returns (PM.Permission memory p)
+        returns (PM.Permission memory)
     {
-        p.account = account;
-        p.spender = address(this);
-        p.start = g.start;
-        p.end = g.end;
-        p.salt = salt;
-        if (job == Job.Save) {
-            p.calls = new PM.CallPermission[](2);
-            p.calls[0] = PM.CallPermission(address(USDC), IERC20.approve.selector, address(0));
-            p.calls[1] = PM.CallPermission(address(AAVE_V3_POOL), IAaveV3Pool.supply.selector, address(0));
-            p.spends = new PM.SpendLimit[](1);
-            p.spends[0] = PM.SpendLimit(address(USDC), g.cap, PM.PeriodUnit.Day, 1);
-        } else {
-            p.calls = new PM.CallPermission[](3);
-            p.calls[0] = PM.CallPermission(address(AAVE_V3_POOL), IAaveV3Pool.withdraw.selector, address(0));
-            p.calls[1] = PM.CallPermission(address(USDC), IERC20.approve.selector, address(0));
-            p.calls[2] = PM.CallPermission(address(SPOKE), ISpoke.repay.selector, address(0));
-            p.spends = new PM.SpendLimit[](2);
-            p.spends[0] = PM.SpendLimit(address(USDC), g.cap, PM.PeriodUnit.Day, 1);
-            p.spends[1] = PM.SpendLimit(address(AUSDC), g.cap, PM.PeriodUnit.Day, 1);
-        }
-    }
-
-    /// The permission's on-chain status, past its approval (checked at registration, and never undone).
-    function _alive(PM.Permission memory p) internal view returns (bool, OffReason) {
-        if (!_managerOwns(p.account)) return (false, OffReason.NotOwner);
-        if (MANAGER.isRevoked(p)) return (false, OffReason.Revoked);
-        return (true, OffReason.Revoked);
-    }
-
-    /// The manager runs every batch through the account, so it must be one of its owners (MANAGER-NOTES §6). A failed
-    /// or odd answer (an EIP-7702 account that changed its code) counts as no.
-    function _managerOwns(address account) internal view returns (bool owns) {
-        bytes memory data = abi.encodeCall(IJustanAccount.isOwnerAddress, (address(MANAGER)));
-        assembly ("memory-safe") {
-            // Gas-capped, and only the first word of the answer is copied.
-            let ok := staticcall(50000, account, add(data, 0x20), mload(data), 0x00, 0x20)
-            owns := and(and(ok, eq(returndatasize(), 0x20)), eq(mload(0x00), 1))
-        }
+        if (job == Job.Save) return SaveJob.permission(_env(), account, g, salt);
+        return ProtectJob.permission(_env(), account, g, salt);
     }
 
     // ================================================================== internals: rules
 
-    function _planJob(address account, Job job, bool preFreeze)
-        internal
-        view
-        returns (Plan memory p, PM.Permission memory perm)
-    {
+    /// What `job` would do for `account` now. A grant that hasn't started waits; one past its end is pruned.
+    function _planJob(address account, Job job, bool preFreeze) internal view returns (Plan memory p) {
         p.job = job;
         Grant memory g = grants[account][job];
-        if (block.timestamp < g.start) return (p, perm); // JAW takes the start from the browser's clock
+        if (block.timestamp < g.start) return p; // JAW takes the start from the browser's clock
         if (block.timestamp > g.end) {
             p.action = Action.Prune;
             p.off = OffReason.Expired;
-            return (p, perm);
+            return p;
         }
-        perm = _permission(job, account, g, salts[account][job]);
-
+        uint256 salt = salts[account][job];
         if (job == Job.Protect) {
-            // Cheap reads first: most accounts owe nothing or are healthy.
-            if (SPOKE.getUserTotalDebt(USDC_RESERVE_ID, account) == 0) return (p, perm);
-            ISpoke.UserAccountData memory d = SPOKE.getUserAccountData(account);
-            (ProtectCase why, uint256 need, uint256 debt) = CashRules.protectNeed(
-                d.totalCollateralValue, d.avgCollateralFactor, d.totalDebtValueRay, preFreeze, thresholds
-            );
-            if (why < ProtectCase.Watch) return (p, perm);
-            uint256 savings = AUSDC.balanceOf(account);
-            if (savings == 0) return (p, perm); // NoSavings, before paying for the two limit reads
-            (why, p.amount) =
-                CashRules.protectAmount(why, need, debt, savings, _protectCapLeft(perm, g.cap), amounts.minRepay);
-            if (why < ProtectCase.Watch) return (p, perm);
-            p.action = Action.Repay;
-            p.reason = why;
-            p.hf = d.healthFactor;
-        } else {
-            Amounts memory a = amounts;
-            uint256 cash = USDC.balanceOf(account);
-            if (cash < uint256(a.keepBack) + a.minSave) return (p, perm);
-            SaveCase c;
-            (c, p.amount) = CashRules.planSave(cash, _capLeft(perm, 0, g.cap), _savesToday(account), a);
-            if (c != SaveCase.Save) return (p, perm);
-            p.action = Action.Save;
+            return ProtectJob.plan(_env(), account, g, salt, thresholds, amounts.minRepay, preFreeze);
         }
+        return SaveJob.plan(_env(), account, g, salt, amounts, accounts[account]);
+    }
 
-        // There is a move to make: only now pay for the permission's status.
-        (bool alive, OffReason off) = _alive(perm);
-        if (!alive) {
-            p.action = Action.Prune;
-            p.off = off;
-            p.amount = 0;
+    /// Plans `job` again from fresh reads and makes its move, if any, through its library.
+    function _runJob(Job job, address account, Grant memory g, bool preFreeze) internal returns (Plan memory) {
+        uint256 salt = salts[account][job];
+        if (job == Job.Protect) {
+            return ProtectJob.run(_env(), account, g, salt, thresholds, amounts.minRepay, preFreeze);
         }
+        return SaveJob.run(_env(), accounts[account], account, g, salt, amounts);
     }
 
-    /// What's left of today's limit on spend `i`.
-    function _capLeft(PM.Permission memory perm, uint256 i, uint160 cap) internal view returns (uint256) {
-        uint256 spent = MANAGER.getCurrentPeriod(perm, perm.spends[i]).spend;
-        return cap > spent ? cap - spent : 0;
-    }
-
-    /// Protect is charged on both limits: the approve amount in USDC, and the savings' drop in aUSDC, which Aave's
-    /// rounding can make a unit or two larger.
-    function _protectCapLeft(PM.Permission memory perm, uint160 cap) internal view returns (uint256) {
-        uint256 usdcLeft = _capLeft(perm, 0, cap);
-        uint256 savingsLeft = _capLeft(perm, 1, cap);
-        savingsLeft = savingsLeft > SAVINGS_ROUNDING ? savingsLeft - SAVINGS_ROUNDING : 0;
-        return usdcLeft < savingsLeft ? usdcLeft : savingsLeft;
-    }
-
-    function _savesToday(address account) internal view returns (uint256) {
-        Account memory a = accounts[account];
-        return a.savesDay == NyCalendar.day(block.timestamp) ? a.savesToday : 0;
+    function _env() internal view returns (Env memory) {
+        return Env(MANAGER, AAVE_V3_POOL, SPOKE, USDC, AUSDC, USDC_RESERVE_ID);
     }
 
     /// Weekend Shield's window: prices are live and the next freeze starts within `weekendWindow`.
@@ -714,59 +660,7 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         return !NyCalendar.frozen(holiday, ts) && NyCalendar.nextFreeze(holiday, ts) - ts <= amounts.weekendWindow;
     }
 
-    // ================================================================== internals: moves and post-checks
-
-    /// Savings → loan: withdraw to the account, approve the spoke, repay the account's own loan.
-    function _repay(address account, PM.Permission memory perm, Plan memory p) internal {
-        uint256 debtBefore = SPOKE.getUserTotalDebt(USDC_RESERVE_ID, account);
-        uint256 savingsBefore = AUSDC.balanceOf(account);
-        uint256 cashBefore = USDC.balanceOf(account);
-        Balances memory mine = _ownBalances();
-
-        PM.Call[] memory calls = new PM.Call[](3);
-        calls[0] = PM.Call(
-            address(AAVE_V3_POOL), 0, abi.encodeCall(IAaveV3Pool.withdraw, (address(USDC), p.amount, account))
-        );
-        calls[1] = PM.Call(address(USDC), 0, abi.encodeCall(IERC20.approve, (address(SPOKE), p.amount)));
-        calls[2] = PM.Call(address(SPOKE), 0, abi.encodeCall(ISpoke.repay, (USDC_RESERVE_ID, p.amount, account)));
-        MANAGER.executeBatch{gas: ACCOUNT_GAS}(perm, calls);
-
-        if (SPOKE.getUserTotalDebt(USDC_RESERVE_ID, account) >= debtBefore) revert DebtNotLower();
-        uint256 hfAfter = SPOKE.getUserAccountData(account).healthFactor;
-        if (hfAfter < p.hf) revert HealthLower();
-        if (AUSDC.balanceOf(account) + p.amount + SAVINGS_ROUNDING < savingsBefore) revert SavingsMoved();
-        // If the debt was smaller than the amount, the spoke took less; the rest stays in the wallet for Save.
-        if (USDC.balanceOf(account) < cashBefore) revert CashLower();
-        _checkOwnBalances(mine);
-        emit ProtectRepaid(account, p.amount, p.hf, hfAfter, p.reason);
-    }
-
-    /// Wallet → savings: approve the pool exactly, supply for the account.
-    function _save(address account, PM.Permission memory perm, uint256 amount) internal {
-        uint256 cashBefore = USDC.balanceOf(account);
-        uint256 savingsBefore = AUSDC.balanceOf(account);
-        Balances memory mine = _ownBalances();
-
-        PM.Call[] memory calls = new PM.Call[](2);
-        calls[0] = PM.Call(address(USDC), 0, abi.encodeCall(IERC20.approve, (address(AAVE_V3_POOL), amount)));
-        calls[1] = PM.Call(
-            address(AAVE_V3_POOL), 0, abi.encodeCall(IAaveV3Pool.supply, (address(USDC), amount, account, 0))
-        );
-        MANAGER.executeBatch{gas: ACCOUNT_GAS}(perm, calls);
-
-        if (USDC.balanceOf(account) + amount != cashBefore) revert WrongAmount();
-        if (AUSDC.balanceOf(account) + SAVINGS_ROUNDING < savingsBefore + amount) revert SavingsNotUp();
-        _checkOwnBalances(mine);
-
-        Account storage a = accounts[account];
-        uint32 today = uint32(NyCalendar.day(block.timestamp));
-        if (a.savesDay != today) {
-            a.savesDay = today;
-            a.savesToday = 0;
-        }
-        ++a.savesToday;
-        emit Saved(account, amount);
-    }
+    // ================================================================== internals: post-checks
 
     /// Funds never mix: a move must leave nothing with the executor. Compared with before the move rather than with 0,
     /// so a stray transfer to this contract can't stop every run.

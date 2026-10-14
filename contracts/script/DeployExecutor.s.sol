@@ -12,6 +12,9 @@ import {Amounts, Thresholds} from "../src/CashRules.sol";
 ///
 ///   EXECUTOR_OWNER=<multisig> forge script script/DeployExecutor.s.sol --rpc-url <base or base sepolia> --broadcast
 ///
+/// forge deploys each job library in src/jobs first and links its address into the executor (GooseExecutor-as-built.md,
+/// "Job modules").
+///
 /// Then, in one session (contracts/docs/GooseExecutor.md §9):
 ///   1. register the run upkeep on automation.chain.link: custom logic, target = the executor, checkData =
 ///      abi.encode(uint256(0), uint256(1)) (shard 0 of 1);
@@ -41,9 +44,9 @@ contract DeployExecutor is Script {
     /// D13: test deploys cap every daily limit at $5.
     uint160 internal constant TEST_CAP_MAX = 5e6;
     /// Accounts per check page, from the worst case measured on a Base fork (ExecutorPageForkTest): accounts that each
-    /// owe against all seven stocks, sit in Watch and have too little savings to repay from cost about 204k gas each to
-    /// check, cold, so 40 of them fit under 8.5M of Base's 10M check limit.
-    uint32 internal constant PAGE_SIZE = 40;
+    /// owe against all seven stocks, sit in Watch and have too little savings to repay from cost about 215k gas each to
+    /// check, cold, so 38 of them fit under 8.5M of Base's 10M check limit.
+    uint32 internal constant PAGE_SIZE = 38;
 
     function run() external returns (GooseExecutor executor) {
         GooseExecutor.Config memory c = config(block.chainid, vm.envAddress("EXECUTOR_OWNER"));
