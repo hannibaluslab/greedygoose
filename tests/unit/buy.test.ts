@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { decodeFunctionData, erc20Abi } from "viem";
-import { bestQuote, buildBuyCalls, minOut, quoteEconomics, type BuyQuote } from "@/lib/swap/buy";
+import { bestQuote, buildBuyCalls, minOut, quoteEconomics, signingQuote, type BuyQuote } from "@/lib/swap/buy";
 import { aeroRouterAbi, swapRouter02Abi } from "@/lib/swap/abis";
 import { AERODROME, UNISWAP } from "@/lib/swap/venues";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
@@ -65,5 +65,25 @@ describe("aerodrome route", () => {
   it("bestQuote picks the venue with more shares", () => {
     expect(bestQuote([quote, aq, { ...aq, amountOut: 0n }])).toBe(aq);
     expect(bestQuote([])).toBeNull();
+  });
+});
+
+describe("signingQuote (the pool read again right before Face ID)", () => {
+  const shown: BuyQuote = { venue: "aerodrome", pool: 10, amountIn: 300_000_000n, amountOut: 135_000_000n };
+  const fresh = (amountOut: bigint): BuyQuote => ({ ...shown, amountOut });
+
+  it("signs on a better fresh quote, so the floor rises with it", () => {
+    expect(signingQuote(shown, fresh(136_000_000n))).toEqual(fresh(136_000_000n));
+  });
+  it("keeps the review's floor when the price slipped but stays above it", () => {
+    expect(signingQuote(shown, fresh(134_000_000n))).toBe(shown);
+    expect(signingQuote(shown, fresh(minOut(shown.amountOut)))).toBe(shown);
+  });
+  it("stops when the fresh quote is under the review's \"at least\"", () => {
+    expect(signingQuote(shown, fresh(minOut(shown.amountOut) - 1n))).toBeNull();
+  });
+  it("only compares the same pool and amount", () => {
+    expect(signingQuote(shown, { ...fresh(140_000_000n), venue: "uniswap", pool: 3000 })).toBeNull();
+    expect(signingQuote(shown, { ...fresh(140_000_000n), amountIn: 1n })).toBeNull();
   });
 });

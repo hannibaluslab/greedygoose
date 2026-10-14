@@ -11,10 +11,14 @@ import { addLocal, updateLocal } from "@/lib/activity/local";
 
 export type TxPhase = "idle" | "simulating" | "signing" | "pending" | "done" | "failed";
 
+/** Stops a batch built at signing time, with words for the user (e.g. the price moved since the review). */
+export class TxStop extends Error {}
+
 /**
  * The one write path (CLAUDE.md › Transaction safety):
  * simulate the whole batch from the user → JAW signs once (wallet_sendCalls) → wait → re-read chain state.
- * No optimistic state: "done" only after the batch lands.
+ * No optimistic state: "done" only after the batch lands. `calls` can be built at signing time, from
+ * reads that must be fresh (a quote): that runs in the "simulating" phase, and a TxStop shows its words.
  */
 export function useTx(failedOnChain = "This didn’t go through on Base. Nothing moved except any network fee.") {
   const client = usePublicClient({ chainId: CHAIN_ID });
@@ -40,28 +44,30 @@ export function useTx(failedOnChain = "This didn’t go through on Base. Nothing
 
   async function run(
     user: `0x${string}`,
-    calls: Call[],
+    calls: Call[] | (() => Promise<Call[]>),
     fallback = "This would fail right now. Try again in a moment.",
     activity?: ActivityItem[],
   ) {
     setError(null);
     setPhase("simulating");
+    let batch: Call[];
     try {
-      const sim = await client!.simulateCalls({ account: user, calls: calls.map(({ to, data }) => ({ to, data })) });
+      batch = typeof calls === "function" ? await calls() : calls;
+      const sim = await client!.simulateCalls({ account: user, calls: batch.map(({ to, data }) => ({ to, data })) });
       const bad = sim.results.findIndex((r) => r.status !== "success");
       if (bad >= 0) {
         setPhase("failed");
-        setError(explainRevert(sim.results[bad].data, fallback, calls[bad]));
+        setError(explainRevert(sim.results[bad].data, fallback, batch[bad]));
         return;
       }
-    } catch {
+    } catch (e) {
       setPhase("failed");
-      setError("We couldn’t check this with Base. Please try again.");
+      setError(e instanceof TxStop ? e.message : "We couldn’t check this with Base. Please try again.");
       return;
     }
     setPhase("signing");
     try {
-      const sent = await send.mutateAsync({ chainId: CHAIN_ID, calls: calls.map(({ to, data }) => ({ to, data })) });
+      const sent = await send.mutateAsync({ chainId: CHAIN_ID, calls: batch.map(({ to, data }) => ({ to, data })) });
       if (activity) {
         addLocal(user, { id: sent.id, time: Date.now(), items: activity, status: "pending" });
         setRecord({ user, id: sent.id });
