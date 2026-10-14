@@ -3,13 +3,22 @@
  * Equities Hub borrower. Nothing is signed or sent.
  */
 import { describe, expect, it } from "vitest";
-import { createPublicClient, erc20Abi, http } from "viem";
+import {
+  createPublicClient, decodeFunctionResult, encodeAbiParameters, encodeFunctionData, erc20Abi, http, keccak256, parseUnits, toFunctionSelector, zeroHash,
+} from "viem";
 import { CHAIN } from "@/lib/chain";
+import { CASH } from "@/config/risk";
 import { buildBorrowCalls, buildLoanCalls, buildRepayCalls, buildSupplyCalls, buildWithdrawCalls } from "@/lib/aave/tx";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { AAVE } from "@/lib/aave/addresses";
-import { explainRevert } from "@/lib/aave/errors";
-import { EQUITIES } from "@/lib/tokens/registry";
+import { CASH_STUCK, explainRevert } from "@/lib/aave/errors";
+import { payFromCash, type Cash } from "@/lib/cash";
+import { GUARDIAN } from "@/lib/guardian/config";
+import { buildWithdrawSavingsCalls } from "@/lib/guardian/permission";
+import { aeroQuoterAbi } from "@/lib/swap/abis";
+import { buildBuyCalls } from "@/lib/swap/buy";
+import { AERODROME } from "@/lib/swap/venues";
+import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
 const client = createPublicClient({ chain: CHAIN, transport: http(process.env.NEXT_PUBLIC_BASE_RPC_URL) });
 const user = "0x2b8ce2c87c166d8e24e186e7e4253c11fc805427"; // real borrower with stock collateral (found via spoke Borrow logs)
@@ -82,5 +91,80 @@ describe("write batches simulate on mainnet", () => {
     const r = await simulate(buildLoanCalls({ user, locks, borrowRaw: 1_000_000n }));
     expect(r.results.every((x) => x.status === "success")).toBe(true);
     expect(r.results).toHaveLength(locks.length * 3 + 1);
+  });
+});
+
+/**
+ * Cash is savings (D15): the same borrower also holds aBasUSDC. A state override empties its wallet
+ * USDC, so every dollar of these buys and repays (and the fee buffer) comes out of savings.
+ */
+describe("savings-first batches from a $0 wallet", () => {
+  // FiatTokenV2_2 keeps balances in the mapping at slot 9; the first test checks it against balanceOf.
+  const walletSlot = keccak256(encodeAbiParameters([{ type: "address" }, { type: "uint256" }], [user, 9n]));
+  const emptyWallet = [{ address: USDC.address, stateDiff: [{ slot: walletSlot, value: zeroHash }] }];
+  const walletRead = { to: USDC.address, data: encodeFunctionData({ abi: erc20Abi, functionName: "balanceOf", args: [user] }) };
+  const feeBuffer = parseUnits(CASH.feeBufferUsd.toFixed(6), 6);
+
+  const cash = async (): Promise<Cash> => ({
+    walletRaw: 0n,
+    savingsRaw: await client.readContract({ address: GUARDIAN.AUSDC, abi: erc20Abi, functionName: "balanceOf", args: [user] }),
+  });
+
+  /** Simulates the batch with an empty wallet, then reads what the wallet holds after it. */
+  async function simulateFromEmptyWallet(calls: { to: `0x${string}`; data: `0x${string}` }[]) {
+    const r = await client.simulateCalls({
+      account: user,
+      calls: [...calls, walletRead].map(({ to, data }) => ({ to, data })),
+      stateOverrides: emptyWallet,
+    });
+    return {
+      statuses: r.results.slice(0, -1).map((x) => x.status),
+      walletAfter: decodeFunctionResult({ abi: erc20Abi, functionName: "balanceOf", data: r.results.at(-1)!.data }),
+    };
+  }
+
+  it("the account holds savings, and the override really empties its wallet", async () => {
+    const [stored, balance] = await Promise.all([
+      client.getStorageAt({ address: USDC.address, slot: walletSlot }),
+      client.readContract({ address: USDC.address, abi: erc20Abi, functionName: "balanceOf", args: [user] }),
+    ]);
+    expect(BigInt(stored ?? 0)).toBe(balance);
+    expect(await client.readContract({ address: USDC.address, abi: erc20Abi, functionName: "balanceOf", args: [user], stateOverride: emptyWallet })).toBe(0n);
+    expect((await cash()).savingsRaw).toBeGreaterThan(5_000_000n);
+  });
+
+  it("buy $1 of a stock: withdraw from savings → approve → swap, fee buffer left in the wallet", async () => {
+    const stock = EQUITIES.find((e) => e.symbol === "NVDAc")!;
+    const amountIn = 1_000_000n;
+    const pool = 10;
+    const { result } = await client.simulateContract({
+      address: AERODROME.QUOTER,
+      abi: aeroQuoterAbi,
+      functionName: "quoteExactInputSingle",
+      args: [{ tokenIn: USDC.address, tokenOut: stock.address, amountIn, tickSpacing: pool, sqrtPriceLimitX96: 0n }],
+    });
+    const quote = { venue: "aerodrome" as const, pool, amountIn, amountOut: result[0] };
+    const calls = payFromCash(user, amountIn, await cash(), buildBuyCalls({ user, stock, quote }));
+    expect(calls.map((c) => c.to)).toEqual([GUARDIAN.AAVE_V3_POOL, USDC.address, AERODROME.ROUTER]);
+    const r = await simulateFromEmptyWallet(calls);
+    expect(r.statuses).toEqual(["success", "success", "success"]);
+    expect(r.walletAfter).toBe(feeBuffer);
+  });
+
+  it("repay $1: withdraw from savings → approve → repay, fee buffer left in the wallet", async () => {
+    const amountRaw = 1_000_000n;
+    const calls = payFromCash(user, amountRaw, await cash(), buildRepayCalls({ user, amountRaw, all: false }));
+    expect(calls.map((c) => c.to)).toEqual([GUARDIAN.AAVE_V3_POOL, USDC.address, AAVE.SPOKE]);
+    const r = await simulateFromEmptyWallet(calls);
+    expect(r.statuses).toEqual(["success", "success", "success"]);
+    expect(r.walletAfter).toBe(feeBuffer);
+  });
+
+  it("a withdrawal savings can't serve reads as cash that can't move right now", async () => {
+    const [withdraw] = buildWithdrawSavingsCalls(user, (await cash()).savingsRaw + 10n ** 12n, false);
+    const [r] = (await client.simulateCalls({ account: user, calls: [{ to: withdraw.to, data: withdraw.data }] })).results;
+    expect(r.status).toBe("failure");
+    expect(r.data).toBe(toFunctionSelector("NotEnoughAvailableUserBalance()"));
+    expect(explainRevert(r.data, "fallback", withdraw)).toBe(CASH_STUCK);
   });
 });
