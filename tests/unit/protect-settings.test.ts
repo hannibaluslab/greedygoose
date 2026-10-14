@@ -60,8 +60,20 @@ describe("Protect's never-sell grant", () => {
 describe("protectSteps", () => {
   it("starts on what's saved: no change, nothing to save", () => {
     expect(protectSteps(fullOn, savedChoice(fullOn), ctx)).toEqual({ steps: [], blocked: null });
-    expect(protectSteps(off, savedChoice(off), ctx)).toEqual({ steps: [], blocked: null });
     expect(savedChoice(off)).toEqual({ limitUsd: 300, sellOn: false, keepMix: false, never: [] });
+  });
+
+  it("while it's off, saving switches it on: repay from cash at the limit on screen, then selling if chosen", () => {
+    expect(protectSteps(off, savedChoice(off), ctx)).toEqual({ steps: [{ kind: "grant", job: "protect", capRaw: usdc(300) }], blocked: null });
+    const { steps } = protectSteps(off, { ...savedChoice(off), limitUsd: 500, sellOn: true, never: [TESLA] }, ctx);
+    expect(steps).toEqual([
+      { kind: "grant", job: "protect", capRaw: usdc(500) },
+      { kind: "grant", job: "sell", capRaw: usdc(500), limitsRaw: sellLimitsFor(usdc(500), CAP_MAX, PRICES, [TESLA]) },
+    ]);
+    expect(faceIdWords(faceIdCount(steps, 0))).toBe("Two Face IDs");
+    // Selling still on from before, its repay grant ended: repaying goes back on first, at selling's limit.
+    const sellOnly: ProtectSaved = { ...fullOn, repayCapRaw: null };
+    expect(protectSteps(sellOnly, savedChoice(sellOnly), ctx).steps).toEqual([{ kind: "grant", job: "protect", capRaw: usdc(300) }]);
   });
 
   it("a new limit with selling off is one grant (repay from cash)", () => {

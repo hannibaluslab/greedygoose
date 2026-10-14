@@ -27,7 +27,8 @@ import { EQUITIES } from "@/lib/tokens/registry";
 
 /**
  * The Rebalancer's settings, the body of its agent sheet (agents-redesign spec): your mix, its weekly limit, when it
- * runs, its next trades from its own rule (lib/guardian/rebalance.ts) on live holdings, and what it never does.
+ * runs and its next trades from its own rule (lib/guardian/rebalance.ts) on live holdings. The sheet says what it
+ * never does. While it's off, saving switches it on.
  * Everything comes from hooks, so it drops into the sheet with `<RebalanceSettings account={account} />`.
  * Saving is `setMix` through useTx and, when needed, a new grant on JAW's own screen (useManageSave). Without an
  * executor it renders live data and saves nothing ("Not live yet").
@@ -245,8 +246,6 @@ export function RebalanceSettingsView({
         </span>
       </ManageCard>
 
-      <p className="m-0 px-1 text-[13px] leading-[1.4] text-ink-mid">Never touches your cash or the stocks backing your credit.</p>
-
       <div className="flex flex-col gap-2 pt-1">
         <TxError error={error} />
         <div className="flex items-center justify-between px-1 text-[13px]">
@@ -254,7 +253,7 @@ export function RebalanceSettingsView({
           <span className="font-semibold">{NETWORK_FEE_ROW.value}</span>
         </div>
         <FaceIdButton
-          label="Save with Face ID"
+          label={configured && !running ? "Switch on with Face ID" : "Save with Face ID"}
           phase={phase}
           disabled={!plan.canSave || busy}
           preview={configured && !connected}

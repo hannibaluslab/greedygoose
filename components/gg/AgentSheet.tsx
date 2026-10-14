@@ -50,7 +50,7 @@ const PILL: Record<AgentStatus, { text: string; tone: "on" | "neutral" }> = {
 const Label = ({ children }: { children: ReactNode }) => <h3 className="label m-0 px-1">{children}</h3>;
 
 export function AgentSheet({
-  open, onClose, item, confirm, onBack, live, stops, limit, settings, activity, onAction, cantSwitchOn,
+  open, onClose, item, confirm, onBack, live, stops, limit, settings, settingsSave = false, activity, onAction,
 }: {
   open: boolean;
   onClose: () => void;
@@ -64,12 +64,15 @@ export function AgentSheet({
   stops: string | null;
   /** The limits it offers; without them the sheet shows the one it runs with. */
   limit?: LimitView;
-  /** Its own settings (Receive's coins; Protect's and Rebalance's are their own stage). */
+  /** Its own settings: Receive's coins, Protect's and Rebalance's settings bodies. */
   settings?: ReactNode;
+  /**
+   * The settings carry the limit and their own Save, which also switches the agent on (Protect, Rebalance): the sheet
+   * then shows no limit of its own and no Switch on, so there is one limit and one Face ID button on screen.
+   */
+  settingsSave?: boolean;
   activity: ReactNode;
   onAction: (a: SheetAction) => void;
-  /** Why it can't be switched on yet, e.g. Rebalance before a mix is saved. */
-  cantSwitchOn?: string | null;
 }) {
   const copy = AGENT_COPY[item.agent];
   const on = item.status === "on" || item.status === "starting";
@@ -108,24 +111,26 @@ export function AgentSheet({
               )}
             </div>
 
-            <section className="flex flex-col gap-2">
-              <Label>Limit</Label>
-              {limit && limit.options.length > 1 ? (
-                <div className="flex flex-col gap-2.5 rounded-[22px] bg-card px-4 py-3.5 shadow-card-elev">
-                  <LimitChips label={`${item.name} can move up to, a ${limit.per}`} options={limit.options} value={limit.value} onChange={limit.onChange} per={`a ${limit.per}`} size="sm" />
-                  {limit.changed &&
-                    (on ? (
-                      <Button variant="dark" disabled={!live} onClick={() => onAction("limit")}>
-                        Save the new limit
-                      </Button>
-                    ) : (
-                      <span className="text-xs text-subtle">It starts on this limit when you switch it on.</span>
-                    ))}
-                </div>
-              ) : (
-                <p className="num m-0 rounded-[22px] bg-card px-4 py-3.5 text-[15px] font-semibold shadow-card-elev">{item.limit}</p>
-              )}
-            </section>
+            {!settingsSave && (
+              <section className="flex flex-col gap-2">
+                <Label>Limit</Label>
+                {limit && limit.options.length > 1 ? (
+                  <div className="flex flex-col gap-2.5 rounded-[22px] bg-card px-4 py-3.5 shadow-card-elev">
+                    <LimitChips label={`${item.name} can move up to, a ${limit.per}`} options={limit.options} value={limit.value} onChange={limit.onChange} per={`a ${limit.per}`} size="sm" />
+                    {limit.changed &&
+                      (on ? (
+                        <Button variant="dark" disabled={!live} onClick={() => onAction("limit")}>
+                          Save the new limit
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-subtle">It starts on this limit when you switch it on.</span>
+                      ))}
+                  </div>
+                ) : (
+                  <p className="num m-0 rounded-[22px] bg-card px-4 py-3.5 text-[15px] font-semibold shadow-card-elev">{item.limit}</p>
+                )}
+              </section>
+            )}
 
             {settings}
 
@@ -139,12 +144,14 @@ export function AgentSheet({
                 Turn off {item.name}
               </button>
             ) : (
-              <div className="flex flex-col gap-2">
-                <Button disabled={!live || item.status === "loading" || !!cantSwitchOn} onClick={() => onAction("on")}>
-                  Switch on {item.name}
-                </Button>
-                {(!live || cantSwitchOn) && <p className="m-0 text-center text-xs text-subtle">{live ? cantSwitchOn : "Not live yet"}</p>}
-              </div>
+              !settingsSave && (
+                <div className="flex flex-col gap-2">
+                  <Button disabled={!live || item.status === "loading"} onClick={() => onAction("on")}>
+                    Switch on {item.name}
+                  </Button>
+                  {!live && <p className="m-0 text-center text-xs text-subtle">Not live yet</p>}
+                </div>
+              )
             )}
           </>
         )}

@@ -245,6 +245,8 @@ function Agents({ address }: { address: `0x${string}` }) {
         stops={ends.length ? longDateText(Math.min(...ends)) : null}
         limit={limit}
         settings={settingsFor(o.agent)}
+        // Protect's and Rebalance's settings carry their limit and Save, which switches them on too.
+        settingsSave={o.agent === "protect" || o.agent === "rebalance"}
         activity={
           <FeedCard>
             {feed.isLoading ? (
@@ -257,7 +259,6 @@ function Agents({ address }: { address: `0x${string}` }) {
           </FeedCard>
         }
         onAction={(action) => openStep({ ...o, action, jobs: undefined })}
-        cantSwitchOn={o.agent === "rebalance" && !mixSet ? "Set your mix below first: saving it switches Rebalance on." : null}
       />
     );
   }

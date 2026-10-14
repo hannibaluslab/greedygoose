@@ -59,7 +59,7 @@ export function sellLimitsFor(capRaw: bigint, capMaxRaw: bigint, pricesRaw: read
 
 /**
  * What saving `choice` takes, in order, from what is `saved`: "Sells first" (only while selling stays on), then the
- * repay grant at the new limit, then the sell grant (switched on, or its limit or never-sell list changed) or its
+ * repay grant at the new limit (or at the limit on screen while it's off: saving switches Protect on), then the sell grant (switched on, or its limit or never-sell list changed) or its
  * revoke. Selling follows Protect's one limit, so a new limit with selling on is two grants. `blocked` says why it
  * can't save: every stock is on the never-sell list.
  */
@@ -76,7 +76,8 @@ export function protectSteps(
     return { steps, blocked: "Leave at least one stock Protect may sell." };
   }
   if (choice.sellOn && saved.keepMix !== null && choice.keepMix !== saved.keepMix) steps.push({ kind: "keepMix", on: choice.keepMix });
-  if (limitChanged) steps.push({ kind: "grant", job: "protect", capRaw });
+  // Repaying from cash always comes first: while it's off, any save switches it on at the limit on screen.
+  if (limitChanged || saved.repayCapRaw === null) steps.push({ kind: "grant", job: "protect", capRaw });
   if (choice.sellOn && (!saved.sell || limitChanged || !sameSet(choice.never, start.never))) {
     steps.push({ kind: "grant", job: "sell", capRaw, limitsRaw: sellLimitsFor(capRaw, ctx.capMaxRaw, ctx.pricesRaw, choice.never) });
   }

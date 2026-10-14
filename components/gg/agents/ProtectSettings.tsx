@@ -41,7 +41,6 @@ const ORDER = [
 ] as const;
 
 export const NEVER_SELL_WARNING = "Protect won’t sell it, but Aave still can if your credit goes past its limit.";
-export const PROTECT_NEVER = "Never sells a stock that doesn’t back your credit. Never sells on a weekend.";
 
 const running = (s: AgentStatus) => s === "on" || s === "starting";
 
@@ -148,6 +147,8 @@ export function ProtectSettingsView({
   const sellUsd = saved.sell && chosen.limitUsd === undefined ? toUsd(saved.sell.capRaw) : limitUsd;
   const names = (ids: readonly number[]) => inWords(EQUITIES.filter((e) => ids.includes(e.reserveId)).map((e) => e.name));
 
+  // While repaying from cash is off, saving switches Protect on (protectSteps).
+  const off = saved.repayCapRaw === null;
   const canSave = live && !preview && !feeBlocked && !waiting && !busy && !plan.blocked && steps.length > 0 && capMaxRaw !== null;
   const note = !live
     ? "Not live yet"
@@ -182,7 +183,7 @@ export function ProtectSettingsView({
           per="a day"
           size="md"
         />
-        {live && saved.repayCapRaw === null && <span className="text-xs leading-[1.4] text-subtle">Off now. Saving a limit switches it on.</span>}
+        {live && off && <span className="text-xs leading-[1.4] text-subtle">Off now. It starts on this limit when you switch it on.</span>}
       </ManageCard>
 
       <ManageCard className="flex flex-col px-4 py-0.5">
@@ -253,11 +254,9 @@ export function ProtectSettingsView({
         )}
       </ManageCard>
 
-      <p className="m-0 px-1 text-xs leading-[1.4] text-subtle">{PROTECT_NEVER}</p>
-
       {lines.length > 0 && (
         <div className="flex flex-col gap-1.5 rounded-[16px] bg-card-bone px-[13px] pb-3 pt-[11px] text-[13px]">
-          <span className="font-semibold">Saving does</span>
+          <span className="font-semibold">{off ? "Switching on does" : "Saving does"}</span>
           <ul className="m-0 flex list-none flex-col gap-1 p-0 text-ink-2">
             {lines.map((l) => (
               <li key={l}>{l}</li>
@@ -269,7 +268,15 @@ export function ProtectSettingsView({
         </div>
       )}
 
-      <SaveFooter phase={phase} disabled={!canSave} preview={live && preview} onSave={() => onSave(steps)} error={error} note={note} />
+      <SaveFooter
+        label={live && off ? "Switch on with Face ID" : "Save with Face ID"}
+        phase={phase}
+        disabled={!canSave}
+        preview={live && preview}
+        onSave={() => onSave(steps)}
+        error={error}
+        note={note}
+      />
     </div>
   );
 }

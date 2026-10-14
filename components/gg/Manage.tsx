@@ -183,14 +183,23 @@ export function ChoiceRow({ label, value, onClick, note }: { label: string; valu
   );
 }
 
-/** The foot of both tabs: "Save with Face ID", its error, and what saving does or why it can't. */
+/** The foot of a settings body: its Face ID button, its error, and what saving does or why it can't. */
 export function SaveFooter({
-  phase, disabled, preview, onSave, error, note,
-}: { phase: TxPhase; disabled: boolean; preview: boolean; onSave: () => void; error: string | null; note: string | null }) {
+  phase, disabled, preview, onSave, error, note, label = "Save with Face ID",
+}: {
+  phase: TxPhase;
+  disabled: boolean;
+  preview: boolean;
+  onSave: () => void;
+  error: string | null;
+  note: string | null;
+  /** What the button does: "Save with Face ID", or "Switch on with Face ID" while the agent is off. */
+  label?: string;
+}) {
   return (
     <div className="mt-auto flex flex-col gap-2 pt-2">
       <TxError error={error} />
-      <FaceIdButton label="Save with Face ID" phase={phase} disabled={disabled} preview={preview} onClick={onSave} />
+      <FaceIdButton label={label} phase={phase} disabled={disabled} preview={preview} onClick={onSave} />
       {note && <p className="m-0 text-center text-xs text-subtle">{note}</p>}
     </div>
   );
