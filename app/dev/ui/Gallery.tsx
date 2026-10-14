@@ -8,6 +8,7 @@ import { BalanceHero, TodayChange } from "@/components/gg/BalanceHero";
 import { Button } from "@/components/gg/Button";
 import { CashCard, CreditCard } from "@/components/gg/Cards";
 import { AddStockCard, HoldingCard, HoldingList, HoldingRow } from "@/components/gg/Holding";
+import { MixCard } from "@/components/gg/Manage";
 import { MarketList, MarketRow } from "@/components/gg/Market";
 import { QuickAction } from "@/components/gg/QuickAction";
 import { TabHeader } from "@/components/gg/Screen";
@@ -24,6 +25,8 @@ import { useNowSec } from "@/hooks/useNowSec";
 import type { ActivityRow } from "@/hooks/useActivity";
 import { homeStatus, type Status } from "@/lib/risk/status";
 import { boughtLine } from "@/lib/activity/bought";
+import { nowPercents, previewTrades, rebalanceOptions, whatHappens, type MixHolding, type MixRow } from "@/lib/agents/mix";
+import { EQUITIES } from "@/lib/tokens/registry";
 import { formatUsd, formatUsdTrim } from "@/lib/formatting";
 
 // Sample figures for the gallery only, the boards' own (HomeUpliftRail, PortfolioPage, F1-4, F2-5, F2-6, F2-7).
@@ -56,6 +59,18 @@ const MOVES = (now: number): ActivityRow[] => [
   { key: "save", time: now - 2 * HOUR, status: "pending", items: [{ kind: "save", symbol: "USDC", amount: 40 }] },
   { key: "buy", time: now - 50 * HOUR, status: "done", items: [{ kind: "buy", symbol: "NVDAc", amount: 0.112, paidUsd: 20 }] },
 ];
+// The Manage board's mix: NVIDIA, Apple and Tesla at 43/26/30 of their free shares, aiming at 50/25/25, with the
+// board's $500 a week. What happens comes from the Rebalancer's own rule on these figures.
+const MIX = [
+  { reserveId: 5, usd: 4_300, price: 178.57, bps: 5_000 },
+  { reserveId: 0, usd: 2_600, price: 222.22, bps: 2_500 },
+  { reserveId: 6, usd: 3_000, price: 378.38, bps: 2_500 },
+];
+const MIX_HOLDINGS: MixHolding[] = MIX.map((m) => ({
+  reserveId: m.reserveId,
+  priceRaw: BigInt(Math.round(m.price * 1e8)),
+  freeRaw: BigInt(Math.round((m.usd / m.price) * 1e8)),
+}));
 const PILL_SIZES: StatusPillSize[] = ["sm", "row", "header", "md", "lg"];
 const STATUSES: Status[] = ["safe", "watch", "act", "none"];
 
@@ -298,6 +313,10 @@ export function Gallery() {
         </div>
       </Section>
 
+      <Section title="Manage · Your mix" kit="manage-mix">
+        <MixDemo />
+      </Section>
+
       <Section title="Sparklines" kit="sparklines">
         <div className="flex items-center justify-between rounded-[22px] bg-card p-4 shadow-card-elev">
           <Sparkline points={HOLDINGS[0].card} width={85} height={22} />
@@ -309,6 +328,20 @@ export function Gallery() {
 
       <BuyDemoSheet open={open} onOpenChange={setOpen} />
     </div>
+  );
+}
+
+function MixDemo() {
+  const [rows, setRows] = useState<MixRow[]>(MIX.map(({ reserveId, bps }) => ({ reserveId, bps })));
+  const trades = previewTrades({ holdings: MIX_HOLDINGS, rows, capRaw: 500_000_000n, capMaxRaw: null, options: rebalanceOptions() });
+  const now = nowPercents(MIX_HOLDINGS, rows);
+  return (
+    <MixCard
+      lines={rows.map((r, i) => ({ ...r, symbol: EQUITIES[r.reserveId].symbol, name: EQUITIES[r.reserveId].name, nowPct: now[i] }))}
+      onChange={(reserveId, bps) => setRows(rows.map((r) => (r.reserveId === reserveId ? { ...r, bps } : r)))}
+      onAdd={noop}
+      happens={whatHappens(rows, trades, MIX_HOLDINGS)}
+    />
   );
 }
 
