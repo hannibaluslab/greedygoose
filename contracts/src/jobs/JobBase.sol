@@ -3,11 +3,11 @@ pragma solidity 0.8.28;
 
 import {GooseExecutor} from "../GooseExecutor.sol";
 import {IJustaPermissionManager as PM} from "../IJustaPermissionManager.sol";
-import {IJustanAccount} from "../IProtocols.sol";
+import {IAeroFactory, IAeroPool, IAeroRouter, IJustanAccount} from "../IProtocols.sol";
 
 /// @title JobBase
-/// @notice What the executor and every job share: a permission's status, what is left of its limits, and the stock
-///         limits Protect · sell and the Rebalancer pack into a grant's terms.
+/// @notice What the executor and every job share: a permission's status, what is left of its limits, the stock
+///         limits Protect · sell and the Rebalancer pack into a grant's terms, and a stock pool's price.
 library JobBase {
     /// Most gas the manager's batch may use for one Cash move (one Protect batch measured at about 404k).
     uint256 internal constant ACCOUNT_GAS = 1_000_000;
@@ -93,6 +93,29 @@ library JobBase {
             if (limit * e.oracle.getReservePrice(r) / 1e10 > STOCK_LIMIT_CAPS * e.capMax) return false;
         }
         return true;
+    }
+
+    // ================================================================== stock pools
+
+    /// Stock r's price on its Aerodrome Slipstream pool with USDC, in USDC a share with 8 decimals like Aave's; 0 when
+    /// there is no pool. Protect · sell and the Rebalancer compare it with Aave's before they trade.
+    function poolPrice(GooseExecutor.Env memory e, uint256 r) internal view returns (uint256) {
+        address pool =
+            IAeroFactory(IAeroRouter(e.router).factory()).getPool(e.stocks[r], address(e.usdc), STOCK_TICK_SPACING);
+        if (pool == address(0)) return 0;
+        (uint160 sqrtPrice,,,,,) = IAeroPool(pool).slot0();
+        return priceOf(sqrtPrice, address(e.usdc) < e.stocks[r]);
+    }
+
+    /// A stock pool's price in USDC a share, 8 decimals, from its square-root price (Q64.96, token1 per token0, raw
+    /// units: 8 decimals a share, 6 a dollar). Safe from overflow over Uniswap v3's whole price range.
+    function priceOf(uint160 sqrtPriceX96, bool usdcIsToken0) internal pure returns (uint256) {
+        if (usdcIsToken0) {
+            uint256 q = (uint256(1) << 96) * 1e10 / sqrtPriceX96; // √(raw USDC a raw share) × 1e10
+            return q * q / 1e10;
+        }
+        uint256 s = uint256(sqrtPriceX96) >> 64; // √(raw USDC a raw share) × 2^32
+        return s * s * 1e10 >> 64;
     }
 
     function ceilDiv(uint256 a, uint256 b) internal pure returns (uint256) {

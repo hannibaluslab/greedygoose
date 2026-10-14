@@ -3,7 +3,7 @@ pragma solidity 0.8.28;
 
 import {GooseExecutor} from "../GooseExecutor.sol";
 import {IJustaPermissionManager as PM} from "../IJustaPermissionManager.sol";
-import {IAeroFactory, IAeroPool, IAeroRouter, IERC20} from "../IProtocols.sol";
+import {IAeroRouter, IERC20} from "../IProtocols.sol";
 import {NyCalendar} from "../NyCalendar.sol";
 import {RebalanceBook, RebalanceLimits, RebalanceRules, Trade} from "../RebalanceRules.sol";
 import {JobBase} from "./JobBase.sol";
@@ -222,28 +222,13 @@ library RebalanceJob {
         view
         returns (bool)
     {
-        IAeroFactory factory = IAeroFactory(IAeroRouter(e.router).factory());
         for (uint256 i; i < trades.length; ++i) {
             uint256 r = trades[i].reserveId;
             if (e.spoke.getReserve(r).flags & JobBase.PAUSED != 0) return false;
-            address pool = factory.getPool(e.stocks[r], address(e.usdc), JobBase.STOCK_TICK_SPACING);
-            if (pool == address(0)) return false;
-            (uint160 sqrtPrice,,,,,) = IAeroPool(pool).slot0();
-            uint256 price = poolPrice(sqrtPrice, address(e.usdc) < e.stocks[r]);
-            if (!RebalanceRules.poolInLine(price, book.stocks[r].price, gapBps)) return false;
+            // No pool reads as a price of 0, which is never in line.
+            if (!RebalanceRules.poolInLine(JobBase.poolPrice(e, r), book.stocks[r].price, gapBps)) return false;
         }
         return true;
-    }
-
-    /// A stock pool's price in USDC a share, 8 decimals, from its square-root price (Q64.96, token1 per token0, raw
-    /// units: 8 decimals a share, 6 a dollar). Safe from overflow over Uniswap v3's whole price range.
-    function poolPrice(uint160 sqrtPriceX96, bool usdcIsToken0) internal pure returns (uint256) {
-        if (usdcIsToken0) {
-            uint256 q = (uint256(1) << 96) * 1e10 / sqrtPriceX96; // √(raw USDC a raw share) × 1e10
-            return q * q / 1e10;
-        }
-        uint256 s = uint256(sqrtPriceX96) >> 64; // √(raw USDC a raw share) × 2^32
-        return s * s * 1e10 >> 64;
     }
 
     // ================================================================== the batch

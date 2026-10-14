@@ -4,9 +4,10 @@ pragma solidity 0.8.28;
 import {Vm} from "forge-std/Vm.sol";
 import {console} from "forge-std/console.sol";
 import {GooseExecutor} from "../src/GooseExecutor.sol";
-import {IAeroPool, IAeroRouter, IERC20} from "../src/IProtocols.sol";
+import {IAeroRouter, IERC20} from "../src/IProtocols.sol";
 import {NyCalendar} from "../src/NyCalendar.sol";
 import {Trade} from "../src/RebalanceRules.sol";
+import {JobBase} from "../src/jobs/JobBase.sol";
 import {RebalanceJob} from "../src/jobs/RebalanceJob.sol";
 import {SellForkBase} from "./ProtectSellFork.t.sol";
 import {IJustaPermissionManager as PM} from "./IJustaPermissionManager.sol";
@@ -57,9 +58,7 @@ abstract contract RebalanceForkBase is SellForkBase {
 
     /// Aave's price for stock `r`: its Aerodrome pool's, times `bps` / 10,000.
     function _priceAt(uint256 r, uint256 bps) internal {
-        address pool = AERO_FACTORY.getPool(STOCKS[r], address(USDC), 10);
-        (uint160 sqrtPrice,,,,,) = IAeroPool(pool).slot0();
-        uint256 price = RebalanceJob.poolPrice(sqrtPrice, address(USDC) < STOCKS[r]) * bps / 10_000;
+        uint256 price = JobBase.poolPrice(x.env(), r) * bps / 10_000;
         vm.mockCall(address(x.ORACLE()), abi.encodeWithSignature("getReservePrice(uint256)", r), abi.encode(price));
     }
 
