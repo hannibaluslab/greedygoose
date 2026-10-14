@@ -37,5 +37,5 @@ export function savingsWithdrawal(amountRaw: bigint, c: Cash): { raw: bigint; al
 export function payFromCash(user: `0x${string}`, amountRaw: bigint, c: Cash, spend: Call[]): Call[] {
   if (amountRaw > maxSpendRaw(c)) throw new Error("More than your cash");
   const w = savingsWithdrawal(amountRaw, c);
-  return assertAllowed(w ? [...buildWithdrawSavingsCalls(user, w.raw, w.all), ...spend] : spend);
+  return assertAllowed(user, w ? [...buildWithdrawSavingsCalls(user, w.raw, w.all), ...spend] : spend);
 }

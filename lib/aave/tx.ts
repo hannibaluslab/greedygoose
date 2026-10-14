@@ -23,7 +23,7 @@ export function buildSupplyCalls(p: { user: `0x${string}`; stock: ReserveAsset; 
   if (p.stock.kind !== "equity") throw new Error("Not a supported stock");
   if (p.amountRaw <= 0n) throw new Error("Amount must be positive");
   const id = BigInt(p.stock.reserveId);
-  return assertAllowed([
+  return assertAllowed(p.user, [
     approve(p.stock.address, p.amountRaw),
     spoke(encodeFunctionData({ abi: spokeAbi, functionName: "supply", args: [id, p.amountRaw, p.user] })),
     spoke(encodeFunctionData({ abi: spokeAbi, functionName: "setUsingAsCollateral", args: [id, true, p.user] })),
@@ -38,7 +38,7 @@ export function buildWithdrawCalls(p: { user: `0x${string}`; stock: ReserveAsset
   if (p.stock.kind !== "equity") throw new Error("Not a supported stock");
   if (!p.all && p.amountRaw <= 0n) throw new Error("Amount must be positive");
   const amount = p.all ? maxUint256 : p.amountRaw;
-  return assertAllowed([
+  return assertAllowed(p.user, [
     spoke(encodeFunctionData({ abi: spokeAbi, functionName: "withdraw", args: [BigInt(p.stock.reserveId), amount, p.user] })),
   ]);
 }
@@ -51,13 +51,13 @@ export function buildLoanCalls(p: { user: `0x${string}`; locks: { stock: Reserve
   const lock = p.locks.filter((l) => l.raw > 0n).flatMap((l) => buildSupplyCalls({ user: p.user, stock: l.stock, amountRaw: l.raw }));
   const borrow = p.borrowRaw > 0n ? buildBorrowCalls({ user: p.user, amountRaw: p.borrowRaw }) : [];
   if (lock.length + borrow.length === 0) throw new Error("Nothing to do");
-  return assertAllowed([...lock, ...borrow]);
+  return assertAllowed(p.user, [...lock, ...borrow]);
 }
 
 /** Borrow USDC to the caller (the user's own account). */
 export function buildBorrowCalls(p: { user: `0x${string}`; amountRaw: bigint }): Call[] {
   if (p.amountRaw <= 0n) throw new Error("Amount must be positive");
-  return assertAllowed([
+  return assertAllowed(p.user, [
     spoke(encodeFunctionData({ abi: spokeAbi, functionName: "borrow", args: [BigInt(USDC.reserveId), p.amountRaw, p.user] })),
   ]);
 }
@@ -73,7 +73,7 @@ export function buildRepayCalls(p: { user: `0x${string}`; amountRaw: bigint; all
     spoke(encodeFunctionData({ abi: spokeAbi, functionName: "repay", args: [BigInt(USDC.reserveId), p.amountRaw, p.user] })),
   ];
   if (p.all) calls.push(approve(USDC.address, 0n));
-  return assertAllowed(calls);
+  return assertAllowed(p.user, calls);
 }
 
 /** Amount to send for a full repay: debt + 0.05% + 1 unit, never more than the cash can pay (`maxSpendRaw`). */

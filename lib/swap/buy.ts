@@ -84,5 +84,5 @@ export function buildBuyCalls(p: { user: `0x${string}`; stock: ReserveAsset; quo
             },
           ],
         });
-  return assertAllowed([approve, { to: router, data, value: 0n }]);
+  return assertAllowed(user, [approve, { to: router, data, value: 0n }]);
 }
