@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { fromCoinRow, type CoinRow } from "@/lib/prices/coingecko";
 import { jawMarketData } from "@/lib/prices/jaw";
 import {
   PRICE_TOLERANCE, agreesWithAave, checked, dayChange, downsample, moveUsd, pickMarketData, weekValue, type MarketData,
@@ -157,6 +158,37 @@ describe("weekValue", () => {
     expect(weekValue([{ valueUsd: 100, week: [1, 2] }, { valueUsd: 100 }])).toBeNull();
     expect(weekValue([{ valueUsd: 100, week: [1] }])).toBeNull();
     expect(weekValue([])).toBeNull();
+  });
+});
+
+describe("the CoinGecko fallback (fromCoinRow)", () => {
+  // The shape /coins/markets answered for METAc on 2026-10-14: 168 hourly points, the last one up to an hour old.
+  const hourly = line(737, 768.65, 168);
+  const row: CoinRow = { id: "meta-coinbase-tokenized-stock", current_price: 766.42, price_change_percentage_24h: 4.02241, sparkline_in_7d: { price: hourly } };
+
+  it("takes the price and the 24-hour change CoinGecko reports, as a fraction", () => {
+    const out = fromCoinRow(row)!;
+    expect(out.price).toBe(766.42);
+    expect(out.change).toBeCloseTo(0.0402241, 12);
+  });
+
+  it("ends both lines on the current price, the one the app checks against Aave's", () => {
+    const out = fromCoinRow(row)!;
+    expect(out.week).toHaveLength(169);
+    expect(out.week.at(-1)).toBe(766.42);
+    expect(out.day).toHaveLength(25);
+    expect(out.day).toEqual(out.week.slice(-25));
+    expect(checked(out, AAVE.METAc)).toBe(out);
+  });
+
+  it("drops gaps in the line and rows with no price or change", () => {
+    expect(fromCoinRow({ ...row, sparkline_in_7d: { price: [700, null, 0, 760] } })!.week).toEqual([700, 760, 766.42]);
+    expect(fromCoinRow({ ...row, current_price: null })).toBeNull();
+    expect(fromCoinRow({ ...row, price_change_percentage_24h: undefined })).toBeNull();
+  });
+
+  it("a row with no line can't pass the check", () => {
+    expect(checked(fromCoinRow({ ...row, sparkline_in_7d: null })!, AAVE.METAc)).toBeUndefined();
   });
 });
 
