@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { usePublicClient, useSendCalls, useWaitForCallsStatus } from "wagmi";
+import { useAccount, useCapabilities, usePublicClient, useSendCalls, useWaitForCallsStatus } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
+import type { ChainCapabilities } from "@jaw.id/core";
 import { CHAIN_ID } from "@/lib/chain";
 import { explainRevert } from "@/lib/aave/errors";
+import { NOT_ATOMIC, atomicSend } from "@/lib/jaw/capabilities";
 import type { Call } from "@/lib/aave/tx";
 import type { ActivityItem } from "@/lib/activity/decode";
 import { addLocal, updateLocal } from "@/lib/activity/local";
@@ -19,9 +21,13 @@ export class TxStop extends Error {}
  * simulate the whole batch from the user → JAW signs once (wallet_sendCalls) → wait → re-read chain state.
  * No optimistic state: "done" only after the batch lands. `calls` can be built at signing time, from
  * reads that must be fresh (a quote): that runs in the "simulating" phase, and a TxStop shows its words.
+ * When JAW reports `atomic`, every batch requires it (atomicSend).
  */
 export function useTx(failedOnChain = "This didn’t go through on Base. Nothing moved except any network fee.") {
   const client = usePublicClient({ chainId: CHAIN_ID });
+  const { address } = useAccount();
+  const caps = useCapabilities({ account: address, query: { enabled: !!address } });
+  const chainCaps = (caps.data as Record<number, ChainCapabilities> | undefined)?.[CHAIN_ID];
   const queryClient = useQueryClient();
   const send = useSendCalls();
   const status = useWaitForCallsStatus({ id: send.data?.id, query: { enabled: !!send.data?.id } });
@@ -65,9 +71,15 @@ export function useTx(failedOnChain = "This didn’t go through on Base. Nothing
       setError(e instanceof TxStop ? e.message : "We couldn’t check this with Base. Please try again.");
       return;
     }
+    const atomic = atomicSend(chainCaps, batch.length);
+    if (!atomic) {
+      setPhase("failed");
+      setError(NOT_ATOMIC);
+      return;
+    }
     setPhase("signing");
     try {
-      const sent = await send.mutateAsync({ chainId: CHAIN_ID, calls: batch.map(({ to, data }) => ({ to, data })) });
+      const sent = await send.mutateAsync({ chainId: CHAIN_ID, calls: batch.map(({ to, data }) => ({ to, data })), ...atomic });
       if (activity) {
         addLocal(user, { id: sent.id, time: Date.now(), items: activity, status: "pending" });
         setRecord({ user, id: sent.id });
