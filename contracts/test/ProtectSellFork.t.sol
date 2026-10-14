@@ -382,6 +382,40 @@ contract ProtectSellForkTest is SellForkBase {
         _assertBackTo1_4(act);
     }
 
+    /// The room at its edge, on Aerodrome's real NVIDIA pool: a pool 0.75% under Aave's price (the 1% floor less the
+    /// 0.25% room) is still for sale and its swaps meet their minimum, fee and price impact included; a hair further
+    /// and there is no heads-up. So the room is enough for what a sale really costs in the pool.
+    function test_a_pool_at_the_edge_of_the_heads_up_room_still_fills() public {
+        _priceAt(NVDA, 10_077); // the pool 0.764% under Aave's price
+        address a = _owing("a", NVDA, 10e8, 1.2e18);
+        _sellOn(a, _limits(NVDA, 5e8));
+        assertEq(uint8(x.planOf(a).action), uint8(GooseExecutor.Action.None), "just outside: no heads-up");
+        _priceAt(NVDA, 10_075); // 0.744% under: just inside
+        assertEq(uint8(x.planOf(a).action), uint8(GooseExecutor.Action.HeadsUp));
+        _run(_check());
+        vm.warp(vm.getBlockTimestamp() + 30 minutes);
+        assertEq(uint8(x.planOf(a).action), uint8(GooseExecutor.Action.Sell));
+        _run(_check());
+        (,, uint8 fails,,,,,,) = x.accounts(a);
+        assertEq(fails, 0, "the swap met its minimum");
+        _assertBackTo1_4(a);
+        _assertHoldsNothing();
+    }
+
+    /// The same at the Act floor's edge (3% less the room), with a sale in several slices into the one pool.
+    function test_a_pool_at_the_edge_of_the_act_room_still_fills_in_slices() public {
+        _priceAt(NVDA, 10_284); // 2.76% under Aave's price
+        address a = _owing("a", NVDA, 10e8, 1.05e18);
+        _sellOn(a, _limits(NVDA, 5e8));
+        assertEq(uint8(x.planOf(a).action), uint8(GooseExecutor.Action.None), "just outside");
+        _priceAt(NVDA, 10_282); // 2.74% under: just inside
+        assertEq(uint8(x.planOf(a).action), uint8(GooseExecutor.Action.Sell));
+        assertGt(_runLogged("Act room's edge", _check()), 1, "several slices");
+        (,, uint8 fails,,,,,,) = x.accounts(a);
+        assertEq(fails, 0, "every swap met its minimum");
+        _assertBackTo1_4(a);
+    }
+
     // ================================================================== which stock, how much
 
     function test_a_never_sell_stock_is_untouched() public {
