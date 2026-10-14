@@ -29,6 +29,10 @@ type SheetShellProps = {
    *  value for a flow that deliberately wants a different ceiling; a lower
    *  default here would silently shrink every other sheet in the app. */
   maxHeightVh?: number;
+  /** Keep the sheet's top at most this many px below the top of the viewport, so a short list
+   *  still opens tall (F1-3's Market sheet starts at 188px). Content taller than that grows the
+   *  sheet up to `maxHeightVh` as usual. */
+  topPx?: number;
   /** Lock the scroll area to an exact pixel height — both floor and
    *  ceiling. For flows that keep one continuous sheet height across steps:
    *  the caller measures the reference step's scroll area on the way out and
@@ -123,6 +127,7 @@ export function SheetShell({
   headerRight,
   hideClose = false,
   maxHeightVh = 88,
+  topPx,
   contentHeightPx,
   flushBottom = false,
   look = "flow",
@@ -175,13 +180,14 @@ export function SheetShell({
         modal={false}
       >
         <DrawerContent
-          style={{ maxHeight: `${maxHeightVh}dvh` }}
+          style={{ maxHeight: `${maxHeightVh}dvh`, minHeight: topPx ? `calc(100dvh - ${topPx}px)` : undefined }}
           // dismissible={false} also makes vaul ignore Escape, so close here.
           onEscapeKeyDown={() => onOpenChange(false)}
         >
           {/* The canvas draws a grabber; the sheet doesn't drag (dismissible={false}), so it's decoration only. */}
           <div aria-hidden className="mx-auto mt-2.5 h-[5px] w-10 shrink-0 rounded-[3px] bg-line-strong" />
-          <div className={`flex items-center gap-1.5 px-5 ${!info ? "pb-3 pt-4" : description ? "py-[18px]" : "py-4"}`}>
+          {/* A flow header is top-aligned on a 32px title row, so Back and Close stay level with the title when a description sits under it. */}
+          <div className={`flex gap-1.5 px-5 ${!info ? "items-start pb-3 pt-4" : description ? "items-center py-[18px]" : "items-center py-4"}`}>
             {onBack && (
               <button
                 type="button"
@@ -193,12 +199,13 @@ export function SheetShell({
               </button>
             )}
             <div className="min-w-0 flex-1">
-              <div className="flex min-w-0 items-center gap-2">
+              <div className={`flex min-w-0 items-center gap-2 ${info ? "" : "min-h-8"}`}>
                 <DrawerTitle className={`m-0 shrink-0 font-semibold tracking-tight-2 text-ink ${info ? "text-[24px] leading-[normal]" : "text-[20px]"}`}>{title}</DrawerTitle>
                 {titleAccessory}
               </div>
               {description && (
-                <DrawerDescription className={info ? "m-0 mt-2 text-[15px] leading-body text-ink-2" : "mt-1 text-body-xs leading-body text-ink-mid"}>
+                // Flow, F1-3: 8px under the title, 16px above the content (the header's 12px plus 4).
+                <DrawerDescription className={info ? "m-0 mt-2 text-[15px] leading-body text-ink-2" : "mb-1 mt-2 text-body-xs leading-[1.4] text-ink-mid"}>
                   {description}
                 </DrawerDescription>
               )}

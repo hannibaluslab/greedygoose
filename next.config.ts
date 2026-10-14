@@ -13,6 +13,8 @@ const nextConfig: NextConfig = {
     { source: "/borrow", destination: "/use-credit", permanent: false },
     { source: "/collateral", destination: "/use-credit", permanent: false },
     { source: "/unlock", destination: "/free-up", permanent: false },
+    // The Market is a sheet on Invest (F1-3): /buy opens it, and /buy?s=NVDAc opens that stock's Buy step.
+    { source: "/buy", destination: "/portfolio?market", permanent: false },
   ],
   partialPrefetching: true,
   turbopack: {
