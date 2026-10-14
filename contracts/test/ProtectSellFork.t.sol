@@ -4,10 +4,10 @@ pragma solidity 0.8.28;
 import {Vm} from "forge-std/Vm.sol";
 import {console} from "forge-std/console.sol";
 import {GooseExecutor} from "../src/GooseExecutor.sol";
-import {IAeroRouter, IERC20} from "../src/IProtocols.sol";
+import {IAeroFactory, IAeroRouter, IERC20} from "../src/IProtocols.sol";
 import {SellJob} from "../src/jobs/SellJob.sol";
 import {ExecutorForkBase} from "./GooseExecutorFork.t.sol";
-import {IJustaPermissionManager as PM, IAeroFactory} from "./IJustaPermissionManager.sol";
+import {IJustaPermissionManager as PM} from "./IJustaPermissionManager.sol";
 
 /// Fixtures for the Protect · sell fork suites.
 abstract contract SellForkBase is ExecutorForkBase {
@@ -90,7 +90,7 @@ abstract contract SellForkBase is ExecutorForkBase {
     }
 
     function _headsUpAt(address a) internal view returns (uint48 at) {
-        (,,,,,, at,) = x.accounts(a);
+        (,,,,,, at,,) = x.accounts(a);
     }
 
     function _price(uint256 r) internal view returns (uint256) {
@@ -259,7 +259,7 @@ contract ProtectSellForkTest is SellForkBase {
         address[] memory work = _check();
         vm.recordLogs();
         _run(work);
-        (,, uint8 fails,,,,,) = x.accounts(a);
+        (,, uint8 fails,,,,,,) = x.accounts(a);
         assertEq(fails, 1, "RunFailed");
         assertEq(SPOKE.getUserSuppliedAssets(NVDA, a), backing);
         assertEq(SPOKE.getUserTotalDebt(USDC_RESERVE, a), debt);
@@ -414,7 +414,7 @@ contract ProtectSellForkTest is SellForkBase {
         assertTrue(needed, "a JAW grant of the sell template registers through the log trigger");
         vm.prank(forwarder);
         x.performUpkeep(performData);
-        (uint8 jobs,,,,,,,) = x.accounts(a);
+        (uint8 jobs,,,,,,,,) = x.accounts(a);
         assertEq(jobs, 4);
     }
 }

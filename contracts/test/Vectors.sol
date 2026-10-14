@@ -86,6 +86,15 @@ library Vectors {
         uint64 maxSwap;
     }
 
+    struct RebalanceHash {
+        address account;
+        uint48 start;
+        uint48 end;
+        uint256 salt;
+        uint160 cap;
+        uint256[7] limits; // raw shares, by reserve id
+    }
+
     function rand(string memory tag, uint256 i, uint256 field) internal pure returns (uint256) {
         return uint256(keccak256(abi.encode(tag, i, field)));
     }
@@ -274,6 +283,28 @@ library Vectors {
         v.floorBps = uint16(between(rand("entry", i, 0), 10, 100));
         v.minEntry = uint64(between(rand("entry", i, 1), 100_000, 100_000_000));
         v.maxSwap = uint64(between(rand("entry", i, 2), 100e6, 100_000e6));
+    }
+
+    /// A third of the stocks unsellable, at least one sellable.
+    function rebalanceHashInput(uint256 i) internal pure returns (RebalanceHash memory v) {
+        uint256 first = rand("rebalance-hash", i, 6) % 7;
+        for (uint256 k; k < 7; ++k) {
+            if (k != first && rand("rebalance-hash", i, 7 + k) % 3 == 0) continue;
+            v.limits[k] = (1 + rand("rebalance-hash", i, 14 + k) % 1_000_000) * 1e4;
+        }
+        v.account = address(uint160(rand("rebalance-hash", i, 1)));
+        v.start = uint48(1_700_000_000 + rand("rebalance-hash", i, 2) % 300_000_000);
+        v.end = v.start + 1 + uint48(rand("rebalance-hash", i, 3) % 400_000_000);
+        v.salt = rand("rebalance-hash", i, 4);
+        v.cap = uint160(1 + rand("rebalance-hash", i, 5) % 5_000_000);
+    }
+
+    function entryHashInput(uint256 i) internal pure returns (Hash memory v) {
+        v.account = address(uint160(rand("entry-hash", i, 1)));
+        v.start = uint48(1_700_000_000 + rand("entry-hash", i, 2) % 300_000_000);
+        v.end = v.start + 1 + uint48(rand("entry-hash", i, 3) % 400_000_000);
+        v.salt = rand("entry-hash", i, 4);
+        v.cap = uint160(1 + rand("entry-hash", i, 5) % 5_000_000);
     }
 
     function hashInput(uint256 i) internal pure returns (Hash memory v) {

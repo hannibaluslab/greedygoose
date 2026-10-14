@@ -9,7 +9,7 @@
  */
 import { writeFileSync } from "node:fs";
 import { encodeAbiParameters, hashTypedData, keccak256, parseUnits, toHex, type Address } from "viem";
-import { CASH, CASH_AGENT, PROTECT_SELL } from "@/config/risk";
+import { CASH, CASH_AGENT, ENTRY, PROTECT_SELL, REBALANCER } from "@/config/risk";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { planEntry, type EntryCoin } from "@/lib/guardian/entry";
 import { inWeekendWindow, planGuardian, planSave } from "@/lib/guardian/plan";
@@ -514,6 +514,19 @@ function defaultsVector() {
       actFloorBps: PROTECT_SELL.actFloorBps.toString(),
       poolCap: usdc(PROTECT_SELL.poolCapUsd),
       maxSlice: usdc(PROTECT_SELL.maxSliceUsd),
+    },
+    rebalance: {
+      bandBps: Math.round(REBALANCER.bandOfTarget * 10_000).toString(),
+      bandMaxBps: Math.round(REBALANCER.bandMaxPoints * 100).toString(),
+      poolGapBps: REBALANCER.poolGapBps.toString(),
+      floorBps: REBALANCER.floorBps.toString(),
+      minTrade: usdc(REBALANCER.minTradeUsd),
+      maxSlice: usdc(REBALANCER.maxSliceUsd),
+    },
+    entry: {
+      floorBps: ENTRY.floorBps.toString(),
+      minEntry: usdc(ENTRY.minEntryUsd),
+      maxSwap: usdc(ENTRY.maxSwapUsd),
     },
   };
 }

@@ -6,6 +6,8 @@ import {GooseExecutor} from "../src/GooseExecutor.sol";
 import {IJustaPermissionManager} from "../src/IJustaPermissionManager.sol";
 import {IAaveV3Pool, IERC20, ISpoke} from "../src/IProtocols.sol";
 import {Amounts, Thresholds} from "../src/CashRules.sol";
+import {EntryLimits} from "../src/EntryRules.sol";
+import {RebalanceLimits} from "../src/RebalanceRules.sol";
 import {SellLimits} from "../src/SellRules.sol";
 import {IAaveOracle} from "../src/IProtocols.sol";
 
@@ -28,7 +30,8 @@ import {IAaveOracle} from "../src/IProtocols.sol";
 /// Base Sepolia has JAW's manager and factory (same code and addresses as Base) but no Aave, no Coinbase USDC, no
 /// equities hub and no stock pools, so a Sepolia deploy only proves the Chainlink plumbing: it takes stand-ins for
 /// those from SEPOLIA_AAVE_V3_POOL, SEPOLIA_SPOKE, SEPOLIA_USDC, SEPOLIA_AUSDC, SEPOLIA_ORACLE, SEPOLIA_ROUTER and
-/// SEPOLIA_STOCKS (seven addresses, comma-separated).
+/// SEPOLIA_STOCKS (seven addresses, comma-separated). Entry's coins and venues are Base mainnet's, fixed in EntryJob,
+/// so a Sepolia deploy has no Entry.
 contract DeployExecutor is Script {
     uint256 internal constant BASE = 8453;
     uint256 internal constant BASE_SEPOLIA = 84532;
@@ -106,6 +109,8 @@ contract DeployExecutor is Script {
         c.thresholds = thresholds();
         c.amounts = amounts();
         c.sellLimits = sellLimits();
+        c.rebalanceLimits = rebalanceLimits();
+        c.entryLimits = entryLimits();
     }
 
     /// The seven stocks on Base, by reserve id (lib/tokens/registry.ts, verified against spoke.getReserve(r)).
@@ -151,5 +156,17 @@ contract DeployExecutor is Script {
             poolCap: 10_000e6,
             maxSlice: 5_000e6
         });
+    }
+
+    /// config/risk.ts REBALANCER (checked by test/DeployExecutor.t.sol).
+    function rebalanceLimits() public pure returns (RebalanceLimits memory) {
+        return RebalanceLimits({
+            bandBps: 2_000, bandMaxBps: 500, poolGapBps: 50, floorBps: 50, minTrade: 20e6, maxSlice: 25_000e6
+        });
+    }
+
+    /// config/risk.ts ENTRY (checked by test/DeployExecutor.t.sol).
+    function entryLimits() public pure returns (EntryLimits memory) {
+        return EntryLimits({floorBps: 50, minEntry: 1e6, maxSwap: 10_000e6});
     }
 }

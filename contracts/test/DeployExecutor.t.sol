@@ -3,11 +3,17 @@ pragma solidity 0.8.28;
 
 import {GooseExecutor} from "../src/GooseExecutor.sol";
 import {Amounts, Thresholds} from "../src/CashRules.sol";
+import {EntryLimits} from "../src/EntryRules.sol";
+import {RebalanceLimits} from "../src/RebalanceRules.sol";
 import {SellLimits} from "../src/SellRules.sol";
-import {ISpoke} from "../src/IProtocols.sol";
+import {IAeroFactory, ISpoke} from "../src/IProtocols.sol";
+import {EntryJob} from "../src/jobs/EntryJob.sol";
+import {ProtectJob} from "../src/jobs/ProtectJob.sol";
+import {RebalanceJob} from "../src/jobs/RebalanceJob.sol";
+import {SaveJob} from "../src/jobs/SaveJob.sol";
+import {SellJob} from "../src/jobs/SellJob.sol";
 import {DeployExecutor} from "../script/DeployExecutor.s.sol";
 import {ForkBase} from "./ForkBase.sol";
-import {IAeroFactory} from "./IJustaPermissionManager.sol";
 
 /// The deploy script's Base parameters, checked on a Base fork without broadcasting anything: every address has code,
 /// the stocks, oracle and pools are the spoke's and Aerodrome's own, a fresh JAW account runs code the executor
@@ -20,8 +26,26 @@ interface IRouter {
     function factory() external view returns (address);
 }
 
+interface IToken {
+    function symbol() external view returns (string memory);
+    function decimals() external view returns (uint8);
+}
+
+interface IUniswapFactory {
+    function getPool(address tokenA, address tokenB, uint24 fee) external view returns (address);
+}
+
+interface IPsm3View {
+    function usdc() external view returns (address);
+    function usds() external view returns (address);
+}
+
 contract DeployExecutorTest is ForkBase {
     address constant AERO_FACTORY = 0xf8f2eB4940CFE7d13603DDDD87f123820Fc061Ef;
+    /// lib/swap/venues.ts AERODROME_V1.FACTORY and UNISWAP.FACTORY.
+    address constant AERO_V1_FACTORY = 0x5e7BB104d84c7CB9B682AaC2F3d509f5F406809A;
+    address constant UNISWAP_FACTORY = 0x33128a8fC17869897dcE68Ed026d694621f6FDfD;
+    uint256 constant EIP_170 = 24_576;
 
     DeployExecutor deploy;
 
@@ -59,6 +83,41 @@ contract DeployExecutorTest is ForkBase {
         }
     }
 
+    /// The executor and every job library fit under the 24 KB limit. Tests deploy ExecutorHarness, which opens a few
+    /// internals on top of it, so this is the check that counts.
+    function test_the_executor_and_every_job_library_fit_under_24_kb() public {
+        assertLe(address(new GooseExecutor(deploy.config(8453, makeAddr("owner")))).code.length, EIP_170, "core");
+        assertLe(type(SaveJob).runtimeCode.length, EIP_170);
+        assertLe(type(ProtectJob).runtimeCode.length, EIP_170);
+        assertLe(type(SellJob).runtimeCode.length, EIP_170);
+        assertLe(type(RebalanceJob).runtimeCode.length, EIP_170);
+        assertLe(type(EntryJob).runtimeCode.length, EIP_170);
+    }
+
+    /// Entry's coins and venues are fixed in EntryJob (lib/tokens/stables.ts): each coin has the symbol and decimals it
+    /// should, each venue is the factory's own and holds USDC against it, and PSM3 swaps Base's USDS for Base's USDC.
+    function test_entrys_coins_and_venues_are_bases_own() public view {
+        string[4] memory symbols = ["USDT", "USDe", "USDbC", "USDS"];
+        for (uint256 k; k < EntryJob.COINS; ++k) {
+            (address coin, uint256 decimals, EntryJob.Venue venue) = EntryJob.coin(k);
+            assertEq(IToken(coin).symbol(), symbols[k]);
+            assertEq(IToken(coin).decimals(), decimals);
+            address pool;
+            if (venue == EntryJob.Venue.Aerodrome) {
+                pool = IAeroFactory(AERO_V1_FACTORY).getPool(coin, address(USDC), EntryJob.STABLE_TICK_SPACING);
+            } else if (venue == EntryJob.Venue.Uniswap) {
+                pool = IUniswapFactory(UNISWAP_FACTORY).getPool(coin, address(USDC), EntryJob.USDE_FEE);
+            } else {
+                pool = EntryJob.PSM3;
+            }
+            assertGt(USDC.balanceOf(pool), 50_000e6, string.concat(symbols[k], ": USDC to swap into"));
+        }
+        assertEq(IRouter(EntryJob.AERODROME_V1_ROUTER).factory(), AERO_V1_FACTORY);
+        assertEq(IRouter(EntryJob.UNISWAP_ROUTER).factory(), UNISWAP_FACTORY);
+        assertEq(IPsm3View(EntryJob.PSM3).usdc(), address(USDC));
+        assertEq(IPsm3View(EntryJob.PSM3).usds(), EntryJob.USDS);
+    }
+
     function test_a_fresh_jaw_account_runs_allowed_code() public {
         bytes32[] memory allowed = deploy.jawCodehashes();
         assertEq(_newJawAccount("alice").codehash, allowed[0], "JAW's factory proxy");
@@ -87,6 +146,17 @@ contract DeployExecutorTest is ForkBase {
         assertEq(l.actFloorBps, vm.parseJsonUint(json, ".sell.actFloorBps"));
         assertEq(l.poolCap, vm.parseJsonUint(json, ".sell.poolCap"));
         assertEq(l.maxSlice, vm.parseJsonUint(json, ".sell.maxSlice"));
+        RebalanceLimits memory r = deploy.rebalanceLimits();
+        assertEq(r.bandBps, vm.parseJsonUint(json, ".rebalance.bandBps"));
+        assertEq(r.bandMaxBps, vm.parseJsonUint(json, ".rebalance.bandMaxBps"));
+        assertEq(r.poolGapBps, vm.parseJsonUint(json, ".rebalance.poolGapBps"));
+        assertEq(r.floorBps, vm.parseJsonUint(json, ".rebalance.floorBps"));
+        assertEq(r.minTrade, vm.parseJsonUint(json, ".rebalance.minTrade"));
+        assertEq(r.maxSlice, vm.parseJsonUint(json, ".rebalance.maxSlice"));
+        EntryLimits memory e = deploy.entryLimits();
+        assertEq(e.floorBps, vm.parseJsonUint(json, ".entry.floorBps"));
+        assertEq(e.minEntry, vm.parseJsonUint(json, ".entry.minEntry"));
+        assertEq(e.maxSwap, vm.parseJsonUint(json, ".entry.maxSwap"));
     }
 
     function test_only_base_and_base_sepolia() public {

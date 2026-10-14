@@ -23,7 +23,3 @@ interface IERC20Lite is IERC20 {
     function transfer(address to, uint256 amount) external returns (bool);
 }
 
-/// Aerodrome Slipstream's pool factory (lib/swap/venues.ts AERODROME.FACTORY).
-interface IAeroFactory {
-    function getPool(address tokenA, address tokenB, int24 tickSpacing) external view returns (address);
-}
