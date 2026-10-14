@@ -11,6 +11,7 @@ import { borrowApr, monthlyCost, priceToUsd, summarize, type AccountData } from 
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { statusFor } from "@/lib/risk/status";
 import { GUARDIAN } from "@/lib/guardian/config";
+import { cashRaw, type Cash } from "@/lib/cash";
 
 /** Aave V3 getReserveData — only `currentLiquidityRate` (index 2, RAY) is used. */
 const v3ReserveAbi = [
@@ -139,6 +140,7 @@ export function usePosition(user: `0x${string}` | undefined) {
     const s = summarize(account);
     const apr = borrowApr(drawnRate, riskPremium);
     const debtUsd = Number(debtRaw) / 10 ** USDC.decimals;
+    const cash: Cash = { walletRaw: usdcBal, savingsRaw };
     return {
       holdings,
       stocksUsd: holdings.reduce((a, h) => a + h.freeUsd + h.lockedUsd, 0),
@@ -152,11 +154,14 @@ export function usePosition(user: `0x${string}` | undefined) {
       monthlyCostUsd: monthlyCost(debtUsd, apr),
       usdcBalance: Number(usdcBal) / 10 ** USDC.decimals,
       usdcBalanceRaw: usdcBal,
-      /** Guardian savings buffer: USDC supplied to Aave V3 (aBasUSDC). */
+      /** Savings: USDC supplied to Aave V3 (aBasUSDC). */
       savingsUsd: Number(savingsRaw) / 10 ** USDC.decimals,
       savingsRaw,
       /** Aave V3 USDC supply APR (variable). */
       savingsApr: Number(v3Reserve.currentLiquidityRate) / 1e27,
+      /** Cash (D15): wallet USDC plus savings. Every screen shows this as the user's cash. */
+      cash,
+      cashUsd: Number(cashRaw(cash)) / 10 ** USDC.decimals,
       debtRaw,
       usdcLiquidity: Number(liquidity) / 10 ** USDC.decimals,
       borrowPaused: usdcCfg.paused || usdcCfg.frozen || !usdcCfg.borrowable,
