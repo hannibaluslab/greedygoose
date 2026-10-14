@@ -219,7 +219,8 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
         details: [
           { label: "Why", value: ["Your cash couldn't bring it back to ", { status: "safe" }, "."] },
           { label: "Would sell", value: [`${usd(e.sellValueRaw)} of backing stock`] },
-          { label: "Sells at", value: [marketState(new Date(e.sellAfter * 1000)).open ? at(e.sellAfter) : "When prices reopen"] },
+          // A wait that ends while prices are held gives their reopening as the sale time: the second before is closed.
+          { label: "Sells at", value: [marketState(new Date((e.sellAfter - 1) * 1000)).open ? at(e.sellAfter) : "When prices reopen"] },
         ],
         manage: MANAGE.protection,
       };

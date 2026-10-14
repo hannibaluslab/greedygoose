@@ -94,27 +94,28 @@ function Agents({ address }: { address: `0x${string}` }) {
 
 /**
  * The pending sale, in the board's words. "Add $X" is what brings the credit to where the sale would (Protect · sell's
- * target, read live), rounded up so it's enough; "$Y" is the stock the heads-up said it would sell. A sale due while prices are held waits for
- * them to reopen. It reads only what it needs, so the warning never waits on the rest of the account.
+ * target, read live), rounded up so it's enough; "$Y" is the stock the heads-up said it would sell. When its wait ends while
+ * prices are held, the sale waits for them, and the heads-up's `sellAfter` is the moment they reopen: the second before
+ * it is frozen. It reads only what it needs, so the warning never waits on the rest of the account.
  */
 function PendingSale({ account, sale, nowSec }: { account: `0x${string}`; sale: HeadsUp; nowSec: number }) {
   const executor = { address: GOOSE_EXECUTOR ?? zeroAddress, abi: gooseExecutorAbi, chainId: CHAIN_ID } as const;
   const reads = useReadContracts({
     contracts: [
       { ...executor, functionName: "sellLimits" },
-      { ...executor, functionName: "frozen", args: [BigInt(sale.sellAfter)] },
+      { ...executor, functionName: "frozen", args: [BigInt(sale.sellAfter - 1)] },
       { address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserAccountData", args: [account], chainId: CHAIN_ID },
     ],
     allowFailure: false,
     query: { enabled: !!GOOSE_EXECUTOR, refetchInterval: 20_000 },
   });
   if (!reads.data) return null;
-  const [limits, frozen, data] = reads.data;
+  const [limits, reopens, data] = reads.data;
   const credit = summarize(data);
   const status = statusFor(credit.healthFactor);
   if (status !== "watch" && status !== "act") return null;
   const add = Math.ceil(credit.debtUsd - (credit.collateralUsd * credit.avgCf) / (Number(limits[2]) / 1e18));
   if (add <= 0) return null;
-  const when = frozen ? "when prices reopen" : sale.sellAfter > nowSec ? `in ${Math.ceil((sale.sellAfter - nowSec) / 60)} min` : "now";
+  const when = sale.sellAfter <= nowSec ? "now" : reopens ? "when prices reopen" : `in ${Math.ceil((sale.sellAfter - nowSec) / 60)} min`;
   return <HeadsUpCard add={formatUsdTrim(add)} sell={formatUsdTrim(toUsd(sale.sellValueRaw))} when={when} status={status} />;
 }

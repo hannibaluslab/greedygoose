@@ -43,9 +43,11 @@ describe("describeAgentEvent: the Agents board's rows", () => {
     expect(r.details["Sells at"]).toMatch(/^\d{1,2}:\d{2} [AP]M$/);
   });
 
-  it("says a heads-up's sale waits when its time falls while prices are held", () => {
-    // Saturday 2025-10-11 15:00 UTC: the stock prices are frozen.
-    expect(row({ kind: "heads-up", hf: hf(1.2), sellValueRaw: usdc(50), sellAfter: 1_760_194_800 }).details["Sells at"]).toBe("When prices reopen");
+  it("says a heads-up's sale waits for prices to reopen when its wait ended while they were held", () => {
+    // Sunday 2025-10-12 20:00 New York: the reopening the executor gives a heads-up sent just before Friday's freeze.
+    expect(row({ kind: "heads-up", hf: hf(1.2), sellValueRaw: usdc(50), sellAfter: 1_760_313_600 }).details["Sells at"]).toBe("When prices reopen");
+    // A minute later the market is open, so a sale due then is given its time.
+    expect(row({ kind: "heads-up", hf: hf(1.2), sellValueRaw: usdc(50), sellAfter: 1_760_313_660 }).details["Sells at"]).toMatch(/^\d{1,2}:\d{2} [AP]M$/);
   });
 
   it("names a sale that comes after the heads-up, and what the swaps left in the wallet", () => {
