@@ -25,16 +25,20 @@ const swapToUser: ArgsCheck = (args, user) => {
   const p = args[0] as { tokenIn: unknown; tokenOut: unknown; recipient: unknown };
   return is(p.recipient, user) && oneOf(p.tokenIn, TOKENS) && oneOf(p.tokenOut, TOKENS);
 };
-/** Uniswap's router takes the deadline through multicall(deadline, data): one call inside, and it must be that swap. */
-const swapWithDeadline: ArgsCheck = (args, user) => {
-  const data = args[1] as readonly Hex[];
-  if (data.length !== 1) return false;
+/** The swap inside Uniswap's multicall(deadline, data): exactly one call, and it must be exactInputSingle. */
+function innerSwap(data: readonly Hex[]): readonly unknown[] | null {
+  if (data.length !== 1) return null;
   try {
     const inner = decodeFunctionData({ abi: swapRouter02Abi, data: data[0] });
-    return inner.functionName === "exactInputSingle" && swapToUser(inner.args, user);
+    return inner.functionName === "exactInputSingle" ? inner.args : null;
   } catch {
-    return false;
+    return null;
   }
+}
+/** Uniswap's router takes the deadline through multicall: one swap inside, to the user. */
+const swapWithDeadline: ArgsCheck = (args, user) => {
+  const inner = innerSwap(args[1] as readonly Hex[]);
+  return !!inner && swapToUser(inner, user);
 };
 
 /**
@@ -82,4 +86,23 @@ export function assertAllowed<C extends { to: Address; data: Hex; value: bigint 
     }
   }
   return calls;
+}
+
+export type SwapParams = { tokenIn: Address; tokenOut: Address; recipient: Address; amountIn: bigint };
+
+/** The swap a router call makes (Uniswap's inside its multicall), or null when the call isn't a swap. */
+export function swapOf(c: { to: Address; data: Hex }): { router: Address; params: SwapParams } | null {
+  try {
+    if (isAddressEqual(c.to, AERODROME.ROUTER)) {
+      return { router: AERODROME.ROUTER, params: decodeFunctionData({ abi: aeroRouterAbi, data: c.data }).args[0] };
+    }
+    if (isAddressEqual(c.to, UNISWAP.SWAP_ROUTER_02)) {
+      const call = decodeFunctionData({ abi: swapRouter02Abi, data: c.data });
+      const inner = call.functionName === "multicall" ? innerSwap(call.args[1]) : null;
+      return inner ? { router: UNISWAP.SWAP_ROUTER_02, params: inner[0] as SwapParams } : null;
+    }
+  } catch {
+    /* not a swap */
+  }
+  return null;
 }
