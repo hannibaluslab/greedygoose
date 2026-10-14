@@ -330,7 +330,8 @@ body:has([data-welcome]) {
   outline-color: var(--brand);
 }
 
-/* Its one motion: every few seconds the egg rocks on its base, then settles. Reduced motion: it stays still. */
+/* Its one motion: every few seconds the egg rocks on its base, then settles. It leans out, away from the goose;
+   the swings back stay small, since its right side already sits against the foot. Reduced motion: it stays still. */
 .gg-egg {
   transform-box: fill-box;
   transform-origin: 50% 100%;
@@ -338,9 +339,9 @@ body:has([data-welcome]) {
 @keyframes gg-egg-rock {
   0%, 62% { transform: rotate(0deg); }
   67% { transform: rotate(-7deg); }
-  73% { transform: rotate(4deg); }
-  79% { transform: rotate(-2.5deg); }
-  85% { transform: rotate(1deg); }
+  73% { transform: rotate(1.5deg); }
+  79% { transform: rotate(-3.5deg); }
+  85% { transform: rotate(0.5deg); }
   90%, 100% { transform: rotate(0deg); }
 }
 @media (prefers-reduced-motion: no-preference) {

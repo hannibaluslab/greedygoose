@@ -25,6 +25,7 @@ export function Welcome() {
   const [ticked, setTicked] = useState(false);
   const attested = stored || ticked;
   const needsAttest = ELIGIBILITY_MODE !== "off";
+  const gated = needsAttest && !attested;
   const apy = useCashRate();
 
   useEffect(() => {
@@ -32,7 +33,7 @@ export function Welcome() {
   }, [status, router]);
 
   const start = () => {
-    if (needsAttest && !attested) return;
+    if (gated) return;
     recordAttestation();
     reset();
     const jaw = connectors.find((c) => c.type === "jaw");
@@ -102,14 +103,15 @@ export function Welcome() {
         <Button
           size="lg"
           onClick={start}
-          disabled={busy || (needsAttest && !attested)}
-          // Waiting on JAW isn't "unavailable": the button keeps its full lime while it spins.
-          className={busy ? "w-full disabled:opacity-100!" : "w-full"}
+          disabled={busy || gated}
+          // Waiting on JAW isn't "unavailable": the button keeps its full lime while it spins. Before the attestation
+          // it sits dark (a dimmed lime reads as olive on ink) and lights up once ticked.
+          className={busy ? "w-full disabled:opacity-100!" : gated ? "w-full disabled:bg-pill-dark disabled:text-ink-on-dark-dim disabled:opacity-100!" : "w-full"}
         >
           {isPending ? (
             <>
               <Spinner />
-              Finish in the JAW window
+              Finish in JAW
             </>
           ) : resuming ? (
             <>
@@ -146,12 +148,13 @@ function Spinner() {
 }
 
 /**
- * JAW rejects with 4001 both when the window is closed and when the browser won't open it
+ * JAW rejects with 4001 both when its window is closed and when the browser won't open it
  * ("Failed to open popup. Please allow popups for this site."), so the pop-up case is told apart by its words.
+ * A window that never answers ("Timed out waiting for popup message") is a plain failure.
  */
 function connectFailure(error: Error): string {
   const words = `${error.name} ${error.message}`;
-  if (/popup|pop-up/i.test(words)) return "Your browser blocked the JAW window. Allow pop-ups for this site, then try again.";
+  if (/failed to open popup|allow pop-?ups/i.test(words)) return "Your browser blocked the JAW window. Allow pop-ups for this site, then try again.";
   const code = (error as { code?: unknown }).code;
   if (code === 4001 || /reject|denied|cancel/i.test(words)) return "Sign-in was cancelled.";
   return "We couldn’t sign you in.";
