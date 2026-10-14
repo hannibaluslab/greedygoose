@@ -297,6 +297,8 @@ export function CreditBuySheet({ open, user, data, onClose }: { open: boolean; u
               {riskNote(backedBy, protect === "on")} {stock.name} here is a tokenized stock. It tracks the share price; it is not company
               shares or voting rights.{plan.priceMayMove && " Markets are closed, so the price may move when they reopen."}
             </p>
+            {/* The quote keeps refreshing here: a new one past the buy guardrails stops the review, as on the amount step. */}
+            {blocker && <p role="status" className="m-0 text-[13px] leading-snug text-act">{blocker}</p>}
             {feeBlocked && (
               <p role="alert" className="m-0 text-[13px] text-act">
                 Your account can’t pay network fees in USDC on Base right now, so this Credit Buy can’t go through.
@@ -311,7 +313,7 @@ export function CreditBuySheet({ open, user, data, onClose }: { open: boolean; u
                   size="md"
                   phase={phase}
                   preview={!isConnected}
-                  disabled={feeBlocked || fee.loading || !!plan.block || (plan.extraConfirm && !ack)}
+                  disabled={feeBlocked || fee.loading || !!blocker || (plan.extraConfirm && !ack)}
                   onClick={() => {
                     if (phase !== "idle") reset();
                     void creditBuy({ user, stock, quote: q, plan, cash: data.cash, confirmedRisk: ack });
