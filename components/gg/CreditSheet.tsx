@@ -12,7 +12,7 @@ import { homeStatus } from "@/lib/risk/status";
 import { USDC } from "@/lib/tokens/registry";
 import { formatUsdTrim } from "@/lib/formatting";
 
-/** The Protection row: the Cash Agent's Protect job, and its daily limit once it runs. */
+/** The Protect row: the Protect job, and its daily limit once it runs. */
 function protection(status: AgentStatus, capRaw: bigint | null) {
   if (status === "on" && capRaw !== null) return `Up to ${formatUsdTrim(Number(capRaw) / 10 ** USDC.decimals)} a day`;
   return { unconfigured: "Not live yet", loading: "…", off: "Off", starting: "Starting", on: "On" }[status];
@@ -89,7 +89,7 @@ export function CreditSheet({
               <span aria-hidden className="flex size-[22px] items-center justify-center rounded-[11px] bg-brand text-ink">
                 <ShieldIcon />
               </span>
-              Protection
+              Protect
             </span>
             <span className="flex items-center gap-1 font-semibold">
               {protection(agents.status.protect, agents.terms.protect?.capRaw ?? null)}
