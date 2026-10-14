@@ -4,7 +4,6 @@ import { useState } from "react";
 import { isAddressEqual } from "viem";
 import { useAccount } from "wagmi";
 import { toast } from "sonner";
-import { usePermissions } from "@jaw.id/wagmi";
 import { CardTitle, ManageCard, SaveFooter } from "@/components/gg/Manage";
 import { LimitChips } from "@/components/gg/LimitChips";
 import { StockAvatar } from "@/components/gg/StockAvatar";
@@ -17,7 +16,7 @@ import { usePosition } from "@/hooks/usePosition";
 import { useProtectSave } from "@/hooks/useProtectSave";
 import type { TxPhase } from "@/hooks/useTx";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
-import { limitRaw, readAgentGrant } from "@/lib/agents/permissions";
+import { limitRaw } from "@/lib/agents/permissions";
 import {
   faceIdCount,
   faceIdWords,
@@ -30,7 +29,6 @@ import {
 } from "@/lib/agents/protect";
 import type { AgentStatus } from "@/lib/agents/status";
 import { toUsd } from "@/lib/cash";
-import { CHAIN_ID } from "@/lib/chain";
 import { formatUsdShort, formatUsdTrim, inWords } from "@/lib/formatting";
 import { EQUITIES } from "@/lib/tokens/registry";
 
@@ -57,11 +55,6 @@ export function ProtectSettings({ account, onDone }: { account: `0x${string}`; o
   const settings = useAgentSettings(account);
   const fee = useFeeSupport();
   const live = !!GOOSE_EXECUTOR;
-  // The same list useAgents reads (one query): a revoke takes one Face ID for each sell grant JAW still lists.
-  const listed = usePermissions({ address: account, chainId: CHAIN_ID, query: { enabled: live } });
-  const sellGrants = GOOSE_EXECUTOR
-    ? (listed.data ?? []).filter((p) => readAgentGrant(p, GOOSE_EXECUTOR!)?.job === "sell").length
-    : 0;
   const [round, setRound] = useState(0);
   const saving = useProtectSave(account, agents, () => {
     toast.success("Protect is saved");
@@ -87,7 +80,8 @@ export function ProtectSettings({ account, onDone }: { account: `0x${string}`; o
       backsUsd={EQUITIES.map((e) => (data.holdings[e.reserveId].lockedRaw > 0n ? data.holdings[e.reserveId].lockedUsd : 0))}
       pricesRaw={EQUITIES.map((e) => data.holdings[e.reserveId].priceRaw)}
       capMaxRaw={agents.capMaxRaw}
-      sellGrants={sellGrants}
+      // Turning selling off revokes each sell grant JAW lists that hasn’t ended (useAgents.turnOff): one Face ID each.
+      sellGrants={agents.faceIdsOff(["sell"])}
       feeBlocked={!!address && fee.state === "unsupported"}
       waiting={fee.loading || agents.busy}
       phase={saving.phase}
@@ -118,7 +112,7 @@ export type ProtectSettingsViewProps = {
   /** Aave's prices by reserve id (8 decimals), for a sell grant's stock limits. */
   pricesRaw: readonly bigint[];
   capMaxRaw: bigint | null;
-  /** Sell grants JAW lists: one Face ID each to switch selling off. */
+  /** Sell grants JAW lists that haven’t ended: one Face ID each to switch selling off. */
   sellGrants: number;
   feeBlocked: boolean;
   /** Something still loading or signing elsewhere (fee support, an agent switch). */
