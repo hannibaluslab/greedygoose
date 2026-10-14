@@ -142,7 +142,7 @@ function Loaded({
         <MarketBanner />
       </section>
 
-      <section className="grid grid-cols-4 gap-2 px-5 pt-3.5">
+      <section className="grid grid-cols-4 gap-2 px-5 pt-[22px]">
         <QuickAction href="/buy" label="Trade" icon={<TradeIcon />} />
         <QuickAction href="/receive" label="Top up" icon={<PlusIcon />} />
         <QuickAction onClick={() => open("credit")} label="Credit Buy" icon={<CreditIcon />} />
@@ -230,7 +230,7 @@ function EmptyPortfolio({ cashUsd }: { cashUsd: number }) {
         <p className="m-0 text-[17px] font-semibold tracking-[-0.01em]">You don’t hold any stocks yet</p>
         <p className="m-0 text-[13px] leading-[1.4] text-ink-mid">{EQUITIES.map((e) => e.name).join(", ")}.</p>
       </div>
-      <Button variant="dark" href="/buy" className="w-full">
+      <Button href="/buy" className="w-full">
         {cashUsd >= 1 ? `Buy stocks with your ${formatUsd(cashUsd)}` : "Buy stocks"}
       </Button>
     </div>
