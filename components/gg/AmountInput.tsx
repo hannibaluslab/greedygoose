@@ -1,6 +1,7 @@
 "use client";
 
 import type { InputHTMLAttributes } from "react";
+import { blurOnEnter } from "@/lib/keyboard";
 
 /** The field has no outline of its own; wrap it in a card with `focus-within:` styling so focus stays visible. */
 
@@ -20,6 +21,7 @@ export function AmountInput({
       inputMode="decimal"
       autoComplete="off"
       enterKeyHint="done"
+      onKeyDown={blurOnEnter}
       placeholder="0"
       value={value}
       onChange={(e) => onValue(cleanAmount(e.target.value, decimals))}

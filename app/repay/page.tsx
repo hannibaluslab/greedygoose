@@ -91,7 +91,7 @@ function Repay({ address }: { address: `0x${string}` }) {
         <div className="flex items-start justify-between gap-3">
           <div className="num flex items-baseline gap-2">
             <span className={`${data.debtUsd >= 1000 ? "text-[38px]" : "text-5xl"} font-semibold leading-none tracking-[-0.04em]`}>{formatUsd(data.debtUsd).replace(/\.00$/, "")}</span>
-            <span className="text-base font-medium text-muted">owed</span>
+            <span className="text-base font-medium text-ink-mid">owed</span>
           </div>
           <span className="mt-1"><StatusPill status={data.status} size="lg" /></span>
         </div>
@@ -107,9 +107,9 @@ function Repay({ address }: { address: `0x${string}` }) {
           Repay from cash <span className="font-medium text-subtle">({formatUsd(data.cashUsd)})</span>
         </div>
         {data.debtUsd === 0 ? (
-          <p className="m-0 pb-4 text-[15px] text-muted">You don’t owe anything.</p>
+          <p className="m-0 pb-4 text-[15px] text-ink-mid">You don’t owe anything.</p>
         ) : maxRepay === 0 ? (
-          <p className="m-0 pb-4 text-[15px] text-muted">You need USDC in your account to repay. <Link href="/receive" className="underline">Receive USDC</Link></p>
+          <p className="m-0 pb-4 text-[15px] text-ink-mid">You need USDC in your account to repay. <Link href="/receive" className="underline">Receive USDC</Link></p>
         ) : (
           <>
             <div role="radiogroup" aria-label="Amount to repay" className="grid grid-cols-3 gap-2">

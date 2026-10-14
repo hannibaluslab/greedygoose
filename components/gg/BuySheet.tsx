@@ -107,7 +107,7 @@ export function BuySheet({
                 <button
                   type="button"
                   onClick={() => setRaw((Math.floor(maxUsd * 100) / 100).toString())}
-                  className="flex h-7 items-center rounded-[14px] bg-[rgba(15,14,11,0.06)] px-2.5 text-xs font-semibold text-muted"
+                  className="flex h-7 items-center rounded-[14px] bg-[rgba(15,14,11,0.06)] px-2.5 text-xs font-semibold text-ink-mid"
                 >
                   MAX
                 </button>
@@ -138,7 +138,7 @@ export function BuySheet({
               </div>
             </div>
 
-            <div className="flex flex-col gap-[5px] rounded-xl border border-[#e3ddcf] bg-card px-3 py-2.5">
+            <div className="flex flex-col gap-[5px] rounded-[12px] border border-[#e3ddcf] bg-card px-3 py-2.5">
               <Small label="Arrives" value="In seconds" />
               <Small label="Via" value={q ? `${VENUE_LABEL[q.venue]} · fee in the price` : "—"} />
               <Small label="Network fee" value="Paid in USDC" />
@@ -218,7 +218,7 @@ function Small({ label, value }: { label: string; value: string }) {
 function Row({ label, value, last = false }: { label: string; value: string; last?: boolean }) {
   return (
     <div className={`flex items-center justify-between py-3 text-[15px] ${last ? "" : "border-b border-hairline"}`}>
-      <span className="text-muted">{label}</span>
+      <span className="text-ink-mid">{label}</span>
       <span className="font-semibold">{value}</span>
     </div>
   );

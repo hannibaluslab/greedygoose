@@ -36,12 +36,12 @@ export function CreditSheet({ data, onClose, guardian }: { data: PositionData; o
 
         <div className="num rounded-[22px] bg-card px-4 py-0.5 shadow-[0_1px_3px_rgba(14,13,11,0.06)]">
           <div className="flex items-center justify-between border-b border-hairline py-3 text-[15px]">
-            <span className="text-muted">Cost</span>
+            <span className="text-ink-mid">Cost</span>
             <span className="font-semibold">{formatUsd(data.monthlyCostUsd)} / month</span>
           </div>
           <div className="flex flex-col gap-2 border-b border-hairline py-3">
             <div className="flex justify-between text-[15px]">
-              <span className="text-muted">Credit available</span>
+              <span className="text-ink-mid">Credit available</span>
               <span className="font-semibold">{formatUsd(data.availableUsd)}</span>
             </div>
             <div className="h-1.5 overflow-hidden rounded-[3px] bg-[rgba(14,13,11,0.08)]">
@@ -53,12 +53,12 @@ export function CreditSheet({ data, onClose, guardian }: { data: PositionData; o
             </div>
           </div>
           <div className="flex items-center justify-between border-b border-hairline py-3 text-[15px]">
-            <span className="text-muted">Borrow rate</span>
+            <span className="text-ink-mid">Borrow rate</span>
             <span className="font-semibold">{(data.apr * 100).toFixed(2)}% a year</span>
           </div>
           <Link href="/guardian" className="flex items-center justify-between py-3 text-[15px] no-underline">
-            <span className="flex items-center gap-2 text-muted">
-              <span aria-hidden className="flex size-[22px] items-center justify-center rounded-[11px] bg-accent text-ink">
+            <span className="flex items-center gap-2 text-ink-mid">
+              <span aria-hidden className="flex size-[22px] items-center justify-center rounded-[11px] bg-brand text-ink">
                 <ShieldIcon />
               </span>
               Guardian
@@ -76,7 +76,7 @@ export function CreditSheet({ data, onClose, guardian }: { data: PositionData; o
           </Link>
           <Link
             href="/repay"
-            className="flex h-[52px] items-center justify-center rounded-[26px] bg-accent text-[15px] font-bold text-ink no-underline"
+            className="flex h-[52px] items-center justify-center rounded-[26px] bg-brand text-[15px] font-bold text-ink no-underline"
             style={{ boxShadow: "0 0 14px rgba(212,255,60,0.32)" }}
           >
             Repay

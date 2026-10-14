@@ -6,9 +6,9 @@ export function Money({
   const intFmt = Number(int).toLocaleString("en-US");
   return (
     <span className={`num inline-flex items-baseline ${className}`}>
-      <span style={{ fontSize: dollarSize ?? Math.round(size * 0.48) }} className="font-medium text-muted">{value < 0 ? "−$" : "$"}</span>
+      <span style={{ fontSize: dollarSize ?? Math.round(size * 0.48) }} className="font-medium text-ink-mid">{value < 0 ? "−$" : "$"}</span>
       <span style={{ fontSize: size, letterSpacing: "-0.04em", lineHeight: 1 }} className="font-semibold">{intFmt}</span>
-      <span style={{ fontSize: centsSize ?? Math.round(size * 0.41) }} className="font-medium text-muted">.{cents}</span>
+      <span style={{ fontSize: centsSize ?? Math.round(size * 0.41) }} className="font-medium text-ink-mid">.{cents}</span>
     </span>
   );
 }

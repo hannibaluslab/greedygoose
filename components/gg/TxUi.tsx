@@ -24,7 +24,7 @@ export function FaceIdButton({
         disabled={off}
         onClick={onClick}
         aria-busy={phase === "simulating" || phase === "signing" || phase === "pending"}
-        className="flex h-14 items-center justify-center gap-2.5 rounded-[28px] bg-accent text-base font-bold text-ink disabled:opacity-45"
+        className="flex h-14 items-center justify-center gap-2.5 rounded-[28px] bg-brand text-base font-bold text-ink disabled:opacity-45"
         style={{ boxShadow: off ? undefined : "0 0 14px rgba(212,255,60,0.32)" }}
       >
         <FaceId />
@@ -42,12 +42,12 @@ export function TxError({ error }: { error: string | null }) {
 export function TxDone({ title, body, txHash, onDone, doneLabel = "Done" }: { title: string; body: ReactNode; txHash?: `0x${string}`; onDone: () => void; doneLabel?: string }) {
   return (
     <div className="flex flex-col gap-3 pt-2" role="status">
-      <span aria-hidden className="flex size-12 items-center justify-center rounded-3xl bg-accent">
+      <span aria-hidden className="flex size-12 items-center justify-center rounded-3xl bg-brand">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0e0d0b" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5 9-10" /></svg>
       </span>
       <h2 className="m-0 text-2xl font-semibold tracking-[-0.02em]">{title}</h2>
-      <p className="m-0 text-[15px] text-muted">{body}</p>
-      {txHash && <a href={txUrl(txHash)} target="_blank" rel="noreferrer" className="text-[13px] text-muted underline">View on Base explorer</a>}
+      <p className="m-0 text-[15px] text-ink-mid">{body}</p>
+      {txHash && <a href={txUrl(txHash)} target="_blank" rel="noreferrer" className="text-[13px] text-ink-mid underline">View on Base explorer</a>}
       <button type="button" onClick={onDone} className="mt-2 h-[52px] rounded-[26px] bg-ink text-[15px] font-semibold text-on-ink">{doneLabel}</button>
     </div>
   );

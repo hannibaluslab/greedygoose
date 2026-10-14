@@ -40,7 +40,7 @@ function Receive({ address }: { address: `0x${string}` }) {
             </span>
           ))}
         </div>
-        <p className="m-0 text-[13px] leading-snug text-muted">
+        <p className="m-0 text-[13px] leading-snug text-ink-mid">
           Send only on <strong className="text-ink">Base</strong>: Coinbase tokenized stocks and USDC. Anything else won’t show up here.
         </p>
       </WhiteCard>

@@ -28,7 +28,7 @@ function Unlock({ address }: { address: `0x${string}` }) {
       <SubHeader label="Collateral" back="/portfolio" />
       <div className="flex flex-col gap-1">
         <h1 className="m-0 text-[30px] font-semibold tracking-[-0.03em]">Unlock stocks</h1>
-        <p className="m-0 text-sm text-muted">Take collateral back to your account. Aave keeps enough to cover what you owe.</p>
+        <p className="m-0 text-sm text-ink-mid">Take collateral back to your account. Aave keeps enough to cover what you owe.</p>
       </div>
       {!data ? (
         <div aria-busy className="h-[300px] animate-pulse rounded-[22px] bg-chip" />
@@ -41,8 +41,8 @@ function Unlock({ address }: { address: `0x${string}` }) {
               <button type="button" onClick={() => setSelected(h.symbol)} className="flex w-full items-center gap-2.5 px-0.5 py-3.5 text-left">
                 <StockAvatar symbol={h.symbol} size={40} />
                 <div className="min-w-0 grow">
-                  <div className="text-[15px] font-semibold leading-tight">{h.name}</div>
-                  <div className="mt-0.5 inline-flex items-center gap-1 text-[13px] font-medium text-muted"><LockIcon size={9} />{formatShares(h.lockedShares)} locked</div>
+                  <div className="text-[15px] font-semibold leading-[1.25]">{h.name}</div>
+                  <div className="mt-0.5 inline-flex items-center gap-1 text-[13px] font-medium text-ink-mid"><LockIcon size={9} />{formatShares(h.lockedShares)} locked</div>
                 </div>
                 <div className="text-[15px] font-semibold">{formatUsd(h.lockedUsd)}</div>
                 <ChevronRight className="shrink-0 text-[#b9b3a6]" />

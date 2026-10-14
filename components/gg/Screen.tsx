@@ -20,7 +20,7 @@ export function WhiteCard({ children, className = "" }: { children: ReactNode; c
 export function Line({ label, value, first = false }: { label: ReactNode; value: ReactNode; first?: boolean }) {
   return (
     <div className={`num flex items-center justify-between py-[13px] text-[15px] ${first ? "" : "border-t border-hairline"}`}>
-      <span className="text-muted">{label}</span>
+      <span className="text-ink-mid">{label}</span>
       <span className="font-semibold">{value}</span>
     </div>
   );

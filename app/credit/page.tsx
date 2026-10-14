@@ -30,12 +30,12 @@ function Credit({ address }: { address: `0x${string}` }) {
             <div className="flex items-start justify-between gap-3">
               <div className="num flex items-baseline gap-2">
                 <span className={`${data.debtUsd >= 1000 ? "text-[38px]" : "text-5xl"} font-semibold leading-none tracking-[-0.04em]`}>{formatUsd(data.debtUsd).replace(/\.00$/, "")}</span>
-                <span className="text-base font-medium text-muted">owed</span>
+                <span className="text-base font-medium text-ink-mid">owed</span>
               </div>
               <span className="mt-1"><StatusPill status={data.status} size="lg" /></span>
             </div>
             <StatusBar status={data.status} healthFactor={data.healthFactor} />
-            <p className="m-0 text-[13px] leading-snug text-muted">{STATUS_COPY[data.status]}</p>
+            <p className="m-0 text-[13px] leading-snug text-ink-mid">{STATUS_COPY[data.status]}</p>
             <div className="flex flex-col">
               <Line label="Cost" value={`${formatUsd(data.monthlyCostUsd)} / month`} />
               <Line label="Credit available" value={formatUsd(data.availableUsd)} />
@@ -51,10 +51,10 @@ function Credit({ address }: { address: `0x${string}` }) {
           </WhiteCard>
 
           <Link href="/guardian" className="flex items-center gap-3 rounded-[22px] bg-card px-4 py-3.5 no-underline shadow-[0_1px_3px_rgba(14,13,11,0.06)]">
-            <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-ink"><ShieldIcon size={16} /></span>
+            <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand text-ink"><ShieldIcon size={16} /></span>
             <span className="flex flex-1 flex-col">
               <span className="text-[15px] font-semibold">Guardian</span>
-              <span className="text-[12.5px] text-muted">Repays from savings so your stocks aren’t sold</span>
+              <span className="text-[12.5px] text-ink-mid">Repays from savings so your stocks aren’t sold</span>
             </span>
             <ChevronRight className="text-subtle" />
           </Link>
@@ -67,7 +67,7 @@ function Credit({ address }: { address: `0x${string}` }) {
           </div>
           <div className="grid grid-cols-2 gap-2.5">
             <Link href="/loan" className="flex h-[52px] items-center justify-center rounded-[26px] bg-chip text-[15px] font-semibold no-underline">Get a loan</Link>
-            <Link href="/repay" className="flex h-[52px] items-center justify-center rounded-[26px] bg-accent text-[15px] font-bold no-underline" style={{ boxShadow: "0 0 14px rgba(212,255,60,0.32)" }}>Repay</Link>
+            <Link href="/repay" className="flex h-[52px] items-center justify-center rounded-[26px] bg-brand text-[15px] font-bold no-underline" style={{ boxShadow: "0 0 14px rgba(212,255,60,0.32)" }}>Repay</Link>
           </div>
         </>
       )}

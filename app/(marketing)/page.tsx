@@ -35,23 +35,23 @@ export default function Welcome() {
   return (
     <main className="flex min-h-dvh flex-col gap-6 px-5 pb-[34px] pt-16">
       <div className="flex items-center gap-2.5">
-        <span aria-hidden className="flex size-8 items-center justify-center rounded-2xl bg-accent text-[15px] font-bold">G</span>
+        <span aria-hidden className="flex size-8 items-center justify-center rounded-2xl bg-brand text-[15px] font-bold">G</span>
         <span className="text-[17px] font-semibold">GreedyGoose</span>
       </div>
 
       <div className="flex grow flex-col justify-center gap-4">
-        <div className="font-mono text-xs uppercase tracking-[0.08em] text-muted">Stocks · credit · Base</div>
+        <div className="font-mono text-xs uppercase tracking-[0.08em] text-ink-mid">Stocks · credit · Base</div>
         <h1 className="m-0 text-[40px] font-semibold leading-[1.05] tracking-[-0.03em] [text-wrap:pretty]">
           Your stocks stay yours. Borrow against them in one tap.
         </h1>
-        <p className="m-0 text-base leading-[1.45] text-muted [text-wrap:pretty]">
+        <p className="m-0 text-base leading-[1.45] text-ink-mid [text-wrap:pretty]">
           Hold NVIDIA, Apple and more. Use them to borrow dollars when you need cash, without selling anything.
         </p>
       </div>
 
       <div className="flex flex-col gap-3">
         {needsAttest && (
-          <label className="flex items-start gap-2.5 px-1 text-[13px] leading-[1.4] text-muted">
+          <label className="flex items-start gap-2.5 px-1 text-[13px] leading-[1.4] text-ink-mid">
             <input
               type="checkbox"
               className="mt-px size-[18px] shrink-0 accent-[#0e0d0b]"
@@ -78,7 +78,7 @@ export default function Welcome() {
         >
           Sign in with your JAW account
         </button>
-        <p className="mt-1 text-center text-[13px] leading-[1.4] text-muted">
+        <p className="mt-1 text-center text-[13px] leading-[1.4] text-ink-mid">
           Already hold stocks in a JAW account? Sign in and they show up here. Secured by passkey, built on JAW.
         </p>
         {error && (

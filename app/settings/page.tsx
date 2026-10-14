@@ -22,7 +22,7 @@ function Settings({ address }: { address: `0x${string}` }) {
         <Line label="Security" value="Passkey (JAW)" />
         <Line label="Guardian" value={<a href="/guardian" className="underline">Manage</a>} />
       </WhiteCard>
-      <WhiteCard className="p-4 text-[13px] leading-snug text-muted">
+      <WhiteCard className="p-4 text-[13px] leading-snug text-ink-mid">
         GreedyGoose is a non-custodial interface. Your stocks and USDC stay in your own smart account. Loans come from the Aave
         protocol; if your collateral value falls too far, Aave can sell part of it. Tokenized stocks track the share price; they
         are not company shares and carry no voting rights. Not available to US persons.
