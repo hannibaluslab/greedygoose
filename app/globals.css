@@ -319,3 +319,32 @@ select {
 /* Range sliders in the ink colour with a bigger thumb for thumbs. */
 input[type="range"] { accent-color: var(--ink); }
 input[type="range"]::-webkit-slider-thumb { width: 22px; height: 22px; }
+
+/* Welcome (app/(marketing)/Welcome.tsx). The page is ink edge to edge, overscroll and the desktop margins
+   included, so the body takes the colour while it's on screen. */
+body:has([data-welcome]) {
+  background: var(--ink);
+  color-scheme: dark;
+}
+[data-welcome] :focus-visible {
+  outline-color: var(--brand);
+}
+
+/* Its one motion: every few seconds the egg rocks on its base, then settles. Reduced motion: it stays still. */
+.gg-egg {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+@keyframes gg-egg-rock {
+  0%, 62% { transform: rotate(0deg); }
+  67% { transform: rotate(-7deg); }
+  73% { transform: rotate(4deg); }
+  79% { transform: rotate(-2.5deg); }
+  85% { transform: rotate(1deg); }
+  90%, 100% { transform: rotate(0deg); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  [data-welcome] .gg-egg {
+    animation: gg-egg-rock 4.8s ease-in-out 1.2s infinite;
+  }
+}
