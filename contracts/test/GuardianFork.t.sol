@@ -1,23 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {Test} from "forge-std/Test.sol";
+import {ForkBase} from "./ForkBase.sol";
 import {GuardianChecker} from "../src/GuardianChecker.sol";
-import {IJustaPermissionManager as PM, IAaveV3Pool, ISpokeLite, IERC20Lite} from "./IJustaPermissionManager.sol";
+import {IJustaPermissionManager as PM} from "./IJustaPermissionManager.sol";
 
-/// End-to-end on a Base mainnet fork, against the real JustaPermissionManager, Aave V3 Pool,
-/// Aave V4 Equities Hub spoke and a real JAW account (which already has the manager as an owner).
+/// End-to-end on a Base mainnet fork, against the real JustaPermissionManager, Aave V3 Pool and
+/// Aave V4 Equities Hub spoke, with a fresh JAW account created by JAW's factory (the manager is an owner).
 /// Run: BASE_RPC_URL=<base rpc> forge test --match-contract Fork
-contract GuardianForkTest is Test {
-    PM constant MANAGER = PM(0xf1b40E3D5701C04d86F7828f0EB367B9C90901D8);
-    IAaveV3Pool constant POOL = IAaveV3Pool(0xA238Dd80C259a72e81d7e4664a9801593F98d1c5);
-    ISpokeLite constant SPOKE = ISpokeLite(0x17905Db0e4A3514467539956c084180616AE7B8D);
-    IERC20Lite constant USDC = IERC20Lite(0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913);
-    IERC20Lite constant AUSDC = IERC20Lite(0x4e65fE4DbA92790696d040ac24Aa414708F5c0AB);
-    uint256 constant USDC_RESERVE = 7;
-
-    // A real JAW smart account with ~$1 of NVDAc locked on the Equities Hub.
-    address constant USER = 0x14087c532332dE6E971Eb2F60a252cbf511F59eA;
+contract GuardianForkTest is ForkBase {
+    address user;
     address keeper = makeAddr("keeper");
     address attacker = makeAddr("attacker");
 
@@ -32,26 +24,24 @@ contract GuardianForkTest is Test {
     bytes4 constant UNAUTHORIZED_PERMISSION = bytes4(keccak256("JustaPermissionManager_UnauthorizedPermission()"));
 
     function setUp() public {
-        vm.createSelectFork(vm.envString("BASE_RPC_URL"));
+        _fork();
+        user = _newJawAccount("user");
         checker = new GuardianChecker(address(USDC), address(POOL), address(SPOKE), USDC_RESERVE);
 
-        // Give the user a savings buffer and a small loan.
+        // Give the user a savings buffer and a small loan backed by 1 NVDAc.
         // Mint test USDC on the fork (moving it out of Aave's hub would break the hub's own accounting).
-        deal(address(USDC), USER, 20e6);
-        vm.startPrank(USER);
-        USDC.approve(address(POOL), 10e6);
-        POOL.supply(address(USDC), 10e6, USER, 0);
-        SPOKE.borrow(USDC_RESERVE, 0.5e6, USER);
-        vm.stopPrank();
+        deal(address(USDC), user, 20e6);
+        _save(user, 10e6);
+        _openCredit(user, 1e8, 0.5e6);
 
         t0 = uint48(block.timestamp);
-        vm.prank(USER);
+        vm.prank(user);
         MANAGER.approve(_p());
         assertTrue(MANAGER.isApproved(_p()));
     }
 
     function _guardianPermission(uint160 dailyCap) internal view returns (PM.Permission memory p) {
-        p.account = USER;
+        p.account = user;
         p.spender = keeper;
         p.start = t0;
         p.end = t0 + 365 days;
@@ -77,30 +67,30 @@ contract GuardianForkTest is Test {
     }
 
     function test_keeper_repays_from_savings() public {
-        uint256 debtBefore = SPOKE.getUserTotalDebt(USDC_RESERVE, USER);
-        uint256 savingsBefore = AUSDC.balanceOf(USER);
+        uint256 debtBefore = SPOKE.getUserTotalDebt(USDC_RESERVE, user);
+        uint256 savingsBefore = AUSDC.balanceOf(user);
         assertGt(debtBefore, 0);
 
         uint256 amount = debtBefore + debtBefore / 1000 + 1; // small buffer: interest accrues per second
         vm.prank(keeper);
-        MANAGER.executeBatch(_p(), _rescue(USER, USER, amount));
+        MANAGER.executeBatch(_p(), _rescue(user, user, amount));
 
-        assertEq(SPOKE.getUserTotalDebt(USDC_RESERVE, USER), 0, "debt repaid");
-        assertApproxEqAbs(savingsBefore - AUSDC.balanceOf(USER), amount, 2, "savings used");
-        assertEq(_allowance(USER, address(SPOKE)), 0, "approval reset by manager");
+        assertEq(SPOKE.getUserTotalDebt(USDC_RESERVE, user), 0, "debt repaid");
+        assertApproxEqAbs(savingsBefore - AUSDC.balanceOf(user), amount, 2, "savings used");
+        assertEq(_allowance(user, address(SPOKE)), 0, "approval reset by manager");
     }
 
     function test_rejects_withdraw_to_attacker() public {
         vm.prank(keeper);
         vm.expectPartialRevert(CHECKER_REJECTED);
-        MANAGER.executeBatch(_p(), _rescue(attacker, USER, 0.5e6));
+        MANAGER.executeBatch(_p(), _rescue(attacker, user, 0.5e6));
         assertEq(USDC.balanceOf(attacker), 0);
     }
 
     function test_rejects_repaying_someone_elses_loan() public {
         vm.prank(keeper);
         vm.expectPartialRevert(CHECKER_REJECTED);
-        MANAGER.executeBatch(_p(), _rescue(USER, attacker, 0.5e6));
+        MANAGER.executeBatch(_p(), _rescue(user, attacker, 0.5e6));
     }
 
     function test_rejects_plain_transfer() public {
@@ -114,21 +104,21 @@ contract GuardianForkTest is Test {
     function test_daily_cap_enforced() public {
         vm.prank(keeper);
         vm.expectPartialRevert(EXCEEDED_SPEND);
-        MANAGER.executeBatch(_p(), _rescue(USER, USER, 6e6)); // cap is 5 USDC / day
+        MANAGER.executeBatch(_p(), _rescue(user, user, 6e6)); // cap is 5 USDC / day
     }
 
     function test_only_the_keeper_can_execute() public {
         vm.prank(attacker);
         vm.expectPartialRevert(INVALID_SENDER);
-        MANAGER.executeBatch(_p(), _rescue(USER, USER, 0.5e6));
+        MANAGER.executeBatch(_p(), _rescue(user, user, 0.5e6));
     }
 
     function test_revoked_permission_cannot_act() public {
-        vm.prank(USER);
+        vm.prank(user);
         MANAGER.revoke(_p());
         vm.prank(keeper);
         vm.expectRevert(UNAUTHORIZED_PERMISSION);
-        MANAGER.executeBatch(_p(), _rescue(USER, USER, 0.5e6));
+        MANAGER.executeBatch(_p(), _rescue(user, user, 0.5e6));
     }
 
     function _allowance(address owner, address spender) internal view returns (uint256 a) {
