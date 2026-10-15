@@ -6,19 +6,9 @@ import { StatusPill } from "./Status";
 import { Tap } from "./Tap";
 import { STATUS_LABEL, type Status } from "@/lib/risk/status";
 
-/** Sub-screen chrome from the design: back chevron, centred mono label, optional right slot. */
-export function SubHeader({ label, right, back = "/home" }: { label: string; right?: ReactNode; back?: string }) {
-  return (
-    <div className="flex items-center justify-between">
-      <Link href={back} aria-label="Back" className="-ml-3 flex size-11 items-center justify-center text-ink"><BackIcon /></Link>
-      <span className="label">{label}</span>
-      <div className="-mr-1 flex size-11 items-center justify-center">{right}</div>
-    </div>
-  );
-}
-
 /**
- * Top of a tab screen (PortfolioPage): an optional back chevron, the title, then on the right an optional action
+ * Top of every screen but Home (PortfolioPage): the back chevron (Adrian: "all pages should have the back button like
+ * portfolio page"; Home has none), the title, then on the right an optional action
  * (Send's Receive link), the credit status pill (a link or a button when given somewhere to go) and the header menu,
  * which Manage's boards leave out (`menu={false}`).
  */

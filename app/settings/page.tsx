@@ -2,7 +2,7 @@
 
 import { useDisconnect } from "wagmi";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
-import { Line, SubHeader, WhiteCard } from "@/components/gg/Screen";
+import { Line, TabHeader, WhiteCard } from "@/components/gg/Screen";
 import { addressUrl } from "@/lib/chain";
 import { shortAddress } from "@/lib/formatting";
 
@@ -14,7 +14,7 @@ function Settings({ address }: { address: `0x${string}` }) {
   const { disconnect } = useDisconnect();
   return (
     <div className="flex min-h-dvh flex-col gap-3.5 px-5 pb-[34px] pt-[calc(env(safe-area-inset-top)+8px)]">
-      <SubHeader label="Settings" />
+      <TabHeader title="Settings" back="/home" />
       <WhiteCard className="px-4 py-0.5">
         <Line first label="Account" value={<a className="underline" href={addressUrl(address)} target="_blank" rel="noreferrer">{shortAddress(address)}</a>} />
         <Line label="Network" value="Base" />

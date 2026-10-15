@@ -97,8 +97,8 @@ describe("agentCards: only when something needs the user", () => {
     const [c] = agentCards({ ...calm, headsUp: { status: "watch", addUsd: 120, sellUsd: 180, when: "at 3:42 PM" } });
     expect(c).toMatchObject({ tone: "watch", agent: "Protect", text: "Your credit hit Watch. Add $120, or Protect sells $180 at 3:42 PM." });
     expect(c.actions).toEqual([
-      { kind: "link", label: "Add cash", href: "/receive" },
-      { kind: "link", label: "Repay", href: "/repay" },
+      { kind: "sheet", label: "Add cash", sheet: "top-up" },
+      { kind: "sheet", label: "Repay", sheet: "repay" },
     ]);
     expect(agentCards({ ...calm, headsUp: { status: "act", addUsd: 5, sellUsd: 9, when: "when prices reopen" } })[0].text).toBe(
       "Your credit hit Act. Add $5, or Protect sells $9 when prices reopen.",

@@ -2,7 +2,7 @@
 
 import { useSearchParams } from "next/navigation";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
-import { SubHeader } from "@/components/gg/Screen";
+import { TabHeader } from "@/components/gg/Screen";
 import { UnlockSheet } from "@/components/gg/UnlockSheet";
 import { StockAvatar } from "@/components/gg/StockAvatar";
 import { ChevronRight, BacksIcon } from "@/components/gg/icons";
@@ -25,10 +25,9 @@ function Unlock({ address }: { address: `0x${string}` }) {
 
   return (
     <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[calc(env(safe-area-inset-top)+8px)]">
-      <SubHeader label="Credit" back="/portfolio" />
       <div className="flex flex-col gap-1">
-        <h1 className="m-0 text-[30px] font-semibold tracking-[-0.03em]">Free up shares</h1>
-        <p className="m-0 text-sm text-ink-mid">Take shares out of backing. Aave keeps enough to cover what you owe.</p>
+        <TabHeader title="Free up shares" back="/home" />
+        <p className="m-0 text-sm text-ink-mid">Take shares out of backing. Enough stays in to cover what you owe.</p>
       </div>
       {!data ? (
         <div aria-busy className="h-[300px] animate-pulse rounded-[22px] bg-chip" />

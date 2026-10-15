@@ -141,7 +141,8 @@ export const EXPIRING_SEC = 7 * 86_400;
 export const FAILS_CARD = 3;
 const MAX_FAILS = 8;
 
-export type CardAction = { kind: "link"; label: string; href: string } | { kind: "renew"; agent: Agent; jobs: AgentJob[] };
+/** A card's button: the Top up or Repay sheet over the tab, or Renew (JAW's own sheet). */
+export type CardAction = { kind: "sheet"; label: string; sheet: "top-up" | "repay" } | { kind: "renew"; agent: Agent; jobs: AgentJob[] };
 
 export type AgentCard = {
   key: string;
@@ -183,8 +184,8 @@ export function agentCards(i: CardsInput): AgentCard[] {
       agent: "Protect",
       text: `Your credit hit ${h.status === "act" ? "Act" : "Watch"}. Add ${formatUsdTrim(h.addUsd)}, or Protect sells ${formatUsdTrim(h.sellUsd)} ${h.when}.`,
       actions: [
-        { kind: "link", label: "Add cash", href: "/receive" },
-        { kind: "link", label: "Repay", href: "/repay" },
+        { kind: "sheet", label: "Add cash", sheet: "top-up" },
+        { kind: "sheet", label: "Repay", sheet: "repay" },
       ],
     });
   }
