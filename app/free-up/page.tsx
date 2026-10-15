@@ -27,7 +27,7 @@ function Unlock({ address }: { address: `0x${string}` }) {
     <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[calc(env(safe-area-inset-top)+8px)]">
       <div className="flex flex-col gap-1">
         <TabHeader title="Free up shares" back="/home" />
-        <p className="m-0 text-sm text-ink-mid">Take shares out of backing. Aave keeps enough to cover what you owe.</p>
+        <p className="m-0 text-sm text-ink-mid">Take shares out of backing. Enough stays in to cover what you owe.</p>
       </div>
       {!data ? (
         <div aria-busy className="h-[300px] animate-pulse rounded-[22px] bg-chip" />
