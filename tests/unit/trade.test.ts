@@ -7,13 +7,15 @@ vi.mock("@/lib/allowlist", async (importOriginal) => {
   return { ...actual, assertAllowed: vi.fn(actual.assertAllowed) };
 });
 
+import { TxStop } from "@/hooks/useTx";
+import { swapBatch, type SwapReads } from "@/hooks/useTrade";
 import { AAVE } from "@/lib/aave/addresses";
 import { assertAllowed, swapOf } from "@/lib/allowlist";
 import { feeBufferRaw, payFromCash, type Cash } from "@/lib/cash";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { aaveV3PoolAbi } from "@/lib/guardian/abis";
 import { aeroRouterAbi } from "@/lib/swap/abis";
-import { minOut, type BuyQuote } from "@/lib/swap/buy";
+import { QUOTE_MOVED, minOut, type BuyQuote } from "@/lib/swap/buy";
 import { sellMinOut, type SellQuote } from "@/lib/swap/sell";
 import { AERODROME, UNISWAP } from "@/lib/swap/venues";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
@@ -34,8 +36,11 @@ import {
   swapSmallPrint,
   toOptions,
   tradeActivity,
+  tradeForm,
   type QuoteState,
+  type TradeAction,
   type TradeData,
+  type TradeForm,
   type TradeHolding,
 } from "@/lib/trade";
 
@@ -266,6 +271,15 @@ describe("the pickers", () => {
     expect(rows.find((r) => r.asset === "AAPLc")).toBeUndefined(); // not held, not listed
   });
 
+  it("From: the Cash row says what MAX takes, the cash less the network fee's $0.50, as the stock rows do", () => {
+    expect(backer.cashUsd).toBe(1_939.18);
+    expect(fromOptions(backer)[0]).toMatchObject({ asset: "cash", right: "$1,938.68", rightSub: "to trade" });
+    expect(fromOptions(backer)[0].right).toBe(`$${maxUsdOf("cash", backer).toLocaleString("en-US", { minimumFractionDigits: 2 })}`);
+    // Under $1.50 it can't be picked: no "to trade", and MAX would take nothing.
+    const poor = fromOptions({ ...newcomer, cash: { walletRaw: usd(0.4), savingsRaw: 0n, saveOn: false }, cashUsd: 0.4 });
+    expect(poor[0]).toMatchObject({ right: "$0.00", rightSub: undefined, disabled: true });
+  });
+
   it("From: a newcomer's free stocks show their shares; cash without $1.50 can't be picked", () => {
     const rows = fromOptions(newcomer);
     expect(rows.map((r) => r.asset)).toEqual(["cash", "NVDAc", "AAPLc", "METAc", "AMZNc", "MSFTc", "GOOGLc", "TSLAc"]);
@@ -319,6 +333,20 @@ describe("the amount", () => {
     expect(a.sharesRaw).toBe(backer.holdings.find((h) => h.symbol === "AMZNc")!.freeRaw);
   });
 
+  it("a stock's amount at exactly its free value sells every free share; cash's never does", () => {
+    expect(clampAmount("AMZNc", backer, "1.8")).toEqual({ amount: "1.8", all: true });
+    expect(clampAmount("AMZNc", backer, "1.80")).toEqual({ amount: "1.80", all: true });
+    expect(clampAmount("AMZNc", backer, "1.79")).toEqual({ amount: "1.79", all: false });
+    expect(clampAmount("cash", backer, "1938.68")).toEqual({ amount: "1938.68", all: false });
+  });
+
+  it("all of it only while the dollars still say all of it: shares that arrive after MAX aren't sold unseen", () => {
+    const more = { ...backer, holdings: backer.holdings.map((h) => (h.symbol === "AMZNc" ? holding("AMZNc", 50, 1_721.43) : h)) };
+    const v = planTrade({ from: "AMZNc", to: "cash", amount: "1.8", all: true, data: more, now: OPEN });
+    expect(v.sharesRaw).toBe(sharesForUsdRaw(usd(1.8), parseUnits("225", 8), 8));
+    expect(v.sharesRaw).toBeLessThan(more.holdings.find((h) => h.symbol === "AMZNc")!.freeRaw);
+  });
+
   it("nothing to take leaves the amount as typed (the status line says why)", () => {
     expect(maxUsdOf("NVDAc", backer)).toBe(0);
     expect(clampAmount("NVDAc", backer, "40")).toEqual({ amount: "40", all: false });
@@ -327,6 +355,78 @@ describe("the amount", () => {
   it("typed dollars on a stock are shares at Aave's price, rounded down", () => {
     const v = planTrade({ from: "NVDAc", to: "cash", amount: "50", all: false, data: newcomer, now: OPEN });
     expect(v.sharesRaw).toBe(25_000_000n);
+  });
+});
+
+describe("the sheet's legs and amount (tradeForm)", () => {
+  /** Shaped like the live backer: Amazon's free value has dust under a cent ($1.7998), so MAX's dollars read $1.79. */
+  const dusty = { ...backer, holdings: backer.holdings.map((h) => (h.symbol === "AMZNc" ? holding("AMZNc", 1.7998, 1_721.43) : h)) };
+  const amzn = dusty.holdings.find((h) => h.symbol === "AMZNc")!;
+  const run = (state: TradeForm, ...actions: TradeAction[]) => actions.reduce((f, a) => tradeForm(f, a, dusty), state);
+  const start = (from: string, to: string, amount = ""): TradeForm => ({ legs: { from, to }, amount, all: false });
+  const sharesOf = (f: TradeForm) => planTrade({ from: f.legs!.from, to: f.legs!.to, amount: f.amount, all: f.all, data: dusty, now: OPEN }).sharesRaw;
+
+  it("MAX on a stock takes its free value to the cent and sells every free share", () => {
+    expect(maxUsdOf("AMZNc", dusty)).toBe(1.79);
+    const f = run(start("AMZNc", "cash"), { type: "max" });
+    expect(f).toEqual({ legs: { from: "AMZNc", to: "cash" }, amount: "1.79", all: true });
+    expect(sharesOf(f)).toBe(amzn.freeRaw);
+  });
+
+  it("MAX keeps selling every free share when To changes, and back (the review's AMZN → NVIDIA → Cash)", () => {
+    const f = run(start("AMZNc", "cash"), { type: "max" }, { type: "pick", which: "to", asset: "NVDAc" }, { type: "pick", which: "to", asset: "cash" });
+    expect(f).toEqual({ legs: { from: "AMZNc", to: "cash" }, amount: "1.79", all: true });
+    expect(sharesOf(f)).toBe(amzn.freeRaw);
+    const swap = run(start("AMZNc", "cash"), { type: "max" }, { type: "pick", which: "to", asset: "AAPLc" });
+    expect(swap.all).toBe(true);
+    expect(sharesOf(swap)).toBe(amzn.freeRaw);
+  });
+
+  it("a flip away and back still sells every free share: the dollars are exactly the free value", () => {
+    const away = run(start("AMZNc", "NVDAc"), { type: "max" }, { type: "flip" });
+    expect(away).toEqual({ legs: { from: "NVDAc", to: "AMZNc" }, amount: "1.79", all: false }); // NVIDIA has nothing free
+    const back = run(away, { type: "flip" });
+    expect(back).toEqual({ legs: { from: "AMZNc", to: "NVDAc" }, amount: "1.79", all: true });
+    expect(sharesOf(back)).toBe(amzn.freeRaw);
+  });
+
+  it("a flip keeps the dollars, clamped to what the new From takes", () => {
+    const f = run(start("cash", "AMZNc", "500"), { type: "flip" });
+    expect(f).toEqual({ legs: { from: "AMZNc", to: "cash" }, amount: "1.79", all: true });
+    expect(run(f, { type: "flip" })).toEqual({ legs: { from: "cash", to: "AMZNc" }, amount: "1.79", all: false });
+  });
+
+  it("typing under the most drops all of it; typing over snaps to it", () => {
+    const f = run(start("AMZNc", "cash"), { type: "max" }, { type: "amount", value: "1.7" });
+    expect(f).toEqual({ legs: { from: "AMZNc", to: "cash" }, amount: "1.7", all: false });
+    expect(sharesOf(f)).toBe(sharesForUsdRaw(usd(1.7), amzn.priceRaw, 8));
+    expect(run(f, { type: "amount", value: "9" })).toMatchObject({ amount: "1.79", all: true });
+    expect(run(start("cash", "NVDAc"), { type: "amount", value: "5000" })).toEqual({ legs: { from: "cash", to: "NVDAc" }, amount: "1938.68", all: false });
+  });
+
+  it("a new From drops MAX's all of it unless it's the same stock; a pick that makes no trade changes nothing", () => {
+    const f = run(start("AMZNc", "cash"), { type: "max" });
+    expect(run(f, { type: "pick", which: "to", asset: "XYZc" })).toEqual(f);
+    expect(run(f, { type: "pick", which: "from", asset: "USDC" })).toEqual(f);
+    const g = run(start("AMZNc", "NVDAc"), { type: "max" }, { type: "pick", which: "from", asset: "cash" });
+    expect(g).toEqual({ legs: { from: "cash", to: "NVDAc" }, amount: "1.79", all: false });
+    expect(run(start("AMZNc", "cash"), { type: "max" }, { type: "pick", which: "from", asset: "AMZNc" }).all).toBe(true);
+  });
+
+  it("picking the other leg's asset flips the legs (so Cash never trades into Cash)", () => {
+    expect(run(start("cash", "NVDAc", "20"), { type: "pick", which: "from", asset: "NVDAc" }).legs).toEqual({ from: "NVDAc", to: "cash" });
+    expect(run(start("AMZNc", "cash"), { type: "pick", which: "from", asset: "cash" }).legs).toEqual({ from: "cash", to: "AMZNc" });
+    expect(run(start("AMZNc", "NVDAc"), { type: "pick", which: "to", asset: "AMZNc" }).legs).toEqual({ from: "NVDAc", to: "AMZNc" });
+  });
+
+  it("MAX on cash takes the cash less the fee buffer and never sells all of anything", () => {
+    expect(run(start("cash", "NVDAc"), { type: "max" })).toEqual({ legs: { from: "cash", to: "NVDAc" }, amount: "1938.68", all: false });
+  });
+
+  it("with nothing to trade only the amount moves", () => {
+    const none: TradeForm = { legs: null, amount: "", all: false };
+    expect(run(none, { type: "max" }, { type: "flip" }, { type: "pick", which: "to", asset: "NVDAc" })).toEqual(none);
+    expect(run(none, { type: "amount", value: "5" })).toEqual({ legs: null, amount: "5", all: false });
   });
 });
 
@@ -513,6 +613,93 @@ describe("planTrade: stock → stock", () => {
     expect(v.sharesRaw).toBe(backer.holdings.find((h) => h.symbol === "AMZNc")!.freeRaw);
     expect(v.hint).toEqual(["Free to trade: $1.80", "$1,721.43 of it backs your credit."]);
     expect(v.route).toBe("swap");
+  });
+});
+
+describe("useTrade: the stock → stock batch at signing (swapBatch)", () => {
+  const shares = sharesForUsdRaw(usd(3), parseUnits("200", 8), 8);
+  const sq = sellQuoteFor("NVDAc", shares);
+  const pre = planTrade({ from: "NVDAc", to: "AAPLc", amount: "3", all: false, data: newcomer, sell: ready(sq), now: OPEN });
+  const bq = buyQuoteFor("AAPLc", pre.buyInRaw);
+  const sign = (over: Partial<Parameters<typeof swapBatch>[0]> = {}): Parameters<typeof swapBatch>[0] => ({
+    route: "swap",
+    user,
+    from: nvda,
+    to: aapl,
+    sellQuote: sq,
+    plan: pre.sellPlan!,
+    buyQuote: bq,
+    oraclePriceUsd: PRICE.NVDAc,
+    feeFromSale: false,
+    ...over,
+  });
+  /** The signing reads: the quotes as shown unless `fresh` says otherwise, and the cash as given. */
+  const reads = (cash: Cash, fresh: { sell?: SellQuote; buy?: BuyQuote } = {}) => {
+    const r = {
+      quoteToSign: vi.fn(async (_stock: unknown, shown: BuyQuote, side?: "buy" | "sell") => (side === "sell" ? (fresh.sell ?? shown) : (fresh.buy ?? shown))),
+      cashToSign: vi.fn(async () => cash),
+    };
+    return r as typeof r & SwapReads;
+  };
+  const rich: Cash = { walletRaw: usd(40), savingsRaw: 0n, saveOn: false };
+
+  it("a sale the screen blocked stops before any read, with the screen's words", async () => {
+    const r = reads(rich);
+    const blocked = swapBatch(sign({ plan: { ...pre.sellPlan!, block: "too-small" } }), r);
+    await expect(blocked).rejects.toBeInstanceOf(TxStop);
+    await expect(blocked).rejects.toThrow("The smallest trade is $1.10.");
+    await expect(swapBatch(sign({ plan: { ...pre.sellPlan!, block: "price" } }), r)).rejects.toThrow(/Too big for the market right now/);
+    expect(r.quoteToSign).not.toHaveBeenCalled();
+    expect(r.cashToSign).not.toHaveBeenCalled();
+  });
+
+  it("reads both quotes again, the sale's as a sale and the buy's as a buy", async () => {
+    const r = reads(rich);
+    await swapBatch(sign(), r);
+    expect(r.quoteToSign).toHaveBeenCalledWith(nvda, sq, "sell");
+    expect(r.quoteToSign).toHaveBeenCalledWith(aapl, bq, "buy");
+  });
+
+  it("stops with QUOTE_MOVED when the fresh sale's floor no longer covers the buy", async () => {
+    const lower = { ...sq, amountOut: sq.amountOut - 50_000n }; // the pool now pays 5 cents less
+    expect(sellMinOut(lower, nvda, PRICE.NVDAc)).toBeLessThan(bq.amountIn);
+    const r = reads(rich, { sell: lower });
+    const moved = swapBatch(sign(), r);
+    await expect(moved).rejects.toBeInstanceOf(TxStop);
+    await expect(moved).rejects.toThrow(QUOTE_MOVED);
+    expect(r.cashToSign).not.toHaveBeenCalled();
+  });
+
+  it("a read that stops (the price fell under the screen's floor) stops the batch with its words", async () => {
+    const r = reads(rich);
+    r.quoteToSign.mockRejectedValueOnce(new TxStop(QUOTE_MOVED));
+    await expect(swapBatch(sign(), r)).rejects.toThrow(QUOTE_MOVED);
+  });
+
+  it("when the sale pays the fee, the batch is the sale and the buy alone, and the cash isn't read", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_800_000_000_000);
+    const r = reads({ walletRaw: usd(0.2), savingsRaw: 0n, saveOn: false });
+    const calls = await swapBatch(sign({ feeFromSale: true }), r);
+    now.mockRestore();
+    expect(calls).toEqual(buildTradeCalls({ user, from: nvda, to: aapl, sellQuote: sq, buyQuote: bq, oraclePriceUsd: PRICE.NVDAc, nowSec: 1_800_000_000 }));
+    expect(calls).toHaveLength(4);
+    expect(r.cashToSign).not.toHaveBeenCalled();
+  });
+
+  it("when the cash pays the fee, it's read again with nothing to spend but the fee; savings come out first if the wallet is short", async () => {
+    const r = reads(rich);
+    expect(await swapBatch(sign(), r)).toHaveLength(4);
+    expect(r.cashToSign).toHaveBeenCalledWith(user, 0n);
+    const short = await swapBatch(sign(), reads({ walletRaw: usd(0.2), savingsRaw: usd(50), saveOn: false }));
+    expect(short).toHaveLength(5);
+    expect(short[0].to).toBe(GUARDIAN.AAVE_V3_POOL);
+    expect(decodeFunctionData({ abi: aaveV3PoolAbi, data: short[0].data }).args).toEqual([USDC.address, usd(0.3), user]);
+  });
+
+  it("the cash read's stop (the cash moved since the screen) stops the batch", async () => {
+    const r = reads(rich);
+    r.cashToSign.mockRejectedValueOnce(new TxStop("cash short"));
+    await expect(swapBatch(sign(), r)).rejects.toThrow("cash short");
   });
 });
 

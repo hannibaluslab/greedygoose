@@ -5,6 +5,7 @@ import { swapOf } from "@/lib/allowlist";
 import { GUARDIAN, SEL } from "@/lib/guardian/config";
 import { BUY_LIMITS } from "@/lib/swap/buy";
 import { AERODROME_V1, ROUTERS, SPARK_PSM3 } from "@/lib/swap/venues";
+import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 
 const PLAIN: Record<string, string> = {
@@ -39,6 +40,22 @@ const ROUTER_PLAIN: Record<string, string> = {
 
 const isSwap = (call: { to: `0x${string}` }) => ROUTERS.some((r) => isAddressEqual(r, call.to));
 
+/** STF on a sale: the router couldn't take the stock (what's held moved, or the stock is paused or held by its policy). */
+export const stockStf = (name: string) =>
+  `${name} couldn’t be sold. What you hold may have changed since you started, or ${name} may be paused for now. Try again in a moment.`;
+
+/**
+ * STF is the router failing to take what it sells from the user, so its words follow that token: the cash on a buy, the
+ * stock's shares on a sale (a B20 pause or transfer policy reverts this way too). Anything else keeps the fallback.
+ */
+function stfText(call: { to: `0x${string}`; data: Hex }): string | null {
+  const tokenIn = swapOf(call)?.params.tokenIn;
+  if (!tokenIn) return null;
+  if (isAddressEqual(tokenIn, USDC.address)) return ROUTER_PLAIN.STF;
+  const stock = EQUITIES.find((e) => isAddressEqual(e.address, tokenIn));
+  return stock ? stockStf(stock.name) : null;
+}
+
 /**
  * Other dollars into cash (lib/swap/entry.ts): its floor is face value less 0.5%, not a quote less a buy's slippage, so
  * a revert there keeps the conversion's own words (the caller's fallback).
@@ -56,7 +73,9 @@ export function explainRevert(data: Hex | undefined, fallback: string, call?: { 
   if (call && isSwap(call)) {
     try {
       const { errorName, args } = decodeErrorResult({ abi: [], data });
-      return (errorName === "Error" && ROUTER_PLAIN[args[0] as string]) || fallback;
+      if (errorName !== "Error") return fallback;
+      if (args[0] === "STF") return stfText(call) ?? fallback;
+      return ROUTER_PLAIN[args[0] as string] || fallback;
     } catch {
       return fallback;
     }

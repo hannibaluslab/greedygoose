@@ -15,6 +15,7 @@ import { decodeActivity } from "@/lib/activity/decode";
 import { feeBufferRaw, payFromCash, readCash, type Cash } from "@/lib/cash";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { aaveV3PoolAbi } from "@/lib/guardian/abis";
+import { explainRevert, stockStf } from "@/lib/aave/errors";
 import { minOut, quotePool, quoteSwap, signingQuote, type BuyQuote, type Side } from "@/lib/swap/buy";
 import { sellMinOut } from "@/lib/swap/sell";
 import { buildTradeCalls, sharesForUsdRaw, swapBuyInRaw } from "@/lib/trade";
@@ -155,6 +156,22 @@ describe("trading one stock for another on Base (the Trade sheet)", () => {
     const r = await simulate(newcomer, nvda, aapl, batch, before);
     expect(r.statuses.every((s) => s === "success")).toBe(true);
     expect(r.usdcAfter).toBeGreaterThanOrEqual(feeBufferRaw);
+  });
+
+  it("shares that moved after the screen: the sale reverts STF in the router, and the words name the stock, not the cash", async () => {
+    const sharesRaw = sharesForUsdRaw(parseUnits("3", 6), await priceRawOf(nvda), nvda.decimals);
+    const t = await trade(newcomer, nvda, aapl, sharesRaw, plenty);
+    // In the same simulated block, every NVDA share leaves the account first (another app moved them).
+    const held = await client.readContract({ address: nvda.address, abi: erc20Abi, functionName: "balanceOf", args: [newcomer] });
+    const before: Call[] = [{ to: nvda.address, data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [backer, held] }), value: 0n }];
+    const r = await client.simulateCalls({ account: newcomer, calls: [...plain(before), ...plain(t.calls)] });
+    const batch = r.results.slice(before.length);
+    expect(r.results[0].status).toBe("success");
+    const bad = batch.findIndex((x) => x.status !== "success");
+    expect(bad).toBe(1); // the approve goes through; the sale's swap can't take the shares
+    const msg = explainRevert(batch[bad].data, "fallback", t.calls[bad]);
+    console.log("sale STF →", msg);
+    expect(msg).toBe(stockStf("NVIDIA"));
   });
 
   it("a buy one unit over the sale's floor can't be built", async () => {

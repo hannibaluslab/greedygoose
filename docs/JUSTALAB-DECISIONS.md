@@ -187,13 +187,21 @@ JAW's own sheet shows the Review and asks for Face ID, so the app shows no confi
 "Trade sheet should be the same as nym where you can swap between any assets you have", and Invest gets "trade cta in between market and credit buy".
 
 - **Home's Trade and Invest's Trade open one sheet,** NYM's MoveSheet in the kit (`TradeSheet`): From (Cash, or a stock's free shares) over To (Cash or any of the seven stocks), a flip button between them, dollars with MAX, what you get and the price, "Network fee · Paid from your cash", one button. Each card's pill opens NYM's in-sheet list ("Trade from", "Trade to"); a tap away or Escape closes the list, not the sheet. The Market sheet stays where it was (Invest's Market, `/buy`, "add a stock").
-- **Invest's row is three even pills:** Market · Trade · Credit Buy, the board's 52px pills 8px apart. Labels step to 14px under a 390px screen and the icons drop under 375px. Trade keeps ↑↓ (Home's icon and the flip button's); Market gets a storefront.
+- **Invest's row is three even pills:** Market · Trade · Credit Buy, Trade in the middle as Adrian asked, the board's 52px pills 8px apart.
 - **Three routes, one batch each (`useTrade`):** cash → stock is the Buy step's batch, stock → cash the free-shares sale, and stock → stock sells and then buys in the same batch (`buildTradeCalls`). The buy spends exactly the sale's floor (the quote less 1%, never under Aave's price less 10%), which the router guarantees reaches the user first, so the trade never spends cash the user already had. When the cash is under the $0.50 fee buffer, the buy is the floor less $0.50 and the sale pays the fee. Otherwise the cash pays it (`payFromCash`, a savings withdrawal first when the wallet can't be counted on). What the sale brings above the buy stays as cash ("To your cash · about $X"). Both quotes are read again right before JAW's sheet, and the whole batch is simulated. Simulated on Base in `tests/onchain/trade.test.ts`.
 - **Only free shares trade here.** The From card says how much is free and "$X of it backs your credit."; a stock whose shares all back credit, or with under $1 free, is listed and can't be picked. Nothing in the batch touches the spoke, so credit, backing and health can't move.
-- **No credit in Trade.** Typing more than the From card takes snaps to the most it takes (NYM's clamp). Credit Buy stays its own button.
-- **Buttons:** "Buy Apple", "Sell NVIDIA", "Trade". A buy or a trade lands on Home with its toast ("Bought 0.4554 NVDA", "Traded NVDA for 0.0086 AAPL"); a sale says "Sold … · What the sale paid is in your cash." in the sheet.
+- **Buttons:** "Buy Apple", "Sell NVIDIA", "Trade". A sale says "Sold … · What the sale paid is in your cash." in the sheet.
 - **Words:** the main screen names no protocol: "the stock’s price" stands for Aave's price there, and the small print names the venues and Aave's price (D7).
-- **Open:** Market's icon (the board draws ↑↓, which is Trade's); about 1% of a stock → stock trade comes back as cash (tighter would cancel more trades in thin pools); a buy or trade from Invest goes Home, as the Buy flow does; Activity shows a trade as two rows (Bought, Sold) from one transaction.
+- **From the review:** MAX keeps selling every free share when To changes or the legs flip back, and an amount at exactly a stock's free value sells all of it, so no dust under a cent is left that could never trade (`tradeForm`, `clampAmount`); more shares arriving after MAX aren't sold unseen. The flip button's tap area is 44px. Close closes the sheet with a list open (only the dim's tap is swallowed). A sale whose stock can't move (STF from the router: what's held changed, or the stock is paused or held by its policy) says so by name instead of "Your cash moved". The From list's Cash row shows what MAX takes, the cash less the network fee's $0.50.
+
+**Builder defaults, pending Adrian.** These were chosen in the build, not by Adrian. Each stays open until he settles it; don't cite one as settled.
+
+- **Market's icon on Invest is a storefront.** The board draws Market with ↑↓, which is Trade's (Home's quick action and the flip button), so this departs from the board on one glyph and needs his call before merge.
+- **The row's labels step to 14px under a 390px screen, and the icons drop under 360px.** Measured with Geist: at 360px Credit Buy with its icon is 94.8px in a 101.3px cell; at 340px it no longer fits.
+- **About 1% of a stock → stock trade comes back as cash.** The buy spends the sale's floor (the quote less 1%); a tighter floor would cancel more trades in thin pools.
+- **A buy or a trade lands on Home with its toast,** even when it started on Invest, as the Buy flow does ("Bought 0.4554 NVDA", "Traded NVDA for 0.0086 AAPL").
+- **No credit in Trade.** Typing more than the From card takes snaps to the most it takes (NYM's clamp); Credit Buy stays its own button.
+- **Activity shows a stock → stock trade as two rows** (Bought, Sold) from one transaction.
 
 ## Cash sheet (Adrian, 2026-10-15)
 

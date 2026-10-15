@@ -23,25 +23,25 @@ import { VENUE_LABEL } from "@/lib/swap/venues";
 import { rawToShares } from "@/lib/tokens/b20";
 import {
   TRADE_COPY,
-  clampAmount,
   defaultLegs,
   emptyLine,
   fromOptions,
   planTrade,
-  routeOf,
   swapSmallPrint,
   toOptions,
   tradeAmount,
+  tradeForm,
   type AssetOption,
+  type TradeAction,
   type TradeAsset,
+  type TradeForm,
   type TradeRoute,
 } from "@/lib/trade";
 
-type Legs = { from: TradeAsset; to: TradeAsset };
 /** What went to JAW's sheet, for what the sheet says once it lands. */
 type Signed = { route: TradeRoute; from: TradeAsset; to: TradeAsset; sharesRaw: bigint };
 
-/** A tap that just closed a picker's list doesn't also close the sheet (the dim and Close both report it). */
+/** A tap on the dim that just closed a picker's list doesn't also close the sheet (the dim reports it after the list). */
 const MENU_TAP_MS = 500;
 
 const pickerRows = (options: AssetOption[]): PickerRow[] =>
@@ -68,11 +68,10 @@ export function TradeSheet({
   const { isConnected } = useAccount();
   const fee = useFeeSupport();
   const { trade, phase, error, reset, busy, txHash } = useTrade();
-  const [picked, setPicked] = useState<Legs | null>(() => defaultLegs(data, { from: seedFrom, to: seedTo }));
+  const [form, setForm] = useState<TradeForm>(() => ({ legs: defaultLegs(data, { from: seedFrom, to: seedTo }), amount: "", all: false }));
   // Opened with nothing to trade: the legs appear once there is something (money arrives while it's open).
-  const legs = picked ?? defaultLegs(data, { from: seedFrom, to: seedTo });
-  const [amount, setAmount] = useState("");
-  const [all, setAll] = useState(false);
+  const legs = form.legs ?? defaultLegs(data, { from: seedFrom, to: seedTo });
+  const { amount, all } = form;
   const [menu, setMenu] = useState<"from" | "to" | null>(null);
   const menuClosedAt = useRef(0);
   const [signed, setSigned] = useState<Signed | null>(null);
@@ -103,41 +102,27 @@ export function TradeSheet({
   const fresh = () => {
     if (phase === "failed") reset();
   };
-  /** New legs keep the dollars, clamped to what the new From takes. */
-  const setLegs = (next: Legs) => {
+  /** The legs and the amount move only through `tradeForm` (lib/trade.ts): flip, pick, typed dollars, MAX. */
+  const dispatch = (action: TradeAction) => {
     fresh();
-    setPicked(next);
-    const c = clampAmount(next.from, data, amount);
-    setAmount(c.amount);
-    setAll(c.all);
+    setForm((f) => tradeForm({ ...f, legs: f.legs ?? legs }, action, data));
   };
-  const flip = () => setLegs({ from: to, to: from });
+  const flip = () => dispatch({ type: "flip" });
   const pick = (which: "from" | "to", asset: TradeAsset) => {
     setMenu(null);
-    const other = which === "from" ? to : from;
-    if (asset === other) return flip();
-    const next = which === "from" ? { from: asset, to } : { from, to: asset };
-    // Cash to cash is no trade: a stock picked From with Cash To stays; Cash picked From needs a stock To.
-    if (!routeOf(next.from, next.to)) return;
-    setLegs(next);
+    dispatch({ type: "pick", which, asset });
   };
-  const onValue = (v: string) => {
-    fresh();
-    const c = clampAmount(from, data, v);
-    setAmount(c.amount);
-    setAll(c.all);
-  };
-  const onMax = () => {
-    fresh();
-    setAmount(String(view.maxUsd));
-    setAll(from !== "cash");
-  };
-  const closeMenu = () => {
-    menuClosedAt.current = Date.now();
+  const onValue = (value: string) => dispatch({ type: "amount", value });
+  const onMax = () => dispatch({ type: "max" });
+  /** A tap away closed the list. Only a tap on the dim (outside the sheet) is swallowed; Close, in the sheet, still closes it. */
+  const closeMenu = (e?: Event) => {
+    const inSheet = e?.target instanceof Element && !!e.target.closest('[role="dialog"]');
+    if (!inSheet) menuClosedAt.current = Date.now();
     setMenu(null);
   };
   const toggle = (which: "from" | "to") => setMenu((m) => (m === which ? null : which));
-  // Escape, the dim and Close come here: an open list closes first, and the tap that closed it closes nothing else.
+  // Escape, the dim and Close come here. Escape with a list open closes the list; the dim's tap that just closed one
+  // closes nothing else; Close closes the sheet (its press already closed the list).
   const onOpenChange = (next: boolean) => {
     if (next) return;
     if (menu) return setMenu(null);

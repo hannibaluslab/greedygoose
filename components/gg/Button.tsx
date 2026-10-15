@@ -21,9 +21,10 @@ const SIZE = {
   lg: "h-14 gap-2.5 rounded-[28px] px-6 text-base",
   /**
    * md, three to a row (Invest's Market · Trade · Credit Buy): no side padding, so the label has the whole cell. It steps
-   * to 14px under a 390px screen, and drops its icon under 375px, so it never wraps or overflows.
+   * to 14px under a 390px screen, and drops its icon under 360px, so it never wraps or overflows. Measured with Geist at
+   * 360px: Credit Buy with its icon is 94.8px in a 101.3px cell; at 340px it no longer fits.
    */
-  row: "h-[52px] min-w-0 gap-1.5 whitespace-nowrap rounded-[26px] px-0 text-[15px] max-[389px]:text-[14px] max-[374px]:[&>svg]:hidden",
+  row: "h-[52px] min-w-0 gap-1.5 whitespace-nowrap rounded-[26px] px-0 text-[15px] max-[390px]:text-[14px] max-[360px]:[&>svg]:hidden",
 } as const;
 
 export type ButtonVariant = keyof typeof VARIANT;
