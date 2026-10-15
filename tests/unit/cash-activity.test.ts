@@ -6,7 +6,7 @@ import { arrivalTxs, arrivalsOf, rateLimited } from "@/lib/activity/arrivals";
 import type { ActivityItem } from "@/lib/activity/decode";
 import type { AgentEvent } from "@/lib/agents/events";
 import { describeAgentEvent, type MoveContext } from "@/lib/agents/feed";
-import type { Cash } from "@/lib/cash";
+import { feeBufferRaw, type Cash } from "@/lib/cash";
 import {
   CASH_ROWS,
   arrivalCashRow,
@@ -53,7 +53,9 @@ describe("the credit beside the cash (no split of the cash)", () => {
   });
 
   it("asks for money first when the cash can't repay (the fee buffer stays for the network fee)", () => {
-    expect(owedBeside(300, { walletRaw: usdc(0.4), savingsRaw: 0n, saveOn: false })?.line).toBe("Add money to your cash to repay.");
+    // Exactly the buffer: none of it can repay.
+    expect(owedBeside(300, { walletRaw: feeBufferRaw, savingsRaw: 0n, saveOn: false })?.line).toBe("Add money to your cash to repay.");
+    expect(owedBeside(300, { walletRaw: feeBufferRaw + 1n, savingsRaw: 0n, saveOn: false })?.line).toBe("Repay from your cash any time.");
   });
 
   it("counts credit as cash only when it came to the cash; a Credit Buy stays, its line saying what the credit paid", () => {

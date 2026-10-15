@@ -126,6 +126,11 @@ export const ENTRY = {
 export const CASH = {
   /** Wallet USDC that Save never sweeps into savings, so a batch can count on it (the executor's `keepBack`). */
   keepBackUsd: 1,
-  /** Left in the wallet after a spend for the network fee, which JAW charges in USDC after the batch. */
-  feeBufferUsd: 0.5,
+  /**
+   * Left in the wallet after a spend for the network fee, which JAW charges in USDC after the batch. $0.10 (Adrian,
+   * 2026-10-15): ten times the largest fee measured on Base mainnet ($0.0095, $0.007 and under a cent). It was $0.50,
+   * which left an account with $1.36 of cash and $4 owed unable to repay at all. Every figure and line that names the
+   * buffer reads it from here.
+   */
+  feeBufferUsd: 0.1,
 } as const;

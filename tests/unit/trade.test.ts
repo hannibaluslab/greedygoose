@@ -19,6 +19,8 @@ import { QUOTE_MOVED, minOut, type BuyQuote } from "@/lib/swap/buy";
 import { sellMinOut, type SellQuote } from "@/lib/swap/sell";
 import { AERODROME, UNISWAP } from "@/lib/swap/venues";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
+import { CASH } from "@/config/risk";
+import { formatUsd } from "@/lib/formatting";
 import {
   TRADE_COPY,
   buildTradeCalls,
@@ -47,6 +49,9 @@ import {
 type Address = `0x${string}`;
 const user: Address = "0x000000000000000000000000000000000000dEaD";
 const usd = (n: number) => parseUnits(n.toFixed(6), 6);
+/** The network-fee buffer in dollars; wallet USDC under it (`short`), the rest of the buffer then comes from savings. */
+const B = CASH.feeBufferUsd;
+const shortRaw = (feeBufferRaw * 2n) / 5n;
 const stock = (symbol: string) => EQUITIES.find((e) => e.symbol === symbol)!;
 const nvda = stock("NVDAc");
 const aapl = stock("AAPLc");
@@ -110,6 +115,8 @@ const newcomer = account(
   { AAPLc: [30, 0], AMZNc: [12, 0], GOOGLc: [8, 0], METAc: [20, 0], MSFTc: [9, 0], NVDAc: [50, 0], TSLAc: [6, 0] },
 );
 const empty = account({ walletRaw: 0n, savingsRaw: 0n, saveOn: false }, {});
+/** What MAX takes from the backer's cash: all of it less the fee buffer, to the cent. */
+const BACKER_MAX = Math.floor((1_939.18 - B) * 100 + 1e-6) / 100;
 
 const ready = <Q,>(data: Q): QuoteState<Q> => ({ data, isFetching: false, isSuccess: true });
 const loading: QuoteState<never> = { data: undefined, isFetching: true, isSuccess: false };
@@ -162,21 +169,22 @@ describe("dollars to shares at Aave's price", () => {
 describe("what a stock → stock buy spends", () => {
   const floor = usd(2.968628);
   it("is exactly the sale's floor when the cash can pay the network fee", () => {
-    const cash = { walletRaw: usd(0.5), savingsRaw: 0n, saveOn: false };
+    const cash = { walletRaw: feeBufferRaw, savingsRaw: 0n, saveOn: false };
     expect(feeFromSale(cash)).toBe(false);
     expect(swapBuyInRaw(floor, cash)).toBe(floor);
     expect(swapBuyInRaw(floor, { walletRaw: 0n, savingsRaw: usd(10), saveOn: true })).toBe(floor);
   });
   it("leaves the fee buffer to the sale when the cash is under it, and is never negative", () => {
-    const cash = { walletRaw: usd(0.2), savingsRaw: usd(0.29), saveOn: false };
+    const cash = { walletRaw: feeBufferRaw / 2n, savingsRaw: feeBufferRaw / 2n - 1n, saveOn: false };
     expect(feeFromSale(cash)).toBe(true);
     expect(swapBuyInRaw(floor, cash)).toBe(floor - feeBufferRaw);
-    expect(swapBuyInRaw(usd(0.4), cash)).toBe(0n);
+    expect(swapBuyInRaw(feeBufferRaw - 1n, cash)).toBe(0n);
   });
   it("the smallest trade reaches a $1 buy from the sale's floor, rounded up to 10 cents, never under $1", () => {
     expect(swapMinUsd(1, false)).toBe(1.1); // 1 / 0.99 = 1.0101 → $1.10
     expect(swapMinUsd(0.998, false)).toBe(1.1);
-    expect(swapMinUsd(1, true)).toBe(1.6); // 1.5 / 0.99 = 1.515 → $1.60
+    // $1 and the fee buffer, over the floor's 0.99, up to 10 cents ($1.10 / 0.99 = 1.111 → $1.20 at a $0.10 buffer).
+    expect(swapMinUsd(1, true)).toBe(Math.ceil(((1 + B) / 0.99) * 10 - 1e-9) / 10);
     expect(swapMinUsd(0.9, false)).toBe(1.2);
   });
 });
@@ -244,14 +252,14 @@ describe("buildTradeCalls (stock → stock in one batch)", () => {
   });
 
   it("when the cash pays the fee and the wallet holds less than the buffer, a savings withdrawal to the user goes first", () => {
-    const cash: Cash = { walletRaw: usd(0.2), savingsRaw: usd(50), saveOn: false };
+    const cash: Cash = { walletRaw: shortRaw, savingsRaw: usd(50), saveOn: false };
     expect(feeFromSale(cash)).toBe(false);
     const batch = payFromCash(user, 0n, cash, build());
     expect(batch).toHaveLength(5);
     expect(batch[0].to).toBe(GUARDIAN.AAVE_V3_POOL);
-    expect(decodeFunctionData({ abi: aaveV3PoolAbi, data: batch[0].data }).args).toEqual([USDC.address, usd(0.3), user]);
-    // With $0.50 in the wallet there's nothing to withdraw.
-    expect(payFromCash(user, 0n, { ...cash, walletRaw: usd(0.5) }, build())).toHaveLength(4);
+    expect(decodeFunctionData({ abi: aaveV3PoolAbi, data: batch[0].data }).args).toEqual([USDC.address, feeBufferRaw - shortRaw, user]);
+    // With the whole buffer in the wallet there's nothing to withdraw.
+    expect(payFromCash(user, 0n, { ...cash, walletRaw: feeBufferRaw }, build())).toHaveLength(4);
   });
 });
 
@@ -271,20 +279,20 @@ describe("the pickers", () => {
     expect(rows.find((r) => r.asset === "AAPLc")).toBeUndefined(); // not held, not listed
   });
 
-  it("From: the Cash row says what MAX takes, the cash less the network fee's $0.50, as the stock rows do", () => {
+  it("From: the Cash row says what MAX takes, the cash less the network-fee buffer, as the stock rows do", () => {
     expect(backer.cashUsd).toBe(1_939.18);
-    expect(fromOptions(backer)[0]).toMatchObject({ asset: "cash", right: "$1,938.68", rightSub: "to trade" });
+    expect(fromOptions(backer)[0]).toMatchObject({ asset: "cash", right: formatUsd(BACKER_MAX), rightSub: "to trade" });
     expect(fromOptions(backer)[0].right).toBe(`$${maxUsdOf("cash", backer).toLocaleString("en-US", { minimumFractionDigits: 2 })}`);
-    // Under $1.50 it can't be picked: no "to trade", and MAX would take nothing.
-    const poor = fromOptions({ ...newcomer, cash: { walletRaw: usd(0.4), savingsRaw: 0n, saveOn: false }, cashUsd: 0.4 });
+    // Under the fee buffer it can't be picked: no "to trade", and MAX would take nothing.
+    const poor = fromOptions({ ...newcomer, cash: { walletRaw: shortRaw, savingsRaw: 0n, saveOn: false }, cashUsd: Number(shortRaw) / 1e6 });
     expect(poor[0]).toMatchObject({ right: "$0.00", rightSub: undefined, disabled: true });
   });
 
-  it("From: a newcomer's free stocks show their shares; cash without $1.50 can't be picked", () => {
+  it("From: a newcomer's free stocks show their shares; cash without $1 and the fee buffer can't be picked", () => {
     const rows = fromOptions(newcomer);
     expect(rows.map((r) => r.asset)).toEqual(["cash", "NVDAc", "AAPLc", "METAc", "AMZNc", "MSFTc", "GOOGLc", "TSLAc"]);
     expect(rows[1].sub).toBe("0.25 shares");
-    const poor = fromOptions({ ...newcomer, cash: { walletRaw: usd(1.49), savingsRaw: 0n, saveOn: false }, cashUsd: 1.49 });
+    const poor = fromOptions({ ...newcomer, cash: { walletRaw: usd(1 + B - 0.01), savingsRaw: 0n, saveOn: false }, cashUsd: 1 + B - 0.01 });
     expect(poor[0]).toMatchObject({ asset: "cash", disabled: true, sub: "Not enough to trade", why: "no-cash" });
   });
 
@@ -321,8 +329,8 @@ describe("the pickers", () => {
 
 describe("the amount", () => {
   it("cash takes up to the cash less the fee buffer, to the cent", () => {
-    expect(maxUsdOf("cash", backer)).toBe(1_938.68);
-    expect(clampAmount("cash", backer, "5000")).toEqual({ amount: "1938.68", all: false });
+    expect(maxUsdOf("cash", backer)).toBe(BACKER_MAX);
+    expect(clampAmount("cash", backer, "5000")).toEqual({ amount: BACKER_MAX.toFixed(2), all: false });
     expect(clampAmount("cash", backer, "100")).toEqual({ amount: "100", all: false });
   });
 
@@ -337,7 +345,7 @@ describe("the amount", () => {
     expect(clampAmount("AMZNc", backer, "1.8")).toEqual({ amount: "1.8", all: true });
     expect(clampAmount("AMZNc", backer, "1.80")).toEqual({ amount: "1.80", all: true });
     expect(clampAmount("AMZNc", backer, "1.79")).toEqual({ amount: "1.79", all: false });
-    expect(clampAmount("cash", backer, "1938.68")).toEqual({ amount: "1938.68", all: false });
+    expect(clampAmount("cash", backer, BACKER_MAX.toFixed(2))).toEqual({ amount: BACKER_MAX.toFixed(2), all: false });
   });
 
   it("all of it only while the dollars still say all of it: shares that arrive after MAX aren't sold unseen", () => {
@@ -401,7 +409,7 @@ describe("the sheet's legs and amount (tradeForm)", () => {
     expect(f).toEqual({ legs: { from: "AMZNc", to: "cash" }, amount: "1.7", all: false });
     expect(sharesOf(f)).toBe(sharesForUsdRaw(usd(1.7), amzn.priceRaw, 8));
     expect(run(f, { type: "amount", value: "9" })).toMatchObject({ amount: "1.79", all: true });
-    expect(run(start("cash", "NVDAc"), { type: "amount", value: "5000" })).toEqual({ legs: { from: "cash", to: "NVDAc" }, amount: "1938.68", all: false });
+    expect(run(start("cash", "NVDAc"), { type: "amount", value: "5000" })).toEqual({ legs: { from: "cash", to: "NVDAc" }, amount: BACKER_MAX.toFixed(2), all: false });
   });
 
   it("a new From drops MAX's all of it unless it's the same stock; a pick that makes no trade changes nothing", () => {
@@ -420,7 +428,7 @@ describe("the sheet's legs and amount (tradeForm)", () => {
   });
 
   it("MAX on cash takes the cash less the fee buffer and never sells all of anything", () => {
-    expect(run(start("cash", "NVDAc"), { type: "max" })).toEqual({ legs: { from: "cash", to: "NVDAc" }, amount: "1938.68", all: false });
+    expect(run(start("cash", "NVDAc"), { type: "max" })).toEqual({ legs: { from: "cash", to: "NVDAc" }, amount: BACKER_MAX.toFixed(2), all: false });
   });
 
   it("with nothing to trade only the amount moves", () => {
@@ -480,10 +488,10 @@ describe("planTrade: cash → stock", () => {
     expect(planTrade({ ...base, amount: "100", buy: noPool }).blocker).toBe("There’s no market for NVIDIA right now.");
     // The cash moved after the amount was typed.
     const less = { ...backer, cash: { walletRaw: usd(60), savingsRaw: 0n, saveOn: false }, cashUsd: 60 };
-    expect(planTrade({ ...base, data: less, amount: "59.8" }).blocker).toBe("Leave $0.50 for the network fee.");
+    expect(planTrade({ ...base, data: less, amount: (60 - B / 2).toFixed(2) }).blocker).toBe(`Leave ${formatUsd(B)} for the network fee.`);
     expect(planTrade({ ...base, data: less, amount: "100" }).blocker).toBe("That’s more than your cash ($60.00).");
-    const poor = { ...backer, cash: { walletRaw: usd(1.2), savingsRaw: 0n, saveOn: false }, cashUsd: 1.2 };
-    expect(planTrade({ ...base, data: poor, amount: "" }).note).toEqual({ tone: "act", text: "You need at least $1.50 in your cash to buy." });
+    const poor = { ...backer, cash: { walletRaw: usd(1 + B - 0.01), savingsRaw: 0n, saveOn: false }, cashUsd: 1 + B - 0.01 };
+    expect(planTrade({ ...base, data: poor, amount: "" }).note).toEqual({ tone: "act", text: `You need at least ${formatUsd(1 + B)} in your cash to buy.` });
   });
 
   it("says markets are closed at the weekend, and still goes ahead", () => {
@@ -564,14 +572,14 @@ describe("planTrade: stock → stock", () => {
     expect(v.ready).toBe(false);
   });
 
-  it("with cash under the fee buffer, the sale pays the fee: the buy is the floor less $0.50", () => {
-    const short = { ...newcomer, cash: { walletRaw: usd(0.3), savingsRaw: 0n, saveOn: false }, cashUsd: 0.3 };
+  it("with cash under the fee buffer, the sale pays the fee: the buy is the floor less the buffer", () => {
+    const short = { ...newcomer, cash: { walletRaw: shortRaw, savingsRaw: 0n, saveOn: false }, cashUsd: Number(shortRaw) / 1e6 };
     const v = planTrade({ ...base, data: short, amount: "3", sell: ready(sq) });
     expect(v.feeFromSale).toBe(true);
     expect(v.buyInRaw).toBe(sellMinOut(sq, nvda, PRICE.NVDAc) - feeBufferRaw);
     // $1.05 can't make a $1 buy once the fee comes out of the sale.
     const small = sellQuoteFor("NVDAc", sharesForUsdRaw(usd(1.05), parseUnits("200", 8), 8));
-    expect(planTrade({ ...base, data: short, amount: "1.05", sell: ready(small) }).blocker).toBe("The smallest trade is $1.60.");
+    expect(planTrade({ ...base, data: short, amount: "1.05", sell: ready(small) }).blocker).toBe(`The smallest trade is ${formatUsd(swapMinUsd(0.998, true))}.`);
     // With the fee from cash it can.
     expect(planTrade({ ...base, amount: "1.05", sell: ready(small) }).blocker).toBeNull();
   });
@@ -678,7 +686,7 @@ describe("useTrade: the stock → stock batch at signing (swapBatch)", () => {
 
   it("when the sale pays the fee, the batch is the sale and the buy alone, and the cash isn't read", async () => {
     const now = vi.spyOn(Date, "now").mockReturnValue(1_800_000_000_000);
-    const r = reads({ walletRaw: usd(0.2), savingsRaw: 0n, saveOn: false });
+    const r = reads({ walletRaw: shortRaw, savingsRaw: 0n, saveOn: false });
     const calls = await swapBatch(sign({ feeFromSale: true }), r);
     now.mockRestore();
     expect(calls).toEqual(buildTradeCalls({ user, from: nvda, to: aapl, sellQuote: sq, buyQuote: bq, oraclePriceUsd: PRICE.NVDAc, nowSec: 1_800_000_000 }));
@@ -690,10 +698,10 @@ describe("useTrade: the stock → stock batch at signing (swapBatch)", () => {
     const r = reads(rich);
     expect(await swapBatch(sign(), r)).toHaveLength(4);
     expect(r.cashToSign).toHaveBeenCalledWith(user, 0n);
-    const short = await swapBatch(sign(), reads({ walletRaw: usd(0.2), savingsRaw: usd(50), saveOn: false }));
+    const short = await swapBatch(sign(), reads({ walletRaw: shortRaw, savingsRaw: usd(50), saveOn: false }));
     expect(short).toHaveLength(5);
     expect(short[0].to).toBe(GUARDIAN.AAVE_V3_POOL);
-    expect(decodeFunctionData({ abi: aaveV3PoolAbi, data: short[0].data }).args).toEqual([USDC.address, usd(0.3), user]);
+    expect(decodeFunctionData({ abi: aaveV3PoolAbi, data: short[0].data }).args).toEqual([USDC.address, feeBufferRaw - shortRaw, user]);
   });
 
   it("the cash read's stop (the cash moved since the screen) stops the batch", async () => {

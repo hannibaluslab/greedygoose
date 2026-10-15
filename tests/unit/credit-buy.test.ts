@@ -18,12 +18,14 @@ import { statusFor } from "@/lib/risk/status";
 import { BUY_LIMITS, buildBuyCalls, minOut, type BuyQuote } from "@/lib/swap/buy";
 import { AERODROME, UNISWAP } from "@/lib/swap/venues";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
+import { formatUsd } from "@/lib/formatting";
 
 const user: `0x${string}` = "0x000000000000000000000000000000000000dEaD";
 const attacker: `0x${string}` = "0x00000000000000000000000000000000000000ee";
 const usd = (n: number) => parseUnits(n.toFixed(6), 6);
 const toUsdc = (raw: bigint) => Number(raw) / 1e6;
 const fee = usd(CASH.feeBufferUsd);
+const B = CASH.feeBufferUsd;
 const aapl = EQUITIES.find((e) => e.symbol === "AAPLc")!;
 const nvda = EQUITIES.find((e) => e.symbol === "NVDAc")!;
 const msft = EQUITIES.find((e) => e.symbol === "MSFTc")!;
@@ -265,7 +267,7 @@ describe("creditAvailable (F2-3's \"You can use up to\")", () => {
   it("with credit but less cash than the network fee, keeps the number and asks for the fee first (F2-5 would block every amount)", () => {
     const a = avail(fresh, [nvdaFree], true, noCash);
     expect(a).toEqual({ usd: 1_250, line: FEE_FIRST });
-    expect(FEE_FIRST).toBe("Add $0.50 to your cash for the network fee first.");
+    expect(FEE_FIRST).toBe(`Add ${formatUsd(B)} to your cash for the network fee first.`);
     expect(planCredit({ position: fresh, options: [nvdaFree], creditRaw: usd(10), cash: noCash }).block).toBe("fee");
     // Just enough for the fee: the usual line.
     expect(avail(fresh, [nvdaFree], true, { walletRaw: fee, savingsRaw: 0n, saveOn: true }).line).toBe(CREDIT_FROM);
@@ -298,11 +300,11 @@ describe("creditAvailable (F2-3's \"You can use up to\")", () => {
     expect(avail(fresh, [], false, { walletRaw: 0n, savingsRaw: 0n, saveOn: false }).line).toBe(
       "Credit comes from the stocks you own. Top up, then buy one with cash.",
     );
-    // $1.49: the $1 minimum buy plus the $0.50 fee doesn't fit.
-    expect(avail(fresh, [], true, { walletRaw: usd(1.49), savingsRaw: 0n, saveOn: false }).line).toBe(
+    // A cent short of the $1 minimum buy plus the fee buffer: it doesn't fit.
+    expect(avail(fresh, [], true, { walletRaw: usd(1 + B - 0.01), savingsRaw: 0n, saveOn: false }).line).toBe(
       "Your stocks can’t back credit right now. Top up to buy with cash.",
     );
-    expect(avail(fresh, [], true, { walletRaw: usd(1.5), savingsRaw: 0n, saveOn: false }).line).toBe(
+    expect(avail(fresh, [], true, { walletRaw: usd(1 + B), savingsRaw: 0n, saveOn: false }).line).toBe(
       "Your stocks can’t back credit right now. You can still buy with cash.",
     );
   });

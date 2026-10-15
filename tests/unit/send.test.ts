@@ -30,6 +30,8 @@ import { GUARDIAN } from "@/lib/guardian/config";
 import { aaveV3PoolAbi } from "@/lib/guardian/abis";
 import { AERODROME, UNISWAP } from "@/lib/swap/venues";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
+import { CASH } from "@/config/risk";
+import { formatUsd } from "@/lib/formatting";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 import {
   SEND_COPY,
@@ -58,6 +60,8 @@ const user: Address = "0x000000000000000000000000000000000000dEaD";
 const sam: Address = "0x6478829650bC51a36ec553575077603911E72952";
 const kit: Address = "0x00000000000000000000000000000000000000eE";
 const usd = (n: number) => parseUnits(n.toFixed(6), 6);
+/** The network-fee buffer, in dollars. */
+const B = CASH.feeBufferUsd;
 const stock = (symbol: string) => EQUITIES.find((e) => e.symbol === symbol)!;
 const nvda = stock("NVDAc");
 const amzn = stock("AMZNc");
@@ -97,6 +101,8 @@ function account(cash: Cash, held: Record<string, [number, number]>): SendData {
 /** Shaped like the dev preview's backer: cash mostly in savings, $1.80 of free Amazon beside backing, NVIDIA all backing. */
 const backer = account({ walletRaw: usd(20), savingsRaw: usd(1_919.18), saveOn: false }, { AMZNc: [1.8, 1_721.43], NVDAc: [0, 1_341.83], TSLAc: [40, 0] });
 const empty = account({ walletRaw: 0n, savingsRaw: 0n, saveOn: false }, {});
+/** What MAX takes from the backer's cash: all of it less the fee buffer, to the cent. */
+const BACKER_MAX = Math.floor((1_939.18 - B) * 100 + 1e-6) / 100;
 
 const transfer = (token: Address, to: Address, amount: bigint) => ({
   to: token,
@@ -124,8 +130,8 @@ describe("buildSendCalls (Send's one batch)", () => {
     expect(calls).toHaveLength(2);
     expect(isAddressEqual(calls[0].to, GUARDIAN.AAVE_V3_POOL)).toBe(true);
     const w = decodeFunctionData({ abi: aaveV3PoolAbi, data: calls[0].data });
-    // amount + fee buffer − wallet: 100 + 0.50 − 20
-    expect(w.args).toEqual([USDC.address, usd(80.5), user]);
+    // amount + fee buffer − wallet: 100 + the buffer − 20
+    expect(w.args).toEqual([USDC.address, usd(100) + feeBufferRaw - usd(20), user]);
     expect(decodeTransfer(calls[1].data).args).toEqual([sam, usd(100)]);
   });
 
@@ -158,10 +164,10 @@ describe("buildSendCalls (Send's one batch)", () => {
 
   it("never spends cash that isn't there: the amount and the fee buffer must fit", () => {
     const cash: Cash = { walletRaw: usd(10), savingsRaw: 0n, saveOn: false };
-    expect(() => buildSendCalls({ user, token: USDC, to: sam, amountRaw: usd(9.6), cash })).toThrow(/More than your cash/);
-    expect(buildSendCalls({ user, token: USDC, to: sam, amountRaw: usd(9.5), cash })).toHaveLength(1);
+    expect(() => buildSendCalls({ user, token: USDC, to: sam, amountRaw: usd(10) - feeBufferRaw + 1n, cash })).toThrow(/More than your cash/);
+    expect(buildSendCalls({ user, token: USDC, to: sam, amountRaw: usd(10) - feeBufferRaw, cash })).toHaveLength(1);
     // A stock send with no cash for the fee.
-    expect(() => buildSendCalls({ user, token: nvda, to: sam, amountRaw: 1n, cash: { walletRaw: usd(0.49), savingsRaw: 0n, saveOn: false } })).toThrow(/More than your cash/);
+    expect(() => buildSendCalls({ user, token: nvda, to: sam, amountRaw: 1n, cash: { walletRaw: feeBufferRaw - 1n, savingsRaw: 0n, saveOn: false } })).toThrow(/More than your cash/);
   });
 });
 
@@ -425,7 +431,7 @@ describe("Send's options and amount", () => {
       ["AMZNc", false],
       ["NVDAc", true],
     ]);
-    expect(opts[0].right).toBe("$1,938.68");
+    expect(opts[0].right).toBe(formatUsd(BACKER_MAX));
     expect(opts.find((o) => o.asset === "AMZNc")!.sub).toBe("$1,721.43 of it backs your credit");
     expect(opts.find((o) => o.asset === "NVDAc")!.sub).toBe(SEND_COPY.subAllBacks);
     expect(defaultAsset(backer)).toBe("cash");
@@ -434,13 +440,13 @@ describe("Send's options and amount", () => {
     expect(defaultAsset(empty)).toBeNull();
   });
 
-  it("cash MAX is the cash less the $0.50 fee buffer, and typing more snaps to it", () => {
+  it("cash MAX is the cash less the fee buffer, and typing more snaps to it", () => {
     let f: SendForm = { asset: "cash", amount: "", all: false };
     f = sendForm(f, { type: "max" }, backer);
-    expect(f).toEqual({ asset: "cash", amount: "1938.68", all: false });
-    expect(sendForm(f, { type: "amount", value: "5000" }, backer).amount).toBe("1938.68");
+    expect(f).toEqual({ asset: "cash", amount: BACKER_MAX.toFixed(2), all: false });
+    expect(sendForm(f, { type: "amount", value: "5000" }, backer).amount).toBe(BACKER_MAX.toFixed(2));
     const v = planSend({ ...f, data: backer, user, recipient: null, checks: {} });
-    expect(v.amountRaw).toBe(usd(1_938.68));
+    expect(v.amountRaw).toBe(usd(BACKER_MAX));
   });
 
   it("stock MAX sends every free share exactly, never one that backs credit", () => {
@@ -461,9 +467,11 @@ describe("Send's options and amount", () => {
 
   it("says why the amount can't go", () => {
     const at = (asset: string, amount: string, data = backer) => planSend({ asset, amount, all: false, data, user, recipient: null, checks: {} }).amountNote;
-    const thin = account({ walletRaw: usd(0.3), savingsRaw: 0n, saveOn: false }, { TSLAc: [40, 0] });
-    expect(at("cash", "5", thin)).toBe(SEND_COPY.overCash(0.3));
-    expect(at("cash", "0.2", thin)).toBe(SEND_COPY.feeBuffer);
+    // Under the fee buffer: any cash amount is more than the cash, or leaves less than the buffer.
+    const thinUsd = B * 0.6;
+    const thin = account({ walletRaw: usd(thinUsd), savingsRaw: 0n, saveOn: false }, { TSLAc: [40, 0] });
+    expect(at("cash", "5", thin)).toBe(SEND_COPY.overCash(thinUsd));
+    expect(at("cash", (thinUsd / 2).toFixed(2), thin)).toBe(SEND_COPY.feeBuffer);
     expect(at("TSLAc", "5", thin)).toBe(SEND_COPY.noFee);
     expect(at("NVDAc", "5")).toBe(SEND_COPY.allBacks("NVIDIA"));
     expect(at("TSLAc", "0.000001")).toBe(SEND_COPY.tooSmall);
@@ -555,7 +563,7 @@ describe("who a send went to, read back from the chain", () => {
     }) as unknown as Log;
 
   it("a cash send from savings decodes as one send to the recipient, the savings leg left out", () => {
-    const logs = [log(USDC.address, GUARDIAN.AUSDC, user, usd(80.5)), log(USDC.address, user, sam, usd(100))];
+    const logs = [log(USDC.address, GUARDIAN.AUSDC, user, usd(80) + feeBufferRaw), log(USDC.address, user, sam, usd(100))];
     expect(decodeActivity(logs, user)).toEqual([{ kind: "send", symbol: "USDC", amount: 100, to: sam }]);
   });
 

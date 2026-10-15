@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { decodeFunctionData, erc20Abi, parseUnits } from "viem";
 import { CASH } from "@/config/risk";
 import { assertAllowed, swapOf } from "@/lib/allowlist";
@@ -14,6 +14,7 @@ const attacker: `0x${string}` = "0x00000000000000000000000000000000000000ee";
 const usd = (n: number) => parseUnits(n.toFixed(6), 6);
 const shares = (n: number) => parseUnits(n.toFixed(8), 8);
 const fee = usd(CASH.feeBufferUsd);
+const B = CASH.feeBufferUsd;
 const nvda = EQUITIES.find((e) => e.symbol === "NVDAc")!;
 const price = 250;
 /** 0.4 NVDA ($100 at Aave's price) sells for $99.50. */
@@ -70,7 +71,8 @@ describe("buildSaleCalls", () => {
   });
 
   it("refuses a repay the sale can't pay for", () => {
-    expect(() => sale("repay", usd(300), { ...quote, amountIn: shares(0.001), amountOut: usd(0.25) })).toThrow(/positive/);
+    // Half the fee buffer's worth of NVIDIA: its floor (the quote less 1%, or Aave's price less 10%) is under the buffer.
+    expect(() => sale("repay", usd(300), { ...quote, amountIn: shares(B / 2 / price), amountOut: usd(B / 2) })).toThrow(/positive/);
   });
 });
 
@@ -171,21 +173,45 @@ describe("planSell: repay by selling a holding (step 9)", () => {
     expect(small.hfAfter!).toBeGreaterThan(700 / 690);
   });
 
-  it("a small sale that would repay less than its shares back and end in Act is blocked (Act is the line)", () => {
-    // $10 owed against 0.063 NVDA ($15.75 at 70%): health 1.1025, in Watch. $1.20 of it repays its floor less the $0.50
-    // fee buffer, about $0.68, and takes $0.84 of backing out: it would end at about 1.09, in Act.
+  it("a small sale that would repay less than its shares back and end in Act is blocked (Act is the line)", async () => {
+    // The rule, at a $0.50 buffer (where it was set): $10 owed against 0.063 NVDA ($15.75 at 70%), health 1.1025, in
+    // Watch. $1.20 of it repays its floor less $0.50, about $0.68, and takes $0.84 of backing out: about 1.09, in Act.
+    vi.resetModules();
+    vi.doMock("@/config/risk", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("@/config/risk")>();
+      return { ...actual, CASH: { ...actual.CASH, feeBufferUsd: 0.5 } };
+    });
+    try {
+      const at50 = await import("@/lib/sell");
+      const thin: SellPosition = { collateralUsd: 15.75, avgCf: 0.7, debtUsd: 10, debtRaw: usd(10), healthFactor: 1.1025 };
+      const h: SellHolding = { priceUsd: price, freeRaw: 0n, lockedRaw: shares(0.063), lockedUsd: 15.75, paused: false };
+      const planAt50 = (q: SellQuote) => at50.planSell({ from: "repay", stock: nvda, holding: h, cf: 0.7, position: thin, quote: q, now: tuesday });
+      const p = planAt50({ ...quote, amountIn: shares(0.0048), amountOut: usd(1.194) });
+      expect(p.before).toBe("watch");
+      expect(p.after).toBe("act");
+      expect(p.hfAfter!).toBeLessThan(1.1025);
+      expect(p.block).toBe("act");
+      expect(at50.SELL_BLOCKED.act).toBe("That would put your credit in Act. Sell more, or repay from cash.");
+      // Selling a little more repays enough to stay out of Act (the fee buffer weighs less): it goes ahead, in Watch.
+      const more = planAt50({ ...quote, amountIn: shares(0.0056), amountOut: usd(1.393) });
+      expect(more.after).toBe("watch");
+      expect(more.block).toBeUndefined();
+    } finally {
+      vi.doUnmock("@/config/risk");
+      vi.resetModules();
+    }
+  });
+
+  it("at today's fee buffer the same $1.20 sale stays in Watch: the fee no longer outweighs the backing it frees", () => {
+    // From Watch, a sale of v dollars ends in Act only if v < 1.1 × buffer ÷ (1.1 × 0.98 − collateral factor): under
+    // $0.30 at 70% and a $0.10 buffer, so under the $1 smallest sale. The rule above stays for a larger buffer.
     const thin: SellPosition = { collateralUsd: 15.75, avgCf: 0.7, debtUsd: 10, debtRaw: usd(10), healthFactor: 1.1025 };
     const h: SellHolding = { priceUsd: price, freeRaw: 0n, lockedRaw: shares(0.063), lockedUsd: 15.75, paused: false };
     const p = plan("repay", { ...quote, amountIn: shares(0.0048), amountOut: usd(1.194) }, thin, h);
-    expect(p.before).toBe("watch");
-    expect(p.after).toBe("act");
-    expect(p.hfAfter!).toBeLessThan(1.1025);
-    expect(p.block).toBe("act");
-    expect(SELL_BLOCKED.act).toBe("That would put your credit in Act. Sell more, or repay from cash.");
-    // Selling a little more repays enough to stay out of Act (the fee buffer weighs less): it goes ahead, in Watch.
-    const more = plan("repay", { ...quote, amountIn: shares(0.0056), amountOut: usd(1.393) }, thin, h);
-    expect(more.after).toBe("watch");
-    expect(more.block).toBeUndefined();
+    expect(p.repayRaw).toBe(minOut(usd(1.194)) - fee);
+    expect(p.hfAfter!).toBeCloseTo((15.75 * 0.7 - 1.2 * 0.7) / (10 - Number(minOut(usd(1.194)) - fee) / 1e6), 6);
+    expect(p.after).toBe("watch");
+    expect(p.block).toBeUndefined();
   });
 
   it("repaying all of it ends with no loan", () => {

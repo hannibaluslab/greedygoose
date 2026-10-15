@@ -3,7 +3,7 @@ import { decodeFunctionData, encodeFunctionData, erc20Abi } from "viem";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { buildBorrowCalls, type Call } from "@/lib/aave/tx";
-import type { Cash } from "@/lib/cash";
+import { feeBufferRaw, type Cash } from "@/lib/cash";
 import type { BackingOption, CreditPosition } from "@/lib/creditBuy";
 import {
   EARN_CLOSED,
@@ -35,6 +35,8 @@ type Address = `0x${string}`;
 const user: Address = "0x000000000000000000000000000000000000dEaD";
 const other: Address = "0x00000000000000000000000000000000000000ee";
 const usdc = (x: number) => BigInt(Math.round(x * 1e6));
+/** Cash split between the wallet and savings, a unit short of the network-fee buffer in all. */
+const underFee: Cash = { walletRaw: feeBufferRaw / 2n, savingsRaw: feeBufferRaw / 2n - 1n, saveOn: false };
 const tsla = EQUITIES.find((e) => e.symbol === "TSLAc")!;
 const nvda = EQUITIES.find((e) => e.symbol === "NVDAc")!;
 
@@ -109,10 +111,9 @@ describe("earnOffer: whether the Cash sheet offers it", () => {
 
   it("isn't offered while new credit is paused, or with no cash for the network fee", () => {
     expect(earnOffer(input({ position: position({ borrowPaused: true }) }))).toMatchObject({ why: "paused", text: "New credit is paused right now. Try again later." });
-    const poor: Cash = { walletRaw: usdc(0.2), savingsRaw: usdc(0.2), saveOn: false };
-    expect(earnOffer(input({ cash: poor }))).toMatchObject({ why: "fee" });
+    expect(earnOffer(input({ cash: underFee }))).toMatchObject({ why: "fee" });
     // The fee can come from savings: wallet empty, savings enough.
-    expect(earnOffer(input({ cash: { walletRaw: 0n, savingsRaw: usdc(0.5), saveOn: true } })).kind).toBe("offer");
+    expect(earnOffer(input({ cash: { walletRaw: 0n, savingsRaw: feeBufferRaw, saveOn: true } })).kind).toBe("offer");
   });
 });
 
@@ -294,17 +295,17 @@ describe("buildEarnCalls: one batch, stocks in use → credit → into savings",
   });
 
   it("pays the network fee from savings first when the wallet can't, and supplies the credit in full", () => {
-    // Save on, $0.20 in the wallet: $0.30 comes out of savings so $0.50 stays for the fee.
-    const thin: Cash = { walletRaw: usdc(0.2), savingsRaw: usdc(100), saveOn: true };
+    // Save on, less than the fee buffer in the wallet: the rest of the buffer comes out of savings so it stays for the fee.
+    const thin: Cash = { walletRaw: (feeBufferRaw * 2n) / 5n, savingsRaw: usdc(100), saveOn: true };
     const calls = buildEarnCalls({ user, backing, creditRaw, cash: thin });
     expect(calls).toHaveLength(7);
     expect(calls[0].to).toBe(GUARDIAN.AAVE_V3_POOL);
-    expect(v3(calls[0])).toMatchObject({ functionName: "withdraw", args: [USDC.address, usdc(0.3), user] });
+    expect(v3(calls[0])).toMatchObject({ functionName: "withdraw", args: [USDC.address, feeBufferRaw - thin.walletRaw, user] });
     expect(v3(calls.at(-1)!)).toMatchObject({ functionName: "supply", args: [USDC.address, creditRaw, user, 0] });
     // Enough in the wallet: nothing comes out of savings.
     expect(buildEarnCalls({ user, backing, creditRaw, cash })[0].to).toBe(tsla.address);
     // Not even the fee: refused.
-    expect(() => buildEarnCalls({ user, backing, creditRaw, cash: { walletRaw: usdc(0.2), savingsRaw: usdc(0.2), saveOn: false } })).toThrow(/More than your cash/);
+    expect(() => buildEarnCalls({ user, backing, creditRaw, cash: underFee })).toThrow(/More than your cash/);
   });
 
 });

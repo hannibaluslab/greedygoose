@@ -124,9 +124,9 @@ export type SendOption = {
 };
 
 /**
- * "Send from": Cash (what MAX takes: the cash less the network fee's $0.50), then each stock held. A stock sends only
- * its free shares; one whose shares all back credit is listed, says so and can't be picked. Stocks not held aren't
- * listed. Cash first, then what can be picked by free value, then the rest.
+ * "Send from": Cash (what MAX takes: the cash less the network-fee buffer, CASH.feeBufferUsd), then each stock held.
+ * A stock sends only its free shares; one whose shares all back credit is listed, says so and can't be picked. Stocks
+ * not held aren't listed. Cash first, then what can be picked by free value, then the rest.
  */
 export function sendOptions(data: SendData): SendOption[] {
   const cashOk = maxSpendRaw(data.cash) > 0n;

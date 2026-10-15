@@ -204,7 +204,7 @@ export function fromOptions(data: Pick<TradeData, "holdings" | "cash" | "cashUsd
     asset: "cash",
     name: TRADE_COPY.cashName,
     sub: cashOk ? undefined : TRADE_COPY.subNoCash,
-    // What MAX takes, as the stock rows say: the cash less the network fee's $0.50, to the cent.
+    // What MAX takes, as the stock rows say: the cash less the network-fee buffer (CASH.feeBufferUsd), to the cent.
     right: formatUsd(maxUsdOf("cash", data)),
     rightSub: cashOk ? TRADE_COPY.toTrade : undefined,
     freeUsd: data.cashUsd,

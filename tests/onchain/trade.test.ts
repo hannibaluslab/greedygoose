@@ -111,7 +111,7 @@ describe("trading one stock for another on Base (the Trade sheet)", () => {
     ]);
   });
 
-  it("newcomer, cash under the fee buffer: the buy is the floor less $0.50, which stays in the wallet for the fee", async () => {
+  it("newcomer, cash under the fee buffer: the buy is the floor less the buffer, which stays in the wallet for the fee", async () => {
     const sharesRaw = sharesForUsdRaw(parseUnits("3", 6), await priceRawOf(nvda), nvda.decimals);
     const t = await trade(newcomer, nvda, aapl, sharesRaw, none);
     expect(t.buyIn).toBe(t.floor - feeBufferRaw);
@@ -137,9 +137,9 @@ describe("trading one stock for another on Base (the Trade sheet)", () => {
   });
 
   it("cash in savings with too little in the wallet: a savings withdrawal goes first and the batch goes through", async () => {
-    // Put all but $0.20 of the wallet's USDC into savings in the same simulated block, as Save would.
+    // Put all but less than the fee buffer of the wallet's USDC into savings in the same simulated block, as Save would.
     const wallet = await client.readContract({ address: USDC.address, abi: erc20Abi, functionName: "balanceOf", args: [newcomer] });
-    const keep = parseUnits("0.2", 6);
+    const keep = (feeBufferRaw * 2n) / 5n;
     expect(wallet).toBeGreaterThan(parseUnits("1", 6));
     const put = wallet - keep;
     const before: Call[] = [

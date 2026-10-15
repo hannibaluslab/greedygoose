@@ -233,7 +233,7 @@ describe("Repay · Pay with a stock held free, on Base", () => {
     expect(r.walletDelta).toBeGreaterThanOrEqual(0n);
   });
 
-  it("with no cash, the sale pays the network fee: it repays the floor less $0.50, and at least $0.50 stays in the wallet", async () => {
+  it("with no cash, the sale pays the network fee: it repays the floor less the fee buffer, and at least the buffer stays in the wallet", async () => {
     const before = await noCash(backer);
     const { data, cfs } = await dataOf(backer, before);
     expect(cashRaw(data.cash)).toBe(0n);
