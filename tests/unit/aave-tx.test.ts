@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { decodeFunctionData, encodeAbiParameters, encodeErrorResult, erc20Abi, toFunctionSelector } from "viem";
 import { buildBorrowCalls, buildLoanCalls, buildRepayCalls, buildSupplyCalls, fullRepayAmount } from "@/lib/aave/tx";
-import { CASH_STUCK, explainRevert } from "@/lib/aave/errors";
+import { CASH_STUCK, explainRevert, stockStf } from "@/lib/aave/errors";
 import { buildAddSavingsCalls, buildWithdrawSavingsCalls } from "@/lib/guardian/permission";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { AAVE } from "@/lib/aave/addresses";
 import { buildBuyCalls } from "@/lib/swap/buy";
+import { buildSellCalls } from "@/lib/swap/sell";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
 const user = "0x000000000000000000000000000000000000dEaD";
@@ -77,6 +78,18 @@ describe("explainRevert", () => {
     }
     // The same string from a call that isn't a swap stays the caller's fallback.
     expect(explainRevert(revert("STF"), "fallback", approve)).toBe("fallback");
+  });
+  it("STF on a sale is about the stock sold, not the cash, on either venue", () => {
+    const revert = (message: string) => `${toFunctionSelector("Error(string)")}${encodeAbiParameters([{ type: "string" }], [message]).slice(2)}` as const;
+    for (const venue of ["aerodrome", "uniswap"] as const) {
+      const quote = { venue, pool: venue === "aerodrome" ? 10 : 3000, amountIn: 1_000_000n, amountOut: 1_000_000n };
+      const [, sale] = buildSellCalls({ user, stock: nvda, quote, oraclePriceUsd: 200 });
+      const msg = explainRevert(revert("STF"), "fallback", sale);
+      expect(msg).toBe(stockStf("NVIDIA"));
+      expect(msg).toBe("NVIDIA couldn’t be sold. What you hold may have changed since you started, or NVIDIA may be paused for now. Try again in a moment.");
+      expect(msg).not.toMatch(/cash|shares|lock|borrow/i);
+      expect(explainRevert(revert("Too little received"), "x", sale)).toMatch(/price moved more than 1%/);
+    }
   });
 });
 

@@ -11,11 +11,11 @@ type Column = { label: string; info?: Info; sub?: ReactNode };
  * "$5,000.00" on the left, a second figure on the right of a hairline, a line under each.
  */
 export function BalanceHero({
-  label, info, value, sub, side,
-}: Column & { value: number; side: Column & { value: ReactNode; unit?: string } }) {
+  label, info, value, sub, side, even = false,
+}: Column & { value: number; side: Column & { value: ReactNode; unit?: string }; /** Two equal columns, not the figure's own width (Invest). */ even?: boolean }) {
   const k = fit(value);
   return (
-    <div className="num grid grid-cols-[auto_1fr] items-baseline px-[16.75px] leading-[normal]">
+    <div className={`num grid ${even ? "grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" : "grid-cols-[auto_1fr]"} items-baseline px-[16.75px] leading-[normal]`}>
       <div className="flex items-center gap-1.5 pb-1">
         <span className="label">{label}</span>
         {info && <InfoButton {...info} />}

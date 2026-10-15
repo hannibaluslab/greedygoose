@@ -232,6 +232,67 @@ function AgentMove({ row, last, open, onToggle }: { row: AgentRow; last: boolean
   );
 }
 
+/**
+ * One feed line from plain parts, as Move and AgentMove draw theirs: its mark, title · time, one line on what changed,
+ * and on tap the details (the 82px label column; "Why" in regular weight) and the transaction on Base. The Cash sheet
+ * draws its rows with it.
+ */
+export function FeedItem({
+  mark, title, time, line, details, hash, status = "done", last, open, onToggle,
+}: {
+  mark: ReactNode;
+  title: string;
+  /** When, in ms. */
+  time: number;
+  line: ReactNode;
+  details: readonly { label: string; value: Words }[];
+  hash?: `0x${string}`;
+  status?: "pending" | "done" | "failed";
+  last: boolean;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <li className={`py-2 ${last ? "" : "border-b border-hairline"}`}>
+      <button type="button" aria-expanded={open} onClick={onToggle} className="flex w-full items-start gap-2.5 text-left">
+        {mark}
+        <span className="flex min-w-0 grow flex-col gap-0.5">
+          <span className="text-sm font-semibold leading-[1.3]">
+            {title} <span className="font-normal text-subtle">· {TIME.format(time)}</span>
+          </span>
+          <span className={`num text-[13px] leading-[1.3] ${status === "failed" ? "text-act" : "text-ink-2"}`}>{line}</span>
+        </span>
+        <ChevronDown className={`mt-0.5 shrink-0 text-subtle ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="mt-2 rounded-[16px] bg-card-bone px-3 pt-2.5 text-[13px] leading-[1.35]">
+          {details.length > 0 && (
+            <dl className={`num m-0 grid grid-cols-[82px_minmax(0,1fr)] gap-y-[5px] ${hash ? "mb-1.5" : ""}`}>
+              {details.map((d, i) => (
+                <Detail key={i} label={d.label} strong={d.label !== "Why"}>
+                  <WordsText words={d.value} />
+                </Detail>
+              ))}
+            </dl>
+          )}
+          {hash ? (
+            <a
+              href={txUrl(hash)}
+              target="_blank"
+              rel="noreferrer"
+              className={`flex h-10 items-center justify-between text-[13px] font-semibold text-ink no-underline ${details.length ? "border-t border-hairline" : ""}`}
+            >
+              View on Base <ChevronRight size={15} />
+            </a>
+          ) : (
+            <div className="h-2.5" />
+          )}
+        </div>
+      )}
+    </li>
+  );
+}
+
 function Detail({ label, strong = true, children }: { label: string; strong?: boolean; children: ReactNode }) {
   return (
     <>

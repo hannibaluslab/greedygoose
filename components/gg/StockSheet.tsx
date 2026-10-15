@@ -244,9 +244,10 @@ function Actions({
 }
 
 /**
- * The Sell step's small print: every move in the batch (D7), the lowest price the swap accepts and what the stock is.
+ * The Sell step's small print (and the Trade sheet's stock → cash): every move in the batch (D7), the lowest price the
+ * swap accepts and what the stock is.
  */
-function SellSmallPrint({ stock, holding, quote, plan }: { stock: ReserveAsset; holding: Holding; quote: SellQuote; plan: SellPlan }) {
+export function SellSmallPrint({ stock, holding, quote, plan }: { stock: ReserveAsset; holding: Holding; quote: SellQuote; plan: SellPlan }) {
   const ticker = tickerOf(stock.symbol);
   const shares = formatShares(rawToShares(plan.sharesRaw, holding.multiplier, stock.decimals));
   const floor = formatUsd(floorPriceUsd(plan, stock));

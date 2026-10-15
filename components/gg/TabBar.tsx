@@ -35,15 +35,14 @@ export function TabBar() {
           const active = match.some((m) => path.startsWith(m));
           // Agents, the middle tab, is a lime button docked in the bar (Adrian: yellow, round, bigger, higher). Done the
           // way docked centre buttons are: raised half out of the bar, a ring in the page's colour so it sits in a
-          // notch rather than on top of the bar, a soft shadow instead of a glow, and its label on the same line as
-          // the other tabs'.
+          // notch rather than on top of the bar, a soft shadow instead of a glow.
           if (href === "/agents") {
             return (
-              <Link key={href} href={href} aria-current={active ? "page" : undefined} className="relative flex flex-col items-center justify-end pb-[9px]">
+              // No label under it (Adrian: the word looked odd there), as the booth's centre button; screen readers get it.
+              <Link key={href} href={href} aria-label={label} aria-current={active ? "page" : undefined} className="relative flex items-center justify-center">
                 <span className="absolute left-1/2 top-0 grid size-[52px] -translate-x-1/2 -translate-y-[22px] place-items-center rounded-full bg-brand text-ink shadow-[0_6px_14px_-4px_rgba(14,13,11,0.35)] ring-[5px] ring-ground transition active:scale-95">
                   <Icon size={24} />
                 </span>
-                <span className={`text-[10px] font-medium tracking-tight ${active ? "text-on-ink" : "text-[rgba(245,240,226,0.45)]"}`}>{label}</span>
               </Link>
             );
           }

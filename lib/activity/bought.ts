@@ -11,3 +11,9 @@ export function boughtLine(amount: number | null, symbol: string, credit = false
   const ticker = symbol.replace(/c$/, "");
   return `Bought ${amount === null ? "" : `${amount.toFixed(4)} `}${ticker}${credit ? " with Credit Buy" : ""}`;
 }
+
+/** The toast after a stock → stock trade (the Trade sheet): "Traded NVDA for 0.0086 AAPL". */
+export function tradedLine(amount: number | null, symbol: string, from: string): string {
+  const ticker = symbol.replace(/c$/, "");
+  return `Traded ${from.replace(/c$/, "")} for ${amount === null ? "" : `${amount.toFixed(4)} `}${ticker}`;
+}

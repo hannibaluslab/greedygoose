@@ -232,8 +232,8 @@ function creditRows(data: PositionData, plan: CreditPlan, cashRaw: bigint): Summ
   ];
 }
 
-/** The small print under the Buy step: every move in the batch (D7), the price guard, and what the stock is. */
-function SmallPrint({
+/** The small print under the Buy step (and the Trade sheet's cash → stock): every move in the batch (D7), the price guard, and what the stock is. */
+export function SmallPrint({
   data, stock, econ, minShares, venue, credit,
 }: {
   data: PositionData;

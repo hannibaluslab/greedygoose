@@ -14,6 +14,9 @@ import { USDC } from "@/lib/tokens/registry";
 /** Blocks per getLogs request, the size Leo's keeper reads the manager's logs in (lib/guardian/keeper.ts). */
 export const LOG_CHUNK = 5_000n;
 
+/** A week of Base blocks (2 seconds each). The feeds read a week at a time. */
+export const WEEK_BLOCKS = 302_400n;
+
 /**
  * The ranges to read from `from` to `to`, newest first, cut on LOG_CHUNK boundaries: a chunk the chain has moved past
  * is the same request every time, so it can be read once and kept.

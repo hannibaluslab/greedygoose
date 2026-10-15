@@ -12,6 +12,7 @@ import { CashCard, YieldCard } from "@/components/gg/Cards";
 import { StartEarningCard, TurnIntoCash } from "@/components/gg/CashSetup";
 import { AddStockCard, HoldingCard } from "@/components/gg/Holding";
 import { CreditSheet } from "@/components/gg/CreditSheet";
+import { CashSheet } from "@/components/gg/CashSheet";
 import { StockSheets, useStockSheets } from "@/components/gg/StockSheets";
 import { ValueLine } from "@/components/gg/ValueLine";
 import { TotalBalanceSheet, YieldSheet } from "@/components/gg/InfoSheets";
@@ -34,7 +35,7 @@ export default function HomePage() {
   return <RequireAccount>{(address) => <Home address={address} />}</RequireAccount>;
 }
 
-type Sheet = "total" | "yield" | "credit";
+type Sheet = "total" | "yield" | "credit" | "cash";
 
 /**
  * Design board "2 · Home · portfolio: Rail" (HomeUpliftRail.dc.html), with its sheets: Total balance (HomeInfo),
@@ -77,6 +78,7 @@ function Home({ address }: { address: `0x${string}` }) {
           open={setSheet}
           openStock={stocks.openStock}
           openCreditBuy={stocks.openCreditBuy}
+          openTrade={() => stocks.openTrade()}
           arrived={arrived}
           dim={startEarningShown(setup.save, data.cashUsd)}
           cards={
@@ -101,6 +103,7 @@ function Home({ address }: { address: `0x${string}` }) {
           <TotalBalanceSheet open={sheet === "total"} onClose={close} cashUsd={data.cashUsd} stocksUsd={data.stocksUsd} debtUsd={data.debtUsd} />
           <YieldSheet open={sheet === "yield"} onClose={close} cashUsd={data.cashUsd} savingsUsd={data.savingsUsd} apy={apy} earning={data.cash.saveOn} />
           <CreditSheet open={sheet === "credit"} onClose={close} account={address} data={data} />
+          <CashSheet open={sheet === "cash"} onClose={close} account={address} data={data} apy={apy} arrived={arrived} save={setup.save} />
           <StockSheets sheets={stocks} user={address} data={data} />
         </>
       )}
@@ -109,7 +112,7 @@ function Home({ address }: { address: `0x${string}` }) {
 }
 
 function Loaded({
-  data, apy, open, openStock, openCreditBuy, arrived, cards, dim,
+  data, apy, open, openStock, openCreditBuy, openTrade, arrived, cards, dim,
 }: {
   data: PositionData;
   apy: number;
@@ -117,6 +120,8 @@ function Loaded({
   openStock: (symbol: string) => void;
   /** The Credit Buy quick action: F2-3, the same sheet as Invest's (StockSheets). */
   openCreditBuy: () => void;
+  /** The Trade sheet: swap between anything you hold, not the Market. */
+  openTrade: () => void;
   arrived: ArrivedView;
   /** What needs the user about their cash: other dollars to turn into cash, starting to earn. */
   cards: ReactNode;
@@ -165,7 +170,7 @@ function Loaded({
       </section>
 
       <section className="grid grid-cols-4 gap-2 px-5 pt-[22px]">
-        <QuickAction href="/buy" label="Trade" icon={<TradeIcon />} />
+        <QuickAction onClick={openTrade} label="Trade" icon={<TradeIcon />} />
         <QuickAction href="/receive" label="Top up" icon={<PlusIcon />} />
         <QuickAction onClick={openCreditBuy} label="Credit Buy" icon={<CreditIcon />} />
         <QuickAction href="/repay" label="Repay" icon={<RepayIcon />} />
@@ -179,7 +184,7 @@ function Loaded({
           earning={data.cash.saveOn}
           dim={dim}
           note={arrived.kind === "arriving" ? `${arrived.text} arriving` : undefined}
-          href="/receive"
+          onClick={() => open("cash")}
         />
         <YieldCard apy={apy} dim={dim} onClick={() => open("yield")} />
       </section>
@@ -198,7 +203,7 @@ function Loaded({
         {held.length === 0 ? (
           <EmptyPortfolio />
         ) : (
-          <div className={`-mx-5 flex ${held.length < 2 ? "justify-start" : "justify-between"} gap-2 overflow-x-auto px-5 pb-4 pt-0.5 [scrollbar-width:none]`}>
+          <div className={`relative -mx-5 flex ${held.length < 2 ? "justify-start" : "justify-between"} gap-2 overflow-x-auto px-5 pb-4 pt-0.5 [scrollbar-width:none]`}>
             {held.map((h) => {
               const valueUsd = h.freeUsd + h.lockedUsd;
               const m = market.bySymbol[h.symbol];

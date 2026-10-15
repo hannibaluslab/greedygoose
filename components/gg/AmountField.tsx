@@ -3,7 +3,7 @@
 import { useId, type ComponentProps, type ReactNode } from "react";
 import { AmountInput } from "./AmountInput";
 import { StockAvatar, tickerOf } from "./StockAvatar";
-import { CreditIcon } from "./icons";
+import { CreditIcon, TradeIcon } from "./icons";
 import { formatUsd } from "@/lib/formatting";
 
 /**
@@ -104,32 +104,63 @@ export function AmountBadge({ kind }: { kind: "cash" | "credit" }) {
   );
 }
 
-/** The round ↓ between what is paid and what arrives (F1-4, F2-5), overlapping both cards. */
-export function AmountArrow() {
+/**
+ * The round ↓ between what is paid and what arrives (F1-4, F2-5), overlapping both cards. With `onFlip` it is NYM's
+ * flip button (the Trade sheet): ↑↓, and a tap swaps what you pay and what you get.
+ */
+export function AmountArrow({ onFlip, disabled }: { onFlip?: () => void; disabled?: boolean } = {}) {
+  // The boards' 34px circle sits inside its 1px border (content-box): 36px across.
+  const circle = "flex size-9 items-center justify-center rounded-[18px] border border-line-field bg-ground text-ink";
+  if (onFlip) {
+    return (
+      <div className="relative z-[1] -my-2.5 flex justify-center">
+        <button
+          type="button"
+          onClick={onFlip}
+          disabled={disabled}
+          aria-label="Switch what you pay and what you get"
+          // 36px to the eye; the overlay takes the tap target to 44px, as the pickers' does.
+          className={`${circle} relative transition after:absolute after:-inset-[5px] after:content-[''] hover:border-line-strong active:scale-90 disabled:opacity-45`}
+        >
+          <TradeIcon size={15} strokeWidth={1.8} />
+        </button>
+      </div>
+    );
+  }
   return (
     <span aria-hidden className="relative z-[1] -my-2.5 flex justify-center">
-      {/* The boards' 34px circle sits inside its 1px border (content-box): 36px across. */}
-      <span className="flex size-9 items-center justify-center rounded-[18px] border border-line-field bg-ground text-ink">
+      <span className={circle}>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M6 13l6 6 6-6" /></svg>
       </span>
     </span>
   );
 }
 
-/** What arrives (F1-4, F2-5): "You get (estimated)", the stock's badge, its shares to 4 places and the price. `shares` null while quoting. */
-export function YouGet({ symbol, shares, priceUsd }: { symbol: string; shares: number | null; priceUsd: number }) {
-  return <Arrives mark={<StockAvatar symbol={symbol} />} amount={shares === null ? null : shares.toFixed(4)} unit={tickerOf(symbol)} priceUsd={priceUsd} />;
+/**
+ * What arrives (F1-4, F2-5): "You get (estimated)", the stock's badge, its shares to 4 places and the price. `shares`
+ * null while quoting. `source`, top right: the Trade sheet's To picker.
+ */
+export function YouGet({ symbol, shares, priceUsd, source }: { symbol: string; shares: number | null; priceUsd: number; source?: ReactNode }) {
+  return <Arrives mark={<StockAvatar symbol={symbol} />} amount={shares === null ? null : shares.toFixed(4)} unit={tickerOf(symbol)} priceUsd={priceUsd} source={source} />;
 }
 
 /** What a sale pays, in YouGet's card: the cash badge, dollars and the price a share. `usd` null while quoting. */
-export function YouGetCash({ usd, priceUsd }: { usd: number | null; priceUsd: number }) {
-  return <Arrives mark={<AmountBadge kind="cash" />} amount={usd === null ? null : formatUsd(usd)} unit="Cash" priceUsd={priceUsd} />;
+export function YouGetCash({ usd, priceUsd, source }: { usd: number | null; priceUsd: number; source?: ReactNode }) {
+  return <Arrives mark={<AmountBadge kind="cash" />} amount={usd === null ? null : formatUsd(usd)} unit="Cash" priceUsd={priceUsd} source={source} />;
 }
 
-function Arrives({ mark, amount, unit, priceUsd }: { mark: ReactNode; amount: string | null; unit: string; priceUsd: number }) {
+function Arrives({ mark, amount, unit, priceUsd, source }: { mark: ReactNode; amount: string | null; unit: string; priceUsd: number; source?: ReactNode }) {
+  const label = <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">You get (estimated)</span>;
   return (
     <div className="flex flex-col gap-2 rounded-[16px] border border-line-field bg-card p-3.5 leading-[normal]">
-      <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">You get (estimated)</span>
+      {source ? (
+        <div className="flex items-center justify-between gap-2">
+          {label}
+          {source}
+        </div>
+      ) : (
+        label
+      )}
       <div className="flex items-center gap-2.5">
         {mark}
         <div className="min-w-0 flex-1">

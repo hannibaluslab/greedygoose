@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { encodeAbiParameters, encodeEventTopics, erc20Abi, getAbiItem, type Log } from "viem";
+import { encodeAbiParameters, encodeEventTopics, erc20Abi, getAbiItem, parseAbi, type Log } from "viem";
+import { entryPoint08Abi, entryPoint08Address } from "viem/account-abstraction";
 import { decodeActivity } from "@/lib/activity/decode";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
@@ -103,5 +104,58 @@ describe("decodeActivity: savings stay inside the cash (D15, D20)", () => {
   it("another account's withdrawal in the same bundle isn't the user's", () => {
     const logs = [fromSavings(5_000_000n, other), repayEvent(user, 1_000_000n)];
     expect(decodeActivity(logs, user)).toEqual([{ kind: "repay", symbol: "USDC", amount: 1 }]);
+  });
+});
+
+describe("decodeActivity: JAW's network fee isn't a move (D4)", () => {
+  // As on JAW's receipts (tx 0xfb269d33…): the paymaster pulls the fee in USDC to its treasury in its postOp, then
+  // says what it took; EntryPoint v0.8 names the paymaster for the user's operation.
+  const paymaster: Address = "0x888888888888Ec68A58AB8094Cc1AD20Ba3D2402";
+  const treasury: Address = "0x4337Ff05c84B9A80Ea0a78dBE7B8E102F66d4c08";
+  const opHash = `0x${"ab".repeat(32)}` as const;
+  const sponsoredAbi = parseAbi([
+    "event UserOperationSponsored(bytes32 indexed userOpHash, address indexed user, uint8 paymasterMode, address token, uint256 tokenAmountPaid, uint256 exchangeRate)",
+  ]);
+  const sponsored = (who: Address, amount: bigint, token: Address = USDC.address, from: Address = paymaster) =>
+    log(
+      from,
+      encodeEventTopics({ abi: sponsoredAbi, eventName: "UserOperationSponsored", args: { userOpHash: opHash, user: who } }),
+      encodeAbiParameters([{ type: "uint8" }, { type: "address" }, { type: "uint256" }, { type: "uint256" }], [1, token, amount, 10n ** 18n]),
+    );
+  const operation = (sender: Address, at: Address = entryPoint08Address) =>
+    log(
+      at,
+      encodeEventTopics({ abi: entryPoint08Abi, eventName: "UserOperationEvent", args: { userOpHash: opHash, sender, paymaster } }),
+      encodeAbiParameters([{ type: "uint256" }, { type: "bool" }, { type: "uint256" }, { type: "uint256" }], [0n, true, 1n, 1n]),
+    );
+  const fee = 10_858n;
+
+  it("a repay with its fee is the repay alone", () => {
+    const logs = [repayEvent(user, 10_000_000n), transfer(USDC.address, user, AAVE.HUB, 10_000_000n), transfer(USDC.address, user, treasury, fee), sponsored(user, fee), operation(user)];
+    expect(decodeActivity(logs, user)).toEqual([{ kind: "repay", symbol: "USDC", amount: 10 }]);
+  });
+
+  it("a buy's price leaves the fee out, so a Credit Buy's cash part is 0", () => {
+    const logs = [transfer(USDC.address, user, pool, 1_000_000n), transfer(nvda.address, pool, user, 436_000n), transfer(USDC.address, user, treasury, fee), sponsored(user, fee), operation(user)];
+    expect(decodeActivity(logs, user)).toEqual([{ kind: "buy", symbol: "NVDAc", amount: 0.00436, paidUsd: 1 }]);
+  });
+
+  it("is read from the chain, never assumed: anything that doesn't match stays a send", () => {
+    const send = transfer(USDC.address, user, treasury, fee);
+    // No user operation from EntryPoint v0.8 for this user.
+    expect(decodeActivity([send, sponsored(user, fee)], user)).toEqual([{ kind: "send", symbol: "USDC", amount: 0.010858 }]);
+    expect(decodeActivity([send, sponsored(user, fee), operation(user, other)], user)).toEqual([{ kind: "send", symbol: "USDC", amount: 0.010858 }]);
+    expect(decodeActivity([send, sponsored(user, fee), operation(other)], user)).toEqual([{ kind: "send", symbol: "USDC", amount: 0.010858 }]);
+    // A different amount, another user's fee, or a fee in another token.
+    expect(decodeActivity([send, sponsored(user, fee + 1n), operation(user)], user)).toEqual([{ kind: "send", symbol: "USDC", amount: 0.010858 }]);
+    expect(decodeActivity([send, sponsored(other, fee), operation(user)], user)).toEqual([{ kind: "send", symbol: "USDC", amount: 0.010858 }]);
+    expect(decodeActivity([send, sponsored(user, fee, nvda.address), operation(user)], user)).toEqual([{ kind: "send", symbol: "USDC", amount: 0.010858 }]);
+    // Emitted by something other than the operation's paymaster.
+    expect(decodeActivity([send, sponsored(user, fee, USDC.address, other), operation(user)], user)).toEqual([{ kind: "send", symbol: "USDC", amount: 0.010858 }]);
+  });
+
+  it("takes out one transfer only, the one before the paymaster's record", () => {
+    const logs = [transfer(USDC.address, user, other, fee), transfer(USDC.address, user, treasury, fee), sponsored(user, fee), operation(user)];
+    expect(decodeActivity(logs, user)).toEqual([{ kind: "send", symbol: "USDC", amount: 0.010858 }]);
   });
 });

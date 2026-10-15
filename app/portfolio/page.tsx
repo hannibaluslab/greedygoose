@@ -11,12 +11,13 @@ import { CreditSheet } from "@/components/gg/CreditSheet";
 import { StockSheets, useStockSheets } from "@/components/gg/StockSheets";
 import { HoldingList, HoldingRow } from "@/components/gg/Holding";
 import { ValueLine } from "@/components/gg/ValueLine";
-import { CreditIcon, TradeIcon } from "@/components/gg/icons";
+import { CreditIcon, MarketIcon, TradeIcon } from "@/components/gg/icons";
 import { MarketBanner } from "@/components/ui/MarketBanner";
 import { useMarketPrices } from "@/hooks/useMarketPrices";
-import { usePosition, type PositionData } from "@/hooks/usePosition";
-import { aprToApy } from "@/lib/aave/math";
-import { formatUsd } from "@/lib/formatting";
+import { useCollateralFactorsRead, usePosition, type PositionData } from "@/hooks/usePosition";
+import { formatUsd, formatUsdTrim } from "@/lib/formatting";
+import { backingOptions, creditAvailable } from "@/lib/creditBuy";
+import { maxSpendRaw, toUsd } from "@/lib/cash";
 import { dayChange, weekValue } from "@/lib/prices/market";
 
 export default function PortfolioPage() {
@@ -26,8 +27,9 @@ export default function PortfolioPage() {
 /**
  * Design board "10 · Portfolio (Invest tab)" (PortfolioPage.dc.html). Market opens Flow 1's sheet
  * (F1-3 → the stock's sheet → F1-4 → confirm); /buy lands here with ?market, or ?s=SYMBOL for one stock's Buy
- * step. Credit Buy opens Flow 2's sheet (F2-2 → F2-3 … F2-6). A holding row opens its stock's sheet. The status
- * pill opens the Credit sheet (HomeCreditSlide).
+ * step. Trade, between Market and Credit Buy (Adrian), opens the Trade sheet, as Home's Trade does. Credit Buy opens
+ * Flow 2's sheet (F2-2 → F2-3 … F2-6). A holding row opens its stock's sheet. The status pill opens the Credit sheet
+ * (HomeCreditSlide).
  * Today's change, the value line and each row's day come from market prices (plan item 8), with the
  * markets-closed banner under the line at weekends. Not drawn yet: "Your mix" (the Rebalancer, item 9).
  */
@@ -52,7 +54,13 @@ function Portfolio({ address }: { address: `0x${string}` }) {
         ) : !data ? (
           <div aria-busy className="h-[300px] animate-pulse rounded-[22px] bg-chip" />
         ) : (
-          <Loaded data={data} openMarket={stocks.openMarket} openCreditBuy={stocks.openCreditBuy} openStock={stocks.openStock} />
+          <Loaded
+            data={data}
+            openMarket={stocks.openMarket}
+            openTrade={() => stocks.openTrade()}
+            openCreditBuy={stocks.openCreditBuy}
+            openStock={stocks.openStock}
+          />
         )}
       </div>
       <TabBar />
@@ -75,9 +83,10 @@ function Portfolio({ address }: { address: `0x${string}` }) {
 }
 
 function Loaded({
-  data, openMarket, openCreditBuy, openStock,
-}: { data: PositionData; openMarket: () => void; openCreditBuy: () => void; openStock: (symbol: string) => void }) {
+  data, openMarket, openTrade, openCreditBuy, openStock,
+}: { data: PositionData; openMarket: () => void; openTrade: () => void; openCreditBuy: () => void; openStock: (symbol: string) => void }) {
   const held = data.holdings.filter((h) => h.freeShares + h.lockedShares > 0);
+  const power = useBuyingPower(data, held.length > 0);
   const market = useMarketPrices(held);
   const priced = held.map((h) => ({ valueUsd: h.freeUsd + h.lockedUsd, ...market.bySymbol[h.symbol] }));
   const today = dayChange(priced, data.stocksUsd);
@@ -85,23 +94,39 @@ function Loaded({
     <>
       <section className="flex flex-col gap-2.5">
         <BalanceHero
+          // Half the width for the portfolio, half for buying power (Adrian: more width for the portfolio).
+          even
           label="Portfolio"
           value={data.stocksUsd}
           sub={today ? <TodayChange usd={today.usd} pct={today.pct} /> : market.loading ? <TodayPending /> : undefined}
+          // Buying power (Adrian): the cash you can spend plus the credit one Credit Buy can use, the same figure the Credit
+          // Buy sheet opens on. Whole dollars, rounded down, so it's never more than there is.
           side={{
-            label: "Cash available",
-            // Whole dollars, as drawn ("$400"), and never more than there is.
-            value: formatUsd(Math.floor(data.cashUsd)).replace(/\.00$/, ""),
-            sub: <><span className="font-semibold text-pos">{(aprToApy(data.savingsApr) * 100).toFixed(1)}%</span> APY</>,
+            label: "Buying power",
+            // The "$" drawn as the portfolio's (as on Home): smaller, in the mid ink.
+            value: power ? (
+              <>
+                <span className="text-[22px] font-medium tracking-normal text-ink-mid">$</span>
+                {formatUsd(Math.floor(power.cashUsd + power.creditUsd)).replace(/\.00$/, "").replace("$", "")}
+              </>
+            ) : (
+              "–"
+            ),
+            sub: power ? (
+              // One line (Adrian): the total is above, so this only says what's in it.
+              <span className="whitespace-nowrap">{power.creditUsd >= 1 ? `Cash + ${formatUsdTrim(Math.floor(power.creditUsd))} credit` : "Cash only"}</span>
+            ) : undefined,
           }}
         />
         {held.length > 0 && <ValueLine points={weekValue(priced)} height={34} loading={market.loading} onRetry={market.retry} />}
         <MarketBanner />
       </section>
 
-      <div className="grid grid-cols-2 gap-2.5">
-        <Button variant="white" icon={<TradeIcon size={18} strokeWidth={1.8} />} onClick={openMarket}>Market</Button>
-        <Button icon={<CreditIcon size={18} strokeWidth={1.8} />} onClick={openCreditBuy}>Credit Buy</Button>
+      {/* The board's pills (52px, 15px labels with 18px icons), three even cells with Trade between: 8px apart so Credit Buy fits at 390px. */}
+      <div className="grid grid-cols-3 gap-2">
+        <Button variant="white" size="row" icon={<MarketIcon size={18} strokeWidth={1.8} />} onClick={openMarket}>Market</Button>
+        <Button variant="white" size="row" icon={<TradeIcon size={18} strokeWidth={1.8} />} onClick={openTrade}>Trade</Button>
+        <Button size="row" icon={<CreditIcon size={18} strokeWidth={1.8} />} onClick={openCreditBuy}>Credit Buy</Button>
       </div>
 
       <HoldingList title="Your holdings">
@@ -137,4 +162,13 @@ function Loaded({
       </p>
     </>
   );
+}
+
+/** Cash you can spend (less the network-fee buffer) and the credit one Credit Buy can use; null while the backing reads. */
+function useBuyingPower(data: PositionData, holdsStock: boolean) {
+  const cfs = useCollateralFactorsRead(data.holdings).cfs;
+  if (holdsStock && !cfs) return null;
+  const options = cfs ? backingOptions(data.holdings, cfs).filter((o) => o.freeUsd >= 1) : [];
+  const credit = creditAvailable({ position: data, options, cash: data.cash, holdsStock });
+  return { cashUsd: toUsd(maxSpendRaw(data.cash)), creditUsd: credit.usd };
 }

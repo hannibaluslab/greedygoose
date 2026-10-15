@@ -1,4 +1,5 @@
-import { erc20Abi, isAddressEqual, parseEventLogs, type Log } from "viem";
+import { erc20Abi, isAddressEqual, parseAbi, parseEventLogs, type Log } from "viem";
+import { entryPoint08Abi, entryPoint08Address } from "viem/account-abstraction";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { ALL_RESERVES, EQUITIES, USDC, findByAddress } from "@/lib/tokens/registry";
@@ -23,13 +24,62 @@ const byReserveId = (id: bigint) => ALL_RESERVES.find((r) => BigInt(r.reserveId)
 const units = (raw: bigint, decimals: number) => Number(raw) / 10 ** decimals;
 
 /**
+ * The paymaster's own record of what it charged (Pimlico's SingletonPaymaster, BaseSingletonPaymaster.sol), emitted
+ * at the end of its postOp. Its topic, 0x7a270f29…, is the one on JAW's receipts.
+ */
+const sponsoredAbi = parseAbi([
+  "event UserOperationSponsored(bytes32 indexed userOpHash, address indexed user, uint8 paymasterMode, address token, uint256 tokenAmountPaid, uint256 exchangeRate)",
+]);
+/** The paymaster's ERC-20 mode: the user pays the fee in a token. */
+const ERC20_MODE = 1;
+
+/**
+ * JAW's network fee, paid in USDC (D4): the paymaster pulls it from the account in its postOp, inside the same
+ * transaction, so it is no move of the user's (measured 2026-10-15 on JAW receipts 0xfb269d33… and 0x21377f51…: a
+ * USDC transfer from the account to the paymaster's treasury, `0x4337Ff05…`, not to the paymaster itself). Read from the
+ * chain, not guessed: for each user operation of `user` that EntryPoint v0.8 (viem's `entryPoint08Address`, the one JAW
+ * sends to) reports with a paymaster, that paymaster's `UserOperationSponsored` for the same operation names the USDC it
+ * took; the USDC transfer from the user for exactly that amount just before it is the fee. A paymaster that pre-charged
+ * and refunded has no such single transfer, and then nothing is left out.
+ */
+function feeTransfers(logs: readonly Log[], user: `0x${string}`): Set<Log> {
+  const ops = parseEventLogs({
+    abi: entryPoint08Abi,
+    logs: logs.filter((l) => isAddressEqual(l.address, entryPoint08Address)),
+    eventName: "UserOperationEvent",
+    strict: false,
+  }).filter((o) => o.args.sender && o.args.paymaster && isAddressEqual(o.args.sender, user));
+  const fees = new Set<Log>();
+  logs.forEach((log, i) => {
+    const op = ops.find((o) => isAddressEqual(o.args.paymaster!, log.address));
+    if (!op) return;
+    const [sponsored] = parseEventLogs({ abi: sponsoredAbi, logs: [log], strict: false });
+    const a = sponsored?.args;
+    if (!a || a.userOpHash !== op.args.userOpHash || !a.user || !isAddressEqual(a.user, user)) return;
+    if (a.paymasterMode !== ERC20_MODE || !a.token || !isAddressEqual(a.token, USDC.address) || a.tokenAmountPaid === undefined) return;
+    for (let j = i - 1; j >= 0; j--) {
+      const l = logs[j];
+      if (fees.has(l) || !isAddressEqual(l.address, USDC.address)) continue;
+      const [t] = parseEventLogs({ abi: erc20Abi, logs: [l], eventName: "Transfer", strict: false });
+      if (t?.args.from && isAddressEqual(t.args.from, user) && t.args.value === a.tokenAmountPaid) {
+        fees.add(l);
+        break;
+      }
+    }
+  });
+  return fees;
+}
+
+/**
  * Decode what happened to `user` in one transaction receipt. A bundle tx can carry other
  * accounts' operations, so every event is filtered by the user's address. USDC moving between the
  * wallet and savings stays inside the cash (D15), and the cash is one pot on screen (D20): it is no
- * move of its own, and a buy or a repay it paid for reads as paid from cash.
+ * move of its own, and a buy or a repay it paid for reads as paid from cash. JAW's network fee isn't
+ * a move either (feeTransfers): it is no "Sent", and a buy's price leaves it out.
  */
 export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[] {
   const items: ActivityItem[] = [];
+  const fees = feeTransfers(logs, user);
 
   const spokeLogs = parseEventLogs({
     abi: spokeAbi,
@@ -50,7 +100,7 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
   const tracked = [...EQUITIES.map((e) => e.address), USDC.address];
   const transfers = parseEventLogs({
     abi: erc20Abi,
-    logs: logs.filter((l) => tracked.some((a) => isAddressEqual(a, l.address))),
+    logs: logs.filter((l) => tracked.some((a) => isAddressEqual(a, l.address)) && !fees.has(l)),
     eventName: "Transfer",
     strict: false,
   });
