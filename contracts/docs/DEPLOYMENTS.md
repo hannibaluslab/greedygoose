@@ -37,16 +37,19 @@ cd contracts
 forge build
 # Rehearse on a Base fork first (nothing is sent anywhere):
 BASE_RPC_URL=https://mainnet.base.org forge test --match-contract GooseBoard
-# Then Base mainnet, with the key in the environment only (never in a file in the repo):
-DEPLOYER_PRIVATE_KEY=0x… forge script script/DeployGooseBoard.s.sol --rpc-url https://mainnet.base.org --broadcast
+# Then Base mainnet. The signer comes from forge's wallet flags, so the key never lands in the shell's history or a file:
+forge script script/DeployGooseBoard.s.sol --rpc-url https://mainnet.base.org --broadcast --account <keystore name>
+#   a keystore made once with `cast wallet import <name> --interactive`; or --ledger; or --interactives 1 (hidden prompt)
 ```
+
+Don't put the key on the command line (`DEPLOYER_PRIVATE_KEY=0x… forge script …` stays in the shell's history). The script still reads `DEPLOYER_PRIVATE_KEY` when it is set, for the fork rehearsals.
 
 The script prints the address and the block. Optionally verify the source (`forge verify-contract <address> src/GooseBoard.sol:GooseBoard --chain base`, with a Basescan key).
 
 ### Then
 
-- Set `NEXT_PUBLIC_GOOSE_BOARD=<address>` in the app's environment. From then on every account's first move carries `join()` at the end of its batch, and the Leaderboard tab reads the list.
-- Set `NEXT_PUBLIC_BASE_RPC_URL` to an RPC that serves `eth_getLogs` over the board's whole history (10,000 blocks a request) and past state. Without it the board reads logs from PublicNode's keyless endpoint, which answers only for about the last 10,000 blocks (measured 2026-10-15), so it can't load once its first member joined more than about five hours earlier.
+- **First, the RPC.** Set `NEXT_PUBLIC_BASE_RPC_URL` to an RPC that serves `eth_getLogs` over the board's whole history (10,000 blocks a request) and past state, and check it answers a range from the deploy block. Without it the board reads logs from PublicNode's keyless endpoint, which answers only for about the last 10,000 blocks (measured 2026-10-15), so the board can't load once its first member joined more than about five hours earlier. The same variable is the whole app's Base transport (`lib/jaw/config.ts`), and like every `NEXT_PUBLIC_*` value it ships in the page, so use a key that is meant to be public (an origin-restricted one).
+- **Then** set `NEXT_PUBLIC_GOOSE_BOARD=<address>` in the app's environment, and not before the RPC above: from then on every account's first move carries `join()` at the end of its batch, and the Leaderboard tab reads the list.
 - Record the deploy here: address, block, commit, cost.
 
 | What | Value |

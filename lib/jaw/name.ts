@@ -9,18 +9,35 @@ const MAINNET_RPC = process.env.NEXT_PUBLIC_MAINNET_RPC_URL || mainnet.rpcUrls.d
 
 let names: JustaName["subnames"] | undefined;
 
+/** Name lookups in flight at once: a screen of names (the leaderboard's page) queues instead of firing together. */
+const NAME_LOOKUPS = 6;
+let lookups = 0;
+const waiting: (() => void)[] = [];
+async function oneAtATime<T>(job: () => Promise<T>): Promise<T> {
+  if (lookups >= NAME_LOOKUPS) await new Promise<void>((go) => waiting.push(go));
+  lookups += 1;
+  try {
+    return await job();
+  } finally {
+    lookups -= 1;
+    waiting.shift()?.();
+  }
+}
+
 /**
  * The account's name ("sam.justan.id"), or null when it has none. JustaName's `reverseResolve`, the SDK JAW's own
  * screens use: the account's ENS reverse record for Base, then the primary name JAW gave it at sign-up (JAW's
  * subnames have no reverse record on chain). Loaded on first use, so the SDK stays out of the first page load.
- * Read-only: no API key.
+ * Read-only: no API key. At most six at once.
  */
 export async function accountName(address: `0x${string}`): Promise<string | null> {
-  if (!names) {
-    const { JustaName } = await import("@justaname.id/sdk");
-    names = JustaName.init({ networks: [{ chainId: 1, providerUrl: MAINNET_RPC }] }).subnames;
-  }
-  return names.reverseResolve({ address, chainId: CHAIN_ID });
+  return oneAtATime(async () => {
+    if (!names) {
+      const { JustaName } = await import("@justaname.id/sdk");
+      names = JustaName.init({ networks: [{ chainId: 1, providerUrl: MAINNET_RPC }] }).subnames;
+    }
+    return names.reverseResolve({ address, chainId: CHAIN_ID });
+  });
 }
 
 /** "sam.justan.id" → "Sam", for "Hi, Sam". */
@@ -50,15 +67,19 @@ export function fullName(input: string): string | null {
 
 /**
  * The account a name points to, for adding a contact by name: its Base address first (ENSIP-11), then its Ethereum
- * one (a JAW account has the same address on every chain). JAW's names resolve through ENS's offchain lookup, which
- * viem follows. Null when the name points nowhere. An address typed in is returned as it is.
+ * one. JAW's names resolve through ENS's offchain lookup, which viem follows; some give a Base address and some only an
+ * Ethereum one (measured 2026-10-15). A name under the app's parent is a JAW account, which has the same address on
+ * every chain, so its Ethereum address is its Base one. For any other name an Ethereum address may be a different
+ * account on Base (a contract wallet), so `onBase` is false and the screen says so. Null when the name points
+ * nowhere. An address typed in is returned as it is.
  */
-export async function addressOfName(input: string): Promise<{ name: string | null; address: Address } | null> {
-  if (isAddress(input.trim())) return { name: null, address: input.trim() as Address };
+export async function addressOfName(input: string): Promise<{ name: string | null; address: Address; onBase: boolean } | null> {
+  if (isAddress(input.trim())) return { name: null, address: input.trim() as Address, onBase: true };
   const name = fullName(input);
   if (!name) return null;
   ens ??= createPublicClient({ chain: mainnet, transport: http(MAINNET_RPC) });
-  const onBase = await ens.getEnsAddress({ name, coinType: toCoinType(CHAIN_ID) }).catch(() => null);
-  const address = onBase ?? (await ens.getEnsAddress({ name }));
-  return address ? { name, address } : null;
+  const base = await ens.getEnsAddress({ name, coinType: toCoinType(CHAIN_ID) }).catch(() => null);
+  if (base) return { name, address: base, onBase: true };
+  const eth = await ens.getEnsAddress({ name });
+  return eth ? { name, address: eth, onBase: name.endsWith(`.${NAME_PARENT}`) } : null;
 }

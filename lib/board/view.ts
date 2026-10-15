@@ -25,30 +25,41 @@ export type BoardLine = { kind: "row"; person: BoardPerson } | { kind: "gap"; ke
 
 export type BoardSections = {
   ranked: BoardLine[];
+  /** Not ranked yet, drawn as rows: you and your contacts. */
   unranked: BoardPerson[];
+  /** Everyone else not ranked yet (All only): a count, not rows, however many accounts join and do nothing. */
+  unrankedOthers: number;
   /** Contacts not on the board (Contacts only). */
   offBoard: OffBoard[];
 };
 
 /**
  * What the board shows under a filter. All: everyone ranked, the first BOARD_PAGE of them, with your own row pinned
- * after a gap when it is further down (as the booth's board did), then everyone not ranked yet. Contacts: the same
- * board filtered to the people you added, and you, with their ranks on the whole board; then your contacts who aren't
- * on it yet.
+ * after a gap when it is further down (as the booth's board did); then, not ranked yet, you and your contacts as rows
+ * and everyone else as a count. Contacts: the same board filtered to the people you added, and you, with their ranks on
+ * the whole board; then your contacts who aren't on it yet.
  */
 export function boardSections(people: readonly BoardPerson[], offBoard: readonly OffBoard[], filter: BoardFilter): BoardSections {
   const shown = filter === "contacts" ? people.filter((p) => p.contact || p.you) : people;
   const ranked = shown.filter((p) => p.rank !== null).sort((a, b) => a.rank! - b.rank!);
   const unranked = shown.filter((p) => p.rank === null);
   if (filter === "contacts") {
-    return { ranked: ranked.map((person) => ({ kind: "row", person })), unranked, offBoard: [...offBoard] };
+    return { ranked: ranked.map((person) => ({ kind: "row", person })), unranked, unrankedOthers: 0, offBoard: [...offBoard] };
   }
   const top = ranked.slice(0, BOARD_PAGE);
   const lines: BoardLine[] = top.map((person) => ({ kind: "row", person }));
   const you = ranked.find((p) => p.you);
   if (you && !top.includes(you)) lines.push({ kind: "gap", key: "gap-you" }, { kind: "row", person: you });
   else if (ranked.length > top.length) lines.push({ kind: "gap", key: "gap-end" });
-  return { ranked: lines, unranked, offBoard: [] };
+  const known = unranked.filter((p) => p.you || p.contact);
+  return { ranked: lines, unranked: known, unrankedOthers: unranked.length - known.length, offBoard: [] };
+}
+
+/** The line under the people not ranked yet on All: how many others there are. */
+export function othersLine(n: number, withRows: boolean): string {
+  const count = n.toLocaleString("en-US");
+  if (withRows) return n === 1 ? "And 1 other." : `And ${count} others.`;
+  return n === 1 ? "1 person." : `${count} people.`;
 }
 
 /** A row's label: "You" for you, else the JAW name, else the short address. */

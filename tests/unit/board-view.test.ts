@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { numberToHex, type Address } from "viem";
-import { BOARD_PAGE, boardPct, boardSections, personLabel, type BoardPerson } from "@/lib/board/view";
+import { BOARD_PAGE, boardPct, boardSections, othersLine, personLabel, type BoardPerson } from "@/lib/board/view";
 
 const addr = (i: number) => numberToHex(i + 1, { size: 20 }) as Address;
 const person = (i: number, over: Partial<BoardPerson> = {}): BoardPerson => ({
@@ -32,12 +32,25 @@ describe("boardSections", () => {
   it("puts the not-ranked-yet after, and Contacts filters the same board to your contacts and you", () => {
     const people = [person(0, { contact: true }), person(1), person(2, { you: true }), person(3, { pct: null, rank: null, contact: true }), person(4, { pct: null, rank: null })];
     const all = boardSections(people, [], "all");
-    expect(all.unranked.map((p) => p.account)).toEqual([addr(3), addr(4)]);
+    // On All, only you and your contacts are drawn among those not ranked yet; everyone else is a count.
+    expect(all.unranked.map((p) => p.account)).toEqual([addr(3)]);
+    expect(all.unrankedOthers).toBe(1);
     const offBoard = [{ account: addr(9), name: "kit.justan.id" }];
     const c = boardSections(people, offBoard, "contacts");
     expect(c.ranked.map((l) => (l.kind === "row" ? l.person.rank : l.key))).toEqual([1, 3]);
     expect(c.unranked.map((p) => p.account)).toEqual([addr(3)]);
     expect(c.offBoard).toEqual(offBoard);
+  });
+});
+
+describe("accounts that join and do nothing", () => {
+  it("never become rows on All: a thousand of them are one line", () => {
+    const junk = Array.from({ length: 1_000 }, (_, i) => person(i + 10, { pct: null, rank: null }));
+    const s = boardSections([person(0), person(1, { you: true, pct: null, rank: null }), ...junk], [], "all");
+    expect(s.unranked.map((p) => p.you)).toEqual([true]);
+    expect(s.unrankedOthers).toBe(1_000);
+    expect(othersLine(1_000, true)).toBe("And 1,000 others.");
+    expect(othersLine(1, false)).toBe("1 person.");
   });
 });
 

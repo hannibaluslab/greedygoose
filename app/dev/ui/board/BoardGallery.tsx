@@ -13,10 +13,11 @@ import type { BoardFilter, BoardPerson, OffBoard } from "@/lib/board/view";
  * (returnSinceJoining, rankRows). Nothing here reads the chain.
  *   /dev/ui/board                 the board, you 4th, some contacts, two not ranked yet
  *   ?view=far                     70 people, you 63rd: your row pinned under the first page
- *   ?view=soon|loading|error|empty
+ *   ?view=crowd                   the board plus 300 accounts that joined and did nothing: one line, not 300 rows
+ *   ?view=soon|loading|error|contacts-error|empty
  *   &filter=contacts              the same board filtered to your contacts
  *   &pick=1                       "Add several", two ticked
- *   &sheet=person|contact|you|unranked|offboard|name
+ *   &sheet=person|contact|you|unranked|offboard|name|name-eth (a name that only gives an Ethereum address)
  * Adding and removing go straight to JAW's own sheet in the app; here they only say so.
  */
 
@@ -71,11 +72,20 @@ export function BoardGallery() {
   const view = q.get("view");
   const [filter, setFilter] = useState<BoardFilter>(q.get("filter") === "contacts" ? "contacts" : "all");
   const [picking, setPicking] = useState(q.get("pick") === "1");
-  const list = view === "far" ? far() : view === "empty" ? [] : people(FIXTURE);
+  const crowd = Array.from({ length: 300 }, () => [null, 0, 0, 0, 0, 0] as (typeof FIXTURE)[number]);
+  const list = view === "far" ? far() : view === "empty" ? [] : people(view === "crowd" ? [...FIXTURE, ...crowd] : FIXTURE);
   const [picked, setPicked] = useState<Set<string>>(new Set(q.get("pick") === "1" ? [addr(1), addr(2)].map((a) => a.toLowerCase()) : []));
   const sheet = q.get("sheet");
   const state: BoardState =
-    view === "soon" ? { kind: "soon" } : view === "loading" ? { kind: "loading" } : view === "error" ? { kind: "error" } : { kind: "ready", people: list, offBoard: view === "empty" ? [] : OFF_BOARD };
+    view === "soon"
+      ? { kind: "soon" }
+      : view === "loading"
+        ? { kind: "loading" }
+        : view === "error"
+          ? { kind: "error", what: "board" }
+          : view === "contacts-error"
+            ? { kind: "error", what: "contacts" }
+            : { kind: "ready", people: list, offBoard: view === "empty" ? [] : OFF_BOARD };
 
   const find = (i: number) => list.find((p) => p.account === addr(i)) ?? null;
   const sheetPerson =
@@ -85,7 +95,10 @@ export function BoardGallery() {
     next.delete("sheet");
     router.replace(`/dev/ui/board?${next}`);
   };
-  const lookup: NameLookup = { kind: "found", name: "rae.justan.id", account: addr(40), you: false, contact: false, onBoard: false };
+  const lookup: NameLookup =
+    sheet === "name-eth"
+      ? { kind: "found", name: "rae.eth", account: addr(42), you: false, contact: false, onBoard: false, onBase: false }
+      : { kind: "found", name: "rae.justan.id", account: addr(40), you: false, contact: false, onBoard: false, onBase: true };
 
   return (
     <>
@@ -122,9 +135,9 @@ export function BoardGallery() {
       />
       <PersonSheet open={!!sheetPerson} onClose={close} person={sheetPerson} phase="idle" error={null} note={null} preview={false} onAdd={NOTHING_SIGNED} onRemove={NOTHING_SIGNED} />
       <AddByNameSheet
-        open={sheet === "name"}
+        open={sheet === "name" || sheet === "name-eth"}
         onClose={close}
-        lookup={sheet === "name" ? lookup : { kind: "idle" }}
+        lookup={sheet === "name" || sheet === "name-eth" ? lookup : { kind: "idle" }}
         onLookup={NOTHING_SIGNED}
         phase="idle"
         error={null}

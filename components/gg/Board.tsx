@@ -9,8 +9,7 @@ import { TabBar } from "./TabBar";
 import { TxButton, TxError } from "./TxUi";
 import { BoardIcon, CloseIcon, PlusIcon } from "./icons";
 import type { TxPhase } from "@/hooks/useTx";
-import { boardPct, boardSections, personLabel, type BoardFilter, type BoardPerson, type OffBoard } from "@/lib/board/view";
-import { MIN_PUT_IN_USD } from "@/lib/board/score";
+import { boardPct, boardSections, othersLine, personLabel, type BoardFilter, type BoardPerson, type OffBoard } from "@/lib/board/view";
 import { shortAddress } from "@/lib/formatting";
 
 /*
@@ -23,24 +22,30 @@ import { shortAddress } from "@/lib/formatting";
 export type BoardState =
   | { kind: "soon" }
   | { kind: "loading" }
-  | { kind: "error" }
+  /** The board couldn't be read, or (on Contacts) the contacts list couldn't. */
+  | { kind: "error"; what?: "board" | "contacts" }
   | { kind: "ready"; people: BoardPerson[]; offBoard: OffBoard[] };
 
 export const BOARD_COPY = {
   soon: "The leaderboard opens soon.",
   soonLine: "Everyone joins with their first move. It ranks return since joining, in percent.",
   error: "Couldn’t load the board",
-  errorLine: "Base didn’t answer, so nothing is shown. Try again in a moment.",
+  errorLine: "Base didn’t answer, so nothing is shown.",
+  contactsError: "Couldn’t load your contacts",
+  contactsErrorLine: "Base didn’t answer. The board is still on All.",
   empty: "Nobody’s on the board yet.",
   emptyLine: "You join with your first move in GreedyGoose.",
   noContacts: "No contacts yet.",
   noContactsLine: "Add people from All, or by name.",
   notRanked: "Not ranked yet",
-  notRankedLine: `Ranked from $${MIN_PUT_IN_USD} put in.`,
+  // No dollar figure on the board, the threshold included (lib/board/score.ts MIN_PUT_IN_USD).
+  notRankedLine: "Ranked once they’ve put money in.",
+  notRankedYou: "Ranked once you’ve put money in.",
   offBoard: "Not on the board yet",
   offBoardLine: "Joins with their first move in GreedyGoose.",
-  foot: "Return since joining, in percent. Money added or taken out doesn’t count.",
+  foot: "Return since joining, in percent. Money added or taken out doesn’t count as a gain.",
   contactsFoot: "Contacts are saved on-chain, under your name.",
+  notOnBase: "This name only gives an Ethereum address. Add it if it’s the same account on Base.",
 } as const;
 
 const FILTERS: { value: BoardFilter; label: string }[] = [
@@ -131,8 +136,9 @@ export function BoardRowItem({
 }
 
 const Gap = () => (
-  <li aria-label="More ranks" className="py-0.5 text-center font-mono text-[12px] tracking-[0.2em] text-ink-mid">
-    · · ·
+  <li className="py-0.5 text-center font-mono text-[12px] tracking-[0.2em] text-ink-mid">
+    <span aria-hidden>· · ·</span>
+    <span className="sr-only">More ranks</span>
   </li>
 );
 
@@ -205,7 +211,10 @@ export function BoardView({
 }) {
   const ready = state.kind === "ready" ? state : null;
   const s = ready ? boardSections(ready.people, ready.offBoard, filter) : null;
-  const addable = ready ? ready.people.filter((p) => !p.you && !p.contact).length : 0;
+  // Only the rows on screen can be ticked.
+  const addable = s
+    ? [...s.ranked.flatMap((l) => (l.kind === "row" ? [l.person] : [])), ...s.unranked].filter((p) => !p.you && !p.contact).length
+    : 0;
   const isPicked = (a: string) => picked.has(a.toLowerCase());
   const row = (p: BoardPerson) => (
     <BoardRowItem
@@ -223,8 +232,9 @@ export function BoardView({
   if (state.kind === "soon") body = <Note icon={<BoardIcon />} title={BOARD_COPY.soon} line={BOARD_COPY.soonLine} />;
   else if (state.kind === "loading") body = <Skeleton />;
   else if (state.kind === "error") {
+    const contacts = state.what === "contacts";
     body = (
-      <Note title={BOARD_COPY.error} line={BOARD_COPY.errorLine}>
+      <Note title={contacts ? BOARD_COPY.contactsError : BOARD_COPY.error} line={contacts ? BOARD_COPY.contactsErrorLine : BOARD_COPY.errorLine}>
         <button type="button" onClick={onRetry} className={buttonClass("dark", "md")}>
           Try again
         </button>
@@ -250,9 +260,10 @@ export function BoardView({
             {s.ranked.map((l) => (l.kind === "gap" ? <Gap key={l.key} /> : row(l.person)))}
           </List>
         )}
-        {s.unranked.length > 0 && !(noContacts && s.unranked.every((p) => p.you)) && (
+        {(s.unranked.length > 0 || s.unrankedOthers > 0) && !(noContacts && s.unranked.every((p) => p.you)) && (
           <Section title={BOARD_COPY.notRanked} line={BOARD_COPY.notRankedLine}>
-            <List label={BOARD_COPY.notRanked}>{s.unranked.map(row)}</List>
+            {s.unranked.length > 0 && <List label={BOARD_COPY.notRanked}>{s.unranked.map(row)}</List>}
+            {s.unrankedOthers > 0 && <p className="m-0 px-1 text-[13px] text-ink-mid">{othersLine(s.unrankedOthers, s.unranked.length > 0)}</p>}
           </Section>
         )}
         {s.offBoard.length > 0 && (
@@ -374,7 +385,7 @@ export function PersonSheet({
           ) : person.pct === null ? (
             <>
               <span className="text-[17px] font-semibold">{BOARD_COPY.notRanked}</span>
-              <span className="text-[13px] leading-[1.4] text-ink-mid">{BOARD_COPY.notRankedLine}</span>
+              <span className="text-[13px] leading-[1.4] text-ink-mid">{person.you ? BOARD_COPY.notRankedYou : BOARD_COPY.notRankedLine}</span>
             </>
           ) : (
             <>
@@ -410,7 +421,8 @@ export type NameLookup =
   | { kind: "idle" }
   | { kind: "looking" }
   | { kind: "none"; name: string }
-  | { kind: "found"; name: string | null; account: `0x${string}`; you: boolean; contact: boolean; onBoard: boolean };
+  /** `onBase` false: the name gave only an Ethereum address, which may not be the same account on Base. */
+  | { kind: "found"; name: string | null; account: `0x${string}`; you: boolean; contact: boolean; onBoard: boolean; onBase?: boolean };
 
 /** Add a contact by name: type it, see who it is, then Add. "sam" means sam.justan.id. */
 export function AddByNameSheet({
@@ -448,11 +460,11 @@ export function AddByNameSheet({
             className="h-14 min-w-0 grow bg-transparent text-base text-ink placeholder:text-ink-faint focus:outline-none"
           />
           {text && (
-            <button type="button" aria-label="Clear" onClick={() => setText("")} className="grid size-8 place-items-center rounded-full text-ink-mid">
+            <button type="button" aria-label="Clear" onClick={() => setText("")} className="-mx-1.5 grid size-11 shrink-0 place-items-center rounded-full text-ink-mid">
               <CloseIcon size={14} />
             </button>
           )}
-          <button type="submit" disabled={!text.trim() || lookup.kind === "looking"} className="h-9 shrink-0 rounded-[18px] bg-ink px-4 text-sm font-semibold text-on-ink disabled:opacity-45">
+          <button type="submit" disabled={!text.trim() || lookup.kind === "looking"} className="-mr-2 h-11 shrink-0 rounded-[16px] bg-ink px-4 text-sm font-semibold text-on-ink disabled:opacity-45">
             {lookup.kind === "looking" ? "Looking…" : "Find"}
           </button>
         </form>
@@ -468,6 +480,7 @@ export function AddByNameSheet({
             </span>
           </WhiteCard>
         )}
+        {found && found.onBase === false && !found.you && !found.contact && <p className="m-0 px-1 text-[13px] leading-[1.4] text-ink-mid">{BOARD_COPY.notOnBase}</p>}
         {found && found.you && <p className="m-0 px-1 text-[14px] text-ink-mid">That’s you.</p>}
         {found && !found.you && found.contact && <p className="m-0 px-1 text-[14px] text-ink-mid">Already in your contacts.</p>}
         {found && !found.you && !found.contact && (

@@ -51,11 +51,10 @@ function Board({ address }: { address: Address }) {
   const contactSet = useMemo(() => new Set(contacts.map(lower)), [contacts]);
   const memberSet = useMemo(() => new Set(rows.map((r) => lower(r.account))), [rows]);
 
-  // Names for what can be on screen: the first page, you, those not ranked yet and your contacts.
+  // Names for what can be on screen: the first page, you and your contacts (others not ranked yet are only a count).
   const named = useMemo(() => {
     const ranked = rows.filter((r) => r.rank !== null && r.rank <= BOARD_PAGE).map((r) => r.account);
-    const rest = rows.filter((r) => r.rank === null).slice(0, BOARD_PAGE).map((r) => r.account);
-    return [...new Set([address, ...ranked, ...rest, ...contacts].map(lower))] as Address[];
+    return [...new Set([address, ...ranked, ...contacts].map(lower))] as Address[];
   }, [rows, contacts, address]);
   const names = useNames(named);
   const nameOf = (a: string) => names.get(lower(a)) ?? null;
@@ -74,9 +73,11 @@ function Board({ address }: { address: Address }) {
     ? { kind: "soon" }
     : (board.isPending && !board.data) || (filter === "contacts" && following.isPending)
       ? { kind: "loading" }
-      : !board.data || (filter === "contacts" && !following.data)
-        ? { kind: "error" }
-        : { kind: "ready", people, offBoard };
+      : !board.data
+        ? { kind: "error", what: "board" }
+        : filter === "contacts" && !following.data
+          ? { kind: "error", what: "contacts" }
+          : { kind: "ready", people, offBoard };
 
   // A change that landed closes what asked for it, the sheet or the bar. Derived from the phase rather than set from
   // an effect; `settle` puts it away for good before anything new starts.
@@ -128,6 +129,7 @@ function Board({ address }: { address: Address }) {
         kind: "found",
         name: found.name ?? nameOf(found.address),
         account: found.address,
+        onBase: found.onBase,
         you: isAddressEqual(found.address, address),
         contact: contactSet.has(lower(found.address)),
         onBoard: memberSet.has(lower(found.address)),
