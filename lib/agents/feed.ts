@@ -79,10 +79,13 @@ const word = (hf: bigint): Words => {
   const s = statusOf(hf);
   return s === "none" ? ["Nothing owed"] : [{ status: s }];
 };
-/** "Back to Safe." after a move, "Now Watch." if it's not there yet, or "Nothing owed now." */
+/**
+ * After a Protect move: "Back to Watch." (where Protect brings it, since Act is the line), "Back to Safe.", "Still in
+ * Act." when a sale was cut short, or "Nothing owed now."
+ */
 const after = (hf: bigint): Words => {
   const s = statusOf(hf);
-  return s === "none" ? ["Nothing owed now."] : s === "safe" ? ["Back to ", { status: s }, "."] : ["Now ", { status: s }, "."];
+  return s === "none" ? ["Nothing owed now."] : s === "act" ? ["Still in ", { status: s }, "."] : ["Back to ", { status: s }, "."];
 };
 
 /** "Tesla", "Tesla and Apple", "3 stocks". */
@@ -122,7 +125,7 @@ function usedRow(ctx: MoveContext, per: "today" | "this week") {
  * matter, and their switches make no row (D20).
  */
 const JOB: Partial<Record<AgentJob, { agent: AgentName; on: (cap: string) => string; off: string }>> = {
-  protect: { agent: "Protect", on: (cap) => `Protect is on. It repays from your cash, up to ${cap} a day.`, off: "Protect is off" },
+  protect: { agent: "Protect", on: (cap) => `Protect is on. If your credit reaches Act, it repays from your cash, up to ${cap} a day.`, off: "Protect is off" },
   sell: { agent: "Protect", on: (cap) => `Protect can sell backing stock, up to ${cap} a day.`, off: "Protect won't sell" },
   rebalance: { agent: "Rebalance", on: (cap) => `Rebalance is on, up to ${cap} a week.`, off: "Rebalance is off" },
 };
@@ -198,7 +201,7 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
           {
             label: "Why",
             value: e.atOnce
-              ? ["Your credit reached ", ...word(e.hfBefore), ", so Protect sold at once."]
+              ? ["Your credit fell deep into ", ...word(e.hfBefore), ", so Protect sold at once."]
               : ["Your credit was still in ", ...word(e.hfBefore), " after the heads-up."],
           },
           ...owedRow(ctx),
@@ -212,7 +215,7 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
         by: "Protect",
         line: ["Credit reached ", ...word(e.hf), ". Asked you to repay or add more."],
         details: [
-          { label: "Why", value: ["Your cash couldn't bring it back to ", { status: "safe" }, "."] },
+          { label: "Why", value: ["Your cash couldn't bring it back to ", { status: "watch" }, "."] },
           { label: "Would sell", value: [`${usd(e.sellValueRaw)} of backing stock`] },
           // A wait that ends while prices are held gives their reopening as the sale time: the second before is closed.
           { label: "Sells at", value: [marketState(new Date((e.sellAfter - 1) * 1000)).open ? at(e.sellAfter) : "When prices reopen"] },

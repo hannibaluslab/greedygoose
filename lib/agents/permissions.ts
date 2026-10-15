@@ -114,8 +114,8 @@ export function agentPermission(
 }
 
 /*
- * Protect · sell (GooseExecutor's Job.ProtectSell, id 2): when savings can't keep the credit Safe, the executor sells
- * some of the stock that backs it and repays. Its own JAW grant, so selling can be switched off alone (decision 5);
+ * Protect · sell (GooseExecutor's Job.ProtectSell, id 2): when savings can't bring the credit out of Act, the executor
+ * sells some of the stock that backs it and repays, back to Watch. Its own JAW grant, so selling can be switched off alone (decision 5);
  * not one of the Cash Agent switches (`CASH_JOBS`).
  */
 

@@ -1,6 +1,6 @@
 /**
- * Protect · sell: when savings can't keep the credit Safe, sell some of the stock that backs it and repay with the
- * proceeds (plan item 1, steps 10–12). Integer on-chain units only, so GooseExecutor's port
+ * Protect · sell: when cash can't bring the credit out of Act, sell some of the stock that backs it and repay with the
+ * proceeds, back to Watch (plan item 1, steps 10–12; Act is the line, 2026-10-15). Integer on-chain units only, so GooseExecutor's port
  * (contracts/src/SellRules.sol) must agree exactly: test/SellRules.t.sol runs both on the vectors from
  * scripts/agent-vectors.ts.
  *
@@ -175,10 +175,11 @@ export function planSell(book: SellBook, o: SellOptions & { maxSliceRaw: bigint 
 export type SellTiming = "wait" | "heads-up" | "clear" | "sell";
 
 /**
- * When Protect sells (decision 3): below `headsUpHf` on a weekday, a heads-up, then the sale `headsUpDelaySec` later
- * if the health is still below; below `nowHf`, at once. Never while prices are held (weekends and holidays). Back
- * above `headsUpHf`, a pending heads-up is cleared, so a later fall gets a new one. `headsUpAt` is 0 when none is
- * pending. A sale below `nowHf` uses the wider Act floor.
+ * When Protect sells (decision 3, Act is the line, 2026-10-15): below `headsUpHf` (the Act line) on a weekday, a
+ * heads-up, then the sale `headsUpDelaySec` later if the health is still below; below `nowHf`, deep in Act, at once.
+ * Never in Safe or Watch, and never while prices are held (weekends and holidays). Back above `headsUpHf`, a pending
+ * heads-up is cleared, so a later fall gets a new one. `headsUpAt` is 0 when none is pending. A sale below `nowHf`
+ * uses the wider Act floor.
  */
 export function sellTiming(
   hf: bigint,

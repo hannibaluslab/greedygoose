@@ -23,12 +23,12 @@ contract CashRulesTest is Test {
             string memory at = string.concat("vector ", vm.toString(i));
             // Within 1e-4 of a threshold float and integer maths may disagree: there only the amount is compared.
             if (checkKind[i] != 0) assertEq(uint8(got), uint8(want), at);
-            if (got >= ProtectCase.Watch && want >= ProtectCase.Watch) {
+            if (got == ProtectCase.Act && want == ProtectCase.Act) {
                 assertApproxEqAbs(amount, amounts[i], CENT, at);
                 ++repays;
             }
         }
-        assertGt(repays, 300, "both repay reasons are well covered");
+        assertGt(repays, 250, "repays are well covered");
     }
 
     function test_save_agrees_with_planSave() public view {
@@ -55,7 +55,13 @@ contract CashRulesTest is Test {
     ) public pure {
         cash = bound(cash, 0, 1e15);
         capLeft = bound(capLeft, 0, 1e15);
-        Amounts memory a = Amounts(0.05e6, uint64(bound(minSave, 0.1e6, 100e6)), uint64(bound(keepBack, 0, 5e6)), 6 hours, uint8(bound(maxSaves, 1, 24)));
+        Amounts memory a = Amounts(
+            0.05e6,
+            uint64(bound(minSave, 0.1e6, 100e6)),
+            uint64(bound(keepBack, 0, 5e6)),
+            6 hours,
+            uint8(bound(maxSaves, 1, 24))
+        );
         (SaveCase c, uint256 amount) = CashRules.planSave(cash, capLeft, savesToday, a);
         if (c != SaveCase.Save) return assertEq(amount, 0);
         assertLe(amount, cash - a.keepBack, "keep-back stays");
@@ -69,19 +75,18 @@ contract CashRulesTest is Test {
         uint256 avgCf,
         uint256 debtRay,
         uint256 savings,
-        uint256 capLeft,
-        bool preFreeze
+        uint256 capLeft
     ) public pure {
         collateral = bound(collateral, 0, 1e35); // up to $1B
         avgCf = bound(avgCf, 0, 1e18);
         debtRay = bound(debtRay, 0, 1e62);
         savings = bound(savings, 0, 1e15);
         capLeft = bound(capLeft, 0, 1e15);
-        Thresholds memory t = Thresholds(1.5e18, 1.65e18, 0.15e18, 1.1e18);
-        (ProtectCase why, uint256 need, uint256 debt) = CashRules.protectNeed(collateral, avgCf, debtRay, preFreeze, t);
-        if (why < ProtectCase.Watch) return assertEq(need, 0);
+        Thresholds memory t = Thresholds(1.1e18, 1.2e18, 0.15e18, 1.1e18);
+        (ProtectCase why, uint256 need, uint256 debt) = CashRules.protectNeed(collateral, avgCf, debtRay, t);
+        if (why != ProtectCase.Act) return assertEq(need, 0);
         (ProtectCase c, uint256 amount) = CashRules.protectAmount(why, need, debt, savings, capLeft, 0.05e6);
-        if (c < ProtectCase.Watch) return assertEq(amount, 0);
+        if (c != ProtectCase.Act) return assertEq(amount, 0);
         assertEq(uint8(c), uint8(why));
         assertLe(amount, savings, "within savings");
         assertLe(amount, capLeft, "within today's limit");
@@ -89,25 +94,55 @@ contract CashRulesTest is Test {
         assertGe(amount, 0.05e6, "worth a run");
     }
 
-    /// An unlimited Watch repay brings the health factor back to the target, give or take a unit of rounding.
-    function testFuzz_watch_repay_reaches_the_target(uint256 collateral, uint256 avgCf, uint256 hf) public pure {
+    /// An unlimited repay in Act brings the health factor back to the target in Watch (1.2), give or take a unit of
+    /// rounding, and no further: Protect brings the credit back to Watch, not to Safe.
+    function testFuzz_act_repay_reaches_the_target_in_watch(uint256 collateral, uint256 avgCf, uint256 hf) public pure {
         collateral = bound(collateral, 1e28, 1e35); // $100 to $1B
         avgCf = bound(avgCf, 0.3e18, 0.9e18);
-        hf = bound(hf, 1.01e18, 1.49e18);
+        hf = bound(hf, 1.01e18, 1.09e18);
         uint256 power = collateral * avgCf / 1e18;
         uint256 debtRay = power * 1e18 / hf * 1e27;
-        Thresholds memory t = Thresholds(1.5e18, 1.65e18, 0.15e18, 1.1e18);
-        (ProtectCase why, uint256 need, uint256 debt) = CashRules.protectNeed(collateral, avgCf, debtRay, false, t);
-        assertEq(uint8(why), uint8(ProtectCase.Watch));
+        Thresholds memory t = Thresholds(1.1e18, 1.2e18, 0.15e18, 1.1e18);
+        (ProtectCase why, uint256 need, uint256 debt) = CashRules.protectNeed(collateral, avgCf, debtRay, t);
+        assertEq(uint8(why), uint8(ProtectCase.Act));
         (, uint256 amount) = CashRules.protectAmount(why, need, debt, type(uint128).max, type(uint128).max, 0.05e6);
         uint256 left = debt - amount * 1e20;
-        assertGe(power * 1e18 / left, 1.65e18 - 1e9, "back to the target");
+        assertGe(power * 1e18 / left, 1.2e18 - 1e9, "back to the target");
+        assertLt(power * 1e18 / left, 1.21e18, "and no further: Watch, not Safe");
+    }
+
+    /// Watch is fine, and Safe too: from 1.10 up, Protect has nothing to repay, however much savings and limit there are.
+    function testFuzz_nothing_in_safe_or_watch(uint256 collateral, uint256 avgCf, uint256 hf) public pure {
+        collateral = bound(collateral, 1e28, 1e35);
+        avgCf = bound(avgCf, 0.3e18, 0.9e18);
+        hf = bound(hf, 1.1e18 + 1e9, 5e18); // a hair over the line, for the rounding of the debt
+        uint256 power = collateral * avgCf / 1e18;
+        uint256 debtRay = power * 1e18 / hf * 1e27;
+        (ProtectCase why, uint256 need,) =
+            CashRules.protectNeed(collateral, avgCf, debtRay, Thresholds(1.1e18, 1.2e18, 0.15e18, 1.1e18));
+        assertEq(uint8(why), uint8(ProtectCase.Healthy));
+        assertEq(need, 0);
+    }
+
+    /// Adrian's examples (2026-10-15): $1,300 of backing power against $1,000 owed (1.30, Watch): nothing. Against
+    /// $1,238.10 (1.05, Act): repay $154.76, back to 1.20.
+    function test_watch_is_fine_and_act_is_repaid_back_to_watch() public pure {
+        Thresholds memory t = Thresholds(1.1e18, 1.2e18, 0.15e18, 1.1e18);
+        uint256 power = 1_300e26;
+        (ProtectCase why,,) = CashRules.protectNeed(power, 1e18, 1_000e26 * 1e27, t);
+        assertEq(uint8(why), uint8(ProtectCase.Healthy), "1.30: Watch is fine");
+        uint256 debt = power * 1e18 / 1.05e18;
+        uint256 need;
+        (why, need, debt) = CashRules.protectNeed(power, 1e18, debt * 1e27, t);
+        assertEq(uint8(why), uint8(ProtectCase.Act), "1.05: Act");
+        (, uint256 amount) = CashRules.protectAmount(why, need, debt, 1_000e6, 1_000e6, 0.05e6);
+        assertApproxEqAbs(amount, 154.761905e6, 1, "$154.76");
+        assertApproxEqAbs(power * 1e18 / (debt - amount * 1e20), 1.2e18, 1e9, "back to 1.20");
     }
 
     function _protect(Vectors.Protect memory v) internal pure returns (ProtectCase, uint256) {
-        (ProtectCase why, uint256 need, uint256 debt) =
-            CashRules.protectNeed(v.collateral, v.avgCf, v.debtRay, v.preFreeze, v.t);
-        if (why < ProtectCase.Watch) return (why, 0);
+        (ProtectCase why, uint256 need, uint256 debt) = CashRules.protectNeed(v.collateral, v.avgCf, v.debtRay, v.t);
+        if (why != ProtectCase.Act) return (why, 0);
         return CashRules.protectAmount(why, need, debt, v.savings, v.capLeft, v.minRepay);
     }
 

@@ -32,7 +32,7 @@ import { EQUITIES } from "@/lib/tokens/registry";
 
 /** "Sells first": GooseExecutor's `keepMix` for Protect · sell. */
 const ORDER = [
-  { keepMix: false, label: "Most safety per dollar", sub: "Sells the least it takes to bring your credit back to Safe." },
+  { keepMix: false, label: "Most safety per dollar", sub: "Sells the least it takes to bring your credit back to Watch." },
   { keepMix: true, label: "Keep my mix", sub: "Sells the same share of each stock that backs your credit." },
 ] as const;
 
@@ -198,7 +198,7 @@ export function ProtectSettingsView({
       <ManageCard className="flex flex-col px-4 py-0.5">
         <div className="flex flex-col gap-0.5 py-[13px]">
           <span className="text-[15px] font-semibold">Repay from your cash</span>
-          <span className="text-xs leading-[1.35] text-subtle">Always first. Your cash pays before any stock is sold.</span>
+          <span className="text-xs leading-[1.35] text-subtle">Only in Act, and always first. Your cash pays before any stock is sold.</span>
         </div>
         <div className="flex items-center gap-3 border-t border-hairline py-[13px]">
           <div className="flex grow flex-col gap-0.5">

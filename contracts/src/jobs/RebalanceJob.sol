@@ -155,7 +155,7 @@ library RebalanceJob {
         (open, b.day) = _window();
         if (!open || acc.rebalanceDay == b.day) return (p, b);
         if (p.hf == 0) p.hf = JobBase.health(e, c.account);
-        if (p.hf < c.thresholds.triggerHf) return (p, b); // Protect first: wait while the credit isn't Safe
+        if (p.hf < c.thresholds.triggerHf) return (p, b); // Protect first: wait while the credit is in Act
 
         b.perm = permission(e, c.account, c.grant, c.salt, c.terms);
         b.trades = _trades(e, c, b.perm, mix);

@@ -4,12 +4,12 @@ pragma solidity 0.8.28;
 /// Protect · sell's numbers. Health factors WAD, floors in BPS, USDC amounts in units (1e6 = $1). GooseExecutor holds
 /// them within hard bounds (D18, `checkLimits`); a change waits the public delay.
 struct SellLimits {
-    uint64 headsUpHf; // below this on a weekday: a heads-up, then a sale
-    uint64 nowHf; // below this: a sale at once
+    uint64 headsUpHf; // below this on a weekday (the Act line): a heads-up, then a sale
+    uint64 nowHf; // below this, deep in Act: a sale at once
     uint64 targetHf; // a sale brings the health back to this
     uint32 headsUpDelay; // seconds from the heads-up to the sale
-    uint16 floorBps; // most a sale may get under Aave's price
-    uint16 actFloorBps; // the same, below nowHf
+    uint16 floorBps; // most a sale after a heads-up may get under Aave's price
+    uint16 actFloorBps; // the same, for a sale at once (below nowHf)
     uint64 poolCap; // USDC, at Aave's price, all accounts may sell into one stock's pool per POOL_WINDOW
     uint64 maxSlice; // USDC, at Aave's price, per swap
 }
@@ -61,11 +61,16 @@ library SellRules {
     uint256 internal constant MAX_SLICES = 6;
 
     // Hard bounds (D18). Nothing can change them.
-    uint64 internal constant HEADS_UP_HF_MIN = 1.1e18;
-    uint64 internal constant HEADS_UP_HF_MAX = 1.5e18;
+    /// Act is the line (Adrian, 2026-10-15): no heads-up, and so no sale, above the Act line (1.10, config/risk.ts
+    /// RISK), whatever a threshold change says; and the heads-up goes out by 1.05 at the latest.
+    uint64 internal constant HEADS_UP_HF_MIN = 1.05e18;
+    uint64 internal constant HEADS_UP_HF_MAX = 1.1e18;
     uint64 internal constant NOW_HF_MIN = 1.02e18;
+    /// The heads-up keeps a band of its own above the at-once line, so a heads-up still goes out before most sales.
+    uint64 internal constant NOW_GAP_MIN = 0.02e18;
     uint64 internal constant TARGET_GAP_MIN = 0.05e18;
-    uint64 internal constant TARGET_HF_MAX = 2e18;
+    /// A sale brings the credit back to Watch, never past it: the target stays under the Safe line (1.50).
+    uint64 internal constant TARGET_HF_MAX = 1.4e18;
     uint32 internal constant HEADS_UP_DELAY_MIN = 10 minutes;
     uint32 internal constant HEADS_UP_DELAY_MAX = 2 hours;
     uint16 internal constant FLOOR_BPS_MIN = 25;
@@ -78,17 +83,18 @@ library SellRules {
 
     function limitsOk(SellLimits memory l) internal pure returns (bool) {
         return l.headsUpHf >= HEADS_UP_HF_MIN && l.headsUpHf <= HEADS_UP_HF_MAX && l.nowHf >= NOW_HF_MIN
-            && l.nowHf <= l.headsUpHf && l.targetHf >= l.headsUpHf + TARGET_GAP_MIN && l.targetHf <= TARGET_HF_MAX
-            && l.headsUpDelay >= HEADS_UP_DELAY_MIN && l.headsUpDelay <= HEADS_UP_DELAY_MAX
-            && l.floorBps >= FLOOR_BPS_MIN && l.actFloorBps >= l.floorBps && l.actFloorBps <= FLOOR_BPS_MAX
-            && l.poolCap >= POOL_CAP_MIN && l.poolCap <= POOL_CAP_MAX && l.maxSlice >= MAX_SLICE_MIN
-            && l.maxSlice <= MAX_SLICE_MAX;
+            && l.nowHf + NOW_GAP_MIN <= l.headsUpHf && l.targetHf >= l.headsUpHf + TARGET_GAP_MIN
+            && l.targetHf <= TARGET_HF_MAX && l.headsUpDelay >= HEADS_UP_DELAY_MIN
+            && l.headsUpDelay <= HEADS_UP_DELAY_MAX && l.floorBps >= FLOOR_BPS_MIN && l.actFloorBps >= l.floorBps
+            && l.actFloorBps <= FLOOR_BPS_MAX && l.poolCap >= POOL_CAP_MIN && l.poolCap <= POOL_CAP_MAX
+            && l.maxSlice >= MAX_SLICE_MIN && l.maxSlice <= MAX_SLICE_MAX;
     }
 
-    /// When Protect sells (decision 3): below `headsUpHf` on a weekday a heads-up, then the sale `headsUpDelay` later
-    /// if the health is still below; below `nowHf`, at once. Never while prices are held (weekends and holidays). Back
-    /// above `headsUpHf`, a pending heads-up is cleared, so a later fall gets a new one. `headsUpAt` is 0 when none is
-    /// pending. `atOnce` sales use the wider Act floor.
+    /// When Protect sells (decision 3; Act is the line, 2026-10-15): below `headsUpHf` (the Act line) on a weekday a
+    /// heads-up, then the sale `headsUpDelay` later if the health is still below; below `nowHf`, deep in Act, at once.
+    /// Never in Safe or Watch, and never while prices are held (weekends and holidays). Back above `headsUpHf`, a
+    /// pending heads-up is cleared, so a later fall gets a new one. `headsUpAt` is 0 when none is pending. `atOnce`
+    /// sales use the wider Act floor.
     function timing(uint256 hf, uint256 headsUpAt, uint256 nowTs, bool frozen, SellLimits memory l)
         internal
         pure

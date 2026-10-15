@@ -174,9 +174,10 @@ contract DeployExecutor is Script {
         h[1] = keccak256(abi.encodePacked(hex"ef0100", JAW_ACCOUNT));
     }
 
-    /// config/risk.ts CASH_AGENT (checked by test/DeployExecutor.t.sol).
+    /// config/risk.ts CASH_AGENT (checked by test/DeployExecutor.t.sol). Act is the line (Adrian, 2026-10-15): Protect
+    /// repays from savings only below 1.10 (Act), back to 1.20 (Watch). Before, 1.50 back to 1.65.
     function thresholds() public pure returns (Thresholds memory) {
-        return Thresholds({triggerHf: 1.5e18, targetHf: 1.65e18, stressDrop: 0.15e18, stressFloorHf: 1.1e18});
+        return Thresholds({triggerHf: 1.1e18, targetHf: 1.2e18, stressDrop: 0.15e18, stressFloorHf: 1.1e18});
     }
 
     /// config/risk.ts CASH_AGENT and CASH.keepBackUsd (checked by test/DeployExecutor.t.sol).
@@ -184,12 +185,13 @@ contract DeployExecutor is Script {
         return Amounts({minRepay: 0.05e6, minSave: 1e6, keepBack: 1e6, weekendWindow: 6 hours, maxSavesPerDay: 6});
     }
 
-    /// config/risk.ts PROTECT_SELL (checked by test/DeployExecutor.t.sol).
+    /// config/risk.ts PROTECT_SELL (checked by test/DeployExecutor.t.sol). Act is the line (Adrian, 2026-10-15): a
+    /// heads-up below 1.10 (Act), at once below 1.05, back to 1.20 (Watch). Before, 1.25, 1.10 and 1.40.
     function sellLimits() public pure returns (SellLimits memory) {
         return SellLimits({
-            headsUpHf: 1.25e18,
-            nowHf: 1.1e18,
-            targetHf: 1.4e18,
+            headsUpHf: 1.1e18,
+            nowHf: 1.05e18,
+            targetHf: 1.2e18,
             headsUpDelay: 30 minutes,
             floorBps: 100,
             actFloorBps: 300,

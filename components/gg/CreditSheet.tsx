@@ -9,6 +9,7 @@ import { Switch } from "./Switch";
 import type { PositionData } from "@/hooks/usePosition";
 import { useAgents } from "@/hooks/useAgents";
 import { useCreditForBuying } from "@/hooks/useCreditForBuying";
+import { PROTECT_RULE } from "@/lib/agents/list";
 import type { AgentStatus } from "@/lib/agents/status";
 import { homeStatus } from "@/lib/risk/status";
 import { USDC } from "@/lib/tokens/registry";
@@ -88,17 +89,21 @@ export function CreditSheet({
               <span>Room {formatUsdTrim(data.availableUsd)}</span>
             </div>
           </div>
-          <Link href="/agents?agent=protect" className="flex items-center justify-between py-3 text-[15px] text-ink no-underline">
-            <span className="flex items-center gap-2 text-ink-mid">
-              <span aria-hidden className="flex size-[22px] items-center justify-center rounded-[11px] bg-brand text-ink">
-                <ShieldIcon />
+          <Link href="/agents?agent=protect" className="flex flex-col gap-1 py-3 text-[15px] text-ink no-underline">
+            <span className="flex items-center justify-between">
+              <span className="flex items-center gap-2 text-ink-mid">
+                <span aria-hidden className="flex size-[22px] items-center justify-center rounded-[11px] bg-brand text-ink">
+                  <ShieldIcon />
+                </span>
+                Protect
               </span>
-              Protect
+              <span className="flex items-center gap-1 font-semibold">
+                {protection(agents.status.protect, agents.terms.protect?.capRaw ?? null)}
+                <ChevronRight className="text-subtle" />
+              </span>
             </span>
-            <span className="flex items-center gap-1 font-semibold">
-              {protection(agents.status.protect, agents.terms.protect?.capRaw ?? null)}
-              <ChevronRight className="text-subtle" />
-            </span>
+            {/* Act is the line (Adrian, 2026-10-15): what Protect does, said where the credit is. */}
+            <span className="pl-[30px] text-xs leading-[1.35] text-subtle">{PROTECT_RULE}</span>
           </Link>
           <div className="flex items-center gap-3 border-t border-hairline py-3">
             <span className="flex grow flex-col gap-0.5">

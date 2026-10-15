@@ -1342,11 +1342,6 @@ export const gooseExecutorAbi = [
         "name": "frozen_",
         "type": "bool",
         "internalType": "bool"
-      },
-      {
-        "name": "preFreeze",
-        "type": "bool",
-        "internalType": "bool"
       }
     ],
     "outputs": [

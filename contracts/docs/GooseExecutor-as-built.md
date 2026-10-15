@@ -181,3 +181,33 @@ The coins and venues are Base mainnet's, fixed in `EntryJob` and checked against
 **Gas.** The manager's batch costs 200k–320k (one approve and one swap, under `ACCOUNT_GAS`), a one-account run 750k–890k.
 
 **Fork tests** (`test/EntryFork.t.sol`), against the real manager and venues: each coin from $1,000 to at least $995 of USDC in the same wallet (USDT $998.63, USDe $999.57, USDbC $999.93, USDS $1,000); $25,000 of USDT in three runs; a $1,000 daily limit holding $3,000 of USDbC to $1,000 a day; at a 99.9% floor, USDT waiting while USDbC converts; a swap to someone else (`BelowFloor`); and the manager refusing a coin past its limit and GHO, which the grant doesn't list.
+
+## Act is the line (2026-10-15)
+
+Adrian: "watch is ok, it is act that is not, also the guardian should only act on act and not take decision and repays under watch" (JUSTALAB-DECISIONS.md, "Act is the line"). This section replaces, above: Protect · sell's "When" (a heads-up below 1.25, at once below 1.10) and "How much" (back to 1.4), its fork table and slice counts, the heads-up at 1.25 in "Below 1.001 nothing can be sold", the Weekend Shield line under Protect from savings, the Rebalancer's wait "while the credit isn't Safe (… 1.5)", the `runAccount` row's `preFreeze`, and the page-size row's "sits in Watch". The rest stands.
+
+| Before | Now | Why |
+| --- | --- | --- |
+| Protect from savings: below 1.50, back to 1.65 | Below 1.10 (Act), back to 1.20 (Watch) | Act is the line. 1.20 leaves an 8% cushion before Act again and repays an eighth of what's owed from 1.05 (Safe would take 30%). |
+| Bounds: trigger 1.20–2.00, target up to 2.50 | Trigger 1.05–1.10, target up to 1.40 | No change through the delay can make Protect repay in Watch, or past Watch toward Safe. |
+| Weekend Shield repays before a freeze (`ProtectCase.WeekendShield`) | Gone: `protectNeed` has no `preFreeze`, `Ctx` no `preFreeze`, `runAccount(account, frozen)` | It only ever acted outside Act. The app shows a heads-up card instead (`lib/guardian/plan.ts` `weekendHeadsUp`). `stressDrop`, `stressFloorHf` and `weekendWindow` stay in the registry, bounded, as the card's numbers. |
+| Sale: heads-up below 1.25, at once below 1.10, back to 1.40 | Heads-up below 1.10, at once below 1.05, back to 1.20 | Sale timing stays inside Act. A heads-up back out of Act is cleared and nothing sold; a sale cut short goes on only while still in Act. |
+| Bounds: heads-up 1.10–1.50; at once 1.02 up to the heads-up; sale target up to 2.00 | Heads-up 1.05–1.10; at once at least 1.02 and 0.02 under the heads-up; sale target up to 1.40 | The same, for selling; the 0.02 band keeps a heads-up before most sales. |
+| The Rebalancer waits below Protect's trigger (Safe) | The same rule, so it waits only in Act | It only touches free stock; in Watch it trades. |
+| The pool window counted each slice rounded up | Counted once per stock, rounded up | Several slices could pass `poolCap` by a unit; the rule budgets per stock. |
+
+**Fork, as built** (`test/ProtectSellFork.t.sol`, `test/GooseExecutorFork.t.sol`, Base, 2026-10-15; NVIDIA unless named):
+
+| Start | What happens | Slices | Run gas |
+| --- | --- | --- | --- |
+| 1.30 (Watch), cash, selling on; Friday afternoon too | nothing: no repay, no heads-up, no sale | | |
+| 1.05, $100 of cash | repaid from cash to 1.20 (an eighth of what's owed) | | |
+| 1.04, $1,000 of cash, selling on | repaid from cash to 1.20; nothing sold | | |
+| 1.04, cash of a quarter of a percent of what's owed | the cash first, still under 1.05; the next run sells at once; 1.20 | | |
+| 1.08 | heads-up; sale 30 min later; 1.20 | 2 | 1.66M |
+| 1.049 | sale at once at the wider floor; 1.20 | 4 | 2.11M |
+| 1.01 | six slices, then the next block's run finishes without a new heads-up; 1.20 | 6 + 2 | 2.58M + 1.60M |
+| $900 at 1.03 and $4,000 at 1.045, pool cap $1,000 | the lower one first, back to 1.20; the bigger one cut short by the cap, in Watch short of 1.20: nothing more when the window rolls | | |
+| any, weekend | nothing | | |
+
+Measured too: a full page of the costliest accounts that need nothing (in Act with too little savings, selling on, prices held) checks in 8.32M gas; seven stocks at 1.08 plan their heads-up in 1.34M cold; `MAX_WORK` Protect repays run in 3.94M. GooseExecutor is 23,801 bytes.

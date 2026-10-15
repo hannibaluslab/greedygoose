@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agentNexts, defaultNumbers, nyDay, planNext, rebalanceCheckAt, whenText, type NextInput } from "@/lib/agents/next";
+import { agentNexts, defaultNumbers, nyDay, planNext, rebalanceCheckAt, weekendCard, whenText, type NextInput } from "@/lib/agents/next";
 import { rebalanceOptions } from "@/lib/agents/mix";
 import { JOBS, type AgentJob } from "@/lib/agents/permissions";
 import { USDC } from "@/lib/tokens/registry";
@@ -19,7 +19,6 @@ function input(over: Partial<NextInput> = {}): NextInput {
     collateralUsd: 2_000,
     avgCf: 0.7,
     debtUsd: 600,
-    credit: "safe",
     holdings: [free(0, 5_000, 250), free(5, 5_000, 180)],
     mixBps: [5_000, 0, 0, 0, 0, 5_000, 0],
     left: byJob(() => null),
@@ -37,18 +36,33 @@ describe("agentNexts: each agent's rule on live data", () => {
     expect(Object.keys(agentNexts(input()))).toEqual(["protect", "rebalance"]);
   });
 
-  it("Protect repays from savings below Safe, and says why it doesn't otherwise", () => {
+  it("Protect repays from savings only in Act, back to Watch, and says why it doesn't otherwise", () => {
     expect(agentNexts(input()).protect).toEqual({ idle: "Safe. Nothing to do." });
-    expect(agentNexts(input({ debtUsd: 0, credit: "none" })).protect).toEqual({ idle: "Nothing owed. Nothing to do." });
-    // $1,400 of power against $1,000 owed is 1.4 (Watch); back to 1.65 needs $151.52, rounded up to the cent.
-    const watch = input({ debtUsd: 1_000, credit: "watch" });
-    expect(agentNexts(watch).protect).toEqual({ will: "repays $151.52 from your cash", would: "Would repay $151.52 from your cash" });
-    expect(agentNexts({ ...watch, savingsRaw: 0n }).protect).toEqual({ idle: "Watch. No cash to repay with" });
-    const used = { ...watch.left, protect: [{ token: USDC.address, leftRaw: 0n }, { token: USDC.address, leftRaw: 0n }] };
-    expect(agentNexts({ ...watch, left: used }).protect).toEqual({ idle: "Watch. Today’s limit is used" });
+    expect(agentNexts(input({ debtUsd: 0 })).protect).toEqual({ idle: "Nothing owed. Nothing to do." });
+    // $1,400 of power against $1,000 owed is 1.4: Watch is fine (Act is the line, 2026-10-15).
+    expect(agentNexts(input({ debtUsd: 1_000 })).protect).toEqual({ idle: "Watch. Steps in only at Act" });
+    // Against $1,300 it's 1.077 (Act); back to 1.2 needs $133.34, rounded up to the cent.
+    const act = input({ debtUsd: 1_300 });
+    expect(agentNexts(act).protect).toEqual({ will: "repays $133.34 from your cash", would: "Would repay $133.34 from your cash" });
+    expect(agentNexts({ ...act, savingsRaw: 0n }).protect).toEqual({ idle: "Act. No cash to repay with" });
+    const used = { ...act.left, protect: [{ token: USDC.address, leftRaw: 0n }, { token: USDC.address, leftRaw: 0n }] };
+    expect(agentNexts({ ...act, left: used }).protect).toEqual({ idle: "Act. Today’s limit is used" });
   });
 
-  it("Rebalance checks its mix at the next window, trades when a stock breaks its band, and waits on credit that isn't Safe", () => {
+  it("shows the weekend heads-up as a card only: before the Friday freeze, in Watch, when a 15% drop would reach Act", () => {
+    // Friday 2025-10-17 14:30 New York (18:30 UTC); $1,400 of power against $1,120 owed is 1.25 (Watch), 1.0625 after −15%.
+    const fri = Date.UTC(2025, 9, 17, 18, 30) / 1000;
+    const card = weekendCard(input({ nowSec: fri, debtUsd: 1_120 }));
+    expect(card).toEqual({ addUsd: 129, dropPct: 15, when: `at ${new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(Date.UTC(2025, 9, 18, 0) * 1)}` });
+    // No move with it: Protect's line is still Watch's.
+    expect(agentNexts(input({ nowSec: fri, debtUsd: 1_120 })).protect).toEqual({ idle: "Watch. Steps in only at Act" });
+    expect(weekendCard(input({ nowSec: fri - 3 * 3600, debtUsd: 1_120 }))).toBeNull(); // 11:30: not yet
+    expect(weekendCard(input({ nowSec: WED_NOON, debtUsd: 1_120 }))).toBeNull(); // a Wednesday
+    expect(weekendCard(input({ nowSec: fri, debtUsd: 1_000 }))).toBeNull(); // 1.4: −15% leaves 1.19, still Watch
+    expect(weekendCard(input({ nowSec: fri, debtUsd: 1_300 }))).toBeNull(); // in Act, Protect acts itself
+  });
+
+  it("Rebalance checks its mix at the next window, trades when a stock breaks its band, and waits while the credit is in Act", () => {
     // Thursday 10:00 New York, in the viewer's own words.
     expect(agentNexts(input()).rebalance).toEqual({ idle: `On target. Checks ${whenText(Date.UTC(2025, 9, 16, 14) / 1000, WED_NOON)}` });
     expect(agentNexts(input({ mixBps: null })).rebalance).toEqual({ idle: "No mix yet" });
@@ -57,7 +71,9 @@ describe("agentNexts: each agent's rule on live data", () => {
     const n = agentNexts(drifted).rebalance;
     expect(n).toMatchObject({ would: expect.stringMatching(/^Would trade \$\d+(\.\d\d)?$/) });
     expect("will" in n && n.will).toMatch(/^trades \$\d+(\.\d\d)? (today|tomorrow) /);
-    expect(agentNexts({ ...drifted, credit: "watch" }).rebalance).toEqual({ idle: "Waits until your credit is Safe" });
+    // Watch is fine for the Rebalancer too: GooseExecutor waits only below Protect's trigger, the Act line.
+    expect(agentNexts({ ...drifted, debtUsd: 1_000 }).rebalance).toMatchObject({ would: expect.stringMatching(/^Would trade/) });
+    expect(agentNexts({ ...drifted, debtUsd: 1_300 }).rebalance).toEqual({ idle: "Waits until your credit is out of Act" });
   });
 
   it("takes the executor's plan for the job it names, and the rules for the rest", () => {

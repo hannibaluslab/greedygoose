@@ -117,7 +117,7 @@ contract NyCalendarTest is Test {
         x.setHolidayNow(uint32(goodFriday / 1 days), true);
         uint256 thu20 = goodFriday - 1 days + 20 hours + 4 hours;
         assertEq(x.nextFreeze(thu20 - 1 hours), thu20);
-        assertTrue(x.preFreeze(thu20 - 1 hours), "Weekend Shield moves to Thursday");
+        assertTrue(x.preFreeze(thu20 - 1 hours), "the weekend heads-up's window moves to Thursday");
         assertFalse(x.preFreeze(goodFriday + 15 hours + 4 hours), "and is over by Friday");
         assertTrue(x.frozen(goodFriday + 2 days + 20 hours + 4 hours - 1), "until Sunday 20:00");
     }
@@ -168,7 +168,7 @@ contract NyCalendarTest is Test {
         }
     }
 
-    /// GooseExecutor.md §7: with no holiday and a 6-hour window, the pre-freeze window is Leo's inWeekendWindow
+    /// GooseExecutor.md §7: with no holiday and a 6-hour window, the weekend heads-up's window is Leo's inWeekendWindow
     /// (plan.ts) and `frozen` is the app's "markets closed" (lib/market-hours).
     function test_agrees_with_the_app_on_10000_timestamps() public view {
         string memory json = vm.readFile("test/vectors/calendar.json");

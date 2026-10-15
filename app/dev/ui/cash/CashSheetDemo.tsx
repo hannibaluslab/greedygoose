@@ -145,7 +145,7 @@ function activity(nowMs: number) {
     details: describeAgentEvent(e, time / 1000, ctx)!.details,
   });
   const moves: ExecutorMove[] = [
-    executor("protect", at(0, 9, 30), { kind: "repaid", amountRaw: usdc(40), hfBefore: hf(1.45), hfAfter: hf(1.66), reason: "watch" }, { owedRaw: [usdc(340), usdc(300)], used: { spentRaw: usdc(40), capRaw: usdc(100) } }),
+    executor("protect", at(0, 9, 30), { kind: "repaid", amountRaw: usdc(40), hfBefore: hf(1.05), hfAfter: hf(1.2), reason: "act" }, { owedRaw: [usdc(340), usdc(300)], used: { spentRaw: usdc(40), capRaw: usdc(100) } }),
     // Earning moves nothing in the one pot (D20): no row.
     executor("save", at(0, 9, 40), { kind: "saved", amountRaw: usdc(250) }),
     executor("convert", at(1, 18, 5), { kind: "converted", coin: ENTRY_COINS[0].address, amountInRaw: usdc(120), usdcOutRaw: usdc(119.83) }),

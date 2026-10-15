@@ -75,15 +75,16 @@ describe("decodeAgentLogs: what each event carries", () => {
     expect(one(log("JobOff", { account, job: 4, reason: 0 }))[0]).toMatchObject({ job: "entry", reason: "revoked" });
   });
 
-  it("reads Protect's repay from savings, Watch or Weekend Shield", () => {
-    const watch = { account, amount: 120_000_000n, hfBefore: 1_300_000_000_000_000_000n, hfAfter: 1_650_000_000_000_000_000n, reason: 5 };
-    expect(one(log("ProtectRepaid", watch))[0]).toMatchObject({ kind: "repaid", amountRaw: 120_000_000n, reason: "watch" });
-    expect(one(log("ProtectRepaid", { ...watch, reason: 6 }))[0]).toMatchObject({ reason: "weekend" });
+  it("reads Protect's repay from savings: Act, or an older executor's Weekend Shield", () => {
+    const act = { account, amount: 120_000_000n, hfBefore: 1_050_000_000_000_000_000n, hfAfter: 1_200_000_000_000_000_000n, reason: 5 };
+    expect(one(log("ProtectRepaid", act))[0]).toMatchObject({ kind: "repaid", amountRaw: 120_000_000n, reason: "act" });
+    // Executors deployed before Act was the line (2026-10-15) also repaid before a weekend freeze.
+    expect(one(log("ProtectRepaid", { ...act, reason: 6 }))[0]).toMatchObject({ reason: "weekend" });
   });
 
   it("reads the heads-up, its clearing and the sale, by reserve id", () => {
-    expect(one(log("SellHeadsUp", { account, hf: 1_240_000_000_000_000_000n, sellValue: 180_000_000n, sellAfter: 1_760_000_000 }))[0]).toMatchObject(
-      { kind: "heads-up", hf: 1_240_000_000_000_000_000n, sellValueRaw: 180_000_000n, sellAfter: 1_760_000_000 },
+    expect(one(log("SellHeadsUp", { account, hf: 1_080_000_000_000_000_000n, sellValue: 180_000_000n, sellAfter: 1_760_000_000 }))[0]).toMatchObject(
+      { kind: "heads-up", hf: 1_080_000_000_000_000_000n, sellValueRaw: 180_000_000n, sellAfter: 1_760_000_000 },
     );
     expect(one(log("SellHeadsUpCleared", { account, hf: 1_300_000_000_000_000_000n }))[0]).toMatchObject({ kind: "heads-up-cleared" });
     const shares = [0n, 0n, 0n, 0n, 0n, 0n, 47_000_000n];

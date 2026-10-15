@@ -97,6 +97,15 @@ abstract contract ForkBase is Test {
         SPOKE.borrow(USDC_RESERVE, creditRaw, account);
     }
 
+    /// Draw more USDC on what already backs the account, on top of what it owes, until its health factor is `hf` (WAD).
+    function _drawMoreTo(address account, uint256 hf) internal {
+        ISpoke.UserAccountData memory d = SPOKE.getUserAccountData(account);
+        uint256 owed = d.totalCollateralValue * d.avgCollateralFactor / 1e18 * 1e18 / hf / 1e20;
+        uint256 debt = SPOKE.getUserTotalDebt(USDC_RESERVE, account);
+        vm.prank(account);
+        SPOKE.borrow(USDC_RESERVE, owed - debt, account);
+    }
+
     /// Back a credit line with `sharesRaw` of each of the seven stocks, the costliest position to read. Needs
     /// `_useStockDouble` for every stock first.
     function _backWithAllStocks(address account, uint256 sharesRaw) internal {

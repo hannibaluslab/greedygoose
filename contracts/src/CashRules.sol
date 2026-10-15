@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-/// Protect's health factors, all WAD (1e18 = 1.0). GooseExecutor holds them within hard bounds (D18).
+/// Protect's health factors, all WAD (1e18 = 1.0). GooseExecutor holds them within hard bounds (D18). `stressDrop` and
+/// `stressFloorHf` are the app's weekend heads-up card's numbers: the executor moves nothing on them (Act is the line,
+/// 2026-10-15), and keeps them here so the card reads the live ones.
 struct Thresholds {
     uint64 triggerHf;
     uint64 targetHf;
@@ -9,7 +11,8 @@ struct Thresholds {
     uint64 stressFloorHf;
 }
 
-/// Amounts in USDC units (1e6 = $1), the pre-freeze window in seconds, and Save's daily number.
+/// Amounts in USDC units (1e6 = $1), the weekend heads-up card's window before a freeze in seconds (the app's; the
+/// executor moves nothing in it), and Save's daily number.
 struct Amounts {
     uint64 minRepay;
     uint64 minSave;
@@ -18,15 +21,15 @@ struct Amounts {
     uint8 maxSavesPerDay;
 }
 
-/// What Protect decides for one account. Only the last two repay.
+/// What Protect decides for one account. Only `Act` repays. (Executors deployed before 2026-10-15 also had a 6,
+/// WeekendShield, which repaid outside Act; Act is the line now.)
 enum ProtectCase {
     NoDebt,
     Healthy,
     NoSavings,
     NoCap,
     TooSmall,
-    Watch,
-    WeekendShield
+    Act
 }
 
 /// What Save decides for one account. Only `Save` moves money.
@@ -48,10 +51,13 @@ library CashRules {
     uint256 internal constant VALUE_PER_USDC_UNIT = 1e20;
 
     // Hard bounds (D18). Nothing can change them.
-    uint64 internal constant TRIGGER_HF_MIN = 1.2e18;
-    uint64 internal constant TRIGGER_HF_MAX = 2e18;
+    /// Act is the line (Adrian, 2026-10-15): Protect never steps in above the Act line (1.10, config/risk.ts RISK), so
+    /// no threshold change can make it act in Watch; and never later than 1.05, halfway to Aave's limit at 1.0.
+    uint64 internal constant TRIGGER_HF_MIN = 1.05e18;
+    uint64 internal constant TRIGGER_HF_MAX = 1.1e18;
     uint64 internal constant TARGET_GAP_MIN = 0.05e18;
-    uint64 internal constant TARGET_HF_MAX = 2.5e18;
+    /// A repay brings the credit back to Watch, never past it: the target stays under the Safe line (1.50).
+    uint64 internal constant TARGET_HF_MAX = 1.4e18;
     uint64 internal constant STRESS_DROP_MIN = 0.05e18;
     uint64 internal constant STRESS_DROP_MAX = 0.3e18;
     uint64 internal constant STRESS_FLOOR_HF_MIN = 1.02e18;
@@ -79,11 +85,12 @@ library CashRules {
             && a.maxSavesPerDay <= MAX_SAVES_MAX;
     }
 
-    /// Protect, first half (plan.ts:41-57): how much debt, in Value, should go, and why. Needs only the account data,
-    /// so the executor reads savings and limits only when there is something to repay.
+    /// Protect, first half (plan.ts `planGuardian`): how much debt, in Value, should go. Needs only the account data,
+    /// so the executor reads savings and limits only when there is something to repay. Only in Act: in Safe or Watch
+    /// there is nothing to repay (Act is the line, 2026-10-15).
     /// @param collateral `totalCollateralValue`; @param avgCf `avgCollateralFactor`; @param debtRay `totalDebtValueRay`.
-    /// @return why `NoDebt`, `Healthy`, `Watch` or `WeekendShield`. @return need Value to repay. @return debt Value owed.
-    function protectNeed(uint256 collateral, uint256 avgCf, uint256 debtRay, bool preFreeze, Thresholds memory t)
+    /// @return why `NoDebt`, `Healthy` or `Act`. @return need Value to repay. @return debt Value owed.
+    function protectNeed(uint256 collateral, uint256 avgCf, uint256 debtRay, Thresholds memory t)
         internal
         pure
         returns (ProtectCase why, uint256 need, uint256 debt)
@@ -91,20 +98,14 @@ library CashRules {
         if (debtRay == 0) return (ProtectCase.NoDebt, 0, 0);
         uint256 power = collateral * avgCf / WAD;
         debt = _ceilDiv(debtRay, RAY); // rounds up, like summarize() (lib/aave/math.ts:22)
-        uint256 hf = power * WAD / debt;
-        if (hf < t.triggerHf) {
-            why = ProtectCase.Watch;
-            need = _sub(debt, power * WAD / t.targetHf);
-        } else if (preFreeze && power * (WAD - t.stressDrop) / debt < t.stressFloorHf) {
-            // The stressed health factor must reach the floor plus the same headroom as a normal repay.
-            why = ProtectCase.WeekendShield;
-            need = _sub(debt, power * (WAD - t.stressDrop) / (t.stressFloorHf + t.targetHf - t.triggerHf));
-        }
+        if (power * WAD / debt >= t.triggerHf) return (ProtectCase.Healthy, 0, debt);
+        need = _sub(debt, power * WAD / t.targetHf);
         if (need == 0) return (ProtectCase.Healthy, 0, debt);
+        why = ProtectCase.Act;
     }
 
-    /// Protect, second half (plan.ts:58-71): the repay in USDC units, within savings and what's left of today's
-    /// limit. `why` is the first half's `Watch` or `WeekendShield`, returned unchanged when there is a repay.
+    /// Protect, second half (plan.ts `planGuardian`): the repay in USDC units, within savings and what's left of
+    /// today's limit. `why` is the first half's `Act`, returned unchanged when there is a repay.
     function protectAmount(
         ProtectCase why,
         uint256 need,

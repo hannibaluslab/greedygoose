@@ -5,8 +5,9 @@
  *   2. take a real JAW account (manager already an owner), put USDC into Aave V3 savings,
  *      borrow on the Equities Hub until the loan is in Watch
  *   3. the account approves the Guardian permission (as the app would via wallet_sendCalls)
- *   4. run the real keeper code: discover → plan → simulate → execute
- *   5. assert the loan is back to Safe, savings paid for it, and nothing else moved
+ *   4. run the real keeper code: discover → plan; in Watch it does nothing (Act is the line, 2026-10-15); then
+ *      borrow into Act and plan → simulate → execute
+ *   5. assert the loan is back in Watch (1.2, not Safe), savings paid for it, and nothing else moved
  *
  *   npx tsx scripts/guardian-e2e.ts
  */
@@ -89,11 +90,14 @@ async function main() {
     const read = async () => summarize((await client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserAccountData", args: [USER] })) as AccountData);
     const before = await read();
     const power = before.collateralUsd * before.avgCf;
-    const targetDebt = power / 1.2; // HF 1.2 → Watch
-    const borrowUsd = Math.max(0, targetDebt - before.debtUsd);
-    await send(AAVE.SPOKE, encodeFunctionData({ abi: spokeAbi, functionName: "borrow", args: [7n, BigInt(Math.floor(borrowUsd * 1e6)), USER] }));
-    const watch = await read();
-    ok(watch.healthFactor !== null && watch.healthFactor < 1.5, `loan is in Watch (HF ${watch.healthFactor?.toFixed(3)})`);
+    const borrowTo = async (hf: number) => {
+      const now = await read();
+      const borrowUsd = Math.max(0, power / hf - now.debtUsd);
+      await send(AAVE.SPOKE, encodeFunctionData({ abi: spokeAbi, functionName: "borrow", args: [7n, BigInt(Math.floor(borrowUsd * 1e6)), USER] }));
+      return read();
+    };
+    const watch = await borrowTo(1.3); // HF 1.3 → Watch
+    ok(watch.healthFactor !== null && watch.healthFactor < 1.5 && watch.healthFactor >= 1.1, `loan is in Watch (HF ${watch.healthFactor?.toFixed(3)})`);
 
     // 3. approve the Guardian permission (same calldata the app sends)
     const now = Number((await client.getBlock()).timestamp);
@@ -105,6 +109,11 @@ async function main() {
     const found = await discoverPermissions(client, { keeper: KEEPER.address, checker, fromBlock: forkBlock + 1n, toBlock: head });
     ok(found.length === 1 && found[0].account === USER, "keeper discovered the permission from on-chain events");
 
+    const inWatch = await checkAccount(client, null, found[0], { dryRun: true });
+    ok(inWatch.status === "checked", `Watch is fine: nothing planned (${JSON.stringify(inWatch.status)})`);
+
+    const act = await borrowTo(1.05); // HF 1.05 → Act
+    ok(act.healthFactor !== null && act.healthFactor < 1.1, `loan is in Act (HF ${act.healthFactor?.toFixed(3)})`);
     const dry = await checkAccount(client, null, found[0], { dryRun: true });
     ok(dry.status === "would-repay", `dry run plans a repay (${JSON.stringify(dry.status)})`);
 
@@ -117,14 +126,14 @@ async function main() {
     const after = await read();
     const savingsAfter = await client.readContract({ address: GUARDIAN.AUSDC, abi: erc20Abi, functionName: "balanceOf", args: [USER] });
     const cashAfter = await client.readContract({ address: USDC.address, abi: erc20Abi, functionName: "balanceOf", args: [USER] });
-    ok(after.healthFactor === null || after.healthFactor >= 1.5, `loan back to Safe (HF ${after.healthFactor?.toFixed(3) ?? "no debt"})`);
+    ok(after.healthFactor !== null && after.healthFactor >= 1.19 && after.healthFactor < 1.5, `loan back in Watch, not Safe (HF ${after.healthFactor?.toFixed(3) ?? "no debt"})`);
     ok(savingsAfter < savingsBefore, `paid from savings (${Number(savingsBefore - savingsAfter) / 1e6} USDC)`);
     ok(cashAfter === cashBefore, "the user's cash balance didn't move");
     const allowance = await client.readContract({ address: USDC.address, abi: erc20Abi, functionName: "allowance", args: [USER, AAVE.SPOKE] });
     ok(allowance === 0n, "no leftover approval");
 
     const again = await checkAccount(client, keeperWallet, found[0]);
-    ok(again.status === "checked", "next tick does nothing (already Safe)");
+    ok(again.status === "checked", "next tick does nothing (in Watch)");
 
     // revoke → keeper skips
     await send(GUARDIAN.PERMISSION_MANAGER, encodeFunctionData({ abi: permissionManagerAbi, functionName: "revoke", args: [toTuple(perm)] }));

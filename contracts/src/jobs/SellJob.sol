@@ -9,10 +9,10 @@ import {Book, Holding, SellLimits, SellRules, SellTiming, Slice} from "../SellRu
 import {JobBase} from "./JobBase.sol";
 
 /// @title SellJob
-/// @notice Protect · sell (plan item 1, steps 10–12): when savings can't keep the credit Safe, sell some of the stock
-///         that backs it on Aerodrome and repay with the proceeds, in slices that keep Aave's health check happy after
-///         every withdrawal. The rule is SellRules; this library reads the account, builds the batch, sends it through
-///         the manager and checks the result.
+/// @notice Protect · sell (plan item 1, steps 10–12): when savings can't bring the credit out of Act, sell some of the
+///         stock that backs it on Aerodrome and repay with the proceeds, back to Watch, in slices that keep Aave's
+///         health check happy after every withdrawal. The rule is SellRules; this library reads the account, builds the
+///         batch, sends it through the manager and checks the result.
 ///
 ///         The permission lists only the stocks the user lets Protect sell, each with its own daily limit. A never-sell
 ///         stock has no `approve` in `calls`, so the manager refuses any batch that would sell it.
@@ -128,15 +128,18 @@ library SellJob {
                 return p;
             }
             uint256 hfAfter = _sell(e, c.account, sale, p.hf);
+            // Counted once per stock, as the rule budgets it: a rounding up per slice could pass the cap by a unit.
+            uint256[7] memory sold;
             for (uint256 i; i < sale.slices.length; ++i) {
-                Slice memory s = sale.slices[i];
-                _usePool(pools[s.reserveId], JobBase.ceilDiv(s.shares * sale.prices[s.reserveId], 1e10));
+                sold[sale.slices[i].reserveId] += sale.slices[i].shares;
             }
-            // Done once back above the heads-up line. A sale cut short (by the slices a run makes, a limit or the pool
-            // cap) goes on in the next runs without a new wait: the user was warned, or it was urgent.
-            acc.headsUpAt = hfAfter >= c.sellLimits.headsUpHf
-                ? 0
-                : uint48(block.timestamp) - c.sellLimits.headsUpDelay;
+            for (uint256 r; r < 7; ++r) {
+                if (sold[r] > 0) _usePool(pools[r], JobBase.ceilDiv(sold[r] * sale.prices[r], 1e10));
+            }
+            // Done once back above the heads-up line, out of Act. A sale cut short (by the slices a run makes, a limit
+            // or the pool cap) goes on in the next runs without a new wait while still in Act: the user was warned, or
+            // it was urgent.
+            acc.headsUpAt = hfAfter >= c.sellLimits.headsUpHf ? 0 : uint48(block.timestamp) - c.sellLimits.headsUpDelay;
         }
     }
 

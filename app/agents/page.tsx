@@ -30,6 +30,7 @@ import {
   agentCards,
   agentItems,
   agentParam,
+  agentStatus,
   longDateText,
   TAB_JOBS,
   type Agent,
@@ -38,7 +39,7 @@ import {
   type SheetAction,
 } from "@/lib/agents/list";
 import { rebalanceOptions } from "@/lib/agents/mix";
-import { agentNexts, defaultNumbers } from "@/lib/agents/next";
+import { agentNexts, defaultNumbers, weekendCard } from "@/lib/agents/next";
 import { JOBS, LIMIT_USD, limitRaw, stockLimitsRaw, type AgentJob } from "@/lib/agents/permissions";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
@@ -83,6 +84,7 @@ function Agents({ address }: { address: `0x${string}` }) {
   const capOf = (usd: number) => limitRaw(usd, capMax ?? BigInt(usd) * 10n ** BigInt(USDC.decimals));
   const mixSet = !!settings?.mixBps.some((w) => w > 0);
 
+  const numbers = settings?.numbers ?? defaultNumbers(rebalanceOptions());
   const next = position
     ? agentNexts({
         nowSec,
@@ -90,22 +92,29 @@ function Agents({ address }: { address: `0x${string}` }) {
         collateralUsd: position.collateralUsd,
         avgCf: position.avgCf,
         debtUsd: position.debtUsd,
-        credit: position.status,
         holdings: position.holdings,
         mixBps: settings?.mixBps ?? null,
         left: agents.left,
         capRaw: byJob((job) => agents.terms[job]?.capRaw ?? capOf(LIMIT_USD[job].start)),
         capMaxRaw: capMax,
-        numbers: settings?.numbers ?? defaultNumbers(rebalanceOptions()),
+        numbers,
         rebalanceDay: settings?.rebalanceDay ?? 0,
         plan: settings?.plan ?? null,
       })
     : LOADING;
   const items = agentItems({ status: agents.status, capRaw: byJob((job) => agents.terms[job]?.capRaw ?? null), next });
 
+  // The weekend heads-up: a card only, while Protect runs, as Weekend Shield did (Act is the line, 2026-10-15).
+  const protectRuns = ["on", "starting"].includes(agentStatus("protect", agents.status));
+  const weekend =
+    position && protectRuns
+      ? weekendCard({ nowSec, collateralUsd: position.collateralUsd, avgCf: position.avgCf, debtUsd: position.debtUsd, numbers })
+      : null;
+
   const cards = agentCards({
     nowSec,
     headsUp,
+    weekend,
     status: agents.status,
     ends: byJob((job) => agents.terms[job]?.end ?? null),
     // Off without the user turning it off: its grant ran out, or the executor switched it off.

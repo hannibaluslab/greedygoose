@@ -21,23 +21,24 @@ function row(e: AgentEvent, ctx?: MoveContext) {
 
 describe("describeAgentEvent: the Agents board's rows", () => {
   it("draws the board's sale: what sold, why, what's owed, the status, the cash and the day's limit", () => {
-    const sale: AgentEvent = { kind: "sold", sharesRaw: sevenWith(6, 46_997_389n), repaidRaw: usdc(178.2), hfBefore: hf(1.08), hfAfter: hf(1.52), atOnce: true };
+    const sale: AgentEvent = { kind: "sold", sharesRaw: sevenWith(6, 46_997_389n), repaidRaw: usdc(178.2), hfBefore: hf(1.04), hfAfter: hf(1.2), atOnce: true };
     expect(row(sale, { owedRaw: [usdc(780), usdc(600)], cashRaw: [usdc(400), usdc(400)], used: { spentRaw: usdc(180), capRaw: usdc(300) }, pricesRaw: prices })).toEqual({
       by: "Protect",
-      line: "Sold $180 of Tesla to repay. Back to Safe.",
+      line: "Sold $180 of Tesla to repay. Back to Watch.",
       details: {
-        Why: "Your credit reached Act, so Protect sold at once.",
+        Why: "Your credit fell deep into Act, so Protect sold at once.",
         "You owe": "$780 → $600",
-        Status: "Act → Safe",
+        Status: "Act → Watch",
         "Your cash": "Not touched",
         "Used today": "$180 of $300",
       },
     });
   });
 
-  it("draws the board's heads-up: credit in Watch, asked to repay or add more", () => {
-    const r = row({ kind: "heads-up", hf: hf(1.24), sellValueRaw: usdc(180), sellAfter: 1_760_635_800 });
-    expect(r.line).toBe("Credit reached Watch. Asked you to repay or add more.");
+  it("draws the board's heads-up: credit in Act, asked to repay or add more", () => {
+    const r = row({ kind: "heads-up", hf: hf(1.08), sellValueRaw: usdc(180), sellAfter: 1_760_635_800 });
+    expect(r.line).toBe("Credit reached Act. Asked you to repay or add more.");
+    expect(r.details.Why).toBe("Your cash couldn't bring it back to Watch.");
     expect(r.details["Would sell"]).toBe("$180 of backing stock");
     expect(r.details["Sells at"]).toMatch(/^\d{1,2}:\d{2} [AP]M$/);
   });
@@ -50,10 +51,12 @@ describe("describeAgentEvent: the Agents board's rows", () => {
   });
 
   it("names a sale that comes after the heads-up, and what the swaps left in the wallet", () => {
-    const sale: AgentEvent = { kind: "sold", sharesRaw: sevenWith(5, 100_000_000n), repaidRaw: usdc(178.2), hfBefore: hf(1.2), hfAfter: hf(1.4), atOnce: false };
+    const sale: AgentEvent = { kind: "sold", sharesRaw: sevenWith(5, 100_000_000n), repaidRaw: usdc(178.2), hfBefore: hf(1.08), hfAfter: hf(1.2), atOnce: false };
     const r = row(sale, { cashRaw: [usdc(10), usdc(11.8)], pricesRaw: prices });
-    expect(r.line).toBe("Sold $180 of NVIDIA to repay. Now Watch.");
-    expect(r.details.Why).toBe("Your credit was still in Watch after the heads-up.");
+    expect(r.line).toBe("Sold $180 of NVIDIA to repay. Back to Watch.");
+    expect(r.details.Why).toBe("Your credit was still in Act after the heads-up.");
+    // A sale cut short (a run's six slices, a limit, the pool's window) says it's still in Act.
+    expect(row({ ...sale, hfAfter: hf(1.07) }, { pricesRaw: prices }).line).toBe("Sold $180 of NVIDIA to repay. Still in Act.");
     expect(r.details["Your cash"]).toBe("Not used · +$1.80");
   });
 
@@ -64,14 +67,14 @@ describe("describeAgentEvent: the Agents board's rows", () => {
 
   it("says a repay from savings used your cash, rounding what's owed up to the cent", () => {
     const r = row(
-      { kind: "repaid", amountRaw: usdc(120), hfBefore: hf(1.3), hfAfter: hf(1.65), reason: "watch" },
+      { kind: "repaid", amountRaw: usdc(120), hfBefore: hf(1.05), hfAfter: hf(1.2), reason: "act" },
       { owedRaw: [780_000_001n, 660_000_001n], used: { spentRaw: usdc(120), capRaw: usdc(300) } },
     );
-    expect(r).toMatchObject({ by: "Protect", line: "Repaid $120 from your cash. Back to Safe." });
+    expect(r).toMatchObject({ by: "Protect", line: "Repaid $120 from your cash. Back to Watch." });
     expect(r.details).toEqual({
-      Why: "Your credit reached Watch.",
+      Why: "Your credit reached Act.",
       "You owe": "$780.01 → $660.01",
-      Status: "Watch → Safe",
+      Status: "Act → Watch",
       "Your cash": "$120 used",
       "Used today": "$120 of $300",
     });
@@ -116,6 +119,9 @@ describe("describeAgentEvent: the Agents board's rows", () => {
   });
 
   it("names switches, the mix and failed runs in plain words, with the executor's own error name", () => {
+    expect(row({ kind: "job-on", job: "protect", capRaw: usdc(300), end: 1_791_984_607 }).line).toBe(
+      "Protect is on. If your credit reaches Act, it repays from your cash, up to $300 a day.",
+    );
     expect(row({ kind: "job-on", job: "sell", capRaw: usdc(300), end: 1_791_984_607 }).line).toBe("Protect can sell backing stock, up to $300 a day.");
     expect(row({ kind: "job-on", job: "rebalance", capRaw: usdc(500), end: 1_791_984_607 }).line).toBe("Rebalance is on, up to $500 a week.");
     expect(row({ kind: "job-off", job: "protect", reason: "stuck" }).line).toBe("Protect is off: its last runs didn't go through.");

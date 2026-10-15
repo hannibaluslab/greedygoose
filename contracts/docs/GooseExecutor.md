@@ -449,3 +449,7 @@ If we go back to Leo's direct `manager.approve` through `wallet_sendCalls` (`hoo
 - Whether JAW's signing screen accepts a direct `manager.approve` is still unverified (`docs/guardian.md:44`).
 
 A third option: JAW's relay already stores a checker per call, and only the grant request type drops it (MANAGER-NOTES §7). If JAW's SDK and popup accepted an optional `checker`, we would keep JAW's screens and get the checkers back.
+
+---
+
+**Superseded in part (2026-10-15): Act is the line.** Protect steps in only below 1.10 and brings the credit back to 1.20; Weekend Shield no longer repays (§5.2's `WeekendShield` branch and `_inPreFreezeWindow` in the runs are gone), and the threshold table's defaults and bounds for `triggerHf` and `targetHf` are replaced. See [GooseExecutor-as-built.md](./GooseExecutor-as-built.md), "Act is the line", and JUSTALAB-DECISIONS.md.

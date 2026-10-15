@@ -631,10 +631,11 @@ function unavailable(h: Holding): string | undefined {
  */
 function riskNote(backers: string[], protectOn: boolean): string {
   const one = backers.length === 1 ? backers[0] : null;
+  // Act is the line (2026-10-15): Protect steps in only at Act, and brings the credit back to Watch.
   if (protectOn) {
     return one
-      ? `If ${one} falls, you can repay, or Protect repays from your cash or sells a little ${one} to keep you Safe.`
-      : "If your stocks fall, you can repay, or Protect repays from your cash or sells a little of them to keep you Safe.";
+      ? `If ${one} falls, you can repay. If your credit reaches Act, Protect repays from your cash or sells a little ${one} to bring it back to Watch.`
+      : "If your stocks fall, you can repay. If your credit reaches Act, Protect repays from your cash or sells a little of them to bring it back to Watch.";
   }
   return one
     ? `If ${one} falls, you can repay. If it falls too far, part of it can be sold to repay what you owe.`

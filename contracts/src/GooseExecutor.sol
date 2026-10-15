@@ -24,9 +24,9 @@ import {SellJob} from "./jobs/SellJob.sol";
 ///         manager and checks the result. Chainlink Automation calls it; there is no server (D12).
 ///
 ///         It runs the Cash Agent: Save (wallet USDC above the keep-back goes to Aave V3 savings), Protect from
-///         savings (a loan that slips below the trigger is repaid from savings, and before a price freeze a fragile
-///         one is trimmed), and Protect · sell (when savings can't keep the credit Safe, some of the stock that backs
-///         it is sold to repay, after a heads-up). It also runs the Rebalancer (once a market day, the mix of free
+///         savings (credit that slips into Act is repaid from savings back to Watch), and Protect · sell (when savings
+///         can't bring the credit out of Act, some of the stock that backs it is sold to repay, after a heads-up).
+///         Protect never moves in Safe or Watch (Act is the line, 2026-10-15). It also runs the Rebalancer (once a market day, the mix of free
 ///         stock is brought back when a stock breaks its band) and the Entry agent (a whitelisted stablecoin in the
 ///         wallet becomes USDC at 99.5% of face value or better).
 ///
@@ -122,7 +122,7 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         uint256 amount; // USDC units (Repay, Save; Sell and HeadsUp: what the sale repays; Rebalance: what the buys
         // spend; Convert: the least USDC the swap brings in)
         uint256 hf; // health factor before the move, WAD, or as the job read it (max: nothing owed)
-        uint8 reason; // Repay: a ProtectCase, Watch or WeekendShield. Sell, HeadsUp: 1 when the sale is at once (Act).
+        uint8 reason; // Repay: a ProtectCase, Act. Sell, HeadsUp: 1 when the sale is at once (deep in Act).
         // Convert: the coin's index in EntryJob
         OffReason off; // Prune
     }
@@ -161,7 +161,6 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         uint256 salt;
         uint256 terms;
         bool frozen; // stock prices are held (NyCalendar)
-        bool preFreeze; // Weekend Shield's window
         uint256 hf; // Aave's health factor, if a job earlier in the run read it (max: nothing owed); 0 if not
         Thresholds thresholds;
         Amounts amounts;
@@ -535,7 +534,7 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         if (paused) revert RunsPaused();
         address[] memory list = abi.decode(data, (address[]));
         if (list.length > MAX_WORK) revert TooMuchWork();
-        (bool frozen_, bool preFreeze) = _clock(block.timestamp);
+        bool frozen_ = NyCalendar.frozen(holiday, block.timestamp);
         for (uint256 i; i < list.length; ++i) {
             address account = list[i];
             Account memory a = accounts[account];
@@ -547,9 +546,7 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
             // Each account runs in its own capped sub-call: a revert anywhere in it, the manager's spend bookkeeping
             // included, rolls back that account alone. RESERVE_GAS always stays behind for the catch.
             uint256 gas = gasleft() - RESERVE_GAS;
-            try this.runAccount{gas: gas < MAX_RUN_GAS ? gas : MAX_RUN_GAS}(account, frozen_, preFreeze) returns (
-                bool deferred
-            ) {
+            try this.runAccount{gas: gas < MAX_RUN_GAS ? gas : MAX_RUN_GAS}(account, frozen_) returns (bool deferred) {
                 // A deferred sale doesn't hold up the accounts after it: the next check lists it again.
                 if (deferred) emit RunDeferred(account);
                 else if (a.fails != 0) accounts[account].fails = 0;
@@ -562,7 +559,7 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     /// One account's run: Protect from savings, then by selling, the Rebalancer, Entry, then Save, and at most one move. A dead permission
     /// switches its job off on the way. Returns true when a sale didn't fit in the gas left. Only callable by this
     /// contract, from `performUpkeep`.
-    function runAccount(address account, bool frozen_, bool preFreeze) external returns (bool deferred) {
+    function runAccount(address account, bool frozen_) external returns (bool deferred) {
         if (msg.sender != address(this)) revert OnlySelf();
         uint256 hf; // read by the first job that needs it, then passed on
         for (uint8 j; j < JOBS; ++j) {
@@ -575,7 +572,7 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
                 continue;
             }
             Balances memory mine = _ownBalances();
-            Plan memory p = _runJob(job, _ctx(account, job, g, frozen_, preFreeze, hf));
+            Plan memory p = _runJob(job, _ctx(account, job, g, frozen_, hf));
             hf = p.hf;
             if (p.action == Action.None) continue;
             if (p.action == Action.Prune) {
@@ -590,13 +587,13 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
 
     /// What a run would do for `account` now: the first job, in priority order, with a move or a dead permission.
     function planOf(address account) external view returns (Plan memory p) {
-        (bool frozen_, bool preFreeze) = _clock(block.timestamp);
+        bool frozen_ = NyCalendar.frozen(holiday, block.timestamp);
         uint8 jobs = accounts[account].jobs;
         uint256 hf; // read by the first job that needs it, then passed on
         for (uint8 j; j < JOBS; ++j) {
             Job job = _priority(j);
             if (jobs & _bit(job) == 0) continue;
-            p = _planJob(account, job, frozen_, preFreeze, hf);
+            p = _planJob(account, job, frozen_, hf);
             if (p.action != Action.None) return p;
             hf = p.hf;
         }
@@ -802,11 +799,7 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     // ================================================================== internals: rules
 
     /// What `job` would do for `account` now. A grant that hasn't started waits; one past its end is pruned.
-    function _planJob(address account, Job job, bool frozen_, bool preFreeze, uint256 hf)
-        internal
-        view
-        returns (Plan memory p)
-    {
+    function _planJob(address account, Job job, bool frozen_, uint256 hf) internal view returns (Plan memory p) {
         p.job = job;
         Grant memory g = grants[account][job];
         if (block.timestamp < g.start) return p; // JAW takes the start from the browser's clock
@@ -815,7 +808,7 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
             p.off = OffReason.Expired;
             return p;
         }
-        Ctx memory c = _ctx(account, job, g, frozen_, preFreeze, hf);
+        Ctx memory c = _ctx(account, job, g, frozen_, hf);
         if (job == Job.Save) return SaveJob.plan(_env(), c, accounts[account], pools);
         if (job == Job.Protect) return ProtectJob.plan(_env(), c, accounts[account], pools);
         if (job == Job.ProtectSell) return SellJob.plan(_env(), c, accounts[account], pools);
@@ -832,7 +825,7 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         return EntryJob.run(_env(), c, accounts[c.account], entryWaits);
     }
 
-    function _ctx(address account, Job job, Grant memory g, bool frozen_, bool preFreeze, uint256 hf)
+    function _ctx(address account, Job job, Grant memory g, bool frozen_, uint256 hf)
         internal
         view
         returns (Ctx memory)
@@ -843,7 +836,6 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
             salt: salts[account][job],
             terms: job == Job.ProtectSell || job == Job.Rebalance ? terms[account][job] : 0,
             frozen: frozen_,
-            preFreeze: preFreeze,
             hf: hf,
             thresholds: thresholds,
             amounts: amounts,
@@ -860,13 +852,6 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     /// The order a run tries the jobs in: Protect from savings, then by selling, the Rebalancer, Entry, then Save.
     function _priority(uint8 j) internal pure returns (Job) {
         return j == 0 ? Job.Protect : j == 1 ? Job.ProtectSell : j == 2 ? Job.Rebalance : j == 3 ? Job.Entry : Job.Save;
-    }
-
-    /// Whether stock prices are held at `ts`, and whether it is in Weekend Shield's window: prices are live and the
-    /// next freeze starts within `weekendWindow`.
-    function _clock(uint256 ts) internal view returns (bool frozen_, bool preFreeze) {
-        frozen_ = NyCalendar.frozen(holiday, ts);
-        preFreeze = !frozen_ && NyCalendar.nextFreeze(holiday, ts) - ts <= amounts.weekendWindow;
     }
 
     // ================================================================== internals: post-checks

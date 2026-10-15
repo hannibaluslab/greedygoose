@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { decodeFunctionData, erc20Abi } from "viem";
-import { inWeekendWindow, planGuardian, planSave } from "@/lib/guardian/plan";
+import { inWeekendWindow, planGuardian, planSave, weekendHeadsUp } from "@/lib/guardian/plan";
+import { sellTiming } from "@/lib/guardian/sell";
+import { CASH_AGENT, PROTECT_SELL, RISK } from "@/config/risk";
 import { buildGuardianPermission, buildRescueCalls, buildAddSavingsCalls, PERIOD } from "@/lib/guardian/permission";
 import { aaveV3PoolAbi } from "@/lib/guardian/abis";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
@@ -8,40 +10,90 @@ import { GUARDIAN, SEL } from "@/lib/guardian/config";
 import { AAVE } from "@/lib/aave/addresses";
 import { USDC } from "@/lib/tokens/registry";
 
-const base = { collateralUsd: 1000, avgCf: 0.7, savingsUsd: 500, capLeftUsd: 500, weekendWindow: false };
+/** $1,000 of stock at a 70% collateral factor: $700 of backing power. */
+const base = { collateralUsd: 1000, avgCf: 0.7, savingsUsd: 500, capLeftUsd: 500 };
+/** What's owed for a health factor on that power. */
+const owedAt = (hf: number) => 700 / hf;
+
+describe("Act is the line (Adrian, 2026-10-15)", () => {
+  it("says it in config/risk.ts: Protect steps in below the Act line and brings the credit back to Watch at 1.2", () => {
+    expect(CASH_AGENT.triggerHf).toBe(RISK.watchMin);
+    expect(CASH_AGENT.targetHf).toBe(1.2);
+    expect(CASH_AGENT.targetHf).toBeGreaterThan(RISK.watchMin);
+    expect(CASH_AGENT.targetHf).toBeLessThan(RISK.safeMin);
+    expect(PROTECT_SELL).toMatchObject({ headsUpHf: RISK.watchMin, nowHf: 1.05, targetHf: 1.2 });
+  });
+
+  it("does nothing at 1.3 (Watch), however much cash there is", () => {
+    expect(planGuardian({ ...base, debtUsd: owedAt(1.3), savingsUsd: 10_000, capLeftUsd: 10_000 })).toMatchObject({ action: "none", reason: "healthy" });
+    // …nor anywhere in Watch, down to the line itself
+    expect(planGuardian({ ...base, debtUsd: owedAt(1.49) }).action).toBe("none");
+    expect(planGuardian({ ...base, debtUsd: owedAt(1.1001) }).action).toBe("none");
+  });
+
+  it("acts at 1.05 (Act), repaying just enough to be back in Watch at about 1.2", () => {
+    const d = planGuardian({ ...base, debtUsd: owedAt(1.05) }); // owes $666.67
+    expect(d).toMatchObject({ action: "repay", reason: "act" });
+    if (d.action !== "repay") return;
+    // to 1.2: owe 700 / 1.2 = $583.33, so repay $83.33, an eighth of what's owed; back to Safe (1.5) would be $200
+    expect(d.amountUsd).toBeCloseTo(83.33, 2);
+    expect(d.hfAfter).toBeCloseTo(1.2, 6);
+  });
+
+  it("sells only if the cash can't reach 1.2: the sale's timing runs on the health the repay leaves", () => {
+    const l = { headsUpHf: 1_100n * 10n ** 15n, nowHf: 1_050n * 10n ** 15n, headsUpDelaySec: 1_800n };
+    const wad = (hf: number) => BigInt(Math.round(hf * 1e6)) * 10n ** 12n;
+    // Enough cash: the repay brings it to 1.2, and selling waits (Watch is fine).
+    const enough = planGuardian({ ...base, debtUsd: owedAt(1.04), savingsUsd: 500 });
+    expect(enough).toMatchObject({ action: "repay", hfAfter: expect.closeTo(1.2, 6) });
+    if (enough.action === "repay") expect(sellTiming(wad(enough.hfAfter), 0n, 1_000n, false, l).timing).toBe("wait");
+    // $3 of cash: the repay leaves it in Act (1.045), deep enough for a sale at once.
+    const short = planGuardian({ ...base, debtUsd: owedAt(1.04), savingsUsd: 3 });
+    expect(short).toMatchObject({ action: "repay", amountUsd: 3, limitedBy: "savings" });
+    if (short.action === "repay") {
+      expect(short.hfAfter).toBeLessThan(1.05);
+      expect(sellTiming(wad(short.hfAfter), 0n, 1_000n, false, l)).toEqual({ timing: "sell", atOnce: true });
+    }
+    // No cash at all: nothing to repay with, and the sale goes on its own.
+    expect(planGuardian({ ...base, debtUsd: owedAt(1.04), savingsUsd: 0 })).toMatchObject({ action: "none", reason: "no-savings" });
+  });
+});
 
 describe("planGuardian", () => {
   it("does nothing without debt or when Safe", () => {
     expect(planGuardian({ ...base, debtUsd: 0 })).toMatchObject({ action: "none", reason: "no-debt" });
     expect(planGuardian({ ...base, debtUsd: 400 })).toMatchObject({ action: "none", reason: "healthy" }); // HF 1.75
   });
-  it("repays to the target when in Watch", () => {
-    const d = planGuardian({ ...base, debtUsd: 600 }); // HF 1.1667
-    expect(d.action).toBe("repay");
-    if (d.action !== "repay") return;
-    // target 1.65 → debt 700/1.65 = 424.24 → repay 175.76
-    expect(d.amountUsd).toBeCloseTo(175.76, 1);
-    expect(d.hfAfter).toBeCloseTo(1.65, 3);
-    expect(d.reason).toBe("watch");
-  });
   it("is limited by savings and by the daily cap", () => {
-    expect(planGuardian({ ...base, debtUsd: 600, savingsUsd: 50 })).toMatchObject({ action: "repay", amountUsd: 50, limitedBy: "savings" });
-    expect(planGuardian({ ...base, debtUsd: 600, capLeftUsd: 20 })).toMatchObject({ action: "repay", amountUsd: 20, limitedBy: "cap" });
-    expect(planGuardian({ ...base, debtUsd: 600, savingsUsd: 0 })).toMatchObject({ action: "none", reason: "no-savings" });
-    expect(planGuardian({ ...base, debtUsd: 600, capLeftUsd: 0 })).toMatchObject({ action: "none", reason: "no-cap" });
-  });
-  it("Weekend Shield trims a Safe-but-fragile loan before the freeze", () => {
-    // HF 1.556 (Safe) but −15% → 1.32 … floor 1.1 is fine → no action
-    expect(planGuardian({ ...base, debtUsd: 450, weekendWindow: true }).action).toBe("none");
-    // HF 1.52 Safe; stressed 1.29 ok; make it fragile with a 30% stress
-    const d = planGuardian({ ...base, debtUsd: 460, weekendWindow: true, stressDrop: 0.4 });
-    expect(d).toMatchObject({ action: "repay", reason: "weekend-shield" });
-    // outside the window: nothing
-    expect(planGuardian({ ...base, debtUsd: 460, weekendWindow: false, stressDrop: 0.4 }).action).toBe("none");
+    const act = owedAt(1.05);
+    expect(planGuardian({ ...base, debtUsd: act, savingsUsd: 50 })).toMatchObject({ action: "repay", amountUsd: 50, limitedBy: "savings" });
+    expect(planGuardian({ ...base, debtUsd: act, capLeftUsd: 20 })).toMatchObject({ action: "repay", amountUsd: 20, limitedBy: "cap" });
+    expect(planGuardian({ ...base, debtUsd: act, savingsUsd: 0 })).toMatchObject({ action: "none", reason: "no-savings" });
+    expect(planGuardian({ ...base, debtUsd: act, capLeftUsd: 0 })).toMatchObject({ action: "none", reason: "no-cap" });
   });
   it("skips dust repays (gas would cost more than it helps)", () => {
-    // In Watch, but only 1 cent of savings left → too small to be worth a transaction.
-    expect(planGuardian({ ...base, debtUsd: 600, savingsUsd: 0.01 })).toMatchObject({ action: "none", reason: "too-small" });
+    // In Act, but only 1 cent of savings left → too small to be worth a transaction.
+    expect(planGuardian({ ...base, debtUsd: owedAt(1.05), savingsUsd: 0.01 })).toMatchObject({ action: "none", reason: "too-small" });
+  });
+});
+
+describe("weekendHeadsUp: Weekend Shield is a card now, never a repay", () => {
+  it("before the freeze, warns credit in Watch that a 15% drop would take into Act, with the repay that keeps it in Watch", () => {
+    // 1.25 (Watch): −15% → 1.0625, under the Act line
+    const h = weekendHeadsUp({ collateralUsd: 1000, avgCf: 0.7, debtUsd: owedAt(1.25), weekendWindow: true });
+    expect(h).not.toBeNull();
+    expect(h!.stressedHf).toBeCloseTo(1.0625, 4);
+    // the stressed health back to 1.1 + 0.1: owe 595 / 1.2 = $495.83, so $64.17 of the $560 owed
+    expect(h!.addUsd).toBeCloseTo(64.17, 2);
+    // and planGuardian still does nothing for it
+    expect(planGuardian({ ...base, debtUsd: owedAt(1.25) }).action).toBe("none");
+  });
+  it("says nothing outside the window, when the drop leaves it out of Act, or in Act (Protect acts itself)", () => {
+    const at = (hf: number, weekendWindow = true) => weekendHeadsUp({ collateralUsd: 1000, avgCf: 0.7, debtUsd: owedAt(hf), weekendWindow });
+    expect(at(1.25, false)).toBeNull();
+    expect(at(1.4)).toBeNull(); // −15% → 1.19, still Watch
+    expect(at(1.05)).toBeNull();
+    expect(weekendHeadsUp({ collateralUsd: 1000, avgCf: 0.7, debtUsd: 0, weekendWindow: true })).toBeNull();
   });
 });
 

@@ -13,19 +13,28 @@ export const RISK: RiskBands = {
 };
 
 /**
- * The Cash Agent's numbers (D18). GooseExecutor holds the live values on-chain, each within hard bounds, and a
- * change waits a public 7-day delay. These mirror its deploy defaults (contracts/script/DeployExecutor.s.sol, checked
- * by contracts/test/DeployExecutor.t.sol); read the live ones with the executor's `thresholds()` and `amounts()`.
+ * Protect's numbers (D18). GooseExecutor holds the live values on-chain, each within hard bounds, and a change waits a
+ * public 7-day delay. These mirror its deploy defaults (contracts/script/DeployExecutor.s.sol, checked by
+ * contracts/test/DeployExecutor.t.sol); read the live ones with the executor's `thresholds()` and `amounts()`.
+ *
+ * Act is the line (Adrian, 2026-10-15: "watch is ok, it is act that is not"): Protect steps in only below the Act line
+ * and brings the credit back to Watch, not to Safe. 1.2 leaves an 8% cushion (1 − 1.1/1.2) before the credit is back
+ * in Act, so a normal day's move doesn't set it off again on the next run, and spends well under half of what
+ * reaching Safe would: from 1.05, 12.5% of what's owed against 30%. The executor's bounds keep the trigger at or under
+ * the Act line and the target under the Safe line.
  */
 export const CASH_AGENT = {
-  /** Protect repays from savings below this health factor (the Safe line)… */
-  triggerHf: RISK.safeMin,
-  /** …back up to this one, so it doesn't fire again on the next run. */
-  targetHf: RISK.safeMin + 0.15,
-  /** Weekend Shield: the price drop it tests just before prices freeze, and the health that drop must leave. */
+  /** Protect repays from cash below this health factor (the Act line)… */
+  triggerHf: RISK.watchMin,
+  /** …just enough to bring the credit back to this one, in Watch with room. */
+  targetHf: 1.2,
+  /**
+   * The weekend heads-up (no move, a card only): the price drop it tests just before prices freeze, and the health
+   * that drop must leave, which is the Act line.
+   */
   stressDrop: 0.15,
   stressFloorHf: RISK.watchMin,
-  /** How long before a freeze Weekend Shield looks (Friday 14:00–20:00 New York with no holiday). */
+  /** How long before a freeze the weekend heads-up shows (Friday 14:00–20:00 New York with no holiday). */
   weekendWindowSec: 6 * 3600,
   /** Smallest repay and smallest save worth a run. */
   minRepayUsd: 0.05,
@@ -35,17 +44,20 @@ export const CASH_AGENT = {
 } as const;
 
 /**
- * Protect · sell's numbers (D18): when savings can't keep the credit Safe, Protect sells backing stock. Locked with
- * Adrian on 2026-10-13 (plan item 1): a heads-up below 1.25 on a weekday and the sale 30 minutes later, at once below
- * 1.10, back to 1.4. The floors and the pool numbers follow the expert panel (eval/protect-panel.json): 1% under Aave's
- * price normally, 3% in Act, about 2% of a pool's USDC depth per 10 minutes, and each swap near 1% of it (the
- * Aerodrome pools hold $0.44M–1.57M, 2026-10-14). All wait on calibration (plan item 6 step 9). GooseExecutor holds
- * the live values within hard bounds (contracts/src/SellRules.sol); a change waits the public 7-day delay.
+ * Protect · sell's numbers (D18): when cash can't bring the credit back to Watch, Protect sells backing stock. Act is
+ * the line here too (Adrian, 2026-10-15): the heads-up goes out below the Act line, on a weekday, and the sale follows
+ * 30 minutes later if the credit is still in Act; deep in Act, below 1.05 (halfway to Aave's limit at 1.0), it sells
+ * at once. A sale brings the credit back to Watch at 1.2, the same target as a repay from cash. Before 2026-10-15 the
+ * heads-up was below 1.25 and the target 1.4 (plan item 1). The floors and the pool numbers follow the expert panel
+ * (eval/protect-panel.json): 1% under Aave's price after a heads-up, 3% at once, about 2% of a pool's USDC depth per
+ * 10 minutes, and each swap near 1% of it (the Aerodrome pools hold $0.44M–1.57M, 2026-10-14). All wait on calibration
+ * (plan item 6 step 9). GooseExecutor holds the live values within hard bounds (contracts/src/SellRules.sol); a
+ * change waits the public 7-day delay.
  */
 export const PROTECT_SELL = {
-  headsUpHf: 1.25,
-  nowHf: RISK.watchMin,
-  targetHf: 1.4,
+  headsUpHf: RISK.watchMin,
+  nowHf: 1.05,
+  targetHf: CASH_AGENT.targetHf,
   headsUpDelaySec: 30 * 60,
   floorBps: 100,
   actFloorBps: 300,

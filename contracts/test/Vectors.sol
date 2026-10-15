@@ -23,7 +23,6 @@ library Vectors {
         uint256 debtRay;
         uint256 savings;
         uint256 capLeft;
-        bool preFreeze;
         Thresholds t;
         uint256 minRepay;
     }
@@ -107,20 +106,18 @@ library Vectors {
         return (1 + r1 % 9) * 10 ** between(r2, lo, hi);
     }
 
+    /// Thresholds within the executor's Act-only bounds (2026-10-15): the trigger at 1.05–1.10, the target up to 1.40;
+    /// the health from 0.80 to 1.30, so about half are in Act and the rest in Watch. The weekend numbers are the card's,
+    /// unused.
     function protectInput(uint256 i) internal pure returns (Protect memory v) {
-        uint256[20] memory r;
-        for (uint256 f; f < 20; ++f) {
+        uint256[19] memory r;
+        for (uint256 f; f < 19; ++f) {
             r[f] = rand("protect", i, f);
         }
-        uint256 trigger = between(r[14], 1.2e18, 2e18);
-        uint256 target = between(r[15], trigger + 0.05e18, 2.5e18);
-        uint256 drop = between(r[16], 0.05e18, 0.3e18);
-        bool shield = r[19] % 4 == 0;
-        uint256 stressed = trigger * (WAD - drop) / WAD;
-        uint256 floorMin = shield && stressed >= 1.02e18 ? stressed + 1 : 1.02e18;
-        uint256 floor = between(r[17], floorMin, trigger);
-        uint256 hf = shield ? between(r[4], trigger, floor * WAD / (WAD - drop)) : between(r[4], 0.8e18, 2.6e18);
-        v.t = Thresholds(uint64(trigger), uint64(target), uint64(drop), uint64(floor));
+        uint256 trigger = between(r[14], 1.05e18, 1.1e18);
+        uint256 target = between(r[15], trigger + 0.05e18, 1.4e18);
+        uint256 hf = between(r[4], 0.8e18, 1.3e18);
+        v.t = Thresholds(uint64(trigger), uint64(target), 0.15e18, uint64(trigger));
 
         v.collateral = spread(r[0], r[1], 1, 6) * VALUE_PER_USD + r[2] % VALUE_PER_USD;
         v.avgCf = between(r[3], 0.5e18, 0.85e18);
@@ -128,7 +125,6 @@ library Vectors {
         v.debtRay = r[6] % 20 == 0 ? 0 : debtValue * RAY + r[5] % RAY;
         v.savings = r[7] % 10 == 0 ? 0 : spread(r[8], r[9], 5, 11);
         v.capLeft = r[10] % 10 == 0 ? 0 : spread(r[11], r[12], 5, 10);
-        v.preFreeze = shield || r[13] % 2 == 1;
         v.minRepay = 50_000 * 10 ** (r[18] % 4);
     }
 
@@ -153,8 +149,8 @@ library Vectors {
         return friday * 1 days + 15 hours + rand("calendar", i, 2) % 12 hours;
     }
 
-    /// Holdings from 0.01 to 10,000 shares at $100–1,000, health from 0.95 to 1.6, and limits, pool windows and the USDC
-    /// limit that bind a fifth of the time.
+    /// Holdings from 0.01 to 10,000 shares at $100–1,000, health from 0.95 to 1.3, a target from 1.15 to 1.4 (the
+    /// executor's Act-only bounds, 2026-10-15), and limits, pool windows and the USDC limit that bind a fifth of the time.
     function sellInput(uint256 i) internal pure returns (Sell memory v) {
         uint256 power;
         for (uint256 k; k < 7; ++k) {
@@ -170,22 +166,24 @@ library Vectors {
             power += h.cf * h.shares * h.price * 1e10;
         }
         v.book.usdcPrice = between(rand("sell", i, 0), 99_500_000, 100_500_000);
-        uint256 hf = between(rand("sell", i, 1), 0.95e18, 1.6e18);
+        uint256 hf = between(rand("sell", i, 1), 0.95e18, 1.3e18);
         v.book.debt = (power * 1e14 + hf - 1) / hf;
         v.book.usdcLeft = rand("sell", i, 2) % 5 == 0 ? spread(rand("sell", i, 3), rand("sell", i, 4), 5, 9) : 1e13;
-        v.targetHf = between(rand("sell", i, 5), 1.3e18, 1.6e18);
+        v.targetHf = between(rand("sell", i, 5), 1.15e18, 1.4e18);
         v.floorBps = between(rand("sell", i, 6), 25, 500);
         v.keepMix = rand("sell", i, 7) % 3 == 0;
         v.maxSlice = between(rand("sell", i, 8), 100e6, 50_000e6);
     }
 
+    /// Within the executor's Act-only bounds (2026-10-15): the heads-up line at 1.05–1.10, the at-once line at least
+    /// 0.02 under it; the health from 0.98 to 1.20, so Act, Watch and both lines are all well covered.
     function timingInput(uint256 i) internal pure returns (Timing memory v) {
         v.now_ = 1_792_000_000;
-        v.headsUpHf = uint64(between(rand("timing", i, 0), 1.1e18, 1.5e18));
-        v.hf = between(rand("timing", i, 1), 0.9e18, 1.6e18);
-        v.headsUpAt = rand("timing", i, 2) % 3 == 0 ? 0 : v.now_ - rand("timing", i, 3) % 7_200;
+        v.headsUpHf = uint64(between(rand("timing", i, 0), 1.05e18, 1.1e18));
+        v.hf = between(rand("timing", i, 1), 0.98e18, 1.2e18);
+        v.headsUpAt = rand("timing", i, 2) % 2 == 0 ? 0 : v.now_ - rand("timing", i, 3) % 7_200;
         v.frozen = rand("timing", i, 4) % 4 == 0;
-        v.nowHf = uint64(between(rand("timing", i, 5), 1.02e18, v.headsUpHf));
+        v.nowHf = uint64(between(rand("timing", i, 5), 1.02e18, v.headsUpHf - 0.02e18));
         v.headsUpDelay = uint32(between(rand("timing", i, 6), 600, 7_200));
     }
 

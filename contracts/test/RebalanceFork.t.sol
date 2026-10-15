@@ -122,14 +122,16 @@ contract RebalanceForkTest is RebalanceForkBase {
         assertEq(_check().length, 0, "not while prices are held");
     }
 
-    /// Protect first: free stock drifted, but the credit isn't Safe, so the Rebalancer waits.
-    function test_it_waits_while_the_credit_is_not_safe() public {
+    /// Protect first: free stock drifted, but the credit is in Act, so the Rebalancer waits. Watch is fine (Act is the
+    /// line, 2026-10-15): once the credit is out of Act it trades, as it only touches free stock.
+    function test_it_waits_while_the_credit_is_in_act() public {
         (address a,) = _holder("a", _list(NVDA, AAPL), _list(5_600e6, 4_400e6), fiftyFifty);
         _backWith(a, TSLA, 5e8);
-        _drawTo(a, 1.45e18);
-        assertEq(uint8(x.planOf(a).action), uint8(GooseExecutor.Action.None));
-        _backWith(a, TSLA, 1e8); // the account adds backing: Safe again
-        assertEq(uint8(x.planOf(a).action), uint8(GooseExecutor.Action.Rebalance));
+        _drawTo(a, 1.05e18);
+        assertEq(uint8(x.planOf(a).action), uint8(GooseExecutor.Action.None), "Act: waits");
+        _backWith(a, TSLA, 1e8); // the account adds backing: 1.26, Watch
+        assertLt(SPOKE.getUserAccountData(a).healthFactor, 1.5e18);
+        assertEq(uint8(x.planOf(a).action), uint8(GooseExecutor.Action.Rebalance), "Watch: trades");
     }
 
     /// NVIDIA's pool 0.6% off Aave's price holds the day; at 0.4% it trades.

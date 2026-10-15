@@ -43,7 +43,7 @@ const toFloat = (v: bigint, unit: bigint) => Number(v) / Number(unit);
 const hex = (bytes: number[]) => toHex(Uint8Array.from(bytes));
 
 /** ProtectCase in CashRules.sol. */
-const PROTECT_CASE = { "no-debt": 0, healthy: 1, "no-savings": 2, "no-cap": 3, "too-small": 4, watch: 5, "weekend-shield": 6 } as const;
+const PROTECT_CASE = { "no-debt": 0, healthy: 1, "no-savings": 2, "no-cap": 3, "too-small": 4, act: 5 } as const;
 /** SaveCase in CashRules.sol. */
 const SAVE_CASE = { "too-small": 0, "no-cap": 1, rate: 2, save: 3 } as const;
 
@@ -58,21 +58,14 @@ export const ENTRY_COUNT = 1000;
 /** Where Vectors.sol's hash test puts the executor, so both sides know the spender. */
 export const HASH_SPENDER: Address = "0x0000000000000000000000000000000000600dE5";
 
-/** Protect inputs, in on-chain units. Mirrors Vectors.protectInput. A quarter of them sit between the trigger and
- *  the weekend floor before a freeze, where only Weekend Shield acts. */
+/** Protect inputs, in on-chain units. Mirrors Vectors.protectInput: thresholds within the executor's Act-only bounds
+ *  (2026-10-15), the trigger at 1.05–1.10 and the target up to 1.40, and the health from 0.80 to 1.30, so about half
+ *  are in Act and the rest in Watch. */
 export function protectInput(i: number) {
   const r = (f: number) => rand("protect", i, f);
-  const triggerHf = between(r(14), (WAD * 12n) / 10n, 2n * WAD);
-  const targetHf = between(r(15), triggerHf + WAD / 20n, (WAD * 25n) / 10n);
-  const stressDrop = between(r(16), WAD / 20n, (WAD * 3n) / 10n);
-  const shield = r(19) % 4n === 0n;
-  // Weekend Shield needs a floor above the stressed trigger: floor > triggerHf × (1 − stressDrop).
-  const stressed = (triggerHf * (WAD - stressDrop)) / WAD;
-  const floorMin = shield && stressed >= (WAD * 102n) / 100n ? stressed + 1n : (WAD * 102n) / 100n;
-  const stressFloorHf = between(r(17), floorMin, triggerHf);
-  const hf = shield
-    ? between(r(4), triggerHf, (stressFloorHf * WAD) / (WAD - stressDrop))
-    : between(r(4), (WAD * 8n) / 10n, (WAD * 26n) / 10n);
+  const triggerHf = between(r(14), (WAD * 105n) / 100n, (WAD * 11n) / 10n);
+  const targetHf = between(r(15), triggerHf + WAD / 20n, (WAD * 14n) / 10n);
+  const hf = between(r(4), (WAD * 8n) / 10n, (WAD * 13n) / 10n);
 
   const collateral = spread(r(0), r(1), 1n, 6n) * VALUE_PER_USD + (r(2) % VALUE_PER_USD);
   const avgCf = between(r(3), WAD / 2n, (WAD * 85n) / 100n);
@@ -80,9 +73,8 @@ export function protectInput(i: number) {
   const debtRay = r(6) % 20n === 0n ? 0n : debtValue * RAY + (r(5) % RAY);
   const savings = r(7) % 10n === 0n ? 0n : spread(r(8), r(9), 5n, 11n);
   const capLeft = r(10) % 10n === 0n ? 0n : spread(r(11), r(12), 5n, 10n);
-  const preFreeze = shield || r(13) % 2n === 1n;
   const minRepay = 50_000n * 10n ** (r(18) % 4n);
-  return { collateral, avgCf, debtRay, savings, capLeft, preFreeze, triggerHf, targetHf, stressDrop, stressFloorHf, minRepay };
+  return { collateral, avgCf, debtRay, savings, capLeft, triggerHf, targetHf, minRepay };
 }
 
 /** Save inputs, in USDC units. Mirrors Vectors.saveInput. */
@@ -112,7 +104,8 @@ export function calendarTime(i: number): bigint {
 }
 
 /** Protect · sell inputs: a book and the options. Mirrors Vectors.sellInput. Holdings from 0.01 to 10,000 shares at
- *  $100–1,000, health from 0.95 to 1.6, and limits, pool windows and the USDC limit that bind a fifth of the time. */
+ *  $100–1,000, health from 0.95 to 1.3, a target from 1.15 to 1.4 (the executor's Act-only bounds, 2026-10-15), and
+ *  limits, pool windows and the USDC limit that bind a fifth of the time. */
 export function sellInput(i: number) {
   const r = (f: number) => rand("sell", i, f);
   const stocks = Array.from({ length: 7 }, (_, k) => {
@@ -128,7 +121,7 @@ export function sellInput(i: number) {
     };
   });
   const usdcPrice = between(r(0), 99_500_000n, 100_500_000n);
-  const hf = between(r(1), (WAD * 95n) / 100n, (WAD * 16n) / 10n);
+  const hf = between(r(1), (WAD * 95n) / 100n, (WAD * 13n) / 10n);
   const power = stocks.reduce((p, s) => p + s.cfBps * s.sharesRaw * s.price * 10n ** 10n, 0n);
   const book: SellBook = {
     stocks,
@@ -138,25 +131,26 @@ export function sellInput(i: number) {
   };
   return {
     book,
-    targetHf: between(r(5), (WAD * 13n) / 10n, (WAD * 16n) / 10n),
+    targetHf: between(r(5), (WAD * 115n) / 100n, (WAD * 14n) / 10n),
     floorBps: between(r(6), 25n, 500n),
     keepMix: r(7) % 3n === 0n,
     maxSliceRaw: between(r(8), 100n * 10n ** 6n, 50_000n * 10n ** 6n),
   };
 }
 
-/** Protect · sell timing inputs. Mirrors Vectors.timingInput. */
+/** Protect · sell timing inputs. Mirrors Vectors.timingInput: within the executor's Act-only bounds (2026-10-15), the
+ *  heads-up line at 1.05–1.10 and the at-once line at least 0.02 under it; the health from 0.98 to 1.20. */
 export function timingInput(i: number) {
   const r = (f: number) => rand("timing", i, f);
   const now = 1_792_000_000n;
-  const headsUpHf = between(r(0), (WAD * 11n) / 10n, (WAD * 15n) / 10n);
+  const headsUpHf = between(r(0), (WAD * 105n) / 100n, (WAD * 11n) / 10n);
   return {
-    hf: between(r(1), (WAD * 9n) / 10n, (WAD * 16n) / 10n),
-    headsUpAt: r(2) % 3n === 0n ? 0n : now - (r(3) % 7_200n),
+    hf: between(r(1), (WAD * 98n) / 100n, (WAD * 12n) / 10n),
+    headsUpAt: r(2) % 2n === 0n ? 0n : now - (r(3) % 7_200n),
     now,
     frozen: r(4) % 4n === 0n,
     headsUpHf,
-    nowHf: between(r(5), (WAD * 102n) / 100n, headsUpHf),
+    nowHf: between(r(5), (WAD * 102n) / 100n, headsUpHf - WAD / 50n),
     headsUpDelaySec: between(r(6), 600n, 7_200n),
   };
 }
@@ -298,7 +292,7 @@ function protectVectors() {
   const amounts: string[] = [];
   for (let i = 0; i < PROTECT_COUNT; i++) {
     const v = protectInput(i);
-    const t = { triggerHf: toFloat(v.triggerHf, WAD), targetHf: toFloat(v.targetHf, WAD), stressDrop: toFloat(v.stressDrop, WAD), stressFloorHf: toFloat(v.stressFloorHf, WAD) };
+    const t = { triggerHf: toFloat(v.triggerHf, WAD), targetHf: toFloat(v.targetHf, WAD) };
     const minRepayUsd = toFloat(v.minRepay, 1_000_000n);
     // Exact conversions, not summarize()'s cent rounding: the vectors test the rule, not the display.
     const collateralUsd = toFloat(v.collateral, VALUE_PER_USD);
@@ -310,7 +304,6 @@ function protectVectors() {
       debtUsd,
       savingsUsd: toFloat(v.savings, 1_000_000n),
       capLeftUsd: toFloat(v.capLeft, 1_000_000n),
-      weekendWindow: v.preFreeze,
       ...t,
     };
     const d = planGuardian({ ...input, minRepayUsd });
@@ -320,10 +313,7 @@ function protectVectors() {
     const near = (a: number, b: number) => Math.abs(a - b) < 1e-4;
     const hf = debtUsd > 0 ? (collateralUsd * avgCf) / debtUsd : Infinity;
     const uncapped = planGuardian({ ...input, minRepayUsd: 0 });
-    const edge =
-      near(hf, t.triggerHf) ||
-      (v.preFreeze && near(hf * (1 - t.stressDrop), t.stressFloorHf)) ||
-      (uncapped.action === "repay" && near(uncapped.amountUsd, minRepayUsd));
+    const edge = near(hf, t.triggerHf) || (uncapped.action === "repay" && near(uncapped.amountUsd, minRepayUsd));
     checkKind.push(edge ? 0 : 1);
   }
   return { kinds: hex(kinds), checkKind: hex(checkKind), amounts };

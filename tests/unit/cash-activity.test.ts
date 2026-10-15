@@ -128,7 +128,7 @@ describe("executorCashRow: the executor's moves in the cash", () => {
   });
 
   it("Protect's repay from the cash", () => {
-    const r = executorCashRow(exec({ kind: "repaid", amountRaw: usdc(40), hfBefore: 1_450_000_000_000_000_000n, hfAfter: 1_660_000_000_000_000_000n, reason: "watch" }))!;
+    const r = executorCashRow(exec({ kind: "repaid", amountRaw: usdc(40), hfBefore: 1_050_000_000_000_000_000n, hfAfter: 1_200_000_000_000_000_000n, reason: "act" }))!;
     expect([r.title, r.line, r.mark]).toEqual(["Protect repaid credit", "−$40.00", { kind: "agent", agent: "Protect" }]);
   });
 
@@ -215,7 +215,7 @@ describe("cashRows: the sheet's list", () => {
         own([{ kind: "receive", symbol: "USDC", amount: 10 }], { key: "a", time: T - 1 * day, hash: tx(1) }),
         own([{ kind: "send", symbol: "USDC", amount: 5 }], { key: "b", time: T - 2 * day, hash: tx(2) }),
       ],
-      executor: [exec({ kind: "repaid", amountRaw: usdc(40), hfBefore: 1n, hfAfter: 2n, reason: "watch" }, {}, { key: "c", time: T - 3 * day, hash: tx(3) })],
+      executor: [exec({ kind: "repaid", amountRaw: usdc(40), hfBefore: 1n, hfAfter: 2n, reason: "act" }, {}, { key: "c", time: T - 3 * day, hash: tx(3) })],
       arrivals: [
         // Already the user's own row.
         { hash: tx(1), time: T - 1 * day, items: [{ kind: "receive", symbol: "USDC", amount: 10 }] },

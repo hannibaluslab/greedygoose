@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PROTECT_SELL } from "@/config/risk";
 import { planSell, sellAmounts, sellOrder, sellPower, sellSlices, sellTiming, SELL_RULE, type SellBook, type SellHolding } from "@/lib/guardian/sell";
 
 const WAD = 10n ** 18n;
@@ -20,26 +21,31 @@ const bookAt = (stocks: Partial<Record<number, SellHolding>>, hf: number): SellB
   // Health = power × 1e14 / debt (WAD), so debt = power / (1e4 × health).
   return { stocks: all, debtValue: sellPower(all) / (10n * BigInt(Math.round(hf * 1000))), usdcPrice: 10n ** 8n, usdcLeftRaw: ALL };
 };
-const opts = { targetHf: (14n * WAD) / 10n, floorBps: 100n, keepMix: false, maxSliceRaw: 5_000n * 10n ** 6n };
+/** Back to Watch at 1.2 (PROTECT_SELL.targetHf; Act is the line, 2026-10-15). */
+const opts = { targetHf: (12n * WAD) / 10n, floorBps: 100n, keepMix: false, maxSliceRaw: 5_000n * 10n ** 6n };
 
 describe("sellAmounts (Protect · sell, plan item 1)", () => {
-  // The protect-panel example: NVDA $4,000, AAPL $3,500, TSLA $1,500 back $5,350 of credit at health 1.22.
+  it("sells back to Watch at 1.2, the deploy default", () => {
+    expect(opts.targetHf).toBe(BigInt(PROTECT_SELL.targetHf * 10) * 10n ** 17n);
+  });
+
+  // The protect-panel example, in Act: NVDA $4,000, AAPL $3,500, TSLA $1,500 back $6,000 of credit at health 1.084.
   const panel = (half: boolean) => {
     const h = (n: number, p: number, cf: number) => holding(n, p, cf, half ? shares(n / 2) : ALL);
-    return { ...bookAt({ 0: h(10, 350, 7_800), 5: h(20, 200, 7_000), 6: h(5, 300, 6_500) }, 1), debtValue: 5_350n * 10n ** 26n };
+    return { ...bookAt({ 0: h(10, 350, 7_800), 5: h(20, 200, 7_000), 6: h(5, 300, 6_500) }, 1), debtValue: 6_000n * 10n ** 26n };
   };
 
   it("sells the lowest collateral factor first, then spills over at a stock's daily limit", () => {
     const take = sellAmounts(panel(true), opts);
     expect(usd(take[6], price(300))).toBe(750); // half the Tesla
-    expect(usd(take[5], price(200))).toBeCloseTo(631, 0); // the rest from NVIDIA
+    expect(usd(take[5], price(200))).toBeCloseTo(597, 0); // the rest from NVIDIA
     expect(take[0]).toBe(0n); // Apple kept
   });
 
   it("sells only Tesla when its limit allows the whole fix", () => {
     const take = sellAmounts(panel(false), opts);
     expect(take[5]).toBe(0n);
-    expect(usd(take[6], price(300))).toBeCloseTo(1_338, 0);
+    expect(usd(take[6], price(300))).toBeCloseTo(1_291, 0);
   });
 
   it("never sells a stock with no limit, and sells nothing at the target", () => {
@@ -48,7 +54,7 @@ describe("sellAmounts (Protect · sell, plan item 1)", () => {
     const take = sellAmounts({ ...b, stocks }, opts);
     expect(take[6]).toBe(0n);
     expect(take[5]).toBeGreaterThan(0n);
-    expect(sellAmounts(bookAt({ 5: holding(20, 200, 7_000) }, 1.4), opts).every((t) => t === 0n)).toBe(true);
+    expect(sellAmounts(bookAt({ 5: holding(20, 200, 7_000) }, 1.2), opts).every((t) => t === 0n)).toBe(true);
   });
 
   it("keeps the mix: the same share of each holding", () => {
@@ -66,9 +72,11 @@ describe("sellAmounts (Protect · sell, plan item 1)", () => {
 });
 
 describe("sellSlices", () => {
-  it("takes two slices from 1.2 when one withdrawal would breach Aave's floor", () => {
-    const b = bookAt({ 5: holding(10, 200, 7_000) }, 1.2);
-    expect(planSell(b, opts).slices).toHaveLength(2);
+  it("takes more slices the deeper in Act, as one withdrawal would breach Aave's floor", () => {
+    const at = (hf: number) => planSell(bookAt({ 5: holding(10, 200, 7_000) }, hf), opts).slices.length;
+    expect(at(1.08)).toBe(2);
+    expect(at(1.05)).toBe(3);
+    expect(at(1.04)).toBe(4);
   });
 
   it("keeps the health above Aave's floor after every withdrawal, six slices a run", () => {
@@ -86,28 +94,34 @@ describe("sellSlices", () => {
   });
 
   it("repays exactly each swap's minimum: Aave's price less the floor", () => {
-    const b = bookAt({ 5: holding(10, 200, 7_000) }, 1.24);
+    const b = bookAt({ 5: holding(10, 200, 7_000) }, 1.08);
     const { slices, repayRaw } = planSell(b, opts);
-    expect(slices).toHaveLength(1);
-    expect(slices[0].minOutRaw).toBe((slices[0].sharesRaw * price(200) * 9_900n) / 10n ** 14n);
-    expect(repayRaw).toBe(slices[0].minOutRaw);
+    expect(slices).toHaveLength(2);
+    for (const s of slices) expect(s.minOutRaw).toBe((s.sharesRaw * price(200) * 9_900n) / 10n ** 14n);
+    expect(repayRaw).toBe(slices[0].minOutRaw + slices[1].minOutRaw);
   });
 });
 
-describe("sellTiming (decision 3)", () => {
-  const l = { headsUpHf: (125n * WAD) / 100n, nowHf: (11n * WAD) / 10n, headsUpDelaySec: 1_800n };
-  const at = (hf: number) => BigInt(Math.round(hf * 100)) * 10n ** 16n;
+describe("sellTiming (decision 3, Act is the line)", () => {
+  const wad = (x: number) => BigInt(Math.round(x * 1000)) * 10n ** 15n;
+  const l = { headsUpHf: wad(PROTECT_SELL.headsUpHf), nowHf: wad(PROTECT_SELL.nowHf), headsUpDelaySec: BigInt(PROTECT_SELL.headsUpDelaySec) };
+  const at = wad;
 
-  it("sends a heads-up below 1.25, sells 30 minutes later, and at once below 1.10", () => {
-    expect(sellTiming(at(1.2), 0n, 1_000n, false, l)).toEqual({ timing: "heads-up", atOnce: false });
-    expect(sellTiming(at(1.2), 1_000n, 2_799n, false, l)).toEqual({ timing: "wait", atOnce: false });
-    expect(sellTiming(at(1.2), 1_000n, 2_800n, false, l)).toEqual({ timing: "sell", atOnce: false });
-    expect(sellTiming(at(1.09), 0n, 1_000n, false, l)).toEqual({ timing: "sell", atOnce: true });
+  it("sends a heads-up in Act, sells 30 minutes later, and at once below 1.05", () => {
+    expect(sellTiming(at(1.08), 0n, 1_000n, false, l)).toEqual({ timing: "heads-up", atOnce: false });
+    expect(sellTiming(at(1.08), 1_000n, 2_799n, false, l)).toEqual({ timing: "wait", atOnce: false });
+    expect(sellTiming(at(1.08), 1_000n, 2_800n, false, l)).toEqual({ timing: "sell", atOnce: false });
+    expect(sellTiming(at(1.049), 0n, 1_000n, false, l)).toEqual({ timing: "sell", atOnce: true });
+  });
+
+  it("does nothing in Watch: no heads-up at 1.3, nor at the line", () => {
+    expect(sellTiming(at(1.3), 0n, 1_000n, false, l)).toEqual({ timing: "wait", atOnce: false });
+    expect(sellTiming(at(1.1), 0n, 1_000n, false, l)).toEqual({ timing: "wait", atOnce: false });
+    expect(sellTiming(at(1.2), 1_000n, 9_000n, false, l)).toEqual({ timing: "clear", atOnce: false }); // a heads-up from Act is cleared, not sold
   });
 
   it("never sells while prices are held, and clears a heads-up once back above the line", () => {
-    expect(sellTiming(at(1.05), 0n, 1_000n, true, l).timing).toBe("wait");
-    expect(sellTiming(at(1.3), 1_000n, 1_000n, true, l).timing).toBe("clear");
-    expect(sellTiming(at(1.3), 0n, 1_000n, false, l).timing).toBe("wait");
+    expect(sellTiming(at(1.04), 0n, 1_000n, true, l).timing).toBe("wait");
+    expect(sellTiming(at(1.15), 1_000n, 1_000n, true, l).timing).toBe("clear");
   });
 });

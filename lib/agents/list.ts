@@ -40,12 +40,15 @@ export const AGENT_NAME: Record<Agent, Exclude<AgentName, "Agents">> = {
   rebalance: "Rebalance",
 };
 
+/** Protect's rule in one line (Adrian, 2026-10-15: "watch is ok, it is act that is not"), wherever Protect is named. */
+export const PROTECT_RULE = "Steps in only if your credit reaches Act, and brings it back to Watch.";
+
 /** What each agent does, in under six words for its row and in a line for its sheet, and what it never does. */
 export const AGENT_COPY: Record<Agent, { does: string; lead: string; never: string }> = {
   protect: {
-    does: "Keeps your credit Safe",
-    lead: "Repays from your cash when your credit leaves Safe. It can sell backing stock if cash isn’t enough.",
-    never: "Protect never sells a stock that doesn’t back your credit, and never sells on a weekend.",
+    does: "Steps in only at Act",
+    lead: `${PROTECT_RULE} It repays from your cash, and can sell backing stock if cash isn’t enough.`,
+    never: "Protect does nothing while your credit is Safe or in Watch. It never sells a stock that doesn’t back your credit, and never sells on a weekend.",
   },
   rebalance: {
     does: "Keeps your mix on target",
@@ -145,7 +148,7 @@ export type CardAction = { kind: "link"; label: string; href: string } | { kind:
 
 export type AgentCard = {
   key: string;
-  /** The heads-up wears the credit's colour; the rest are plain. */
+  /** The heads-ups wear the credit's colour (a sale's Act, the weekend's Watch); the rest are plain. */
   tone: "watch" | "act" | "plain";
   agent: AgentName;
   text: string;
@@ -153,12 +156,20 @@ export type AgentCard = {
   actions: CardAction[];
 };
 
-/** Protect · sell's pending heads-up, read live: what to add, what it would sell, and when. */
-export type HeadsUpCard = { status: "watch" | "act"; addUsd: number; sellUsd: number; when: string };
+/** Protect · sell's pending heads-up, read live: what to add, what it would sell, and when. Only in Act. */
+export type HeadsUpCard = { addUsd: number; sellUsd: number; when: string };
+
+/**
+ * The weekend heads-up (lib/guardian/plan.ts `weekendHeadsUp`): no move, a card only. Before prices pause, credit in
+ * Watch that a drop at the reopen would take into Act: when they pause, the drop, and the repay that keeps it in Watch.
+ */
+export type WeekendCard = { addUsd: number; dropPct: number; when: string };
 
 export type CardsInput = {
   nowSec: number;
   headsUp: HeadsUpCard | null;
+  /** Only while Protect runs (on or starting), as Weekend Shield did. */
+  weekend: WeekendCard | null;
   status: Readonly<Record<AgentJob, AgentStatus>>;
   /** Each job's grant end while it has a live one (on or starting). */
   ends: Readonly<Record<AgentJob, number | null>>;
@@ -172,16 +183,31 @@ export type CardsInput = {
   cooldownUntil: number;
 };
 
-/** The cards, most urgent first: the heads-up, failed runs, stopped agents, agents about to stop. */
+/** The cards, most urgent first: the heads-ups, failed runs, stopped agents, agents about to stop. */
 export function agentCards(i: CardsInput): AgentCard[] {
   const cards: AgentCard[] = [];
   if (i.headsUp) {
     const h = i.headsUp;
     cards.push({
       key: "heads-up",
-      tone: h.status,
+      tone: "act",
       agent: "Protect",
-      text: `Your credit hit ${h.status === "act" ? "Act" : "Watch"}. Add ${formatUsdTrim(h.addUsd)}, or Protect sells ${formatUsdTrim(h.sellUsd)} ${h.when}.`,
+      text: `Your credit hit Act. Add ${formatUsdTrim(h.addUsd)}, or Protect sells ${formatUsdTrim(h.sellUsd)} ${h.when}.`,
+      actions: [
+        { kind: "link", label: "Add cash", href: "/receive" },
+        { kind: "link", label: "Repay", href: "/repay" },
+      ],
+    });
+  }
+  if (i.weekend) {
+    const w = i.weekend;
+    cards.push({
+      key: "weekend",
+      tone: "watch",
+      agent: "Protect",
+      text: `Prices pause ${w.when}. If stocks reopen ${w.dropPct}% lower, your credit reaches Act.`,
+      sub: `Repaying ${formatUsdTrim(w.addUsd)} now keeps it in Watch. Protect does nothing before Act.`,
+      // As the heads-up's: the last action is the lime one, and here it is the repay the line names.
       actions: [
         { kind: "link", label: "Add cash", href: "/receive" },
         { kind: "link", label: "Repay", href: "/repay" },

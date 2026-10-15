@@ -59,18 +59,18 @@ abstract contract ExecutorForkBase is ForkBase {
         x.register(job, p.account, p.start, p.end, p.salt, cap, 0);
     }
 
-    /// $100 of savings and a loan at health 1.30, with Protect on.
-    function _inWatch(string memory name) internal returns (address a) {
+    /// $100 of savings and credit at health 1.05 (Act), with Protect on.
+    function _inAct(string memory name) internal returns (address a) {
         a = _newJawAccount(name);
         _withSavings(a, 100e6);
-        _openCreditAt(a, 1e8, 1.3e18);
+        _openCreditAt(a, 1e8, 1.05e18);
         _turnOn(a, GooseExecutor.Job.Protect, 1_000e6);
     }
 
     /// The same for a fake account, which approves its own permission (it isn't a JAW account).
-    function _fakeInWatch(address fake) internal {
+    function _fakeInAct(address fake) internal {
         _withSavings(fake, 100e6);
-        _openCreditAt(fake, 1e8, 1.3e18);
+        _openCreditAt(fake, 1e8, 1.05e18);
         PM.Permission memory p = _permission(fake, GooseExecutor.Job.Protect, 1_000e6);
         vm.prank(fake);
         MANAGER.approve(p);
@@ -395,38 +395,68 @@ contract GooseExecutorForkTest is ExecutorForkBase {
 
     // ================================================================== Protect from savings (§5.2)
 
-    function test_a_loan_in_watch_is_repaid_from_savings_back_to_the_target() public {
+    /// Act is the line (Adrian, 2026-10-15): credit in Act is repaid from savings just enough to be back in Watch, at
+    /// 1.20, and then Protect leaves it there.
+    function test_credit_in_act_is_repaid_from_savings_back_to_watch() public {
         address alice = _newJawAccount("alice");
         _withSavings(alice, 100e6);
-        _openCreditAt(alice, 1e8, 1.3e18);
+        _openCreditAt(alice, 1e8, 1.05e18);
         PM.Permission memory p = _turnOn(alice, GooseExecutor.Job.Protect, 1_000e6);
         uint256 debtBefore = SPOKE.getUserTotalDebt(USDC_RESERVE, alice);
         uint256 savingsBefore = AUSDC.balanceOf(alice);
 
         GooseExecutor.Plan memory plan = x.planOf(alice);
         assertEq(uint8(plan.action), uint8(GooseExecutor.Action.Repay));
-        assertEq(uint8(plan.reason), uint8(ProtectCase.Watch));
+        assertEq(uint8(plan.reason), uint8(ProtectCase.Act));
+        // From 1.05 to 1.20 is 12.5% of what's owed; back to Safe (1.50) would have been 30%.
+        assertApproxEqRel(plan.amount, debtBefore / 8, 0.002e18, "an eighth of what's owed");
         address[] memory work = _check();
         assertEq(work[0], alice);
         vm.expectEmit(true, false, false, false, address(x));
-        emit GooseExecutor.ProtectRepaid(alice, 0, 0, 0, ProtectCase.Watch);
+        emit GooseExecutor.ProtectRepaid(alice, 0, 0, 0, ProtectCase.Act);
         _run(work);
 
         uint256 hf = SPOKE.getUserAccountData(alice).healthFactor;
-        assertApproxEqRel(hf, 1.65e18, 0.001e18, "back to the target");
+        assertApproxEqRel(hf, 1.2e18, 0.001e18, "back to Watch, at the target");
         assertApproxEqAbs(debtBefore - SPOKE.getUserTotalDebt(USDC_RESERVE, alice), plan.amount, 2, "repaid");
         assertApproxEqAbs(savingsBefore - AUSDC.balanceOf(alice), plan.amount, 2, "from savings");
         assertEq(MANAGER.getCurrentPeriod(p, p.spends[0]).spend, plan.amount, "USDC limit charged");
         assertApproxEqAbs(MANAGER.getCurrentPeriod(p, p.spends[1]).spend, plan.amount, 2, "savings limit charged");
         _assertHoldsNothing();
-        assertEq(_check().length, 0, "Safe again");
+        assertEq(_check().length, 0, "in Watch: nothing more to do");
+    }
+
+    /// Watch is fine: credit at 1.30, with savings, Protect from savings and Protect · sell all on, gets no repay, no
+    /// heads-up and no sale, on a weekday or just before the weekend freeze.
+    function test_watch_is_fine_nothing_moves() public {
+        address alice = _newJawAccount("alice");
+        _withSavings(alice, 100e6);
+        _openCreditAt(alice, 1e8, 1.3e18);
+        _turnOn(alice, GooseExecutor.Job.Protect, 1_000e6);
+        _turnOnSell(alice);
+        uint256 debt = SPOKE.getUserTotalDebt(USDC_RESERVE, alice);
+        uint256 savings = AUSDC.balanceOf(alice);
+        assertEq(uint8(x.planOf(alice).action), uint8(GooseExecutor.Action.None), "Watch");
+        assertEq(_check().length, 0);
+        vm.warp(_nextFridayUtc(vm.getBlockTimestamp()) + 19 hours + 30 minutes); // Friday 14:30 or 15:30 in New York
+        assertFalse(x.frozen(vm.getBlockTimestamp()));
+        assertEq(uint8(x.planOf(alice).action), uint8(GooseExecutor.Action.None), "nor before the weekend");
+        assertEq(_check().length, 0);
+        address[] memory work = new address[](1);
+        work[0] = alice;
+        _run(work); // listed anyway: still nothing
+        assertGe(SPOKE.getUserTotalDebt(USDC_RESERVE, alice), debt, "nothing repaid (interest only)");
+        assertGe(AUSDC.balanceOf(alice), savings, "savings untouched");
+        // Just under the Act line it steps in.
+        _drawMoreTo(alice, 1.09e18);
+        assertEq(uint8(x.planOf(alice).action), uint8(GooseExecutor.Action.Repay), "Act");
     }
 
     /// D13: on a $5 test deploy Protect repays what the limits leave, aUSDC rounding included, and then waits.
     function test_protect_stays_within_both_daily_limits() public {
         address alice = _newJawAccount("alice");
         _withSavings(alice, 100e6);
-        _openCreditAt(alice, 1e8, 1.3e18);
+        _openCreditAt(alice, 1e8, 1.05e18);
         _turnOn(alice, GooseExecutor.Job.Protect, 5e6);
         uint256 hfBefore = SPOKE.getUserAccountData(alice).healthFactor;
         assertEq(x.planOf(alice).amount, 5e6 - 2);
@@ -438,46 +468,48 @@ contract GooseExecutorForkTest is ExecutorForkBase {
     function test_protect_comes_first_and_a_run_makes_one_move() public {
         address alice = _newJawAccount("alice");
         _withSavings(alice, 100e6);
-        _openCreditAt(alice, 1e8, 1.3e18);
+        _openCreditAt(alice, 1e8, 1.05e18);
         _turnOn(alice, GooseExecutor.Job.Save, 1_000e6);
         _turnOn(alice, GooseExecutor.Job.Protect, 1_000e6);
         deal(address(USDC), alice, USDC.balanceOf(alice) + 10e6);
         uint256 cash = USDC.balanceOf(alice);
 
         _run(_check());
-        assertGt(SPOKE.getUserAccountData(alice).healthFactor, 1.6e18, "Protect first");
+        assertGt(SPOKE.getUserAccountData(alice).healthFactor, 1.15e18, "Protect first");
         assertEq(USDC.balanceOf(alice), cash, "and nothing else");
         _run(_check());
         assertEq(USDC.balanceOf(alice), 1e6, "Save on the next run");
     }
 
-    /// Weekend Shield with thresholds where it can act (with the defaults it never does: GooseExecutor.t.sol). A Safe loan that a
-    /// 30% drop would push under 1.40 is trimmed on Friday afternoon, not on Tuesday.
-    function test_weekend_shield_trims_a_fragile_loan_before_the_freeze() public {
+    /// Weekend Shield no longer repays (Act is the line, 2026-10-15): with the stress numbers at their widest (a 30%
+    /// drop that must leave 1.10), credit in Watch that the drop would take deep into Act is left as it is on Friday
+    /// afternoon. The app shows a heads-up card instead (lib/guardian/plan.ts `weekendHeadsUp`).
+    function test_no_weekend_repay_outside_act() public {
         GooseExecutor.Config memory c = _config();
-        c.thresholds = Thresholds({triggerHf: 1.5e18, targetHf: 1.65e18, stressDrop: 0.3e18, stressFloorHf: 1.4e18});
+        c.thresholds = Thresholds({triggerHf: 1.1e18, targetHf: 1.2e18, stressDrop: 0.3e18, stressFloorHf: 1.1e18});
         x = _deploy(c);
         address alice = _newJawAccount("alice");
         _withSavings(alice, 100e6);
-        _openCreditAt(alice, 1e8, 1.8e18);
+        _openCreditAt(alice, 1e8, 1.2e18);
         _turnOn(alice, GooseExecutor.Job.Protect, 1_000e6);
+        uint256 debt = SPOKE.getUserTotalDebt(USDC_RESERVE, alice);
 
-        vm.warp(_nextFridayUtc(vm.getBlockTimestamp()) + 12 hours); // Friday 07:00 or 08:00 in New York
-        assertEq(uint8(x.planOf(alice).action), uint8(GooseExecutor.Action.None), "outside the window");
-        vm.warp(vm.getBlockTimestamp() + 7 hours + 30 minutes); // 14:30 or 15:30
-        GooseExecutor.Plan memory plan = x.planOf(alice);
-        assertEq(uint8(plan.reason), uint8(ProtectCase.WeekendShield));
-        _run(_check());
-        uint256 hf = SPOKE.getUserAccountData(alice).healthFactor;
-        assertApproxEqRel(hf * 0.7e18 / 1e18, 1.55e18, 0.002e18, "a 30% drop now leaves the floor plus headroom");
+        vm.warp(_nextFridayUtc(vm.getBlockTimestamp()) + 19 hours + 30 minutes); // 14:30 or 15:30 in New York
+        assertFalse(x.frozen(vm.getBlockTimestamp()));
+        assertEq(uint8(x.planOf(alice).action), uint8(GooseExecutor.Action.None), "Watch, before the freeze");
+        assertEq(_check().length, 0);
+        address[] memory work = new address[](1);
+        work[0] = alice;
+        _run(work); // listed anyway: still nothing
+        assertGe(SPOKE.getUserTotalDebt(USDC_RESERVE, alice), debt, "nothing repaid (interest only)");
     }
 
     // ================================================================== failures (§6)
 
     function test_one_failing_account_does_not_stop_the_others() public {
-        address alice = _inWatch("alice");
+        address alice = _inAct("alice");
         FakeAccount fake = new FakeAccount(false); // takes the batch and moves nothing
-        _fakeInWatch(address(fake));
+        _fakeInAct(address(fake));
 
         address[] memory work = _check();
         assertEq(work.length, 2);
@@ -485,7 +517,7 @@ contract GooseExecutorForkTest is ExecutorForkBase {
         emit GooseExecutor.RunFailed(address(fake), GooseExecutor.DebtNotLower.selector, 1);
         _run(work);
 
-        assertGt(SPOKE.getUserAccountData(alice).healthFactor, 1.6e18, "alice repaid");
+        assertGt(SPOKE.getUserAccountData(alice).healthFactor, 1.15e18, "alice repaid");
         (,,, uint8 fails, uint48 cooldownUntil) = x.jobsOf(address(fake));
         assertEq(fails, 1);
         assertEq(cooldownUntil, vm.getBlockTimestamp() + 10 minutes);
@@ -493,9 +525,9 @@ contract GooseExecutorForkTest is ExecutorForkBase {
     }
 
     function test_a_gas_burner_is_contained() public {
-        address alice = _inWatch("alice");
+        address alice = _inAct("alice");
         FakeAccount burner = new FakeAccount(true);
-        _fakeInWatch(address(burner));
+        _fakeInAct(address(burner));
         address[] memory work = new address[](2);
         work[0] = address(burner);
         work[1] = alice;
@@ -503,7 +535,7 @@ contract GooseExecutorForkTest is ExecutorForkBase {
         emit GooseExecutor.RunFailed(address(burner), bytes4(NO_REVERT_DATA), 1);
         vm.prank(forwarder);
         x.performUpkeep{gas: 5_000_000}(abi.encode(GooseExecutor.Mode.Run, abi.encode(work)));
-        assertGt(SPOKE.getUserAccountData(alice).healthFactor, 1.6e18, "alice repaid after the burner");
+        assertGt(SPOKE.getUserAccountData(alice).healthFactor, 1.15e18, "alice repaid after the burner");
     }
 
     /// More accounts with work than MAX_WORK in one page: each pass starts further on, so all of them get a turn.
@@ -525,7 +557,7 @@ contract GooseExecutorForkTest is ExecutorForkBase {
 
     function test_failures_back_off_then_switch_the_account_off() public {
         FakeAccount fake = new FakeAccount(false);
-        _fakeInWatch(address(fake));
+        _fakeInAct(address(fake));
         for (uint8 n = 1; n <= 8; ++n) {
             vm.warp(_failOnce(address(fake), n));
         }
@@ -551,9 +583,9 @@ contract GooseExecutorForkTest is ExecutorForkBase {
     function test_a_transfer_to_the_executor_does_not_stop_runs() public {
         deal(address(USDC), address(x), 1e6);
         vm.deal(address(x), 1 ether);
-        address alice = _inWatch("alice");
+        address alice = _inAct("alice");
         _run(_check());
-        assertGt(SPOKE.getUserAccountData(alice).healthFactor, 1.6e18);
+        assertGt(SPOKE.getUserAccountData(alice).healthFactor, 1.15e18);
     }
 
     function test_runs_prune_revoked_and_expired_permissions() public {
@@ -589,11 +621,11 @@ contract GooseExecutorForkTest is ExecutorForkBase {
 }
 
 /// The deploy's PAGE_SIZE holds: a full page of the costliest accounts that need nothing checks in under 8.5M gas.
-/// Each is in Watch with savings too small to repay from, so Protect pays for every read (debt, account data, savings,
-/// both limits) and finds no move; Protect · sell is on for all seven stocks and waits, above the heads-up line, on the
-/// health Protect read; Save is on with nothing above the keep-back. The page is built in setUp, which
-/// forge runs as its own transaction, so the check pays cold storage, as a real one does. The next page comes up on the
-/// next block, and a second shard owns it alone.
+/// Each is in Act (Protect reads more only there, since Act is the line) with savings too small to repay from, so
+/// Protect pays for every read (debt, account data, savings, both limits) and finds no move; Protect · sell is on for
+/// all seven stocks and waits, as prices are held (a weekend), on the health Protect read; Save is on with nothing
+/// above the keep-back. The page is built in setUp, which forge runs as its own transaction, so the check pays cold
+/// storage, as a real one does. The next page comes up on the next block, and a second shard owns it alone.
 contract ExecutorPageForkTest is ExecutorForkBase {
     address nextPage;
 
@@ -607,15 +639,16 @@ contract ExecutorPageForkTest is ExecutorForkBase {
             address a = _newJawAccount(string.concat("owes ", vm.toString(i)));
             _withSavings(a, 0.01e6); // a cent: less than the smallest repay
             _backWithAllStocks(a, 1e8);
-            uint256 drawn = _drawTo(a, 1.3e18);
+            uint256 drawn = _drawTo(a, 1.08e18);
             vm.prank(a);
             USDC.transfer(attacker, drawn); // the credit leaves the wallet
             _turnOn(a, GooseExecutor.Job.Protect, 5e6);
             _turnOn(a, GooseExecutor.Job.Save, 5e6);
             _turnOnSell(a);
         }
-        nextPage = _inWatch("next page");
+        nextPage = _inAct("next page");
         vm.roll(vm.getBlockNumber() + vm.getBlockNumber() % 2); // even: shard 0 of 1 scans page 0
+        vm.warp(_nextFridayUtc(vm.getBlockTimestamp()) + 1 days + 12 hours); // Saturday: prices are held
     }
 
     function test_a_worst_case_page_checks_under_8_5M_gas() public {
@@ -636,20 +669,20 @@ contract ExecutorPageForkTest is ExecutorForkBase {
     }
 }
 
-/// MAX_WORK accounts that all need Protect, built in setUp so the measured calls pay cold storage.
+/// MAX_WORK accounts that all need Protect (in Act), built in setUp so the measured calls pay cold storage.
 contract ExecutorRunForkTest is ExecutorForkBase {
-    address[] watch;
+    address[] act;
 
     function setUp() public {
         _fork();
         x = _deploy(_config());
         for (uint256 i; i < x.MAX_WORK(); ++i) {
-            watch.push(_inWatch(string.concat("watch ", vm.toString(i))));
+            act.push(_inAct(string.concat("act ", vm.toString(i))));
         }
     }
 
     function test_a_full_run_repays_all_within_5M_gas() public {
-        address[] memory list = watch;
+        address[] memory list = act;
         bytes memory performData = abi.encode(GooseExecutor.Mode.Run, abi.encode(list));
         vm.prank(forwarder);
         uint256 before = gasleft();
@@ -658,7 +691,7 @@ contract ExecutorRunForkTest is ExecutorForkBase {
         console.log("run of MAX_WORK Protect repays, gas:", gas);
         assertLt(gas, 5_000_000);
         for (uint256 i; i < list.length; ++i) {
-            assertGt(SPOKE.getUserAccountData(list[i]).healthFactor, 1.6e18);
+            assertGt(SPOKE.getUserAccountData(list[i]).healthFactor, 1.15e18);
         }
     }
 
@@ -667,7 +700,7 @@ contract ExecutorRunForkTest is ExecutorForkBase {
         assertTrue(needed);
         assertLe(performData.length, 2000);
         address[] memory listed = _check();
-        address[] memory all = watch;
+        address[] memory all = act;
         assertEq(listed.length, all.length);
         for (uint256 i; i < all.length; ++i) {
             assertTrue(_includes(listed, all[i]));

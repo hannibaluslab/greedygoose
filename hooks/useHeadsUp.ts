@@ -16,7 +16,9 @@ import { statusFor } from "@/lib/risk/status";
 
 /**
  * Protect · sell's pending heads-up, as its card says it. It shows only while the registry's `headsUpAt` is that
- * heads-up's time (a sale cut short, or one cleared, has moved it). "Add $X" is the repay that brings the credit back to
+ * heads-up's time (a sale cut short, or one cleared, has moved it), and only while the credit is in Act, under the
+ * executor's heads-up line: back above it the executor clears the heads-up on its next run and sells nothing (Act is
+ * the line, 2026-10-15). "Add $X" is the repay that brings the credit back to
  * Protect · sell's target (read live), rounded up so it's enough; "$Y" is the stock the heads-up said it would sell.
  * When its wait ends while prices are held, the heads-up's `sellAfter` is the moment they reopen: the second before it
  * is frozen. It reads only the spoke's account data, so the warning never waits on the rest of the account.
@@ -40,10 +42,10 @@ export function useHeadsUp(
   if (!pending || !settings || !reads.data) return null;
   const [reopens, data] = reads.data;
   const credit = summarize(data);
-  const status = statusFor(credit.healthFactor);
-  if (status !== "watch" && status !== "act") return null;
+  const hf = credit.healthFactor;
+  if (statusFor(hf) !== "act" || hf === null || hf >= settings.sellHeadsUpHf) return null;
   const addUsd = Math.ceil(credit.debtUsd - (credit.collateralUsd * credit.avgCf) / settings.sellTargetHf);
   if (addUsd <= 0) return null;
   const when = pending.sellAfter <= nowSec ? "now" : reopens ? "when prices reopen" : `at ${timeText(pending.sellAfter)}`;
-  return { status, addUsd, sellUsd: toUsd(pending.sellValueRaw), when };
+  return { addUsd, sellUsd: toUsd(pending.sellValueRaw), when };
 }

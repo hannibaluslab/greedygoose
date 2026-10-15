@@ -11,7 +11,7 @@ import {Vectors} from "./Vectors.sol";
 contract SellRulesTest is Test {
     uint256 constant WAD = 1e18;
     uint256 constant FLOOR = 100; // 1%
-    uint256 constant TARGET = 1.4e18;
+    uint256 constant TARGET = 1.2e18; // back to Watch (Act is the line, 2026-10-15)
     uint256 constant NONE = 0;
     uint256 constant ALL = 1e13; // a limit, pool window or USDC limit that never binds
 
@@ -70,30 +70,42 @@ contract SellRulesTest is Test {
 
     // ================================================================== timing (decision 3)
 
-    function test_heads_up_then_a_sale_30_minutes_later_and_at_once_below_1_10() public pure {
+    /// Act is the line (Adrian, 2026-10-15): in Act a heads-up, then the sale 30 minutes later; deep in Act (under
+    /// 1.05) at once; in Watch nothing, not even a heads-up.
+    function test_heads_up_in_act_then_a_sale_30_minutes_later_and_at_once_below_1_05() public pure {
         SellLimits memory l = _defaults();
         uint256 t0 = 1_792_000_000;
-        _timing(1.2e18, 0, t0, false, l, SellTiming.HeadsUp, false);
-        _timing(1.2e18, t0, t0 + 30 minutes - 1, false, l, SellTiming.Wait, false);
-        _timing(1.2e18, t0, t0 + 30 minutes, false, l, SellTiming.Sell, false);
-        _timing(1.09e18, 0, t0, false, l, SellTiming.Sell, true);
-        _timing(1.25e18, t0, t0, false, l, SellTiming.Clear, false); // back at the line: a later fall gets a new heads-up
+        _timing(1.08e18, 0, t0, false, l, SellTiming.HeadsUp, false);
+        _timing(1.08e18, t0, t0 + 30 minutes - 1, false, l, SellTiming.Wait, false);
+        _timing(1.08e18, t0, t0 + 30 minutes, false, l, SellTiming.Sell, false);
+        _timing(1.05e18, 0, t0, false, l, SellTiming.HeadsUp, false); // the at-once line itself still warns first
+        _timing(1.049e18, 0, t0, false, l, SellTiming.Sell, true);
+        _timing(1.1e18, t0, t0, false, l, SellTiming.Clear, false); // back at the line: a later fall gets a new heads-up
+    }
+
+    function test_watch_is_fine_no_heads_up_and_no_sale() public pure {
+        SellLimits memory l = _defaults();
+        uint256 t0 = 1_792_000_000;
+        _timing(1.1e18, 0, t0, false, l, SellTiming.Wait, false);
         _timing(1.3e18, 0, t0, false, l, SellTiming.Wait, false);
+        _timing(1.49e18, 0, t0, false, l, SellTiming.Wait, false);
+        _timing(1.3e18, t0 - 1 hours, t0, false, l, SellTiming.Clear, false); // a heads-up from Act is cleared, not sold
     }
 
     function test_nothing_while_prices_are_held_but_a_heads_up_can_clear() public pure {
         SellLimits memory l = _defaults();
-        _timing(1.05e18, 0, 1, true, l, SellTiming.Wait, false);
-        _timing(1.2e18, 0, 1, true, l, SellTiming.Wait, false);
-        _timing(1.2e18, 1, 1 days, true, l, SellTiming.Wait, false);
-        _timing(1.3e18, 1, 1 days, true, l, SellTiming.Clear, false);
+        _timing(1.04e18, 0, 1, true, l, SellTiming.Wait, false);
+        _timing(1.08e18, 0, 1, true, l, SellTiming.Wait, false);
+        _timing(1.08e18, 1, 1 days, true, l, SellTiming.Wait, false);
+        _timing(1.15e18, 1, 1 days, true, l, SellTiming.Clear, false);
     }
 
     // ================================================================== which stock, how much
 
-    /// The protect-panel example (eval/protect-panel.json), at the 1.4 target Adrian picked: NVDA $4,000, AAPL $3,500,
-    /// TSLA $1,500 back $5,350 of credit at 1.22, with the panel's daily limit of half of each holding. Tesla (65%)
-    /// goes first, up to its limit, then NVIDIA (70%); Apple (78%) is kept.
+    /// The protect-panel example (eval/protect-panel.json), now in Act and back to Watch at 1.2 (Act is the line,
+    /// 2026-10-15): NVDA $4,000, AAPL $3,500, TSLA $1,500 back $6,200 of credit at 1.049, with the panel's daily limit
+    /// of half of each holding. Tesla (65%) goes first, up to its limit, then NVIDIA (70%); Apple (78%) is kept. Back
+    /// to the old 1.4 target the same sale would be $3,164, Apple included.
     function test_sells_the_lowest_collateral_factor_first() public pure {
         Book memory b = _book();
         b.stocks[NVDA] = _holding(20e8, 200e8, 7_000);
@@ -102,17 +114,20 @@ contract SellRulesTest is Test {
         for (uint256 r; r < 7; ++r) {
             b.stocks[r].limit = b.stocks[r].shares / 2;
         }
-        b.debt = 5_350e26;
+        b.debt = 6_200e26;
         uint256[7] memory take = SellRules.amounts(b, TARGET, FLOOR, false);
         assertEq(take[TSLA], 2.5e8, "half the Tesla first: $750");
         assertGt(take[NVDA], 0, "then NVIDIA");
         assertEq(take[AAPL], 0, "Apple untouched");
         _assertReaches(b, take, TARGET);
-        // $1,381 at a 1% floor; the panel's $1,367 assumed a 0.5% cost.
-        assertApproxEqAbs(_value(b, take) / 1e16, 1_381, 1, "about $1,381 in all, at Aave's prices");
+        assertApproxEqAbs(_value(b, take) / 1e16, 1_839, 1, "about $1,839 in all, at Aave's prices");
         // The least: a little less leaves it short of the target.
         take[NVDA] -= 10;
         assertLt(_hf(b, take, FLOOR), TARGET);
+        // The old target, 1.4, would have sold far more, and Apple too.
+        uint256[7] memory old = SellRules.amounts(b, 1.4e18, FLOOR, false);
+        assertApproxEqAbs(_value(b, old) / 1e16, 3_164, 1, "about $3,164 to reach 1.4");
+        assertGt(old[AAPL], 0);
     }
 
     function test_a_near_tie_goes_to_the_larger_holding() public pure {
@@ -174,7 +189,7 @@ contract SellRulesTest is Test {
     function test_the_usdc_limit_caps_the_sale() public pure {
         Book memory b = _book();
         b.stocks[NVDA] = _holding(20e8, 200e8, 7_000);
-        b.debt = _debtAt(b, 1.15e18);
+        b.debt = _debtAt(b, 1.05e18);
         b.usdcLeft = 300e6;
         uint256[7] memory take = SellRules.amounts(b, TARGET, FLOOR, false);
         Slice[] memory s = SellRules.slices(b, take, FLOOR, 5_000e6);
@@ -189,7 +204,7 @@ contract SellRulesTest is Test {
     function test_nothing_to_sell_at_or_above_the_target() public pure {
         Book memory b = _book();
         b.stocks[NVDA] = _holding(20e8, 200e8, 7_000);
-        b.debt = _debtAt(b, 1.4e18);
+        b.debt = _debtAt(b, TARGET);
         uint256[7] memory take = SellRules.amounts(b, TARGET, FLOOR, false);
         assertEq(_value(b, take), 0);
     }
@@ -238,6 +253,7 @@ contract SellRulesTest is Test {
             (v.book.stocks[r].limit, v.book.stocks[r].poolLeft) = (ALL * 1e3, ALL * 1e3);
         }
         v.book.usdcLeft = ALL * 1e3;
+        vm.assume(v.book.debt > 0); // one input in 2,187 backs nothing at all
         uint256 hf = SellRules.power(v.book.stocks) * 1e14 / v.book.debt;
         vm.assume(hf > 1.05e18);
         uint256[7] memory take = SellRules.amounts(v.book, v.targetHf, v.floorBps, keepMix);
@@ -252,18 +268,20 @@ contract SellRulesTest is Test {
 
     function test_limits_bounds() public pure {
         assertTrue(SellRules.limitsOk(_defaults()));
-        SellLimits[8] memory bad;
+        SellLimits[10] memory bad;
         for (uint256 i; i < bad.length; ++i) {
             bad[i] = _defaults(); // each its own copy
         }
-        bad[0].headsUpHf = 1.51e18;
-        bad[1].nowHf = 1.26e18; // above the heads-up line
-        bad[2].targetHf = 1.29e18; // less than 0.05 above it
+        bad[0].headsUpHf = 1.11e18; // above the Act line: a heads-up, and so a sale, in Watch
+        bad[1].nowHf = 1.081e18; // less than 0.02 under the heads-up line
+        bad[2].targetHf = 1.14e18; // less than 0.05 above it
         bad[3].headsUpDelay = 5 minutes;
         bad[4].floorBps = 20;
         bad[5].actFloorBps = 501; // past Aave's 5.5% liquidation bonus, with room
         bad[6].poolCap = 999e6;
         bad[7].maxSlice = 50_001e6;
+        bad[8].targetHf = 1.41e18; // back past Watch toward Safe: more stock sold than Act asks for
+        bad[9].headsUpHf = 1.04e18; // a heads-up later than 1.05
         for (uint256 i; i < bad.length; ++i) {
             assertFalse(SellRules.limitsOk(bad[i]), vm.toString(i));
         }
@@ -274,9 +292,9 @@ contract SellRulesTest is Test {
     /// config/risk.ts PROTECT_SELL.
     function _defaults() internal pure returns (SellLimits memory) {
         return SellLimits({
-            headsUpHf: 1.25e18,
-            nowHf: 1.1e18,
-            targetHf: 1.4e18,
+            headsUpHf: 1.1e18,
+            nowHf: 1.05e18,
+            targetHf: 1.2e18,
             headsUpDelay: 30 minutes,
             floorBps: 100,
             actFloorBps: 300,

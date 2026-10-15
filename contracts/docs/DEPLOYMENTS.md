@@ -26,6 +26,20 @@ The admin (the deployer) can `cancel(hash)` a pending request to get its WETH ba
 
 `bootstrap` has not been called. Once Chainlink approves, read both forwarders with the registry's `getForwarder` and pass them in the one `bootstrap` call. For hands-on tests before that, the deployer can be bootstrapped as the only caller (it can only trigger runs; every run is re-checked on-chain and money only moves within each account), and the Chainlink forwarders are then added through the 7-day delay.
 
+### The next deploy carries the Act-only defaults (2026-10-15)
+
+Act is the line (JUSTALAB-DECISIONS.md, "Act is the line (Adrian, 2026-10-15)"): Protect steps in only below 1.10 and brings the credit back to Watch at 1.20. This D13 deploy can't be moved there through its 7-day delay: its bounds keep Protect's trigger at 1.20 or more, and its code still has Weekend Shield's repay. It is throwaway, so the next deploy replaces it rather than a threshold change. Nothing has been deployed for this.
+
+| Number | This deploy (`0x778d…A71b`) | Next deploy (`script/DeployExecutor.s.sol`, `config/risk.ts`) |
+|---|---|---|
+| Protect from cash: trigger → target | 1.50 → 1.65 | 1.10 → 1.20 |
+| Protect · sell: heads-up / at once → target | 1.25 / 1.10 → 1.40 | 1.10 / 1.05 → 1.20 |
+| Weekend Shield | repays before a freeze | gone (the app shows a card only) |
+| Bounds: trigger · Protect target | 1.20–2.00 · up to 2.50 | 1.05–1.10 · up to 1.40 |
+| Bounds: heads-up · at once · sale target | 1.10–1.50 · 1.02 up to the heads-up · up to 2.00 | 1.05–1.10 · 1.02, at least 0.02 under the heads-up · up to 1.40 |
+
+When it is redeployed: point `NEXT_PUBLIC_GOOSE_EXECUTOR` and `NEXT_PUBLIC_GOOSE_EXECUTOR_BLOCK` at the new address in the developer's `.env.local`, register the two upkeeps again, and record the deploy here. Grants made to this deploy name it as spender and don't carry over: each test account switches its agents on again.
+
 ## GooseBoard — not deployed yet
 
 The leaderboard's member list (`src/GooseBoard.sol`, JUSTALAB-DECISIONS.md "The Leaderboard"). It holds nothing, calls nothing and has no owner: an account only puts itself on (`join()`) or takes itself off (`leave()`, not in the app). The deployer key pays the gas and gets no power over it. Adrian approves and signs the mainnet deploy; nobody else deploys it to Base.

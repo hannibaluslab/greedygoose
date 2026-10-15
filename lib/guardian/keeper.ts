@@ -11,7 +11,7 @@ import { USDC } from "@/lib/tokens/registry";
 import { GUARDIAN } from "./config";
 import { permissionManagerAbi } from "./abis";
 import { buildRescueCalls, toTuple, type GuardianPermission } from "./permission";
-import { inWeekendWindow, planGuardian, type GuardianDecision } from "./plan";
+import { planGuardian, type GuardianDecision } from "./plan";
 
 /**
  * Guardian keeper core. Holds no user funds and no user keys: it can only call
@@ -91,7 +91,6 @@ export async function checkAccount(
       debtUsd: s.debtUsd,
       savingsUsd: Number(savingsRaw) / 10 ** USDC.decimals,
       capLeftUsd: Number(capLeftRaw) / 10 ** USDC.decimals,
-      weekendWindow: inWeekendWindow(now),
     });
     if (decision.action !== "repay") return { account, status: "checked", decision };
 
@@ -108,7 +107,10 @@ export async function checkAccount(
       account: perm.spender,
     });
     if (opts.dryRun || !wallet) return { account, status: "would-repay", decision, amountRaw };
-    const txHash = await wallet.writeContract(sim.request);
+    // The estimate is for this block; the one the repay lands in can cost a little more (measured on a fork: a repay
+    // estimated at 460k ran out of gas), so leave room. Unused gas isn't paid for.
+    const gas = await client.estimateContractGas({ ...sim.request, account: perm.spender });
+    const txHash = await wallet.writeContract({ ...sim.request, gas: (gas * 13n) / 10n });
     const receipt = await client.waitForTransactionReceipt({ hash: txHash });
     if (receipt.status !== "success") return { account, status: "error", error: `reverted ${txHash}` };
     return { account, status: "repaid", decision, amountRaw, txHash };

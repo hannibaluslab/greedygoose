@@ -2,13 +2,17 @@ import { parseUnits } from "viem";
 import { CASH, CASH_AGENT } from "@/config/risk";
 
 /**
- * Guardian's decision for one account. Pure — the keeper and the app's preview share it.
+ * Protect's decision for one account (from cash). Pure — the keeper and the app's preview share it, and GooseExecutor's
+ * CashRules.sol ports it line for line.
  *
- * - Trigger: health factor below the Safe line (i.e. the loan is in Watch or Act).
- * - Target: repay enough to reach `targetHf` (a bit above Safe, so it doesn't fire again on the next tick).
- * - Weekend Shield: shortly before stock prices freeze, check a stressed price (e.g. −15% at Monday's open);
- *   if that stressed health would fall below `stressFloorHf`, trim now so it wouldn't.
+ * Act is the line (Adrian, 2026-10-15: "watch is ok, it is act that is not, also the guardian should only act on act
+ * and not take decision and repays under watch"):
+ * - Trigger: health factor below `triggerHf`, the Act line. In Safe or Watch it does nothing.
+ * - Target: repay just enough to reach `targetHf`, back in Watch with room (1.2), not back to Safe.
  * - Never more than the savings balance, the remaining daily cap, or the debt itself.
+ *
+ * Weekend Shield no longer repays: before a freeze the credit is outside Act by definition, so it is a heads-up card
+ * only (`weekendHeadsUp`), and the executor has no weekend move.
  */
 export type GuardianInput = {
   collateralUsd: number;
@@ -16,25 +20,19 @@ export type GuardianInput = {
   debtUsd: number;
   savingsUsd: number;
   capLeftUsd: number;
-  /** True in the window before stock prices freeze for the weekend. */
-  weekendWindow: boolean;
   triggerHf?: number;
   targetHf?: number;
-  stressDrop?: number;
-  stressFloorHf?: number;
   /** Don't bother below this (gas would dominate). */
   minRepayUsd?: number;
 };
 
 export type GuardianDecision =
   | { action: "none"; reason: "no-debt" | "healthy" | "no-savings" | "no-cap" | "too-small"; hf: number | null }
-  | { action: "repay"; amountUsd: number; reason: "watch" | "weekend-shield"; hf: number; hfAfter: number; limitedBy?: "savings" | "cap" };
+  | { action: "repay"; amountUsd: number; reason: "act"; hf: number; hfAfter: number; limitedBy?: "savings" | "cap" };
 
 const GUARDIAN_DEFAULTS = {
-  triggerHf: CASH_AGENT.triggerHf, // 1.5
-  targetHf: CASH_AGENT.targetHf, // 1.65
-  stressDrop: CASH_AGENT.stressDrop,
-  stressFloorHf: CASH_AGENT.stressFloorHf, // 1.1
+  triggerHf: CASH_AGENT.triggerHf, // 1.1, the Act line
+  targetHf: CASH_AGENT.targetHf, // 1.2, in Watch
   minRepayUsd: CASH_AGENT.minRepayUsd,
 } as const;
 
@@ -43,19 +41,10 @@ export function planGuardian(i: GuardianInput): GuardianDecision {
   if (i.debtUsd <= 0) return { action: "none", reason: "no-debt", hf: null };
   const power = i.collateralUsd * i.avgCf;
   const hf = power / i.debtUsd;
-  const stressedHf = (power * (1 - o.stressDrop)) / i.debtUsd;
-
-  let need = 0;
-  let reason: "watch" | "weekend-shield" | null = null;
-  if (hf < o.triggerHf) {
-    need = i.debtUsd - power / o.targetHf;
-    reason = "watch";
-  } else if (i.weekendWindow && stressedHf < o.stressFloorHf) {
-    // Make the stressed HF reach the floor plus the same headroom as normal.
-    need = i.debtUsd - (power * (1 - o.stressDrop)) / (o.stressFloorHf + (o.targetHf - o.triggerHf));
-    reason = "weekend-shield";
-  }
-  if (!reason || need <= 0) return { action: "none", reason: "healthy", hf };
+  // Safe and Watch are fine: Protect steps in only in Act.
+  if (hf >= o.triggerHf) return { action: "none", reason: "healthy", hf };
+  const need = i.debtUsd - power / o.targetHf;
+  if (need <= 0) return { action: "none", reason: "healthy", hf };
   if (i.savingsUsd <= 0) return { action: "none", reason: "no-savings", hf };
   if (i.capLeftUsd <= 0) return { action: "none", reason: "no-cap", hf };
 
@@ -71,7 +60,47 @@ export function planGuardian(i: GuardianInput): GuardianDecision {
   }
   if (amount < o.minRepayUsd) return { action: "none", reason: "too-small", hf };
   const left = i.debtUsd - amount;
-  return { action: "repay", amountUsd: amount, reason, hf, hfAfter: left > 0 ? power / left : Infinity, limitedBy };
+  return { action: "repay", amountUsd: amount, reason: "act", hf, hfAfter: left > 0 ? power / left : Infinity, limitedBy };
+}
+
+/**
+ * The weekend heads-up: what Weekend Shield used to repay, now only a card (Adrian, 2026-10-15: no move outside Act).
+ * Shortly before stock prices freeze, a stressed price (−15% at the reopen) is tested; if it would take a credit that
+ * isn't in Act today into Act, the card says so, and what repaying would keep it in Watch through that drop: the
+ * stressed health back to the Act line plus the same room a repay leaves (1.1 + 0.1). Nothing moves; in Act Protect
+ * acts on its own. App-only: the executor has no weekend move, and so no port of this.
+ */
+export type WeekendHeadsUpInput = {
+  collateralUsd: number;
+  avgCf: number;
+  debtUsd: number;
+  /** True in the window before stock prices freeze for the weekend. */
+  weekendWindow: boolean;
+  triggerHf?: number;
+  targetHf?: number;
+  stressDrop?: number;
+  stressFloorHf?: number;
+};
+
+export type WeekendHeadsUp = { hf: number; stressedHf: number; addUsd: number };
+
+const HEADS_UP_DEFAULTS = {
+  triggerHf: CASH_AGENT.triggerHf,
+  targetHf: CASH_AGENT.targetHf,
+  stressDrop: CASH_AGENT.stressDrop, // 15%
+  stressFloorHf: CASH_AGENT.stressFloorHf, // 1.1, the Act line
+} as const;
+
+export function weekendHeadsUp(i: WeekendHeadsUpInput): WeekendHeadsUp | null {
+  const o = { ...HEADS_UP_DEFAULTS, ...strip(i) };
+  if (!i.weekendWindow || i.debtUsd <= 0) return null;
+  const power = i.collateralUsd * i.avgCf;
+  const hf = power / i.debtUsd;
+  if (hf < o.triggerHf) return null; // in Act: Protect itself steps in
+  const stressedHf = (power * (1 - o.stressDrop)) / i.debtUsd;
+  if (stressedHf >= o.stressFloorHf) return null;
+  const addUsd = i.debtUsd - (power * (1 - o.stressDrop)) / (o.stressFloorHf + (o.targetHf - o.triggerHf));
+  return addUsd > 0 ? { hf, stressedHf, addUsd } : null;
 }
 
 /**
@@ -110,8 +139,8 @@ function strip<T extends object>(o: T): Partial<T> {
 }
 
 /**
- * Weekend window: Friday from 14:00 until the 20:00 ET freeze. The keeper also re-checks
- * stressed health on every tick inside the window.
+ * Weekend window: Friday from 14:00 until the 20:00 ET freeze, when the weekend heads-up card can show. Nothing
+ * moves in it (Act is the line, 2026-10-15).
  */
 export function inWeekendWindow(now: Date = new Date()): boolean {
   const f = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short", hour: "numeric", hourCycle: "h23" });

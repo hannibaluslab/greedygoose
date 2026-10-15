@@ -1,13 +1,13 @@
 import { CASH_AGENT } from "@/config/risk";
 import { OFF_REASONS } from "@/lib/agents/events";
 import { OFF_WHY } from "@/lib/agents/feed";
-import { agentOf, AGENTS, type Agent, type Next } from "@/lib/agents/list";
+import { agentOf, AGENTS, timeText, type Agent, type Next, type WeekendCard } from "@/lib/agents/list";
 import { isMix, previewTrades, type MixHolding } from "@/lib/agents/mix";
 import { JOBS, readStockLimits, type AgentJob } from "@/lib/agents/permissions";
-import { inWeekendWindow, planGuardian } from "@/lib/guardian/plan";
+import { inWeekendWindow, planGuardian, weekendHeadsUp } from "@/lib/guardian/plan";
 import type { RebalanceOptions } from "@/lib/guardian/rebalance";
 import { formatUsdTrim } from "@/lib/formatting";
-import { STATUS_LABEL, statusFor, type Status } from "@/lib/risk/status";
+import { STATUS_LABEL, statusFor } from "@/lib/risk/status";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
 /*
@@ -129,7 +129,6 @@ export type NextInput = {
   collateralUsd: number;
   avgCf: number;
   debtUsd: number;
-  credit: Status;
   /** Free shares and Aave's price, by reserve id. */
   holdings: readonly MixHolding[];
   /** The registry's mix in BPS, by reserve id; null before one is saved (or read). */
@@ -150,7 +149,10 @@ export type NextInput = {
 
 const smaller = (a: bigint, b: bigint) => (a < b ? a : b);
 
-/** Protect: repays from savings below Safe, back up to its target; Weekend Shield before a freeze (planGuardian). */
+/**
+ * Protect: repays from savings only in Act, back to its target in Watch (planGuardian; Act is the line, 2026-10-15).
+ * In Safe or Watch it says it waits for Act.
+ */
 function protectNext(i: NextInput): Next {
   const left = i.left.protect;
   const d = planGuardian({
@@ -159,11 +161,8 @@ function protectNext(i: NextInput): Next {
     debtUsd: i.debtUsd,
     savingsUsd: Number(i.savingsRaw) / 10 ** USDC.decimals,
     capLeftUsd: Number(left ? left.map((s) => s.leftRaw).reduce(smaller) : i.capRaw.protect) / 10 ** USDC.decimals,
-    weekendWindow: inWeekendWindow(new Date(i.nowSec * 1000)),
     triggerHf: i.numbers.triggerHf,
     targetHf: i.numbers.targetHf,
-    stressDrop: i.numbers.stressDrop,
-    stressFloorHf: i.numbers.stressFloorHf,
     minRepayUsd: Number(i.numbers.minRepayRaw) / 10 ** USDC.decimals,
   });
   if (d.action === "repay") {
@@ -171,9 +170,37 @@ function protectNext(i: NextInput): Next {
     return move(`repays ${a} from your cash`, `Would repay ${a} from your cash`);
   }
   if (d.reason === "no-debt") return { idle: "Nothing owed. Nothing to do." };
-  if (d.reason === "healthy" || d.reason === "too-small") return { idle: "Safe. Nothing to do." };
-  const status = STATUS_LABEL[statusFor(d.hf)];
-  return { idle: d.reason === "no-savings" ? `${status}. No cash to repay with` : `${status}. Today’s limit is used` };
+  const status = statusFor(d.hf);
+  // Over a live trigger set under the Act line (its bounds allow 1.05), Act can be healthy for the rule too.
+  if (d.reason === "healthy") {
+    return { idle: status === "safe" ? "Safe. Nothing to do." : status === "watch" ? "Watch. Steps in only at Act" : "Act. Nothing to repay yet" };
+  }
+  const label = STATUS_LABEL[status];
+  if (d.reason === "too-small") return { idle: `${label}. Nothing worth repaying yet` };
+  return { idle: d.reason === "no-savings" ? `${label}. No cash to repay with` : `${label}. Today’s limit is used` };
+}
+
+/**
+ * The weekend heads-up card (lib/guardian/plan.ts `weekendHeadsUp`, on the executor's live numbers): Friday 14:00 to
+ * the 20:00 New York freeze, credit outside Act that the stress drop would take into it. No move: a card only.
+ */
+export function weekendCard(i: Pick<NextInput, "nowSec" | "collateralUsd" | "avgCf" | "debtUsd" | "numbers">): WeekendCard | null {
+  const h = weekendHeadsUp({
+    collateralUsd: i.collateralUsd,
+    avgCf: i.avgCf,
+    debtUsd: i.debtUsd,
+    weekendWindow: inWeekendWindow(new Date(i.nowSec * 1000)),
+    triggerHf: i.numbers.triggerHf,
+    targetHf: i.numbers.targetHf,
+    stressDrop: i.numbers.stressDrop,
+    stressFloorHf: i.numbers.stressFloorHf,
+  });
+  if (!h) return null;
+  return {
+    addUsd: Math.ceil(h.addUsd),
+    dropPct: Math.round(i.numbers.stressDrop * 100),
+    when: `at ${timeText(nyHour(nyDay(i.nowSec), 20))}`,
+  };
 }
 
 /** Rebalance: the trades its rule finds for the saved mix on today's free shares, at the next window. */
@@ -193,7 +220,9 @@ function rebalanceNext(i: NextInput): Next {
   });
   const when = whenText(rebalanceCheckAt(i.nowSec, i.rebalanceDay), i.nowSec);
   if (trades.length === 0) return { idle: `On target. Checks ${when}` };
-  if (i.credit === "watch" || i.credit === "act") return { idle: "Waits until your credit is Safe" };
+  // GooseExecutor's RebalanceJob waits while Protect may act: below Protect's trigger, the Act line.
+  const hf = i.debtUsd > 0 ? (i.collateralUsd * i.avgCf) / i.debtUsd : Infinity;
+  if (hf < i.numbers.triggerHf) return { idle: "Waits until your credit is out of Act" };
   const spend = usd(trades.filter((t) => t.buy).reduce((a, t) => a + t.amountIn, 0n));
   return move(`trades ${spend} ${when}`, `Would trade ${spend}`);
 }

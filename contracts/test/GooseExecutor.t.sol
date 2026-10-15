@@ -99,11 +99,16 @@ contract GooseExecutorTest is Test {
         assertFalse(x.bootstrapped());
     }
 
-    /// With the deploy defaults (trigger 1.50, drop 15%, floor 1.10) any loan Weekend Shield would trim is already in
-    /// Watch: 1.10 / 0.85 = 1.29 < 1.50. These are Leo's numbers (plan.ts); calibration is plan item 6 step 9.
-    function test_with_the_defaults_weekend_shield_never_acts_before_watch() public view {
+    /// Act is the line (Adrian, 2026-10-15): with the deploy defaults Protect repays only below the Act line (1.10)
+    /// and back to Watch (1.20), and sells only below it too; the bounds keep any later change there.
+    function test_with_the_defaults_protect_steps_in_only_in_act_and_back_to_watch() public view {
         Thresholds memory t = deploy.thresholds();
-        assertLt(uint256(t.stressFloorHf) * 1e18 / (1e18 - t.stressDrop), t.triggerHf);
+        assertEq(t.triggerHf, 1.1e18, "repays only in Act");
+        assertEq(t.targetHf, 1.2e18, "back to Watch");
+        (uint64 headsUp, uint64 now_, uint64 target,,,,,) = x.sellLimits();
+        assertEq(headsUp, 1.1e18, "no heads-up, and no sale, in Watch");
+        assertEq(now_, 1.05e18, "at once deep in Act");
+        assertEq(target, 1.2e18, "a sale back to Watch too");
     }
 
     // ------------------------------------------------------------------ who may run
@@ -120,7 +125,7 @@ contract GooseExecutorTest is Test {
 
         vm.prank(stranger);
         vm.expectRevert(GooseExecutor.OnlySelf.selector);
-        x.runAccount(account, false, false);
+        x.runAccount(account, false);
 
         _bootstrap();
         vm.prank(forwarder);
@@ -199,7 +204,7 @@ contract GooseExecutorTest is Test {
     }
 
     function test_thresholds_amounts_and_owner_change_after_the_delay() public {
-        Thresholds memory t = Thresholds(1.4e18, 1.6e18, 0.2e18, 1.05e18);
+        Thresholds memory t = Thresholds(1.05e18, 1.15e18, 0.2e18, 1.05e18);
         Amounts memory a = Amounts(1e6, 2e6, 0, 3 hours, 4);
         address newOwner = makeAddr("new owner");
         vm.startPrank(owner);
@@ -213,7 +218,7 @@ contract GooseExecutorTest is Test {
         vm.stopPrank();
 
         (uint64 trigger,,, uint64 floor) = x.thresholds();
-        assertEq(trigger, 1.4e18);
+        assertEq(trigger, 1.05e18);
         assertEq(floor, 1.05e18);
         (,, uint64 keepBack, uint32 window,) = x.amounts();
         assertEq(keepBack, 0);
@@ -222,12 +227,14 @@ contract GooseExecutorTest is Test {
     }
 
     function test_bounds_are_checked_at_queue() public {
-        Thresholds[5] memory bad = [
-            Thresholds(1.19e18, 1.65e18, 0.15e18, 1.1e18), // trigger below 1.20
-            Thresholds(2.01e18, 2.5e18, 0.15e18, 1.1e18), // trigger above 2.00
-            Thresholds(1.5e18, 1.54e18, 0.15e18, 1.1e18), // target less than 0.05 above the trigger
-            Thresholds(1.5e18, 1.65e18, 0.31e18, 1.1e18), // stress drop above 30%
-            Thresholds(1.5e18, 1.65e18, 0.15e18, 1.51e18) // floor above the trigger
+        Thresholds[7] memory bad = [
+            Thresholds(1.04e18, 1.2e18, 0.15e18, 1.04e18), // trigger below 1.05
+            Thresholds(1.11e18, 1.2e18, 0.15e18, 1.1e18), // trigger above the Act line: a repay in Watch
+            Thresholds(1.5e18, 1.65e18, 0.15e18, 1.1e18), // the old Safe-line trigger
+            Thresholds(1.1e18, 1.14e18, 0.15e18, 1.1e18), // target less than 0.05 above the trigger
+            Thresholds(1.1e18, 1.41e18, 0.15e18, 1.1e18), // target past Watch toward Safe
+            Thresholds(1.1e18, 1.2e18, 0.31e18, 1.1e18), // stress drop above 30%
+            Thresholds(1.1e18, 1.2e18, 0.15e18, 1.11e18) // floor above the trigger
         ];
         vm.startPrank(owner);
         for (uint256 i; i < bad.length; ++i) {
@@ -277,9 +284,13 @@ contract GooseExecutorTest is Test {
         l.actFloorBps = 250;
         SellLimits memory bad = deploy.sellLimits();
         bad.actFloorBps = 501; // past Aave's 5.5% liquidation bonus, with room
+        SellLimits memory inWatch = deploy.sellLimits();
+        (inWatch.headsUpHf, inWatch.nowHf, inWatch.targetHf) = (1.25e18, 1.1e18, 1.4e18); // the old lines: Watch
         vm.startPrank(owner);
         vm.expectRevert(GooseExecutor.OutOfBounds.selector);
         x.queueChange(GooseExecutor.Change.SetSellLimits, abi.encode(bad));
+        vm.expectRevert(GooseExecutor.OutOfBounds.selector);
+        x.queueChange(GooseExecutor.Change.SetSellLimits, abi.encode(inWatch));
         x.queueChange(GooseExecutor.Change.SetSellLimits, abi.encode(l));
         vm.expectRevert(abi.encodeWithSelector(GooseExecutor.TooEarly.selector, vm.getBlockTimestamp() + 7 days));
         x.applyChange(GooseExecutor.Change.SetSellLimits, abi.encode(l), 0);

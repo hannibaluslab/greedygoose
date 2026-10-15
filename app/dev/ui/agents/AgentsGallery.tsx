@@ -64,7 +64,6 @@ function nextInput(nowSec: number, over: Partial<NextInput> = {}): NextInput {
     collateralUsd: 2_000,
     avgCf: 0.7,
     debtUsd: 600,
-    credit: "safe",
     holdings: HOLDINGS,
     mixBps: MIX,
     left: byJob(() => null),
@@ -90,10 +89,10 @@ function feedRows(nowMs: number): FeedAgentRow[] {
     [
       "sale",
       at(0, 3, 12),
-      { kind: "sold", sharesRaw: seven(6, shares(180, 378.38)), repaidRaw: usdc(178.2), hfBefore: hf(1.24), hfAfter: hf(1.52), atOnce: false },
+      { kind: "sold", sharesRaw: seven(6, shares(180, 378.38)), repaidRaw: usdc(178.2), hfBefore: hf(1.08), hfAfter: hf(1.2), atOnce: false },
       { owedRaw: [usdc(780), usdc(600)], cashRaw: [usdc(400), usdc(401.8)], used: { spentRaw: usdc(180), capRaw: usdc(300) }, pricesRaw: prices },
     ],
-    ["heads-up", at(0, 2, 41), { kind: "heads-up", hf: hf(1.24), sellValueRaw: usdc(180), sellAfter: at(0, 3, 11) }, {}],
+    ["heads-up", at(0, 2, 41), { kind: "heads-up", hf: hf(1.08), sellValueRaw: usdc(180), sellAfter: at(0, 3, 11) }, {}],
     [
       "rebalance",
       at(2, 10, 5),
@@ -141,7 +140,8 @@ export function AgentsGallery() {
   const cards = cardsView
     ? agentCards({
         nowSec,
-        headsUp: { status: "watch", addUsd: 120, sellUsd: 180, when: `at ${timeText(nowSec + 30 * 60)}` },
+        headsUp: { addUsd: 120, sellUsd: 180, when: `at ${timeText(nowSec + 30 * 60)}` },
+        weekend: { addUsd: 40, dropPct: 15, when: "at 8:00 PM" },
         status,
         ends: byJob((job) => (job === "protect" || job === "sell" ? nowSec + 5 * 86_400 : status[job] === "off" ? null : nowSec + 200 * 86_400)),
         stopped: byJob((job) => (job === "rebalance" ? nowSec - 2 * 86_400 : null)),

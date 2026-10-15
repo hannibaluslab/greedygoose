@@ -57,7 +57,9 @@ export function useAgentSettings(account: `0x${string}`) {
       headsUpAt: a[6],
       /** The New York day the Rebalancer last traded. */
       rebalanceDay: a[8],
-      /** Protect · sell's target: the health a sale brings the credit back to (WAD). */
+      /** Protect · sell's heads-up line, the Act line: no heads-up and no sale at or above it. */
+      sellHeadsUpHf: Number(sell[0]) / WAD,
+      /** Protect · sell's target: the health a sale brings the credit back to (Watch). */
       sellTargetHf: Number(sell[2]) / WAD,
       options,
       numbers,
