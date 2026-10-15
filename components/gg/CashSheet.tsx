@@ -15,7 +15,7 @@ import { useFeeSupport } from "@/hooks/useFeeSupport";
 import type { PositionData } from "@/hooks/usePosition";
 import type { AgentStatus } from "@/lib/agents/status";
 import { owedBeside } from "@/lib/cashActivity";
-import type { ArrivedView } from "@/lib/cashSetup";
+import { earningLine, type ArrivedView } from "@/lib/cashSetup";
 import { earnDone, earnTenths, pctText, type EarnOffer, type EarnOpen } from "@/lib/earnWithStocks";
 
 type Step = "cash" | "earn";
@@ -40,7 +40,7 @@ export function CashAmount({ data, arrived }: { data: PositionData; arrived: Arr
       </div>
       <Money value={data.cashUsd} size={38} />
       <span className="text-[13px] text-ink-mid">
-        {arrived.kind === "arriving" ? `${arrived.text} arriving` : data.cash.saveOn ? "Always earning" : "Not earning yet"}
+        {arrived.kind === "arriving" ? `${arrived.text} arriving` : earningLine(data.cash.saveOn, data.savingsUsd)}
       </span>
     </div>
   );

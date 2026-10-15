@@ -25,7 +25,7 @@ import { useEntryBalances } from "@/hooks/useEntryBalances";
 import { useMarketPrices } from "@/hooks/useMarketPrices";
 import { usePosition, type PositionData } from "@/hooks/usePosition";
 import { aprToApy } from "@/lib/aave/math";
-import { arrivedCoins, arrivedView, rateText, startEarningShown, type ArrivedView } from "@/lib/cashSetup";
+import { arrivedCoins, arrivedView, earningLine, rateText, startEarningShown, type ArrivedView } from "@/lib/cashSetup";
 import { homeStatus } from "@/lib/risk/status";
 import { StatusPill } from "@/components/gg/Status";
 import { formatUsdTrim, monthlyCostText } from "@/lib/formatting";
@@ -183,7 +183,7 @@ function Loaded({
       <section className="grid grid-cols-2 gap-2.5 px-5 pt-[18px]">
         <CashCard
           cashUsd={data.cashUsd}
-          earning={data.cash.saveOn}
+          earning={earningLine(data.cash.saveOn, data.savingsUsd)}
           dim={dim}
           note={arrived.kind === "arriving" ? `${arrived.text} arriving` : undefined}
           onClick={() => open("cash")}
