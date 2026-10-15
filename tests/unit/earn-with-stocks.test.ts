@@ -137,10 +137,10 @@ describe("earnOffer: caps", () => {
   it("is the least of what Save moves today, the credit the stocks back and the USDC available", () => {
     // Save's room binds: $1,000 left today.
     expect(open(earnOffer(input()))).toMatchObject({ maxUsd: 1_000, limitedBy: "today" });
-    // The credit binds: $100 of Tesla at 70%, nothing else, 99.5% of it as /use-credit.
-    expect(open(earnOffer(input({ position: position({ collateralUsd: 0 }), options: [option(100)] })))).toMatchObject({ maxUsd: 69, limitedBy: "credit" });
+    // The credit binds: $100 of Tesla at 70%, nothing else, at the cap's line (70 ÷ 1.12 = $62.50), as every way of taking credit.
+    expect(open(earnOffer(input({ position: position({ collateralUsd: 0 }), options: [option(100)] })))).toMatchObject({ maxUsd: 62, limitedBy: "credit" });
     // The USDC available binds.
-    expect(open(earnOffer(input({ position: position({ usdcLiquidity: 50 }) })))).toMatchObject({ maxUsd: 49, limitedBy: "credit" });
+    expect(open(earnOffer(input({ position: position({ usdcLiquidity: 50 }) })))).toMatchObject({ maxUsd: 50, limitedBy: "credit" });
   });
 
   it("leaves room for wallet USDC that Save hasn't moved yet", () => {
@@ -163,6 +163,14 @@ describe("earnOffer: caps", () => {
     expect(o.maxUsd).toBeLessThanOrEqual(5);
     expect(o).toMatchObject({ maxUsd: 5, limitedBy: "today" });
     expect(earnHint(o)).toBe("Up to $5 today, so all of it starts earning.");
+  });
+
+  it("isn't offered while the credit is in Act (Act is the line), whatever is free", () => {
+    const inAct = position({ debtUsd: 600, healthFactor: 630 / 600 });
+    expect(earnOffer(input({ position: inAct }))).toMatchObject({ kind: "closed", why: "in-act", text: "Your credit is in Act. Repay some before using more." });
+    // At the cap's line it's Watch, not Act: offered, with what's left on the free Tesla.
+    const atCap = position({ debtUsd: 562.5, healthFactor: 630 / 562.5 });
+    expect(open(earnOffer(input({ position: atCap, room: room({ leftRaw: usdc(5_000) }) })))).toMatchObject({ maxUsd: 875, limitedBy: "credit" });
   });
 
   it("says when the stocks can't back more", () => {
@@ -236,7 +244,7 @@ describe("earnQuote: one amount", () => {
     expect(earnStop(q, offer, false)).toBe("One moment…");
   });
 
-  it("needs the risk tick when it ends in Watch or Act, and not in Safe", () => {
+  it("needs the risk tick when it ends in Watch, not in Safe; ending in Act is blocked, ticked or not", () => {
     const safe = quote(500);
     expect(safe.q.plan.after).toBe("safe");
     expect(earnStop(safe.q, safe.offer, false)).toBeNull();
@@ -247,10 +255,16 @@ describe("earnQuote: one amount", () => {
     expect(earnStop(watch.q, watch.offer, true)).toBeNull();
 
     const wide = open(earnOffer(input({ position: owing, room: room({ leftRaw: usdc(5_000) }) })));
+    // The cap: (630 + 980) ÷ 1.12 − 300 = $1,137.50, rounded down to $1,137, ends in Watch.
+    expect(wide.maxUsd).toBe(1_137);
+    const top = quote(1_137, { offer: wide });
+    expect(top.q.plan).toMatchObject({ after: "watch", extraConfirm: true, block: undefined });
+    expect(earnStop(top.q, top.offer, true)).toBeNull();
     const act = quote(1_250, { offer: wide });
     expect(act.q.plan.after).toBe("act");
-    expect(earnStop(act.q, act.offer, false)).toBe("Confirm you understand this puts your credit in Act first.");
-    expect(earnStop(act.q, act.offer, true)).toBeNull();
+    expect(act.q.plan.extraConfirm).toBe(false);
+    expect(earnStop(act.q, act.offer, false)).toBe("That would put your credit in Act. Try a smaller amount.");
+    expect(earnStop(act.q, act.offer, true)).toBe("That would put your credit in Act. Try a smaller amount.");
   });
 
   it("puts what already backs credit first, then the free stock", () => {

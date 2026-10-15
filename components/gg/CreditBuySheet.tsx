@@ -31,6 +31,7 @@ import { BUY_LIMITS, quoteEconomics } from "@/lib/swap/buy";
 import { VENUE_LABEL } from "@/lib/swap/venues";
 import { rawToShares } from "@/lib/tokens/b20";
 import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
+import { CREDIT_CAP } from "@/config/risk";
 
 /** The four steps, backing first (Adrian, 2026-10-15): Back it with → How much → pick a stock → amount to buy. */
 type Step = "back" | "much" | "pick" | "amount";
@@ -128,6 +129,8 @@ export function CreditBuySheet({
   const available = cfs || held.length === 0 ? creditAvailable({ position: data, options, cash: data.cash, holdsStock: held.length > 0 }) : null;
   // The room on what already backs credit alone: step 1's "already backs" row.
   const existingRoom = creditWith(data);
+  // In Act no credit is taken (Act is the line): step 1's one line says so, with no list of why each holding can't.
+  const inAct = available?.why === "in-act";
   const canUseExisting = data.collateralUsd > 0 && existingRoom >= BUY_LIMITS.minUsd;
   // Step 1 picks the holding that can back the most until Sam picks another, else what already backs credit. A pick
   // that can't back it any more (under $1 free, paused, or no longer read) falls back to that default on step 1.
@@ -286,8 +289,8 @@ export function CreditBuySheet({
                 )}
               </div>
               <CantBack
-                inUse={data.collateralUsd > 0 && !canUseExisting ? { names: backers(data.holdings, []).map((h) => h.name), usd: data.collateralUsd } : null}
-                items={unpickable.flatMap((h) => {
+                inUse={data.collateralUsd > 0 && !canUseExisting && !inAct ? { names: backers(data.holdings, []).map((h) => h.name), usd: data.collateralUsd } : null}
+                items={inAct ? [] : unpickable.flatMap((h) => {
                   const g = gives.get(h.symbol);
                   const reason =
                     g != null && g < BUY_LIMITS.minUsd && !h.paused && !h.frozen && h.freeUsd >= MIN_BACKING_USD
@@ -367,12 +370,15 @@ export function CreditBuySheet({
               line={
                 room.block === "over-free"
                   ? null
+                  : data.status === "act"
+                    ? CREDIT_BLOCKED["in-act"]
                   : canUse
                     ? // Ties the two dollar figures together (Adrian: "up to 3 but MAX is 3.99?"): credit is a share of what's
-                      // put in use, plus any room left on what already backs credit.
+                      // put in use (its collateral factor over the cap's line, CREDIT_CAP.minHf), plus any room left on
+                      // what already backs credit, or less what that credit already needs when it's under the line.
                       creditLine === FEE_FIRST
                       ? creditLine
-                      : `${pick.raw > 0n ? `About ${Math.round(chosen.cf * 100)}% of the ${formatUsd(backAmount || chosen.freeUsd)} of ${chosen.stock.name} you put in use${data.collateralUsd > 0 ? ", plus room on what already backs credit" : ""}.` : "From what already backs credit."}${room.maxSafeUsd >= 1 ? ` Stays Safe up to ${wholeUsd(room.maxSafeUsd)}.` : ""}`
+                      : `${pick.raw > 0n ? `About ${Math.round((chosen.cf / CREDIT_CAP.minHf) * 100)}% of the ${formatUsd(backAmount || chosen.freeUsd)} of ${chosen.stock.name} you put in use${existingRoom > 0 ? ", plus room on what already backs credit" : data.debtUsd > 0 ? ", less what your credit already needs" : ""}.` : "From what already backs credit."}${room.maxSafeUsd >= 1 ? ` Stays Safe up to ${wholeUsd(room.maxSafeUsd)}.` : ""}`
                     : backAmount > 0 || pick.raw > 0n
                       ? `A Credit Buy needs at least ${formatUsd(BUY_LIMITS.minUsd)} of credit. Put more in use.`
                       : `Type how much ${chosen.stock.name} to put in use.`

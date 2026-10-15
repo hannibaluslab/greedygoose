@@ -8,7 +8,7 @@ import type { AgentStatus } from "@/lib/agents/status";
 import { cashRaw, feeBufferRaw, toUsd, type Cash } from "@/lib/cash";
 import { CREDIT_BLOCKED, planCredit, shortNames, type Backing, type BackingOption, type CreditBlock, type CreditPlan, type CreditPosition } from "@/lib/creditBuy";
 import { formatShares, formatUsdTrim, inWords } from "@/lib/formatting";
-import { STATUS_LABEL } from "@/lib/risk/status";
+import { STATUS_LABEL, statusFor } from "@/lib/risk/status";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
 /*
@@ -105,6 +105,7 @@ export const EARN_CLOSED = {
   paused: "New credit is paused right now. Try again later.",
   today: "Your cash can’t start earning on more today. Try again tomorrow.",
   credit: "Your stocks can’t back more credit right now.",
+  "in-act": CREDIT_BLOCKED["in-act"],
   fee: CREDIT_BLOCKED.fee,
   unread: "We couldn’t check this right now. Try again in a moment.",
 } as const;
@@ -147,8 +148,8 @@ const closed = (why: Exclude<EarnClosed, "small">, rates?: EarnRates): EarnOffer
  * Whether the Cash sheet offers Earn with stocks, and up to how much. The first rule that matches wins:
  * no executor (no card); loading (or a line when a read it waits on failed); earning off or starting; no stocks that
  * can back credit; credit costing as much as the cash earns or more (as shown, in tenths); new credit paused; nothing
- * left today (Save's room) or nothing the stocks can back (99.5% of the credit limit, as /use-credit, and the USDC
- * available), or less than the smallest amount; no cash for the network fee.
+ * left today (Save's room) or nothing the stocks can back (creditCap, Act is the line: never past it, nothing while the
+ * credit is in Act; and the USDC available), or less than the smallest amount; no cash for the network fee.
  */
 export function earnOffer(i: EarnInput): EarnOffer {
   if (i.save === "unconfigured") return { kind: "hidden" };
@@ -159,6 +160,7 @@ export function earnOffer(i: EarnInput): EarnOffer {
   const rates = earnRates(i.cashApy, i.creditApy);
   if (rates.left <= 0) return closed("costs-more", rates);
   if (i.position.borrowPaused) return closed("paused");
+  if (statusFor(i.position.healthFactor) === "act") return closed("in-act");
 
   const plan0 = planCredit({ position: i.position, options: i.options, creditRaw: 0n, cash: i.cash, now: i.now });
   const creditUsd = Math.min(plan0.maxUsd, i.position.usdcLiquidity);
@@ -228,6 +230,8 @@ export const EARN_BLOCKED: Record<CreditBlock, string> = {
   paused: EARN_CLOSED.paused,
   "no-liquidity": "There isn’t enough credit available right now. Try a smaller amount.",
   "over-free": CREDIT_BLOCKED["over-free"],
+  "in-act": CREDIT_BLOCKED["in-act"],
+  act: CREDIT_BLOCKED.act,
   "too-much": "That’s more credit than your stocks can back right now. Try a smaller amount.",
   fee: CREDIT_BLOCKED.fee,
 };
@@ -243,7 +247,7 @@ export function earnBlock(q: EarnQuote, o: EarnOpen): string | null {
   return null;
 }
 
-/** Why it can't be signed: a block, the rate after it still being read, or a Watch/Act ending without the tick (D2). */
+/** Why it can't be signed: a block (ending in Act is one), the rate after it still being read, or a Watch ending without the tick (D2). */
 export function earnStop(q: EarnQuote, o: EarnOpen, confirmedRisk: boolean): string | null {
   const block = earnBlock(q, o);
   if (block) return block;
@@ -294,7 +298,7 @@ export function earnSmallPrint(p: {
   );
 }
 
-/** The risk tick (D2), when it ends in Watch or Act. */
+/** The risk tick (D2), when it ends in Watch (ending in Act is blocked). */
 export const earnTick = (after: CreditPlan["after"]) =>
   `I understand this puts my credit in ${STATUS_LABEL[after]}. If my stocks fall, part of them can be sold to repay what I owe.`;
 

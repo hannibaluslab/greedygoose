@@ -7,9 +7,12 @@ import {
   createPublicClient, decodeFunctionResult, encodeAbiParameters, encodeFunctionData, erc20Abi, http, keccak256, parseUnits, toFunctionSelector, zeroHash,
 } from "viem";
 import { CHAIN } from "@/lib/chain";
-import { CASH } from "@/config/risk";
+import { CASH, CREDIT_CAP } from "@/config/risk";
 import { buildBorrowCalls, buildLoanCalls, buildRepayCalls, buildSupplyCalls, buildWithdrawCalls } from "@/lib/aave/tx";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
+import { aaveOracleAbi } from "@/lib/aave/abis/IAaveOracle";
+import { healthAfterWithdraw, maxWithdrawUsd, priceToUsd, summarize, type AccountData } from "@/lib/aave/math";
+import { statusFor } from "@/lib/risk/status";
 import { AAVE } from "@/lib/aave/addresses";
 import { CASH_STUCK, explainRevert } from "@/lib/aave/errors";
 import { decodeActivity } from "@/lib/activity/decode";
@@ -207,5 +210,56 @@ describe("the cash a batch is signed with (readCash)", () => {
     const r = await simulate(payFromCash(user, amountRaw, c, buildRepayCalls({ user, amountRaw, all: false })));
     expect(r.results.every((x) => x.status === "success")).toBe(true);
     expect(cashShort(cashRaw(c), c)).toMatch(/^Your cash moved since you started\. You have \$[\d,]+\.\d\d now/);
+  });
+});
+
+/**
+ * Act is the line (Adrian, 2026-10-15): Free up stops where taking credit does, at CREDIT_CAP.minHf. Simulated from a small
+ * real account in Watch (the dev preview's), the holding with the most in use.
+ */
+describe("Free up stops at the cap's line on Base", () => {
+  const watcher = "0xFf13Dc32AcA90b3D61058ea26Df1D895F842eE1F";
+  const healthAfter = async (calls: { to: `0x${string}`; data: `0x${string}` }[]) => {
+    const read = { to: AAVE.SPOKE, data: encodeFunctionData({ abi: spokeAbi, functionName: "getUserAccountData", args: [watcher] }) };
+    const r = await client.simulateCalls({ account: watcher, calls: [...calls, read].map(({ to, data }) => ({ to, data })) });
+    expect(r.results.slice(0, calls.length).every((x) => x.status === "success")).toBe(true);
+    return summarize(decodeFunctionResult({ abi: spokeAbi, functionName: "getUserAccountData", data: r.results[calls.length].data }) as AccountData).healthFactor!;
+  };
+
+  it("its MAX leaves Aave's health at 1.12, in Watch; the old MAX (99.5% of Aave's limit) ended in Act", async () => {
+    const account = summarize((await client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserAccountData", args: [watcher] })) as AccountData);
+    expect(account.debtUsd).toBeGreaterThan(0);
+    const held = await Promise.all(
+      EQUITIES.map(async (stock) => {
+        const id = BigInt(stock.reserveId);
+        const [supplied, price, reserve] = await Promise.all([
+          client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserSuppliedAssets", args: [id, watcher] }),
+          client.readContract({ address: AAVE.SPOKE_ORACLE, abi: aaveOracleAbi, functionName: "getReservePrice", args: [id] }),
+          client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getReserve", args: [id] }),
+        ]);
+        const dyn = await client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getDynamicReserveConfig", args: [id, reserve.dynamicConfigKey] });
+        return { stock, supplied, lockedUsd: (Number(supplied) / 10 ** stock.decimals) * priceToUsd(price), cf: dyn.collateralFactor / 10_000 };
+      }),
+    );
+    const h = held.sort((a, b) => b.lockedUsd - a.lockedUsd)[0];
+    const loan = { collateralUsd: account.collateralUsd, avgCf: account.avgCf, debtUsd: account.debtUsd, cf: h.cf, lockedUsd: h.lockedUsd };
+    // UnlockSheet's MAX, as shares rounded down.
+    const maxUsd = maxWithdrawUsd({ ...loan, targetHf: CREDIT_CAP.minHf });
+    console.log(`Free up ${h.stock.symbol}: health ${account.healthFactor?.toFixed(4)}, $${h.lockedUsd.toFixed(4)} in use, MAX $${maxUsd.toFixed(4)}`);
+    if (account.healthFactor! < CREDIT_CAP.minHf) {
+      expect(maxUsd).toBe(0); // under the line already: nothing can come out while something is owed
+      return;
+    }
+    expect(maxUsd).toBeLessThan(h.lockedUsd);
+    expect(statusFor(healthAfterWithdraw({ ...loan, usd: maxUsd }))).toBe("watch");
+    const rawFor = (usd: number) => (h.supplied * BigInt(Math.floor((usd / h.lockedUsd) * 1e9))) / 1_000_000_000n;
+    const capped = await healthAfter(buildWithdrawCalls({ user: watcher, stock: h.stock, amountRaw: rawFor(maxUsd), all: false }));
+    expect(statusFor(capped)).toBe("watch");
+    expect(capped).toBeGreaterThanOrEqual(CREDIT_CAP.minHf - 0.002);
+    expect(capped).toBeLessThan(CREDIT_CAP.minHf + 0.01);
+    // The sheet's old MAX: Aave allows it, and it lands in Act.
+    const old = await healthAfter(buildWithdrawCalls({ user: watcher, stock: h.stock, amountRaw: rawFor(maxWithdrawUsd(loan) * 0.995), all: false }));
+    console.log(`Free up health after: MAX ${capped.toFixed(4)}, old MAX ${old.toFixed(4)}`);
+    expect(statusFor(old)).toBe("act");
   });
 });

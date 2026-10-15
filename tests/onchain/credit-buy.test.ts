@@ -9,19 +9,21 @@ import {
   type StateOverride,
 } from "viem";
 import { CHAIN } from "@/lib/chain";
-import { CASH } from "@/config/risk";
+import { CASH, CREDIT_CAP } from "@/config/risk";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { hubAbi } from "@/lib/aave/abis/IHub";
 import { aaveOracleAbi } from "@/lib/aave/abis/IAaveOracle";
 import { explainRevert } from "@/lib/aave/errors";
 import { priceToUsd, summarize, type AccountData } from "@/lib/aave/math";
+import { buildLoanCalls } from "@/lib/aave/tx";
 import { swapOf } from "@/lib/allowlist";
 import type { Cash } from "@/lib/cash";
 import {
   backingOptions, backingRaw, buildCreditBuyCalls, freeShownUsd, isAllFree, planCredit, splitCash, type BackingOption, type CreditPosition,
 } from "@/lib/creditBuy";
 import { GUARDIAN } from "@/lib/guardian/config";
+import { statusFor } from "@/lib/risk/status";
 import { buildBuyCalls, minOut, quoteBuy, quotePool, signingQuote, type BuyQuote } from "@/lib/swap/buy";
 import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
 
@@ -196,9 +198,9 @@ describe("Credit Buy batches simulate on mainnet", () => {
     expect(option.freeUsd).toBeGreaterThan(20);
     const raw = backingRaw(option, 20);
     const room = planCredit({ position, backing: { option, raw }, creditRaw: 0n, cash });
-    // $20 of NVIDIA at its collateral factor, at 99.5% of the limit: nothing else backs this account's credit.
-    expect(room.maxUsd).toBeLessThanOrEqual(20 * option.cf * 0.995);
-    expect(room.maxUsd).toBeGreaterThan(20 * option.cf * 0.995 - 0.02);
+    // $20 of NVIDIA at its collateral factor, over the cap's line (1.12): nothing else backs this account's credit.
+    expect(room.maxUsd).toBeLessThanOrEqual((20 * option.cf) / CREDIT_CAP.minHf);
+    expect(room.maxUsd).toBeGreaterThan((20 * option.cf) / CREDIT_CAP.minHf - 0.02);
     expect(planCredit({ position, backing: { option, raw }, creditRaw: usd(room.maxUsd + 0.01), cash }).block).toBe("too-much");
 
     const creditRaw = usd(5);
@@ -355,5 +357,80 @@ describe("the swap leg on Base", () => {
     const tooLittle = (await client.simulateCalls({ account: backer, calls: greedy.map(({ to, data }) => ({ to, data })) })).results[1];
     expect(tooLittle.status).toBe("failure");
     expect(explainRevert(tooLittle.data, "fallback", greedy[1])).toMatch(/price moved more than 1%/);
+  });
+});
+
+/** The account's position read back from a simulation (the accountRead after a batch), as planCredit reads it. */
+const positionAfter = (data: Address, base: CreditPosition): CreditPosition => ({
+  ...base,
+  ...summarize(decodeFunctionResult({ abi: spokeAbi, functionName: "getUserAccountData", data }) as AccountData),
+});
+
+describe("Act is the line on Base (Adrian, 2026-10-15)", () => {
+  it("what 99.5% of Aave's limit allowed ends in Act on Aave's own health; the plan now blocks it, and the cap ends in Watch", async () => {
+    const { position, options, cash } = await live(newcomer);
+    const option = options.find((o) => o.stock.symbol === "NVDAc")!;
+    const raw = backingRaw(option, 20);
+    const pick = { option, raw };
+    const usdIn = option.freeUsd * (Number(raw) / Number(option.freeRaw));
+    const oldMax = Math.floor(usdIn * option.cf * 0.995 * 100) / 100;
+    const cap = planCredit({ position, backing: pick, creditRaw: 0n, cash }).maxUsd;
+    expect(cap).toBeLessThan(oldMax);
+    expect(planCredit({ position, backing: pick, creditRaw: usd(oldMax), cash }).block).toBe("act");
+
+    const healthWith = async (creditUsd: number) => {
+      const calls = buildLoanCalls({ user: newcomer, locks: [{ stock: option.stock, raw }], borrowRaw: usd(creditUsd) });
+      const r = await client.simulateCalls({ account: newcomer, calls: [...calls, accountRead(newcomer)] });
+      expect(r.results.map((x) => x.status).every((x) => x === "success")).toBe(true);
+      return positionAfter(r.results[calls.length].data, position).healthFactor!;
+    };
+    const old = await healthWith(oldMax);
+    const capped = await healthWith(cap);
+    console.log(`$20 of NVIDIA: old MAX $${oldMax} → health ${old.toFixed(4)}; cap $${cap} → health ${capped.toFixed(4)}`);
+    expect(statusFor(old)).toBe("act");
+    expect(statusFor(capped)).toBe("watch");
+    expect(capped).toBeGreaterThanOrEqual(CREDIT_CAP.minHf - 0.002);
+    expect(capped).toBeLessThan(CREDIT_CAP.minHf + 0.01);
+  });
+
+  it("the leverage loop: two Credit Buys at MAX, the second backed by the NVIDIA the first one bought, end at the cap's line in Watch", async () => {
+    const { position, options, cash } = await live(newcomer);
+    const option = options.find((o) => o.stock.symbol === "NVDAc")!;
+    const nvda = option.stock;
+    const usdPerRaw = option.freeUsd / Number(option.freeRaw);
+
+    // 1: $20 of NVIDIA in use, the MAX in credit, NVIDIA bought with it.
+    const pick1 = { option, raw: backingRaw(option, 20) };
+    const max1 = planCredit({ position, backing: pick1, creditRaw: 0n, cash }).maxUsd;
+    const plan1 = planCredit({ position, backing: pick1, creditRaw: usd(max1), cash });
+    expect(plan1).toMatchObject({ after: "watch", block: undefined, extraConfirm: true });
+    const quote1 = await quoteToSign(nvda, plan1.creditRaw);
+    const calls1 = buildCreditBuyCalls({ user: newcomer, stock: nvda, quote: quote1, creditRaw: plan1.creditRaw, backing: plan1.backing, limit: plan1.limit, cash });
+    const r1 = await simulateCreditBuy(newcomer, nvda, calls1);
+    expect(r1.statuses.every((x) => x === "success")).toBe(true);
+    expect(statusFor(r1.hfAfter)).toBe("watch");
+    expect(r1.hfAfter!).toBeGreaterThanOrEqual(CREDIT_CAP.minHf - 0.002);
+
+    // 2: what it bought goes in use, and the MAX again, planned on the position after 1 as the app would read it.
+    const after1 = positionAfter(r1.results[calls1.length + 3].data, position);
+    // The wallet's NVIDIA moved by what was bought less what went in use (the same stock).
+    const boughtRaw = r1.stockIn + pick1.raw;
+    expect(boughtRaw).toBeGreaterThanOrEqual(minOut(quote1.amountOut));
+    const bought: BackingOption = { stock: nvda, freeRaw: boughtRaw, freeUsd: Number(boughtRaw) * usdPerRaw, cf: option.cf };
+    const pick2 = { option: bought, raw: bought.freeRaw };
+    const max2 = planCredit({ position: after1, backing: pick2, creditRaw: 0n, cash }).maxUsd;
+    expect(max2).toBeLessThan(max1); // each round is about cf ÷ 1.12 of the last
+    expect(max2).toBeGreaterThanOrEqual(1);
+    const plan2 = planCredit({ position: after1, backing: pick2, creditRaw: usd(max2), cash });
+    expect(plan2).toMatchObject({ after: "watch", block: undefined });
+    expect(planCredit({ position: after1, backing: pick2, creditRaw: usd(max2 * 1.05), cash }).block).toMatch(/too-much|act/);
+    const quote2 = await quoteToSign(nvda, plan2.creditRaw);
+    const calls2 = buildCreditBuyCalls({ user: newcomer, stock: nvda, quote: quote2, creditRaw: plan2.creditRaw, backing: plan2.backing, limit: plan2.limit, cash });
+    const r2 = await simulateCreditBuy(newcomer, nvda, [...calls1, ...calls2]);
+    console.log(`leverage loop: $${max1} then $${max2}; health ${r1.hfAfter?.toFixed(4)} → ${r2.hfAfter?.toFixed(4)}`);
+    expect(r2.statuses.every((x) => x === "success")).toBe(true);
+    expect(statusFor(r2.hfAfter)).toBe("watch");
+    expect(r2.hfAfter!).toBeGreaterThanOrEqual(CREDIT_CAP.minHf - 0.003);
+    expect(r2.hfAfter!).toBeLessThan(CREDIT_CAP.minHf + 0.01);
   });
 });

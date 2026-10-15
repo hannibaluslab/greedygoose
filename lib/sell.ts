@@ -37,7 +37,7 @@ export const SELL_BLOCKED: Record<SellBlock, string> = {
   price: `Too big for the market right now: you’d get more than ${SELL_LIMITS.floorBps / 100}% under Aave’s price. Try a smaller amount.`,
 };
 
-/** Headroom under Aave's limit for what comes out before the repay, for interest and price moves (as on the free-up sheet). */
+/** Headroom under Aave's limit for what comes out before the repay, for interest and price moves. It's a repay and ends healthier, so the credit cap (CREDIT_CAP, Act is the line) doesn't bind it. */
 const LIMIT_HEADROOM = 0.995;
 
 export type SellPlan = {

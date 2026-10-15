@@ -1,4 +1,4 @@
-import { RISK } from "@/config/risk";
+import { CREDIT_CAP, RISK } from "@/config/risk";
 
 /**
  * "Get a loan" planner: given how much USDC the user wants and which stock backs it,
@@ -82,6 +82,11 @@ export function combinedLoan(p: { collateralUsd: number; avgCf: number; debtUsd:
     maxSafe: room(RISK.safeMin),
     /** Most you can borrow before the loan reaches Act (the Watch line). */
     maxWatch: room(RISK.watchMin),
+    /**
+     * The most credit the app takes with these locks (Act is the line, Adrian 2026-10-15): health stays at or above
+     * CREDIT_CAP.minHf, the Act line plus its margin. Every way of taking credit is capped here (lib/creditBuy.ts creditCap).
+     */
+    maxCredit: room(CREDIT_CAP.minHf),
     /** Aave's own limit with these locks (HF = 1). Never borrow right up to it. */
     maxAave: room(1),
   };
