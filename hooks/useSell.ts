@@ -35,11 +35,24 @@ export type SellInput = {
   debtRaw: bigint;
 };
 
-const FALLBACK: Record<SellFrom, string> = {
+export const SELL_FALLBACK: Record<SellFrom, string> = {
   free: "This sale would fail right now — the price may have moved or the stock may be paused. Try again in a moment.",
   backing: "This sale would fail right now — the price or Aave’s limits may have moved. Try a smaller amount in a moment.",
   repay: "This repay would fail right now — the price or Aave’s limits may have moved. Try a smaller amount in a moment.",
 };
+
+/**
+ * A sale's batch, built right before JAW's sheet: the screen's block still holds, and the quote is read again. The
+ * stock sheet's Sell and the Trade sheet's stock → cash.
+ */
+export function useSaleBatch() {
+  const quoteToSign = useSigningQuote();
+  return async (p: SellInput) => {
+    if (p.plan.block) throw new TxStop(SELL_BLOCKED[p.plan.block]);
+    const quote = await quoteToSign(p.stock, p.quote, "sell");
+    return buildSaleCalls({ ...p, from: p.plan.from, quote });
+  };
+}
 
 /**
  * Sell stock in one batch (plan item 7 steps 2, 3 and 9): free shares, a backing holding, or a backing
@@ -47,17 +60,7 @@ const FALLBACK: Record<SellFrom, string> = {
  */
 export function useSell() {
   const tx = useTx("The sale didn’t go through on Base. Nothing moved except any network fee.");
-  const quoteToSign = useSigningQuote();
-  const sell = (p: SellInput) =>
-    tx.run(
-      p.user,
-      async () => {
-        if (p.plan.block) throw new TxStop(SELL_BLOCKED[p.plan.block]);
-        const quote = await quoteToSign(p.stock, p.quote, "sell");
-        return buildSaleCalls({ ...p, from: p.plan.from, quote });
-      },
-      FALLBACK[p.plan.from],
-      saleActivity(p.stock, p.plan),
-    );
+  const batch = useSaleBatch();
+  const sell = (p: SellInput) => tx.run(p.user, () => batch(p), SELL_FALLBACK[p.plan.from], saleActivity(p.stock, p.plan));
   return { ...tx, sell };
 }

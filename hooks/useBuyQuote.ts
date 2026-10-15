@@ -18,15 +18,23 @@ export function useDebounced<T>(value: T, ms = 350) {
   return v;
 }
 
-/** Best quote across Aerodrome tick spacings and Uniswap v3 fee tiers. `null` = no pool can fill it. */
+/** Best quote across Aerodrome tick spacings and Uniswap v3 fee tiers, for dollars as typed (debounced). `null` = no pool can fill it. */
 export function useBuyQuote(stock: ReserveAsset | undefined, amountUsd: number) {
-  const client = usePublicClient({ chainId: CHAIN_ID });
   const amount = useDebounced(amountUsd);
+  return useBuyQuoteRaw(stock, amount > 0 ? parseUnits(amount.toFixed(USDC.decimals), USDC.decimals) : 0n);
+}
+
+/**
+ * useBuyQuote for an exact USDC amount in raw units, not debounced: the Trade sheet's stock → stock buy, which spends
+ * the sale's floor once the sale's own (debounced) quote is in. Same "buyQuote" key, so useSigningQuote refreshes it.
+ */
+export function useBuyQuoteRaw(stock: ReserveAsset | undefined, amountInRaw: bigint) {
+  const client = usePublicClient({ chainId: CHAIN_ID });
   return useQuery({
-    queryKey: ["buyQuote", stock?.address, amount],
-    enabled: !!client && !!stock && amount > 0,
+    queryKey: ["buyQuote", stock?.address, amountInRaw.toString()],
+    enabled: !!client && !!stock && amountInRaw > 0n,
     refetchInterval: 15_000,
-    queryFn: (): Promise<BuyQuote | null> => quoteBuy(client!, stock!, parseUnits(amount.toFixed(USDC.decimals), USDC.decimals)),
+    queryFn: (): Promise<BuyQuote | null> => quoteBuy(client!, stock!, amountInRaw),
   });
 }
 
