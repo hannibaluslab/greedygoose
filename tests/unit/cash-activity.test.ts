@@ -63,6 +63,18 @@ describe("the credit beside the cash (no split of the cash)", () => {
     const creditBuy = ownCashRow(own([{ kind: "borrow", symbol: "USDC", amount: 200 }, { kind: "buy", symbol: "NVDAc", amount: 1.1, paidUsd: 200 }]))!;
     expect([creditBuy.title, creditBuy.line, creditBuy.usd]).toEqual(["Credit Buy NVIDIA", "$200.00 on credit", 0]);
   });
+
+  it("Earn with stocks is one row: the credit that came to the cash, earning (its savings supply never left the cash)", () => {
+    const earn = ownCashRow(own([{ kind: "earn", symbol: "USDC", amount: 500 }, { kind: "supply", symbol: "TSLAc", amount: 1.32 }]))!;
+    expect([earn.title, earn.line, earn.usd]).toEqual(["Earn with stocks", "+$500.00 from credit, earning", 500]);
+    expect(words(earn)[0]).toBe("What: Backed by 1.32 TSLA");
+    // While it confirms, from this device's record (earnActivity), it reads the same.
+    const pending = ownCashRow(own([{ kind: "earn", symbol: "USDC", amount: 500 }], { status: "pending" }))!;
+    expect([pending.title, pending.line]).toEqual(["Earn with stocks", "+$500.00 from credit, earning · Confirming"]);
+    // One row in the sheet: not "From credit", and not money sent.
+    const rows = cashRows({ own: [own([{ kind: "earn", symbol: "USDC", amount: 500 }, { kind: "supply", symbol: "TSLAc", amount: 1.32 }])], executor: [], arrivals: [], since: 0 });
+    expect(rows.map((r) => [r.title, r.line])).toEqual([["Earn with stocks", "+$500.00 from credit, earning"]]);
+  });
 });
 
 describe("ownCashRow: the user's own moves, by what they did to the cash", () => {

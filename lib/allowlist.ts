@@ -27,10 +27,12 @@ import { ENTRY_COINS, type EntryVenue } from "@/lib/tokens/stables";
 type Address = `0x${string}`;
 /**
  * What a check may look at besides the call's own arguments: the user's own EFP list slots (the one it already has,
- * read from Base by the caller, and any minted in the same batch), the call's raw data, and who a Send pays (`sendTo`,
- * declared by the Send builder alone; null in every other batch, so no other batch can carry a transfer).
+ * read from Base by the caller, and any minted in the same batch), the call's target and raw data, who a Send pays
+ * (`sendTo`, declared by the Send builder alone; null in every other batch, so no other batch can carry a transfer),
+ * and whether the batch saves for the user (`saveTo`, declared by the Earn with stocks builder alone) with the amount of
+ * its one savings supply (`saveRaw`, read from the batch; null when it has none).
  */
-type BatchContext = { listSlots: readonly bigint[]; data: Hex; sendTo: Address | null };
+type BatchContext = { listSlots: readonly bigint[]; to: Address; data: Hex; sendTo: Address | null; saveTo: Address | null; saveRaw: bigint | null };
 /** True when a call's arguments keep the money with `user`. */
 type ArgsCheck = (args: readonly unknown[], user: Address, ctx: BatchContext) => boolean;
 type Rule = { targets: readonly Address[]; abi: Abi; functions: Record<string, ArgsCheck> };
@@ -112,6 +114,27 @@ const transferOut: ArgsCheck = (args, user, ctx) => {
     amount > 0n
   );
 };
+/**
+ * Earn with stocks (Adrian, 2026-10-15: "the user should be able to put stocks get cash in saving"), the one
+ * user-signed savings supply: Aave V3's supply(asset, amount, onBehalfOf, referralCode) of USDC, for the user, referral
+ * code 0, more than 0, only in a batch that declares it saves for the user (`saveTo`), once per batch.
+ */
+const saveForUser: ArgsCheck = (args, user, ctx) => {
+  const [asset, amount, onBehalfOf, referralCode] = args;
+  return (
+    !!ctx.saveTo &&
+    is(ctx.saveTo, user) &&
+    is(asset, USDC.address) &&
+    is(onBehalfOf, user) &&
+    referralCode === 0 &&
+    typeof amount === "bigint" &&
+    amount > 0n
+  );
+};
+/** The USDC approve for that supply: to Aave V3's pool, for exactly what the batch's one savings supply puts in. */
+const savingsApprove: ArgsCheck = (args, user, ctx) =>
+  !!ctx.saveTo && is(ctx.saveTo, user) && ctx.saveRaw !== null && is(ctx.to, USDC.address) && is(args[0], GUARDIAN.AAVE_V3_POOL) && args[1] === ctx.saveRaw;
+
 /** GooseBoard.join(): exactly its selector, nothing after it. */
 const JOIN = toFunctionSelector("join()");
 const bareJoin: ArgsCheck = (args, _user, ctx) => args.length === 0 && ctx.data.toLowerCase() === JOIN;
@@ -121,13 +144,19 @@ const bareJoin: ArgsCheck = (args, _user, ctx) => args.length === 0 && ctx.data.
  * functions it may be called with, and what their arguments must say. Money only moves between the
  * user's own pockets: an approve names only the spoke or a router, every position, withdrawal and
  * swap pays the user, and savings come out only as USDC. The one exception is a Send's single transfer,
- * to the recipient its batch declares (`transferOut`). Buys, repays and savings-first batches mix
+ * to the recipient its batch declares (`transferOut`). Savings go in only in Earn with stocks' batch, which
+ * declares it (`saveTo`): one USDC supply for the user, approved to Aave V3's pool for exactly that amount
+ * (`saveForUser`, `savingsApprove`). Buys, repays and savings-first batches mix
  * targets, so each target is held to its own functions. An Entry coin is approved only to the venue that converts
  * it, and converted only into USDC (D20). GooseExecutor's settings move no money and apply to the signer alone
  * (`msg.sender`): a mix must add up to 100% (or clear it).
  */
 const RULES: readonly Rule[] = [
-  { targets: TOKENS, abi: erc20Abi, functions: { approve: (args) => oneOf(args[0], SPENDERS), transfer: transferOut } },
+  {
+    targets: TOKENS,
+    abi: erc20Abi,
+    functions: { approve: (args, user, ctx) => oneOf(args[0], SPENDERS) || savingsApprove(args, user, ctx), transfer: transferOut },
+  },
   ...ENTRY_COINS.map((c) => ({ targets: [c.address], abi: erc20Abi, functions: { approve: (args: readonly unknown[]) => is(args[0], venueOf(c.venue)) } })),
   {
     targets: [AAVE.SPOKE],
@@ -137,7 +166,7 @@ const RULES: readonly Rule[] = [
   {
     targets: [GUARDIAN.AAVE_V3_POOL],
     abi: aaveV3PoolAbi,
-    functions: { withdraw: (args, user) => is(args[0], USDC.address) && is(args[2], user) },
+    functions: { withdraw: (args, user) => is(args[0], USDC.address) && is(args[2], user), supply: saveForUser },
   },
   { targets: [AERODROME.ROUTER], abi: aeroRouterAbi, functions: { exactInputSingle: swapToUser() } },
   { targets: [AERODROME_V1.ROUTER], abi: aeroRouterAbi, functions: { exactInputSingle: convertToUser(ENTRY_AT("aerodrome")) } },
@@ -165,20 +194,45 @@ const RULES: readonly Rule[] = [
 ];
 
 /**
- * What a batch's builder tells the allowlist: the user's EFP list slot as read from Base (`listSlot`), and, for a Send
- * only, who it pays (`sendTo`).
+ * What a batch's builder tells the allowlist: the user's EFP list slot as read from Base (`listSlot`), for a Send only,
+ * who it pays (`sendTo`), and for Earn with stocks only, that it saves for the user (`saveTo`, which must be the user).
  */
-export type AllowContext = { listSlot?: bigint | null; sendTo?: Address };
+export type AllowContext = { listSlot?: bigint | null; sendTo?: Address; saveTo?: Address };
+
+const isSavingsSupply = (to: Address, functionName: string) => isAddressEqual(to, GUARDIAN.AAVE_V3_POOL) && functionName === "supply";
+
+/** The amount of the batch's one savings supply (null when it has none); more than one is refused. */
+function savingsSupplyRaw(calls: readonly { to: Address; data: Hex }[]): bigint | null {
+  let raw: bigint | null = null;
+  for (const c of calls) {
+    if (!isAddressEqual(c.to, GUARDIAN.AAVE_V3_POOL)) continue;
+    let call: { functionName: string; args?: readonly unknown[] };
+    try {
+      call = decodeFunctionData({ abi: aaveV3PoolAbi, data: c.data });
+    } catch {
+      continue; // blocked below
+    }
+    if (call.functionName !== "supply") continue;
+    if (raw !== null) throw new Error("Blocked: more than one savings supply");
+    raw = typeof call.args?.[1] === "bigint" ? call.args[1] : null;
+  }
+  return raw;
+}
 
 /**
  * Throws unless every call is allowed. `own.listSlot` is the user's EFP list slot as read from Base
  * (lib/efp/read.ts checks the list is the user's own); a batch that mints a list may also write to the slot it mints.
- * `own.sendTo` lets the batch carry one transfer, to that address (`transferOut`).
+ * `own.sendTo` lets the batch carry one transfer, to that address (`transferOut`). `own.saveTo` (the user, no one else)
+ * lets it carry one USDC savings supply for the user and its exact approve (`saveForUser`, `savingsApprove`).
  */
 export function assertAllowed<C extends { to: Address; data: Hex; value: bigint }>(user: Address, calls: C[], own?: AllowContext): C[] {
   const listSlots: bigint[] = own?.listSlot != null ? [own.listSlot] : [];
   const sendTo = own?.sendTo ?? null;
+  const saveTo = own?.saveTo ?? null;
+  if (saveTo && !isAddressEqual(saveTo, user)) throw new Error("Blocked: savings are only for the user");
+  const saveRaw = saveTo ? savingsSupplyRaw(calls) : null;
   let transfers = 0;
+  let savingsApproves = 0;
   for (const c of calls) {
     if (!isAddressEqual(c.to, EFP_LIST_MINTER)) continue;
     try {
@@ -200,10 +254,16 @@ export function assertAllowed<C extends { to: Address; data: Hex; value: bigint 
       throw new Error(`Blocked: unexpected call to ${c.to}`);
     }
     const check = Object.hasOwn(rule.functions, call.functionName) ? rule.functions[call.functionName] : undefined;
-    // Outside a Send (no recipient declared), transfer is no function of any target at all.
-    if (!check || (call.functionName === "transfer" && !sendTo)) throw new Error(`Blocked: unexpected call to ${c.to}`);
+    // Outside a Send (no recipient declared), transfer is no function of any target at all; outside Earn with stocks
+    // (no saveTo declared), neither is a savings supply.
+    if (!check || (call.functionName === "transfer" && !sendTo) || (isSavingsSupply(c.to, call.functionName) && !saveTo)) {
+      throw new Error(`Blocked: unexpected call to ${c.to}`);
+    }
     if (call.functionName === "transfer" && ++transfers > 1) throw new Error("Blocked: more than one transfer");
-    if (!check(call.args ?? [], user, { listSlots, data: c.data, sendTo })) {
+    if (call.functionName === "approve" && is(call.args?.[0], GUARDIAN.AAVE_V3_POOL) && ++savingsApproves > 1) {
+      throw new Error("Blocked: more than one savings approval");
+    }
+    if (!check(call.args ?? [], user, { listSlots, to: c.to, data: c.data, sendTo, saveTo, saveRaw })) {
       throw new Error(
         call.functionName === "approve"
           ? `Blocked: unexpected spender ${call.args?.[0]}`

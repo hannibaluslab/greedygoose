@@ -108,7 +108,7 @@ export function CashSheet({
 }) {
   const [step, setStep] = useState<Step>("cash");
   const [direction, setDirection] = useState<"forward" | "back">("forward");
-  const earn = useEarnOffer(account, data, save, open);
+  const earn = useEarnOffer(account, data, open);
   const tx = useEarnWithStocks();
   const fee = useFeeSupport();
   const { address: signer } = useAccount();
@@ -144,8 +144,8 @@ export function CashSheet({
     reset();
   }, [phase, reset, sent, txHash]);
 
-  // The offer the batch was signed on stays while it confirms: the credit landing can close the live offer (the wallet
-  // grows, so Save's room shrinks) before the receipt is read, and the step mustn't drop back mid-confirmation.
+  // The offer the batch was signed on stays while it confirms: the credit landing can close the live offer (the stocks
+  // back less once it's taken) before the receipt is read, and the step mustn't drop back mid-confirmation.
   const [signedOn, setSignedOn] = useState<EarnOpen | null>(null);
   const offer: EarnOpen | null = earn.offer.kind === "offer" ? earn.offer : tx.busy ? signedOn : null;
 
@@ -171,7 +171,6 @@ export function CashSheet({
             options={earn.options}
             protect={earn.protect}
             sell={earn.sell}
-            capMaxRaw={earn.capMaxRaw}
             phase={tx.phase}
             error={tx.error}
             preview={preview}

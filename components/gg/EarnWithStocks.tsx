@@ -11,7 +11,6 @@ import { TxButton, TxError } from "./TxUi";
 import { usePrepare, type TxPhase, type TxPlan, type TxPrep } from "@/hooks/useTx";
 import { useEarnRates, type EarnInput } from "@/hooks/useEarnWithStocks";
 import type { PositionData } from "@/hooks/usePosition";
-import { LIMIT_USD, testCapNote } from "@/lib/agents/permissions";
 import type { AgentStatus } from "@/lib/agents/status";
 import { backers, type BackingOption } from "@/lib/creditBuy";
 import {
@@ -63,10 +62,9 @@ function Rates({ rates, left }: { rates: EarnRates; left: boolean }) {
 
 /**
  * "Earn with stocks" on the Cash sheet's first step: the live rates side by side and one button to the earn step, or
- * one plain line on why it's not offered now. Hidden with no executor (no earning to put credit to).
+ * one plain line on why it's not offered now. It needs no agent: the batch puts the credit where the cash earns.
  */
 export function EarnCard({ offer, onOpen }: { offer: EarnOffer; onOpen: () => void }) {
-  if (offer.kind === "hidden") return null;
   if (offer.kind === "loading")
     return (
       <div aria-busy className="h-16 animate-pulse rounded-[22px] bg-chip">
@@ -97,10 +95,11 @@ export function EarnCard({ offer, onOpen }: { offer: EarnOffer; onOpen: () => vo
 /**
  * The earn step: how much credit comes to the cash, what it earns and costs at that amount (the cost is this credit's
  * own, from the rate after the batch), the status before and after, the risk tick (D2), every move in small print (D7),
- * then one button that opens JAW's sheet. No confirm screen of ours.
+ * then one button that opens JAW's sheet. No confirm screen of ours. The same batch puts the credit where the cash
+ * earns, so it earns at once.
  */
 export function EarnStep({
-  user, data, offer, options, protect, sell, capMaxRaw, phase, error, preview, feeBlocked, prep, planFor, onEarn, initialAmount = "", fixedApyAfter,
+  user, data, offer, options, protect, sell, phase, error, preview, feeBlocked, prep, planFor, onEarn, initialAmount = "", fixedApyAfter,
 }: {
   user: `0x${string}`;
   data: PositionData;
@@ -108,7 +107,6 @@ export function EarnStep({
   options: BackingOption[];
   protect: AgentStatus;
   sell: AgentStatus;
-  capMaxRaw: bigint | null;
   phase: TxPhase;
   error: string | null;
   preview: boolean;
@@ -130,7 +128,7 @@ export function EarnStep({
 
   // The plan first, for the batch the rate after it is read from.
   const draft = earnQuote({ offer, position: data, options, cash: data.cash, creditRaw, creditApyNow: apyNow, creditApyAfter: null });
-  const read = useEarnRates({ user, backing: draft.plan.backing, creditRaw, apyNow, enabled: fixedApyAfter === undefined });
+  const read = useEarnRates({ user, backing: draft.plan.backing, creditRaw, cash: data.cash, apyNow, enabled: fixedApyAfter === undefined });
   const apyAfter = fixedApyAfter ?? read.apyAfter;
   const quote = apyAfter === null ? draft : earnQuote({ offer, position: data, options, cash: data.cash, creditRaw, creditApyNow: apyNow, creditApyAfter: apyAfter });
   const { plan } = quote;
@@ -154,8 +152,7 @@ export function EarnStep({
   const adding = plan.backing.length ? plan.backing.map((b) => b.stock.symbol) : data.collateralUsd > 0 || !lead ? [] : [lead];
   const backedBy = backers(data.holdings, adding, lead);
 
-  const cap = offer.limitedBy === "today" ? testCapNote(LIMIT_USD.save.start, capMaxRaw) : null;
-  const hint = [earnHint(offer), cap].filter(Boolean).join(" ");
+  const hint = earnHint(offer);
 
   const cost = amount > 0 ? quote.cost : offer.rates.cost;
   const left = amount > 0 ? quote.left : offer.rates.left;
@@ -205,7 +202,7 @@ export function EarnStep({
           NETWORK_FEE_ROW,
         ]}
       />
-      <p className="m-0 px-0.5 text-[12.5px] leading-[1.45] text-subtle">Both rates are variable. Your cash starts earning on this soon.</p>
+      <p className="m-0 px-0.5 text-[12.5px] leading-[1.45] text-subtle">Both rates are variable. It starts earning right away.</p>
       {(block || plan.priceMayMove) && (
         <p role="status" className={`m-0 text-[13px] leading-snug ${block ? "text-act" : "text-watch-text"}`}>
           {block ?? "Stock markets are closed. You can still do this, but prices can jump when they reopen."}

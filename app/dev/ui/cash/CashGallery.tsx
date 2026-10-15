@@ -40,9 +40,8 @@ import { CashSheetDemo, SHEET_VIEWS, type SheetView } from "./CashSheetDemo";
  * The Cash sheet (CashSheetDemo), over Home:
  *   ?view=sheet                   earning, nothing owed, Earn with stocks offered, no activity yet
  *   ?view=sheet-owed              $300 owed beside the cash, and the week's cash activity
- *   ?view=sheet-start             before earning is on: "Start earning first"
+ *   ?view=sheet-start             before earning is on (as on the public link): Earn with stocks still offered
  *   ?view=sheet-costs-more        credit costs more than the cash earns: the rates, and no button
- *   ?view=sheet-no-room           today's saves are used up: "Try again tomorrow"
  *   ?view=earn | earn-watch       the earn step at $500 (Safe), and at $1,000 (Watch, with the risk tick)
  *   ?view=sheet-activity          the activity with a row open (&open=n in the screenshots)
  *   ?view=sheet-error             part of the activity couldn't be read

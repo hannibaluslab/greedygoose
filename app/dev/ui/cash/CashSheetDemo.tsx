@@ -10,12 +10,11 @@ import type { CashFeedError } from "@/hooks/useCashActivity";
 import { aprToApy, monthlyCost } from "@/lib/aave/math";
 import type { AgentEvent } from "@/lib/agents/events";
 import { describeAgentEvent, type MoveContext } from "@/lib/agents/feed";
-import { nyDay } from "@/lib/agents/next";
 import type { AgentStatus } from "@/lib/agents/status";
 import { cashRaw, toUsd, type Cash } from "@/lib/cash";
 import { cashRows, type Arrival, type ExecutorMove, type OwnMove } from "@/lib/cashActivity";
 import { backingOptions } from "@/lib/creditBuy";
-import { earnOffer, type SaveRoomInput } from "@/lib/earnWithStocks";
+import { earnOffer } from "@/lib/earnWithStocks";
 import { statusFor } from "@/lib/risk/status";
 import { EQUITIES } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
@@ -26,7 +25,7 @@ import { ENTRY_COINS } from "@/lib/tokens/stables";
  * history JAW lists. Nothing here reads the chain or signs.
  */
 
-export const SHEET_VIEWS = ["sheet", "sheet-owed", "sheet-start", "sheet-costs-more", "sheet-no-room", "earn", "earn-watch", "sheet-activity", "sheet-error"] as const;
+export const SHEET_VIEWS = ["sheet", "sheet-owed", "sheet-start", "sheet-costs-more", "earn", "earn-watch", "sheet-activity", "sheet-error"] as const;
 export type SheetView = (typeof SHEET_VIEWS)[number];
 
 const usdc = (x: number) => BigInt(Math.round(x * 1e6));
@@ -98,25 +97,11 @@ function position(p: { owed: number; saveOn: boolean; creditApr?: number }): Pos
 
 const CFS = Object.fromEntries(EQUITIES.map((e) => [e.symbol, CF]));
 
-/** Save's room: $1,000 a day, none used yet; or today's six saves made. */
-function room(data: PositionData, nowSec: number, full: boolean): SaveRoomInput {
-  return {
-    leftRaw: full ? usdc(600) : usdc(1_000),
-    walletRaw: data.cash.walletRaw,
-    keepBackRaw: usdc(1),
-    minSaveRaw: usdc(1),
-    savesDay: nyDay(nowSec),
-    savesToday: full ? 6 : 1,
-    maxSavesPerDay: 6,
-    nowSec,
-  };
-}
-
 /** A week of the cash: credit taken (confirming), money in, Protect, a conversion, a Credit Buy with cash, a send, a repay. */
 function activity(nowMs: number) {
   const at = (daysBack: number, h: number, m: number) => new Date(nowMs).setHours(h, m, 0, 0) - daysBack * 86_400_000;
   const own: OwnMove[] = [
-    { key: "earn", time: at(0, 11, 5), status: "pending", items: [{ kind: "supply", symbol: "TSLAc", amount: 1.32 }, { kind: "borrow", symbol: "USDC", amount: 500 }] },
+    { key: "earn", time: at(0, 11, 5), status: "pending", items: [{ kind: "earn", symbol: "USDC", amount: 500 }, { kind: "supply", symbol: "TSLAc", amount: 1.32 }] },
     {
       key: "credit-buy-cash",
       time: at(1, 15, 20),
@@ -160,13 +145,11 @@ export function CashSheetDemo({ view, nowSec }: { view: SheetView; nowSec: numbe
   const save: AgentStatus = view === "sheet-start" ? "off" : "on";
   const data = position({ owed, saveOn: save === "on", creditApr: view === "sheet-costs-more" ? 0.0435 : undefined });
   const offer = earnOffer({
-    save,
     cashApy: aprToApy(data.savingsApr),
     creditApy: aprToApy(data.apr),
     position: data,
     options: backingOptions(data.holdings, CFS),
     cash: data.cash,
-    room: room(data, nowSec, view === "sheet-no-room"),
   });
   const a = activity(nowMs);
   const rows = view === "sheet" || view === "sheet-start" ? [] : cashRows({ ...a, since: nowMs - 7 * 86_400_000 });
@@ -183,7 +166,6 @@ export function CashSheetDemo({ view, nowSec }: { view: SheetView; nowSec: numbe
             options={backingOptions(data.holdings, CFS)}
             protect="on"
             sell="on"
-            capMaxRaw={usdc(1_000_000)}
             phase="idle"
             error={null}
             preview={false}
