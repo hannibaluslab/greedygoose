@@ -24,6 +24,7 @@ import { describeAgentEvent, type MoveContext } from "@/lib/agents/feed";
 import { arrivedCoins, arrivedView, rateText } from "@/lib/cashSetup";
 import { convertFloorRaw } from "@/lib/swap/entry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
+import { CashSheetDemo, SHEET_VIEWS, type SheetView } from "./CashSheetDemo";
 
 /*
  * Dev only: earning and other dollars becoming cash (D20), in each state, from fixtures run through the app's own
@@ -36,6 +37,15 @@ import { ENTRY_COINS } from "@/lib/tokens/stables";
  *   ?view=done                    converted, with nothing to ask (no executor, or it already converts on its own)
  *   ?view=pay | pay-setup         Pay while the cash earns, and before earning is set up
  *   ?view=activity                Activity with the cash's own events
+ * The Cash sheet (CashSheetDemo), over Home:
+ *   ?view=sheet                   earning, nothing owed, Earn with stocks offered, no activity yet
+ *   ?view=sheet-owed              $300 owed beside the cash, and the week's cash activity
+ *   ?view=sheet-start             before earning is on: "Start earning first"
+ *   ?view=sheet-costs-more        credit costs more than the cash earns: the rates, and no button
+ *   ?view=sheet-no-room           today's saves are used up: "Try again tomorrow"
+ *   ?view=earn | earn-watch       the earn step at $500 (Safe), and at $1,000 (Watch, with the risk tick)
+ *   ?view=sheet-activity          the activity with a row open (&open=n in the screenshots)
+ *   ?view=sheet-error             part of the activity couldn't be read
  */
 
 const RATE = rateText(0.0391);
@@ -51,8 +61,9 @@ const GRANT: GrantView = { busy: false, error: null, blocked: null, preview: fal
 const ZERO_TX = `0x${"0".repeat(64)}` as const;
 const noop = () => toast("Dev gallery: nothing is signed");
 
-type View = "home" | "arriving" | "convert" | "auto" | "done" | "pay" | "pay-setup" | "activity";
-const VIEWS: View[] = ["home", "arriving", "convert", "auto", "done", "pay", "pay-setup", "activity"];
+type View = "home" | "arriving" | "convert" | "auto" | "done" | "pay" | "pay-setup" | "activity" | SheetView;
+const VIEWS: View[] = ["home", "arriving", "convert", "auto", "done", "pay", "pay-setup", "activity", ...SHEET_VIEWS];
+const isSheetView = (v: View): v is SheetView => (SHEET_VIEWS as readonly string[]).includes(v);
 
 export function CashGallery() {
   const raw = useSearchParams().get("view") as View | null;
@@ -64,6 +75,7 @@ export function CashGallery() {
     return <AddMoneyView address={ADDRESS} name="sam.justan.id" rate={view === "pay" ? RATE : null} onCopy={noop} />;
   }
   if (view === "activity") return <ActivityFixture nowSec={nowSec} />;
+  if (isSheetView(view)) return <HomeFixture cards={null} sheet={<CashSheetDemo view={view} nowSec={nowSec} />} />;
 
   // Home: before other dollars convert on their own they're asked about; after, the Cash card says they're arriving.
   const arrived = arrivedView(arrivedCoins(BALANCES), view === "arriving" ? "on" : "off");
@@ -174,7 +186,7 @@ function ActivityFixture({ nowSec }: { nowSec: number }) {
     { key: "buy", time: at(2, 10, 20) * 1000, status: "done", hash: ZERO_TX, items: [{ kind: "buy", symbol: "NVDAc", amount: 0.112, paidUsd: 20 }] },
   ];
   const rows: FeedRow[] = [
-    ...executor.map(([key, time, e, ctx]) => ({ ...describeAgentEvent(e, time, ctx)!, key, time: time * 1000, hash: ZERO_TX })),
+    ...executor.map(([key, time, e, ctx]) => ({ ...describeAgentEvent(e, time, ctx)!, key, time: time * 1000, hash: ZERO_TX, event: e, ctx })),
     ...yours,
   ].sort((a, b) => b.time - a.time);
   return (

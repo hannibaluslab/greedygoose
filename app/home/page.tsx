@@ -12,6 +12,7 @@ import { CashCard, YieldCard } from "@/components/gg/Cards";
 import { StartEarningCard, TurnIntoCash } from "@/components/gg/CashSetup";
 import { AddStockCard, HoldingCard } from "@/components/gg/Holding";
 import { CreditSheet } from "@/components/gg/CreditSheet";
+import { CashSheet } from "@/components/gg/CashSheet";
 import { StockSheets, useStockSheets } from "@/components/gg/StockSheets";
 import { ValueLine } from "@/components/gg/ValueLine";
 import { TotalBalanceSheet, YieldSheet } from "@/components/gg/InfoSheets";
@@ -34,7 +35,7 @@ export default function HomePage() {
   return <RequireAccount>{(address) => <Home address={address} />}</RequireAccount>;
 }
 
-type Sheet = "total" | "yield" | "credit";
+type Sheet = "total" | "yield" | "credit" | "cash";
 
 /**
  * Design board "2 · Home · portfolio: Rail" (HomeUpliftRail.dc.html), with its sheets: Total balance (HomeInfo),
@@ -100,6 +101,7 @@ function Home({ address }: { address: `0x${string}` }) {
           <TotalBalanceSheet open={sheet === "total"} onClose={close} cashUsd={data.cashUsd} stocksUsd={data.stocksUsd} debtUsd={data.debtUsd} />
           <YieldSheet open={sheet === "yield"} onClose={close} cashUsd={data.cashUsd} savingsUsd={data.savingsUsd} apy={apy} earning={data.cash.saveOn} />
           <CreditSheet open={sheet === "credit"} onClose={close} account={address} data={data} />
+          <CashSheet open={sheet === "cash"} onClose={close} account={address} data={data} apy={apy} arrived={arrived} save={setup.save} />
           <StockSheets sheets={stocks} user={address} data={data} />
         </>
       )}
@@ -169,7 +171,7 @@ function Loaded({
           earning={data.cash.saveOn}
           dim={dim}
           note={arrived.kind === "arriving" ? `${arrived.text} arriving` : undefined}
-          href="/receive"
+          onClick={() => open("cash")}
         />
         <YieldCard apy={apy} dim={dim} onClick={() => open("yield")} />
       </section>
