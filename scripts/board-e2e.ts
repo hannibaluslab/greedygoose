@@ -8,12 +8,16 @@
  *   1. deploy GooseBoard (contracts/out, `forge build` first), and put the test OracleDouble at Aave's spoke oracle at
  *      today's prices, so prices can move (anvil 1.8 runs the B20 stocks natively);
  *   2. four real JAW accounts (JAW's factory) hold money and stocks before their first move;
- *   3. a buy as a first move (quote → buildBuyCalls → payFromCash → withBoardJoin) is simulated from the account, as
- *      useTx simulates every batch before JAW's sheet: anvil 1.8.5 hangs mining a swap through a stock pool (eth_call
- *      runs it fine), so the moves that land are contacts batches, built by the app's code and sent as JAW sends them
- *      (the EntryPoint calls account.executeBatch), with join() at the end, once;
+ *   3. first moves: anvil 1.8.5 hangs mining a swap through a stock pool (eth_call runs it fine), so the moves that land
+ *      are contacts batches, built by the app's code and sent as JAW sends them (the EntryPoint calls
+ *      account.executeBatch), with join() at the end, once;
  *   4. money moves after joining: a deposit, a payment between members, savings, and prices;
- *   5. the board is read with the app's own reader (readBoard) and checked against the expected percentages.
+ *   5. the board is read with the app's own reader (readBoard) and checked against the expected percentages;
+ *   6. the review's two ways to cheat it, on the fork: someone else's $5,000 swept to Sam through Uniswap's router is
+ *      money Sam put in, not a gain, and $100 of credit Sam draws on Aave V3 against his savings never lifts his percent;
+ *   7. last, a buy as a first move (quote → buildBuyCalls → payFromCash → withBoardJoin) is simulated from a fresh account,
+ *      as useTx simulates every batch before JAW's sheet. It runs last because anvil 1.8.5 has hung mining the next batch
+ *      after an eth_simulateV1 through a stock pool.
  * Leaves the fork running with the board on it, for the dev server (NEXT_PUBLIC_BASE_RPC_URL=<fork>,
  * NEXT_PUBLIC_GOOSE_BOARD=<printed address>, /leaderboard?as=<printed account>).
  */
@@ -170,13 +174,6 @@ async function main() {
     ok(batch.length === move.length + 1 && batch.at(-1)!.to === board, `${short(who)}'s first move: ${what}, then join() (${batch.length} calls)`);
     return userOp(who, batch);
   };
-  // A buy as the first move: the batch useTx would hand JAW, simulated from the account.
-  const buyBatch = await withBoardJoin(client, sam, await buy(sam, NVDA, 500));
-  const sim = await client.simulateCalls({ account: sam, calls: buyBatch.map(({ to, data }) => ({ to, data })) });
-  ok(
-    buyBatch.at(-1)!.to === board && sim.results.every((r) => r.status === "success"),
-    `a first buy ($500 of NVIDIA) carries join() at the end and simulates (${buyBatch.length} calls)`,
-  );
   await firstMove(sam, "add Kit and Ana to contacts", await addContacts(sam, [kit, ana]));
   await firstMove(kit, "add Sam to contacts", await addContacts(kit, [sam]));
   await firstMove(leo, "add Sam to contacts", await addContacts(leo, [sam]));
@@ -226,6 +223,56 @@ async function main() {
   ok(Math.abs(byAccount(ana).pct!) < 1e-6, "Ana 0.00%: a deposit after joining isn't a gain");
   ok(byAccount(leo).pct === null && byAccount(leo).rank === null, "Leo isn't ranked yet: $10 put in");
   ok(byAccount(sam).rank === 1 && byAccount(ana).rank === 2 && byAccount(kit).rank === 3, "ranked Sam, Ana, Kit");
+
+  // 6. the review's cheats
+  const samGain = 0.08 * sam0.stockUsd;
+  const ALT: Address = "0x00000000000000000000000000000000000a17a1";
+  await test.impersonateAccount({ address: ALT });
+  await test.setBalance({ address: ALT, value: parseEther("1") });
+  const alt = createWalletClient({ chain: base, transport: http(RPC), account: ALT });
+  await deposit(ALT, 5_000);
+  const { UNISWAP } = await import("@/lib/swap/venues");
+  await client.waitForTransactionReceipt({
+    hash: await alt.writeContract({ address: USDC.address, abi: erc20Abi, functionName: "transfer", args: [UNISWAP.SWAP_ROUTER_02, 5_000_000_000n] }),
+    timeout: RECEIPT_TIMEOUT,
+  });
+  const sweep = await client.waitForTransactionReceipt({
+    hash: await alt.writeContract({
+      address: UNISWAP.SWAP_ROUTER_02,
+      abi: parseAbi(["function sweepToken(address token, uint256 amountMinimum, address recipient) payable"]),
+      functionName: "sweepToken",
+      args: [USDC.address, 0n, sam],
+    }),
+    timeout: RECEIPT_TIMEOUT,
+  });
+  ok(sweep.status === "success", "someone else sweeps $5,000 to Sam through Uniswap's router");
+  await test.mine({ blocks: 2 });
+  const swept = (await readBoard({ state: client, logs: client, board })).rows.find((r) => r.account.toLowerCase() === sam.toLowerCase())!;
+  const sweptPct = samGain / (sam0.worth + 5_000);
+  ok(Math.abs(swept.pct! - sweptPct) < 1e-4, `Sam ${(swept.pct! * 100).toFixed(2)}%: the $5,000 is money he put in, the gain is still NVIDIA's (${(sweptPct * 100).toFixed(2)}%)`);
+
+  const { GUARDIAN } = await import("@/lib/guardian/config");
+  const v3Pool = parseAbi(["function borrow(address asset, uint256 amount, uint256 interestRateMode, uint16 referralCode, address onBehalfOf)"]);
+  await userOp(sam, [{ to: GUARDIAN.AAVE_V3_POOL, data: encodeFunctionData({ abi: v3Pool, functionName: "borrow", args: [USDC.address, 100_000_000n, 2n, 0, sam] }), value: 0n }]);
+  await test.mine({ blocks: 2 });
+  const drawn = (await readBoard({ state: client, logs: client, board })).rows.find((r) => r.account.toLowerCase() === sam.toLowerCase())!;
+  const drawnPct = samGain / (sam0.worth + 5_000 + 100);
+  ok(drawn.pct! <= swept.pct! && Math.abs(drawn.pct! - drawnPct) < 1e-4, `Sam ${(drawn.pct! * 100).toFixed(2)}% after drawing $100 on Aave V3 against his savings: credit spreads the gain, never lifts it`);
+
+  // 7. a first buy, simulated (last: see the top of this file)
+  const [newcomer] = await (async () => {
+    const owners = [pad(privateKeyToAccount(keccak256(toHex("new"))).address), pad(MANAGER)];
+    const { result, request } = await client.simulateContract({ account: DEPLOYER, address: JAW_FACTORY, abi: factoryAbi, functionName: "createAccount", args: [owners, 0n] });
+    await client.waitForTransactionReceipt({ hash: await deployer.writeContract(request), timeout: RECEIPT_TIMEOUT });
+    await deposit(result, 1_000);
+    return [result];
+  })();
+  const buyBatch = await withBoardJoin(client, newcomer, await buy(newcomer, NVDA, 500));
+  const sim = await client.simulateCalls({ account: newcomer, calls: buyBatch.map(({ to, data }) => ({ to, data })) });
+  ok(
+    buyBatch.at(-1)!.to === board && sim.results.every((r) => r.status === "success"),
+    `a first buy ($500 of NVIDIA) carries join() at the end and simulates (${buyBatch.length} calls)`,
+  );
 
   console.log(`\nBoard e2e: ALL PASSED\n\nNEXT_PUBLIC_BASE_RPC_URL=${RPC}\nNEXT_PUBLIC_GOOSE_BOARD=${board}\npreview: /leaderboard?as=${sam}`);
 }

@@ -10,8 +10,10 @@ import { BOARD_TOKENS } from "./tokens";
  * The logs the board scores members from, read per 10,000-block chunk for every member at once (no indexer, D12):
  *   1. transfers of a tracked token from a member,
  *   2. transfers of a tracked token to a member,
- *   3. Aave V4 spoke events about a member's position, and Aave V3 savings withdrawn to a member,
- *   4. Aave V3 savings supplied for or withdrawn by a member, and JAW's paymaster's fee records for a member.
+ *   3. Aave V4 spoke events about a member's position, Aave V3 savings withdrawn to a member and Aave V3
+ *      liquidations of a member,
+ *   4. Aave V3 savings supplied for or withdrawn by a member, Aave V3 USDC credit drawn on or repaid for a member, and
+ *      JAW's paymaster's fee records for a member.
  * A chunk the chain has moved past never changes, so it is read once and kept (in memory and, when it can, this
  * browser's storage).
  */
@@ -19,9 +21,16 @@ import { BOARD_TOKENS } from "./tokens";
 /** JAW's ERC-20 paymaster (@jaw.id/core's ERC20_PAYMASTER_ADDRESS, Pimlico's singleton paymaster on Base). */
 export const JAW_PAYMASTER: Address = "0x888888888888Ec68A58AB8094Cc1AD20Ba3D2402";
 
+/**
+ * Aave V3's Pool events (aave-v3-origin IPool). Supply, Withdraw, Borrow and Repay checked against the pool's logs on
+ * Base 2026-10-15 (topics and data as decoded here); LiquidationCall is the same interface's.
+ */
 export const savingsEventsAbi = parseAbi([
   "event Supply(address indexed reserve, address user, address indexed onBehalfOf, uint256 amount, uint16 indexed referralCode)",
   "event Withdraw(address indexed reserve, address indexed user, address indexed to, uint256 amount)",
+  "event Borrow(address indexed reserve, address user, address indexed onBehalfOf, uint256 amount, uint8 interestRateMode, uint256 borrowRate, uint16 indexed referralCode)",
+  "event Repay(address indexed reserve, address indexed user, address indexed repayer, uint256 amount, bool useATokens)",
+  "event LiquidationCall(address indexed collateralAsset, address indexed debtAsset, address indexed user, uint256 debtToCover, uint256 liquidatedCollateralAmount, address liquidator, bool receiveAToken)",
 ]);
 /** Emitted in postOp; paymasterMode 1 is ERC-20 (the fee taken in `token`), measured on Base 2026-10-15. */
 export const paymasterEventsAbi = parseAbi([
@@ -33,6 +42,10 @@ const SPOKE_EVENT_NAMES = ["Supply", "Withdraw", "Borrow", "Repay", "Liquidation
 const SPOKE_EVENTS = SPOKE_EVENT_NAMES.map((name) => toEventSelector(getAbiItem({ abi: spokeAbi, name })));
 const SAVINGS_SUPPLY = toEventSelector(savingsEventsAbi[0]);
 const SAVINGS_WITHDRAW = toEventSelector(savingsEventsAbi[1]);
+const SAVINGS_BORROW = toEventSelector(savingsEventsAbi[2]);
+const SAVINGS_REPAY = toEventSelector(savingsEventsAbi[3]);
+const SAVINGS_LIQUIDATION = toEventSelector(savingsEventsAbi[4]);
+const SAVINGS_EVENTS = [SAVINGS_SUPPLY, SAVINGS_WITHDRAW, SAVINGS_BORROW, SAVINGS_REPAY, SAVINGS_LIQUIDATION];
 const SPONSORED = toEventSelector(paymasterEventsAbi[0]);
 const TOKEN_ADDRESSES = BOARD_TOKENS.map((t) => t.address);
 
@@ -92,14 +105,28 @@ export function decodeRecords(logs: readonly Log[]): BoardRecord[] {
         const amount = (a.suppliedAmount ?? a.withdrawnAmount ?? a.drawnAmount ?? a.totalAmountRepaid) as bigint;
         out.push({ kind: "spoke", ...base(l), event: e.eventName, reserveId: Number(a.reserveId as bigint), caller: a.caller as Address, user: a.user as Address, amount });
       }
-    } else if (isAddressEqual(l.address, GUARDIAN.AAVE_V3_POOL) && (t0 === SAVINGS_SUPPLY || t0 === SAVINGS_WITHDRAW)) {
+    } else if (isAddressEqual(l.address, GUARDIAN.AAVE_V3_POOL) && t0 && SAVINGS_EVENTS.includes(t0)) {
       const [e] = parseEventLogs({ abi: savingsEventsAbi, logs: [l], strict: true });
       if (!e) continue;
-      out.push(
-        e.eventName === "Supply"
-          ? { kind: "savings", ...base(l), event: "Supply", reserve: e.args.reserve, by: e.args.user, for: e.args.onBehalfOf, amount: e.args.amount }
-          : { kind: "savings", ...base(l), event: "Withdraw", reserve: e.args.reserve, by: e.args.user, for: e.args.to, amount: e.args.amount },
-      );
+      const b = base(l);
+      if (e.eventName === "Supply") out.push({ kind: "savings", ...b, event: "Supply", reserve: e.args.reserve, by: e.args.user, for: e.args.onBehalfOf, amount: e.args.amount });
+      else if (e.eventName === "Withdraw") out.push({ kind: "savings", ...b, event: "Withdraw", reserve: e.args.reserve, by: e.args.user, for: e.args.to, amount: e.args.amount });
+      else if (e.eventName === "Borrow") out.push({ kind: "savingsCredit", ...b, event: "Borrow", reserve: e.args.reserve, debtor: e.args.onBehalfOf, by: e.args.user, amount: e.args.amount });
+      else if (e.eventName === "Repay") {
+        out.push({ kind: "savingsCredit", ...b, event: "Repay", reserve: e.args.reserve, debtor: e.args.user, by: e.args.repayer, amount: e.args.amount, aTokens: e.args.useATokens });
+      } else {
+        out.push({
+          kind: "savingsCredit",
+          ...b,
+          event: "LiquidationCall",
+          reserve: e.args.debtAsset,
+          debtor: e.args.user,
+          by: e.args.liquidator,
+          amount: e.args.debtToCover,
+          collateral: e.args.collateralAsset,
+          aTokens: e.args.receiveAToken,
+        });
+      }
     } else if (isAddressEqual(l.address, JAW_PAYMASTER) && t0 === SPONSORED) {
       const [e] = parseEventLogs({ abi: paymasterEventsAbi, logs: [l], strict: true });
       if (e && e.args.paymasterMode === 1) out.push({ kind: "fee", ...base(l), user: e.args.user, token: e.args.token, amount: e.args.tokenAmountPaid });
@@ -114,17 +141,20 @@ async function readChunkLogs(client: Client, accounts: readonly Address[], c: Ch
   const parts = await Promise.all([
     getLogs(client, [...TOKEN_ADDRESSES], [TRANSFER, topics], c),
     getLogs(client, [...TOKEN_ADDRESSES], [TRANSFER, null, topics], c),
-    getLogs(client, [AAVE.SPOKE, GUARDIAN.AAVE_V3_POOL], [[...SPOKE_EVENTS, SAVINGS_WITHDRAW], null, null, topics], c),
-    getLogs(client, [GUARDIAN.AAVE_V3_POOL, JAW_PAYMASTER], [[SAVINGS_SUPPLY, SAVINGS_WITHDRAW, SPONSORED], null, topics], c),
+    // topic 3: the spoke's user; V3 Withdraw's `to`; V3 LiquidationCall's user
+    getLogs(client, [AAVE.SPOKE, GUARDIAN.AAVE_V3_POOL], [[...SPOKE_EVENTS, SAVINGS_WITHDRAW, SAVINGS_LIQUIDATION], null, null, topics], c),
+    // topic 2: V3 Supply's and Borrow's onBehalfOf; V3 Withdraw's and Repay's user; the paymaster's user
+    getLogs(client, [GUARDIAN.AAVE_V3_POOL, JAW_PAYMASTER], [[SAVINGS_SUPPLY, SAVINGS_WITHDRAW, SAVINGS_BORROW, SAVINGS_REPAY, SPONSORED], null, topics], c),
   ]);
   return parts.flat();
 }
 
 /* ── the chunk cache ───────────────────────────────────────────────── */
 
-type Stored = { v: 1; records: unknown[] };
+type Stored = { v: 2; records: unknown[] };
 const memory = new Map<string, BoardRecord[]>();
-const STORAGE_PREFIX = "gg.board.v1:";
+// v2: chunks hold Aave V3 credit events too, so v1's are read again.
+const STORAGE_PREFIX = "gg.board.v2:";
 
 // Records hold bigints; storage holds JSON.
 const toJson = (r: BoardRecord) => JSON.parse(JSON.stringify(r, (_k, v) => (typeof v === "bigint" ? `${v}n` : v)));
@@ -147,7 +177,7 @@ function cached(key: string): BoardRecord[] | undefined {
     const raw = globalThis.localStorage?.getItem(STORAGE_PREFIX + key);
     if (!raw) return undefined;
     const stored = JSON.parse(raw) as Stored;
-    if (stored.v !== 1) return undefined;
+    if (stored.v !== 2) return undefined;
     const records = stored.records.map(fromJson);
     memory.set(key, records);
     return records;
@@ -159,7 +189,7 @@ function cached(key: string): BoardRecord[] | undefined {
 function keep(key: string, records: BoardRecord[]) {
   memory.set(key, records);
   try {
-    globalThis.localStorage?.setItem(STORAGE_PREFIX + key, JSON.stringify({ v: 1, records: records.map(toJson) } satisfies Stored));
+    globalThis.localStorage?.setItem(STORAGE_PREFIX + key, JSON.stringify({ v: 2, records: records.map(toJson) } satisfies Stored));
   } catch {
     /* storage full or blocked: memory still has it */
   }

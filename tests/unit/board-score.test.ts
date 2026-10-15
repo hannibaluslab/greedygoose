@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { Address, Hex } from "viem";
-import { memberFlows, peakCredit, type BoardRecord, type FlowRules, type Move } from "@/lib/board/flows";
+import { flowTotals, memberFlows, peakCredit, type Amount, type BoardRecord, type FlowRules } from "@/lib/board/flows";
 import { MIN_PUT_IN_USD, rankRows, returnSinceJoining, type Flows } from "@/lib/board/score";
 import { stockUsd6 } from "@/lib/board/worth";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { tokenInfo } from "@/lib/board/tokens";
+import { UNISWAP } from "@/lib/swap/venues";
 
 /*
  * The leaderboard's number, return since joining, run through the same steps the board takes (lib/board/read.ts):
@@ -22,12 +23,11 @@ const TREASURY = "0x0000000000000000000000000000000000000fee" as Address; // the
 const NVDA = EQUITIES[5];
 const JOIN = 100n;
 
-const rules: FlowRules = {
-  usdc: USDC.address,
-  ausdc: GUARDIAN.AUSDC,
-  token: tokenInfo,
-  inside: (a) => [POOL, HUB].some((b) => b.toLowerCase() === a.toLowerCase()),
-};
+const same = (list: Address[]) => (a: Address) => list.some((b) => b.toLowerCase() === a.toLowerCase());
+/** Each pool is its own venue; PSM3 and its pocket are one. */
+const venues = (pools: Address[], psm: Address[] = []) => (a: Address) =>
+  pools.some((b) => b.toLowerCase() === a.toLowerCase()) ? a.toLowerCase() : psm.some((b) => b.toLowerCase() === a.toLowerCase()) ? "psm3" : undefined;
+const rules: FlowRules = { usdc: USDC.address, ausdc: GUARDIAN.AUSDC, token: tokenInfo, venue: venues([POOL]), aave: same([HUB]) };
 
 const usd6 = (usd: number) => BigInt(Math.round(usd * 1e6));
 const priceRaw = (usd: number) => BigInt(Math.round(usd * 1e8));
@@ -81,15 +81,56 @@ class Ledger {
     this.add(this.usd, to, usd6(usd));
     this.transfer(this.tx(), USDC.address, from, to, usd6(usd));
   }
-  /** Buy NVIDIA at the current price through a pool, paying a USDC network fee to the paymaster's treasury. */
-  buy(a: Address, usd: number, feeUsd = 0) {
+  /**
+   * Buy NVIDIA through a pool, paying a USDC network fee to the paymaster's treasury. The pool's price is Aave's unless
+   * `poolPrice` says otherwise (a thin pool, or a weekend while Aave's price is held).
+   */
+  buy(a: Address, usd: number, feeUsd = 0, poolPrice = this.price) {
     const tx = this.tx();
-    const n = (usd6(usd) * 10n ** 10n) / this.price;
+    const n = (usd6(usd) * 10n ** 10n) / poolPrice;
     this.add(this.usd, a, -usd6(usd));
     this.add(this.stock, a, n);
     this.transfer(tx, NVDA.address, POOL, a, n);
     this.transfer(tx, USDC.address, a, POOL, usd6(usd));
     if (feeUsd) this.fee(a, tx, feeUsd);
+  }
+  /** Someone else's money reaches `a` through a place the board trades with: a pool's swap paid to `a`, or a router's sweep. */
+  routed(a: Address, usd: number, via: "pool" | "router") {
+    const tx = this.tx();
+    if (via === "pool") {
+      const n = (usd6(usd) * 10n ** 10n) / this.price;
+      this.add(this.stock, a, n);
+      this.transfer(tx, USDC.address, OUTSIDE, POOL, usd6(usd));
+      this.transfer(tx, NVDA.address, POOL, a, n);
+    } else {
+      this.add(this.usd, a, usd6(usd));
+      this.transfer(tx, USDC.address, OUTSIDE, UNISWAP.SWAP_ROUTER_02, usd6(usd));
+      this.transfer(tx, USDC.address, UNISWAP.SWAP_ROUTER_02, a, usd6(usd));
+    }
+  }
+  /** Cash into savings on Aave V3 (net worth unchanged: savings are cash). */
+  save(a: Address, usd: number) {
+    const tx = this.tx();
+    this.transfer(tx, USDC.address, a, GUARDIAN.AUSDC, usd6(usd));
+    this.transfer(tx, GUARDIAN.AUSDC, "0x0000000000000000000000000000000000000000", a, usd6(usd));
+    this.records.push({ kind: "savings", ...this.base(tx), event: "Supply", reserve: USDC.address, by: a, for: a, amount: usd6(usd) });
+  }
+  /** Savings supplied by `from` for `to` (Aave V3's onBehalfOf): a payment between members. */
+  saveFor(from: Address, to: Address, usd: number) {
+    const tx = this.tx();
+    this.add(this.usd, from, -usd6(usd));
+    this.add(this.usd, to, usd6(usd));
+    this.transfer(tx, USDC.address, from, GUARDIAN.AUSDC, usd6(usd));
+    this.transfer(tx, GUARDIAN.AUSDC, "0x0000000000000000000000000000000000000000", to, usd6(usd));
+    this.records.push({ kind: "savings", ...this.base(tx), event: "Supply", reserve: USDC.address, by: from, for: to, amount: usd6(usd) });
+  }
+  /** USDC credit drawn on Aave V3 against savings, in another app (Aave's own): it lands in the wallet as cash. */
+  creditV3(a: Address, usd: number) {
+    const tx = this.tx();
+    this.add(this.owed, a, usd6(usd));
+    this.add(this.usd, a, usd6(usd));
+    this.transfer(tx, USDC.address, GUARDIAN.AUSDC, a, usd6(usd));
+    this.records.push({ kind: "savingsCredit", ...this.base(tx), event: "Borrow", reserve: USDC.address, debtor: a, by: a, amount: usd6(usd) });
   }
   fee(a: Address, tx: Hex, feeUsd: number) {
     this.add(this.usd, a, -usd6(feeUsd));
@@ -122,17 +163,17 @@ class Ledger {
     this.records.push({ kind: "spoke", ...this.base(tx), event: "LiquidationCall", reserveId: USDC.reserveId, caller: OUTSIDE, user: a, amount: usd6(debtUsd) });
   }
 
-  /** What the board computes for `a`, given what `a` held at joining. */
+  /** What the board computes for `a`, given what `a` held at joining, the way lib/board/read.ts does. */
   flows(a: Address, atJoin: { worth: number; owed: bigint }): Flows {
-    const { moves, credit } = memberFlows(a, JOIN, this.records, rules);
-    const value = (m: Move) => ("usd6" in m ? m.usd6 : stockUsd6(m.stock.raw, this.priceAt(m.block)));
-    const sum = (dir: "in" | "out") => Number(moves.filter((m) => m.dir === dir).reduce((s, m) => s + value(m), 0n)) / 1e6;
+    const f = memberFlows(a, JOIN, this.records, rules);
+    const value = (m: Amount, block: bigint) => ("usd6" in m ? m.usd6 : stockUsd6(m.stock.raw, this.priceAt(block)));
+    const { putIn, takenOut } = flowTotals(f, value);
     return {
       worthAtJoin: atJoin.worth,
       worthNow: this.worth(a),
-      putIn: sum("in"),
-      takenOut: sum("out"),
-      peakCredit: Number(peakCredit(atJoin.owed, credit, this.get(this.owed, a))) / 1e6,
+      putIn: Number(putIn) / 1e6,
+      takenOut: Number(takenOut) / 1e6,
+      peakCredit: Number(peakCredit(atJoin.owed, f.credit, this.get(this.owed, a))) / 1e6,
     };
   }
   /** Holdings at the end of the join block: what a member starts from. */
@@ -264,6 +305,67 @@ describe("returnSinceJoining", () => {
     expect(sAfter.gain).toBeCloseTo(sBefore.gain, 6);
     expect(kAfter.gain).toBeCloseTo(kBefore.gain, 6);
     expect(sAfter.gain + kAfter.gain).toBeCloseTo(sBefore.gain + kBefore.gain, 6);
+  });
+
+  it("money someone else routes through a pool or a router to the member is money put in, never a gain", () => {
+    for (const via of ["pool", "router"] as const) {
+      const l = new Ledger();
+      l.deposit(SAM, 100);
+      const start = l.snapshot(SAM);
+      l.next().buy(SAM, 100);
+      l.next(priceRaw(110));
+      const before = returnSinceJoining(l.flows(SAM, start));
+      l.next().routed(SAM, 10_000, via);
+      const after = returnSinceJoining(l.flows(SAM, start));
+      expect(after.gain).toBeCloseTo(before.gain, 6);
+      expect(after.pct!).toBeLessThanOrEqual(before.pct! + 1e-12);
+    }
+  });
+
+  it("values a trade's shares at Aave's price: a pool under it shows as a gain until Aave's price follows", () => {
+    const l = new Ledger();
+    l.deposit(SAM, 1_000);
+    const start = l.snapshot(SAM);
+    // The pool sells at $90 while Aave's price is $100 (a weekend's held price, or a thin pool): 11.1 shares at $100.
+    l.next().buy(SAM, 1_000, 0, priceRaw(90));
+    expect(returnSinceJoining(l.flows(SAM, start)).gain).toBeCloseTo(111.11, 1);
+    // When Aave's price follows the pool down, the shares are worth what was paid: no gain, and no loss either.
+    l.next(priceRaw(90));
+    expect(returnSinceJoining(l.flows(SAM, start)).gain).toBeCloseTo(0, 4);
+  });
+
+  it("credit drawn on Aave V3 against savings never lifts it, kept as cash or spent on stocks", () => {
+    for (const move of [0.2, 0, -0.2]) {
+      const plain = new Ledger();
+      const drawn = new Ledger();
+      for (const l of [plain, drawn]) {
+        l.deposit(SAM, 1_000);
+        l.save(SAM, 500);
+      }
+      const [a, b] = [plain.snapshot(SAM), drawn.snapshot(SAM)];
+      plain.next().buy(SAM, 500);
+      drawn.next().buy(SAM, 500);
+      drawn.creditV3(SAM, 300); // kept as cash
+      drawn.creditV3(SAM, 200);
+      drawn.buy(SAM, 200); // spent on more of the stock
+      const p = priceRaw(100 * (1 + move));
+      plain.next(p);
+      drawn.next(p);
+      const without = pct(plain.flows(SAM, a));
+      const withCredit = pct(drawn.flows(SAM, b));
+      expect(withCredit).toBeLessThanOrEqual(without + 1e-12);
+      expect(drawn.flows(SAM, b).peakCredit).toBeCloseTo(500, 6);
+    }
+  });
+
+  it("savings one member supplies for another net to zero, like a payment", () => {
+    const l = new Ledger();
+    l.deposit(SAM, 1_000);
+    l.deposit(KIT, 1_000);
+    const [s, k] = [l.snapshot(SAM), l.snapshot(KIT)];
+    l.next().saveFor(SAM, KIT, 500);
+    expect(returnSinceJoining(l.flows(SAM, s)).gain).toBeCloseTo(0, 6);
+    expect(returnSinceJoining(l.flows(KIT, k)).gain).toBeCloseTo(0, 6);
   });
 
   it(`isn't ranked under $${MIN_PUT_IN_USD} of own money`, () => {

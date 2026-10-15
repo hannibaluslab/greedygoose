@@ -20,3 +20,10 @@ export const BOARD_TOKENS: readonly { address: Address; info: TokenInfo }[] = [
 ];
 
 export const tokenInfo = (address: Address): TokenInfo | undefined => BOARD_TOKENS.find((t) => isAddressEqual(t.address, address))?.info;
+
+/**
+ * Aave V3's variable debt token for USDC on Base ("variableDebtBasUSDC", 6 decimals, underlying USDC): the pool's
+ * `getReserveData(USDC).variableDebtTokenAddress`, read 2026-10-15. Its balance is the USDC credit an account owes on
+ * Aave V3, which a JAW account can draw against its savings in another app (tests/onchain/board.test.ts re-checks it).
+ */
+export const AAVE_V3_USDC_DEBT: Address = "0x59dca05b6c26dbd64b5381374aAaC5CD05644C28";

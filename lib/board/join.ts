@@ -20,12 +20,21 @@ export function joinCall(board: Address): Call {
 export async function withBoardJoin(client: Client, user: Address, batch: Call[]): Promise<Call[]> {
   const board = GOOSE_BOARD;
   if (!board) return batch;
+  // Once an account has joined it stays joined (joinedAt never goes back to 0), so it is read once a session.
+  const key = `${board.toLowerCase()}:${user.toLowerCase()}`;
+  if (joined.has(key)) return batch;
   let joinedAt: bigint;
   try {
     joinedAt = await readContract(client, { address: board, abi: gooseBoardAbi, functionName: "joinedAt", args: [user] });
   } catch {
     return batch;
   }
-  if (joinedAt !== 0n) return batch;
+  if (joinedAt !== 0n) {
+    joined.add(key);
+    return batch;
+  }
   return [...batch, ...assertAllowed(user, [joinCall(board)])];
 }
+
+/** Accounts read as joined this session (board:account). */
+const joined = new Set<string>();

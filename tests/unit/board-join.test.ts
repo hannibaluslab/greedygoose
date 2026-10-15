@@ -15,15 +15,19 @@ import { buildRepayCalls } from "@/lib/aave/tx";
 
 const user = "0x000000000000000000000000000000000000a11c" as Address;
 
-/** A client whose eth_call answers GooseBoard.joinedAt(user) with `joinedAt`, or fails. */
-const clientWith = (joinedAt: bigint | "fail") =>
-  ({
+/** A client whose eth_call answers GooseBoard.joinedAt(user) with `joinedAt`, or fails; `reads` counts the calls. */
+const clientWith = (joinedAt: bigint | "fail") => {
+  const c = {
+    reads: 0,
     request: async ({ method }: { method: string }) => {
       if (method !== "eth_call") throw new Error(method);
+      c.reads += 1;
       if (joinedAt === "fail") throw new Error("RPC down");
       return `0x${joinedAt.toString(16).padStart(64, "0")}`;
     },
-  }) as unknown as Client;
+  };
+  return c as typeof c & Client;
+};
 
 describe("join on the first move", () => {
   const move = buildRepayCalls({ user, amountRaw: 1_000_000n, all: false });
@@ -34,12 +38,21 @@ describe("join on the first move", () => {
     expect(batch.at(-1)!.data).toBe(toFunctionSelector("join()"));
   });
 
-  it("leaves later batches alone, an account that left included", async () => {
-    expect(await withBoardJoin(clientWith(52_000_000n), user, move)).toBe(move);
-  });
-
   it("goes ahead without it when the board can't be read", async () => {
     expect(await withBoardJoin(clientWith("fail"), user, move)).toBe(move);
+  });
+
+  it("leaves later batches alone, an account that left included, and reads a joined account once a session", async () => {
+    const joined = clientWith(52_000_000n);
+    expect(await withBoardJoin(joined, user, move)).toBe(move);
+    expect(await withBoardJoin(joined, user, move)).toBe(move);
+    expect(joined.reads).toBe(1);
+    // Not joined yet is read again every time: the next move may be the first.
+    const fresh = clientWith(0n);
+    const other = "0x000000000000000000000000000000000000b0b0" as Address;
+    await withBoardJoin(fresh, other, buildRepayCalls({ user: other, amountRaw: 1_000_000n, all: false }));
+    await withBoardJoin(fresh, other, buildRepayCalls({ user: other, amountRaw: 1_000_000n, all: false }));
+    expect(fresh.reads).toBe(2);
   });
 });
 
