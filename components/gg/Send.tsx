@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 import { isAddressEqual, type Address } from "viem";
 import { useAccount } from "wagmi";
@@ -8,6 +7,7 @@ import { AmountBadge, AmountField } from "./AmountField";
 import { AssetPicker, assetMark, type PickerRow } from "./AssetPicker";
 import { Button } from "./Button";
 import { Initial } from "./Initial";
+import { useMoneySheets } from "./MoneySheets";
 import { TabHeader } from "./Screen";
 import { StockAvatar } from "./StockAvatar";
 import { NETWORK_FEE_ROW, Summary } from "./Summary";
@@ -64,6 +64,7 @@ function useLocalActivity(user: Address): LocalActivity[] {
 export function SendScreen({ user, data }: { user: Address; data: PositionData }) {
   const { isConnected } = useAccount();
   const fee = useFeeSupport();
+  const money = useMoneySheets();
   const to = useRecipient();
   const [form, setForm] = useState<SendForm>(() => ({ asset: defaultAsset(data), amount: "", all: false }));
   // Opened with nothing to send: the asset appears once there is something (money arrives while it's open).
@@ -154,7 +155,7 @@ export function SendScreen({ user, data }: { user: Address; data: PositionData }
         <div className="flex flex-col items-start gap-3 pt-1">
           <h2 className="m-0 text-[17px] font-semibold tracking-[-0.01em]">{SEND_COPY.emptyTitle}</h2>
           <p className="m-0 text-[14px] leading-[1.4] text-ink-mid">{SEND_COPY.emptyLine}</p>
-          <Button variant="dark" href="/receive?from=send" className="mt-1 w-full">{SEND_COPY.topUp}</Button>
+          <Button variant="dark" onClick={money.topUp} className="mt-1 w-full">{SEND_COPY.topUp}</Button>
         </div>
       ) : (
         <>
@@ -231,19 +232,22 @@ export function SendScreen({ user, data }: { user: Address; data: PositionData }
   );
 }
 
-/** The tab's title, with Receive (the address and its QR) one tap away; Back there returns here. */
+/** The tab's title, with Back to Home and Receive (the address and its QR) one tap away, as the Top up sheet over Send. */
 export function SendHeader() {
+  const money = useMoneySheets();
   return (
     <TabHeader
       title={SEND_COPY.title}
+      back="/home"
       action={
-        <Link
-          href="/receive?from=send"
-          className="flex h-9 items-center gap-1.5 rounded-[18px] bg-chip pl-2.5 pr-3.5 text-[14px] font-semibold text-ink no-underline transition active:scale-[0.97]"
+        <button
+          type="button"
+          onClick={money.topUp}
+          className="flex h-9 items-center gap-1.5 rounded-[18px] bg-chip pl-2.5 pr-3.5 text-[14px] font-semibold text-ink transition active:scale-[0.97]"
         >
           <ReceiveIcon size={16} />
           {SEND_COPY.receive}
-        </Link>
+        </button>
       }
     />
   );

@@ -5,14 +5,15 @@ import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { ALL_RESERVES, EQUITIES, USDC, findByAddress } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 import { GUARDIAN } from "@/lib/guardian/config";
+import { savingsEventsAbi } from "@/lib/board/logs";
 
-export type ActivityKind = "supply" | "withdraw" | "borrow" | "repay" | "buy" | "sell" | "receive" | "send" | "convert";
+export type ActivityKind = "supply" | "withdraw" | "borrow" | "repay" | "buy" | "sell" | "receive" | "send" | "convert" | "earn";
 
 export type ActivityItem = {
   kind: ActivityKind;
   /** Registry symbol, e.g. NVDAc or USDC. */
   symbol: string;
-  /** Human amount in token units (raw / 10^decimals; shares use raw units). */
+  /** Human amount in token units (raw / 10^decimals; shares use raw units). For `earn`, the credit that went in to earn. */
   amount: number;
   /** For buys: USDC paid. */
   paidUsd?: number;
@@ -79,11 +80,15 @@ function feeTransfers(logs: readonly Log[], user: `0x${string}`): Set<Log> {
  * accounts' operations, so every event is filtered by the user's address. USDC moving between the
  * wallet and savings stays inside the cash (D15), and the cash is one pot on screen (D20): it is no
  * move of its own, and a buy or a repay it paid for reads as paid from cash. JAW's network fee isn't
- * a move either (feeTransfers): it is no "Sent", and a buy's price leaves it out.
+ * a move either (feeTransfers): it is no "Sent", and a buy's price leaves it out. Credit the user's own batch put
+ * where the cash earns (Earn with stocks: a USDC savings supply for the user, by the user, beside the credit) is one
+ * `earn` item, first, in place of that much credit: money that came to the cash, earning, not money that left.
  */
 export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[] {
   const items: ActivityItem[] = [];
   const fees = feeTransfers(logs, user);
+  const savedRaw = savedByUser(logs, user);
+  let creditRaw = 0n;
 
   const spokeLogs = parseEventLogs({
     abi: spokeAbi,
@@ -98,7 +103,20 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
     if (!r) continue;
     const raw = firstBigint(ev.args as Record<string, unknown>, ["suppliedAmount", "withdrawnAmount", "drawnAmount", "totalAmountRepaid", "amount"]);
     const kind = ({ Supply: "supply", Withdraw: "withdraw", Borrow: "borrow", Repay: "repay" } as const)[ev.eventName as "Supply" | "Withdraw" | "Borrow" | "Repay"];
+    if (kind === "borrow" && r.symbol === USDC.symbol) creditRaw += raw;
     items.push({ kind, symbol: r.symbol, amount: units(raw, r.decimals) });
+  }
+  // Earn with stocks: the credit that went in to earn is one move, first; any credit beyond it stays credit.
+  if (creditRaw > 0n && savedRaw > 0n) {
+    const earnRaw = creditRaw < savedRaw ? creditRaw : savedRaw;
+    const rest = creditRaw - earnRaw;
+    const others = items.filter((i) => !(i.kind === "borrow" && i.symbol === USDC.symbol));
+    items.length = 0;
+    items.push(
+      { kind: "earn", symbol: USDC.symbol, amount: units(earnRaw, USDC.decimals) },
+      ...others,
+      ...(rest > 0n ? [{ kind: "borrow" as const, symbol: USDC.symbol, amount: units(rest, USDC.decimals) }] : []),
+    );
   }
 
   const tracked = [...EQUITIES.map((e) => e.address), USDC.address];
@@ -172,6 +190,23 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
     for (const v of usdcIn.slice(converted.length)) items.push({ kind: "receive", symbol: USDC.symbol, amount: units(v, USDC.decimals) });
   }
   return items;
+}
+
+/**
+ * USDC the user put into savings for itself in this transaction: Aave V3's Supply of USDC with the user as both the
+ * caller and the account it's for (the pool's own event, `savingsEventsAbi` as measured for the board).
+ */
+function savedByUser(logs: readonly Log[], user: `0x${string}`): bigint {
+  return parseEventLogs({
+    abi: savingsEventsAbi,
+    logs: logs.filter((l) => isAddressEqual(l.address, GUARDIAN.AAVE_V3_POOL)),
+    eventName: "Supply",
+    strict: false,
+  }).reduce((sum, e) => {
+    const a = e.args as { reserve?: `0x${string}`; user?: `0x${string}`; onBehalfOf?: `0x${string}`; amount?: bigint };
+    const mine = a.reserve && isAddressEqual(a.reserve, USDC.address) && a.user && isAddressEqual(a.user, user) && a.onBehalfOf && isAddressEqual(a.onBehalfOf, user);
+    return mine && a.amount !== undefined ? sum + a.amount : sum;
+  }, 0n);
 }
 
 function firstBigint(args: Record<string, unknown>, keys: string[]): bigint {

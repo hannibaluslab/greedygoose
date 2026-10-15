@@ -29,6 +29,9 @@ export function describeActivity(i: ActivityItem): { title: string; amount: stri
       return { title: `Freed up ${name}`, amount: r?.kind === "equity" ? shares : formatUsd(i.amount), sign: "" };
     case "borrow":
       return { title: "Used credit", amount: formatUsd(i.amount), sign: "+" };
+    case "earn":
+      // One move (lib/activity/decode.ts): the credit that came to the cash and went in to earn, as the Cash sheet says.
+      return { title: "Earn with stocks", amount: `${formatUsd(i.amount)} from credit, earning`, sign: "+" };
     case "repay":
       return { title: "Repaid credit", amount: formatUsd(i.amount), sign: "−" };
     case "receive":
@@ -142,7 +145,9 @@ function Move({ row, last, open, onToggle }: { row: ActivityRow; last: boolean; 
   const main = row.items[0];
   const d = main ? describeActivity(main) : null;
   const status = row.status === "pending" ? "Confirming" : row.status === "failed" ? "Failed" : null;
-  const line = [d && `${d.sign}${d.amount}`, row.items.length > 1 && `${row.items.length - 1} more`, status].filter(Boolean).join(" · ");
+  // Earn with stocks reads as one move: the backing it put in use is in its details, not "1 more".
+  const more = main?.kind !== "earn" && row.items.length > 1;
+  const line = [d && `${d.sign}${d.amount}`, more && `${row.items.length - 1} more`, status].filter(Boolean).join(" · ");
 
   return (
     <li className={`py-2 ${last ? "" : "border-b border-hairline"}`}>

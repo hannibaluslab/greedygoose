@@ -4,6 +4,7 @@ import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { isAddress } from "viem";
 import { useAccount, useSwitchChain } from "wagmi";
+import { MoneySheets } from "@/components/gg/MoneySheets";
 import { CHAIN } from "@/lib/chain";
 
 const noopSubscribe = () => () => {};
@@ -29,7 +30,10 @@ function devPreviewAddress(): `0x${string}` | null {
   }
 }
 
-/** Gate for signed-in screens: handles disconnected, reconnecting and wrong-chain states. */
+/**
+ * Gate for signed-in screens: handles disconnected, reconnecting and wrong-chain states. A signed-in screen gets the
+ * Top up and Repay sheets (MoneySheets).
+ */
 export function RequireAccount({ children }: { children: (address: `0x${string}`) => ReactNode }) {
   const preview = useSyncExternalStore(noopSubscribe, devPreviewAddress, () => null);
   // Wallet state only exists in the browser; render nothing until hydrated so server and client match.
@@ -44,7 +48,7 @@ export function RequireAccount({ children }: { children: (address: `0x${string}`
   }, [status, router]);
 
   if (!hydrated) return <ShellSkeleton />;
-  if (preview) return <div className="gg-page">{children(preview)}</div>;
+  if (preview) return <SignedIn address={preview}>{children}</SignedIn>;
 
   if (status === "connecting" || status === "reconnecting") return <ShellSkeleton label="Signing you in…" />;
   if (!address) return <ShellSkeleton />;
@@ -63,7 +67,16 @@ export function RequireAccount({ children }: { children: (address: `0x${string}`
       </div>
     );
   }
-  return <div className="gg-page">{children(address)}</div>;
+  return <SignedIn address={address}>{children}</SignedIn>;
+}
+
+/** A signed-in page, with Top up and Repay ready to open over it from anywhere on it (MoneySheets). */
+function SignedIn({ address, children }: { address: `0x${string}`; children: (address: `0x${string}`) => ReactNode }) {
+  return (
+    <div className="gg-page">
+      <MoneySheets address={address}>{children(address)}</MoneySheets>
+    </div>
+  );
 }
 
 /** Shown while the wallet state loads, so screens never flash blank. */

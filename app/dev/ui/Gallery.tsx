@@ -135,14 +135,14 @@ export function Gallery() {
 
       <Section title="Cash and Credit cards" kit="cards">
         <div className="grid grid-cols-2 gap-2.5">
-          <CashCard cashUsd={CASH} earning note="2 in Quarantine" onClick={noop} />
+          <CashCard cashUsd={CASH} earning="Always earning" note="2 in Quarantine" onClick={noop} />
           <CreditCard debtUsd={600} status="safe" monthlyCostUsd={3} availableUsd={1100} onClick={noop} />
         </div>
       </Section>
 
       <Section title="Credit card · nothing owed (F2-1)" kit="credit-card-none">
         <div className="grid grid-cols-2 gap-2.5">
-          <CashCard cashUsd={40} earning onClick={noop} />
+          <CashCard cashUsd={40} earning="Always earning" onClick={noop} />
           <CreditCard debtUsd={0} status={homeStatus("none")} monthlyCostUsd={0} availableUsd={1700} onClick={noop} />
         </div>
       </Section>

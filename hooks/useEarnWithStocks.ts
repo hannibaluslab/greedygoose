@@ -1,88 +1,41 @@
 "use client";
 
 import { useMemo } from "react";
-import { isAddressEqual, zeroAddress } from "viem";
-import { usePublicClient, useReadContracts } from "wagmi";
+import { usePublicClient } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
 import { useAgents } from "@/hooks/useAgents";
 import { useDebounced } from "@/hooks/useBuyQuote";
-import { useNowSec } from "@/hooks/useNowSec";
-import { useCollateralFactors, type PositionData } from "@/hooks/usePosition";
+import { useCollateralFactorsRead, type PositionData } from "@/hooks/usePosition";
 import { useSigningCash } from "@/hooks/useSigningCash";
 import { TxStop, txKey, useTx, type TxPlan } from "@/hooks/useTx";
 import { AAVE } from "@/lib/aave/addresses";
 import { hubAbi } from "@/lib/aave/abis/IHub";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { aprToApy, borrowApr } from "@/lib/aave/math";
-import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
-import { GOOSE_EXECUTOR } from "@/lib/agents/config";
-import type { AgentStatus } from "@/lib/agents/status";
+import type { Cash } from "@/lib/cash";
 import { CHAIN_ID } from "@/lib/chain";
 import { backingOptions, type Backing } from "@/lib/creditBuy";
-import { buildEarnCalls, earnActivity, earnOffer, earnStop, type EarnOpen, type EarnQuote, type SaveRoomInput } from "@/lib/earnWithStocks";
+import { buildEarnCalls, earnActivity, earnOffer, earnStop, type EarnOpen, type EarnQuote } from "@/lib/earnWithStocks";
 import { USDC } from "@/lib/tokens/registry";
 
 /**
- * What Save can move today (lib/earnWithStocks.ts saveRoomRaw): what's left of the Save grant's daily limit
- * (useAgents' `left`, the manager's period), and the executor's own numbers and count, read while the sheet is open.
- * `room` is null until it's all read, or while Save isn't on (there's no period to read); `unread` once a read failed.
+ * Whether the Cash sheet offers Earn with stocks (earnOffer), on live data only: the cash rate and the credit's (each
+ * an APY), the stocks that can back credit (paused and frozen ones left out), the position and the cash. No agent is
+ * needed: the batch puts the credit where the cash earns itself. Also Protect's state for the risk line.
  */
-function useSaveRoom(
-  account: `0x${string}`,
-  walletRaw: bigint,
-  enabled: boolean,
-  agents: Pick<ReturnType<typeof useAgents>, "left" | "leftUnreadable">,
-): { room: SaveRoomInput | null; unread: boolean } {
-  const at = GOOSE_EXECUTOR ?? zeroAddress;
-  const reads = useReadContracts({
-    contracts: [
-      { address: at, abi: gooseExecutorAbi, functionName: "accounts", args: [account], chainId: CHAIN_ID },
-      { address: at, abi: gooseExecutorAbi, functionName: "amounts", chainId: CHAIN_ID },
-    ],
-    allowFailure: false,
-    query: { enabled: enabled && !!GOOSE_EXECUTOR, refetchInterval: 20_000 },
-  });
-  const nowSec = useNowSec();
-  const leftRaw = agents.left.save?.find((s) => isAddressEqual(s.token as `0x${string}`, USDC.address))?.leftRaw;
-  const unread = enabled && ((reads.isError && !reads.data) || agents.leftUnreadable);
-  if (!reads.data || leftRaw === undefined || !nowSec) return { room: null, unread };
-  const [acc, amounts] = reads.data;
-  return {
-    room: {
-      leftRaw,
-      walletRaw,
-      keepBackRaw: amounts[2],
-      minSaveRaw: amounts[1],
-      savesDay: acc[4],
-      savesToday: acc[5],
-      maxSavesPerDay: amounts[4],
-      nowSec,
-    },
-    unread,
-  };
-}
-
-/**
- * Whether the Cash sheet offers Earn with stocks (earnOffer), on live data only: earning's state, the cash rate and
- * the credit's (each an APY), the stocks that can back credit (paused and frozen ones left out), the position, the
- * cash and what Save can move today. Also Protect's state for the risk line, and the executor's CAP_MAX.
- */
-export function useEarnOffer(account: `0x${string}`, data: PositionData, save: AgentStatus, open: boolean) {
+export function useEarnOffer(account: `0x${string}`, data: PositionData, open: boolean) {
   const agents = useAgents(account);
-  const cfs = useCollateralFactors(open ? data.holdings : undefined);
+  const { cfs, failed } = useCollateralFactorsRead(open ? data.holdings : undefined);
   const options = useMemo(() => (cfs ? backingOptions(data.holdings, cfs) : undefined), [cfs, data.holdings]);
-  const { room, unread } = useSaveRoom(account, data.cash.walletRaw, open && save === "on", agents);
   const offer = earnOffer({
-    save,
     cashApy: aprToApy(data.savingsApr),
     creditApy: aprToApy(data.apr),
     position: data,
     options,
     cash: data.cash,
-    room,
-    unread,
+    unread: failed,
   });
-  return { offer, options: options ?? [], protect: agents.status.protect, sell: agents.status.sell, capMaxRaw: agents.capMaxRaw };
+  return { offer, options: options ?? [], protect: agents.status.protect, sell: agents.status.sell };
 }
 
 /**
@@ -91,7 +44,7 @@ export function useEarnOffer(account: `0x${string}`, data: PositionData, save: A
  * `apyAfter` is null while it's read; if the read fails it's today's rate (the batch is simulated again before JAW's
  * sheet).
  */
-export function useEarnRates(p: { user: `0x${string}`; backing: readonly Backing[]; creditRaw: bigint; apyNow: number; enabled?: boolean }) {
+export function useEarnRates(p: { user: `0x${string}`; backing: readonly Backing[]; creditRaw: bigint; cash: Cash; apyNow: number; enabled?: boolean }) {
   const client = usePublicClient({ chainId: CHAIN_ID });
   const key = `${p.creditRaw}|${p.backing.map((b) => `${b.stock.symbol}:${b.raw}`).join(",")}`;
   const settled = useDebounced(key, 400);
@@ -101,7 +54,7 @@ export function useEarnRates(p: { user: `0x${string}`; backing: readonly Backing
     staleTime: 15_000,
     retry: false,
     queryFn: async () => {
-      const calls = buildEarnCalls({ user: p.user, backing: p.backing, creditRaw: p.creditRaw });
+      const calls = buildEarnCalls({ user: p.user, backing: p.backing, creditRaw: p.creditRaw, cash: p.cash });
       const r = await client!.simulateCalls({
         account: p.user,
         calls: [
@@ -127,8 +80,9 @@ export type EarnInput = { user: `0x${string}`; quote: EarnQuote; offer: EarnOpen
 
 /**
  * What Earn with stocks signs (useTx): the screen's stops are checked again (earnStop), the cash is read again for the
- * network fee, then the batch is built and checked (assertEarn). Keyed by the credit, what goes in use, the status it
- * ends in, the risk tick and the stop, so another amount or plan is another batch.
+ * network fee (from savings first when the wallet can't pay it), then the batch is built and checked (assertEarn): the
+ * backing, the credit, and exactly that credit put where the cash earns. Keyed by the credit, what goes in use, the
+ * status it ends in, the risk tick and the stop, so another amount or plan is another batch.
  */
 export const earnPlan = (p: EarnInput, cashToSign: ReturnType<typeof useSigningCash>): TxPlan => ({
   key: txKey(
@@ -145,8 +99,8 @@ export const earnPlan = (p: EarnInput, cashToSign: ReturnType<typeof useSigningC
   calls: async () => {
     const stop = earnStop(p.quote, p.offer, p.confirmedRisk);
     if (stop) throw new TxStop(stop);
-    await cashToSign(p.user, 0n);
-    return buildEarnCalls({ user: p.user, backing: p.quote.plan.backing, creditRaw: p.quote.plan.creditRaw });
+    const cash = await cashToSign(p.user, 0n);
+    return buildEarnCalls({ user: p.user, backing: p.quote.plan.backing, creditRaw: p.quote.plan.creditRaw, cash });
   },
   fallback: EARN_REVERT,
   activity: earnActivity(p.quote.plan),

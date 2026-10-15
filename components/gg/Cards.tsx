@@ -14,7 +14,7 @@ const CARD = "flex flex-col gap-2 rounded-[22px] px-4 py-3.5 leading-[normal]";
  */
 export function CashCard({
   cashUsd, earning, note, dim = false, href, onClick,
-}: { cashUsd: number; earning: boolean; note?: string; dim?: boolean; href?: string; onClick?: () => void }) {
+}: { cashUsd: number; /** The line under the amount: "Always earning", "$25 earning" or "Not earning yet". */ earning: string; note?: string; dim?: boolean; href?: string; onClick?: () => void }) {
   return (
     <Tap
       href={href}
@@ -29,7 +29,7 @@ export function CashCard({
       </span>
       <MoneyCompact value={cashUsd} size={26} centsSize={15} centsClass="text-ink-on-dark-mute" lineHeight="normal" />
       <span className="-mt-1 flex items-center gap-0.5 text-[11px] text-ink-on-dark-mute">
-        {note ?? (earning ? "Always earning" : "Not earning yet")}
+        {note ?? earning}
         {note && (href || onClick) && <ChevronRight size={12} strokeWidth={2.2} />}
       </span>
     </Tap>

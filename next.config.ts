@@ -24,8 +24,13 @@ const nextConfig: NextConfig = {
     { source: "/guardian", destination: "/agents?agent=protect", permanent: false },
     // Friends became the Leaderboard: one board, filtered to All or Contacts.
     { source: "/friends", destination: "/leaderboard?filter=contacts", permanent: false },
-    // Pay became Send; Receive, which the Pay tab opened, stays at /receive.
+    // Pay became Send.
     { source: "/pay", destination: "/send", permanent: false },
+    // Top up (Receive) and Repay are sheets over the page they open from (components/gg/MoneySheets.tsx): their old
+    // pages open them over Home, or over Send for Send's old Receive link.
+    { source: "/receive", has: [{ type: "query", key: "from", value: "send" }], destination: "/send?topup", permanent: false },
+    { source: "/receive", destination: "/home?topup", permanent: false },
+    { source: "/repay", destination: "/home?repay", permanent: false },
   ],
   partialPrefetching: true,
   turbopack: {
