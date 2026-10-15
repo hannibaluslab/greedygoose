@@ -311,12 +311,12 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
       {risky && (
         <label className="flex items-start gap-2.5 rounded-2xl bg-act-bg px-4 py-3 text-[13px] leading-snug text-act">
           <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-px size-[18px] shrink-0 accent-[#8e2a1d]" />
-          I understand this puts my loan in {after === "act" ? "Act" : "Watch"}. If my stocks fall, Aave can sell part of them.
+          I understand this puts my credit in {after === "act" ? "Act" : "Watch"}. If my stocks fall too far, part of them can be sold to repay what I owe.
         </label>
       )}
       <p className="m-0 text-xs leading-snug text-subtle">
-        Shares in use stay in your account’s Aave position; nothing is sold. If they fall too far, Aave can sell part of
-        them to repay what you owe. {!marketState().open && "Stock prices are paused until markets reopen and can jump when they do. "}
+        Shares in use stay in your account; nothing is sold. If they fall too far, part of them can be sold to repay
+        what you owe. {!marketState().open && "Stock prices are paused until markets reopen and can jump when they do. "}
         Tokenized stocks track the share price; they are not company shares.
       </p>
       {feeBlocked && <p role="alert" className="m-0 text-[13px] text-act">Your account can’t pay network fees in USDC on Base right now.</p>}

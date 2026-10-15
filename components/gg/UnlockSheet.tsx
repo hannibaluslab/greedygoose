@@ -129,7 +129,7 @@ export function UnlockSheet({
             {risky && !tooMuch && (
               <label className="flex items-start gap-2.5 rounded-2xl bg-act-bg px-4 py-3 text-[13px] leading-snug text-act">
                 <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-px size-[18px] shrink-0 accent-[#8e2a1d]" />
-                I understand this puts my loan in {after === "act" ? "Act" : "Watch"}. If my stocks fall, Aave can sell part of them.
+                I understand this puts my credit in {after === "act" ? "Act" : "Watch"}. If my stocks fall too far, part of them can be sold to repay what I owe.
               </label>
             )}
             {holding.paused && <p role="status" className="m-0 text-[13px] text-act">Aave has paused {stock.name} for now.</p>}

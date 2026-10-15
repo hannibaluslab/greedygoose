@@ -188,7 +188,7 @@ export function BuySheet({
             {ready && plan?.extraConfirm && (
               <label className="flex items-start gap-2.5 rounded-2xl bg-act-bg px-4 py-3 text-[13px] leading-snug text-act">
                 <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-px size-[18px] shrink-0 accent-[#8e2a1d]" />
-                I understand this puts my credit in {STATUS_LABEL[plan.after]}. If my stocks fall, Aave can sell part of them.
+                I understand this puts my credit in {STATUS_LABEL[plan.after]}. If my stocks fall too far, part of them can be sold to repay what I owe.
               </label>
             )}
             {feeBlocked && (
@@ -258,7 +258,7 @@ export function SmallPrint({
     <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">
       In one go: {inWords(moves)}. You get at least {minShares.toFixed(4)} {ticker}: if the price moves more than{" "}
       {BUY_LIMITS.slippageBps / 100}%, the buy is cancelled.{" "}
-      {plan && `Credit costs ${(data.apr * 100).toFixed(2)}% a year (variable). If your stocks fall too far, Aave can sell part of them to repay what you owe. `}
+      {plan && `Credit costs ${(data.apr * 100).toFixed(2)}% a year (variable). If your stocks fall too far, part of them can be sold to repay what you owe. `}
       {stock.name} here is a tokenized stock. It tracks the share price; it is not company shares or voting rights.
     </p>
   );

@@ -416,7 +416,7 @@ export function CreditBuySheet({
             {ready && plan.extraConfirm && (
               <label className="flex items-start gap-2.5 rounded-2xl bg-act-bg px-4 py-3 text-[13px] leading-snug text-act">
                 <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-px size-[18px] shrink-0 accent-[#8e2a1d]" />
-                I understand this puts my credit in {STATUS_LABEL[plan.after]}. If my stocks fall, Aave can sell part of them.
+                I understand this puts my credit in {STATUS_LABEL[plan.after]}. If my stocks fall too far, part of them can be sold to repay what I owe.
               </label>
             )}
             {feeBlocked && (
@@ -584,8 +584,8 @@ function riskNote(backers: string[], protectOn: boolean): string {
       : "If your stocks fall, you can repay, or Protect repays from your cash or sells a little of them to keep you Safe.";
   }
   return one
-    ? `If ${one} falls, you can repay. If it falls too far, Aave can sell part of it to repay what you owe.`
-    : "If your stocks fall, you can repay. If they fall too far, Aave can sell part of them to repay what you owe.";
+    ? `If ${one} falls, you can repay. If it falls too far, part of it can be sold to repay what you owe.`
+    : "If your stocks fall, you can repay. If they fall too far, part of them can be sold to repay what you owe.";
 }
 
 /**
