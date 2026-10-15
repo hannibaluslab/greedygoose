@@ -18,6 +18,10 @@ export type ActivityItem = {
   paidUsd?: number;
   /** For sells, and for other dollars turned into cash (`convert`, `symbol` is the coin's): USDC received. */
   receivedUsd?: number;
+  /** For sends: who it went to, when one account got all of it. */
+  to?: `0x${string}`;
+  /** For a send this device made: the name it was sent to (sam.justan.id), for Activity and Send's quick picks. */
+  toName?: string;
 };
 
 const byReserveId = (id: bigint) => ALL_RESERVES.find((r) => BigInt(r.reserveId) === id);
@@ -106,9 +110,10 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
   });
   const touchesAave = (addr?: `0x${string}`) => !!addr && (isAddressEqual(addr, AAVE.HUB) || isAddressEqual(addr, AAVE.SPOKE));
   let usdcOut = 0n;
+  const usdcOutTo = new Map<string, `0x${string}`>();
   const usdcIn: bigint[] = [];
   const stockIn: { symbol: string; raw: bigint; decimals: number }[] = [];
-  const stockOut: { symbol: string; raw: bigint; decimals: number }[] = [];
+  const stockOut: { symbol: string; raw: bigint; decimals: number; to?: `0x${string}` }[] = [];
   for (const t of transfers) {
     const { from, to, value } = t.args as { from?: `0x${string}`; to?: `0x${string}`; value?: bigint };
     if (value === undefined) continue;
@@ -119,9 +124,12 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
     // Aave V3 savings: USDC into or out of the aToken contract, within the user's own cash.
     if (token.kind === "debt" && from && to && isAddressEqual(from, user) && isAddressEqual(to, GUARDIAN.AUSDC)) continue;
     if (token.kind === "debt" && from && to && isAddressEqual(from, GUARDIAN.AUSDC) && isAddressEqual(to, user)) continue;
-    if (token.kind === "debt" && from && isAddressEqual(from, user)) usdcOut += value;
+    if (token.kind === "debt" && from && isAddressEqual(from, user)) {
+      usdcOut += value;
+      if (to) usdcOutTo.set(to.toLowerCase(), to);
+    }
     if (token.kind === "equity" && to && isAddressEqual(to, user)) stockIn.push({ symbol: token.symbol, raw: value, decimals: token.decimals });
-    if (token.kind === "equity" && from && isAddressEqual(from, user)) stockOut.push({ symbol: token.symbol, raw: value, decimals: token.decimals });
+    if (token.kind === "equity" && from && isAddressEqual(from, user)) stockOut.push({ symbol: token.symbol, raw: value, decimals: token.decimals, to });
     if (token.kind === "debt" && to && isAddressEqual(to, user)) usdcIn.push(value);
   }
   for (const s of stockIn) {
@@ -137,7 +145,7 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
     items.push(
       receivedRaw > 0n
         ? { kind: "sell", symbol: s.symbol, amount: units(s.raw, s.decimals), receivedUsd: units(receivedRaw, USDC.decimals) }
-        : { kind: "send", symbol: s.symbol, amount: units(s.raw, s.decimals) },
+        : { kind: "send", symbol: s.symbol, amount: units(s.raw, s.decimals), ...(s.to ? { to: s.to } : {}) },
     );
   }
   // Other dollars out and USDC in is a conversion into cash (lib/swap/entry.ts): each swap pays the user once, in the
@@ -156,7 +164,10 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
   converted.forEach(({ coin, value }, i) =>
     items.push({ kind: "convert", symbol: coin.symbol, amount: units(value, coin.decimals), receivedUsd: units(usdcIn[i], USDC.decimals) }),
   );
-  if (stockIn.length === 0 && usdcOut > 0n) items.push({ kind: "send", symbol: USDC.symbol, amount: units(usdcOut, USDC.decimals) });
+  if (stockIn.length === 0 && usdcOut > 0n) {
+    const [to] = [...usdcOutTo.values()];
+    items.push({ kind: "send", symbol: USDC.symbol, amount: units(usdcOut, USDC.decimals), ...(usdcOutTo.size === 1 ? { to } : {}) });
+  }
   if (stockOut.length === 0) {
     for (const v of usdcIn.slice(converted.length)) items.push({ kind: "receive", symbol: USDC.symbol, amount: units(v, USDC.decimals) });
   }
