@@ -203,7 +203,7 @@ function Loaded({
         {held.length === 0 ? (
           <EmptyPortfolio />
         ) : (
-          <div className={`-mx-5 flex ${held.length < 2 ? "justify-start" : "justify-between"} gap-2 overflow-x-auto px-5 pb-4 pt-0.5 [scrollbar-width:none]`}>
+          <div className={`relative -mx-5 flex ${held.length < 2 ? "justify-start" : "justify-between"} gap-2 overflow-x-auto px-5 pb-4 pt-0.5 [scrollbar-width:none]`}>
             {held.map((h) => {
               const valueUsd = h.freeUsd + h.lockedUsd;
               const m = market.bySymbol[h.symbol];
