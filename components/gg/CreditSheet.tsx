@@ -12,7 +12,7 @@ import { useCreditForBuying } from "@/hooks/useCreditForBuying";
 import type { AgentStatus } from "@/lib/agents/status";
 import { homeStatus } from "@/lib/risk/status";
 import { USDC } from "@/lib/tokens/registry";
-import { formatUsdTrim } from "@/lib/formatting";
+import { formatUsdTrim, monthlyCostText } from "@/lib/formatting";
 
 /** The Protect row: the Protect job, and its daily limit once it runs. */
 function protection(status: AgentStatus, capRaw: bigint | null) {
@@ -71,7 +71,7 @@ export function CreditSheet({
           <div className="flex flex-col gap-1 border-b border-hairline py-3">
             <div className="flex items-center justify-between text-[15px]">
               <span className="text-ink-mid">Cost</span>
-              <span className="font-semibold">{formatUsdTrim(data.monthlyCostUsd)} / month</span>
+              <span className="font-semibold">{monthlyCostText(data.monthlyCostUsd)}</span>
             </div>
             <span className="text-xs text-subtle">{(data.apr * 100).toFixed(2)}% a year, variable</span>
           </div>

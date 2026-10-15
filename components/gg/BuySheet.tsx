@@ -21,7 +21,7 @@ import { CASH } from "@/config/risk";
 import { monthlyCost } from "@/lib/aave/math";
 import { maxSpendRaw, toUsd } from "@/lib/cash";
 import { CREDIT_BLOCKED, backingOptions, planCredit, splitCash, type CreditPlan } from "@/lib/creditBuy";
-import { formatShares, formatUsd, inWords } from "@/lib/formatting";
+import { formatShares, formatUsd, inWords, monthlyCostText } from "@/lib/formatting";
 import { marketState } from "@/lib/market-hours";
 import { STATUS_LABEL } from "@/lib/risk/status";
 import { BUY_LIMITS, minOut, quoteEconomics } from "@/lib/swap/buy";
@@ -229,7 +229,7 @@ function creditRows(data: PositionData, plan: CreditPlan, cashRaw: bigint): Summ
     { label: "From your cash", value: formatUsd(toUsd(cashRaw)) },
     { label: "On credit", value: formatUsd(creditUsd) },
     { label: "Backed by", value: backers.length > 2 ? `${backers.length} of your stocks` : inWords(backers) },
-    { label: "Cost", value: `${formatUsd(monthlyCost(creditUsd, data.apr))} / month` },
+    { label: "Cost", value: `${(data.apr * 100).toFixed(1)}% a year · ${monthlyCostText(monthlyCost(creditUsd, data.apr))}` },
     { label: "You owe after", value: formatUsd(data.debtUsd + creditUsd) },
     // No debt yet is as safe as it gets: the board reads "Safe → Safe" for a first Credit Buy.
     { label: "Status", value: <StatusChange from={plan.before === "none" ? "safe" : plan.before} to={plan.after} /> },

@@ -9,7 +9,7 @@ import { MarketBanner } from "@/components/ui/MarketBanner";
 import { usePosition } from "@/hooks/usePosition";
 import { AGENT_COPY } from "@/lib/agents/list";
 import { STATUS_COPY } from "@/lib/risk/status";
-import { formatPct, formatUsd } from "@/lib/formatting";
+import { formatPct, formatUsd, monthlyCostText } from "@/lib/formatting";
 
 export default function CreditPage() {
   return <RequireAccount>{(address) => <Credit address={address} />}</RequireAccount>;
@@ -37,7 +37,7 @@ function Credit({ address }: { address: `0x${string}` }) {
             <StatusBar status={data.status} healthFactor={data.healthFactor} />
             <p className="m-0 text-[13px] leading-snug text-ink-mid">{STATUS_COPY[data.status]}</p>
             <div className="flex flex-col">
-              <Line label="Cost" value={`${formatUsd(data.monthlyCostUsd)} / month`} />
+              <Line label="Cost" value={monthlyCostText(data.monthlyCostUsd)} />
               <Line label="Credit available" value={formatUsd(data.availableUsd)} />
               <Line label="Backed by" value={`${formatUsd(data.collateralUsd)} of stocks`} />
             </div>

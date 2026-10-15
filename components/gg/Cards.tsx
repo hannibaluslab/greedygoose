@@ -3,7 +3,7 @@ import { StatusPill } from "./Status";
 import { Tap } from "./Tap";
 import { ChevronRight } from "./icons";
 import type { Status } from "@/lib/risk/status";
-import { formatUsdTrim } from "@/lib/formatting";
+import { formatUsdTrim, monthlyCostText } from "@/lib/formatting";
 
 const CARD = "flex flex-col gap-2 rounded-[22px] px-4 py-3.5 leading-[normal]";
 
@@ -78,7 +78,7 @@ export function CreditCard({
       </span>
       <span className="mt-auto flex w-full items-baseline justify-between text-[12px]">
         <span className="text-subtle">{owes ? "Cost" : "Available"}</span>
-        <span className="num font-semibold">{owes ? `${formatUsdTrim(monthlyCostUsd)} / month` : formatUsdTrim(Math.floor(availableUsd))}</span>
+        <span className="num font-semibold">{owes ? monthlyCostText(monthlyCostUsd) : formatUsdTrim(Math.floor(availableUsd))}</span>
       </span>
     </Tap>
   );

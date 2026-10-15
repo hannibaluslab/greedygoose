@@ -20,7 +20,7 @@ import { USDC } from "@/lib/tokens/registry";
 import { StatusBar, StatusPill } from "@/components/gg/Status";
 import { ChevronRight, SlidersIcon } from "@/components/gg/icons";
 import { usePosition, type PositionData } from "@/hooks/usePosition";
-import { formatUsdTrim } from "@/lib/formatting";
+import { formatUsdTrim, monthlyCostText } from "@/lib/formatting";
 
 export default function RepayPage() {
   return <RequireAccount>{(address) => <Repay address={address} />}</RequireAccount>;
@@ -97,7 +97,7 @@ function Repay({ address }: { address: `0x${string}` }) {
         </div>
         <StatusBar status={data.status} healthFactor={data.healthFactor} />
         <div className="flex flex-col">
-          <Line label="Cost" value={`${formatUsdTrim(data.monthlyCostUsd)} / month`} />
+          <Line label="Cost" value={monthlyCostText(data.monthlyCostUsd)} />
           <Line label="Credit available" value={formatUsdTrim(data.availableUsd)} />
         </div>
       </WhiteCard>

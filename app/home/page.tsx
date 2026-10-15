@@ -27,7 +27,7 @@ import { aprToApy } from "@/lib/aave/math";
 import { arrivedCoins, arrivedView, rateText, startEarningShown, type ArrivedView } from "@/lib/cashSetup";
 import { homeStatus } from "@/lib/risk/status";
 import { StatusPill } from "@/components/gg/Status";
-import { formatUsdTrim } from "@/lib/formatting";
+import { formatUsdTrim, monthlyCostText } from "@/lib/formatting";
 import { EQUITIES } from "@/lib/tokens/registry";
 import { dayChange, weekValue } from "@/lib/prices/market";
 
@@ -160,7 +160,7 @@ function Loaded({
             sub: (
               <span className="inline-flex items-center justify-center gap-1.5">
                 <StatusPill status={homeStatus(data.status)} size="sm" />
-                {formatUsdTrim(data.monthlyCostUsd)} / month
+                {monthlyCostText(data.monthlyCostUsd)}
               </span>
             ),
           }}

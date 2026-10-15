@@ -24,7 +24,7 @@ import { needsExtraConfirm, statusFor } from "@/lib/risk/status";
 import { rawToShares } from "@/lib/tokens/b20";
 import { marketState } from "@/lib/market-hours";
 import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
-import { formatShares, formatUsd } from "@/lib/formatting";
+import { formatShares, formatUsd, monthlyCostText } from "@/lib/formatting";
 
 export default function UseCreditPage() {
   return <RequireAccount>{(address) => <Loan address={address} />}</RequireAccount>;
@@ -161,7 +161,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
     <WhiteCard className="num px-4 py-0.5">
       <Row label="Credit limit" value={formatUsd(calc.powerUsd)} />
       <Row label="You owe after" value={formatUsd(data.debtUsd + amount)} />
-      <Row label="Cost" value={`about ${formatUsd(monthlyCost(data.debtUsd + amount, data.apr))} / month`} />
+      <Row label="Cost" value={`${(data.apr * 100).toFixed(1)}% a year · about ${monthlyCostText(monthlyCost(data.debtUsd + amount, data.apr))}`} />
       <Row label="Rate" value={`${(data.apr * 100).toFixed(2)}% a year, variable`} />
       <div className="flex items-center justify-between py-3 text-[15px]">
         <span className="text-ink-mid">Status</span>
