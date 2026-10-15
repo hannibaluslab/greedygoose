@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { TAP_AGAIN, txKey, useTx, type TxPhase, type TxPlan } from "@/hooks/useTx";
+import { runError } from "@/hooks/useAgentRun";
 import type { useAgents } from "@/hooks/useAgents";
 import type { AgentJob, StockLimits } from "@/lib/agents/permissions";
 import { buildSetMixCalls } from "@/lib/agents/settings";
@@ -40,14 +41,15 @@ export function useManageSave(account: `0x${string}`, agents: ReturnType<typeof 
   const tx = useTx();
   const [step, setStep] = useState<"idle" | "setting" | "granting">("idle");
   const [grant, setGrant] = useState<GrantStep | null>(null);
-  // The mix landed, its grant didn't open: the next Save opens it alone (`asked` is what that Save asked for).
-  const [pending, setPending] = useState<{ asked: string; grant: GrantStep } | null>(null);
+  // The mix landed, its grant didn't open: the next Save opens it alone (`asked` is what that Save asked for; `done`
+  // of `of` JAW sheets went through).
+  const [pending, setPending] = useState<{ asked: string; grant: GrantStep; done: number; of: number } | null>(null);
   const asked = useRef("");
   const launched = useRef(false);
-  // The latest agents and callback, so the effect below doesn't re-run on every render's new object.
-  const live = useRef({ agents, onSaved });
+  // The latest agents, callback and reset, so the effect below doesn't re-run on every render's new object.
+  const live = useRef({ agents, onSaved, resetTx: tx.reset });
   useEffect(() => {
-    live.current = { agents, onSaved };
+    live.current = { agents, onSaved, resetTx: tx.reset };
   });
 
   // The setting landed: on to the grant, once.
@@ -63,14 +65,18 @@ export function useManageSave(account: `0x${string}`, agents: ReturnType<typeof 
         },
         (e: unknown) => {
           // useAgents keeps the error for the screen; a grant JAW couldn't open waits for the next tap.
-          if (grant && isPopupBlocked(e)) setPending({ asked: ask, grant });
+          if (grant && isPopupBlocked(e)) setPending({ asked: ask, grant, done: 1, of: 2 });
         },
       )
-      .finally(() => setStep("idle"));
+      .finally(() => {
+        setStep("idle");
+        // The mix's batch is behind us: the write goes back to idle, so the body prepares the next Save's again.
+        live.current.resetTx();
+      });
   }, [step, tx.phase, grant]);
 
-  /** A grant from this tap. */
-  const grantNow = (g: GrantStep, ask: string) => {
+  /** A grant from this tap (`count`: the JAW sheets of this Save so far, when it goes on from one that didn't open). */
+  const grantNow = (g: GrantStep, ask: string, count = { done: 0, of: 1 }) => {
     setStep("granting");
     openGrant(agents, g)
       .then(
@@ -79,7 +85,7 @@ export function useManageSave(account: `0x${string}`, agents: ReturnType<typeof 
           onSaved();
         },
         (e: unknown) => {
-          if (isPopupBlocked(e)) setPending({ asked: ask, grant: g });
+          if (isPopupBlocked(e)) setPending({ asked: ask, grant: g, ...count });
         },
       )
       .finally(() => setStep("idle"));
@@ -89,7 +95,7 @@ export function useManageSave(account: `0x${string}`, agents: ReturnType<typeof 
     const key = txKey(p.mixChanged ? p.weights : null, p.grant);
     // The mix already landed and only its grant is left: from this tap, with the screen's newest terms once it re-read.
     if (pending && (pending.asked === key || !p.mixChanged)) {
-      grantNow(!p.mixChanged && p.grant ? p.grant : pending.grant, pending.asked);
+      grantNow(!p.mixChanged && p.grant ? p.grant : pending.grant, pending.asked, { done: pending.done, of: pending.of });
       return;
     }
     tx.reset();
@@ -109,7 +115,9 @@ export function useManageSave(account: `0x${string}`, agents: ReturnType<typeof 
     step === "granting" || (step === "setting" && tx.phase === "done") ? "signing" : step === "setting" ? tx.phase : "idle";
   const grantError = agents.error
     ? isPopupBlocked(agents.error)
-      ? TAP_AGAIN
+      ? pending && pending.done > 0
+        ? runError(pending.done, pending.of, agents.error)
+        : TAP_AGAIN
       : CANCELLED.test(agents.error.message)
         ? "You cancelled on JAW’s screen. Its limit didn’t change."
         : "We couldn’t change its limit right now. Try again."

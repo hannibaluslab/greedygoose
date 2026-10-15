@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { TxStop, txKey, useTx, type TxPlan } from "./useTx";
 import { useDebounced, useSigningQuote } from "./useBuyQuote";
 import { CHAIN_ID } from "@/lib/chain";
-import { SELL_BLOCKED, buildSaleCalls, saleActivity, type SellFrom, type SellPlan } from "@/lib/sell";
+import { SELL_BLOCKED, buildSaleCalls, saleActivity, saleRepayRaw, type SellFrom, type SellPlan } from "@/lib/sell";
 import { quoteKey, quoteSwap } from "@/lib/swap/buy";
 import { sellMinOut, type SellQuote } from "@/lib/swap/sell";
 import type { ReserveAsset } from "@/lib/tokens/registry";
@@ -56,24 +56,29 @@ export function useSaleBatch() {
 
 /**
  * What a sale signs (useTx), keyed by what shapes its batch: the account, the stock, the quote, the floor (the quote's
- * and Aave's price's), where the shares come from and its stop, and what's owed for a repay by selling.
+ * and Aave's price's), where the shares come from and its stop, and for a repay by selling whether the floor covers
+ * what's owed. Not what's owed itself: it accrues every block, and the repay then is the debt plus Aave's interest
+ * buffer (covered) or the floor less the fee (not), so its batch only changes when that does.
  */
-export const salePlan = (p: SellInput, batch: ReturnType<typeof useSaleBatch>): TxPlan => ({
-  key: txKey(
-    "sell",
-    p.user,
-    p.stock.symbol,
-    quoteKey(p.quote),
-    sellMinOut(p.quote, p.stock, p.oraclePriceUsd),
-    p.plan.from,
-    p.plan.block ?? null,
-    p.plan.from === "repay" ? p.debtRaw : null,
-  ),
-  user: p.user,
-  calls: () => batch(p),
-  fallback: SELL_FALLBACK[p.plan.from],
-  activity: saleActivity(p.stock, p.plan),
-});
+export const salePlan = (p: SellInput, batch: ReturnType<typeof useSaleBatch>): TxPlan => {
+  const floor = sellMinOut(p.quote, p.stock, p.oraclePriceUsd);
+  return {
+    key: txKey(
+      "sell",
+      p.user,
+      p.stock.symbol,
+      quoteKey(p.quote),
+      floor,
+      p.plan.from,
+      p.plan.block ?? null,
+      p.plan.from === "repay" ? (saleRepayRaw(floor, p.debtRaw) > p.debtRaw ? "full" : "part") : null,
+    ),
+    user: p.user,
+    calls: () => batch(p),
+    fallback: SELL_FALLBACK[p.plan.from],
+    activity: saleActivity(p.stock, p.plan),
+  };
+};
 
 /**
  * Sell stock in one batch (plan item 7 steps 2, 3 and 9): free shares, a backing holding, or a backing holding sold to

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { isAddressEqual, zeroAddress } from "viem";
 import { useAccount, useReadContract, useReadContracts } from "wagmi";
 import { useGrantPermissions, usePermissions, useRevokePermissions } from "@jaw.id/wagmi";
@@ -29,6 +29,12 @@ export const GRANT_SECONDS = 365 * 86_400;
 export type JobTerms = { capRaw: bigint; limitsRaw?: StockLimits };
 
 const byJob = <T,>(f: (job: AgentJob) => T) => Object.fromEntries(JOBS.map((job) => [job, f(job)])) as Record<AgentJob, T>;
+
+/**
+ * Grants revoked this session (JAW permission ids), shared by every screen's useAgents until JAW's list shows them
+ * gone: a turn-off that stopped part way on one screen goes on with the rest from any other, and isn't counted again.
+ */
+const revoked = new Set<string>();
 
 /**
  * One account's agents, through JAW's own permission screens (D14): turned on with `useGrantPermissions`, listed
@@ -66,8 +72,6 @@ export function useAgents(account: `0x${string}`) {
   const revoke = useRevokePermissions();
   const { address: signer } = useAccount();
   const nowSec = useNowSec();
-  // Grants revoked this session, until JAW's list shows them gone: a turn-off that stopped part way goes on with the rest.
-  const revoked = useRef(new Set<string>());
 
   /** Grants and revokes are the account's own, like useTx's calls: never while another address is shown (`?as=`). */
   function ownAccount() {
@@ -222,9 +226,9 @@ export function useAgents(account: `0x${string}`) {
     ownAccount();
     try {
       for (const g of live[job]) {
-        if (revoked.current.has(g.permissionId)) continue;
+        if (revoked.has(g.permissionId)) continue;
         await revoke.mutateAsync({ address: account, chainId: CHAIN_ID, id: g.permissionId });
-        revoked.current.add(g.permissionId);
+        revoked.add(g.permissionId);
       }
     } finally {
       await refetch();
@@ -240,7 +244,7 @@ export function useAgents(account: `0x${string}`) {
     /** What's left of the running jobs' limits couldn't be read (`left` stays null until it is). */
     leftUnreadable: periods.isError && !periods.data,
     /** JAW sheets it takes to turn `jobs` off: one per grant JAW lists for them that hasn't ended. */
-    faceIdsOff: (jobs: readonly AgentJob[]) => jobs.reduce((n, job) => n + live[job].length, 0),
+    faceIdsOff: (jobs: readonly AgentJob[]) => jobs.reduce((n, job) => n + live[job].filter((g) => !revoked.has(g.permissionId)).length, 0),
     /** The most any limit may be on this executor, once read. */
     capMaxRaw: capMax.data ?? null,
     /** The registry couldn't be read (every status stays "loading" until it is). */

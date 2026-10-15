@@ -13,12 +13,15 @@ import {
   PREPARE_SETTLE_MS,
   PreparedTx,
   TAP_AGAIN,
+  chainMoved,
   checkPlan,
   checkingView,
   idleView,
   signPlan,
+  type Checked,
   type CheckDeps,
   type PrepView,
+  type SignDeps,
   type TxPhase,
   type TxPlan,
 } from "@/lib/tx/prepared";
@@ -34,6 +37,37 @@ const checkDeps = (client: Client | undefined): CheckDeps => ({
   simulate: async (user, batch) => (await client!.simulateCalls({ account: user, calls: batch.map(({ to, data }) => ({ to, data })) })).results,
   explain: explainRevert,
 });
+
+/** wagmi's sendCalls (EIP-5792 wallet_sendCalls to JAW), as useSendCalls' `mutateAsync` takes it. */
+type SendCalls = (p: { chainId: typeof CHAIN_ID; calls: { to: `0x${string}`; data: `0x${string}` }[]; forceAtomic: boolean }) => Promise<{ id: string }>;
+
+/**
+ * The tap's dependencies (signPlan): JAW is wagmi's sendCalls on Base with the batch's targets and data, and
+ * `atomic` as JAW reports it. Pure, so the tap's path to wallet_sendCalls is tested without React
+ * (tests/unit/prepared-tx.test.ts).
+ */
+export function tapDeps(p: {
+  address: `0x${string}` | undefined;
+  store: PreparedTx;
+  chainCaps: ChainCapabilities | undefined;
+  check: (plan: TxPlan) => Promise<Checked>;
+  sendCalls: SendCalls;
+  setPhase: SignDeps["setPhase"];
+  setError: SignDeps["setError"];
+  onSent: SignDeps["onSent"];
+}): SignDeps {
+  return {
+    address: p.address,
+    prepared: p.store,
+    now: Date.now,
+    check: p.check,
+    atomic: (n) => atomicSend(p.chainCaps, n),
+    send: (batch, atomic) => p.sendCalls({ chainId: CHAIN_ID, calls: batch.map(({ to, data }) => ({ to, data })), ...atomic }),
+    setPhase: p.setPhase,
+    setError: p.setError,
+    onSent: p.onSent,
+  };
+}
 
 /** A write's prepared batch, for whichever component holds the inputs: the store, the chain, and whether it's busy. */
 export type TxPrep = { store: PreparedTx; client: Client | undefined; paused: boolean };
@@ -79,7 +113,8 @@ function usePrepareLoop(prep: TxPrep | null, plan: TxPlan | null, active: boolea
       store.abandon();
     };
   }, [store, key, user, paused, client]);
-  // Gone from the screen: nothing it prepared may be signed.
+  // Gone from the screen: what it prepared sleeps. It can be signed again only for the very same inputs, under its
+  // 30 s, and only if no write landed on this page since (chainMoved).
   useEffect(() => () => store?.setPlan(null, null), [store]);
 
   const snap = useSyncExternalStore(store?.subscribe ?? noSubscribe, store?.getSnapshot ?? idleSnapshot, idleSnapshot);
@@ -95,7 +130,8 @@ function usePrepareLoop(prep: TxPrep | null, plan: TxPlan | null, active: boolea
  */
 export function usePrepare(prep: TxPrep | null | undefined, plan: TxPlan | null) {
   const view = usePrepareLoop(prep ?? null, plan, !!prep);
-  return { checking: view.checking, blocked: view.blocked, error: view.error };
+  // While the write is busy (JAW's sheet is open, it's confirming) or done, a background check has nothing to say.
+  return { checking: view.checking, blocked: view.blocked, error: prep?.paused ? null : view.error };
 }
 
 /**
@@ -139,6 +175,14 @@ export function useTx(failedOnChain = "This didn’t go through on Base. Nothing
   const shownError = effective === "failed" && phase === "pending" ? failedOnChain : (tapError ?? (busy ? null : own.error));
 
   const txHash = status.data?.receipts?.at(-1)?.transactionHash;
+  // A batch landed or failed on Base: every store on the page prepares again (a batch from before may be stale).
+  const sentId = send.data?.id;
+  const moved = useRef<string | null>(null);
+  useEffect(() => {
+    if (!sentId || (callsStatus !== "success" && callsStatus !== "failure") || moved.current === sentId) return;
+    moved.current = sentId;
+    chainMoved();
+  }, [callsStatus, sentId]);
   useEffect(() => {
     if (callsStatus === "success") void queryClient.invalidateQueries();
     // The chain moved (or the fee was paid): nothing prepared before it may be signed.
@@ -151,21 +195,23 @@ export function useTx(failedOnChain = "This didn’t go through on Base. Nothing
   /** The tap: signs `p` (the hook's plan unless given), straight to JAW when it's prepared. */
   function sign(p: TxPlan | null | undefined = plan) {
     const target = p ?? null;
-    return signPlan(target, {
-      address,
-      prepared: store,
-      now: Date.now,
-      check: (x) => checkPlan(x, checkDeps(client)),
-      atomic: (n) => atomicSend(chainCaps, n),
-      send: (batch, atomic) => send.mutateAsync({ chainId: CHAIN_ID, calls: batch.map(({ to, data }) => ({ to, data })), ...atomic }),
-      setPhase,
-      setError: (text) => setError(text === null ? null : { text, key: target?.key ?? null }),
-      onSent: (x, id) => {
-        if (!x.activity) return;
-        addLocal(x.user, { id, time: Date.now(), items: x.activity, status: "pending" });
-        setRecord({ user: x.user, id });
-      },
-    });
+    return signPlan(
+      target,
+      tapDeps({
+        address,
+        store,
+        chainCaps,
+        check: (x) => checkPlan(x, checkDeps(client)),
+        sendCalls: send.mutateAsync,
+        setPhase,
+        setError: (text) => setError(text === null ? null : { text, key: target?.key ?? null }),
+        onSent: (x, id) => {
+          if (!x.activity) return;
+          addLocal(x.user, { id, time: Date.now(), items: x.activity, status: "pending" });
+          setRecord({ user: x.user, id });
+        },
+      }),
+    );
   }
 
   const reset = () => {

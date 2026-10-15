@@ -8,10 +8,10 @@ import { StockAvatar, tickerOf } from "./StockAvatar";
 import { StatusPill } from "./Status";
 import { NETWORK_FEE_ROW } from "./Summary";
 import { TxButton, TxDone, TxError } from "./TxUi";
-import { txKey, useTx, type TxPlan } from "@/hooks/useTx";
+import { useTx } from "@/hooks/useTx";
+import { withdrawPlan } from "@/lib/tx/plans";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import type { Holding, PositionData } from "@/hooks/usePosition";
-import { buildWithdrawCalls } from "@/lib/aave/tx";
 import { healthAfterWithdraw, maxWithdrawUsd } from "@/lib/aave/math";
 import { needsExtraConfirm, statusFor } from "@/lib/risk/status";
 import { rawToShares, sharesToRaw } from "@/lib/tokens/b20";
@@ -58,14 +58,9 @@ export function UnlockSheet({
   const risky = amountRaw > 0n && needsExtraConfirm(after);
   const feeBlocked = isConnected && fee.state === "unsupported";
   // What Free up would sign now, prepared while the sheet is idle so the tap opens JAW's sheet at once.
-  const plan: TxPlan | null =
+  const plan =
     open && amountRaw > 0n && !tooMuch && !(risky && !ack) && !holding.paused && !feeBlocked && cf !== undefined
-      ? {
-          key: txKey("withdraw", user, stock.symbol, amountRaw, all),
-          user,
-          calls: () => Promise.resolve(buildWithdrawCalls({ user, stock, amountRaw, all })),
-          activity: [{ kind: "withdraw", symbol: stock.symbol, amount: Number(amountRaw) / 10 ** stock.decimals }],
-        }
+      ? withdrawPlan({ user, stock, amountRaw, all })
       : null;
   const tx = useTx(undefined, plan);
 

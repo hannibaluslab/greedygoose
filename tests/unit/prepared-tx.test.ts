@@ -4,6 +4,7 @@ import { UserRejectedRequestError } from "viem";
 import type { Call } from "@/lib/aave/tx";
 import { NOT_ATOMIC } from "@/lib/jaw/capabilities";
 import { runError } from "@/hooks/useAgentRun";
+import { tapDeps } from "@/hooks/useTx";
 import {
   CANCELLED,
   CANT_CHECK,
@@ -13,6 +14,8 @@ import {
   PreparedTx,
   TAP_AGAIN,
   TxStop,
+  chainEpoch,
+  chainMoved,
   checkPlan,
   isCancel,
   isPopupBlocked,
@@ -210,10 +213,75 @@ describe("PreparedTx: a batch is signed only for the inputs it was prepared for"
   it("keeps a batch built at the tap only for the inputs on screen", () => {
     const store = new PreparedTx(now);
     store.setPlan("A", SAM);
-    store.keep({ key: "B", user: SAM, batch: [call(1)], at: clock });
+    store.keep({ key: "B", user: SAM, batch: [call(1)], at: clock, epoch: chainEpoch() });
     expect(store.usable("B", SAM)).toBeNull();
-    store.keep({ key: "A", user: SAM, batch: [call(1)], at: clock });
+    store.keep({ key: "A", user: SAM, batch: [call(1)], at: clock, epoch: chainEpoch() });
     expect(store.usable("A", SAM)).not.toBeNull();
+  });
+});
+
+describe("a write that lands on the page: nothing prepared before it is signed", () => {
+  it("every store's batch stops being usable, its button waits, and it's prepared again at once", () => {
+    const a = preparedFor("A");
+    const b = preparedFor("B");
+    const seen = vi.fn();
+    b.subscribe(seen);
+    expect(b.getSnapshot()).toMatchObject({ ready: true });
+    chainMoved();
+    expect(a.usable("A", SAM)).toBeNull();
+    expect(b.usable("B", SAM)).toBeNull();
+    // The watched store tells its screen; the other works it out when it's next read.
+    expect(seen).toHaveBeenCalled();
+    expect(b.getSnapshot()).toMatchObject({ key: "B", ready: false, checking: true });
+    expect(a.getSnapshot()).toMatchObject({ key: "A", ready: false, checking: true });
+    // No 15 s wait: what's there is from before the write.
+    expect(a.due("A")).toBe(true);
+    a.finish(a.begin("A", SAM), ok(2));
+    expect(a.usable("A", SAM)?.batch).toEqual([call(2)]);
+  });
+
+  it("a preparation that started before the write is never signable, and a stop from before is checked again", () => {
+    const store = new PreparedTx(now);
+    store.setPlan("A", SAM);
+    const id = store.begin("A", SAM);
+    chainMoved();
+    store.finish(id, ok(1));
+    expect(store.usable("A", SAM)).toBeNull();
+    expect(store.due("A")).toBe(true);
+
+    const stopped = new PreparedTx(now);
+    stopped.setPlan("A", SAM);
+    stopped.finish(stopped.begin("A", SAM), { ok: false, error: "Your cash moved since you started.", blocks: true });
+    expect(stopped.getSnapshot()).toMatchObject({ blocked: true });
+    chainMoved();
+    expect(stopped.getSnapshot()).toMatchObject({ blocked: false, checking: true, error: null });
+    expect(stopped.due("A")).toBe(true);
+  });
+
+  it("a sleeping batch (its sheet closed) doesn't wake up after another write landed", () => {
+    const store = preparedFor("A");
+    store.setPlan(null, null);
+    chainMoved();
+    store.setPlan("A", SAM);
+    expect(store.usable("A", SAM)).toBeNull();
+  });
+
+  it("a batch kept after a blocked popup is dropped by a write that landed while JAW was being asked", async () => {
+    const store = new PreparedTx(now);
+    store.setPlan("A", SAM);
+    const blocked = deps(store, {
+      check: vi.fn(async () => {
+        chainMoved();
+        return ok(9);
+      }),
+      send: vi.fn(() => Promise.reject(popupError())),
+    });
+    await signPlan(plan("A"), blocked.d);
+    expect(blocked.state.error).toBe(TAP_AGAIN);
+    expect(store.usable("A", SAM)).toBeNull();
+    const again = deps(store);
+    await signPlan(plan("A"), again.d);
+    expect(again.check).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -255,6 +323,32 @@ describe("signPlan: the tap", () => {
     await done;
     expect(log.slice(2)).toEqual(["sent", "phase:pending"]);
     expect(state.error).toBeNull();
+  });
+
+  it("through useTx's own wiring (tapDeps), wagmi's sendCalls gets the batch on Base before anything is awaited", async () => {
+    // tapDeps reads the real clock (Date.now), faked here to the store's.
+    vi.setSystemTime(clock);
+    const store = preparedFor("A", ok(1, 2));
+    const sendCalls = vi.fn(async () => ({ id: "0xcalls" }));
+    const check = vi.fn(async () => ok(9));
+    const phases: TxPhase[] = [];
+    const onSent = vi.fn();
+    const caps = { atomic: { status: "supported" } } as unknown as Parameters<typeof tapDeps>[0]["chainCaps"];
+    const done = signPlan(
+      plan("A"),
+      tapDeps({ address: SAM, store, chainCaps: caps, check, sendCalls, setPhase: (p) => phases.push(p), setError: vi.fn(), onSent }),
+    );
+    expect(sendCalls).toHaveBeenCalledTimes(1);
+    expect(sendCalls).toHaveBeenCalledWith({
+      chainId: 8453,
+      calls: [call(1), call(2)].map(({ to, data }) => ({ to, data })),
+      forceAtomic: true,
+    });
+    expect(check).not.toHaveBeenCalled();
+    expect(phases).toEqual(["signing"]);
+    await done;
+    expect(onSent).toHaveBeenCalledWith(plan("A"), "0xcalls");
+    expect(phases).toEqual(["signing", "pending"]);
   });
 
   it("never signs a batch prepared for other inputs: it builds and checks the screen's own first", async () => {

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { TAP_AGAIN, txKey, useTx, type TxPhase, type TxPlan } from "@/hooks/useTx";
+import { runError } from "@/hooks/useAgentRun";
 import type { useAgents } from "@/hooks/useAgents";
 import type { ProtectStep } from "@/lib/agents/protect";
 import { buildSetKeepMixCalls } from "@/lib/agents/settings";
@@ -46,15 +47,16 @@ async function runGrants(agents: ReturnType<typeof useAgents>, steps: readonly P
 export function useProtectSave(account: `0x${string}`, agents: ReturnType<typeof useAgents>, onSaved: () => void) {
   const tx = useTx();
   const [step, setStep] = useState<"idle" | "setting" | "granting">("idle");
-  // What's left after a step JAW couldn't open, for the next Save (`asked` is what that Save asked for).
-  const [pending, setPending] = useState<{ asked: string; rest: ProtectStep[] } | null>(null);
+  // What's left after a step JAW couldn't open, for the next Save (`asked` is what that Save asked for; `done` of `of`
+  // JAW sheets went through).
+  const [pending, setPending] = useState<{ asked: string; rest: ProtectStep[]; done: number; of: number } | null>(null);
   const rest = useRef<ProtectStep[]>([]);
   const asked = useRef("");
   const launched = useRef(false);
-  // The latest agents and callback, so the effect below doesn't re-run on every render's new object.
-  const live = useRef({ agents, onSaved });
+  // The latest agents, callback and reset, so the effect below doesn't re-run on every render's new object.
+  const live = useRef({ agents, onSaved, resetTx: tx.reset });
   useEffect(() => {
-    live.current = { agents, onSaved };
+    live.current = { agents, onSaved, resetTx: tx.reset };
   });
 
   // The setting landed: on to the grants, once.
@@ -62,27 +64,37 @@ export function useProtectSave(account: `0x${string}`, agents: ReturnType<typeof
     if (step !== "setting" || tx.phase !== "done" || launched.current) return;
     launched.current = true;
     const ask = asked.current;
-    runGrants(live.current.agents, rest.current)
+    const steps = rest.current;
+    // "Sells first" was the first of this Save's JAW sheets.
+    const of = 1 + steps.length;
+    runGrants(live.current.agents, steps)
       .then((r) => {
         if (r.rest.length === 0) {
           setPending(null);
           live.current.onSaved();
         } else if (isPopupBlocked(r.error)) {
-          setPending({ asked: ask, rest: r.rest });
+          setPending({ asked: ask, rest: r.rest, done: of - r.rest.length, of });
         } // otherwise useAgents keeps the error for the screen
       })
-      .finally(() => setStep("idle"));
+      .finally(() => {
+        setStep("idle");
+        // The setting's batch is behind us: the write goes back to idle, so the body prepares the next Save's again.
+        live.current.resetTx();
+      });
   }, [step, tx.phase]);
 
-  /** Grants and revokes from this tap. */
-  const grantNow = (steps: readonly ProtectStep[], ask: string) => {
+  /** Grants and revokes from this tap (`count`: the JAW sheets of this Save so far, when it goes on from one that didn't open). */
+  const grantNow = (steps: readonly ProtectStep[], ask: string, count = { done: 0, of: steps.length }) => {
     setStep("granting");
     runGrants(agents, steps)
       .then((r) => {
         if (r.rest.length === 0) {
           setPending(null);
           onSaved();
-        } else setPending(isPopupBlocked(r.error) ? { asked: ask, rest: r.rest } : null);
+        } else
+          setPending(
+            isPopupBlocked(r.error) ? { asked: ask, rest: r.rest, done: count.done + steps.length - r.rest.length, of: count.of } : null,
+          );
       })
       .finally(() => setStep("idle"));
   };
@@ -91,7 +103,8 @@ export function useProtectSave(account: `0x${string}`, agents: ReturnType<typeof
     const key = txKey(steps);
     // Steps were left after one JAW couldn't open: go on with them (or with the screen's newest steps once it re-read).
     if (pending && (pending.asked === key || !steps.some((s) => s.kind === "keepMix"))) {
-      grantNow(pending.asked === key ? pending.rest : steps, key);
+      if (pending.asked === key) grantNow(pending.rest, key, { done: pending.done, of: pending.of });
+      else grantNow(steps, key);
       return;
     }
     tx.reset();
@@ -113,7 +126,9 @@ export function useProtectSave(account: `0x${string}`, agents: ReturnType<typeof
     step === "granting" || (step === "setting" && tx.phase === "done") ? "signing" : step === "setting" ? tx.phase : "idle";
   const grantError = agents.error
     ? isPopupBlocked(agents.error)
-      ? TAP_AGAIN
+      ? pending && pending.done > 0
+        ? runError(pending.done, pending.of, agents.error)
+        : TAP_AGAIN
       : CANCELLED.test(agents.error.message)
         ? "You cancelled on JAW’s screen. Nothing after it changed."
         : "We couldn’t save this right now. Try again."

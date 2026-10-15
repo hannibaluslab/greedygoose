@@ -90,8 +90,11 @@ export const quoteBuy = (client: Client, stock: ReserveAsset, amountIn: bigint) 
 /** A quote's part of a write's key (useTx): a new quote is a new batch, since its floor (`minOut`) comes from amountOut. */
 export const quoteKey = (q: BuyQuote) => [q.venue, q.pool, q.amountIn, q.amountOut];
 
-/** Shown when the quote read again while the batch is prepared gives less than the screen's "at least". */
-export const QUOTE_MOVED = "The price moved since you checked. Look at the new amount, then try again.";
+/**
+ * Shown when the quote read again while the batch is prepared gives less than the screen's "at least". It can show
+ * before any tap (the batch is prepared in the background), so it doesn't ask the user to try again.
+ */
+export const QUOTE_MOVED = "The price just moved. Check the new amount.";
 
 /**
  * The quote to sign with. useBuyQuote refreshes every 15 s only, so the shown quote's pool is read

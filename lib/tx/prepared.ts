@@ -30,7 +30,8 @@ export const PREPARE_SETTLE_MS = 300;
 
 /** JAW couldn't open its popup (Safari, the activation was gone): the batch is kept, and the next tap opens it. */
 export const TAP_AGAIN = "Tap again to open JAW.";
-export const CANT_CHECK = "We couldn’t check this with Base. Please try again.";
+/** Base didn't answer while the batch was prepared: shown before any tap too, so it doesn't ask to try again. */
+export const CANT_CHECK = "We couldn’t check this with Base right now.";
 export const ONLY_SIGNER = "Only the signed-in account can do this. Nothing was sent.";
 export const CANCELLED = "You cancelled. Nothing was sent.";
 export const COULDNT_SEND = "We couldn’t send this. Please try again.";
@@ -107,9 +108,27 @@ export async function checkPlan(plan: TxPlan, d: CheckDeps): Promise<Checked> {
   }
 }
 
-/** A batch simulated OK for `key`, from reads taken from `at` on. */
-export type PreparedBatch = { key: string; user: Address; batch: Call[]; at: number };
-type Failure = { key: string; error: string; blocks: boolean; at: number };
+/**
+ * How many batches have landed (or failed on Base) on this page, from any write. A batch prepared before one may be
+ * stale (a savings withdrawal sized for cash that another write spent), so it's never signed: every store prepares
+ * again. Each useTx store is also cleared when its own batch lands; this covers the others on the same page.
+ */
+let landed = 0;
+/** The stores someone is watching, told when the chain moved so their buttons wait for a new batch. */
+const watched = new Set<PreparedTx>();
+
+/** A write landed or failed on Base (useTx): nothing prepared before it may be signed, in any store. */
+export function chainMoved() {
+  landed += 1;
+  for (const s of watched) s.refresh();
+}
+
+/** The current count of writes landed, stamped on each batch as its reads start. */
+export const chainEpoch = () => landed;
+
+/** A batch simulated OK for `key`, from reads taken from `at` on, after `epoch` writes had landed. */
+export type PreparedBatch = { key: string; user: Address; batch: Call[]; at: number; epoch: number };
+type Failure = { key: string; error: string; blocks: boolean; at: number; epoch: number };
 
 /** What the button shows for the inputs on screen. */
 export type PrepView = {
@@ -138,21 +157,36 @@ export class PreparedTx {
   private user: Address | null = null;
   private batch: PreparedBatch | null = null;
   private failure: Failure | null = null;
-  private running: { key: string; user: Address; id: number; at: number } | null = null;
+  private running: { key: string; user: Address; id: number; at: number; epoch: number } | null = null;
   private seq = 0;
   private expiry: ReturnType<typeof setTimeout> | null = null;
   private view: PrepView = idleView();
+  private viewEpoch = landed;
   private listeners = new Set<() => void>();
 
   constructor(private now: () => number = Date.now) {}
 
   subscribe = (fn: () => void) => {
     this.listeners.add(fn);
+    watched.add(this);
     return () => {
       this.listeners.delete(fn);
+      if (this.listeners.size === 0) watched.delete(this);
     };
   };
-  getSnapshot = () => this.view;
+  getSnapshot = () => {
+    // A write landed while no one watched: the view is worked out again, without telling anyone mid-render.
+    if (this.viewEpoch !== landed) {
+      this.viewEpoch = landed;
+      this.view = this.compute();
+    }
+    return this.view;
+  };
+
+  /** The chain moved (chainMoved): what was ready may not be any more. */
+  refresh() {
+    this.update();
+  }
 
   /**
    * The inputs on screen. New inputs drop anything prepared or failed for other ones. Null (nothing can be signed for
@@ -174,21 +208,24 @@ export class PreparedTx {
   /** The batch the tap may sign for `key` from `user`, or null: never one prepared for other inputs, nor a stale one. */
   usable(key: string, user: Address, now = this.now()): PreparedBatch | null {
     const b = this.batch;
-    if (!b || b.key !== key || key !== this.key || !isAddressEqual(b.user, user)) return null;
+    if (!b || b.key !== key || key !== this.key || !isAddressEqual(b.user, user) || b.epoch !== landed) return null;
     return now >= b.at && now - b.at < PREPARED_TTL_MS ? b : null;
   }
 
   /** Whether a background preparation should start for the inputs on screen: none running, the last over 15 s ago. */
   due(key: string, now = this.now()): boolean {
     if (key !== this.key || this.running?.key === key) return false;
-    const last = Math.max(this.batch?.key === key ? this.batch.at : -Infinity, this.failure?.key === key ? this.failure.at : -Infinity);
+    // Only what was prepared since the last write landed counts: anything older is prepared again at once.
+    const b = this.batch?.key === key && this.batch.epoch === landed ? this.batch.at : -Infinity;
+    const f = this.failure?.key === key && this.failure.epoch === landed ? this.failure.at : -Infinity;
+    const last = Math.max(b, f);
     return now - last >= PREPARE_EVERY_MS;
   }
 
   /** A preparation starts for `key`; its reads are taken from now on. */
   begin(key: string, user: Address, now = this.now()): number {
     const id = ++this.seq;
-    this.running = { key, user, id, at: now };
+    this.running = { key, user, id, at: now, epoch: landed };
     this.update();
     return id;
   }
@@ -200,10 +237,10 @@ export class PreparedTx {
     this.running = null;
     if (run.key === this.key) {
       if (r.ok) {
-        this.batch = { key: run.key, user: run.user, batch: r.batch, at: run.at };
+        this.batch = { key: run.key, user: run.user, batch: r.batch, at: run.at, epoch: run.epoch };
         this.failure = null;
       } else {
-        this.failure = { key: run.key, error: r.error, blocks: r.blocks, at: run.at };
+        this.failure = { key: run.key, error: r.error, blocks: r.blocks, at: run.at, epoch: run.epoch };
         // A revert now means the batch from before would revert too.
         if (r.blocks) this.batch = null;
       }
@@ -239,7 +276,7 @@ export class PreparedTx {
     const key = this.key;
     if (key === null || this.user === null) return idleView(key);
     if (this.usable(key, this.user)) return { key, ready: true, checking: false, error: null, blocked: false };
-    const f = this.failure?.key === key ? this.failure : null;
+    const f = this.failure?.key === key && this.failure.epoch === landed ? this.failure : null;
     if (f) return { key, ready: false, checking: false, error: f.error, blocked: f.blocks };
     return checkingView(key);
   }
@@ -247,6 +284,7 @@ export class PreparedTx {
   private update() {
     if (this.expiry) clearTimeout(this.expiry);
     this.expiry = null;
+    this.viewEpoch = landed;
     const next = this.compute();
     // A ready batch stops being ready when it gets too old: say so then, even if nothing else happens.
     if (next.ready && this.batch) {
@@ -330,11 +368,12 @@ function submit(plan: TxPlan, b: PreparedBatch, d: SignDeps): Promise<void> {
 async function signSlow(plan: TxPlan, d: SignDeps): Promise<void> {
   d.setPhase("simulating");
   const at = d.now();
+  const epoch = landed;
   const r = await d.check(plan);
   if (!r.ok) {
     d.setPhase("failed");
     d.setError(r.error);
     return;
   }
-  return submit(plan, { key: plan.key, user: plan.user, batch: r.batch, at }, d);
+  return submit(plan, { key: plan.key, user: plan.user, batch: r.batch, at, epoch }, d);
 }

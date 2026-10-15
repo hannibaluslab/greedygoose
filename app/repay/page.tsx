@@ -3,22 +3,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { parseUnits } from "viem";
-import { useAccount, usePublicClient } from "wagmi";
+import { useAccount } from "wagmi";
 import { toast } from "sonner";
 import Link from "next/link";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { Line, SubHeader, WhiteCard } from "@/components/gg/Screen";
 import { NETWORK_FEE_ROW } from "@/components/gg/Summary";
 import { TxButton, TxError } from "@/components/gg/TxUi";
-import { TxStop, txKey, useTx, type TxPlan } from "@/hooks/useTx";
+import { useTx } from "@/hooks/useTx";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
-import { useSigningCash } from "@/hooks/useSigningCash";
-import { AAVE } from "@/lib/aave/addresses";
-import { spokeAbi } from "@/lib/aave/abis/ISpoke";
-import { buildRepayCalls, fullRepayAmount } from "@/lib/aave/tx";
-import { CHAIN_ID } from "@/lib/chain";
+import { repayPlan, useRepayBatch } from "@/hooks/useRepay";
+import { fullRepayAmount } from "@/lib/aave/tx";
 import { repayChips } from "@/lib/aave/loan";
-import { cantRepay, maxSpendRaw, payFromCash, readCash, toUsd } from "@/lib/cash";
+import { cantRepay, maxSpendRaw, toUsd } from "@/lib/cash";
 import { USDC } from "@/lib/tokens/registry";
 import { StatusBar, StatusPill } from "@/components/gg/Status";
 import { ChevronRight, SlidersIcon } from "@/components/gg/icons";
@@ -40,37 +37,19 @@ function Repay({ address }: { address: `0x${string}` }) {
   const { isConnected } = useAccount();
   const router = useRouter();
   const { data } = usePosition(address);
-  const client = usePublicClient({ chainId: CHAIN_ID });
   const fee = useFeeSupport();
-  const cashToSign = useSigningCash();
+  const repayBatch = useRepayBatch();
   const [choice, setChoice] = useState<number | "all" | null>(null);
   const paid = useRef<string | null>(null);
 
   const options = useMemo(() => (data ? repayChips(Math.min(toUsd(maxSpendRaw(data.cash)), data.debtUsd)) : []), [data]);
   const feeBlocked = isConnected && fee.state === "unsupported";
   const pick = data ? repayPick(data, options, choice) : null;
-  // What Repay would sign now, prepared while the screen is idle (the cash read again) so the tap opens JAW's sheet.
-  // All repays what's owed when it's prepared, from the cash then (both read again, plus Aave's interest buffer), so
-  // the interest that accrues every block doesn't make it a new batch each time the position re-reads.
-  const plan: TxPlan | null =
+  // What Repay would sign now, prepared while the screen is idle (the cash read again) so the tap opens JAW's sheet
+  // (useRepay: All that covers what's owed repays it as read then; otherwise exactly the amount on screen).
+  const plan =
     pick && pick.amount > 0 && !feeBlocked
-      ? {
-          key: pick.all ? txKey("repay", address, "all") : txKey("repay", address, pick.amountRaw),
-          user: address,
-          calls: async () => {
-            if (!pick.all) {
-              return payFromCash(address, pick.amountRaw, await cashToSign(address, pick.amountRaw), buildRepayCalls({ user: address, amountRaw: pick.amountRaw, all: false }));
-            }
-            const [debtRaw, cash] = await Promise.all([
-              client!.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserTotalDebt", args: [BigInt(USDC.reserveId), address] }),
-              readCash(client!, address),
-            ]);
-            const amountRaw = fullRepayAmount(debtRaw, maxSpendRaw(cash));
-            if (amountRaw <= 0n) throw new TxStop(cantRepay(cash));
-            return payFromCash(address, amountRaw, cash, buildRepayCalls({ user: address, amountRaw, all: true }));
-          },
-          activity: [{ kind: "repay", symbol: "USDC", amount: pick.amount }],
-        }
+      ? repayPlan({ user: address, all: pick.all, coversAll: pick.coversAll, amount: pick.amount, amountRaw: pick.amountRaw }, repayBatch)
       : null;
   const tx = useTx(undefined, plan);
 

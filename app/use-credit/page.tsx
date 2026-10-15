@@ -15,10 +15,10 @@ import { BacksIcon } from "@/components/gg/icons";
 import { TxButton, TxDone, TxError } from "@/components/gg/TxUi";
 import { MarketBanner } from "@/components/ui/MarketBanner";
 import { useCollateralFactors, usePosition, type Holding, type PositionData } from "@/hooks/usePosition";
-import { txKey, useTx, type TxPlan } from "@/hooks/useTx";
+import { useTx } from "@/hooks/useTx";
+import { loanPlan } from "@/lib/tx/plans";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { FILL_MARGIN, autoFill, combinedLoan } from "@/lib/aave/loan";
-import { buildLoanCalls } from "@/lib/aave/tx";
 import { monthlyCost } from "@/lib/aave/math";
 import { needsExtraConfirm, statusFor } from "@/lib/risk/status";
 import { rawToShares } from "@/lib/tokens/b20";
@@ -103,19 +103,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
   const chosen = locks.filter((l) => l.raw > 0n);
   const borrowRaw = amount > 0 ? parseUnits(amount.toFixed(USDC.decimals), USDC.decimals) : 0n;
   // What the button would sign now, prepared while the screen is idle so the tap opens JAW's sheet at once.
-  const plan: TxPlan | null =
-    ready && !(risky && !ack) && !feeBlocked
-      ? {
-          key: txKey("loan", address, chosen.map((l) => [l.stock.symbol, l.raw]), borrowRaw),
-          user: address,
-          calls: () => Promise.resolve(buildLoanCalls({ user: address, locks: chosen.map((l) => ({ stock: l.stock, raw: l.raw })), borrowRaw })),
-          fallback: "This would fail right now — prices may have moved. Try a little less credit, or back it with a bit more.",
-          activity: [
-            ...chosen.map((l) => ({ kind: "supply" as const, symbol: l.stock.symbol, amount: Number(l.raw) / 10 ** l.stock.decimals })),
-            ...(amount > 0 ? [{ kind: "borrow" as const, symbol: "USDC", amount }] : []),
-          ],
-        }
-      : null;
+  const plan = ready && !(risky && !ack) && !feeBlocked ? loanPlan({ user: address, locks: chosen, borrowRaw }) : null;
   const tx = useTx(undefined, plan);
 
   const fill = () => {
