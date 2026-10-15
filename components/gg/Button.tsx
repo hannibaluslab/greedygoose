@@ -7,7 +7,7 @@ import { Tap } from "./Tap";
  *   dark     ink ("That’s more than your cash", Credit Buy's "Continue")
  *   soft     grey (HomeCreditSlide "Buy more", F2-6 "Back")
  *   white    card (PortfolioPage "Market")
- * md is the 52px sheet and card size; lg is the 56px CTA at the foot of a page (CreditOn).
+ * md is the 52px sheet and card size; lg is the 56px CTA at the foot of a page (CreditOn); row is md three to a row.
  */
 const VARIANT = {
   primary: "bg-brand font-bold text-ink shadow-brand-glow disabled:shadow-none",
@@ -19,6 +19,11 @@ const VARIANT = {
 const SIZE = {
   md: "h-[52px] gap-2 rounded-[26px] px-6 text-[15px]",
   lg: "h-14 gap-2.5 rounded-[28px] px-6 text-base",
+  /**
+   * md, three to a row (Invest's Market · Trade · Credit Buy): no side padding, so the label has the whole cell. It steps
+   * to 14px under a 390px screen, and drops its icon under 375px, so it never wraps or overflows.
+   */
+  row: "h-[52px] min-w-0 gap-1.5 whitespace-nowrap rounded-[26px] px-0 text-[15px] max-[389px]:text-[14px] max-[374px]:[&>svg]:hidden",
 } as const;
 
 export type ButtonVariant = keyof typeof VARIANT;

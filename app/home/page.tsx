@@ -76,6 +76,7 @@ function Home({ address }: { address: `0x${string}` }) {
           apy={apy}
           open={setSheet}
           openStock={stocks.openStock}
+          openTrade={() => stocks.openTrade()}
           arrived={arrived}
           dim={startEarningShown(setup.save, data.cashUsd)}
           cards={
@@ -108,12 +109,14 @@ function Home({ address }: { address: `0x${string}` }) {
 }
 
 function Loaded({
-  data, apy, open, openStock, arrived, cards, dim,
+  data, apy, open, openStock, openTrade, arrived, cards, dim,
 }: {
   data: PositionData;
   apy: number;
   open: (sheet: Sheet) => void;
   openStock: (symbol: string) => void;
+  /** The Trade sheet: swap between anything you hold, not the Market. */
+  openTrade: () => void;
   arrived: ArrivedView;
   /** What needs the user about their cash: other dollars to turn into cash, starting to earn. */
   cards: ReactNode;
@@ -155,7 +158,7 @@ function Loaded({
       </section>
 
       <section className="grid grid-cols-4 gap-2 px-5 pt-[22px]">
-        <QuickAction href="/buy" label="Trade" icon={<TradeIcon />} />
+        <QuickAction onClick={openTrade} label="Trade" icon={<TradeIcon />} />
         <QuickAction href="/receive" label="Top up" icon={<PlusIcon />} />
         <QuickAction onClick={() => open("credit")} label="Credit Buy" icon={<CreditIcon />} />
         <QuickAction href="/repay" label="Repay" icon={<RepayIcon />} />

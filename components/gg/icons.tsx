@@ -42,6 +42,8 @@ export const InvestIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r
 export const GearIcon = ({ size = 20, ...r }: P) => (
   <svg {...base(size, 1.7, r)}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>
 );
+/** Invest's Market: a storefront, since ↑↓ is Trade's (Home, Invest and the Trade sheet's flip). */
+export const MarketIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M4 10v9h16v-9M3 10l2-5h14l2 5M3 10h18M9 19v-5h6v5" /></svg>;
 export const TradeIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M7 20V5M3 9l4-4 4 4M17 4v15M13 15l4 4 4-4" /></svg>;
 export const ActivityIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M3 12h4l3-8 4 16 3-8h4" /></svg>;
 export const AgentsIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M6 9h12v10H6zM12 5v4M9.5 13.5h.01M14.5 13.5h.01M3 13v3M21 13v3" /></svg>;

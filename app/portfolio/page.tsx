@@ -11,7 +11,7 @@ import { CreditSheet } from "@/components/gg/CreditSheet";
 import { StockSheets, useStockSheets } from "@/components/gg/StockSheets";
 import { HoldingList, HoldingRow } from "@/components/gg/Holding";
 import { ValueLine } from "@/components/gg/ValueLine";
-import { CreditIcon, TradeIcon } from "@/components/gg/icons";
+import { CreditIcon, MarketIcon, TradeIcon } from "@/components/gg/icons";
 import { MarketBanner } from "@/components/ui/MarketBanner";
 import { useMarketPrices } from "@/hooks/useMarketPrices";
 import { usePosition, type PositionData } from "@/hooks/usePosition";
@@ -26,8 +26,9 @@ export default function PortfolioPage() {
 /**
  * Design board "10 · Portfolio (Invest tab)" (PortfolioPage.dc.html). Market opens Flow 1's sheet
  * (F1-3 → the stock's sheet → F1-4 → confirm); /buy lands here with ?market, or ?s=SYMBOL for one stock's Buy
- * step. Credit Buy opens Flow 2's sheet (F2-2 → F2-3 … F2-6). A holding row opens its stock's sheet. The status
- * pill opens the Credit sheet (HomeCreditSlide).
+ * step. Trade, between Market and Credit Buy (Adrian), opens the Trade sheet, as Home's Trade does. Credit Buy opens
+ * Flow 2's sheet (F2-2 → F2-3 … F2-6). A holding row opens its stock's sheet. The status pill opens the Credit sheet
+ * (HomeCreditSlide).
  * Today's change, the value line and each row's day come from market prices (plan item 8), with the
  * markets-closed banner under the line at weekends. Not drawn yet: "Your mix" (the Rebalancer, item 9).
  */
@@ -52,7 +53,13 @@ function Portfolio({ address }: { address: `0x${string}` }) {
         ) : !data ? (
           <div aria-busy className="h-[300px] animate-pulse rounded-[22px] bg-chip" />
         ) : (
-          <Loaded data={data} openMarket={stocks.openMarket} openCreditBuy={stocks.openCreditBuy} openStock={stocks.openStock} />
+          <Loaded
+            data={data}
+            openMarket={stocks.openMarket}
+            openTrade={() => stocks.openTrade()}
+            openCreditBuy={stocks.openCreditBuy}
+            openStock={stocks.openStock}
+          />
         )}
       </div>
       <TabBar />
@@ -75,8 +82,8 @@ function Portfolio({ address }: { address: `0x${string}` }) {
 }
 
 function Loaded({
-  data, openMarket, openCreditBuy, openStock,
-}: { data: PositionData; openMarket: () => void; openCreditBuy: () => void; openStock: (symbol: string) => void }) {
+  data, openMarket, openTrade, openCreditBuy, openStock,
+}: { data: PositionData; openMarket: () => void; openTrade: () => void; openCreditBuy: () => void; openStock: (symbol: string) => void }) {
   const held = data.holdings.filter((h) => h.freeShares + h.lockedShares > 0);
   const market = useMarketPrices(held);
   const priced = held.map((h) => ({ valueUsd: h.freeUsd + h.lockedUsd, ...market.bySymbol[h.symbol] }));
@@ -99,9 +106,11 @@ function Loaded({
         <MarketBanner />
       </section>
 
-      <div className="grid grid-cols-2 gap-2.5">
-        <Button variant="white" icon={<TradeIcon size={18} strokeWidth={1.8} />} onClick={openMarket}>Market</Button>
-        <Button icon={<CreditIcon size={18} strokeWidth={1.8} />} onClick={openCreditBuy}>Credit Buy</Button>
+      {/* The board's pills (52px, 15px labels with 18px icons), three even cells with Trade between: 8px apart so Credit Buy fits at 390px. */}
+      <div className="grid grid-cols-3 gap-2">
+        <Button variant="white" size="row" icon={<MarketIcon size={18} strokeWidth={1.8} />} onClick={openMarket}>Market</Button>
+        <Button variant="white" size="row" icon={<TradeIcon size={18} strokeWidth={1.8} />} onClick={openTrade}>Trade</Button>
+        <Button size="row" icon={<CreditIcon size={18} strokeWidth={1.8} />} onClick={openCreditBuy}>Credit Buy</Button>
       </div>
 
       <HoldingList title="Your holdings">
