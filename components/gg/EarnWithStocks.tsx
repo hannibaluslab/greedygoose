@@ -83,7 +83,7 @@ export function EarnCard({ offer, onOpen }: { offer: EarnOffer; onOpen: () => vo
         <>
           <Rates rates={offer.rates} left />
           <p className="m-0 -mt-1 text-[12.5px] leading-[1.4] text-subtle">A year, at today’s rates. Both are variable.</p>
-          <Button variant="dark" onClick={onOpen}>Earn with stocks</Button>
+          <Button variant="soft" onClick={onOpen}>Earn with stocks</Button>
         </>
       ) : (
         offer.rates && <Rates rates={offer.rates} left={false} />
