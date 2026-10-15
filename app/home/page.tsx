@@ -266,7 +266,8 @@ function BalanceLine({
       loading={held && loading}
       onRetry={onRetry}
       label="What your total balance was worth over the last 7 days: what you hold now, at market prices"
-      caption="Total balance · 7 days"
+      // No caption (Adrian): the line sits under the total balance, so it needs no title of its own.
+      caption=""
       neutral={flat}
     />
   );
