@@ -136,7 +136,6 @@ export function StockSheets({ sheets, user, data }: { sheets: StockSheetsState; 
             creditBuy.close();
             buy.show({ symbol, fromCreditBuy: { symbol: creditAt?.symbol ?? null, back: creditAt?.back } });
           }}
-          onMarket={() => buy.show({ symbol: null })}
         />
       )}
       {trade.subject && (

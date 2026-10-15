@@ -61,7 +61,7 @@ const wholeUsd = (n: number) => formatUsdTrim(Math.max(0, Math.floor(n)));
  * Back from step 1 returns to that sheet. Once it lands it goes Home with the "Bought" toast (F2-7).
  */
 export function CreditBuySheet({
-  open, user, data, symbol, onClose, onBack, onBuyWithCash, onMarket,
+  open, user, data, symbol, onClose, onBack, onBuyWithCash,
 }: {
   open: boolean;
   user: `0x${string}`;
@@ -73,8 +73,6 @@ export function CreditBuySheet({
   onBack?: () => void;
   /** No credit to use: a stock tapped opens its Buy step with cash. */
   onBuyWithCash: (symbol: string) => void;
-  /** The page's Market: the Repay sheet's "Buy more with credit" opens it in place. */
-  onMarket?: () => void;
 }) {
   const preset = EQUITIES.find((e) => e.symbol === symbol) ?? null;
   const { isConnected } = useAccount();
@@ -201,8 +199,7 @@ export function CreditBuySheet({
   /** Credit Buy's Repay links: this sheet slides out as the Repay sheet slides in. */
   const leaveForRepay = () => {
     close();
-    if (onMarket) money.repayWithMarket(onMarket);
-    else money.repay();
+    money.repay();
   };
 
   // F2-5 → F2-7: once the batch lands, Home with "Bought … with Credit Buy", the shares read from the receipt.

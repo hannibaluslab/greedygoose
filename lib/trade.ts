@@ -369,9 +369,9 @@ export function tradeAmount(p: { from: TradeAsset; to: TradeAsset; amount: strin
 /** A quote as the sheet's queries hold it: `data` null when no pool can fill it. */
 export type QuoteState<Q> = { data?: Q | null; isFetching: boolean; isSuccess: boolean };
 
-type Leg<Q> = { state: "idle" } | { state: "quoting" } | { state: "none" } | { state: "ready"; quote: Q; fetching: boolean };
+export type Leg<Q> = { state: "idle" } | { state: "quoting" } | { state: "none" } | { state: "ready"; quote: Q; fetching: boolean };
 /** One leg's quote for `amountIn`: none to read, waiting, no pool can fill it, or this amount's quote. */
-function legOf<Q extends BuyQuote>(q: QuoteState<Q> | undefined, amountIn: bigint): Leg<Q> {
+export function legOf<Q extends BuyQuote>(q: QuoteState<Q> | undefined, amountIn: bigint): Leg<Q> {
   if (amountIn <= 0n || !q) return { state: amountIn <= 0n ? "idle" : "quoting" };
   if (q.data && q.data.amountIn === amountIn) return { state: "ready", quote: q.data, fetching: q.isFetching };
   if (q.data === null && q.isSuccess && !q.isFetching) return { state: "none" };

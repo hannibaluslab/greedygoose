@@ -1,8 +1,11 @@
+import { decodeFunctionData, erc20Abi, isAddressEqual } from "viem";
 import { RISK } from "@/config/risk";
+import { AAVE } from "@/lib/aave/addresses";
+import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { healthAfterWithdraw, maxWithdrawUsd } from "@/lib/aave/math";
 import { buildRepayCalls, buildWithdrawCalls, fullRepayAmount, type Call } from "@/lib/aave/tx";
 import type { ActivityItem } from "@/lib/activity/decode";
-import { assertAllowed } from "@/lib/allowlist";
+import { assertAllowed, swapOf } from "@/lib/allowlist";
 import { feeBufferRaw, toUsd } from "@/lib/cash";
 import { formatUsdTrim } from "@/lib/formatting";
 import { marketState } from "@/lib/market-hours";
@@ -82,6 +85,16 @@ export function saleRepayRaw(minOutRaw: bigint, debtRaw: bigint): bigint {
 const part = (raw: bigint, f: number) => (f >= 1 ? raw : f > 0 ? (raw * BigInt(Math.floor(f * 1_000_000))) / 1_000_000n : 0n);
 
 /**
+ * The most backing shares a repay by selling can take out (planSell's `maxRaw` for "repay"): the shares come out before
+ * the repay lands, so the loan must stay within Aave's limit, with LIMIT_HEADROOM, in between. All of them when
+ * nothing is owed. Repay's "Pay with" offers a backing stock up to this.
+ */
+export function repaySaleMaxRaw(h: Pick<SellHolding, "lockedRaw" | "lockedUsd">, cf: number, pos: Pick<SellPosition, "collateralUsd" | "avgCf" | "debtUsd">): bigint {
+  const loan = { collateralUsd: pos.collateralUsd, avgCf: pos.avgCf, debtUsd: pos.debtUsd, cf, lockedUsd: h.lockedUsd };
+  return part(h.lockedRaw, h.lockedUsd > 0 ? (maxWithdrawUsd(loan) * LIMIT_HEADROOM) / h.lockedUsd : 0);
+}
+
+/**
  * Plan a sale of `quote.amountIn` shares on Leo's maths. A backing holding comes out only as far as the loan
  * stays Safe (maxWithdrawUsd at the Safe line). Selling to repay takes the shares out first, so the loan must
  * stay within Aave's limit until the repay lands; it always ends healthier. Plan only: the batch is simulated
@@ -112,7 +125,7 @@ export function planSell(p: {
     maxRaw = backingShare(maxWithdrawUsd({ ...loan, targetHf: RISK.safeMin }));
     hfAfter = healthAfterWithdraw({ ...loan, usd: valueUsd });
   } else if (from === "repay") {
-    maxRaw = backingShare(maxWithdrawUsd(loan) * LIMIT_HEADROOM);
+    maxRaw = repaySaleMaxRaw(h, p.cf, pos);
     const debtAfter = pos.debtUsd - toUsd(repayRaw);
     hfAfter = debtAfter > 0 ? (pos.collateralUsd * pos.avgCf - valueUsd * p.cf) / debtAfter : null;
   }
@@ -166,6 +179,87 @@ export function buildSaleCalls(p: {
   if (p.from === "backing") return assertAllowed(p.user, sale);
   const repayRaw = saleRepayRaw(sellMinOut(p.quote, p.stock, p.oraclePriceUsd), p.debtRaw);
   return assertAllowed(p.user, [...sale, ...buildRepayCalls({ user: p.user, amountRaw: repayRaw, all: repayRaw > p.debtRaw })]);
+}
+
+/**
+ * What a repay with free shares repays (Repay's "Pay with" a stock you hold free, Adrian 2026-10-15): exactly what the
+ * sale is sure to pay, its swap's floor (`sellMinOut`), and no more than a full repay of `debtRaw`. When the cash can't
+ * keep the network-fee buffer, the sale pays the fee and the repay is the floor less the buffer (`saleRepayRaw`). 0 when
+ * nothing is left.
+ */
+export function freeRepayRaw(minOutRaw: bigint, debtRaw: bigint, feeFromSale: boolean): bigint {
+  if (feeFromSale) return saleRepayRaw(minOutRaw, debtRaw);
+  return minOutRaw > 0n ? fullRepayAmount(debtRaw, minOutRaw) : 0n;
+}
+
+const repayOf = (c: Call): bigint | null => {
+  if (!isAddressEqual(c.to, AAVE.SPOKE)) return null;
+  try {
+    const call = decodeFunctionData({ abi: spokeAbi, data: c.data });
+    return call.functionName === "repay" ? call.args[1] : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * A repay that rides on a sale spends only what the sale is sure to bring. Throws unless the batch has exactly one
+ * swap into USDC for the user and one repay after it, the repay is no more than the swap's floor (`amountOutMinimum`,
+ * less the network-fee buffer when the sale pays the fee), and every USDC approve to the spoke is exactly the repay
+ * (or the 0 that resets it). So a batch that would dip into the cash the user already had is never built.
+ */
+export function assertSaleCoversRepay(user: Address, calls: Call[], feeFromSale: boolean): Call[] {
+  const swaps = calls.map((c, i) => ({ i, swap: swapOf(c) })).filter((x) => x.swap !== null);
+  const repays = calls.map((c, i) => ({ i, raw: repayOf(c) })).filter((x): x is { i: number; raw: bigint } => x.raw !== null);
+  if (swaps.length !== 1 || repays.length !== 1) throw new Error("Blocked: a repay by selling is one sale and one repay");
+  const [{ i: at, swap }] = swaps;
+  const [{ i: repayAt, raw: repayRaw }] = repays;
+  const sale = swap!.params;
+  if (!isAddressEqual(sale.tokenOut, USDC.address) || !isAddressEqual(sale.recipient, user) || repayAt < at) {
+    throw new Error("Blocked: the repay must come after a sale into USDC for the user");
+  }
+  const covered = sale.amountOutMinimum - (feeFromSale ? feeBufferRaw : 0n);
+  if (repayRaw <= 0n || repayRaw > covered) throw new Error("Blocked: the repay is more than the sale is sure to bring");
+  for (const c of calls) {
+    if (!isAddressEqual(c.to, USDC.address)) continue;
+    const call = decodeFunctionData({ abi: erc20Abi, data: c.data });
+    if (call.functionName === "approve" && isAddressEqual(call.args[0], AAVE.SPOKE) && call.args[1] !== repayRaw && call.args[1] !== 0n) {
+      throw new Error("Blocked: the repay's approval is not exact");
+    }
+  }
+  return calls;
+}
+
+/**
+ * Repay with a stock you hold free (Repay's "Pay with", Adrian 2026-10-15), in one batch: approve exactly the shares to
+ * the router → swap them to USDC for the user, at least `sellMinOut` (the quote less 1%, never under Aave's price less
+ * 10%) → approve exactly the repay to the spoke → repay it for the user (→ the allowance back to 0 on a full repay). The
+ * repay is `freeRepayRaw` of that floor, computed here and checked again by `assertSaleCoversRepay`, so it can never be
+ * more than the sale guarantees; what the sale brings above it stays as cash. No call takes anything out of backing.
+ * When the cash pays the network fee, the caller adds what it needs (`payFromCash`).
+ */
+export function buildFreeRepayCalls(p: {
+  user: Address;
+  stock: ReserveAsset;
+  quote: SellQuote;
+  oraclePriceUsd: number;
+  debtRaw: bigint;
+  /** The cash can't keep the network-fee buffer, so the sale pays the fee. */
+  feeFromSale: boolean;
+  nowSec?: number;
+}): Call[] {
+  if (p.debtRaw <= 0n) throw new Error("Nothing owed");
+  const repayRaw = freeRepayRaw(sellMinOut(p.quote, p.stock, p.oraclePriceUsd), p.debtRaw, p.feeFromSale);
+  const calls = [...buildSellCalls(p), ...buildRepayCalls({ user: p.user, amountRaw: repayRaw, all: repayRaw > p.debtRaw })];
+  return assertAllowed(p.user, assertSaleCoversRepay(p.user, calls, p.feeFromSale));
+}
+
+/** What Activity shows while a repay with free shares confirms: the sale and the repay. */
+export function freeRepayActivity(stock: ReserveAsset, plan: Pick<SellPlan, "sharesRaw" | "usd">, repayRaw: bigint): ActivityItem[] {
+  return [
+    { kind: "sell", symbol: stock.symbol, amount: Number(plan.sharesRaw) / 10 ** stock.decimals, receivedUsd: plan.usd },
+    { kind: "repay", symbol: USDC.symbol, amount: toUsd(repayRaw) },
+  ];
 }
 
 /** The lowest price a share sells at in this plan: what the sale pays at least (the swap's floor), per share sold. */
