@@ -332,3 +332,18 @@ Measured on the iPhone Simulator (Safari, a real account on Base): "Buy Alphabet
 - **Protect's and Rebalance's settings:** after "Sells first" or the mix lands, the write goes back to idle, so a second Save in the same sheet is prepared too. A grant JAW couldn't open after it says "1 of 2 went through. Tap again to open JAW.". Grants revoked in the session are remembered on every screen, so a turn-off that stopped part way goes on from any of them and isn't counted twice.
 - **Open:** Buy on the iPhone isn't confirmed end to end yet. It needs one real tap from Adrian's signed-in session: in Simulator Safari, tap Buy, check JAW's sheet opens, and cancel on JAW's sheet so nothing is sent.
 - **Open:** Turn into cash prepares every 15 s while its card is on Home or Receive, even if it's never tapped. Production needs `NEXT_PUBLIC_BASE_RPC_URL` set: mainnet.base.org already answers 429.
+
+## Top up and Repay are sheets, and every page has Back (Adrian, 2026-10-15)
+
+"top up and repay should open a sheet not a full page, all pages should have the back button like portfolio page". This replaces, in "Send replaces Pay", "Receive … stays at `/receive`: Send's header has a "Receive" link to it (its Back then returns to Send), and Home's Top up and the Cash sheet's Top up still open it" and "Receive lights the tab its Back returns to".
+
+- **Top up (Receive) and Repay are sheets over the page they open from,** with the content their pages had (`TopUpSheet`, "Add money"; `RepaySheet`, "Repay"). Every signed-in page can open them: `RequireAccount` mounts `MoneySheets`, and `useMoneySheets()` opens one. They open from Home's Top up and Repay, the Cash sheet's Top up and Repay, the Credit sheet's and the Credit page's Repay, Credit Buy's Repay links, the Trade sheet's and Send's Top up, Send's Receive, and Protect's heads-up card (Add cash, Repay). Opened from another sheet, that one slides out as this one slides in. Repay's "Add money" opens Top up in its place.
+- **Repay's write is unchanged:** the same chips, All, cash rules and prepared batch (`repayPlan` through `useTx`), prepared only while its sheet is open. A landed repay closes the sheet with its toast, on the page it opened from (the page went Home). "Buy more with credit" goes to the Market at `/buy`, or, opened on a page whose Market is a sheet (Invest's Credit sheet, any Credit Buy), opens that Market in its place. "Turn into cash" in Top up prepares only while the sheet is open.
+- **Old links:** `/receive` and `/repay` redirect (307) to `/home?topup` and `/home?repay`, and `/receive?from=send` to `/send?topup`. The sheet opens as the page loads, and the query that opened it is dropped, so a reload doesn't open it again.
+- **Back on every page but Home,** Invest's chevron left of the 30px title (`TabHeader back="/home"`): Agents, Leaderboard, Send, Activity, Settings, Use credit, Free up shares and Credit. The centred "Credit" label header (`SubHeader`) is gone; Free up's Back goes Home, not to Invest.
+
+**Builder defaults, pending Adrian.**
+
+- **Top up's title is "Add money"** (the board's and the page's); the buttons that open it still say Top up, Add cash or Receive.
+- **Top up and Repay have Close and no Back** when opened from another sheet: they end the hop (SheetShell's rule: Back for a step in a sequence, Close for a leaf).
+- **Invest's header sits 4px lower than the others** (its page starts 12px under the status bar, the rest 8px), so its chevron does too. The paddings are left as they were.

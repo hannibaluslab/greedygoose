@@ -5,7 +5,7 @@ import Link from "next/link";
 import { parseUnits } from "viem";
 import { useAccount } from "wagmi";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
-import { SubHeader, WhiteCard } from "@/components/gg/Screen";
+import { TabHeader, WhiteCard } from "@/components/gg/Screen";
 import { AmountInput } from "@/components/gg/AmountInput";
 import { BottomBar } from "@/components/gg/BottomBar";
 import { LoanMeter } from "@/components/gg/LoanMeter";
@@ -122,7 +122,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
   if (tx.phase === "done" && sent) {
     return (
       <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[calc(env(safe-area-inset-top)+8px)]">
-        <SubHeader label="Credit" />
+        <TabHeader title="Use credit" back="/home" />
         <TxDone
           title={sent.borrowed > 0 ? `You used ${formatUsd(sent.borrowed)} of credit` : "Backing added"}
           body={
@@ -147,8 +147,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
   if (lines.length === 0 && data.collateralUsd === 0) {
     return (
       <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[calc(env(safe-area-inset-top)+8px)]">
-        <SubHeader label="Credit" />
-        <h1 className="m-0 text-[30px] font-semibold tracking-[-0.03em]">Use credit</h1>
+        <TabHeader title="Use credit" back="/home" />
         <WhiteCard className="flex flex-col gap-3 p-[18px]">
           <p className="m-0 text-[15px]">Credit needs stocks to back it. Buy some with your USDC, or receive them.</p>
           <Link href="/buy" className="flex h-[52px] items-center justify-center rounded-[26px] bg-brand text-[15px] font-bold no-underline">Buy stocks</Link>
@@ -172,9 +171,8 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
 
   return (
     <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[calc(env(safe-area-inset-top)+8px)]">
-      <SubHeader label="Credit" />
       <div className="flex flex-col gap-1">
-        <h1 className="m-0 text-[30px] font-semibold tracking-[-0.03em]">Use credit</h1>
+        <TabHeader title="Use credit" back="/home" />
         <p className="m-0 text-sm text-ink-mid">Choose what backs it and how much to take. Nothing is sold.</p>
       </div>
       <MarketBanner />

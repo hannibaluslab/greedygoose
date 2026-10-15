@@ -283,7 +283,7 @@ export function BoardView({
 
   return (
     <div className="relative flex min-h-dvh flex-col gap-3 px-5 pt-[calc(env(safe-area-inset-top)+8px)] leading-[normal]">
-      <TabHeader title="Leaderboard" />
+      <TabHeader title="Leaderboard" back="/home" />
       <SegmentedControl label="Show" options={FILTERS} value={filter} onChange={onFilter} />
       {ready && filter === "all" && addable > 0 && (
         <div className="-mb-1 flex items-center justify-between px-1">

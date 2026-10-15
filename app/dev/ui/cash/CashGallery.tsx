@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { AddMoneyView } from "@/components/gg/AddMoney";
+import { TopUpSheetView } from "@/components/gg/AddMoney";
 import { AgentsFeed } from "@/components/gg/Agents";
 import { BalanceHero, TodayChange } from "@/components/gg/BalanceHero";
 import { CashCard, CreditCard } from "@/components/gg/Cards";
@@ -35,7 +35,7 @@ import { CashSheetDemo, SHEET_VIEWS, type SheetView } from "./CashSheetDemo";
  *   ?view=convert                 "Turn into cash" with one coin under the floor: it stays as it is
  *   ?view=auto                    once it lands, "Do this automatically next time?"
  *   ?view=done                    converted, with nothing to ask (no executor, or it already converts on its own)
- *   ?view=pay | pay-setup         Pay while the cash earns, and before earning is set up
+ *   ?view=pay | pay-setup         the Top up sheet over Home, while the cash earns and before earning is set up
  *   ?view=activity                Activity with the cash's own events
  * The Cash sheet (CashSheetDemo), over Home:
  *   ?view=sheet                   earning, nothing owed, Earn with stocks offered, no activity yet
@@ -72,7 +72,12 @@ export function CashGallery() {
   if (!nowSec) return null;
 
   if (view === "pay" || view === "pay-setup") {
-    return <AddMoneyView address={ADDRESS} name="sam.justan.id" rate={view === "pay" ? RATE : null} onCopy={noop} />;
+    return (
+      <HomeFixture
+        cards={null}
+        sheet={<TopUpSheetView open onClose={noop} address={ADDRESS} name="sam.justan.id" rate={view === "pay" ? RATE : null} onCopy={noop} />}
+      />
+    );
   }
   if (view === "activity") return <ActivityFixture nowSec={nowSec} />;
   if (isSheetView(view)) return <HomeFixture cards={null} sheet={<CashSheetDemo view={view} nowSec={nowSec} />} />;

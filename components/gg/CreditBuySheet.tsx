@@ -1,12 +1,12 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import { parseUnits } from "viem";
 import { useAccount } from "wagmi";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { AmountArrow, AmountBadge, AmountField, AmountSource, YouGet } from "./AmountField";
 import { Button } from "./Button";
+import { useMoneySheets } from "./MoneySheets";
 import { StockAvatar, tickerOf } from "./StockAvatar";
 import { NETWORK_FEE_ROW, Summary } from "./Summary";
 import { TxButton, TxError } from "./TxUi";
@@ -60,7 +60,7 @@ const wholeUsd = (n: number) => formatUsdTrim(Math.max(0, Math.floor(n)));
  * Back from step 1 returns to that sheet. Once it lands it goes Home with the "Bought" toast (F2-7).
  */
 export function CreditBuySheet({
-  open, user, data, symbol, onClose, onBack, onBuyWithCash,
+  open, user, data, symbol, onClose, onBack, onBuyWithCash, onMarket,
 }: {
   open: boolean;
   user: `0x${string}`;
@@ -72,6 +72,8 @@ export function CreditBuySheet({
   onBack?: () => void;
   /** No credit to use: a stock tapped opens its Buy step with cash. */
   onBuyWithCash: (symbol: string) => void;
+  /** The page's Market: the Repay sheet's "Buy more with credit" opens it in place. */
+  onMarket?: () => void;
 }) {
   const preset = EQUITIES.find((e) => e.symbol === symbol) ?? null;
   const { isConnected } = useAccount();
@@ -192,6 +194,13 @@ export function CreditBuySheet({
     onClose();
     if (!busy) reset();
   };
+  const money = useMoneySheets();
+  /** Credit Buy's Repay links: this sheet slides out as the Repay sheet slides in. */
+  const leaveForRepay = () => {
+    close();
+    if (onMarket) money.repayWithMarket(onMarket);
+    else money.repay();
+  };
 
   // F2-5 → F2-7: once the batch lands, Home with "Bought … with Credit Buy", the shares read from the receipt.
   useBoughtHome({ phase, user, symbol: stock?.symbol ?? "", txHash, credit: true, onClose });
@@ -228,276 +237,278 @@ export function CreditBuySheet({
   const creditLine = cashRaw(data.cash) < feeBufferRaw ? FEE_FIRST : CREDIT_FROM;
 
   return (
-    <SheetShell
-      open={open}
-      onOpenChange={(next) => !next && close()}
-      title={title}
-      // Step 3 opens the picker as tall as F1-3's Market (188px from the top), however few stocks there are.
-      topPx={step === "pick" ? 188 : undefined}
-      onBack={leave ?? (back ? () => !busy && go(back) : undefined)}
-    >
-      <SheetSteps stepKey={step} direction={direction} className="flex flex-col gap-3">
-        {step === "back" ? (
-          !available ? (
-            cfRead.failed ? <CantCheck onRetry={cfRead.retry} /> : <div aria-busy className="h-[220px] animate-pulse rounded-[16px] bg-chip" />
-          ) : available.why === "no-stocks" ? (
-            // No stocks at all (Adrian: step 1 always shows): the step's title, an empty slot saying why, then the
-            // stocks, which buy with cash. Holding any stock shows it below instead, with why it can't back this yet.
-            <div className="flex flex-col gap-3 pt-1">
-              <h3 className="label m-0 px-1">Back it with</h3>
-              <div className="flex flex-col items-center gap-1.5 rounded-[16px] border-[1.5px] border-dashed border-[rgba(14,13,11,0.2)] px-5 py-5 text-center">
-                <p className="m-0 text-[15px] font-semibold">
-                  {available.why === "no-stocks" ? "No stocks to back it with yet" : "Nothing free to back it with"}
-                </p>
-                <p className="m-0 text-pretty text-[13px] leading-[1.4] text-ink-mid">{available.line}</p>
+    <LeaveForRepay.Provider value={leaveForRepay}>
+      <SheetShell
+        open={open}
+        onOpenChange={(next) => !next && close()}
+        title={title}
+        // Step 3 opens the picker as tall as F1-3's Market (188px from the top), however few stocks there are.
+        topPx={step === "pick" ? 188 : undefined}
+        onBack={leave ?? (back ? () => !busy && go(back) : undefined)}
+      >
+        <SheetSteps stepKey={step} direction={direction} className="flex flex-col gap-3">
+          {step === "back" ? (
+            !available ? (
+              cfRead.failed ? <CantCheck onRetry={cfRead.retry} /> : <div aria-busy className="h-[220px] animate-pulse rounded-[16px] bg-chip" />
+            ) : available.why === "no-stocks" ? (
+              // No stocks at all (Adrian: step 1 always shows): the step's title, an empty slot saying why, then the
+              // stocks, which buy with cash. Holding any stock shows it below instead, with why it can't back this yet.
+              <div className="flex flex-col gap-3 pt-1">
+                <h3 className="label m-0 px-1">Back it with</h3>
+                <div className="flex flex-col items-center gap-1.5 rounded-[16px] border-[1.5px] border-dashed border-[rgba(14,13,11,0.2)] px-5 py-5 text-center">
+                  <p className="m-0 text-[15px] font-semibold">
+                    {available.why === "no-stocks" ? "No stocks to back it with yet" : "Nothing free to back it with"}
+                  </p>
+                  <p className="m-0 text-pretty text-[13px] leading-[1.4] text-ink-mid">{available.line}</p>
+                </div>
+                <StockLists
+                  held={preset ? held.filter((h) => h.symbol === preset.symbol) : held}
+                  others={preset ? others.filter((e) => e.symbol === preset.symbol) : others}
+                  priceOf={priceOf}
+                  withCash
+                  onPick={(s) => onBuyWithCash(s.symbol)}
+                />
               </div>
-              <StockLists
-                held={preset ? held.filter((h) => h.symbol === preset.symbol) : held}
-                others={preset ? others.filter((e) => e.symbol === preset.symbol) : others}
-                priceOf={priceOf}
-                withCash
-                onPick={(s) => onBuyWithCash(s.symbol)}
-              />
-            </div>
-          ) : (
-            <>
-              <h3 className="label m-0 px-1">Back it with</h3>
-              <div role="radiogroup" aria-label="Back it with" className="flex flex-col gap-2">
-                {options.map((o) => {
-                  const h = data.holdings.find((x) => x.symbol === o.stock.symbol)!;
-                  return (
-                    <BackingRow
-                      key={h.symbol}
-                      holding={h}
-                      checked={pickedKey === h.symbol}
-                      right={<><span className="num text-[20px] font-bold leading-[1.1] tracking-[-0.02em]">{formatUsd(o.freeUsd)}</span><span className="whitespace-nowrap text-[11.5px] text-ink-mid">free</span></>}
-                      onPick={() => choose(h.symbol)}
-                    />
-                  );
-                })}
-                {canUseExisting && (
-                  <ExistingRow
-                    names={backers(data.holdings, []).map((h) => h.name)}
-                    valueUsd={data.collateralUsd}
-                    roomUsd={existingRoom}
-                    checked={pickedKey === EXISTING}
-                    onPick={() => choose(EXISTING)}
-                  />
-                )}
-              </div>
-              <CantBack
-                inUse={data.collateralUsd > 0 && !canUseExisting ? { names: backers(data.holdings, []).map((h) => h.name), usd: data.collateralUsd } : null}
-                items={unpickable.flatMap((h) => {
-                  const g = gives.get(h.symbol);
-                  const reason =
-                    g != null && g < BUY_LIMITS.minUsd && !h.paused && !h.frozen && h.freeUsd >= MIN_BACKING_USD
-                      ? `gives ${formatUsd(Math.max(0, g))} of credit, under the $1 minimum`
-                      : unavailable(h)?.toLowerCase();
-                  // All in use: the line above already names it.
-                  return reason ? [{ name: h.name, reason }] : [];
-                })}
-              />
-              {available.why ? (
-                // Holdings, but none can back a Credit Buy yet: why, and the stocks still buy with cash.
-                <>
-                  <p role="status" className="m-0 px-1 text-[13px] leading-[1.4] text-ink-mid">{available.line}</p>
-                  <StockLists
-                    held={preset ? held.filter((h) => h.symbol === preset.symbol) : held}
-                    others={preset ? others.filter((e) => e.symbol === preset.symbol) : others}
-                    priceOf={priceOf}
-                    withCash
-                    onPick={(s) => onBuyWithCash(s.symbol)}
-                  />
-                </>
-              ) : (
+            ) : (
               <>
-              {/* The board's "Your cash isn't used": the network fee is paid from cash. D19: no "It keeps earning." */}
-              <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">Amounts move with the price. Your cash only pays the network fee.</p>
-              <Button
-                variant="dark"
-                disabled={!pickedKey}
-                onClick={() => {
-                  // Hold the pick from here on: the default must not move to another holding when prices tick.
-                  choose(pickedKey);
-                  go(chosen ? "much" : afterBacking);
+                <h3 className="label m-0 px-1">Back it with</h3>
+                <div role="radiogroup" aria-label="Back it with" className="flex flex-col gap-2">
+                  {options.map((o) => {
+                    const h = data.holdings.find((x) => x.symbol === o.stock.symbol)!;
+                    return (
+                      <BackingRow
+                        key={h.symbol}
+                        holding={h}
+                        checked={pickedKey === h.symbol}
+                        right={<><span className="num text-[20px] font-bold leading-[1.1] tracking-[-0.02em]">{formatUsd(o.freeUsd)}</span><span className="whitespace-nowrap text-[11.5px] text-ink-mid">free</span></>}
+                        onPick={() => choose(h.symbol)}
+                      />
+                    );
+                  })}
+                  {canUseExisting && (
+                    <ExistingRow
+                      names={backers(data.holdings, []).map((h) => h.name)}
+                      valueUsd={data.collateralUsd}
+                      roomUsd={existingRoom}
+                      checked={pickedKey === EXISTING}
+                      onPick={() => choose(EXISTING)}
+                    />
+                  )}
+                </div>
+                <CantBack
+                  inUse={data.collateralUsd > 0 && !canUseExisting ? { names: backers(data.holdings, []).map((h) => h.name), usd: data.collateralUsd } : null}
+                  items={unpickable.flatMap((h) => {
+                    const g = gives.get(h.symbol);
+                    const reason =
+                      g != null && g < BUY_LIMITS.minUsd && !h.paused && !h.frozen && h.freeUsd >= MIN_BACKING_USD
+                        ? `gives ${formatUsd(Math.max(0, g))} of credit, under the $1 minimum`
+                        : unavailable(h)?.toLowerCase();
+                    // All in use: the line above already names it.
+                    return reason ? [{ name: h.name, reason }] : [];
+                  })}
+                />
+                {available.why ? (
+                  // Holdings, but none can back a Credit Buy yet: why, and the stocks still buy with cash.
+                  <>
+                    <p role="status" className="m-0 px-1 text-[13px] leading-[1.4] text-ink-mid">{available.line}</p>
+                    <StockLists
+                      held={preset ? held.filter((h) => h.symbol === preset.symbol) : held}
+                      others={preset ? others.filter((e) => e.symbol === preset.symbol) : others}
+                      priceOf={priceOf}
+                      withCash
+                      onPick={(s) => onBuyWithCash(s.symbol)}
+                    />
+                  </>
+                ) : (
+                <>
+                {/* The board's "Your cash isn't used": the network fee is paid from cash. D19: no "It keeps earning." */}
+                <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">Amounts move with the price. Your cash only pays the network fee.</p>
+                <Button
+                  variant="dark"
+                  disabled={!pickedKey}
+                  onClick={() => {
+                    // Hold the pick from here on: the default must not move to another holding when prices tick.
+                    choose(pickedKey);
+                    go(chosen ? "much" : afterBacking);
+                  }}
+                  className="mt-1"
+                >
+                  Continue
+                </Button>
+                </>
+                )}
+              </>
+            )
+          ) : lostPick ? (
+            // The holding picked on step 1 can't back credit any more (see `lostPick`): say so, and pick again.
+            !cfs ? (
+              cfRead.failed ? <CantCheck onRetry={cfRead.retry} /> : <div aria-busy className="h-[220px] animate-pulse rounded-[16px] bg-chip" />
+            ) : (
+              <>
+                <p role="status" className="m-0 px-1 pt-1 text-[15px] leading-snug text-ink">
+                  {EQUITIES.find((e) => e.symbol === picked)?.name ?? "That stock"} can’t back credit right now.
+                </p>
+                <Button variant="dark" onClick={() => go("back")} className="mt-1">
+                  Pick again
+                </Button>
+              </>
+            )
+          ) : step === "much" && chosen && chosenHolding ? (
+            <>
+              <AmountField
+                label="How much to put in use"
+                badge={<StockAvatar symbol={chosen.stock.symbol} />}
+                value={typed ? backUsd : ""}
+                onValue={(v) => {
+                  // The whole free value typed is all of it from now on; otherwise the shares it is worth now.
+                  const usd = Math.max(0, Number(v) || 0);
+                  setBacking(v, isAllFree(chosen, usd), backingRaw(chosen, usd));
                 }}
-                className="mt-1"
-              >
+                onMax={() => setBacking(freeShownUsd(chosen).toFixed(2), true, chosen.freeRaw)}
+                hint={
+                  room.block === "over-free"
+                    ? `${formatShares(chosenHolding.freeShares)} ${tickerOf(chosen.stock.symbol)} shares · ${formatUsd(chosen.freeUsd)} free`
+                    : `${formatShares(rawToShares(pick.raw, chosenHolding.multiplier, chosen.stock.decimals))} of ${formatShares(chosenHolding.freeShares)} ${tickerOf(chosen.stock.symbol)} shares · ${formatUsd(chosen.freeUsd)} free`
+                }
+                autoFocus
+              />
+              <UseUpTo
+                usd={canUse ? roomUsd : 0}
+                line={
+                  room.block === "over-free"
+                    ? null
+                    : canUse
+                      ? // Ties the two dollar figures together (Adrian: "up to 3 but MAX is 3.99?"): credit is a share of what's
+                        // put in use, plus any room left on what already backs credit.
+                        creditLine === FEE_FIRST
+                        ? creditLine
+                        : `${pick.raw > 0n ? `About ${Math.round(chosen.cf * 100)}% of the ${formatUsd(backAmount || chosen.freeUsd)} of ${chosen.stock.name} you put in use${data.collateralUsd > 0 ? ", plus room on what already backs credit" : ""}.` : "From what already backs credit."}${room.maxSafeUsd >= 1 ? ` Stays Safe up to ${wholeUsd(room.maxSafeUsd)}.` : ""}`
+                      : backAmount > 0 || pick.raw > 0n
+                        ? `A Credit Buy needs at least ${formatUsd(BUY_LIMITS.minUsd)} of credit. Put more in use.`
+                        : `Type how much ${chosen.stock.name} to put in use.`
+                }
+              />
+              {canUse && data.debtUsd > 0 && (
+                <Summary
+                  rows={[
+                    // How much of it keeps the credit Safe (D2's bands); none at all reads in the status instead.
+                    // What putting it in use does on its own, before any new credit (nothing owed has no status yet).
+                    ...(data.debtUsd > 0 ? [{ label: "Status", value: <StatusChange from={room.before} to={room.after} /> }] : []),
+                  ]}
+                />
+              )}
+              {room.block === "over-free" && (
+                <p role="status" className="m-0 text-[13px] leading-snug text-act">
+                  That’s more than your free {chosen.stock.name} ({formatUsd(chosen.freeUsd)}).
+                </p>
+              )}
+              {against.length > 0 && (
+                <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">{riskNote(againstNames, protect === "on")}</p>
+              )}
+              <Button variant="dark" disabled={!canUse} onClick={() => go(afterBacking)} className="mt-1">
                 Continue
               </Button>
-              </>
-              )}
             </>
-          )
-        ) : lostPick ? (
-          // The holding picked on step 1 can't back credit any more (see `lostPick`): say so, and pick again.
-          !cfs ? (
-            cfRead.failed ? <CantCheck onRetry={cfRead.retry} /> : <div aria-busy className="h-[220px] animate-pulse rounded-[16px] bg-chip" />
-          ) : (
+          ) : step === "pick" ? (
+            <div className="flex flex-col gap-4 pt-1">
+              <CreditHero available={{ usd: roomUsd, line: creditLine }} failed={false} onRetry={cfRead.retry} />
+              <StockLists held={held} others={others} priceOf={priceOf} withCash={false} onPick={pickStock} />
+            </div>
+          ) : step === "amount" && stock ? (
             <>
-              <p role="status" className="m-0 px-1 pt-1 text-[15px] leading-snug text-ink">
-                {EQUITIES.find((e) => e.symbol === picked)?.name ?? "That stock"} can’t back credit right now.
-              </p>
-              <Button variant="dark" onClick={() => go("back")} className="mt-1">
-                Pick again
-              </Button>
-            </>
-          )
-        ) : step === "much" && chosen && chosenHolding ? (
-          <>
-            <AmountField
-              label="How much to put in use"
-              badge={<StockAvatar symbol={chosen.stock.symbol} />}
-              value={typed ? backUsd : ""}
-              onValue={(v) => {
-                // The whole free value typed is all of it from now on; otherwise the shares it is worth now.
-                const usd = Math.max(0, Number(v) || 0);
-                setBacking(v, isAllFree(chosen, usd), backingRaw(chosen, usd));
-              }}
-              onMax={() => setBacking(freeShownUsd(chosen).toFixed(2), true, chosen.freeRaw)}
-              hint={
-                room.block === "over-free"
-                  ? `${formatShares(chosenHolding.freeShares)} ${tickerOf(chosen.stock.symbol)} shares · ${formatUsd(chosen.freeUsd)} free`
-                  : `${formatShares(rawToShares(pick.raw, chosenHolding.multiplier, chosen.stock.decimals))} of ${formatShares(chosenHolding.freeShares)} ${tickerOf(chosen.stock.symbol)} shares · ${formatUsd(chosen.freeUsd)} free`
-              }
-              autoFocus
-            />
-            <UseUpTo
-              usd={canUse ? roomUsd : 0}
-              line={
-                room.block === "over-free"
-                  ? null
-                  : canUse
-                    ? // Ties the two dollar figures together (Adrian: "up to 3 but MAX is 3.99?"): credit is a share of what's
-                      // put in use, plus any room left on what already backs credit.
-                      creditLine === FEE_FIRST
-                      ? creditLine
-                      : `${pick.raw > 0n ? `About ${Math.round(chosen.cf * 100)}% of the ${formatUsd(backAmount || chosen.freeUsd)} of ${chosen.stock.name} you put in use${data.collateralUsd > 0 ? ", plus room on what already backs credit" : ""}.` : "From what already backs credit."}${room.maxSafeUsd >= 1 ? ` Stays Safe up to ${wholeUsd(room.maxSafeUsd)}.` : ""}`
-                    : backAmount > 0 || pick.raw > 0n
-                      ? `A Credit Buy needs at least ${formatUsd(BUY_LIMITS.minUsd)} of credit. Put more in use.`
-                      : `Type how much ${chosen.stock.name} to put in use.`
-              }
-            />
-            {canUse && data.debtUsd > 0 && (
+              <AmountField
+                label="On credit"
+                source={
+                  against.length > 0 && (
+                    <AmountSource mark={<StockAvatar symbol={against[0].symbol} size={16} />}>
+                      Against {against[0].name}{against.length > 1 ? ` +${against.length - 1}` : ""}
+                    </AmountSource>
+                  )
+                }
+                badge={<AmountBadge kind="credit" />}
+                value={raw}
+                onValue={(v) => {
+                  setRaw(v);
+                  setAck(false);
+                }}
+                onMax={() => {
+                  setRaw(String(Math.max(0, Math.floor(plan.maxUsd))));
+                  setAck(false);
+                }}
+                hint={`Up to ${wholeUsd(plan.maxUsd)} against your ${shortNames(againstNames)}`}
+                autoFocus
+              />
+              <AmountArrow />
+              <YouGet symbol={stock.symbol} shares={quote.isFetching && amount > 0 ? null : econ ? econ.shares : 0} priceUsd={econ ? econ.price : oraclePriceUsd} />
               <Summary
                 rows={[
-                  // How much of it keeps the credit Safe (D2's bands); none at all reads in the status instead.
-                  // What putting it in use does on its own, before any new credit (nothing owed has no status yet).
-                  ...(data.debtUsd > 0 ? [{ label: "Status", value: <StatusChange from={room.before} to={room.after} /> }] : []),
+                  { label: "Cost", value: `${(data.apr * 100).toFixed(1)}% a year · ${monthlyCostText(monthlyCost(amount, data.apr))}` },
+                  { label: against.length === 1 ? `Credit left on ${against[0].name}` : "Credit left", value: wholeUsd(plan.maxUsd - amount) },
+                  {
+                    label: "Status after",
+                    value: <span className={AFTER_TONE[plan.after]}>{STATUS_LABEL[plan.after]}</span>,
+                  },
+                  NETWORK_FEE_ROW,
                 ]}
               />
-            )}
-            {room.block === "over-free" && (
-              <p role="status" className="m-0 text-[13px] leading-snug text-act">
-                That’s more than your free {chosen.stock.name} ({formatUsd(chosen.freeUsd)}).
-              </p>
-            )}
-            {against.length > 0 && (
-              <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">{riskNote(againstNames, protect === "on")}</p>
-            )}
-            <Button variant="dark" disabled={!canUse} onClick={() => go(afterBacking)} className="mt-1">
-              Continue
-            </Button>
-          </>
-        ) : step === "pick" ? (
-          <div className="flex flex-col gap-4 pt-1">
-            <CreditHero available={{ usd: roomUsd, line: creditLine }} failed={false} onRetry={cfRead.retry} />
-            <StockLists held={held} others={others} priceOf={priceOf} withCash={false} onPick={pickStock} />
-          </div>
-        ) : step === "amount" && stock ? (
-          <>
-            <AmountField
-              label="On credit"
-              source={
-                against.length > 0 && (
-                  <AmountSource mark={<StockAvatar symbol={against[0].symbol} size={16} />}>
-                    Against {against[0].name}{against.length > 1 ? ` +${against.length - 1}` : ""}
-                  </AmountSource>
-                )
-              }
-              badge={<AmountBadge kind="credit" />}
-              value={raw}
-              onValue={(v) => {
-                setRaw(v);
-                setAck(false);
-              }}
-              onMax={() => {
-                setRaw(String(Math.max(0, Math.floor(plan.maxUsd))));
-                setAck(false);
-              }}
-              hint={`Up to ${wholeUsd(plan.maxUsd)} against your ${shortNames(againstNames)}`}
-              autoFocus
-            />
-            <AmountArrow />
-            <YouGet symbol={stock.symbol} shares={quote.isFetching && amount > 0 ? null : econ ? econ.shares : 0} priceUsd={econ ? econ.price : oraclePriceUsd} />
-            <Summary
-              rows={[
-                { label: "Cost", value: `${(data.apr * 100).toFixed(1)}% a year · ${monthlyCostText(monthlyCost(amount, data.apr))}` },
-                { label: against.length === 1 ? `Credit left on ${against[0].name}` : "Credit left", value: wholeUsd(plan.maxUsd - amount) },
-                {
-                  label: "Status after",
-                  value: <span className={AFTER_TONE[plan.after]}>{STATUS_LABEL[plan.after]}</span>,
-                },
-                NETWORK_FEE_ROW,
-              ]}
-            />
-            {(blocker || warnPremium || plan.priceMayMove) && (
-              <p role="status" className={`m-0 text-[13px] leading-snug ${blocker ? "text-act" : "text-watch-text"}`}>
-                {blocker ??
-                  (warnPremium
-                    ? `You’d pay ${(econ!.premium * 100).toFixed(1)}% over Aave’s price — the market for ${stock.name} is small.`
-                    : "Stock markets are closed. You can still buy, but the price can jump when they reopen.")}
-              </p>
-            )}
-            {ready && (
-              <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">
-                {/* D7: every move in the batch, the stock put in use too. */}
-                In one go:{" "}
-                {inWords([
-                  ...plan.backing.map((b) => {
-                    const h = data.holdings.find((x) => x.symbol === b.stock.symbol)!;
-                    return `${formatShares(rawToShares(b.raw, h.multiplier, b.stock.decimals))} ${tickerOf(b.stock.symbol)} goes in use to back credit`;
-                  }),
-                  `${formatUsd(amount)} of credit is taken`,
-                  `exactly ${formatUsd(econ!.usd)} is approved for the ${VENUE_LABEL[q!.venue]} router and swapped`,
-                ])}
-                . You’ll owe {formatUsd(data.debtUsd + amount)}, backed by {shortNames(againstNames)}. {riskNote(againstNames, protect === "on")}{" "}
-                {stock.name} here is a tokenized stock. It tracks the share price; it is not company shares or voting rights.
-              </p>
-            )}
-            {ready && plan.extraConfirm && (
-              <label className="flex items-start gap-2.5 rounded-2xl bg-act-bg px-4 py-3 text-[13px] leading-snug text-act">
-                <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-px size-[18px] shrink-0 accent-[#8e2a1d]" />
-                I understand this puts my credit in {STATUS_LABEL[plan.after]}. If my stocks fall too far, part of them can be sold to repay what I owe.
-              </label>
-            )}
-            {feeBlocked && (
-              <p role="alert" className="m-0 text-[13px] text-act">
-                Your account can’t pay network fees in USDC on Base right now, so this Credit Buy can’t go through.
-              </p>
-            )}
-            <TxError error={error} />
-            <div className="mt-1">
-              <TxButton
-                label="Credit Buy"
-                size="md"
-                phase={phase}
-                checking={checking}
-                preview={!isConnected}
-                disabled={!signable || fee.loading || blocked || phase === "done"}
-                onClick={() => {
-                  if (!signable) return;
-                  if (phase !== "idle") reset();
-                  void sign();
-                }}
-              />
-            </div>
-          </>
-        ) : (
-          <div aria-busy className="h-[320px] animate-pulse rounded-[16px] bg-chip" />
-        )}
-      </SheetSteps>
-    </SheetShell>
+              {(blocker || warnPremium || plan.priceMayMove) && (
+                <p role="status" className={`m-0 text-[13px] leading-snug ${blocker ? "text-act" : "text-watch-text"}`}>
+                  {blocker ??
+                    (warnPremium
+                      ? `You’d pay ${(econ!.premium * 100).toFixed(1)}% over Aave’s price — the market for ${stock.name} is small.`
+                      : "Stock markets are closed. You can still buy, but the price can jump when they reopen.")}
+                </p>
+              )}
+              {ready && (
+                <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">
+                  {/* D7: every move in the batch, the stock put in use too. */}
+                  In one go:{" "}
+                  {inWords([
+                    ...plan.backing.map((b) => {
+                      const h = data.holdings.find((x) => x.symbol === b.stock.symbol)!;
+                      return `${formatShares(rawToShares(b.raw, h.multiplier, b.stock.decimals))} ${tickerOf(b.stock.symbol)} goes in use to back credit`;
+                    }),
+                    `${formatUsd(amount)} of credit is taken`,
+                    `exactly ${formatUsd(econ!.usd)} is approved for the ${VENUE_LABEL[q!.venue]} router and swapped`,
+                  ])}
+                  . You’ll owe {formatUsd(data.debtUsd + amount)}, backed by {shortNames(againstNames)}. {riskNote(againstNames, protect === "on")}{" "}
+                  {stock.name} here is a tokenized stock. It tracks the share price; it is not company shares or voting rights.
+                </p>
+              )}
+              {ready && plan.extraConfirm && (
+                <label className="flex items-start gap-2.5 rounded-2xl bg-act-bg px-4 py-3 text-[13px] leading-snug text-act">
+                  <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-px size-[18px] shrink-0 accent-[#8e2a1d]" />
+                  I understand this puts my credit in {STATUS_LABEL[plan.after]}. If my stocks fall too far, part of them can be sold to repay what I owe.
+                </label>
+              )}
+              {feeBlocked && (
+                <p role="alert" className="m-0 text-[13px] text-act">
+                  Your account can’t pay network fees in USDC on Base right now, so this Credit Buy can’t go through.
+                </p>
+              )}
+              <TxError error={error} />
+              <div className="mt-1">
+                <TxButton
+                  label="Credit Buy"
+                  size="md"
+                  phase={phase}
+                  checking={checking}
+                  preview={!isConnected}
+                  disabled={!signable || fee.loading || blocked || phase === "done"}
+                  onClick={() => {
+                    if (!signable) return;
+                    if (phase !== "idle") reset();
+                    void sign();
+                  }}
+                />
+              </div>
+            </>
+          ) : (
+            <div aria-busy className="h-[320px] animate-pulse rounded-[16px] bg-chip" />
+          )}
+        </SheetSteps>
+      </SheetShell>
+    </LeaveForRepay.Provider>
   );
 }
 
@@ -580,7 +591,7 @@ function ExistingRow({ names, valueUsd, roomUsd, checked, onPick }: {
         <span className="num truncate text-[12.5px] text-ink-mid">{shortNames(names)} · {formatUsd(valueUsd)}</span>
         {!onPick && (
           <span className="text-[12px] text-ink-mid">
-            Nothing left to use · <Link href="/repay" className="font-semibold text-ink no-underline">Repay</Link>
+            Nothing left to use · <RepayLink />
           </span>
         )}
       </span>
@@ -604,6 +615,19 @@ function ExistingRow({ names, valueUsd, roomUsd, checked, onPick }: {
     <div role="radio" aria-checked={false} aria-disabled aria-label="Already backs credit, not available: nothing left to use" className={`${cls} border border-line-field opacity-60`}>
       {body}
     </div>
+  );
+}
+
+/** How a Repay link inside the sheet leaves it for the Repay sheet (CreditBuySheet sets it). */
+const LeaveForRepay = createContext<() => void>(() => {});
+
+/** "Repay" inside a row or a note: opens the Repay sheet in this one's place. */
+function RepayLink() {
+  const repay = useContext(LeaveForRepay);
+  return (
+    <button type="button" onClick={repay} className="font-semibold text-ink">
+      Repay
+    </button>
   );
 }
 
@@ -753,7 +777,7 @@ function BackingRow({ holding: h, checked = false, right, onPick, reason }: {
               <>
                 <BacksIcon size={10} className="mr-1 inline align-[-1px] text-ink" />
                 {allInUse ? (
-                  <><b className="font-semibold text-ink">All</b> in use · <Link href="/repay" className="font-semibold text-ink no-underline">Repay</Link></>
+                  <><b className="font-semibold text-ink">All</b> in use · <RepayLink /></>
                 ) : (
                   <><b className="font-semibold text-ink">{formatShares(h.lockedShares)}</b> in use</>
                 )}
@@ -790,7 +814,7 @@ function CantBack({ inUse, items }: { inUse: { names: string[]; usd: number } | 
         <p className="m-0">
           <BacksIcon size={10} className="mr-1 inline align-[-1px] text-ink" />
           <b className="font-semibold text-ink">{shortNames(inUse.names)}</b> ({formatUsd(inUse.usd)}) already {inUse.names.length > 1 ? "back" : "backs"} your credit, with nothing
-          left to use. <Link href="/repay" className="font-semibold text-ink no-underline">Repay</Link>
+          left to use. <RepayLink />
         </p>
       )}
       {items.map((i) => (

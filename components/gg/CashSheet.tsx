@@ -8,6 +8,7 @@ import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { Button } from "./Button";
 import { CashActivity } from "./CashActivity";
 import { EarnCard, EarnStep } from "./EarnWithStocks";
+import { useMoneySheets } from "./MoneySheets";
 import { Money } from "./Money";
 import { useEarnOffer, useEarnWithStocks } from "@/hooks/useEarnWithStocks";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
@@ -64,25 +65,35 @@ export function CashOwed({ data }: { data: PositionData }) {
   );
 }
 
-/** Top up, and Repay while something is owed. Buttons name the action. Send is its own tab (2026-10-15), not offered here. */
-export function CashFooter({ owes }: { owes: boolean }) {
+/**
+ * Top up, and Repay while something is owed, each a sheet that slides in as this one slides out (`onLeave` closes it).
+ * Buttons name the action. Send is its own tab (2026-10-15), not offered here.
+ */
+export function CashFooter({ owes, onLeave }: { owes: boolean; onLeave?: () => void }) {
+  const money = useMoneySheets();
+  const hop = (open: () => void) => () => {
+    onLeave?.();
+    open();
+  };
   return (
     <div className={`grid gap-2.5 ${owes ? "grid-cols-2" : "grid-cols-1"}`}>
-      <Button variant="soft" href="/receive">Top up</Button>
-      {owes && <Button variant="soft" href="/repay">Repay</Button>}
+      <Button variant="soft" onClick={hop(money.topUp)}>Top up</Button>
+      {owes && <Button variant="soft" onClick={hop(money.repay)}>Repay</Button>}
     </div>
   );
 }
 
 /** The Cash step's body, plain values in, so the dev gallery draws it with fixtures. */
-export function CashStep({ data, arrived, offer, onEarn, activity }: { data: PositionData; arrived: ArrivedView; offer: EarnOffer; onEarn: () => void; activity: ReactNode }) {
+export function CashStep({
+  data, arrived, offer, onEarn, activity, onLeave,
+}: { data: PositionData; arrived: ArrivedView; offer: EarnOffer; onEarn: () => void; activity: ReactNode; onLeave?: () => void }) {
   return (
     <>
       <CashAmount data={data} arrived={arrived} />
       <CashOwed data={data} />
       <EarnCard offer={offer} onOpen={onEarn} />
       {activity}
-      <CashFooter owes={data.debtUsd > 0} />
+      <CashFooter owes={data.debtUsd > 0} onLeave={onLeave} />
     </>
   );
 }
@@ -187,7 +198,14 @@ export function CashSheet({
             }}
           />
         ) : (
-          <CashStep data={data} arrived={arrived} offer={earn.offer} onEarn={() => go("earn")} activity={open && <CashActivity account={account} />} />
+          <CashStep
+            data={data}
+            arrived={arrived}
+            offer={earn.offer}
+            onEarn={() => go("earn")}
+            activity={open && <CashActivity account={account} />}
+            onLeave={close}
+          />
         )}
       </SheetSteps>
     </SheetShell>

@@ -163,12 +163,20 @@ export function AutomaticStep({ landed, grant, onYes, onNo }: { landed: string; 
 }
 
 /**
- * "Turn into cash" where other dollars show (Home, Pay): the card, signing from its own button, then, once the batch
+ * "Turn into cash" where other dollars show (Home, the Top up sheet): the card, signing from its own button, then, once the batch
  * lands, "Do this automatically next time?" when an executor is configured and nothing converts on its own yet, or
  * "It's cash now". The card keeps the coins it was signed for while JAW's sheet is open, so it doesn't change under the
  * user as balances re-read.
  */
-export function TurnIntoCash({ user, view, setup }: { user: `0x${string}`; view: ArrivedView; setup: ReturnType<typeof useCashSetup> }) {
+export function TurnIntoCash({
+  user, view, setup, active = true,
+}: {
+  user: `0x${string}`;
+  view: ArrivedView;
+  setup: ReturnType<typeof useCashSetup>;
+  /** False while the sheet it sits in slides away: nothing is prepared then. */
+  active?: boolean;
+}) {
   const tx = useConvert();
   // What was signed for, and whether the next question is asked: settled at the tap, so the grant switching it on
   // doesn't swap the step under the user.
@@ -179,7 +187,7 @@ export function TurnIntoCash({ user, view, setup }: { user: `0x${string}`; view:
   const shown = pinned ? held : live;
   const quotes = useConvertQuotes(shown?.coins ?? [], !!shown && !pinned);
   // What the card's button would sign now, prepared while it's idle so the tap opens JAW's sheet at once.
-  const plan = shown && !pinned && quotes.data ? tx.planFor(user, quotes.data) : null;
+  const plan = active && shown && !pinned && quotes.data ? tx.planFor(user, quotes.data) : null;
   const prep = usePrepare(tx.prep, plan);
   const close = () => {
     setHeld(null);
