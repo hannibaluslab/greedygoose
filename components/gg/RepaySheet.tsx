@@ -9,6 +9,8 @@ import { StockAvatar } from "./StockAvatar";
 import { AssetPicker, assetMark, type PickerRow } from "./AssetPicker";
 import { Button } from "./Button";
 import { WhiteCard } from "./Screen";
+import { UnlockSheet } from "./UnlockSheet";
+import { ChevronRight } from "./icons";
 import { StatusBar, StatusPill } from "./Status";
 import { Summary } from "./Summary";
 import { TxButton, TxError } from "./TxUi";
@@ -16,7 +18,8 @@ import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { useCollateralFactorsRead, usePosition, type PositionData } from "@/hooks/usePosition";
 import { repaySign, useRepayWith } from "@/hooks/useRepay";
 import { useSellQuote } from "@/hooks/useSell";
-import { formatUsdTrim, monthlyCostText } from "@/lib/formatting";
+import { formatUsd, formatUsdTrim, monthlyCostText } from "@/lib/formatting";
+import { EQUITIES } from "@/lib/tokens/registry";
 import {
   REPAY_COPY,
   REPAY_FORM,
@@ -72,8 +75,12 @@ export function RepaySheet({
   const fee = useFeeSupport();
   const [form, setForm] = useState<RepayForm>(REPAY_FORM);
   const [menu, setMenu] = useState(false);
+  // A stock picked in "Backing your credit": its Free up shows in this sheet, Back returns to Repay.
+  const [freeing, setFreeing] = useState<string | null>(null);
   const menuClosedAt = useRef(0);
   const paid = useRef<string | null>(null);
+  // Coming back from a Free up step slides Repay in as "back".
+  const [cameBack, setCameBack] = useState(false);
 
   const sources = data ? repaySources(data, cfRead.cfs) : [];
   const source = pickedSource(sources, form.source);
@@ -86,7 +93,7 @@ export function RepaySheet({
 
   const feeBlocked = isConnected && fee.state === "unsupported";
   // What Repay would sign now, prepared while the sheet is open and idle so the tap opens JAW's sheet at once.
-  const sign = open && data && view && !feeBlocked ? repaySign(view, address, data.debtRaw) : null;
+  const sign = open && !freeing && data && view && !feeBlocked ? repaySign(view, address, data.debtRaw) : null;
   const tx = useRepayWith(sign);
 
   useEffect(() => {
@@ -117,9 +124,24 @@ export function RepaySheet({
   // Backing rows wait for the collateral factors, so the default row doesn't jump once they're read.
   const waitingForCfs = !!data && !cfRead.cfs && !cfRead.failed && data.holdings.some((h) => h.lockedRaw > 0n);
 
+  const freeHolding = freeing ? data?.holdings.find((h) => h.symbol === freeing) : undefined;
+  const freeStock = freeing ? EQUITIES.find((e) => e.symbol === freeing) : undefined;
+  if (freeing && data && freeHolding && freeStock) {
+    return (
+      <SheetShell open={open} onOpenChange={onOpenChange} title={`Free up ${freeStock.name}`} onBack={() => {
+        setCameBack(true);
+        setFreeing(null);
+      }}>
+        <SheetSteps stepKey={`free:${freeing}`} className="flex flex-col gap-4">
+          <UnlockSheet open={open} user={address} stock={freeStock} holding={freeHolding} data={data} cf={cfRead.cfs?.[freeing]} onClose={onClose} />
+        </SheetSteps>
+      </SheetShell>
+    );
+  }
+
   return (
     <SheetShell open={open} onOpenChange={onOpenChange} title={REPAY_COPY.title}>
-      <SheetSteps stepKey="repay" className="flex flex-col gap-4">
+      <SheetSteps stepKey="repay" direction={cameBack ? "back" : "forward"} className="flex flex-col gap-4">
         {data?.debtRaw === 0n ? (
           // Nothing owed: this line alone, with nothing to pick, type or tap.
           <p className="m-0 px-1 pb-2 text-[17px] text-ink-mid">{REPAY_COPY.nothingOwed}</p>
@@ -136,6 +158,10 @@ export function RepaySheet({
         ) : (
           <>
             <Owed data={data} />
+            <Backing data={data} onPick={(symbol) => {
+              setMenu(false);
+              setFreeing(symbol);
+            }} />
             <PayWith
               data={data}
               sources={sources}
@@ -211,6 +237,36 @@ function Owed({ data }: { data: PositionData }) {
         </span>
       </div>
     </WhiteCard>
+  );
+}
+
+/**
+ * "Backing your credit" (Adrian, 2026-10-15): every stock that backs the credit and its dollars at Aave's price. A tap
+ * opens that stock's Free up in this sheet, where repaying gets it back.
+ */
+function Backing({ data, onPick }: { data: PositionData; onPick: (symbol: string) => void }) {
+  const rows = data.holdings.filter((h) => h.lockedRaw > 0n);
+  if (rows.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="pl-1 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">Backing your credit</span>
+      <WhiteCard className="flex flex-col px-4 py-0.5 leading-[normal]">
+        {rows.map((h) => (
+          <button
+            key={h.symbol}
+            type="button"
+            onClick={() => onPick(h.symbol)}
+            aria-label={`${h.name}, ${formatUsd(h.lockedUsd)} backs your credit. Free it up`}
+            className="flex min-h-12 items-center gap-3 border-b border-line-field py-2 text-left last:border-b-0"
+          >
+            <StockAvatar symbol={h.symbol} size={28} />
+            <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{h.name}</span>
+            <span className="num text-[15px] font-semibold">{formatUsd(h.lockedUsd)}</span>
+            <ChevronRight strokeWidth={2.2} className="shrink-0 text-ink-faint" />
+          </button>
+        ))}
+      </WhiteCard>
+    </div>
   );
 }
 
