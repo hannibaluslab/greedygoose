@@ -9,14 +9,14 @@ import { StockAvatar } from "./StockAvatar";
 import { AssetPicker, assetMark, type PickerRow } from "./AssetPicker";
 import { Button } from "./Button";
 import { WhiteCard } from "./Screen";
-import { StatusPill } from "./Status";
+import { StatusBar, StatusPill } from "./Status";
 import { Summary } from "./Summary";
 import { TxButton, TxError } from "./TxUi";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { useCollateralFactorsRead, usePosition, type PositionData } from "@/hooks/usePosition";
 import { repaySign, useRepayWith } from "@/hooks/useRepay";
 import { useSellQuote } from "@/hooks/useSell";
-import { formatUsdTrim } from "@/lib/formatting";
+import { formatUsdTrim, monthlyCostText } from "@/lib/formatting";
 import {
   REPAY_COPY,
   REPAY_FORM,
@@ -186,15 +186,29 @@ export function RepaySheet({
   );
 }
 
-/** The one big number: "You owe $X", with the status it's in now. */
+/**
+ * The one big number, "You owe $X", with its status, then (Adrian: kept compact) a thin gauge and one line of two
+ * facts: what the credit costs and the credit still available.
+ */
 function Owed({ data }: { data: PositionData }) {
   return (
-    <WhiteCard className="flex items-end justify-between gap-3 px-[18px] py-[18px] leading-[normal]">
-      <div className="flex min-w-0 flex-col gap-2">
-        <span className="text-[15px] font-medium text-ink-mid">{REPAY_COPY.owe}</span>
-        <span className={`num ${data.debtUsd >= 100_000 ? "text-[38px]" : "text-5xl"} font-semibold leading-none tracking-[-0.04em]`}>{owed(data.debtUsd)}</span>
+    <WhiteCard className="flex flex-col gap-3 px-4 py-3.5 leading-[normal]">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[14px] font-medium text-ink-mid">{REPAY_COPY.owe}</span>
+        <StatusPill status={data.status} size="sm" />
       </div>
-      <span className="mb-1"><StatusPill status={data.status} size="lg" /></span>
+      <span className={`num -mt-1 ${data.debtUsd >= 100_000 ? "text-[34px]" : "text-[40px]"} font-semibold leading-none tracking-[-0.04em]`}>{owed(data.debtUsd)}</span>
+      {data.debtUsd > 0 && <StatusBar status={data.status} healthFactor={data.healthFactor} slim />}
+      <div className="num grid grid-cols-2 border-t border-line-field pt-2.5 text-[12.5px]">
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <span className="text-subtle">Cost</span>
+          <span className="truncate font-semibold">{(data.apr * 100).toFixed(1)}% · {monthlyCostText(data.monthlyCostUsd)}</span>
+        </span>
+        <span className="flex min-w-0 flex-col gap-0.5 border-l border-line-field pl-3">
+          <span className="text-subtle">Credit available</span>
+          <span className="truncate font-semibold">{formatUsdTrim(Math.floor(data.availableUsd))}</span>
+        </span>
+      </div>
     </WhiteCard>
   );
 }

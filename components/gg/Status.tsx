@@ -44,28 +44,30 @@ export function StatusChange({ from, to }: { from: Status; to: Status }) {
 }
 
 /** Three-segment Safe / Watch / Act bar with marker. Labels always shown. */
-export function StatusBar({ status, healthFactor }: { status: Status; healthFactor: number | null }) {
+export function StatusBar({ status, healthFactor, slim = false }: { status: Status; healthFactor: number | null; /** A thin bar with no labels (Repay's card, where the pill names the status). */ slim?: boolean }) {
   // Position along the bar: HF ≥ 2.5 → far left, HF 1.0 → far right.
   const pos = healthFactor === null ? 0 : Math.min(1, Math.max(0, (2.5 - healthFactor) / 1.5));
   return (
     <div className="flex flex-col gap-2" role="img" aria-label={`Your credit is ${STATUS_LABEL[status]}`}>
-      <div className="relative flex h-2 gap-1">
+      <div className={`relative flex gap-1 ${slim ? "h-1.5" : "h-2"}`}>
         <span className="rounded bg-safe" style={{ flex: 5 }} />
         <span className="rounded bg-watch" style={{ flex: 2 }} />
         <span className="rounded bg-act" style={{ flex: 1.4 }} />
         {status !== "none" && (
           <span
             aria-hidden
-            className="absolute -top-1 size-4 rounded-full border-[2.5px] border-ink bg-card"
-            style={{ left: `calc(${pos * 100}% - 8px)`, boxShadow: "0 2px 6px rgba(14,13,11,0.18)" }}
+            className={`absolute rounded-full border-ink bg-card ${slim ? "-top-[3px] size-3 border-2" : "-top-1 size-4 border-[2.5px]"}`}
+            style={{ left: `calc(${pos * 100}% - ${slim ? 6 : 8}px)`, boxShadow: "0 2px 6px rgba(14,13,11,0.18)" }}
           />
         )}
       </div>
+      {!slim && (
       <div className="flex text-xs font-semibold">
         <span className="text-safe" style={{ flex: 5 }}>Safe</span>
         <span className="text-watch-text" style={{ flex: 2 }}>Watch</span>
         <span className="text-act" style={{ flex: 1.4 }}>Act</span>
       </div>
+      )}
     </div>
   );
 }
