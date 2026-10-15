@@ -19,3 +19,24 @@ describe("decodeActivity", () => {
     expect(items.some((i) => i.kind === "supply" && i.symbol === "USDC" && i.amount > 37)).toBe(true);
   });
 });
+
+/**
+ * JAW's network fee (D4) on our test JAW account's own receipts: the paymaster takes USDC from the account inside the
+ * transaction, to its treasury. That is no move of the user's, so it is no "Sent" (measured 2026-10-15).
+ */
+describe("decodeActivity: JAW's network fee", () => {
+  const jawAccount = "0x14087c532332dE6E971Eb2F60a252cbf511F59eA" as const;
+
+  it("credit taken with backing reads as the backing and the credit, without the fee", async () => {
+    const r = await client.getTransactionReceipt({ hash: "0xfb269d3378792239bb7eee82d986d2ece77b442910aefae6506ef999738a6b91" });
+    expect(decodeActivity(r.logs, jawAccount)).toEqual([
+      { kind: "supply", symbol: "NVDAc", amount: 0.00435899 },
+      { kind: "borrow", symbol: "USDC", amount: 0.45 },
+    ]);
+  });
+
+  it("freeing up a stock reads as that alone", async () => {
+    const r = await client.getTransactionReceipt({ hash: "0x21377f51cfd17aee039c28a94646ba1ba6f13ace7e37e269274652c480657e1c" });
+    expect(decodeActivity(r.logs, jawAccount)).toEqual([{ kind: "withdraw", symbol: "NVDAc", amount: 0.00435899 }]);
+  });
+});
