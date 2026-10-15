@@ -11,8 +11,7 @@ import { Button } from "./Button";
 import { WhiteCard } from "./Screen";
 import { SegmentedControl } from "./SegmentedControl";
 import { UnlockSheet } from "./UnlockSheet";
-import { BacksChip } from "./Holding";
-import { ChevronRight } from "./icons";
+import { ChevronRight, LockIcon } from "./icons";
 import { StatusBar, StatusPill } from "./Status";
 import { Summary } from "./Summary";
 import { TxButton, TxError } from "./TxUi";
@@ -21,6 +20,7 @@ import { useCollateralFactorsRead, usePosition, type PositionData } from "@/hook
 import { repaySign, useRepayWith } from "@/hooks/useRepay";
 import { useSellQuote } from "@/hooks/useSell";
 import { formatShares, formatUsd, formatUsdTrim, monthlyCostText } from "@/lib/formatting";
+import { wholePct } from "@/lib/holding";
 import { EQUITIES } from "@/lib/tokens/registry";
 import {
   REPAY_COPY,
@@ -295,11 +295,15 @@ function Backing({ data, onPick }: { data: PositionData; onPick: (symbol: string
             <StockAvatar symbol={h.symbol} size={32} />
             <span className="flex min-w-0 flex-1 flex-col gap-0.5">
               <span className="truncate text-[15px] font-semibold">{h.name}</span>
-              {/* The shares that back the credit, and how much of the holding that is: the figure and the backing mark,
-                  no sentence (Adrian, 2026-10-16). The mark is the linked rings, never a padlock (D17). */}
+              {/* The shares that back the credit, and how much of the holding that is: the figure and a padlock, no
+                  sentence (Adrian, 2026-10-16: "the lock icon is too small, and it is not even a lock"; here, over D17). */}
               <span className="flex min-w-0 items-center gap-1.5 text-[12.5px] text-ink-mid">
                 <span className="num truncate">{formatShares(h.lockedShares)} shares</span>
-                <BacksChip backs={h.lockedUsd / Math.max(h.lockedUsd + h.freeUsd, 1e-9)} compact />
+                <span className="num inline-flex h-[22px] shrink-0 items-center gap-1 rounded-[11px] bg-ground px-2 text-[12px] font-semibold text-ink-2">
+                  {wholePct(h.lockedUsd / Math.max(h.lockedUsd + h.freeUsd, 1e-9))}%
+                  <LockIcon size={11} />
+                  <span className="sr-only">backs your credit</span>
+                </span>
               </span>
             </span>
             <span className="num text-[15px] font-semibold">{formatUsd(h.lockedUsd)}</span>
