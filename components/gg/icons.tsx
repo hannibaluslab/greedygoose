@@ -21,6 +21,19 @@ export const CreditIcon = ({ size = 20, ...r }: P) => (
     <path d="M2 16l6 6" /><circle cx="16" cy="9" r="2.9" /><circle cx="6" cy="5" r="3" />
   </svg>
 );
+/** Backs credit: two linked rings (D17: never a padlock). */
+export const BacksIcon = ({ size = 8, ...r }: P) => (
+  <svg width={size} height={size} viewBox="0 0 10 10" aria-hidden {...r}>
+    <circle cx="3.6" cy="5" r="2.4" fill="none" stroke="currentColor" strokeWidth="1.4" />
+    <circle cx="6.4" cy="5" r="2.4" fill="none" stroke="currentColor" strokeWidth="1.4" />
+  </svg>
+);
+/** Free, not backing credit: one hollow ring. */
+export const FreeIcon = ({ size = 8, ...r }: P) => (
+  <svg width={size} height={size} viewBox="0 0 10 10" aria-hidden {...r}>
+    <circle cx="5" cy="5" r="3" fill="none" stroke="currentColor" strokeWidth="1.3" />
+  </svg>
+);
 export const LockIcon = ({ size = 8, ...r }: P) => (
   <svg width={size} height={size * 1.1} viewBox="0 0 10 11" aria-hidden {...r}>
     <rect x="1" y="4.6" width="8" height="5.6" rx="1.4" fill="currentColor" />

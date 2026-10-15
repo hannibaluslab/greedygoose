@@ -31,7 +31,7 @@ export type ButtonVariant = keyof typeof VARIANT;
 export type ButtonSize = keyof typeof SIZE;
 
 export const buttonClass = (variant: ButtonVariant, size: ButtonSize) =>
-  `flex items-center justify-center leading-[normal] disabled:opacity-45 ${VARIANT[variant]} ${SIZE[size]}`;
+  `flex select-none items-center justify-center leading-[normal] [-webkit-touch-callout:none] disabled:opacity-45 ${VARIANT[variant]} ${SIZE[size]}`;
 
 export function Button({
   variant = "primary", size = "md", icon, href, onClick, disabled, className = "", children,
