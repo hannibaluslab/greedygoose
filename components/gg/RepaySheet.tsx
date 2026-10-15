@@ -5,7 +5,7 @@ import { useAccount } from "wagmi";
 import { toast } from "sonner";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { AmountBadge, AmountField } from "./AmountField";
-import { CashMark } from "./AssetPicker";
+import { AssetPicker, assetMark, type PickerRow } from "./AssetPicker";
 import { Button } from "./Button";
 import { WhiteCard } from "./Screen";
 import { StatusPill } from "./Status";
@@ -38,15 +38,23 @@ import {
 const owed = (usd: number) => formatUsdTrim(Math.max(0, Math.ceil(usd)));
 /** What's owed after, rounded up to the cent: a small repay still shows what it changes ("$2.01", "$0"). */
 const owedAfter = (usd: number) => formatUsdTrim(Math.max(0, Math.ceil(usd * 100 - 1e-6) / 100));
+/** A tap on the dim that just closed the Pay with list doesn't also close the sheet (the dim reports it after the list). */
+const MENU_TAP_MS = 500;
+/** The mark for a source: cash's "$", or the stock's logo. */
+const sourceMark = (s: RepaySource, size: number) => assetMark(s.kind === "cash" ? "cash" : s.stock!.symbol, size);
 
 /**
  * Repay is one choice: pay with (Adrian, 2026-10-15). A sheet over the page it opens from (Home's Repay, the Credit and
- * Cash sheets, Credit Buy's Repay links, Protect's heads-up): the big "You owe $X" with its status, then "Pay with" (the
- * cash, each stock held free, each stock that backs the credit, every row with the status it would land in), one amount
- * in dollars, typed or filled by a quick pick (All, $25, $50), what you owe after, who pays the network fee, and one
- * Repay button that opens JAW's sheet straight away. With nothing owed it says only that. The status bar, the cost, the credit available, Buy more and Protect's settings live on the Credit
- * sheet. The batch is prepared only while the sheet is open and idle (useRepayWith), and a landed repay closes the sheet
- * with its toast. All the money maths is lib/repay.ts.
+ * Cash sheets, Credit Buy's Repay links, Protect's heads-up), on one 390×844 screen without scrolling (Adrian,
+ * 2026-10-15): the big "You owe $X" with its status; "Pay with" and one pill naming the source, which opens the list
+ * (the cash, each stock held free, each stock that backs the credit, every row with the status it would land in, and
+ * the "safest" line under them), as the Trade sheet's From picker does; one amount in dollars, typed or filled by a
+ * quick pick ($25, $50, All); what you owe after and who pays the network fee; and one Repay button that opens JAW's
+ * sheet straight away. A stock sale's small print sits under the button. With nothing owed it says only that. It is
+ * the one credit sheet (Adrian, 2026-10-15): Home's Credit ⓘ and Invest's status pill open it too, and the Credit
+ * sheet (its status bar, cost, credit available, Buy more, Protect row and "Use credit for buying") is gone; Protect
+ * stays on the Agents tab. The batch is prepared only while the sheet is open and idle (useRepayWith), and a landed
+ * repay closes the sheet with its toast. All the money maths is lib/repay.ts.
  */
 export function RepaySheet({
   open, address, onClose, onTopUp,
@@ -62,6 +70,8 @@ export function RepaySheet({
   const cfRead = useCollateralFactorsRead(data?.holdings);
   const fee = useFeeSupport();
   const [form, setForm] = useState<RepayForm>(REPAY_FORM);
+  const [menu, setMenu] = useState(false);
+  const menuClosedAt = useRef(0);
   const paid = useRef<string | null>(null);
 
   const sources = data ? repaySources(data, cfRead.cfs) : [];
@@ -89,11 +99,25 @@ export function RepaySheet({
     if (tx.phase === "failed") tx.reset();
     setForm((f) => repayForm(f, action));
   };
+  /** A tap away closed the list. Only a tap on the dim (outside the sheet) is swallowed; Close, in the sheet, still closes it. */
+  const closeMenu = (e?: Event) => {
+    const inSheet = e?.target instanceof Element && !!e.target.closest('[role="dialog"]');
+    if (!inSheet) menuClosedAt.current = Date.now();
+    setMenu(false);
+  };
+  // Escape, the dim and Close come here, as in the Trade sheet. Escape with the list open closes the list; the dim's
+  // tap that just closed it closes nothing else; Close closes the sheet (its press already closed the list).
+  const onOpenChange = (next: boolean) => {
+    if (next) return;
+    if (menu) return setMenu(false);
+    if (Date.now() - menuClosedAt.current < MENU_TAP_MS) return;
+    onClose();
+  };
   // Backing rows wait for the collateral factors, so the default row doesn't jump once they're read.
   const waitingForCfs = !!data && !cfRead.cfs && !cfRead.failed && data.holdings.some((h) => h.lockedRaw > 0n);
 
   return (
-    <SheetShell open={open} onOpenChange={(next) => !next && onClose()} title={REPAY_COPY.title}>
+    <SheetShell open={open} onOpenChange={onOpenChange} title={REPAY_COPY.title}>
       <SheetSteps stepKey="repay" className="flex flex-col gap-4">
         {data?.debtRaw === 0n ? (
           // Nothing owed: this line alone, with nothing to pick, type or tap.
@@ -111,7 +135,19 @@ export function RepaySheet({
         ) : (
           <>
             <Owed data={data} />
-            <PayWith data={data} sources={sources} view={view} disabled={tx.busy} onPick={(id) => dispatch({ type: "source", id })} />
+            <PayWith
+              data={data}
+              sources={sources}
+              view={view}
+              open={menu}
+              disabled={tx.busy}
+              onToggle={() => setMenu((m) => !m)}
+              onClose={closeMenu}
+              onPick={(id) => {
+                setMenu(false);
+                dispatch({ type: "source", id });
+              }}
+            />
             <Amount view={view} form={form} disabled={tx.busy} dispatch={dispatch} />
             <Summary
               rows={[
@@ -124,7 +160,6 @@ export function RepaySheet({
                 {view.note.text}
               </p>
             )}
-            {view.ready && repaySmallPrint(view) && <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">{repaySmallPrint(view)}</p>}
             {feeBlocked && <p role="alert" className="m-0 text-[13px] text-act">{REPAY_COPY.feeUnsupported}</p>}
             <TxError error={tx.error} />
             <TxButton
@@ -141,6 +176,8 @@ export function RepaySheet({
                 void tx.sign();
               }}
             />
+            {/* A stock sale's small print (D7) sits under the button, so the sheet's one idea fits one screen. */}
+            {view.ready && repaySmallPrint(view) && <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">{repaySmallPrint(view)}</p>}
           </>
         )}
       </SheetSteps>
@@ -162,58 +199,61 @@ function Owed({ data }: { data: PositionData }) {
 }
 
 /**
- * "Pay with": the cash, the stocks held free, the stocks that back the credit, each with what it is and the status the
- * amount on screen would land in. One line under the list says why cash or another stock is the safest, once, when a
- * stock that backs the credit is on it.
+ * "Pay with" and one pill naming the source (its mark and name), as the Trade sheet's From picker. The pill opens the
+ * list in Adrian's order: the cash, the stocks held free, the stocks that back the credit, each row with its mark, its
+ * name, what it can pay ("$X in your cash", "$X free", "$X backs your credit") and the status the amount on screen would
+ * land in. One line under the list says why cash or another stock is the safest, when a stock that backs the credit is
+ * on it. The row sits at the content's edges, so the list is as wide as the content.
  */
 function PayWith({
-  data, sources, view, disabled, onPick,
-}: { data: PositionData; sources: RepaySource[]; view: RepayView; disabled: boolean; onPick: (id: string) => void }) {
+  data, sources, view, open, disabled, onToggle, onClose, onPick,
+}: {
+  data: PositionData;
+  sources: RepaySource[];
+  view: RepayView;
+  open: boolean;
+  disabled: boolean;
+  onToggle: () => void;
+  onClose: (e: Event) => void;
+  onPick: (id: string) => void;
+}) {
+  const { source } = view;
+  const rows: PickerRow[] = sources.map((s) => {
+    const after = s.id === source.id ? view.after : statusAfter(s, view.amountUsd, data);
+    return {
+      id: s.id,
+      name: s.name,
+      mark: sourceMark(s, 32),
+      sub: s.sub,
+      aside: (
+        <>
+          <span className="sr-only">{REPAY_COPY.after}: </span>
+          <StatusPill status={after} size="row" />
+        </>
+      ),
+    };
+  });
   return (
-    <section className="flex flex-col gap-2">
-      {/* One label for the pills' column ("After"), so each row keeps its room for what it is. */}
-      <div className="flex items-center justify-between pl-1 pr-[52px] font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">
-        <h3 id="pay-with" className="m-0 font-[inherit] text-[11px]">{REPAY_COPY.payWith}</h3>
-        <span aria-hidden>{REPAY_COPY.after}</span>
-      </div>
-      <div role="radiogroup" aria-labelledby="pay-with" className="flex flex-col gap-0.5 rounded-[22px] bg-card p-1.5 shadow-[0_1px_3px_rgba(14,13,11,0.06)]">
-        {sources.map((s) => {
-          const on = s.id === view.source.id;
-          const after = on ? view.after : statusAfter(s, view.amountUsd, data);
-          return (
-            <button
-              key={s.id}
-              type="button"
-              role="radio"
-              aria-checked={on}
-              disabled={disabled}
-              onClick={() => onPick(s.id)}
-              className={`flex min-h-[56px] w-full items-center gap-3 rounded-[16px] px-2.5 py-2 text-left leading-[normal] transition disabled:opacity-60 ${
-                on ? "bg-pill" : "hover:bg-pill active:bg-pill-strong"
-              }`}
-            >
-              {s.kind === "cash" ? <CashMark size={32} /> : <StockAvatar symbol={s.stock!.symbol} size={32} />}
-              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="truncate text-[15px] font-semibold text-ink">{s.name}</span>
-                <span className="num truncate text-[12px] leading-[1.3] text-ink-mid">{s.sub}</span>
-              </span>
-              <span className="shrink-0">
-                <span className="sr-only">{REPAY_COPY.after}: </span>
-                <StatusPill status={after} size="row" />
-              </span>
-              {on ? (
-                <span aria-hidden className="flex size-[22px] shrink-0 items-center justify-center rounded-full bg-brand shadow-[0_0_0_1.5px_#0e0d0b]">
-                  <span className="size-2 rounded-full bg-ink" />
-                </span>
-              ) : (
-                <span aria-hidden className="size-[22px] shrink-0 rounded-full border-[1.5px] border-[#d9d2c3]" />
-              )}
-            </button>
-          );
-        })}
-      </div>
-      {sources.some((s) => s.kind === "backing") && <p className="m-0 px-1 text-[12px] leading-snug text-subtle">{REPAY_COPY.safest}</p>}
-    </section>
+    <div className="flex min-h-[44px] items-center justify-between gap-3 pl-1">
+      <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">{REPAY_COPY.payWith}</span>
+      <AssetPicker
+        label={REPAY_COPY.payWithLabel(source.name, source.sub)}
+        title={REPAY_COPY.payWith}
+        titleAside={<span aria-hidden className="pr-[34px]">{REPAY_COPY.after}</span>}
+        name={source.name}
+        mark={sourceMark(source, 18)}
+        rows={rows}
+        selected={source.id}
+        open={open}
+        onToggle={onToggle}
+        onClose={onClose}
+        onPick={onPick}
+        disabled={disabled}
+        footer={sources.some((s) => s.kind === "backing") ? <p className="m-0 text-[12px] leading-snug text-subtle">{REPAY_COPY.safest}</p> : undefined}
+        wide
+        peek
+      />
+    </div>
   );
 }
 

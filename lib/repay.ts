@@ -68,6 +68,8 @@ export const REPAY_COPY = {
   title: "Repay",
   owe: "You owe",
   payWith: "Pay with",
+  /** The picker's accessible name: what it pays with and what that row is ("Pay with: Cash, $1.36 in your cash"). */
+  payWithLabel: (name: string, sub: string) => `Pay with: ${name}, ${sub}`,
   cash: "Cash",
   cashSub: (usd: number) => `${formatUsd(usd)} in your cash`,
   freeSub: (usd: number) => `${formatUsd(usd)} free`,

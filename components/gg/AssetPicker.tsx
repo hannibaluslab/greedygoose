@@ -13,6 +13,8 @@ export type PickerRow = {
   sub?: string;
   right?: string;
   rightSub?: string;
+  /** Anything else on the row's right, before its radio: Repay's status-after pill. */
+  aside?: ReactNode;
   disabled?: boolean;
 };
 
@@ -32,9 +34,10 @@ export function CashMark({ size }: { size: number }) {
 /** The mark for an asset: cash's "$", or the stock's logo. */
 export const assetMark = (asset: string, size: number) => (asset === "cash" ? <CashMark size={size} /> : <StockAvatar symbol={asset} size={size} />);
 
-/** The list's title and padding, and one row, in px: its height before it renders. */
+/** The list's title and padding, one row, and a footer line, in px: its height before it renders. */
 const MENU_CHROME_PX = 52;
 const ROW_PX = 56;
+const FOOTER_PX = 52;
 const MENU_MIN_PX = 160;
 
 /**
@@ -44,10 +47,13 @@ const MENU_MIN_PX = 160;
  * To list then showed three rows under the To card). Its height is capped to that room, so it never runs off the sheet,
  * and it scrolls inside. A row sets the asset; a tap away closes the list (useClickAway). Open/closed belongs to the
  * sheet, so Escape closes the list first. Keys: the list takes focus on the picked row, ↑ ↓ Home End move between the
- * rows that can be picked, and once the list closes focus goes back to the pill.
+ * rows that can be picked, and once the list closes focus goes back to the pill. Repay's "Pay with" adds a column
+ * label beside the title (`titleAside`), a pill on each row (`aside`), one line under the list (`footer`), a list as
+ * wide as the sheet's content (`wide`: its pill sits at the content's right edge), and a list that, when it has to
+ * scroll, stops halfway through a row (`peek`), so it reads as one that scrolls.
  */
 export function AssetPicker({
-  label, title, name, mark, rows, selected, open, onToggle, onClose, onPick, disabled,
+  label, title, name, mark, rows, selected, open, onToggle, onClose, onPick, disabled, titleAside, footer, wide = false, peek = false,
 }: {
   /** The pill's accessible name: "Trade from: Cash". */
   label: string;
@@ -63,6 +69,14 @@ export function AssetPicker({
   onClose: (e: Event) => void;
   onPick: (id: string) => void;
   disabled?: boolean;
+  /** Beside the list's title, on the right: a label for the rows' `aside` column. */
+  titleAside?: ReactNode;
+  /** Under the list, outside its scroll: one line about the rows. */
+  footer?: ReactNode;
+  /** As wide as the sheet's content (350px on a 390px phone), not 320px. */
+  wide?: boolean;
+  /** When the list has to scroll, show half of its last visible row. */
+  peek?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const pillRef = useRef<HTMLButtonElement>(null);
@@ -111,10 +125,15 @@ export function AssetPicker({
       const pad = scroller ? parseFloat(getComputedStyle(scroller).paddingBottom) || 0 : 0;
       const below = bottom - r.bottom - Math.max(12, pad);
       const above = r.top - top - 12;
-      const need = MENU_CHROME_PX + rows.length * ROW_PX;
+      const need = MENU_CHROME_PX + rows.length * ROW_PX + (footer ? FOOTER_PX : 0);
       const flip = below < need && above > below;
       setUp(flip);
-      setMaxH(Math.max(MENU_MIN_PX, flip ? above : below));
+      let h = Math.max(MENU_MIN_PX, flip ? above : below);
+      if (peek && need > h) {
+        const chrome = MENU_CHROME_PX + (footer ? FOOTER_PX : 0);
+        h = chrome + (Math.max(1, Math.floor((h - chrome) / ROW_PX - 0.5)) + 0.5) * ROW_PX;
+      }
+      setMaxH(h);
     }
     onToggle();
   };
@@ -145,11 +164,18 @@ export function AssetPicker({
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
           style={{ maxHeight: maxH }}
-          className={`absolute right-0 z-30 flex w-[min(320px,calc(100vw-40px))] flex-col rounded-[16px] border border-line-field bg-card p-2 shadow-[0_12px_32px_-12px_rgba(14,13,11,0.28)] animate-in fade-in-0 zoom-in-95 duration-150 ${
+          className={`absolute right-0 z-30 flex ${wide ? "w-[min(350px,calc(100vw-40px))]" : "w-[min(320px,calc(100vw-40px))]"} flex-col rounded-[16px] border border-line-field bg-card p-2 shadow-[0_12px_32px_-12px_rgba(14,13,11,0.28)] animate-in fade-in-0 zoom-in-95 duration-150 ${
             up ? "bottom-full mb-2 origin-bottom-right" : "top-full mt-2 origin-top-right"
           }`}
         >
-          <div className="shrink-0 px-2 pb-2 pt-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">{title}</div>
+          {titleAside ? (
+            <div className="flex shrink-0 items-center justify-between px-2 pb-2 pt-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">
+              <span>{title}</span>
+              {titleAside}
+            </div>
+          ) : (
+            <div className="shrink-0 px-2 pb-2 pt-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">{title}</div>
+          )}
           <div
             ref={listRef}
             id={listId}
@@ -187,6 +213,7 @@ export function AssetPicker({
                       {row.rightSub && <span className="text-[12px] text-subtle">{row.rightSub}</span>}
                     </span>
                   )}
+                  {row.aside && <span className="shrink-0">{row.aside}</span>}
                   {on ? (
                     <span aria-hidden className="flex size-[22px] shrink-0 items-center justify-center rounded-full bg-brand shadow-[0_0_0_1.5px_#0e0d0b]">
                       <span className="size-2 rounded-full bg-ink" />
@@ -198,6 +225,7 @@ export function AssetPicker({
               );
             })}
           </div>
+          {footer && <div className="mt-1 shrink-0 border-t border-hairline px-2 pb-1 pt-2.5">{footer}</div>}
         </div>
       )}
     </div>
