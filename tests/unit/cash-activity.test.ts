@@ -56,12 +56,12 @@ describe("the credit beside the cash (no split of the cash)", () => {
     expect(owedBeside(300, { walletRaw: usdc(0.4), savingsRaw: 0n, saveOn: false })?.line).toBe("Add money to your cash to repay.");
   });
 
-  it("counts credit as cash only when it came to the cash, never when a buy spent it in the same batch", () => {
+  it("counts credit as cash only when it came to the cash; a Credit Buy stays, its line saying what the credit paid", () => {
     const taken = ownCashRow(own([{ kind: "supply", symbol: "TSLAc", amount: 1.32 }, { kind: "borrow", symbol: "USDC", amount: 500 }]))!;
     expect([taken.title, taken.line]).toEqual(["From credit", "+$500.00"]);
     expect(words(taken)[0]).toBe("What: Backed by 1.32 TSLA");
-    const creditBuy = ownCashRow(own([{ kind: "borrow", symbol: "USDC", amount: 200 }, { kind: "buy", symbol: "NVDAc", amount: 1.1, paidUsd: 200 }]));
-    expect(creditBuy).toBeNull();
+    const creditBuy = ownCashRow(own([{ kind: "borrow", symbol: "USDC", amount: 200 }, { kind: "buy", symbol: "NVDAc", amount: 1.1, paidUsd: 200 }]))!;
+    expect([creditBuy.title, creditBuy.line, creditBuy.usd]).toEqual(["Credit Buy NVIDIA", "$200.00 on credit", 0]);
   });
 });
 
@@ -80,7 +80,7 @@ describe("ownCashRow: the user's own moves, by what they did to the cash", () =>
 
   it("a buy reads as its cash part, with what credit paid in the details (decision 1)", () => {
     const r = ownCashRow(own([{ kind: "borrow", symbol: "USDC", amount: 300 }, { kind: "buy", symbol: "NVDAc", amount: 2.21, paidUsd: 400 }]))!;
-    expect([r.title, r.line, r.mark]).toEqual(["Bought NVIDIA", "−$100.00", { kind: "stock", symbol: "NVDAc" }]);
+    expect([r.title, r.line, r.mark]).toEqual(["Credit Buy NVIDIA", "−$100.00 · $300.00 on credit", { kind: "stock", symbol: "NVDAc" }]);
     expect(words(r).slice(0, 2)).toEqual(["What: 2.21 NVDA", ": $300.00 of it on credit"]);
     const plain = ownCashRow(own([{ kind: "buy", symbol: "NVDAc", amount: 0.112, paidUsd: 20 }]))!;
     expect([plain.title, plain.line]).toEqual(["Bought NVIDIA", "−$20.00"]);

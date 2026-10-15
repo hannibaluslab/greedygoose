@@ -75,7 +75,7 @@ const shares = (i: ActivityItem) => `${formatShares(i.amount)} ${ticker(i.symbol
 const isStock = (i: ActivityItem) => EQUITIES.some((e) => e.symbol === i.symbol);
 const isUsdc = (i: ActivityItem) => i.symbol === USDC.symbol;
 
-function row(p: Omit<CashRow, "line" | "details"> & { what: string[]; details?: CashDetail[] }): CashRow {
+function row(p: Omit<CashRow, "line" | "details"> & { what: string[]; details?: CashDetail[]; lineText?: string }): CashRow {
   const details: CashDetail[] = [
     ...p.what.map((w, k) => ({ label: k === 0 ? "What" : "", value: [w] })),
     ...(p.details ?? []),
@@ -88,7 +88,7 @@ function row(p: Omit<CashRow, "line" | "details"> & { what: string[]; details?: 
     mark: p.mark,
     title: p.title,
     usd: p.usd,
-    line: `${signedUsd(p.usd)}${p.pending ? " · Confirming" : ""}`,
+    line: `${p.lineText ?? signedUsd(p.usd)}${p.pending ? " · Confirming" : ""}`,
     details,
     hash: p.hash,
     pending: p.pending,
@@ -115,7 +115,10 @@ export function ownCashRow(m: OwnMove): CashRow | null {
     (buys.length ? 0 : credit) + sum(receives.map((i) => i.amount)) + sum(sells.map((i) => i.receivedUsd ?? 0)) + sum(converts.map((i) => i.receivedUsd ?? 0));
   const out = sum(sends.map((i) => i.amount)) + sum(repays.map((i) => i.amount)) + sum(buys.map((i) => i.paidUsd ?? 0)) - (buys.length ? credit : 0);
   const usd = cents(into - out);
-  if (Math.abs(usd) < MIN_USD) return null;
+  // A Credit Buy paid with credit leaves the cash as it was, but it's still the cash's story (Adrian: "I don't see the
+  // credit buys"): it stays, its line saying what the credit paid.
+  const creditBuy = buys.length > 0 && credit > 0;
+  if (Math.abs(usd) < MIN_USD && !creditBuy) return null;
 
   const base = { key: m.key, time: m.time, usd, hash: m.hash, pending: m.status === "pending", mark: { kind: "cash" } as CashMark };
   if (converts.length) {
@@ -126,7 +129,14 @@ export function ownCashRow(m: OwnMove): CashRow | null {
   if (buys.length) {
     const what = buys.map(shares);
     if (credit > 0) what.push(`${formatUsd(credit)} of it on credit`);
-    return row({ ...base, mark: { kind: "stock", symbol: buys[0].symbol }, title: `Bought ${nameOf(buys[0].symbol)}`, what });
+    return row({
+      ...base,
+      mark: { kind: "stock", symbol: buys[0].symbol },
+      title: credit > 0 ? `Credit Buy ${nameOf(buys[0].symbol)}` : `Bought ${nameOf(buys[0].symbol)}`,
+      what,
+      // Paid all on credit: the cash didn't move, so the line says the credit; part cash says both.
+      ...(credit > 0 ? { lineText: Math.abs(usd) < MIN_USD ? `${formatUsd(credit)} on credit` : `${signedUsd(usd)} · ${formatUsd(credit)} on credit` } : {}),
+    });
   }
   if (sells.length) return row({ ...base, mark: { kind: "stock", symbol: sells[0].symbol }, title: `Sold ${nameOf(sells[0].symbol)}`, what: sells.map(shares) });
   if (repays.length) {
