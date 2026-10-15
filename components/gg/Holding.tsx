@@ -3,7 +3,7 @@ import { MoneyCompact } from "./Money";
 import { Sparkline } from "./Sparkline";
 import { StockAvatar } from "./StockAvatar";
 import { Tap } from "./Tap";
-import { ChevronRight, LockIcon, PlusIcon, UnlockIcon } from "./icons";
+import { BacksIcon, ChevronRight, FreeIcon, PlusIcon } from "./icons";
 import { formatShares, formatSignedPct, formatUsd } from "@/lib/formatting";
 import { wholePct } from "@/lib/holding";
 import { LINE_POINTS, downsample } from "@/lib/prices/market";
@@ -25,7 +25,7 @@ type HoldingProps = {
 
 /**
  * "33% backs Credit Buy" or "Not backing credit". `compact` is the Home rail's small chip
- * (the figure and a closed or open padlock); the words go to screen readers and the tooltip.
+ * (the figure and linked rings, or one empty ring when free; D17: no padlock); the words go to screen readers and the tooltip.
  */
 export function BacksChip({ backs, compact = false }: { backs: number; compact?: boolean }) {
   const words = backs > 0 ? `${wholePct(backs)}% backs Credit Buy` : "Not backing credit";
@@ -33,19 +33,19 @@ export function BacksChip({ backs, compact = false }: { backs: number; compact?:
     return backs > 0 ? (
       <span title={words} className="num inline-flex h-4 items-center gap-[3px] whitespace-nowrap rounded-[8px] bg-ground pl-1.5 pr-[5px] text-[9.5px] font-semibold text-ink-2">
         <span aria-hidden>{wholePct(backs)}%</span>
-        <LockIcon />
+        <BacksIcon />
         <span className="sr-only">{words}</span>
       </span>
     ) : (
       <span title={words} className="inline-flex h-4 w-5 items-center justify-center rounded-[8px] border border-dashed border-[rgba(14,13,11,0.22)] text-subtle">
-        <UnlockIcon />
+        <FreeIcon />
         <span className="sr-only">{words}</span>
       </span>
     );
   }
   return backs > 0 ? (
     <span className="num inline-flex items-center gap-[5px] whitespace-nowrap rounded-full bg-ground px-[9px] py-1 text-[11.5px] leading-[1.2] text-ink-mid">
-      <LockIcon size={10} />
+      <BacksIcon size={10} />
       {words}
     </span>
   ) : (

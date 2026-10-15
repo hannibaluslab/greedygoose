@@ -5,7 +5,7 @@ import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { SubHeader } from "@/components/gg/Screen";
 import { UnlockSheet } from "@/components/gg/UnlockSheet";
 import { StockAvatar } from "@/components/gg/StockAvatar";
-import { ChevronRight, LockIcon } from "@/components/gg/icons";
+import { ChevronRight, BacksIcon } from "@/components/gg/icons";
 import { useCollateralFactors, usePosition } from "@/hooks/usePosition";
 import { useSheetSubject } from "@/hooks/useSheetSubject";
 import { EQUITIES } from "@/lib/tokens/registry";
@@ -42,7 +42,7 @@ function Unlock({ address }: { address: `0x${string}` }) {
                 <StockAvatar symbol={h.symbol} size={40} />
                 <div className="min-w-0 grow">
                   <div className="text-[15px] font-semibold leading-[1.25]">{h.name}</div>
-                  <div className="mt-0.5 inline-flex items-center gap-1 text-[13px] font-medium text-ink-mid"><LockIcon size={9} />{formatShares(h.lockedShares)} in use</div>
+                  <div className="mt-0.5 inline-flex items-center gap-1 text-[13px] font-medium text-ink-mid"><BacksIcon size={9} />{formatShares(h.lockedShares)} in use</div>
                 </div>
                 <div className="text-[15px] font-semibold">{formatUsd(h.lockedUsd)}</div>
                 <ChevronRight className="shrink-0 text-[#b9b3a6]" />

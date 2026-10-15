@@ -173,7 +173,7 @@ export const TRADE_COPY = {
   feeUnsupported: "Your account can’t pay network fees in USDC on Base right now, so this trade can’t go through.",
   swapFallback: "This trade would fail right now — a price may have moved or a stock may be paused. Try again in a moment.",
   failedOnChain: "The trade didn’t go through on Base. Nothing moved except any network fee.",
-  sold: (shares: string, ticker: string) => `Sold ${shares} ${ticker}`,
+  sold: (shares: string, name: string) => `Sold ${shares} ${name}`,
   soldBody: "What the sale paid is in your cash.",
   emptyTitle: "Nothing to trade yet",
   emptyCash: "Top up your cash to buy stocks.",

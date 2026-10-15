@@ -107,7 +107,7 @@ export function StockSheet({
       <SheetSteps stepKey={done ? "done" : step} direction={direction} className="flex flex-col gap-3">
         {done ? (
           <TxDone
-            title={`Sold ${formatShares(rawToShares(sold, holding.multiplier, stock.decimals))} ${ticker}`}
+            title={`Sold ${formatShares(rawToShares(sold, holding.multiplier, stock.decimals))} ${stock.name}`}
             body="What the sale paid is in your cash."
             txHash={txHash}
             onDone={onClose}
@@ -144,7 +144,7 @@ export function StockSheet({
             )}
             <StockActivity user={user} holding={holding} name={stock.name} owned={owned} />
             <p className="m-0 px-1 text-xs leading-snug text-subtle">
-              Values use Aave’s price. The price at the top and the chart are market prices, for information only.
+              Values use the price your credit is measured at. The price at the top and the chart are market prices, for information only.
               Tokenized stocks track the share price; they are not company shares and carry no voting rights.
             </p>
           </>
