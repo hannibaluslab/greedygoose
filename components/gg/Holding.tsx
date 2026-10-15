@@ -112,8 +112,10 @@ export function AddStockCard({ href }: { href: string }) {
 }
 
 /** A holding in the Invest list (PortfolioPage): name and shares, its line, value and today's move, then what it backs. */
-export function HoldingRow({ symbol, name, valueUsd, backs, today, spark, shares, note, href, onClick }: HoldingProps & {
+export function HoldingRow({ symbol, name, valueUsd, backs, today, spark, shares, priceUsd, note, href, onClick }: HoldingProps & {
   shares: number;
+  /** The price a share the value uses (Aave's), on the chip line's left (Adrian, 2026-10-15). */
+  priceUsd?: number;
   /** A plain-words problem with this stock, in red under the row ("Aave has paused this stock for now."). */
   note?: ReactNode;
 }) {
@@ -136,9 +138,16 @@ export function HoldingRow({ symbol, name, valueUsd, backs, today, spark, shares
           )}
         </span>
       </span>
-      <span className="mt-2.5 flex items-center justify-end gap-1.5">
-        <BacksChip backs={backs} />
-        {(href || onClick) && <ChevronRight strokeWidth={2.2} className="shrink-0 text-ink-faint" />}
+      <span className="mt-2.5 flex items-center gap-1.5">
+        {priceUsd != null && priceUsd > 0 && (
+          <span className="num whitespace-nowrap text-[12.5px] text-ink-mid">
+            <b className="font-semibold text-ink-2">{formatUsd(priceUsd)}</b> a share
+          </span>
+        )}
+        <span className="ml-auto flex items-center gap-1.5">
+          <BacksChip backs={backs} />
+          {(href || onClick) && <ChevronRight strokeWidth={2.2} className="shrink-0 text-ink-faint" />}
+        </span>
       </span>
       {note && <span className="mt-2 block text-[12px] text-act">{note}</span>}
     </Tap>

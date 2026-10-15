@@ -133,6 +133,7 @@ function Loaded({
                 name={h.name}
                 valueUsd={value}
                 shares={h.freeShares + h.lockedShares}
+                priceUsd={h.priceUsd}
                 backs={backs}
                 today={m?.change}
                 spark={m?.day}
