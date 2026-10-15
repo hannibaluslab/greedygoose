@@ -46,7 +46,8 @@ export const GearIcon = ({ size = 20, ...r }: P) => (
 export const MarketIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M4 10v9h16v-9M3 10l2-5h14l2 5M3 10h18M9 19v-5h6v5" /></svg>;
 export const TradeIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M7 20V5M3 9l4-4 4 4M17 4v15M13 15l4 4 4-4" /></svg>;
 export const ActivityIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M3 12h4l3-8 4 16 3-8h4" /></svg>;
-export const AgentsIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M6 9h12v10H6zM12 5v4M9.5 13.5h.01M14.5 13.5h.01M3 13v3M21 13v3" /></svg>;
+/** Agents: sparkles, "works on its own" (Adrian: the robot looked too much like a bot). Lucide's Sparkles in the kit's stroke. */
+export const AgentsIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0l1.58 6.14a2 2 0 0 0 1.44 1.44l6.14 1.58a.5.5 0 0 1 0 .96l-6.14 1.58a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z" /><path d="M20 3v4M22 5h-4M4 17v2M5 18H3" /></svg>;
 export const FriendsIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M3 20v-6h6v6M9 20V8h6v12M15 20v-9h6v9" /></svg>;
 export const PayIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M4 12l16-8-6 16-3-7z" /></svg>;
 export const ArrowLeftIcon = ({ size = 18, ...r }: P) => <svg {...base(size, 2, r)}><path d="M19 12H5M11 6l-6 6 6 6" /></svg>;
