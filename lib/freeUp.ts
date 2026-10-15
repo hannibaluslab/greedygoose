@@ -79,3 +79,72 @@ export function freeUpCheck(p: {
   const ok = some && !tooMuch && !inAct;
   return { maxUsd, canAll, maxShares, usd, hfAfter, after, endsInAct: inAct, tooMuch, risky: ok && needsExtraConfirm(after), line, ok };
 }
+
+/** Rounded up to the cent: the repay that frees all of it is never shown as less than it is. */
+const centsUp = (usd: number) => Math.ceil(usd * 100 - 1e-6) / 100;
+const centsDown = (usd: number) => Math.floor(usd * 100 + 1e-6) / 100;
+/** Under the line by a hair, so a price tick between reading and signing doesn't stop the batch (as Sell's 0.995). */
+const SHARE_HEADROOM = 0.995;
+
+export type FreeUpByRepay = {
+  /** This stock's dollars backing the credit, at Aave's price. */
+  backsUsd: number;
+  /** What to repay to get all of it back, to the cent (0: it can all come back now). */
+  allRepayUsd: number;
+  /** The most the field takes: allRepayUsd, or the cash that can be spent when it's less. */
+  maxRepayUsd: number;
+  /** The repay used: the field's amount, held to 0…maxRepayUsd. */
+  repayUsd: number;
+  /** The repay pays everything owed (a full repay, with Aave's interest buffer). */
+  repaysAll: boolean;
+  /** The dollars of the stock that come back for repayUsd. */
+  backUsd: number;
+  /** The shares that come back, raw; all of them when `all`. */
+  backRaw: bigint;
+  /** All of it comes back (withdraw everything supplied). */
+  all: boolean;
+  oweAfterUsd: number;
+  after: Status;
+  /** The field asked for more than maxRepayUsd. */
+  snapped: boolean;
+};
+
+/**
+ * Free up by repaying (UnlockSheet, Adrian 2026-10-15): one amount, what you repay from your cash, and what of the stock
+ * comes back for it. The most that comes back keeps the health at or above CREDIT_CAP.minHf after the repay, the line
+ * freeUpCheck uses: power left after taking w out ≥ (owed − repay) × minHf.
+ */
+export function freeUpByRepay(p: {
+  position: { collateralUsd: number; avgCf: number; debtUsd: number };
+  holding: { lockedRaw: bigint; lockedUsd: number };
+  /** The stock's collateral factor (0–1). */
+  cf: number;
+  /** The cash that can be spent (less the network-fee buffer), in dollars. */
+  cashUsd: number;
+  /** The field's amount; null is "the most" (the sheet opens on it). */
+  repayUsd: number | null;
+}): FreeUpByRepay {
+  const { position: pos, holding: h } = p;
+  const power = pos.collateralUsd * pos.avgCf;
+  const m = CREDIT_CAP.minHf;
+  const backsUsd = h.lockedUsd;
+  // Taking all of it out leaves `rest` of power; what's owed after must fit under it at the line.
+  const rest = power - backsUsd * p.cf;
+  const owed = pos.debtUsd;
+  const needed = owed <= 0 ? 0 : rest <= 0 ? owed : Math.max(0, owed - rest / m);
+  const allRepayUsd = needed <= 0 ? 0 : Math.min(centsUp(needed), centsUp(owed));
+  const maxRepayUsd = Math.min(allRepayUsd, centsDown(Math.max(0, p.cashUsd)));
+  const asked = p.repayUsd ?? maxRepayUsd;
+  const repayUsd = Math.max(0, Math.min(asked, maxRepayUsd));
+  const snapped = p.repayUsd != null && p.repayUsd > maxRepayUsd + 1e-9;
+  const repaysAll = owed > 0 && repayUsd >= owed - 0.005;
+  const oweAfterUsd = repaysAll ? 0 : Math.max(0, owed - repayUsd);
+  // What comes back: all of it once the repay reaches allRepayUsd (or nothing is owed), else what the line allows.
+  const all = backsUsd > 0 && (oweAfterUsd <= 0 || p.cf <= 0 || repayUsd >= allRepayUsd - 1e-9);
+  const room = oweAfterUsd <= 0 ? backsUsd : (power - oweAfterUsd * m) / p.cf;
+  const backUsd = all ? backsUsd : Math.max(0, Math.min(backsUsd, room));
+  const share = backsUsd > 0 ? (backUsd / backsUsd) * SHARE_HEADROOM : 0;
+  const backRaw = all ? h.lockedRaw : (h.lockedRaw * BigInt(Math.floor(share * 1_000_000))) / 1_000_000n;
+  const hfAfter = oweAfterUsd <= 0 ? null : (power - backUsd * p.cf) / oweAfterUsd;
+  return { backsUsd, allRepayUsd, maxRepayUsd, repayUsd, repaysAll, backUsd, backRaw, all, oweAfterUsd, after: statusFor(hfAfter), snapped };
+}

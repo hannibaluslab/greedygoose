@@ -332,7 +332,7 @@ function Amount({ view, form, disabled, dispatch }: { view: RepayView; form: Rep
   );
 }
 
-function Chip({ selected, disabled, onClick, children }: { selected: boolean; disabled?: boolean; onClick: () => void; children: ReactNode }) {
+export function Chip({ selected, disabled, onClick, children }: { selected: boolean; disabled?: boolean; onClick: () => void; children: ReactNode }) {
   return (
     <button
       type="button"
@@ -348,7 +348,7 @@ function Chip({ selected, disabled, onClick, children }: { selected: boolean; di
 }
 
 /** A small pencil: the amount can be edited. */
-function PencilIcon(props: SVGProps<SVGSVGElement>) {
+export function PencilIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
       <path d="M12 20h9" />

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CREDIT_CAP, RISK } from "@/config/risk";
 import { healthAfterWithdraw, maxWithdrawUsd } from "@/lib/aave/math";
-import { FREE_UP_BLOCKED, FREE_UP_FLOOR, freeUpCheck } from "@/lib/freeUp";
+import { FREE_UP_BLOCKED, FREE_UP_FLOOR, freeUpByRepay, freeUpCheck } from "@/lib/freeUp";
 import { statusFor } from "@/lib/risk/status";
 
 /*
@@ -71,5 +71,46 @@ describe("freeUpCheck: Free up stops at the cap's line", () => {
 
   it("keeps protocol words off screen", () => {
     for (const line of Object.values(FREE_UP_BLOCKED)) expect(line).not.toMatch(/borrow|loan|lock|aave|collateral|health/i);
+  });
+});
+
+describe("freeUpByRepay", () => {
+  // Oulina, measured 2026-10-15: $6.08 backing at an average 0.75, $4.00 owed (health 1.14); Amazon $2.03 of it.
+  const position = { collateralUsd: 6.075, avgCf: 0.75, debtUsd: 4 };
+  const holding = { lockedRaw: 8_000_000_000_000_000n, lockedUsd: 2.03 };
+  const cf = 0.75;
+
+  it("says what frees all of it, and caps the field at the cash", () => {
+    const r = freeUpByRepay({ position, holding, cf, cashUsd: 1.23, repayUsd: null });
+    // Taking all of Amazon out leaves 4.556 − 1.5225 = 3.034 of power; 4.00 − 3.034 / 1.12 = 1.29.
+    expect(r.allRepayUsd).toBeCloseTo(1.3, 2);
+    expect(r.maxRepayUsd).toBe(1.23);
+    expect(r.repayUsd).toBe(1.23);
+    expect(r.all).toBe(false);
+    expect(r.backUsd).toBeGreaterThan(1.8);
+    expect(r.backUsd).toBeLessThan(2.03);
+    expect(r.oweAfterUsd).toBeCloseTo(2.77, 2);
+  });
+
+  it("gives all of it back once the repay reaches the line", () => {
+    const r = freeUpByRepay({ position, holding, cf, cashUsd: 10, repayUsd: null });
+    expect(r.all).toBe(true);
+    expect(r.backRaw).toBe(holding.lockedRaw);
+    expect(r.backUsd).toBe(2.03);
+  });
+
+  it("frees only what the line allows for a small repay, and snaps a too-big one", () => {
+    const small = freeUpByRepay({ position, holding, cf, cashUsd: 10, repayUsd: 0.5 });
+    expect(small.all).toBe(false);
+    expect(small.backRaw).toBeLessThan(holding.lockedRaw);
+    const big = freeUpByRepay({ position, holding, cf, cashUsd: 1.23, repayUsd: 5 });
+    expect(big.snapped).toBe(true);
+    expect(big.repayUsd).toBe(1.23);
+  });
+
+  it("needs no repay with nothing owed", () => {
+    const r = freeUpByRepay({ position: { ...position, debtUsd: 0 }, holding, cf, cashUsd: 0, repayUsd: null });
+    expect(r.allRepayUsd).toBe(0);
+    expect(r.all).toBe(true);
   });
 });
