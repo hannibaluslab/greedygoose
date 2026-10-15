@@ -226,9 +226,16 @@ export function CreditBuySheet({
           !available ? (
             cfRead.failed ? <CantCheck onRetry={cfRead.retry} /> : <div aria-busy className="h-[220px] animate-pulse rounded-[16px] bg-chip" />
           ) : available.why ? (
-            // Nothing to use: why, and cash still buys (today's F2-3 zero state).
-            <div className="flex flex-col gap-4 pt-1">
-              <CreditHero available={available} failed={false} onRetry={cfRead.retry} />
+            // Nothing to back it with (Adrian: step 1 always shows): the step's title, an empty slot saying why, then
+            // the stocks, which buy with cash.
+            <div className="flex flex-col gap-3 pt-1">
+              <h3 className="label m-0 px-1">Back it with</h3>
+              <div className="flex flex-col items-center gap-1.5 rounded-[16px] border-[1.5px] border-dashed border-[rgba(14,13,11,0.2)] px-5 py-5 text-center">
+                <p className="m-0 text-[15px] font-semibold">
+                  {available.why === "no-stocks" ? "No stocks to back it with yet" : "Nothing free to back it with"}
+                </p>
+                <p className="m-0 text-pretty text-[13px] leading-[1.4] text-ink-mid">{available.line}</p>
+              </div>
               <StockLists
                 held={preset ? held.filter((h) => h.symbol === preset.symbol) : held}
                 others={preset ? others.filter((e) => e.symbol === preset.symbol) : others}
