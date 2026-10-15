@@ -103,10 +103,8 @@ function Loaded({
             label: "Buying power",
             value: power ? formatUsd(Math.floor(power.cashUsd + power.creditUsd)).replace(/\.00$/, "") : "–",
             sub: power ? (
-              <span className="block whitespace-normal text-[12.5px] leading-[1.35]">
-                {formatUsdTrim(Math.floor(power.cashUsd))} cash
-                <br />+ {formatUsdTrim(Math.floor(power.creditUsd))} credit
-              </span>
+              // One line (Adrian): the total is above, so this only says what's in it.
+              <span className="whitespace-nowrap">{power.creditUsd >= 1 ? `Cash + ${formatUsdTrim(Math.floor(power.creditUsd))} credit` : "Cash only"}</span>
             ) : undefined,
           }}
         />
