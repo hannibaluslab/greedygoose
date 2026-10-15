@@ -18,7 +18,7 @@ import { explainRevert } from "@/lib/aave/errors";
 import { priceToUsd, summarize, type AccountData } from "@/lib/aave/math";
 import { swapOf } from "@/lib/allowlist";
 import type { Cash } from "@/lib/cash";
-import { backingOptions, buildCreditBuyCalls, planCredit, splitCash, type CreditPosition } from "@/lib/creditBuy";
+import { backingOptions, backingRaw, buildCreditBuyCalls, planCredit, splitCash, type BackingOption, type CreditPosition } from "@/lib/creditBuy";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { buildBuyCalls, minOut, quoteBuy, quotePool, signingQuote, type BuyQuote } from "@/lib/swap/buy";
 import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
@@ -122,7 +122,7 @@ describe("Credit Buy batches simulate on mainnet", () => {
     expect(plan.backing.length).toBeGreaterThan(0);
 
     const quote = await quoteToSign(aapl, creditRaw);
-    const calls = buildCreditBuyCalls({ user: newcomer, stock: aapl, quote, creditRaw: plan.creditRaw, backing: plan.backing, cash });
+    const calls = buildCreditBuyCalls({ user: newcomer, stock: aapl, quote, creditRaw: plan.creditRaw, backing: plan.backing, limit: plan.limit, cash });
     expect(calls).toHaveLength(plan.backing.length * 3 + 3);
     const r = await simulateCreditBuy(newcomer, aapl, calls);
     console.log(`first-time: backing ${plan.backing.map((b) => `${b.stock.symbol} $${b.usd.toFixed(2)}`).join(", ")}; HF after ${r.hfAfter?.toFixed(3)} (planned ${plan.hfAfter.toFixed(3)})`);
@@ -146,11 +146,96 @@ describe("Credit Buy batches simulate on mainnet", () => {
     expect(plan.backing.map((b) => b.stock.symbol)).toEqual([picked.stock.symbol]);
 
     const quote = await quoteToSign(aapl, creditRaw);
-    const calls = buildCreditBuyCalls({ user: newcomer, stock: aapl, quote, creditRaw: plan.creditRaw, backing: plan.backing, cash });
+    const calls = buildCreditBuyCalls({ user: newcomer, stock: aapl, quote, creditRaw: plan.creditRaw, backing: plan.backing, limit: plan.limit, cash });
     const r = await simulateCreditBuy(newcomer, aapl, calls);
     expect(r.statuses.every((s) => s === "success")).toBe(true);
     expect(r.debtAdded).toBeGreaterThanOrEqual(creditRaw);
     expect(r.hfAfter!).toBeGreaterThanOrEqual(1.5);
+  });
+
+  it("backing first (F2-4 → How much): exactly the typed amount of one free holding goes in use, from the preview account", async () => {
+    const { position, options, cash } = await live(backer);
+    // The holding with the most free stock that isn't the one bought, as step 1 lists them.
+    const option = [...options].filter((o) => o.stock.symbol !== aapl.symbol).sort((a, b) => b.freeUsd - a.freeUsd)[0];
+    expect(option).toBeDefined();
+    // Half of it, typed in dollars (the preview account keeps a little free: about $1.79 of Amazon on 2026-10-15).
+    const typedUsd = Math.floor((option.freeUsd / 2) * 100) / 100;
+    const raw = backingRaw(option, typedUsd);
+    expect(raw).toBeGreaterThan(0n);
+    expect(raw).toBeLessThan(option.freeRaw);
+
+    const creditRaw = usd(5);
+    const room = planCredit({ position, backing: { option, raw }, creditRaw: 0n, cash });
+    const plan = planCredit({ position, backing: { option, raw }, creditRaw, cash });
+    expect(plan.block).toBeUndefined();
+    // Step 2's "You can use up to" is step 4's "Up to", and it grew with the backing.
+    expect(plan.maxUsd).toBe(room.maxUsd);
+    expect(room.maxUsd).toBeGreaterThan(planCredit({ position, backing: { option: null, raw: 0n }, creditRaw: 0n, cash }).maxUsd);
+    expect(plan.backing).toEqual([{ stock: option.stock, raw, usd: expect.any(Number) }]);
+
+    const quote = await quoteToSign(aapl, creditRaw);
+    const calls = buildCreditBuyCalls({ user: backer, stock: aapl, quote, creditRaw, backing: plan.backing, limit: plan.limit, cash });
+    const freeBefore = await client.readContract({ address: option.stock.address, abi: erc20Abi, functionName: "balanceOf", args: [backer] });
+    const r = await simulateCreditBuy(backer, aapl, [...calls, balanceRead(option.stock.address, backer)]);
+    expect(r.statuses.every((x) => x === "success")).toBe(true);
+    const freeAfter = decodeFunctionResult({ abi: erc20Abi, functionName: "balanceOf", data: r.results[calls.length].data });
+    console.log(`backing first: ${option.stock.symbol} $${typedUsd} in use (${raw} raw), up to $${room.maxUsd}; HF after ${r.hfAfter?.toFixed(3)} (planned ${plan.hfAfter.toFixed(3)})`);
+    // Exactly the typed backing left the wallet: not the planner's auto amount.
+    expect(freeBefore - freeAfter).toBe(raw);
+    expect(r.debtAdded).toBeGreaterThanOrEqual(creditRaw);
+    expect(r.debtAdded).toBeLessThan(creditRaw + 10n);
+    expect(r.stockIn).toBeGreaterThanOrEqual(minOut(quote.amountOut));
+    expect(r.hfAfter!).toBeCloseTo(plan.hfAfter, 1);
+  });
+
+  it("backing first on an account that never backed credit: the credit is capped by the typed backing alone", async () => {
+    const { position, options, cash } = await live(newcomer);
+    const option = options.find((o) => o.stock.symbol === "NVDAc")!;
+    expect(option.freeUsd).toBeGreaterThan(20);
+    const raw = backingRaw(option, 20);
+    const room = planCredit({ position, backing: { option, raw }, creditRaw: 0n, cash });
+    // $20 of NVIDIA at its collateral factor, at 99.5% of the limit: nothing else backs this account's credit.
+    expect(room.maxUsd).toBeLessThanOrEqual(20 * option.cf * 0.995);
+    expect(room.maxUsd).toBeGreaterThan(20 * option.cf * 0.995 - 0.02);
+    expect(planCredit({ position, backing: { option, raw }, creditRaw: usd(room.maxUsd + 0.01), cash }).block).toBe("too-much");
+
+    const creditRaw = usd(5);
+    const plan = planCredit({ position, backing: { option, raw }, creditRaw, cash });
+    expect(plan.block).toBeUndefined();
+    expect(plan.after).toBe("safe");
+    const quote = await quoteToSign(aapl, creditRaw);
+    const calls = buildCreditBuyCalls({ user: newcomer, stock: aapl, quote, creditRaw, backing: plan.backing, limit: plan.limit, cash });
+    const r = await simulateCreditBuy(newcomer, aapl, [...calls, balanceRead(option.stock.address, newcomer)]);
+    expect(r.statuses.every((x) => x === "success")).toBe(true);
+    const freeAfter = decodeFunctionResult({ abi: erc20Abi, functionName: "balanceOf", data: r.results[calls.length].data });
+    expect(option.freeRaw - freeAfter).toBe(raw);
+    expect(r.hfAfter!).toBeCloseTo(plan.hfAfter, 1);
+  });
+
+  it("backing first with MAX: all the free shares go in use, and none are left behind", async () => {
+    const { position, options, cash } = await live(backer);
+    const option: BackingOption = [...options].filter((o) => o.stock.symbol !== aapl.symbol).sort((a, b) => b.freeUsd - a.freeUsd)[0];
+    expect(option).toBeDefined();
+    const creditRaw = usd(5);
+    const plan = planCredit({ position, backing: { option, raw: option.freeRaw }, creditRaw, cash });
+    expect(plan.block).toBeUndefined();
+    const quote = await quoteToSign(aapl, creditRaw);
+    const calls = buildCreditBuyCalls({ user: backer, stock: aapl, quote, creditRaw, backing: plan.backing, limit: plan.limit, cash });
+    const r = await simulateCreditBuy(backer, aapl, [...calls, balanceRead(option.stock.address, backer)]);
+    expect(r.statuses.every((x) => x === "success")).toBe(true);
+    expect(decodeFunctionResult({ abi: erc20Abi, functionName: "balanceOf", data: r.results[calls.length].data })).toBe(0n);
+  });
+
+  it("backing first with nothing new: only what already backs credit, take credit → approve → swap", async () => {
+    const { position, options, cash } = await live(backer);
+    const plan = planCredit({ position, backing: { option: options[0] ?? null, raw: 0n }, creditRaw: usd(5), cash });
+    expect(plan.block).toBeUndefined();
+    expect(plan.backing).toEqual([]);
+    const quote = await quoteToSign(aapl, usd(5));
+    const calls = buildCreditBuyCalls({ user: backer, stock: aapl, quote, creditRaw: usd(5), backing: plan.backing, limit: plan.limit, cash });
+    expect(calls.map((c) => c.to)).toEqual([AAVE.SPOKE, USDC.address, swapOf(calls[2])!.router]);
+    const r = await simulateCreditBuy(backer, aapl, calls);
+    expect(r.statuses).toEqual(["success", "success", "success"]);
   });
 
   it("already backing: take credit → approve → swap, the credit spent in full", async () => {
@@ -162,7 +247,7 @@ describe("Credit Buy batches simulate on mainnet", () => {
     expect(plan.backing).toEqual([]);
 
     const quote = await quoteToSign(aapl, creditRaw);
-    const calls = buildCreditBuyCalls({ user: backer, stock: aapl, quote, creditRaw, backing: plan.backing, cash });
+    const calls = buildCreditBuyCalls({ user: backer, stock: aapl, quote, creditRaw, backing: plan.backing, limit: plan.limit, cash });
     expect(calls.map((c) => c.to)).toEqual([AAVE.SPOKE, USDC.address, swapOf(calls[2])!.router]);
     const r = await simulateCreditBuy(backer, aapl, calls);
     expect(r.statuses).toEqual(["success", "success", "success"]);
@@ -178,7 +263,7 @@ describe("Credit Buy batches simulate on mainnet", () => {
     const creditRaw = usd(5);
     const plan = planCredit({ position, options, creditRaw, cash });
     const quote = await quoteToSign(aapl, creditRaw);
-    const calls = buildCreditBuyCalls({ user: backer, stock: aapl, quote, creditRaw, backing: plan.backing, cash });
+    const calls = buildCreditBuyCalls({ user: backer, stock: aapl, quote, creditRaw, backing: plan.backing, limit: plan.limit, cash });
     expect(calls.map((c) => c.to)).toEqual([GUARDIAN.AAVE_V3_POOL, AAVE.SPOKE, USDC.address, swapOf(calls[3])!.router]);
     const r = await simulateCreditBuy(backer, aapl, calls, emptyWallet(backer));
     expect(r.statuses).toEqual(["success", "success", "success", "success"]);
@@ -196,7 +281,7 @@ describe("Credit Buy batches simulate on mainnet", () => {
     expect(plan.block).toBeUndefined();
 
     const quote = await quoteToSign(aapl, amountIn);
-    const calls = buildCreditBuyCalls({ user: backer, stock: aapl, quote, creditRaw, backing: plan.backing, cash });
+    const calls = buildCreditBuyCalls({ user: backer, stock: aapl, quote, creditRaw, backing: plan.backing, limit: plan.limit, cash });
     expect(calls.map((c) => c.to)).toEqual([GUARDIAN.AAVE_V3_POOL, AAVE.SPOKE, USDC.address, swapOf(calls[3])!.router]);
     expect(swapAmountIn(calls)).toBe(cashRaw + creditRaw);
     const r = await simulateCreditBuy(backer, aapl, calls, emptyWallet(backer));
@@ -216,7 +301,7 @@ describe("Credit Buy batches simulate on mainnet", () => {
     const plan = planCredit({ position, options, creditRaw, cash });
     expect(plan.backing.length).toBeGreaterThan(0);
     const quote = await quoteToSign(aapl, amountIn);
-    const calls = buildCreditBuyCalls({ user: newcomer, stock: aapl, quote, creditRaw, backing: plan.backing, cash });
+    const calls = buildCreditBuyCalls({ user: newcomer, stock: aapl, quote, creditRaw, backing: plan.backing, limit: plan.limit, cash });
     expect(swapAmountIn(calls)).toBe(cashRaw + creditRaw);
     const walletSlot = keccak256(encodeAbiParameters([{ type: "address" }, { type: "uint256" }], [newcomer, 9n]));
     const threeDollars = [{ address: USDC.address, stateDiff: [{ slot: walletSlot, value: encodeAbiParameters([{ type: "uint256" }], [usd(3)]) }] }];

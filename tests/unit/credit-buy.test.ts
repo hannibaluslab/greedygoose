@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { decodeFunctionData, erc20Abi, maxUint256, parseUnits } from "viem";
+import { decodeFunctionData, encodeFunctionData, erc20Abi, maxUint256, parseUnits } from "viem";
 import { CASH } from "@/config/risk";
-import { swapOf } from "@/lib/allowlist";
+import { assertAllowed, swapOf } from "@/lib/allowlist";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { FILL_MARGIN, fillRaw } from "@/lib/aave/loan";
 import { buildBorrowCalls } from "@/lib/aave/tx";
 import { payFromCash } from "@/lib/cash";
 import {
-  CREDIT_BLOCKED, CREDIT_FROM, FEE_FIRST, NO_CREDIT, assertCreditBuy, backers, backingOptions, bestBacking, buildCreditBuyCalls, creditAvailable,
+  CREDIT_BLOCKED, CREDIT_FROM, FEE_FIRST, NO_CREDIT, assertCreditBuy, backers, backingOptions, backingRaw, bestBacking, buildCreditBuyCalls, creditAvailable,
   creditBuyActivity, creditBuyStop, creditWith, noCreditLine, planCredit, shortNames, splitCash,
-  type BackingOption, type CreditPosition,
+  type BackingOption, type CreditLimit, type CreditPosition,
 } from "@/lib/creditBuy";
 import { aaveV3PoolAbi } from "@/lib/guardian/abis";
 import { buildBuyCalls, minOut, type BuyQuote } from "@/lib/swap/buy";
@@ -20,6 +20,7 @@ import { EQUITIES, USDC } from "@/lib/tokens/registry";
 const user: `0x${string}` = "0x000000000000000000000000000000000000dEaD";
 const attacker: `0x${string}` = "0x00000000000000000000000000000000000000ee";
 const usd = (n: number) => parseUnits(n.toFixed(6), 6);
+const toUsdc = (raw: bigint) => Number(raw) / 1e6;
 const fee = usd(CASH.feeBufferUsd);
 const aapl = EQUITIES.find((e) => e.symbol === "AAPLc")!;
 const nvda = EQUITIES.find((e) => e.symbol === "NVDAc")!;
@@ -27,12 +28,14 @@ const msft = EQUITIES.find((e) => e.symbol === "MSFTc")!;
 const meta = EQUITIES.find((e) => e.symbol === "METAc")!;
 const quote: BuyQuote = { venue: "aerodrome", pool: 10, amountIn: usd(300), amountOut: 135_000_000n }; // $300 → 1.35 AAPLc
 const walletCash = { walletRaw: usd(40), savingsRaw: 0n, saveOn: true };
+/** A limit that doesn't bite: for the tests about the batch's shape. */
+const roomy: CreditLimit = { maxCreditRaw: usd(1_000_000), freeRaw: { NVDAc: 10n ** 12n } };
 const fn = (data: `0x${string}`) => decodeFunctionData({ abi: [...erc20Abi, ...spokeAbi, ...aaveV3PoolAbi], data }).functionName;
 const steps = (calls: { data: `0x${string}`; to: `0x${string}` }[]) => calls.map((c) => (swapOf(c) ? "swap" : fn(c.data)));
 
 describe("buildCreditBuyCalls (plan item 3)", () => {
   it("first-time backing: put the stock in use → take credit → approve → swap, in that order", () => {
-    const calls = buildCreditBuyCalls({ user, stock: aapl, quote, creditRaw: quote.amountIn, backing: [{ stock: nvda, raw: 336_000_000n }], cash: walletCash, nowSec: 1_000 });
+    const calls = buildCreditBuyCalls({ limit: roomy, user, stock: aapl, quote, creditRaw: quote.amountIn, backing: [{ stock: nvda, raw: 336_000_000n }], cash: walletCash, nowSec: 1_000 });
     expect(steps(calls)).toEqual(["approve", "supply", "setUsingAsCollateral", "borrow", "approve", "swap"]);
     expect(calls.map((c) => c.to)).toEqual([nvda.address, AAVE.SPOKE, AAVE.SPOKE, AAVE.SPOKE, USDC.address, AERODROME.ROUTER]);
     expect(decodeFunctionData({ abi: spokeAbi, data: calls[1].data }).args).toEqual([5n, 336_000_000n, user]);
@@ -44,25 +47,25 @@ describe("buildCreditBuyCalls (plan item 3)", () => {
   });
 
   it("already backing: take credit → approve → swap, nothing else", () => {
-    const calls = buildCreditBuyCalls({ user, stock: aapl, quote, creditRaw: quote.amountIn, backing: [], cash: walletCash });
+    const calls = buildCreditBuyCalls({ limit: roomy, user, stock: aapl, quote, creditRaw: quote.amountIn, backing: [], cash: walletCash });
     expect(steps(calls)).toEqual(["borrow", "approve", "swap"]);
   });
 
   it("the network fee comes from cash: a $0 wallet takes just the fee buffer out of savings first", () => {
-    const calls = buildCreditBuyCalls({ user, stock: aapl, quote, creditRaw: quote.amountIn, backing: [], cash: { walletRaw: 0n, savingsRaw: usd(100), saveOn: true } });
+    const calls = buildCreditBuyCalls({ limit: roomy, user, stock: aapl, quote, creditRaw: quote.amountIn, backing: [], cash: { walletRaw: 0n, savingsRaw: usd(100), saveOn: true } });
     expect(steps(calls)).toEqual(["withdraw", "borrow", "approve", "swap"]);
     expect(decodeFunctionData({ abi: aaveV3PoolAbi, data: calls[0].data }).args).toEqual([USDC.address, fee, user]);
   });
 
   it("Uniswap route: the swap sits in multicall with its deadline, and is still checked", () => {
     const uni = { ...quote, venue: "uniswap" as const, pool: 3000 };
-    const calls = buildCreditBuyCalls({ user, stock: aapl, quote: uni, creditRaw: uni.amountIn, backing: [], cash: walletCash });
+    const calls = buildCreditBuyCalls({ limit: roomy, user, stock: aapl, quote: uni, creditRaw: uni.amountIn, backing: [], cash: walletCash });
     expect(calls.map((c) => c.to)).toEqual([AAVE.SPOKE, USDC.address, UNISWAP.SWAP_ROUTER_02]);
     expect(decodeFunctionData({ abi: erc20Abi, data: calls[1].data }).args).toEqual([UNISWAP.SWAP_ROUTER_02, usd(300)]);
   });
 
   it("refuses a buy that doesn't spend the credit, no credit, a stock that isn't one of the 7, and cash short of the fee", () => {
-    const base = { user, stock: aapl, quote, backing: [], cash: walletCash };
+    const base = { user, stock: aapl, quote, backing: [], limit: roomy, cash: walletCash };
     expect(() => buildCreditBuyCalls({ ...base, creditRaw: quote.amountIn + 1n })).toThrow(/Credit must be part of the buy/);
     expect(() => buildCreditBuyCalls({ ...base, creditRaw: 0n })).toThrow(/Credit must be part of the buy/);
     expect(() => buildCreditBuyCalls({ ...base, stock: USDC, creditRaw: quote.amountIn })).toThrow(/Not a supported stock/);
@@ -81,7 +84,7 @@ describe("decision 1: more than your cash", () => {
   it("one batch: withdraw savings → put backing in use → take credit for the rest → approve → swap", () => {
     const cash = { walletRaw: 0n, savingsRaw: usd(100), saveOn: true };
     const { cashRaw, creditRaw } = splitCash(quote.amountIn, cash);
-    const calls = buildCreditBuyCalls({ user, stock: aapl, quote, creditRaw, backing: [{ stock: nvda, raw: 1n }], cash });
+    const calls = buildCreditBuyCalls({ limit: roomy, user, stock: aapl, quote, creditRaw, backing: [{ stock: nvda, raw: 1n }], cash });
     expect(steps(calls)).toEqual(["withdraw", "approve", "supply", "setUsingAsCollateral", "borrow", "approve", "swap"]);
     // All of savings comes out (max uint): they are the last of the cash.
     expect(decodeFunctionData({ abi: aaveV3PoolAbi, data: calls[0].data }).args).toEqual([USDC.address, maxUint256, user]);
@@ -92,8 +95,8 @@ describe("decision 1: more than your cash", () => {
 });
 
 describe("assertCreditBuy (the batch against the review)", () => {
-  const review = { stock: aapl, creditRaw: quote.amountIn, cashRaw: 0n };
-  const good = () => buildCreditBuyCalls({ user, stock: aapl, quote, creditRaw: quote.amountIn, backing: [], cash: walletCash });
+  const review = { stock: aapl, creditRaw: quote.amountIn, cashRaw: 0n, backing: [], limit: roomy };
+  const good = () => buildCreditBuyCalls({ limit: roomy, user, stock: aapl, quote, creditRaw: quote.amountIn, backing: [], cash: walletCash });
 
   it("passes the builder's batch", () => {
     const calls = good();
@@ -105,7 +108,7 @@ describe("assertCreditBuy (the batch against the review)", () => {
     expect(() => assertCreditBuy(user, good(), { ...review, stock: msft })).toThrow(/swap differs/);
   });
   it("blocks another account's batch", () => {
-    const theirs = buildCreditBuyCalls({ user: attacker, stock: aapl, quote, creditRaw: quote.amountIn, backing: [], cash: walletCash });
+    const theirs = buildCreditBuyCalls({ limit: roomy, user: attacker, stock: aapl, quote, creditRaw: quote.amountIn, backing: [], cash: walletCash });
     expect(() => assertCreditBuy(user, theirs, review)).toThrow(/credit differs/);
   });
   it("blocks a batch out of order, with a second credit or swap, or without its approve", () => {
@@ -359,5 +362,151 @@ describe("fillRaw", () => {
     expect(fillRaw(1_000_000n, 100, 50)).toBe(501_500n);
     expect(fillRaw(1_000_000n, 100, 99.8)).toBe(1_000_000n);
     expect(fillRaw(1_000_000n, 100, 0)).toBe(0n);
+  });
+});
+
+describe("planCredit with an explicit backing (Credit Buy goes backing first, Adrian 2026-10-15)", () => {
+  // Sam: no credit yet, $2,000 of free NVIDIA (70% counts), $40 of cash.
+  const fresh: CreditPosition = { collateralUsd: 0, avgCf: 0, debtUsd: 0, healthFactor: null, usdcLiquidity: 1_000_000, borrowPaused: false };
+  const backed: CreditPosition = { ...fresh, collateralUsd: 1_000, avgCf: 0.7, debtUsd: 300, healthFactor: 2.33 };
+  const nvdaFree: BackingOption = { stock: nvda, freeRaw: 1_120_000_000n, freeUsd: 2_000, cf: 0.7 };
+  const weekday = new Date("2026-10-14T15:00:00Z");
+  const withBacking = (typedUsd: number, creditUsd = 0, position = fresh, option: BackingOption | null = nvdaFree) =>
+    planCredit({ position, backing: { option, raw: option ? backingRaw(option, typedUsd) : 0n }, creditRaw: usd(creditUsd), cash: walletCash, now: weekday });
+
+  it("the typed dollars become raw units in proportion to the free value, and exactly that goes in (no fill margin)", () => {
+    expect(backingRaw(nvdaFree, 500)).toBe(280_000_000n); // a quarter of the free shares
+    const p = withBacking(500, 300);
+    expect(p.backing).toEqual([{ stock: nvda, raw: 280_000_000n, usd: 500 }]);
+    // autoFill would have put in $645 (300 × 1.5 / 0.7 plus the margin); the pick is what Sam typed.
+    expect(planCredit({ position: fresh, options: [nvdaFree], creditRaw: usd(300), cash: walletCash, now: weekday }).backing[0].usd).toBeCloseTo((300 * 1.5 * FILL_MARGIN) / 0.7, 0);
+  });
+
+  it("the credit limit grows with the backing: what it counts for, at 99.5% of the limit", () => {
+    const limits = [0, 100, 500, 1_000, 2_000].map((u) => withBacking(u).maxUsd);
+    expect(limits).toEqual([0, 69.65, 348.25, 696.5, 1_393]);
+    expect(withBacking(500).maxSafeUsd).toBe(233.33); // 500 × 70% / 1.5
+  });
+
+  it("MAX is all the free shares exactly, and gives Invest's number (creditWith)", () => {
+    expect(backingRaw(nvdaFree, nvdaFree.freeUsd)).toBe(nvdaFree.freeRaw);
+    // Within half a cent of all of it is all of it: no dust left behind.
+    expect(backingRaw(nvdaFree, 1_999.996)).toBe(nvdaFree.freeRaw);
+    expect(backingRaw(nvdaFree, 1_999.99)).toBeLessThan(nvdaFree.freeRaw);
+    const all = planCredit({ position: fresh, backing: { option: nvdaFree, raw: nvdaFree.freeRaw }, creditRaw: 0n, cash: walletCash });
+    expect(all.backing[0].raw).toBe(nvdaFree.freeRaw);
+    expect(all.maxUsd).toBe(creditWith(fresh, nvdaFree));
+  });
+
+  it("never more than is free: more is blocked, and the plan never puts in more than the free shares", () => {
+    const over = withBacking(2_500, 10);
+    expect(backingRaw(nvdaFree, 2_500)).toBeGreaterThan(nvdaFree.freeRaw);
+    expect(over.block).toBe("over-free");
+    expect(over.backing[0].raw).toBe(nvdaFree.freeRaw);
+    expect(creditBuyStop(over, true)).toBe(CREDIT_BLOCKED["over-free"]);
+    // Nothing free at all.
+    expect(planCredit({ position: backed, backing: { option: null, raw: 1n }, creditRaw: usd(10), cash: walletCash }).block).toBe("over-free");
+    expect(backingRaw(nvdaFree, 0)).toBe(0n);
+    expect(backingRaw(nvdaFree, Number.NaN)).toBe(0n);
+  });
+
+  it("0 backing uses only what already backs credit", () => {
+    const none = withBacking(0, 100, backed);
+    expect(none.backing).toEqual([]);
+    expect(none.maxUsd).toBe(creditWith(backed)); // (1,000 × 0.7 − 300) × 99.5%
+    expect(none.maxUsd).toBe(398);
+    expect(none.block).toBeUndefined();
+    expect(withBacking(0, 100, backed, null).maxUsd).toBe(398);
+    // With nothing backing credit yet, 0 gives no room at all.
+    expect(withBacking(0, 5).maxUsd).toBe(0);
+    expect(withBacking(0, 5).block).toBe("too-much");
+    // Existing backing and the typed backing add up.
+    expect(withBacking(500, 0, backed).maxUsd).toBe(746.25); // (700 + 350 − 300) × 99.5%
+  });
+
+  it("the D2 tick: Safe within what keeps it Safe, the extra confirmation past it, a block past the MAX", () => {
+    // $1,000 of NVIDIA counts for $700: Safe up to $466, Watch to $636, Act past it.
+    expect(withBacking(1_000, 400)).toMatchObject({ after: "safe", extraConfirm: false });
+    expect(withBacking(1_000, 500)).toMatchObject({ after: "watch", extraConfirm: true });
+    expect(withBacking(1_000, 650)).toMatchObject({ after: "act", extraConfirm: true });
+    expect(withBacking(1_000, 696.5).block).toBeUndefined();
+    expect(withBacking(1_000, 696.51).block).toBe("too-much");
+    expect(withBacking(1_000, 0).extraConfirm).toBe(false);
+    expect(creditBuyStop(withBacking(1_000, 500), false)).toMatch(/credit in Watch/);
+  });
+
+  it("the status before → after with the backing alone: putting stock in use lifts a position", () => {
+    const watching: CreditPosition = { ...fresh, collateralUsd: 1_000, avgCf: 0.7, debtUsd: 550, healthFactor: 700 / 550 };
+    const p = withBacking(500, 0, watching);
+    expect(p.before).toBe("watch");
+    expect(p.after).toBe("safe"); // (700 + 350) / 550 = 1.91
+    expect(withBacking(0, 0).after).toBe("none");
+  });
+
+  it("step 2's figure is step 4's: the room doesn't depend on the credit typed", () => {
+    expect(withBacking(500, 300).maxUsd).toBe(withBacking(500, 0).maxUsd);
+  });
+
+  it("carries the batch's limit: the backing's free shares and the most credit it allows", () => {
+    expect(withBacking(500, 300).limit).toEqual({ maxCreditRaw: usd(348.25), freeRaw: { NVDAc: nvdaFree.freeRaw } });
+    expect(withBacking(0, 100, backed).limit).toEqual({ maxCreditRaw: usd(398), freeRaw: {} });
+    // Auto mode: the room with exactly the backing autoFill puts in.
+    const auto = planCredit({ position: fresh, options: [nvdaFree], creditRaw: usd(300), cash: walletCash, now: weekday });
+    expect(toUsdc(auto.limit.maxCreditRaw)).toBeGreaterThanOrEqual(300);
+    expect(auto.limit.freeRaw).toEqual({ NVDAc: nvdaFree.freeRaw });
+  });
+});
+
+describe("the explicit backing in the batch (buildCreditBuyCalls, assertCreditBuy, the allowlist)", () => {
+  const fresh: CreditPosition = { collateralUsd: 0, avgCf: 0, debtUsd: 0, healthFactor: null, usdcLiquidity: 1_000_000, borrowPaused: false };
+  const nvdaFree: BackingOption = { stock: nvda, freeRaw: 1_120_000_000n, freeUsd: 2_000, cf: 0.7 };
+  const plan = planCredit({ position: fresh, backing: { option: nvdaFree, raw: backingRaw(nvdaFree, 500) }, creditRaw: quote.amountIn, cash: walletCash });
+  const build = (over: Partial<Parameters<typeof buildCreditBuyCalls>[0]> = {}) =>
+    buildCreditBuyCalls({ user, stock: aapl, quote, creditRaw: plan.creditRaw, backing: plan.backing, limit: plan.limit, cash: walletCash, nowSec: 1_000, ...over });
+  const review = { stock: aapl, creditRaw: quote.amountIn, cashRaw: 0n, backing: plan.backing, limit: plan.limit };
+
+  it("puts exactly the typed backing in use → takes the credit → exact approve → swap, all allowed", () => {
+    const calls = build();
+    expect(steps(calls)).toEqual(["approve", "supply", "setUsingAsCollateral", "borrow", "approve", "swap"]);
+    expect(decodeFunctionData({ abi: erc20Abi, data: calls[0].data }).args).toEqual([AAVE.SPOKE, 280_000_000n]);
+    expect(decodeFunctionData({ abi: spokeAbi, data: calls[1].data }).args).toEqual([5n, 280_000_000n, user]);
+    expect(assertAllowed(user, calls)).toBe(calls);
+  });
+
+  it("blocks more credit than the backing allows, even when the batch is otherwise right", () => {
+    const tight = { ...plan.limit, maxCreditRaw: quote.amountIn - 1n };
+    expect(() => build({ limit: tight })).toThrow(/more credit than the backing allows/);
+    expect(plan.limit.maxCreditRaw).toBeGreaterThanOrEqual(quote.amountIn);
+  });
+
+  it("blocks more backing than the free shares, or a stock the screen didn't read", () => {
+    expect(() => build({ limit: { ...plan.limit, freeRaw: { NVDAc: 279_999_999n } } })).toThrow(/more backing than the free shares/);
+    expect(() => build({ limit: { ...plan.limit, freeRaw: {} } })).toThrow(/more backing than the free shares/);
+    expect(() => build({ backing: [{ stock: msft, raw: 1n }] })).toThrow(/more backing than the free shares/);
+  });
+
+  it("blocks a batch whose backing differs from the review: other amount, another account, extra or missing, after the credit, a bigger approve", () => {
+    const calls = build();
+    expect(() => assertCreditBuy(user, calls, { ...review, backing: [{ stock: nvda, raw: 1n }] })).toThrow(/backing differs/);
+    expect(() => assertCreditBuy(user, calls, { ...review, backing: [] })).toThrow(/backing differs/);
+    const noBacking = build({ backing: [] });
+    expect(() => assertCreditBuy(user, noBacking, review)).toThrow(/backing differs/);
+    const theirs = { ...calls[1], data: encodeFunctionData({ abi: spokeAbi, functionName: "supply", args: [5n, 280_000_000n, attacker] }) };
+    expect(() => assertCreditBuy(user, [calls[0], theirs, ...calls.slice(2)], review)).toThrow(/backing differs/);
+    const [approve, supply, collateral, borrow, usdcApprove, swap] = calls;
+    expect(() => assertCreditBuy(user, [borrow, approve, supply, collateral, usdcApprove, swap], review)).toThrow(/backing differs/);
+    const bigger = { ...approve, data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [AAVE.SPOKE, 280_000_001n] }) };
+    expect(() => assertCreditBuy(user, [bigger, ...calls.slice(1)], review)).toThrow(/backing's approval differs/);
+    expect(assertCreditBuy(user, calls, review)).toBe(calls);
+  });
+
+  it("the allowlist refuses backing put in use for someone else", () => {
+    const calls = build();
+    const theirs = { ...calls[1], data: encodeFunctionData({ abi: spokeAbi, functionName: "supply", args: [5n, 280_000_000n, attacker] }) };
+    expect(() => assertAllowed(user, [calls[0], theirs])).toThrow(/unexpected arguments to supply/);
+  });
+
+  it("records exactly the typed backing in Activity", () => {
+    expect(creditBuyActivity({ stock: aapl, quote, plan })[0]).toEqual({ kind: "supply", symbol: "NVDAc", amount: 2.8 });
   });
 });
