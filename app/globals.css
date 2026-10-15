@@ -306,6 +306,12 @@ select {
 [data-vaul-drawer][data-vaul-drawer-direction="bottom"]::after {
   background: transparent !important;
 }
+/* Since the lift works on iOS 26 (useKeyboardLift), the strip under a lifted sheet sits behind the keypad's glass,
+   which showed the Home page through the keys (Adrian, 2026-10-15: "why now we have transparent?"). While the
+   keyboard is up the strip is the sheet's own colour, so the sheet runs down under the keypad, as before the lift. */
+[data-vaul-drawer][data-vaul-drawer-direction="bottom"][data-keyboard-lift]::after {
+  background: var(--bg-sheet) !important;
+}
 
 /* Sheet step push / pop (SheetSteps in components/sheets/SheetShell.tsx). The header stays put,
    so the body only has to say "this replaced that": 14px and 200ms. */

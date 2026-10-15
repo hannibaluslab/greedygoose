@@ -146,7 +146,8 @@ export function RepaySheet({
               onClose={closeMenu}
               onPick={(id) => {
                 setMenu(false);
-                dispatch({ type: "source", id });
+                // Picking the row already picked only closes the list: it no longer wipes a typed amount.
+                if (id !== source.id) dispatch({ type: "source", id });
               }}
             />
             <Amount view={view} form={form} disabled={tx.busy} dispatch={dispatch} />

@@ -34,6 +34,31 @@ export function CashMark({ size }: { size: number }) {
 /** The mark for an asset: cash's "$", or the stock's logo. */
 export const assetMark = (asset: string, size: number) => (asset === "cash" ? <CashMark size={size} /> : <StockAvatar symbol={asset} size={size} />);
 
+/**
+ * Cancel the mousedown and click of the tap that is under way, so it presses nothing (and focuses nothing). Undone by
+ * that click, by the touch turning into a scroll (pointercancel: no click follows), or after 700ms.
+ */
+function swallowNextPress() {
+  const stop = (e: Event) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  const onClick = (e: Event) => {
+    stop(e);
+    off();
+  };
+  const off = () => {
+    window.clearTimeout(timer);
+    document.removeEventListener("mousedown", stop, true);
+    document.removeEventListener("click", onClick, true);
+    document.removeEventListener("pointercancel", off, true);
+  };
+  document.addEventListener("mousedown", stop, true);
+  document.addEventListener("click", onClick, true);
+  document.addEventListener("pointercancel", off, true);
+  const timer = window.setTimeout(off, 700);
+}
+
 /** The list's title and padding, one row, and a footer line, in px: its height before it renders. */
 const MENU_CHROME_PX = 52;
 const ROW_PX = 56;
@@ -85,7 +110,13 @@ export function AssetPicker({
   const [up, setUp] = useState(false);
   const [maxH, setMaxH] = useState<number>();
   useClickAway(ref, (e) => {
-    if (open) onClose(e);
+    if (!open) return;
+    onClose(e);
+    // A tap away inside the sheet only closes the list, as a native menu does. iOS closes it on touchstart, then sends
+    // the tap's mousedown and click to whatever the list was covering or sat next to (measured on Repay: Max fired; on
+    // the amount the keypad opened). The sheet's Close still closes the sheet; the dim is the sheet's own (onOpenChange).
+    const t = e.target instanceof Element ? e.target : null;
+    if (t?.closest('[role="dialog"]') && !t.closest('[aria-label="Close"]')) swallowNextPress();
   });
 
   const options = () => [...(listRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]:not([aria-disabled="true"])') ?? [])];
@@ -114,8 +145,9 @@ export function AssetPicker({
     else if (e.key === "End") go(rowsNow.length - 1);
   };
 
-  const toggle = () => {
-    if (!open && ref.current) {
+  /** Measure the room in the sheet's scroll area and place the list below or above the pill. */
+  const place = () => {
+    if (ref.current) {
       const r = ref.current.getBoundingClientRect();
       const scroller = ref.current.closest("[data-sheet-scroll]");
       const box = scroller?.getBoundingClientRect();
@@ -135,8 +167,25 @@ export function AssetPicker({
       }
       setMaxH(h);
     }
+  };
+  const toggle = () => {
+    if (!open) place();
     onToggle();
   };
+  // Opening the list from the amount field closes the keyboard, and the sheet drops and grows back right after the
+  // list was placed for the short, lifted sheet: it opened upward over "You owe". Place it again once the keyboard is
+  // gone (the visual viewport resizes as it goes).
+  const placeRef = useRef(place);
+  useEffect(() => {
+    placeRef.current = place;
+  });
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!open || !vv) return;
+    const again = () => placeRef.current();
+    vv.addEventListener("resize", again);
+    return () => vv.removeEventListener("resize", again);
+  }, [open]);
 
   return (
     <div ref={ref} className="relative shrink-0">

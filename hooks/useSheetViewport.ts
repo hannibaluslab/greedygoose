@@ -92,6 +92,32 @@ export function useBodyScrollLock(locked: boolean) {
  * including portaled popovers, whose lists then cannot be touch-scrolled on
  * iOS at all. That is a distinct bug from the lift and is NOT addressed here.
  */
+/**
+ * With the sheet lifted and capped above the keyboard, keep the focused field inside the sheet's scroll area, 16px
+ * clear of its edges. Only that area scrolls: scrolling the page is what iOS does, and what useKeyboardLift undoes.
+ */
+function revealField(field: HTMLElement) {
+  const scroller = field.closest<HTMLElement>("[data-sheet-scroll]");
+  if (!scroller) return;
+  const box = scroller.getBoundingClientRect();
+  const f = field.getBoundingClientRect();
+  const by = f.bottom > box.bottom - 16 ? f.bottom - (box.bottom - 16) : f.top < box.top + 16 ? -(box.top + 16 - f.top) : 0;
+  if (!by) return;
+  if (!revealedFrom.has(scroller)) revealedFrom.set(scroller, scroller.scrollTop);
+  scroller.scrollTop += by;
+}
+
+/** Where each sheet's scroll area was before revealField moved it, so the drop puts the sheet back as it was. */
+const revealedFrom = new WeakMap<HTMLElement, number>();
+
+/** The keyboard is gone: scroll the sheet back to where it was before the field was revealed. */
+function restoreReveal(drawer: HTMLElement) {
+  const scroller = drawer.querySelector<HTMLElement>("[data-sheet-scroll]");
+  if (!scroller || !revealedFrom.has(scroller)) return;
+  scroller.scrollTop = revealedFrom.get(scroller)!;
+  revealedFrom.delete(scroller);
+}
+
 export function useKeyboardLift(active: boolean) {
   useEffect(() => {
     if (!active || typeof window === "undefined") return;
@@ -122,8 +148,24 @@ export function useKeyboardLift(active: boolean) {
           ae.tagName === "TEXTAREA" ||
           ae.tagName === "SELECT" ||
           ae.isContentEditable);
+      // iOS 26 still pans the page to reveal the focused field, body lock or
+      // not (measured on Repay's amount, iPhone 17 Pro: scrollY and
+      // visualViewport.offsetTop both 263 with the keypad up). The overlap
+      // below subtracts that pan, so it read 47px, under the 60px gate: no
+      // lift, the sheet's title and Close went off the top, the keypad
+      // covered its bottom, and the pan snapped back ~250ms after the next
+      // tap, under the finger. The body is fixed, so nothing lives below
+      // scroll 0: undo the pan (vaul's "last resort", which we turned off with
+      // its modal mode) and lift from offset 0; the visualViewport scroll
+      // event the undo fires re-applies with the settled numbers. revealField
+      // then scrolls the field into view inside the sheet, where iOS can't.
+      let pan = vv.offsetTop;
+      if (editing && window.scrollY > 0) {
+        window.scrollTo(0, 0);
+        pan = 0;
+      }
       const overlap = editing
-        ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
+        ? Math.max(0, window.innerHeight - vv.height - pan)
         : 0;
       // <60px is keyboard-animation noise / accessory-bar shuffle, not an
       // open keyboard — treat as closed so the sheet rests at bottom: 0.
@@ -132,9 +174,14 @@ export function useKeyboardLift(active: boolean) {
         // 72px headroom keeps the sheet header clear of the iOS status bar
         // when the visible area is short (title stays readable while capped).
         el.style.maxHeight = `${vv.height - 72}px`;
+        // The strip under the lifted sheet takes the sheet's colour (globals.css).
+        el.dataset.keyboardLift = "";
+        revealField(ae!);
       } else {
         el.style.bottom = "";
         el.style.maxHeight = "";
+        delete el.dataset.keyboardLift;
+        restoreReveal(el);
       }
     };
     // Focus moves don't fire visualViewport events by themselves — re-apply
