@@ -160,9 +160,9 @@ function Loaded({
             unit: "owed",
             // Board 2f: the status and what the credit costs a month, always (Safe and $0 / month with none taken).
             sub: (
-              <span className="inline-flex items-center justify-center gap-1.5">
+              <span className="inline-flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1">
                 <StatusPill status={homeStatus(data.status)} size="sm" />
-                {monthlyCostText(data.monthlyCostUsd)}
+                <span className="whitespace-nowrap">{monthlyCostText(data.monthlyCostUsd)}</span>
               </span>
             ),
           }}
