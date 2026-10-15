@@ -223,7 +223,8 @@ describe("the cash a batch is signed with (readCash)", () => {
  * credit to a health of 1.75), so it doesn't hang on any real account's health drifting.
  */
 describe("Free up stops at the cap's line on Base", () => {
-  const newcomer = "0xcd1549f523ad3606cc99950c85711c3dbe62266b";
+  // Holds NVIDIA and backs no credit, as in credit-buy.test.ts (0xcd15…266b, the one before, sold all its stock on 2026-10-15).
+  const newcomer = "0xb5ef91ce939f2c390cff462bb231e74bb228deb4";
   const nvda = EQUITIES.find((e) => e.symbol === "NVDAc")!;
 
   it("its MAX leaves Aave's health at 1.12, in Watch; the old MAX (99.5% of Aave's limit) lands in Act, and the app's check stops it", async () => {

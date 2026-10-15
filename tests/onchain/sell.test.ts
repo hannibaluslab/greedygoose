@@ -24,8 +24,8 @@ type Address = `0x${string}`;
 const client = createPublicClient({ chain: CHAIN, transport: http(process.env.NEXT_PUBLIC_BASE_RPC_URL), batch: { multicall: true } });
 /** Backs credit with five stocks (as in flows.test.ts and credit-buy.test.ts), and holds a little free AMZN. */
 const backer: Address = "0x2b8ce2c87c166d8e24e186e7e4253c11fc805427";
-/** Holds all 7 stocks free and has never backed credit (found via the stocks' Transfer logs, 2026-10-14). */
-const newcomer: Address = "0xcd1549f523ad3606cc99950c85711c3dbe62266b";
+/** Holds all 7 stocks free and backs no credit (found via NVIDIA's Transfer logs, 2026-10-15; 0xcd15…266b, the one before, sold all its stock that day). */
+const newcomer: Address = "0xb5ef91ce939f2c390cff462bb231e74bb228deb4";
 const nvda = EQUITIES.find((e) => e.symbol === "NVDAc")!;
 const amzn = EQUITIES.find((e) => e.symbol === "AMZNc")!;
 
