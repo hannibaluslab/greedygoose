@@ -162,7 +162,9 @@ function Loaded({
             sub: (
               <span className="inline-flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1">
                 <StatusPill status={homeStatus(data.status)} size="sm" />
-                <span className="whitespace-nowrap">{monthlyCostText(data.monthlyCostUsd)}</span>
+                <span className="whitespace-nowrap">
+                  {monthlyCostText(data.monthlyCostUsd).replace(" / month", "")} /<span className="text-[11px]">month</span>
+                </span>
               </span>
             ),
           }}
