@@ -135,7 +135,10 @@ function Loaded({
           label="Total balance"
           info={{ label: "What’s in your total balance", onClick: () => open("total") }}
           value={data.stocksUsd + data.cashUsd}
-          sub={today ? <TodayChange usd={today.usd} pct={today.pct} /> : market.loading ? <TodayPending /> : undefined}
+          // Board 2f: today's change is always there; with no stocks nothing moves, so it reads $0.00 · 0.00% today.
+          sub={
+            today ? <TodayChange usd={today.usd} pct={today.pct} /> : market.loading ? <TodayPending /> : held.length === 0 ? <TodayChange usd={0} pct={0} /> : undefined
+          }
           // Board 2f: what you have on the left, what you owe on the right. Owed is rounded up, never shown as less.
           side={{
             label: "Credit",
@@ -148,15 +151,13 @@ function Loaded({
               </>
             ),
             unit: "owed",
-            sub:
-              data.debtUsd > 0 ? (
-                <span className="inline-flex items-center justify-center gap-1.5">
-                  <StatusPill status={homeStatus(data.status)} size="sm" />
-                  {formatUsdTrim(data.monthlyCostUsd)} / month
-                </span>
-              ) : (
-                <span className="text-subtle">None taken</span>
-              ),
+            // Board 2f: the status and what the credit costs a month, always (Safe and $0 / month with none taken).
+            sub: (
+              <span className="inline-flex items-center justify-center gap-1.5">
+                <StatusPill status={homeStatus(data.status)} size="sm" />
+                {formatUsdTrim(data.monthlyCostUsd)} / month
+              </span>
+            ),
           }}
         />
         <BalanceLine held={held.length > 0} stockWeek={weekValue(priced)} cashUsd={data.cashUsd} loading={market.loading} onRetry={market.retry} />

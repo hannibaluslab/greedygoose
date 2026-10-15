@@ -61,11 +61,13 @@ function fit(value: number) {
 
 /** "+$38.20 · +0.76% today", green up and red down. */
 export function TodayChange({ usd, pct }: { usd: number; pct: number }) {
-  const money = formatSignedUsd(usd);
-  const tone = money.startsWith("−") ? "text-neg" : "text-pos";
+  // No move is neither green nor red, and carries no sign: "$0.00 · 0.00% today".
+  const still = Math.abs(usd) < 0.005;
+  const money = still ? "$0.00" : formatSignedUsd(usd);
+  const tone = still ? "" : money.startsWith("−") ? "text-neg" : "text-pos";
   return (
     <>
-      <span className={`font-semibold ${tone}`}>{money}</span> · <span className={`font-semibold ${tone}`}>{formatSignedPct(pct)}</span> today
+      <span className={`font-semibold ${tone}`}>{money}</span> · <span className={`font-semibold ${tone}`}>{still ? "0.00%" : formatSignedPct(pct)}</span> today
     </>
   );
 }
