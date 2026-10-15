@@ -144,6 +144,7 @@ export function SheetShell({
   // lift target, which is the point — two drawers meant two of each.
   useBodyScrollLock(open && !embedded);
   useKeyboardLift(open && !embedded);
+  const dragToClose = useDragToClose(() => onOpenChange(false));
 
   // As a step: contribute the body only. The host owns the drawer, the
   // header (title / back / close) and the scroll area, so the chrome props
@@ -187,7 +188,10 @@ export function SheetShell({
           // dismissible={false} also makes vaul ignore Escape, so close here.
           onEscapeKeyDown={() => onOpenChange(false)}
         >
-          {/* The canvas draws a grabber; the sheet doesn't drag (dismissible={false}), so it's decoration only. */}
+          {/* The top bar (grabber + title row) drags the sheet down to close it (Adrian). vaul's own drag stays off
+              (dismissible={false}): it fought the keyboard lift, so the drag is ours and limited to this bar, never
+              the scroll area or the fields. */}
+          <div {...dragToClose} className="touch-none select-none">
           <div aria-hidden className="mx-auto mt-2.5 h-[5px] w-10 shrink-0 rounded-[3px] bg-line-strong" />
           {/* A flow header is top-aligned on a 32px title row, so Back and Close stay level with the title when a description sits under it. */}
           <div className={`flex gap-1.5 px-5 ${!info ? "items-start pb-3 pt-4" : description ? "items-center py-[18px]" : "items-center py-4"}`}>
@@ -225,6 +229,7 @@ export function SheetShell({
               </button>
             )}
           </div>
+          </div>
           <div
             data-sheet-scroll
             className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-5 ${flushBottom ? "" : "pb-[max(34px,env(safe-area-inset-bottom))]"}`}
@@ -238,4 +243,61 @@ export function SheetShell({
       </Drawer>
     </>
   );
+}
+
+/**
+ * Drag the sheet down by its top bar to close it: past 90px, or a quick flick, it slides away and closes; otherwise it
+ * springs back. A tap (under 6px of movement) stays a tap, so Back and Close still work. Moves the drawer element
+ * itself (vaul's [data-vaul-drawer]) with an inline transform, cleared once it settles.
+ */
+function useDragToClose(close: () => void) {
+  const drag = useRef<{ id: number; y0: number; t0: number; el: HTMLElement; dy: number; moving: boolean } | null>(null);
+  const settle = (el: HTMLElement, to: string, then?: () => void) => {
+    el.style.transition = "transform 220ms cubic-bezier(0.32, 0.72, 0, 1)";
+    el.style.transform = to;
+    window.setTimeout(() => {
+      then?.();
+      window.setTimeout(() => {
+        el.style.transition = "";
+        el.style.transform = "";
+      }, then ? 400 : 0);
+    }, 220);
+  };
+  return {
+    onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
+      const el = e.currentTarget.closest<HTMLElement>("[data-vaul-drawer]");
+      if (!el || (e.pointerType === "mouse" && e.button !== 0)) return;
+      drag.current = { id: e.pointerId, y0: e.clientY, t0: performance.now(), el, dy: 0, moving: false };
+    },
+    onPointerMove: (e: React.PointerEvent<HTMLElement>) => {
+      const d = drag.current;
+      if (!d || d.id !== e.pointerId) return;
+      d.dy = Math.max(0, e.clientY - d.y0);
+      if (!d.moving && d.dy < 6) return;
+      if (!d.moving) {
+        d.moving = true;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        d.el.style.transition = "none";
+      }
+      d.el.style.transform = `translate3d(0, ${d.dy}px, 0)`;
+    },
+    onPointerUp: (e: React.PointerEvent<HTMLElement>) => {
+      const d = drag.current;
+      drag.current = null;
+      if (!d || !d.moving) return;
+      e.preventDefault();
+      const speed = d.dy / Math.max(1, performance.now() - d.t0);
+      if (d.dy > 90 || speed > 0.6) settle(d.el, "translate3d(0, 100%, 0)", close);
+      else settle(d.el, "translate3d(0, 0, 0)");
+    },
+    onPointerCancel: () => {
+      const d = drag.current;
+      drag.current = null;
+      if (d?.moving) settle(d.el, "translate3d(0, 0, 0)");
+    },
+    // A drag that ends on Back or Close mustn't also press it.
+    onClickCapture: (e: React.MouseEvent) => {
+      if (drag.current?.moving) e.stopPropagation();
+    },
+  };
 }
