@@ -122,8 +122,8 @@ const floorCents = (usd: number) => Math.floor(usd * 100 + 1e-6) / 100;
 
 /**
  * The one cap on taking credit (Act is the line, Adrian 2026-10-15), for every way of taking it: Credit Buy, decision
- * 1's "Use credit for the other $Y", Earn with stocks, /use-credit, and every figure that says how much (Home's and the
- * Credit sheet's "Available", Invest's buying power, "You can use up to", MAX and "Up to"). With `lines` put in use and
+ * 1's "Use credit for the other $Y", Earn with stocks, /use-credit, and every figure that says how much (usePosition's
+ * `availableUsd`, Invest's buying power, "You can use up to", MAX and "Up to"). With `lines` put in use and
  * no credit taken yet: the most credit that keeps the health factor at or above CREDIT_CAP.minHf (combinedLoan's
  * maxCredit: net of what's owed, within what can be lent), so a plan may end in Watch but never in Act, and the most
  * that stays Safe. In cents, rounded down. Nothing while the credit is in Act: more is blocked until it's out.

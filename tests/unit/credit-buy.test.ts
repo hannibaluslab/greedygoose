@@ -663,7 +663,7 @@ describe("Act is the line (Adrian, 2026-10-15): every way of taking credit may e
     expect(planCredit({ position: backed, backing: all, creditRaw: usd(headline), cash: walletCash })).toMatchObject({ after: "watch", block: undefined });
     expect(planCredit({ position: backed, backing: all, creditRaw: usd(headline + 0.01), cash: walletCash }).block).toBe("too-much");
     expect(toUsdc(step4.limit.maxCreditRaw)).toBe(headline);
-    // Home's and the Credit sheet's "Available" (usePosition's availableUsd) is the same cap on what already backs credit.
+    // usePosition's availableUsd (what the old Credit sheet called "Available") is the same cap on what already backs credit.
     expect(creditWith(backed)).toBe(creditCap(backed).maxUsd);
     expect(creditWith(backed)).toBe(325);
   });

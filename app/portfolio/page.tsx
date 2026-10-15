@@ -1,13 +1,12 @@
 "use client";
 
-import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { TabBar } from "@/components/gg/TabBar";
 import { TabHeader } from "@/components/gg/Screen";
 import { BalanceHero, TodayChange, TodayPending } from "@/components/gg/BalanceHero";
 import { Button } from "@/components/gg/Button";
-import { CreditSheet } from "@/components/gg/CreditSheet";
+import { useMoneySheets } from "@/components/gg/MoneySheets";
 import { StockSheets, useStockSheets } from "@/components/gg/StockSheets";
 import { HoldingList, HoldingRow } from "@/components/gg/Holding";
 import { ValueLine } from "@/components/gg/ValueLine";
@@ -28,8 +27,8 @@ export default function PortfolioPage() {
  * Design board "10 · Portfolio (Invest tab)" (PortfolioPage.dc.html). Market opens Flow 1's sheet
  * (F1-3 → the stock's sheet → F1-4 → confirm); /buy lands here with ?market, or ?s=SYMBOL for one stock's Buy
  * step. Trade, between Market and Credit Buy (Adrian), opens the Trade sheet, as Home's Trade does. Credit Buy opens
- * Flow 2's sheet (F2-2 → F2-3 … F2-6). A holding row opens its stock's sheet. The status pill opens the Credit sheet
- * (HomeCreditSlide).
+ * Flow 2's sheet (F2-2 → F2-3 … F2-6). A holding row opens its stock's sheet. The status pill opens the Repay sheet,
+ * the one credit sheet (Adrian, 2026-10-15; the board's Credit sheet, HomeCreditSlide, is gone).
  * Today's change, the value line and each row's day come from market prices (plan item 8), with the
  * markets-closed banner under the line at weekends. Not drawn yet: "Your mix" (the Rebalancer, item 9).
  */
@@ -37,12 +36,12 @@ function Portfolio({ address }: { address: `0x${string}` }) {
   const { data, isError, refetch } = usePosition(address);
   const params = useSearchParams();
   const stocks = useStockSheets(params.has("s") ? { symbol: params.get("s") } : params.has("market") ? { symbol: null } : null);
-  const [credit, setCredit] = useState(false);
+  const money = useMoneySheets();
 
   return (
     <div className="relative min-h-dvh">
       <div className="flex flex-col gap-4 px-5 pt-[calc(env(safe-area-inset-top)+12px)]">
-        <TabHeader title="Portfolio" back="/home" status={data?.status} onStatus={() => setCredit(true)} />
+        <TabHeader title="Portfolio" back="/home" status={data?.status} onStatus={money.repay} />
 
         {isError && !data ? (
           <div className="rounded-[22px] bg-card p-4 shadow-card-elev">
@@ -65,19 +64,6 @@ function Portfolio({ address }: { address: `0x${string}` }) {
       </div>
       <TabBar />
       {data && <StockSheets sheets={stocks} user={address} data={data} />}
-      {data && (
-        <CreditSheet
-          open={credit}
-          onClose={() => setCredit(false)}
-          account={address}
-          data={data}
-          // The Market is already on this page: Buy more swaps the sheets instead of navigating to itself.
-          onBuyMore={() => {
-            setCredit(false);
-            stocks.openMarket();
-          }}
-        />
-      )}
     </div>
   );
 }

@@ -11,7 +11,6 @@ import { QuickAction } from "@/components/gg/QuickAction";
 import { CashCard, YieldCard } from "@/components/gg/Cards";
 import { StartEarningCard, TurnIntoCash } from "@/components/gg/CashSetup";
 import { AddStockCard, HoldingCard } from "@/components/gg/Holding";
-import { CreditSheet } from "@/components/gg/CreditSheet";
 import { CashSheet } from "@/components/gg/CashSheet";
 import { useMoneySheets } from "@/components/gg/MoneySheets";
 import { StockSheets, useStockSheets } from "@/components/gg/StockSheets";
@@ -36,11 +35,12 @@ export default function HomePage() {
   return <RequireAccount>{(address) => <Home address={address} />}</RequireAccount>;
 }
 
-type Sheet = "total" | "yield" | "credit" | "cash";
+type Sheet = "total" | "yield" | "cash";
 
 /**
- * Design board "2 · Home · portfolio: Rail" (HomeUpliftRail.dc.html), with its sheets: Total balance (HomeInfo),
- * Average yield (HomeYieldInfo) and Credit (HomeCreditSlide). Today's change, the line and each holding's day come
+ * Design board "2 · Home · portfolio: Rail" (HomeUpliftRail.dc.html), with its sheets: Total balance (HomeInfo) and
+ * Average yield (HomeYieldInfo). The ⓘ beside Credit opens the Repay sheet, the one credit sheet (Adrian, 2026-10-15;
+ * the board's Credit sheet, HomeCreditSlide, is gone). Today's change, the line and each holding's day come
  * from market prices (plan item 8). The board's all-time return is left out: it needs what Sam paid, which only the
  * PnL engine will read from the chain (plan item 7). A holding card opens its stock's sheet.
  *
@@ -103,7 +103,6 @@ function Home({ address }: { address: `0x${string}` }) {
         <>
           <TotalBalanceSheet open={sheet === "total"} onClose={close} cashUsd={data.cashUsd} stocksUsd={data.stocksUsd} debtUsd={data.debtUsd} />
           <YieldSheet open={sheet === "yield"} onClose={close} cashUsd={data.cashUsd} savingsUsd={data.savingsUsd} apy={apy} earning={data.cash.saveOn} />
-          <CreditSheet open={sheet === "credit"} onClose={close} account={address} data={data} />
           <CashSheet open={sheet === "cash"} onClose={close} account={address} data={data} apy={apy} arrived={arrived} save={setup.save} />
           <StockSheets sheets={stocks} user={address} data={data} />
         </>
@@ -149,7 +148,8 @@ function Loaded({
           // Board 2f: what you have on the left, what you owe on the right. Owed is rounded up, never shown as less.
           side={{
             label: "Credit",
-            info: { label: "Your credit", onClick: () => open("credit") },
+            // The one credit sheet is Repay's (Adrian, 2026-10-15): with nothing owed it says only that.
+            info: { label: "Your credit", onClick: money.repay },
             // The "$" drawn as the total balance draws it (Adrian): smaller, in the mid ink.
             value: (
               <>
