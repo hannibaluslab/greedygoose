@@ -76,6 +76,7 @@ function Home({ address }: { address: `0x${string}` }) {
           apy={apy}
           open={setSheet}
           openStock={stocks.openStock}
+          openCreditBuy={stocks.openCreditBuy}
           openTrade={() => stocks.openTrade()}
           arrived={arrived}
           dim={startEarningShown(setup.save, data.cashUsd)}
@@ -109,12 +110,14 @@ function Home({ address }: { address: `0x${string}` }) {
 }
 
 function Loaded({
-  data, apy, open, openStock, openTrade, arrived, cards, dim,
+  data, apy, open, openStock, openCreditBuy, openTrade, arrived, cards, dim,
 }: {
   data: PositionData;
   apy: number;
   open: (sheet: Sheet) => void;
   openStock: (symbol: string) => void;
+  /** The Credit Buy quick action: F2-3, the same sheet as Invest's (StockSheets). */
+  openCreditBuy: () => void;
   /** The Trade sheet: swap between anything you hold, not the Market. */
   openTrade: () => void;
   arrived: ArrivedView;
@@ -124,7 +127,8 @@ function Loaded({
   dim: boolean;
 }) {
   const held = data.holdings.filter((h) => h.freeShares + h.lockedShares > 0);
-  const market = useMarketPrices(held);
+  // Before the first stock, the line is the market's week: the seven stocks, each weighted the same.
+  const market = useMarketPrices(held.length > 0 ? held : data.holdings);
   const priced = held.map((h) => ({ valueUsd: h.freeUsd + h.lockedUsd, ...market.bySymbol[h.symbol] }));
   const today = dayChange(priced, data.stocksUsd + data.cashUsd);
 
@@ -153,14 +157,25 @@ function Loaded({
               ),
           }}
         />
-        {held.length > 0 && <ValueLine points={weekValue(priced)} height={68} loading={market.loading} onRetry={market.retry} />}
+        {held.length > 0 ? (
+          <ValueLine points={weekValue(priced)} height={68} loading={market.loading} onRetry={market.retry} />
+        ) : (
+          <ValueLine
+            points={weekValue(data.holdings.map((h) => ({ valueUsd: 1, ...market.bySymbol[h.symbol] })))}
+            height={68}
+            loading={market.loading}
+            onRetry={market.retry}
+            label="The seven stocks over the last 7 days, each weighted the same, at market prices"
+            caption="Market · 7 days"
+          />
+        )}
         <MarketBanner />
       </section>
 
       <section className="grid grid-cols-4 gap-2 px-5 pt-[22px]">
         <QuickAction onClick={openTrade} label="Trade" icon={<TradeIcon />} />
         <QuickAction href="/receive" label="Top up" icon={<PlusIcon />} />
-        <QuickAction onClick={() => open("credit")} label="Credit Buy" icon={<CreditIcon />} />
+        <QuickAction onClick={openCreditBuy} label="Credit Buy" icon={<CreditIcon />} />
         <QuickAction href="/repay" label="Repay" icon={<RepayIcon />} />
       </section>
 

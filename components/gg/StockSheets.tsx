@@ -12,8 +12,11 @@ import { EQUITIES, type ReserveAsset } from "@/lib/tokens/registry";
 
 /** The stock sheet's subject: which stock, and whether the Market opened it (its Back returns there). */
 type StockAt = { symbol: string; fromMarket?: boolean };
-/** A flow's subject: its stock (none for the Market or F2-3's picker), and the stock sheet that opened it, to go back to. */
-type FlowAt = { symbol: string | null; back?: StockAt };
+/**
+ * A flow's subject: its stock (none for the Market or F2-3's picker), and the stock sheet that opened it, to go back
+ * to; or, for a Buy opened from F2-3 with no credit to use, `fromCreditBuy`, whose Back returns to F2-3.
+ */
+type FlowAt = { symbol: string | null; back?: StockAt; fromCreditBuy?: boolean };
 /** The Trade sheet's subject: what it opens on, when not its defaults (Home and Invest pass none). */
 type TradeAt = { from?: TradeAsset; to?: TradeAsset };
 
@@ -106,7 +109,14 @@ export function StockSheets({ sheets, user, data }: { sheets: StockSheetsState; 
             buy.close();
             stock.show({ symbol, fromMarket: true });
           }}
-          onBack={backTo(buy, buy.subject.back)}
+          onBack={
+            buy.subject.fromCreditBuy
+              ? () => {
+                  buy.close();
+                  creditBuy.show({ symbol: null });
+                }
+              : backTo(buy, buy.subject.back)
+          }
         />
       )}
       {creditBuy.subject && (
@@ -118,6 +128,10 @@ export function StockSheets({ sheets, user, data }: { sheets: StockSheetsState; 
           symbol={creditBuy.subject.symbol}
           onClose={creditBuy.close}
           onBack={backTo(creditBuy, creditBuy.subject.back)}
+          onBuyWithCash={(symbol) => {
+            creditBuy.close();
+            buy.show({ symbol, fromCreditBuy: true });
+          }}
         />
       )}
       {trade.subject && (

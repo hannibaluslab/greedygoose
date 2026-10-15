@@ -26,9 +26,13 @@ export function BalanceHero({
       </Divided>
 
       <Money value={value} size={46 * k} dollarSize={22 * k} centsSize={19 * k} />
-      <Divided className="flex items-baseline justify-center gap-1 self-stretch">
-        <span className="text-[30px] font-semibold leading-none tracking-[-0.03em]">{side.value}</span>
-        {side.unit && <span className="text-[13px] font-medium text-subtle">{side.unit}</span>}
+      {/* 8px under its label (Adrian: not tight under it, not down on the big figure's foot); stretched so the
+          hairline runs on. */}
+      <Divided className="flex items-start justify-center self-stretch pt-2">
+        <span className="flex items-baseline gap-1">
+          <span className="text-[30px] font-semibold leading-none tracking-[-0.03em]">{side.value}</span>
+          {side.unit && <span className="text-[13px] font-medium text-subtle">{side.unit}</span>}
+        </span>
       </Divided>
 
       {(sub || side.sub) && (

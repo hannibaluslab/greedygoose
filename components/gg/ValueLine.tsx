@@ -9,7 +9,9 @@ import { LINE_POINTS, downsample } from "@/lib/prices/market";
  */
 export function ValueLine({
   points, height, loading, onRetry,
-}: { points: number[] | null; height: number; loading: boolean; onRetry: () => void }) {
+  label = "What your stocks were worth over the last 7 days, at market prices",
+  caption = "Market prices · 7 days",
+}: { points: number[] | null; height: number; loading: boolean; onRetry: () => void; label?: string; caption?: string }) {
   if (loading) return <div aria-busy className="animate-pulse rounded-[14px] bg-chip" style={{ height }} />;
   if (!points) {
     return (
@@ -24,8 +26,8 @@ export function ValueLine({
       points={downsample(points, LINE_POINTS.hero)}
       variant="hero"
       height={height}
-      label="What your stocks were worth over the last 7 days, at market prices"
-      caption="Market prices · 7 days"
+      label={label}
+      caption={caption}
     />
   );
 }

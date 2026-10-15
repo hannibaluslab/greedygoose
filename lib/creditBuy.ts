@@ -10,7 +10,7 @@ import { formatUsd } from "@/lib/formatting";
 import { marketState } from "@/lib/market-hours";
 import type { ActivityItem } from "@/lib/activity/decode";
 import { STATUS_LABEL, needsExtraConfirm, statusFor, type Status } from "@/lib/risk/status";
-import { buildBuyCalls, type BuyQuote } from "@/lib/swap/buy";
+import { BUY_LIMITS, buildBuyCalls, type BuyQuote } from "@/lib/swap/buy";
 import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
 
 type Address = `0x${string}`;
@@ -84,6 +84,39 @@ export type CreditPlan = {
   block?: CreditBlock;
 };
 
+const loanOf = (pos: CreditPosition) => ({ collateralUsd: pos.collateralUsd, avgCf: pos.avgCf, debtUsd: pos.debtUsd, liquidityUsd: pos.usdcLiquidity });
+const lineOf = (o: BackingOption, usd: number) => ({ key: o.stock.symbol, usd, cf: o.cf, freeUsd: o.freeUsd });
+
+/**
+ * The most credit with every option in use, on Leo's combinedLoan: the MAX (99.5% of Aave's limit, as /use-credit) and
+ * the most that stays Safe. Net of what's owed, within what Aave can lend.
+ */
+function creditRoom(pos: CreditPosition, options: readonly BackingOption[]): { maxUsd: number; maxSafeUsd: number } {
+  const all = combinedLoan({ ...loanOf(pos), borrowUsd: 0, locks: options.map((o) => lineOf(o, o.freeUsd)) });
+  return { maxUsd: Math.floor(all.maxAave * 0.995 * 100) / 100, maxSafeUsd: Math.floor(all.maxSafe * 100) / 100 };
+}
+
+/**
+ * F2-4's figure for one holding: the most one Credit Buy can use backed by `option` and what already backs credit
+ * (planCredit's MAX with that one option). Without `option`, the room on what already backs credit alone.
+ */
+export function creditWith(position: CreditPosition, option?: BackingOption): number {
+  return creditRoom(position, option ? [option] : []).maxUsd;
+}
+
+/**
+ * The holding F2-4 picks until Sam picks another: the one a Credit Buy can use the most with (ties: the most free
+ * stock). F2-3's number is its figure, so the amount F2-3 promises is the one F2-4 and F2-5 offer first.
+ */
+export function bestBacking(position: CreditPosition, options: readonly BackingOption[]): { option: BackingOption; usd: number } | null {
+  let best: { option: BackingOption; usd: number } | null = null;
+  for (const option of options) {
+    const usd = creditWith(position, option);
+    if (!best || usd > best.usd || (usd === best.usd && option.freeUsd > best.option.freeUsd)) best = { option, usd };
+  }
+  return best;
+}
+
 /**
  * What backs `creditRaw` of credit and the status it ends in, on Leo's loan maths. What already
  * backs credit counts first; autoFill tops up from `options` (highest collateral factor first) so
@@ -93,17 +126,15 @@ export type CreditPlan = {
 export function planCredit(p: { position: CreditPosition; options: BackingOption[]; creditRaw: bigint; cash: Cash; now?: Date }): CreditPlan {
   const { position: pos, options } = p;
   const creditUsd = toUsd(p.creditRaw);
-  const loan = { collateralUsd: pos.collateralUsd, avgCf: pos.avgCf, debtUsd: pos.debtUsd, liquidityUsd: pos.usdcLiquidity };
-  const line = (o: BackingOption, usd: number) => ({ key: o.stock.symbol, usd, cf: o.cf, freeUsd: o.freeUsd });
+  const loan = loanOf(pos);
 
-  const fill = autoFill({ ...loan, borrowUsd: creditUsd, lines: options.map((o) => line(o, 0)) });
+  const fill = autoFill({ ...loan, borrowUsd: creditUsd, lines: options.map((o) => lineOf(o, 0)) });
   const chosen = options.flatMap((o) => {
     const raw = fillRaw(o.freeRaw, o.freeUsd, fill[o.stock.symbol]);
     return raw > 0n ? [{ option: o, raw, usd: (o.freeUsd * Number(raw)) / Number(o.freeRaw) }] : [];
   });
-  const calc = combinedLoan({ ...loan, borrowUsd: creditUsd, locks: chosen.map((c) => line(c.option, c.usd)) });
-  const all = combinedLoan({ ...loan, borrowUsd: 0, locks: options.map((o) => line(o, o.freeUsd)) });
-  const maxUsd = Math.floor(all.maxAave * 0.995 * 100) / 100;
+  const calc = combinedLoan({ ...loan, borrowUsd: creditUsd, locks: chosen.map((c) => lineOf(c.option, c.usd)) });
+  const { maxUsd, maxSafeUsd } = creditRoom(pos, options);
   const after = statusFor(pos.debtUsd + creditUsd > 0 ? calc.hfAfter : null);
 
   let block: CreditBlock | undefined;
@@ -119,11 +150,69 @@ export function planCredit(p: { position: CreditPosition; options: BackingOption
     after,
     hfAfter: calc.hfAfter,
     extraConfirm: creditUsd > 0 && needsExtraConfirm(after),
-    maxSafeUsd: Math.floor(all.maxSafe * 100) / 100,
+    maxSafeUsd,
     maxUsd,
     priceMayMove: !marketState(p.now).open,
     block,
   };
+}
+
+/** Why a Credit Buy can use nothing right now (F2-3's zero state). */
+export type NoCredit = "no-stocks" | "cant-back" | "all-in-use" | "paused" | "no-liquidity";
+
+/** F2-3's line under "$0", first half: why. */
+export const NO_CREDIT: Record<NoCredit, string> = {
+  "no-stocks": "Credit comes from the stocks you own.",
+  "cant-back": "Your stocks can’t back credit right now.",
+  "all-in-use": "Your stocks already back what you owe. Repay some to use more.",
+  paused: "New credit is paused right now.",
+  "no-liquidity": "There’s no credit to give out right now.",
+};
+
+/**
+ * F2-3's whole line under "$0": why, then that cash still buys (a stock tapped there opens its Buy step with cash), or,
+ * with too little cash for the smallest buy and its network fee, to top up first.
+ */
+export function noCreditLine(why: NoCredit, canPayCash: boolean): string {
+  const then =
+    why === "no-stocks"
+      ? canPayCash ? "Buy one with cash first." : "Top up, then buy one with cash."
+      : canPayCash ? "You can still buy with cash." : "Top up to buy with cash.";
+  return `${NO_CREDIT[why]} ${then}`;
+}
+
+/** F2-3's line under the number when there is credit to use. */
+export const CREDIT_FROM = "In credit, backed by the stocks you own.";
+/** …and when there's credit but not the network fee: cash pays it (D4), and F2-5 would block every amount ("fee"). */
+export const FEE_FIRST = `Add ${formatUsd(CASH.feeBufferUsd)} to your cash for the network fee first.`;
+
+export type CreditAvailable = {
+  /** The most one Credit Buy can use right now; 0 with `why`. */
+  usd: number;
+  why?: NoCredit;
+  /** The plain line under the number. */
+  line: string;
+};
+
+/**
+ * F2-3's big number: the most one Credit Buy can use right now. A Credit Buy is backed by one free holding plus what
+ * already backs credit (F2-4), so this is the best of F2-4's per-stock figures (bestBacking, the one F2-4 picks first),
+ * or the room on what already backs credit when nothing free can back it. Net of what's owed and capped by what Aave
+ * can lend (combinedLoan). Under the minimum buy, or while new credit is paused, it is $0 with the reason. With credit
+ * but less cash than the network fee, the number stays and the line asks for the fee first.
+ * `options` are the ones F2-4 lists; `holdsStock` is whether the account owns any stock, free or in use.
+ */
+export function creditAvailable(p: { position: CreditPosition; options: readonly BackingOption[]; cash: Cash; holdsStock: boolean }): CreditAvailable {
+  const usd = Math.max(creditWith(p.position), bestBacking(p.position, p.options)?.usd ?? 0);
+  const why = ((): NoCredit | undefined => {
+    if (!p.holdsStock) return "no-stocks";
+    if (p.position.borrowPaused) return "paused";
+    if (usd >= BUY_LIMITS.minUsd) return undefined;
+    if (p.position.usdcLiquidity < BUY_LIMITS.minUsd) return "no-liquidity";
+    return p.options.length === 0 && p.position.collateralUsd <= 0 ? "cant-back" : "all-in-use";
+  })();
+  if (why) return { usd: 0, why, line: noCreditLine(why, toUsd(maxSpendRaw(p.cash)) >= BUY_LIMITS.minUsd) };
+  return { usd, line: cashRaw(p.cash) < feeBufferRaw ? FEE_FIRST : CREDIT_FROM };
 }
 
 /** Why a Credit Buy on screen can't be signed: a block, or a Watch/Act ending without the extra confirmation (D2). */
