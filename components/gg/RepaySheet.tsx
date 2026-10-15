@@ -5,6 +5,7 @@ import { useAccount } from "wagmi";
 import { toast } from "sonner";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { AmountInput } from "./AmountInput";
+import { StockAvatar } from "./StockAvatar";
 import { AssetPicker, assetMark, type PickerRow } from "./AssetPicker";
 import { Button } from "./Button";
 import { WhiteCard } from "./Screen";
@@ -274,7 +275,15 @@ function Amount({ view, form, disabled, dispatch }: { view: RepayView; form: Rep
       <div className="grid grid-cols-2 rounded-[16px] border border-line-field bg-card leading-[normal] focus-within:border-ink">
         <div className="flex min-w-0 flex-col gap-1 border-r border-line-field p-3.5">
           <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">You have</span>
-          <span className="num truncate text-[22px] font-semibold tracking-[-0.02em]">{have}</span>
+          {/* Always dollars, with the coin's own mark before it: USDC for cash, the stock's logo for a stock (Adrian). */}
+          <span className="flex min-w-0 items-center gap-2">
+            {source.kind === "cash" ? (
+              <span aria-hidden className="block size-6 shrink-0 rounded-full bg-cover bg-center" style={{ backgroundImage: "url(/tokens/USDC.png)" }} />
+            ) : (
+              <StockAvatar symbol={source.stock!.symbol} size={24} />
+            )}
+            <span className="num truncate text-[22px] font-semibold tracking-[-0.02em]">{have}</span>
+          </span>
           <span className="truncate text-[12px] text-ink-mid">{haveWords.join(" ")}</span>
         </div>
         <div className="flex min-w-0 flex-col gap-1 p-3.5">
