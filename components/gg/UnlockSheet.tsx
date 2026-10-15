@@ -12,10 +12,8 @@ import { useTx } from "@/hooks/useTx";
 import { withdrawPlan } from "@/lib/tx/plans";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import type { Holding, PositionData } from "@/hooks/usePosition";
-import { healthAfterWithdraw, maxWithdrawUsd } from "@/lib/aave/math";
-import { needsExtraConfirm, statusFor } from "@/lib/risk/status";
+import { freeUpCheck } from "@/lib/freeUp";
 import { rawToShares, sharesToRaw } from "@/lib/tokens/b20";
-import { CREDIT_CAP } from "@/config/risk";
 import { formatShares, formatUsd } from "@/lib/formatting";
 import type { ReserveAsset } from "@/lib/tokens/registry";
 
@@ -23,7 +21,7 @@ import type { ReserveAsset } from "@/lib/tokens/registry";
  * "Free up shares": withdraw a stock from Aave back to the user's account, straight to JAW's own sheet from the amount
  * (with the risk tick on this screen when it ends in Watch; the batch is prepared while the sheet is idle). Act is the
  * line (Adrian, 2026-10-15): the most it frees up keeps the health factor at or above CREDIT_CAP.minHf, the same line
- * as taking credit, and an amount that would end in Act is blocked with one plain line, never a tick.
+ * as taking credit, and an amount that would end in Act is blocked with one plain line, never a tick (lib/freeUp.ts).
  * `onBack` when opened from the stock's sheet.
  */
 export function UnlockSheet({
@@ -46,27 +44,12 @@ export function UnlockSheet({
 
   const ticker = tickerOf(stock.symbol);
   const lockedShares = rawToShares(holding.lockedRaw, holding.multiplier, stock.decimals);
-  const factor = cf ?? 0;
-  // With debt, the most that keeps the credit at the cap's line: Watch at worst, with a margin before Act.
-  const maxUsd = maxWithdrawUsd({ collateralUsd: data.collateralUsd, avgCf: data.avgCf, debtUsd: data.debtUsd, cf: factor, lockedUsd: holding.lockedUsd, targetHf: CREDIT_CAP.minHf });
-  const canAll = data.debtUsd === 0 || maxUsd >= holding.lockedUsd;
-  const maxShares = canAll ? lockedShares : lockedShares * (maxUsd / Math.max(holding.lockedUsd, 1e-9));
-
   const amountRaw = all ? holding.lockedRaw : sharesToRaw(raw, holding.multiplier, stock.decimals);
-  const shares = rawToShares(amountRaw, holding.multiplier, stock.decimals);
-  const usd = (Number(amountRaw) / 10 ** stock.decimals) * holding.priceUsd;
-  const tooMuch = !all && shares > maxShares + 1e-12;
-  const hfAfter = healthAfterWithdraw({ collateralUsd: data.collateralUsd, avgCf: data.avgCf, debtUsd: data.debtUsd, cf: factor, usd });
-  const after = statusFor(hfAfter);
-  // Act is the line: an amount that would end in Act is blocked outright (it is also more than MAX).
-  const endsInAct = amountRaw > 0n && after === "act";
-  const risky = amountRaw > 0n && !tooMuch && !endsInAct && needsExtraConfirm(after);
+  // With debt, the most is what keeps the credit at the cap's line (Watch at worst); ending in Act is blocked.
+  const { canAll, maxShares, usd, after, risky, line, ok } = freeUpCheck({ position: data, holding, decimals: stock.decimals, cf: cf ?? 0, amountRaw, all });
   const feeBlocked = isConnected && fee.state === "unsupported";
   // What Free up would sign now, prepared while the sheet is idle so the tap opens JAW's sheet at once.
-  const plan =
-    open && amountRaw > 0n && !tooMuch && !endsInAct && !(risky && !ack) && !holding.paused && !feeBlocked && cf !== undefined
-      ? withdrawPlan({ user, stock, amountRaw, all })
-      : null;
+  const plan = open && ok && !(risky && !ack) && !holding.paused && !feeBlocked && cf !== undefined ? withdrawPlan({ user, stock, amountRaw, all }) : null;
   const tx = useTx(undefined, plan);
 
   return (
@@ -133,14 +116,7 @@ export function UnlockSheet({
               </div>
             </div>
 
-            {data.debtUsd > 0 && maxUsd <= 0 && (
-              <p role="status" className="m-0 text-[13px] text-act">Your credit needs all of these shares. Repay some first to free them up.</p>
-            )}
-            {endsInAct ? (
-              <p role="status" className="m-0 text-[13px] text-act">That would put your credit in Act. Free up less, or repay some first.</p>
-            ) : (
-              tooMuch && <p role="status" className="m-0 text-[13px] text-act">That’s more than you can free up while you owe {formatUsd(data.debtUsd)}.</p>
-            )}
+            {line && <p role="status" className="m-0 text-[13px] text-act">{line}</p>}
             {risky && (
               <label className="flex items-start gap-2.5 rounded-2xl bg-act-bg px-4 py-3 text-[13px] leading-snug text-act">
                 <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-px size-[18px] shrink-0 accent-[#8e2a1d]" />

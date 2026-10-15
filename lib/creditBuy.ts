@@ -1,5 +1,5 @@
 import { decodeFunctionData, erc20Abi, isAddressEqual, parseUnits } from "viem";
-import { CASH } from "@/config/risk";
+import { CASH, RISK } from "@/config/risk";
 import { swapOf } from "@/lib/allowlist";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
@@ -9,8 +9,9 @@ import { cashRaw, feeBufferRaw, maxSpendRaw, payFromCash, toUsd, type Cash } fro
 import { formatUsd } from "@/lib/formatting";
 import { marketState } from "@/lib/market-hours";
 import type { ActivityItem } from "@/lib/activity/decode";
-import { STATUS_LABEL, needsExtraConfirm, statusFor, type Status } from "@/lib/risk/status";
+import { STATUS_LABEL, endsInAct, needsExtraConfirm, statusFor, type Status } from "@/lib/risk/status";
 import { BUY_LIMITS, buildBuyCalls, type BuyQuote } from "@/lib/swap/buy";
+import type { HealthFloor } from "@/lib/tx/prepared";
 import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
 
 type Address = `0x${string}`;
@@ -77,11 +78,18 @@ export const CREDIT_BLOCKED: Record<CreditBlock, string> = {
   paused: "Aave isn’t giving new USDC credit right now.",
   "no-liquidity": "Aave doesn’t have enough USDC for this right now. Try a smaller amount.",
   "over-free": "That’s more than you have free to put in use. Try a smaller amount.",
-  "in-act": "Your credit is in Act. Repay some before using more.",
+  "in-act": "Your credit is in Act. Repay some to use more.",
   act: "That would put your credit in Act. Try a smaller amount.",
   "too-much": "That’s more credit than your stocks can back right now. Try a smaller amount.",
   fee: `The network fee is paid from your cash. Top up ${formatUsd(CASH.feeBufferUsd)} first.`,
 };
+
+/**
+ * Every batch that takes credit (Credit Buy, decision 1, Earn with stocks, /use-credit) is stopped if the health on Aave
+ * after it, read in its own simulation, is in Act: the screen's cap is planned on the position as last read, Aave lets
+ * credit go down to 1.0, and a cut in a stock's collateral factor lands at the borrow (lib/tx/prepared.ts HealthFloor).
+ */
+export const CREDIT_FLOOR: HealthFloor = { minHf: RISK.watchMin, stop: CREDIT_BLOCKED.act };
 
 export type CreditPlan = {
   creditRaw: bigint;
@@ -124,6 +132,32 @@ export function creditCap(pos: CreditPosition, lines: readonly LockLine[] = []):
   if (statusFor(pos.healthFactor) === "act") return { maxUsd: 0, maxSafeUsd: 0 };
   const all = combinedLoan({ ...loanOf(pos), borrowUsd: 0, locks: [...lines] });
   return { maxUsd: floorCents(all.maxCredit), maxSafeUsd: floorCents(all.maxSafe) };
+}
+
+/**
+ * /use-credit's checks on what's on screen (Act is the line): with `locks` put in use and `amountUsd` taken, the cap
+ * (MAX, "Up to", Credit limit) and the Safe figure, the status after, the one line that blocks it (in Act already;
+ * ending in Act; past the cap), D2's tick for Watch, and whether "Pick enough backing for $X" can help: only when the
+ * amount is past Safe and all the free stock (`all`) would bring it within the cap, with some of it not in use yet.
+ */
+export function loanCheck(p: { position: CreditPosition; locks: readonly LockLine[]; all: readonly LockLine[]; amountUsd: number; moreToPutInUse: boolean }) {
+  const { position: pos, amountUsd } = p;
+  const cap = creditCap(pos, p.locks);
+  const hfAfter = combinedLoan({ ...loanOf(pos), borrowUsd: amountUsd, locks: [...p.locks] }).hfAfter;
+  const after = statusFor(pos.debtUsd + amountUsd > 0 ? hfAfter : null);
+  const overCap = amountUsd > cap.maxUsd;
+  const line =
+    amountUsd <= 0
+      ? null
+      : statusFor(pos.healthFactor) === "act"
+        ? CREDIT_BLOCKED["in-act"]
+        : endsInAct(after)
+          ? CREDIT_BLOCKED.act
+          : overCap
+            ? `That’s more than these stocks can back. Back it with more, or take up to ${formatUsd(cap.maxUsd)}.`
+            : null;
+  const needsFill = amountUsd > 0 && amountUsd > cap.maxSafeUsd && amountUsd <= creditCap(pos, p.all).maxUsd && p.moreToPutInUse;
+  return { maxUsd: cap.maxUsd, maxSafeUsd: cap.maxSafeUsd, after, overCap, line, risky: amountUsd > 0 && !line && needsExtraConfirm(after), needsFill };
 }
 
 /** The most credit with every option in use (creditCap): the MAX and the most that stays Safe. */
@@ -242,7 +276,7 @@ export function planCredit(
   else if (creditUsd > pos.usdcLiquidity) block = "no-liquidity";
   else if (overFree) block = "over-free";
   else if (creditUsd > 0 && before === "act") block = "in-act";
-  else if (creditUsd > 0 && after === "act") block = "act";
+  else if (creditUsd > 0 && endsInAct(after)) block = "act";
   else if (creditUsd > maxUsd) block = "too-much";
   else if (cashRaw(p.cash) < feeBufferRaw) block = "fee";
 
@@ -254,7 +288,7 @@ export function planCredit(
     after,
     hfAfter: calc.hfAfter,
     // D2's tick is for ending in Watch; ending in Act is the "act" block above.
-    extraConfirm: creditUsd > 0 && needsExtraConfirm(after) && after !== "act",
+    extraConfirm: creditUsd > 0 && needsExtraConfirm(after),
     maxSafeUsd,
     maxUsd,
     priceMayMove: !marketState(p.now).open,
@@ -271,7 +305,7 @@ export const NO_CREDIT: Record<NoCredit, string> = {
   "cant-back": "Your stocks can’t back credit right now.",
   "too-small": "Your free stock is too small to back credit yet.",
   "all-in-use": "Your stocks already back what you owe. Repay some to use more.",
-  "in-act": "Your credit is in Act. Repay some to use more.",
+  "in-act": CREDIT_BLOCKED["in-act"],
   paused: "New credit is paused right now.",
   "no-liquidity": "There’s no credit to give out right now.",
 };

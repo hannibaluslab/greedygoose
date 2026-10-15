@@ -131,7 +131,7 @@ describe("earnOffer: the cap", () => {
 
   it("isn't offered while the credit is in Act (Act is the line), whatever is free", () => {
     const inAct = position({ debtUsd: 600, healthFactor: 630 / 600 });
-    expect(earnOffer(input({ position: inAct }))).toMatchObject({ kind: "closed", why: "in-act", text: "Your credit is in Act. Repay some before using more." });
+    expect(earnOffer(input({ position: inAct }))).toMatchObject({ kind: "closed", why: "in-act", text: "Your credit is in Act. Repay some to use more." });
     // At the cap's line it's Watch, not Act: offered, with what's left on the free Tesla (980 ÷ 1.12 = $875).
     const atCap = position({ debtUsd: 562.5, healthFactor: 630 / 562.5 });
     expect(open(earnOffer(input({ position: atCap })))).toMatchObject({ maxUsd: 875 });

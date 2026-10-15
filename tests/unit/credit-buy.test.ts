@@ -10,7 +10,7 @@ import { buildBorrowCalls } from "@/lib/aave/tx";
 import { payFromCash } from "@/lib/cash";
 import {
   CREDIT_BLOCKED, CREDIT_FROM, FEE_FIRST, NO_CREDIT, assertCreditBuy, backers, backingOptions, backingRaw, bestBacking, buildCreditBuyCalls, creditAvailable,
-  creditBuyActivity, creditBuyStop, creditCap, creditWith, freeShownUsd, isAllFree, noCreditLine, planCredit, shortNames, splitCash,
+  creditBuyActivity, creditBuyStop, creditCap, creditWith, freeShownUsd, isAllFree, loanCheck, noCreditLine, planCredit, shortNames, splitCash,
   type BackingOption, type CreditLimit, type CreditPosition,
 } from "@/lib/creditBuy";
 import { aaveV3PoolAbi } from "@/lib/guardian/abis";
@@ -717,5 +717,50 @@ describe("Act is the line (Adrian, 2026-10-15): every way of taking credit may e
 
   it("its words keep D17's and protocol words off screen", () => {
     for (const line of [CREDIT_BLOCKED.act, CREDIT_BLOCKED["in-act"], NO_CREDIT["in-act"]]) expect(line).not.toMatch(/borrow|loan|lock|aave|collateral|health/i);
+  });
+});
+
+describe("loanCheck: /use-credit's checks (Act is the line)", () => {
+  const fresh: CreditPosition = { collateralUsd: 0, avgCf: 0, debtUsd: 0, healthFactor: null, usdcLiquidity: 1_000_000, borrowPaused: false };
+  /** $2,000 of NVIDIA free at 70%; `inUse` of it put in use on screen. */
+  const line = (inUse: number) => ({ key: "NVDAc", usd: inUse, cf: 0.7, freeUsd: 2_000 });
+  const check = (inUse: number, amountUsd: number, position = fresh) =>
+    loanCheck({ position, locks: [line(inUse)], all: [line(2_000)], amountUsd, moreToPutInUse: inUse < 2_000 });
+
+  it("MAX, Up to and the Credit limit are creditCap with what's on screen", () => {
+    const c = check(1_000, 0);
+    expect(c.maxUsd).toBe(625); // 700 ÷ 1.12
+    expect(c.maxUsd).toBe(creditCap(fresh, [line(1_000)]).maxUsd);
+    expect(c.maxSafeUsd).toBe(466.66);
+    expect(c).toMatchObject({ line: null, risky: false, needsFill: false });
+  });
+
+  it("at the cap it ends in Watch with D2's tick; past it, one line that names the cap", () => {
+    expect(check(1_000, 625)).toMatchObject({ after: "watch", line: null, risky: true, overCap: false });
+    expect(check(1_000, 630)).toMatchObject({
+      after: "watch",
+      overCap: true,
+      risky: false,
+      line: "That’s more than these stocks can back. Back it with more, or take up to $625.00.",
+    });
+  });
+
+  it("ending in Act is blocked with its own line, and no tick", () => {
+    const c = check(1_000, 650); // 700 ÷ 650 = 1.077
+    expect(c).toMatchObject({ after: "act", line: CREDIT_BLOCKED.act, risky: false });
+  });
+
+  it("in Act already: no credit, whatever goes in use; backing alone has no line", () => {
+    const inAct: CreditPosition = { ...fresh, collateralUsd: 1_000, avgCf: 0.7, debtUsd: 660, healthFactor: 700 / 660 };
+    expect(check(2_000, 10, inAct)).toMatchObject({ maxUsd: 0, line: CREDIT_BLOCKED["in-act"], risky: false });
+    expect(check(2_000, 0, inAct)).toMatchObject({ line: null, risky: false });
+  });
+
+  it("offers \"Pick enough backing\" only past Safe and within what all the free stock could back", () => {
+    expect(check(500, 500).needsFill).toBe(true); // 1,400 ÷ 1.12 = $1,250 with all of it
+    expect(check(500, 1_250).needsFill).toBe(true);
+    expect(check(500, 1_251).needsFill).toBe(false);
+    expect(check(500, 200).needsFill).toBe(false); // Safe already
+    expect(loanCheck({ position: fresh, locks: [line(2_000)], all: [line(2_000)], amountUsd: 1_300, moreToPutInUse: false }).needsFill).toBe(false);
   });
 });

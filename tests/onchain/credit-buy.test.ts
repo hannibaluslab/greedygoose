@@ -20,8 +20,12 @@ import { buildLoanCalls } from "@/lib/aave/tx";
 import { swapOf } from "@/lib/allowlist";
 import type { Cash } from "@/lib/cash";
 import {
-  backingOptions, backingRaw, buildCreditBuyCalls, freeShownUsd, isAllFree, planCredit, splitCash, type BackingOption, type CreditPosition,
+  CREDIT_BLOCKED, backingOptions, backingRaw, buildCreditBuyCalls, freeShownUsd, isAllFree, planCredit, splitCash, type BackingOption, type CreditPlan,
+  type CreditPosition,
 } from "@/lib/creditBuy";
+import { creditBuyPlan } from "@/hooks/useCreditBuy";
+import { checkPlan, type CheckDeps } from "@/lib/tx/prepared";
+import { loanPlan } from "@/lib/tx/plans";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { statusFor } from "@/lib/risk/status";
 import { buildBuyCalls, minOut, quoteBuy, quotePool, signingQuote, type BuyQuote } from "@/lib/swap/buy";
@@ -391,6 +395,34 @@ describe("Act is the line on Base (Adrian, 2026-10-15)", () => {
     expect(statusFor(capped)).toBe("watch");
     expect(capped).toBeGreaterThanOrEqual(CREDIT_CAP.minHf - 0.002);
     expect(capped).toBeLessThan(CREDIT_CAP.minHf + 0.01);
+  });
+
+  it("the app's own check reads Aave's health after the batch: credit that lands in Act stops there, whatever the screen planned", async () => {
+    const { position, options, cash } = await live(newcomer);
+    const option = options.find((o) => o.stock.symbol === "NVDAc")!;
+    const raw = backingRaw(option, 20);
+    const pick = { option, raw };
+    const usdIn = option.freeUsd * (Number(raw) / Number(option.freeRaw));
+    const oldMax = Math.floor(usdIn * option.cf * 0.995 * 100) / 100;
+    const cap = planCredit({ position, backing: pick, creditRaw: 0n, cash }).maxUsd;
+    // As useTx checks a batch: eth_simulateV1 from the account, with Aave's health read after it.
+    const deps: CheckDeps = {
+      join: async (_u, batch) => batch,
+      simulate: async (u, batch) => (await client.simulateCalls({ account: u, calls: batch.map(({ to, data }) => ({ to, data })) })).results,
+      explain: explainRevert,
+    };
+    const loan = (creditUsd: number) => loanPlan({ user: newcomer, locks: [{ stock: option.stock, raw }], borrowRaw: usd(creditUsd) });
+    expect(await checkPlan(loan(oldMax), deps)).toEqual({ ok: false, error: CREDIT_BLOCKED.act, blocks: true });
+    expect((await checkPlan(loan(cap), deps)).ok).toBe(true);
+
+    // A Credit Buy planned on a stale reading (its screen thought the old MAX ended in Watch): Aave's health stops it.
+    const shown = planCredit({ position, backing: pick, creditRaw: usd(oldMax), cash });
+    const stale: CreditPlan = { ...shown, block: undefined, after: "watch", extraConfirm: true, limit: { ...shown.limit, maxCreditRaw: usd(oldMax) } };
+    const quote = await quoteToSign(option.stock, stale.creditRaw);
+    const buy = creditBuyPlan({ user: newcomer, stock: option.stock, quote, plan: stale, confirmedRisk: true }, async (p) =>
+      buildCreditBuyCalls({ user: p.user, stock: p.stock, quote: p.quote, creditRaw: p.plan.creditRaw, backing: p.plan.backing, limit: p.plan.limit, cash }),
+    );
+    expect(await checkPlan(buy, deps)).toEqual({ ok: false, error: CREDIT_BLOCKED.act, blocks: true });
   });
 
   it("the leverage loop: two Credit Buys at MAX, the second backed by the NVIDIA the first one bought, end at the cap's line in Watch", async () => {

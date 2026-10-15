@@ -11,7 +11,10 @@ import { setMixPlan } from "@/hooks/useManageSave";
 import { keepMixPlan } from "@/hooks/useProtectSave";
 import { salePlan, type SellInput } from "@/hooks/useSell";
 import { swapPlan, type SwapReads } from "@/hooks/useTrade";
-import type { CreditPlan } from "@/lib/creditBuy";
+import { CREDIT_FLOOR, type CreditPlan } from "@/lib/creditBuy";
+import { EARN_FLOOR } from "@/lib/earnWithStocks";
+import { FREE_UP_FLOOR } from "@/lib/freeUp";
+import { RISK } from "@/config/risk";
 import type { SellPlan } from "@/lib/sell";
 import type { BuyQuote } from "@/lib/swap/buy";
 import { loanPlan, withdrawPlan } from "@/lib/tx/plans";
@@ -88,6 +91,12 @@ describe("a Credit Buy's key", () => {
 
   it("not with what the screen only shows (the most it could use)", () => {
     expect(key({ maxUsd: 501, maxSafeUsd: 99 })).toBe(key());
+  });
+
+  it("is checked on Aave's own health after it: in Act, it stops (Act is the line)", () => {
+    const p = creditBuyPlan({ user: SAM, stock: nvda, quote, plan, confirmedRisk: true }, noBatch);
+    expect(p.healthFloor).toBe(CREDIT_FLOOR);
+    expect(CREDIT_FLOOR).toEqual({ minHf: RISK.watchMin, stop: "That would put your credit in Act. Try a smaller amount." });
   });
 });
 
@@ -235,6 +244,15 @@ describe("Use credit's and Free up's keys", () => {
     const k = (p: Partial<Parameters<typeof withdrawPlan>[0]> = {}) => withdrawPlan({ user: SAM, stock: nvda, amountRaw: 5n, all: false, ...p }).key;
     for (const other of [k({ stock: aapl }), k({ amountRaw: 6n }), k({ all: true }), k({ user: ANN })]) expect(other).not.toBe(k());
   });
+
+  it("credit taken and shares freed up are checked on Aave's own health after them; backing alone isn't", () => {
+    expect(loanPlan({ user: SAM, locks: [{ stock: nvda, raw: 5n }], borrowRaw: 10_000_000n }).healthFloor).toBe(CREDIT_FLOOR);
+    expect(loanPlan({ user: SAM, locks: [], borrowRaw: 10_000_000n }).healthFloor).toBe(CREDIT_FLOOR);
+    // Putting stock in use only lifts the health: it goes ahead even in Act.
+    expect(loanPlan({ user: SAM, locks: [{ stock: nvda, raw: 5n }], borrowRaw: 0n }).healthFloor).toBeUndefined();
+    expect(withdrawPlan({ user: SAM, stock: nvda, amountRaw: 5n, all: false }).healthFloor).toBe(FREE_UP_FLOOR);
+    expect(FREE_UP_FLOOR).toEqual({ minHf: RISK.watchMin, stop: "That would put your credit in Act. Free up less, or repay some first." });
+  });
 });
 
 describe("Earn with stocks' key", () => {
@@ -268,5 +286,10 @@ describe("Earn with stocks' key", () => {
 
   it("not with what the screen only shows (its cost and what's left in dollars)", () => {
     expect(key({}, false, { cost: 60, leftUsdYear: 2 })).toBe(key());
+  });
+
+  it("is checked on Aave's own health after it: in Act, it stops", () => {
+    expect(earnPlan({ user: SAM, quote, offer, confirmedRisk: false }, vi.fn()).healthFloor).toBe(EARN_FLOOR);
+    expect(EARN_FLOOR).toEqual({ minHf: RISK.watchMin, stop: "That would put your credit in Act. Try a smaller amount." });
   });
 });

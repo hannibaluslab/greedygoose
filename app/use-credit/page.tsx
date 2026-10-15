@@ -18,10 +18,9 @@ import { useCollateralFactors, usePosition, type Holding, type PositionData } fr
 import { useTx } from "@/hooks/useTx";
 import { loanPlan } from "@/lib/tx/plans";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
-import { FILL_MARGIN, autoFill, combinedLoan } from "@/lib/aave/loan";
-import { CREDIT_BLOCKED, creditCap } from "@/lib/creditBuy";
+import { FILL_MARGIN, autoFill } from "@/lib/aave/loan";
+import { loanCheck } from "@/lib/creditBuy";
 import { monthlyCost } from "@/lib/aave/math";
-import { needsExtraConfirm, statusFor } from "@/lib/risk/status";
 import { rawToShares } from "@/lib/tokens/b20";
 import { marketState } from "@/lib/market-hours";
 import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
@@ -82,27 +81,19 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
     return { ...l, raw: r, usd: usdFor(l.holding, r, l.stock.decimals) };
   });
   const amount = Math.max(0, Number(raw.replace(/[^0-9.]/g, "")) || 0);
-  const lockLines = locks.map((l) => ({ key: l.stock.symbol, usd: l.usd, cf: l.cf, freeUsd: l.holding.freeUsd }));
-  const calc = combinedLoan({
-    collateralUsd: data.collateralUsd,
-    avgCf: data.avgCf,
-    debtUsd: data.debtUsd,
-    borrowUsd: amount,
-    liquidityUsd: data.usdcLiquidity,
-    locks: lockLines,
-  });
   // The one cap (Act is the line, Adrian 2026-10-15): it can end in Watch, never in Act, with a margin for one price
-  // update between reading and signing. Nothing while the credit is in Act.
-  const cap = creditCap(data, lockLines);
-  const hardMax = cap.maxUsd;
-  const safeMax = cap.maxSafeUsd;
-  const after = statusFor(data.debtUsd + amount > 0 ? calc.hfAfter : null);
+  // update between reading and signing. Nothing while the credit is in Act. Past the cap, or in or into Act, one plain
+  // line, and no tick can let it through (lib/creditBuy.ts loanCheck).
+  const check = loanCheck({
+    position: data,
+    locks: locks.map((l) => ({ key: l.stock.symbol, usd: l.usd, cf: l.cf, freeUsd: l.holding.freeUsd })),
+    all: locks.map((l) => ({ key: l.stock.symbol, usd: l.holding.freeUsd, cf: l.cf, freeUsd: l.holding.freeUsd })),
+    amountUsd: amount,
+    moreToPutInUse: locks.some((l) => l.raw < l.holding.freeRaw),
+  });
+  const { maxUsd: hardMax, maxSafeUsd: safeMax, after, line: capLine, risky, needsFill } = check;
   const lockingAny = locks.some((l) => l.raw > 0n);
-  const overLimit = amount > hardMax;
-  // Past the cap, one plain line; in or into Act it says so, and no tick can let it through.
-  const capLine =
-    amount <= 0 ? null : data.status === "act" ? CREDIT_BLOCKED["in-act"] : after === "act" ? CREDIT_BLOCKED.act : overLimit ? `That’s more than these stocks can back. Back it with more, or take up to ${formatUsd(hardMax)}.` : null;
-  const risky = amount > 0 && !capLine && needsExtraConfirm(after);
+  const overLimit = check.overCap;
   const feeBlocked = isConnected && fee.state === "unsupported";
   const nothing = !lockingAny && amount === 0;
   const ready = !nothing && !overLimit && !capLine && !(amount > 0 && data.borrowPaused);
@@ -122,9 +113,6 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
     });
     setFractions(Object.fromEntries(lines.map((l) => [l.stock.symbol, Math.min(1, ((usd[l.stock.symbol] ?? 0) * FILL_MARGIN) / l.holding.freeUsd)])));
   };
-  // Only offer auto-fill when there's still free stock to lock, and all of it would bring the amount within the cap.
-  const capAll = creditCap(data, locks.map((l) => ({ key: l.stock.symbol, usd: l.holding.freeUsd, cf: l.cf, freeUsd: l.holding.freeUsd }))).maxUsd;
-  const needsFill = amount > 0 && amount > safeMax && amount <= capAll && locks.some((l) => l.raw < l.holding.freeRaw);
 
   if (tx.phase === "done" && sent) {
     return (

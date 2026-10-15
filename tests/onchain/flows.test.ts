@@ -11,7 +11,10 @@ import { CASH, CREDIT_CAP } from "@/config/risk";
 import { buildBorrowCalls, buildLoanCalls, buildRepayCalls, buildSupplyCalls, buildWithdrawCalls } from "@/lib/aave/tx";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { aaveOracleAbi } from "@/lib/aave/abis/IAaveOracle";
-import { healthAfterWithdraw, maxWithdrawUsd, priceToUsd, summarize, type AccountData } from "@/lib/aave/math";
+import { maxWithdrawUsd, priceToUsd, summarize, type AccountData } from "@/lib/aave/math";
+import { FREE_UP_BLOCKED, freeUpCheck } from "@/lib/freeUp";
+import { checkPlan, type CheckDeps } from "@/lib/tx/prepared";
+import { withdrawPlan } from "@/lib/tx/plans";
 import { statusFor } from "@/lib/risk/status";
 import { AAVE } from "@/lib/aave/addresses";
 import { CASH_STUCK, explainRevert } from "@/lib/aave/errors";
@@ -214,52 +217,62 @@ describe("the cash a batch is signed with (readCash)", () => {
 });
 
 /**
- * Act is the line (Adrian, 2026-10-15): Free up stops where taking credit does, at CREDIT_CAP.minHf. Simulated from a small
- * real account in Watch (the dev preview's), the holding with the most in use.
+ * Act is the line (Adrian, 2026-10-15): Free up stops where taking credit does, at CREDIT_CAP.minHf, and the app's own
+ * check (checkPlan with withdrawPlan's floor) stops a Free up that lands in Act on Aave's health. Deterministic: the
+ * position is set up in the same simulation, from an account that never backed credit ($20 of its NVIDIA in use and
+ * credit to a health of 1.75), so it doesn't hang on any real account's health drifting.
  */
 describe("Free up stops at the cap's line on Base", () => {
-  const watcher = "0xFf13Dc32AcA90b3D61058ea26Df1D895F842eE1F";
-  const healthAfter = async (calls: { to: `0x${string}`; data: `0x${string}` }[]) => {
-    const read = { to: AAVE.SPOKE, data: encodeFunctionData({ abi: spokeAbi, functionName: "getUserAccountData", args: [watcher] }) };
-    const r = await client.simulateCalls({ account: watcher, calls: [...calls, read].map(({ to, data }) => ({ to, data })) });
-    expect(r.results.slice(0, calls.length).every((x) => x.status === "success")).toBe(true);
-    return summarize(decodeFunctionResult({ abi: spokeAbi, functionName: "getUserAccountData", data: r.results[calls.length].data }) as AccountData).healthFactor!;
-  };
+  const newcomer = "0xcd1549f523ad3606cc99950c85711c3dbe62266b";
+  const nvda = EQUITIES.find((e) => e.symbol === "NVDAc")!;
 
-  it("its MAX leaves Aave's health at 1.12, in Watch; the old MAX (99.5% of Aave's limit) ended in Act", async () => {
-    const account = summarize((await client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserAccountData", args: [watcher] })) as AccountData);
-    expect(account.debtUsd).toBeGreaterThan(0);
-    const held = await Promise.all(
-      EQUITIES.map(async (stock) => {
-        const id = BigInt(stock.reserveId);
-        const [supplied, price, reserve] = await Promise.all([
-          client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserSuppliedAssets", args: [id, watcher] }),
-          client.readContract({ address: AAVE.SPOKE_ORACLE, abi: aaveOracleAbi, functionName: "getReservePrice", args: [id] }),
-          client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getReserve", args: [id] }),
-        ]);
-        const dyn = await client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getDynamicReserveConfig", args: [id, reserve.dynamicConfigKey] });
-        return { stock, supplied, lockedUsd: (Number(supplied) / 10 ** stock.decimals) * priceToUsd(price), cf: dyn.collateralFactor / 10_000 };
-      }),
-    );
-    const h = held.sort((a, b) => b.lockedUsd - a.lockedUsd)[0];
-    const loan = { collateralUsd: account.collateralUsd, avgCf: account.avgCf, debtUsd: account.debtUsd, cf: h.cf, lockedUsd: h.lockedUsd };
-    // UnlockSheet's MAX, as shares rounded down.
-    const maxUsd = maxWithdrawUsd({ ...loan, targetHf: CREDIT_CAP.minHf });
-    console.log(`Free up ${h.stock.symbol}: health ${account.healthFactor?.toFixed(4)}, $${h.lockedUsd.toFixed(4)} in use, MAX $${maxUsd.toFixed(4)}`);
-    if (account.healthFactor! < CREDIT_CAP.minHf) {
-      expect(maxUsd).toBe(0); // under the line already: nothing can come out while something is owed
-      return;
-    }
-    expect(maxUsd).toBeLessThan(h.lockedUsd);
-    expect(statusFor(healthAfterWithdraw({ ...loan, usd: maxUsd }))).toBe("watch");
-    const rawFor = (usd: number) => (h.supplied * BigInt(Math.floor((usd / h.lockedUsd) * 1e9))) / 1_000_000_000n;
-    const capped = await healthAfter(buildWithdrawCalls({ user: watcher, stock: h.stock, amountRaw: rawFor(maxUsd), all: false }));
+  it("its MAX leaves Aave's health at 1.12, in Watch; the old MAX (99.5% of Aave's limit) lands in Act, and the app's check stops it", async () => {
+    const id = BigInt(nvda.reserveId);
+    const [price, reserve, free] = await Promise.all([
+      client.readContract({ address: AAVE.SPOKE_ORACLE, abi: aaveOracleAbi, functionName: "getReservePrice", args: [id] }),
+      client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getReserve", args: [id] }),
+      client.readContract({ address: nvda.address, abi: erc20Abi, functionName: "balanceOf", args: [newcomer] }),
+    ]);
+    const dyn = await client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getDynamicReserveConfig", args: [id, reserve.dynamicConfigKey] });
+    const cf = dyn.collateralFactor / 10_000;
+    const usdPerRaw = priceToUsd(price) / 10 ** nvda.decimals;
+    const lockedRaw = BigInt(Math.floor(20 / usdPerRaw));
+    expect(free).toBeGreaterThanOrEqual(lockedRaw);
+    const lockedUsd = Number(lockedRaw) * usdPerRaw;
+    const debtUsd = Math.floor(((lockedUsd * cf) / 1.75) * 1e6) / 1e6;
+    // The position, set up first in every simulation below: $20 of NVIDIA in use, credit to a health of 1.75.
+    const setup = buildLoanCalls({ user: newcomer, locks: [{ stock: nvda, raw: lockedRaw }], borrowRaw: parseUnits(debtUsd.toFixed(6), 6) });
+    const healthAfter = async (calls: { to: `0x${string}`; data: `0x${string}` }[]) => {
+      const read = { to: AAVE.SPOKE, data: encodeFunctionData({ abi: spokeAbi, functionName: "getUserAccountData", args: [newcomer] }) };
+      const r = await client.simulateCalls({ account: newcomer, calls: [...setup, ...calls, read].map(({ to, data }) => ({ to, data })) });
+      expect(r.results.slice(0, setup.length + calls.length).every((x) => x.status === "success")).toBe(true);
+      return summarize(decodeFunctionResult({ abi: spokeAbi, functionName: "getUserAccountData", data: r.results.at(-1)!.data }) as AccountData).healthFactor!;
+    };
+    expect(await healthAfter([])).toBeCloseTo(1.75, 3);
+
+    const loan = { collateralUsd: lockedUsd, avgCf: cf, debtUsd, cf, lockedUsd };
+    // The sheet's MAX (freeUpCheck), as shares rounded down.
+    const sheet = freeUpCheck({ position: loan, holding: { lockedRaw, lockedUsd, priceUsd: priceToUsd(price), multiplier: 10n ** 18n }, decimals: nvda.decimals, cf, amountRaw: 0n, all: false });
+    expect(sheet.maxUsd).toBeCloseTo(maxWithdrawUsd({ ...loan, targetHf: CREDIT_CAP.minHf }), 9);
+    const rawFor = (usd: number) => (lockedRaw * BigInt(Math.floor((usd / lockedUsd) * 1e9))) / 1_000_000_000n;
+    const maxRaw = rawFor(sheet.maxUsd);
+    const oldRaw = rawFor(maxWithdrawUsd(loan) * 0.995);
+    const capped = await healthAfter(buildWithdrawCalls({ user: newcomer, stock: nvda, amountRaw: maxRaw, all: false }));
+    const old = await healthAfter(buildWithdrawCalls({ user: newcomer, stock: nvda, amountRaw: oldRaw, all: false }));
+    console.log(`Free up NVIDIA from 1.75: MAX $${sheet.maxUsd.toFixed(4)} → health ${capped.toFixed(4)}; old MAX → ${old.toFixed(4)}`);
     expect(statusFor(capped)).toBe("watch");
     expect(capped).toBeGreaterThanOrEqual(CREDIT_CAP.minHf - 0.002);
     expect(capped).toBeLessThan(CREDIT_CAP.minHf + 0.01);
-    // The sheet's old MAX: Aave allows it, and it lands in Act.
-    const old = await healthAfter(buildWithdrawCalls({ user: watcher, stock: h.stock, amountRaw: rawFor(maxWithdrawUsd(loan) * 0.995), all: false }));
-    console.log(`Free up health after: MAX ${capped.toFixed(4)}, old MAX ${old.toFixed(4)}`);
     expect(statusFor(old)).toBe("act");
+
+    // The app's own check, as useTx runs it: the batch simulated after the set-up position, Aave's health read after it.
+    const deps: CheckDeps = {
+      join: async (_u, batch) => batch,
+      simulate: async (u, batch) =>
+        (await client.simulateCalls({ account: u, calls: [...setup, ...batch].map(({ to, data }) => ({ to, data })) })).results.slice(setup.length),
+      explain: explainRevert,
+    };
+    expect(await checkPlan(withdrawPlan({ user: newcomer, stock: nvda, amountRaw: oldRaw, all: false }), deps)).toEqual({ ok: false, error: FREE_UP_BLOCKED.act, blocks: true });
+    expect((await checkPlan(withdrawPlan({ user: newcomer, stock: nvda, amountRaw: maxRaw, all: false }), deps)).ok).toBe(true);
   });
 });

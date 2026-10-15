@@ -1,4 +1,6 @@
+import { decodeFunctionResult, type Hex } from "viem";
 import { ORACLE_DECIMALS, RAY, VALUE_PER_USD, WAD } from "@/lib/aave/addresses";
+import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 
 /** Spoke `UserAccountData`, as returned on-chain. */
 export type AccountData = {
@@ -31,6 +33,10 @@ export function summarize(d: AccountData) {
     avgCf: Number(d.avgCollateralFactor) / Number(WAD),
   };
 }
+
+/** The health factor in a `getUserAccountData` result (lib/aave/tx.ts accountDataRead); null when nothing is owed. */
+export const healthFromAccountData = (data: Hex): number | null =>
+  summarize(decodeFunctionResult({ abi: spokeAbi, functionName: "getUserAccountData", data }) as AccountData).healthFactor;
 
 /** Health factor after changing debt/collateral, using the position's current weighted CF. */
 export function projectHealth(p: { collateralUsd: number; debtUsd: number; avgCf: number }): number | null {

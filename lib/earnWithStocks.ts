@@ -1,4 +1,5 @@
 import { decodeFunctionData, erc20Abi, isAddressEqual } from "viem";
+import { RISK } from "@/config/risk";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { buildLoanCalls, type Call } from "@/lib/aave/tx";
@@ -12,6 +13,7 @@ import { aaveV3PoolAbi } from "@/lib/guardian/abis";
 import { buildAddSavingsCalls } from "@/lib/guardian/permission";
 import { STATUS_LABEL, statusFor } from "@/lib/risk/status";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
+import type { HealthFloor } from "@/lib/tx/prepared";
 
 /*
  * Earn with stocks (Adrian, 2026-10-15: "use your stock to add more cash to get yield"; then "the user should be able to
@@ -175,6 +177,9 @@ export const EARN_BLOCKED: Record<CreditBlock, string> = {
   "too-much": "That’s more credit than your stocks can back right now. Try a smaller amount.",
   fee: CREDIT_BLOCKED.fee,
 };
+
+/** Its batch is stopped if the health on Aave after it, read in its own simulation, is in Act (lib/creditBuy.ts CREDIT_FLOOR). */
+export const EARN_FLOOR: HealthFloor = { minHf: RISK.watchMin, stop: EARN_BLOCKED.act };
 
 export const EARN_COSTS_MORE = "At this amount, credit costs more than your cash earns right now.";
 

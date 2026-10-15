@@ -15,7 +15,7 @@ import { aprToApy, borrowApr } from "@/lib/aave/math";
 import type { Cash } from "@/lib/cash";
 import { CHAIN_ID } from "@/lib/chain";
 import { backingOptions, type Backing } from "@/lib/creditBuy";
-import { buildEarnCalls, earnActivity, earnOffer, earnStop, type EarnOpen, type EarnQuote } from "@/lib/earnWithStocks";
+import { EARN_FLOOR, buildEarnCalls, earnActivity, earnOffer, earnStop, type EarnOpen, type EarnQuote } from "@/lib/earnWithStocks";
 import { USDC } from "@/lib/tokens/registry";
 
 /**
@@ -103,6 +103,8 @@ export const earnPlan = (p: EarnInput, cashToSign: ReturnType<typeof useSigningC
     return buildEarnCalls({ user: p.user, backing: p.quote.plan.backing, creditRaw: p.quote.plan.creditRaw, cash });
   },
   fallback: EARN_REVERT,
+  // The health on Aave after it, read in its simulation: in Act, it stops (Act is the line).
+  healthFloor: EARN_FLOOR,
   activity: earnActivity(p.quote.plan),
 });
 

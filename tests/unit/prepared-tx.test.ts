@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Hex } from "viem";
-import { UserRejectedRequestError } from "viem";
-import type { Call } from "@/lib/aave/tx";
+import { UserRejectedRequestError, encodeFunctionResult, maxUint256 } from "viem";
+import { spokeAbi } from "@/lib/aave/abis/ISpoke";
+import { accountDataRead, type Call } from "@/lib/aave/tx";
 import { NOT_ATOMIC } from "@/lib/jaw/capabilities";
 import { runError } from "@/hooks/useAgentRun";
 import { tapDeps } from "@/hooks/useTx";
@@ -307,6 +308,65 @@ describe("checkPlan: build, join(), simulate", () => {
     expect(stops).toEqual({ ok: false, error: "The price moved.", blocks: true });
     const down = await checkPlan(plan("A"), d({ simulate: async () => Promise.reject(new Error("fetch failed")) }));
     expect(down).toEqual({ ok: false, error: CANT_CHECK, blocks: false });
+  });
+});
+
+describe("checkPlan: the health on Aave after a batch that takes credit or frees backing (Act is the line)", () => {
+  const STOP = "That would put your credit in Act. Try a smaller amount.";
+  /** getUserAccountData's answer with this health factor (WAD), as eth_simulateV1 returns it. */
+  const account = (hfWad: bigint): Hex =>
+    encodeFunctionResult({
+      abi: spokeAbi,
+      functionName: "getUserAccountData",
+      result: {
+        riskPremium: 0n,
+        avgCollateralFactor: 7n * 10n ** 17n,
+        healthFactor: hfWad,
+        totalCollateralValue: 0n,
+        totalDebtValueRay: 0n,
+        activeCollateralCount: 1n,
+        borrowCount: 1n,
+      },
+    });
+  const wad = (hf: number) => BigInt(Math.round(hf * 1e6)) * 10n ** 12n;
+  const floored: TxPlan = { key: "credit", user: SAM, calls: async () => [call(1), call(2)], healthFloor: { minHf: 1.1, stop: STOP } };
+  /** The batch succeeds; the read at its end answers `data` (or fails). */
+  const withHealth = (data: Hex | null) =>
+    vi.fn(async (_u: `0x${string}`, batch: Call[]) =>
+      batch.map((_, i) => (i === batch.length - 1 ? (data ? { status: "success", data } : { status: "failure", data: "0x" as Hex }) : { status: "success", data: "0x" as Hex })),
+    );
+  const deps = (simulate: CheckDeps["simulate"]): CheckDeps => ({ join: async (_u, batch) => batch, simulate, explain: (_d, fallback) => fallback });
+
+  it("reads the account on Aave at the end of the simulation, and signs only the batch", async () => {
+    const simulate = withHealth(account(wad(1.1201)));
+    const r = await checkPlan(floored, deps(simulate));
+    expect(r).toEqual({ ok: true, batch: [call(1), call(2)] });
+    expect(simulate).toHaveBeenCalledWith(SAM, [call(1), call(2), accountDataRead(SAM)]);
+  });
+
+  it("stops a batch that lands in Act, whatever the screen planned, with the floor's words", async () => {
+    expect(await checkPlan(floored, deps(withHealth(account(wad(1.0999)))))).toEqual({ ok: false, error: STOP, blocks: true });
+    // At the line exactly it's Watch, and goes ahead.
+    expect((await checkPlan(floored, deps(withHealth(account(wad(1.1)))))).ok).toBe(true);
+    // Nothing owed after it (a full Free up with no credit): no health to fall under.
+    expect((await checkPlan(floored, deps(withHealth(account(maxUint256))))).ok).toBe(true);
+  });
+
+  it("without the health after it, it isn't signed: checked again, as when Base doesn't answer", async () => {
+    expect(await checkPlan(floored, deps(withHealth(null)))).toEqual({ ok: false, error: CANT_CHECK, blocks: false });
+    expect(await checkPlan(floored, deps(withHealth("0x1234")))).toEqual({ ok: false, error: CANT_CHECK, blocks: false });
+  });
+
+  it("a revert in the batch still names its own call, not the read", async () => {
+    const explain = vi.fn((_d: Hex | undefined, fallback: string, c: Call) => `${fallback} ${c.data}`);
+    const simulate = async (_u: `0x${string}`, batch: Call[]) => batch.map((_, i) => ({ status: i === 1 ? "failure" : "success", data: "0x" as Hex }));
+    expect(await checkPlan({ ...floored, fallback: "Fails at" }, { ...deps(simulate), explain })).toEqual({ ok: false, error: `Fails at ${call(2).data}`, blocks: true });
+  });
+
+  it("a plan without a floor (a buy, a repay, backing alone) has nothing read after it", async () => {
+    const simulate = vi.fn(async (_u: `0x${string}`, batch: Call[]) => batch.map(() => ({ status: "success" })));
+    await checkPlan({ key: "buy", user: SAM, calls: [call(1)] }, deps(simulate));
+    expect(simulate).toHaveBeenCalledWith(SAM, [call(1)]);
   });
 });
 

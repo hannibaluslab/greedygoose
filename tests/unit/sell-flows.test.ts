@@ -171,6 +171,23 @@ describe("planSell: repay by selling a holding (step 9)", () => {
     expect(small.hfAfter!).toBeGreaterThan(700 / 690);
   });
 
+  it("a small sale that would repay less than its shares back and end in Act is blocked (Act is the line)", () => {
+    // $10 owed against 0.063 NVDA ($15.75 at 70%): health 1.1025, in Watch. $1.20 of it repays its floor less the $0.50
+    // fee buffer, about $0.68, and takes $0.84 of backing out: it would end at about 1.09, in Act.
+    const thin: SellPosition = { collateralUsd: 15.75, avgCf: 0.7, debtUsd: 10, debtRaw: usd(10), healthFactor: 1.1025 };
+    const h: SellHolding = { priceUsd: price, freeRaw: 0n, lockedRaw: shares(0.063), lockedUsd: 15.75, paused: false };
+    const p = plan("repay", { ...quote, amountIn: shares(0.0048), amountOut: usd(1.194) }, thin, h);
+    expect(p.before).toBe("watch");
+    expect(p.after).toBe("act");
+    expect(p.hfAfter!).toBeLessThan(1.1025);
+    expect(p.block).toBe("act");
+    expect(SELL_BLOCKED.act).toBe("That would put your credit in Act. Sell more, or repay from cash.");
+    // Selling a little more repays enough to stay out of Act (the fee buffer weighs less): it goes ahead, in Watch.
+    const more = plan("repay", { ...quote, amountIn: shares(0.0056), amountOut: usd(1.393) }, thin, h);
+    expect(more.after).toBe("watch");
+    expect(more.block).toBeUndefined();
+  });
+
   it("repaying all of it ends with no loan", () => {
     const p = plan("repay", quote, owing(20));
     expect(p.repayRaw).toBe(usd(20) + usd(20) / 2000n + 1n);
