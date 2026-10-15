@@ -22,6 +22,16 @@ const EMPTY: LocalActivity[] = [];
  * Activity = JAW's call history for the account (works across devices), each transaction decoded
  * from its Base receipt, plus this device's not-yet-indexed sends.
  */
+/** A send's name (sam.justan.id) lives only in this device's record of it: carried onto the receipt's decoded send. */
+function withNames(items: ActivityItem[], mine: LocalActivity | undefined): ActivityItem[] {
+  if (!mine) return items;
+  return items.map((i) => {
+    if (i.kind !== "send" || !i.to || i.toName) return i;
+    const named = mine.items.find((m) => m.kind === "send" && m.toName && m.to?.toLowerCase() === i.to!.toLowerCase());
+    return named ? { ...i, toName: named.toName } : i;
+  });
+}
+
 export function useActivity(address: `0x${string}`) {
   const client = usePublicClient({ chainId: CHAIN_ID });
   const history = useGetCallsHistory({ address, chainId: CHAIN_ID, limit: 30, query: { refetchInterval: 20_000 } });
@@ -46,7 +56,8 @@ export function useActivity(address: `0x${string}`) {
   const rows = useMemo<ActivityRow[]>(() => {
     const out: ActivityRow[] = entries.map((e, i) => {
       const r = receipts[i]?.data;
-      const items = r ? decodeActivity(r.logs, address) : [];
+      const mine = local.find((l) => l.id === e.id || (!!l.hash && l.hash === e.transactionHash));
+      const items = r ? withNames(decodeActivity(r.logs, address), mine) : [];
       const status = e.status === 100 ? "pending" : e.status === 500 || r?.status === "reverted" ? "failed" : "done";
       return { key: e.id, time: e.timestamp * 1000, status, items, hash: e.transactionHash ?? undefined };
     });

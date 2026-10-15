@@ -64,7 +64,7 @@ export function CashOwed({ data }: { data: PositionData }) {
   );
 }
 
-/** Top up, and Repay while something is owed: the routes that exist (there's no send yet). Buttons name the action. */
+/** Top up, and Repay while something is owed. Buttons name the action. Send is its own tab (2026-10-15), not offered here. */
 export function CashFooter({ owes }: { owes: boolean }) {
   return (
     <div className={`grid gap-2.5 ${owes ? "grid-cols-2" : "grid-cols-1"}`}>

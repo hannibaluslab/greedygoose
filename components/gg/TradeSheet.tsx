@@ -1,5 +1,6 @@
 "use client";
 
+import { EQUITIES } from "@/lib/tokens/registry";
 import { useRef, useState } from "react";
 import { useAccount } from "wagmi";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
@@ -171,7 +172,7 @@ export function TradeSheet({
           <TxDone
             title={TRADE_COPY.sold(
               formatShares(rawToShares(signed.sharesRaw, soldHolding?.multiplier ?? 10n ** 18n, view.fromStock?.decimals ?? 8)),
-              tickerOf(signed.from),
+              EQUITIES.find((e) => e.symbol === signed.from)?.name ?? tickerOf(signed.from),
             )}
             body={TRADE_COPY.soldBody}
             txHash={txHash}

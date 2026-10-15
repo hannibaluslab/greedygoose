@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { encodeAbiParameters, encodeEventTopics, erc20Abi, getAbiItem, parseAbi, type Log } from "viem";
+import { encodeAbiParameters, encodeEventTopics, erc20Abi, getAbiItem, getAddress, parseAbi, type Log } from "viem";
 import { entryPoint08Abi, entryPoint08Address } from "viem/account-abstraction";
 import { decodeActivity } from "@/lib/activity/decode";
 import { AAVE } from "@/lib/aave/addresses";
@@ -49,7 +49,7 @@ describe("decodeActivity: sales", () => {
   });
 
   it("stock out alone is still a send, and USDC in alone a receive", () => {
-    expect(decodeActivity([transfer(nvda.address, user, other, 1_000_000n)], user)).toEqual([{ kind: "send", symbol: "NVDAc", amount: 0.01 }]);
+    expect(decodeActivity([transfer(nvda.address, user, other, 1_000_000n)], user)).toEqual([{ kind: "send", symbol: "NVDAc", amount: 0.01, to: getAddress(other) }]);
     expect(decodeActivity([transfer(USDC.address, other, user, 1_000_000n), transfer(USDC.address, other, user, 2_000_000n)], user)).toEqual([
       { kind: "receive", symbol: "USDC", amount: 1 },
       { kind: "receive", symbol: "USDC", amount: 2 },
@@ -143,19 +143,19 @@ describe("decodeActivity: JAW's network fee isn't a move (D4)", () => {
   it("is read from the chain, never assumed: anything that doesn't match stays a send", () => {
     const send = transfer(USDC.address, user, treasury, fee);
     // No user operation from EntryPoint v0.8 for this user.
-    expect(decodeActivity([send, sponsored(user, fee)], user)).toEqual([{ kind: "send", symbol: "USDC", amount: 0.010858 }]);
-    expect(decodeActivity([send, sponsored(user, fee), operation(user, other)], user)).toEqual([{ kind: "send", symbol: "USDC", amount: 0.010858 }]);
-    expect(decodeActivity([send, sponsored(user, fee), operation(other)], user)).toEqual([{ kind: "send", symbol: "USDC", amount: 0.010858 }]);
+    expect(decodeActivity([send, sponsored(user, fee)], user)).toEqual([{ kind: "send", symbol: "USDC", amount: 0.010858, to: treasury }]);
+    expect(decodeActivity([send, sponsored(user, fee), operation(user, other)], user)).toEqual([{ kind: "send", symbol: "USDC", amount: 0.010858, to: treasury }]);
+    expect(decodeActivity([send, sponsored(user, fee), operation(other)], user)).toEqual([{ kind: "send", symbol: "USDC", amount: 0.010858, to: treasury }]);
     // A different amount, another user's fee, or a fee in another token.
-    expect(decodeActivity([send, sponsored(user, fee + 1n), operation(user)], user)).toEqual([{ kind: "send", symbol: "USDC", amount: 0.010858 }]);
-    expect(decodeActivity([send, sponsored(other, fee), operation(user)], user)).toEqual([{ kind: "send", symbol: "USDC", amount: 0.010858 }]);
-    expect(decodeActivity([send, sponsored(user, fee, nvda.address), operation(user)], user)).toEqual([{ kind: "send", symbol: "USDC", amount: 0.010858 }]);
+    expect(decodeActivity([send, sponsored(user, fee + 1n), operation(user)], user)).toEqual([{ kind: "send", symbol: "USDC", amount: 0.010858, to: treasury }]);
+    expect(decodeActivity([send, sponsored(other, fee), operation(user)], user)).toEqual([{ kind: "send", symbol: "USDC", amount: 0.010858, to: treasury }]);
+    expect(decodeActivity([send, sponsored(user, fee, nvda.address), operation(user)], user)).toEqual([{ kind: "send", symbol: "USDC", amount: 0.010858, to: treasury }]);
     // Emitted by something other than the operation's paymaster.
-    expect(decodeActivity([send, sponsored(user, fee, USDC.address, other), operation(user)], user)).toEqual([{ kind: "send", symbol: "USDC", amount: 0.010858 }]);
+    expect(decodeActivity([send, sponsored(user, fee, USDC.address, other), operation(user)], user)).toEqual([{ kind: "send", symbol: "USDC", amount: 0.010858, to: treasury }]);
   });
 
   it("takes out one transfer only, the one before the paymaster's record", () => {
     const logs = [transfer(USDC.address, user, other, fee), transfer(USDC.address, user, treasury, fee), sponsored(user, fee), operation(user)];
-    expect(decodeActivity(logs, user)).toEqual([{ kind: "send", symbol: "USDC", amount: 0.010858 }]);
+    expect(decodeActivity(logs, user)).toEqual([{ kind: "send", symbol: "USDC", amount: 0.010858, to: getAddress(other) }]);
   });
 });

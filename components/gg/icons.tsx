@@ -21,6 +21,19 @@ export const CreditIcon = ({ size = 20, ...r }: P) => (
     <path d="M2 16l6 6" /><circle cx="16" cy="9" r="2.9" /><circle cx="6" cy="5" r="3" />
   </svg>
 );
+/** Backs credit: two linked rings (D17: never a padlock). */
+export const BacksIcon = ({ size = 8, ...r }: P) => (
+  <svg width={size} height={size} viewBox="0 0 10 10" aria-hidden {...r}>
+    <circle cx="3.6" cy="5" r="2.4" fill="none" stroke="currentColor" strokeWidth="1.4" />
+    <circle cx="6.4" cy="5" r="2.4" fill="none" stroke="currentColor" strokeWidth="1.4" />
+  </svg>
+);
+/** Free, not backing credit: one hollow ring. */
+export const FreeIcon = ({ size = 8, ...r }: P) => (
+  <svg width={size} height={size} viewBox="0 0 10 10" aria-hidden {...r}>
+    <circle cx="5" cy="5" r="3" fill="none" stroke="currentColor" strokeWidth="1.3" />
+  </svg>
+);
 export const LockIcon = ({ size = 8, ...r }: P) => (
   <svg width={size} height={size * 1.1} viewBox="0 0 10 11" aria-hidden {...r}>
     <rect x="1" y="4.6" width="8" height="5.6" rx="1.4" fill="currentColor" />
@@ -50,7 +63,7 @@ export const ActivityIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7,
 export const AgentsIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0l1.58 6.14a2 2 0 0 0 1.44 1.44l6.14 1.58a.5.5 0 0 1 0 .96l-6.14 1.58a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z" /><path d="M20 3v4M22 5h-4M4 17v2M5 18H3" /></svg>;
 /** The leaderboard: three bars of a podium. */
 export const BoardIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M3 20v-6h6v6M9 20V8h6v12M15 20v-9h6v9" /></svg>;
-export const PayIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M4 12l16-8-6 16-3-7z" /></svg>;
+export const SendIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M4 12l16-8-6 16-3-7z" /></svg>;
 export const ArrowLeftIcon = ({ size = 18, ...r }: P) => <svg {...base(size, 2, r)}><path d="M19 12H5M11 6l-6 6 6 6" /></svg>;
 export const CloseIcon = ({ size = 16, ...r }: P) => <svg {...base(size, 2, r)}><path d="M6 6l12 12M18 6L6 18" /></svg>;
 export const ChevronDown = ({ size = 16, ...r }: P) => <svg {...base(size, 2, r)}><path d="M6 9l6 6 6-6" /></svg>;

@@ -11,7 +11,7 @@ import { STATUS_LABEL } from "@/lib/risk/status";
 import { txUrl } from "@/lib/chain";
 import { ALL_RESERVES, USDC, findByAddress } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
-import { formatCoin, formatShares, formatUsd } from "@/lib/formatting";
+import { formatCoin, formatShares, formatUsd, shortAddress } from "@/lib/formatting";
 
 /** One decoded move in words: what happened, then its amount and sign. */
 export function describeActivity(i: ActivityItem): { title: string; amount: string; sign: "+" | "−" | "" } {
@@ -167,6 +167,9 @@ function Move({ row, last, open, onToggle }: { row: ActivityRow; last: boolean; 
                 </Detail>
               );
             })}
+            {main?.kind === "send" && main.to && (
+              <Detail label="To">{main.toName ? `${main.toName} · ${shortAddress(main.to)}` : shortAddress(main.to)}</Detail>
+            )}
             <Detail label="When">{WHEN.format(row.time)}</Detail>
             {status && <Detail label="Status">{status}</Detail>}
           </dl>

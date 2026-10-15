@@ -1,6 +1,6 @@
 import { erc20Abi, parseUnits, type Address, type PublicClient, type Transport } from "viem";
 import { CASH } from "@/config/risk";
-import { assertAllowed } from "@/lib/allowlist";
+import { assertAllowed, type AllowContext } from "@/lib/allowlist";
 import type { Call } from "@/lib/aave/tx";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
@@ -84,11 +84,12 @@ export function cashShort(amountRaw: bigint, c: Cash): string | null {
 }
 
 /**
- * Pay for a buy or repay from cash: the savings withdrawal it needs goes first, in the same batch.
- * `amountRaw` can be 0 (a Credit Buy spends only credit): cash still pays the network fee.
+ * Pay for a buy, repay or send from cash: the savings withdrawal it needs goes first, in the same batch.
+ * `amountRaw` can be 0 (a Credit Buy spends only credit, a stock send only shares): cash still pays the network fee.
+ * `own` goes to the allowlist with the batch (a Send declares who it pays).
  */
-export function payFromCash(user: `0x${string}`, amountRaw: bigint, c: Cash, spend: Call[]): Call[] {
+export function payFromCash(user: `0x${string}`, amountRaw: bigint, c: Cash, spend: Call[], own?: AllowContext): Call[] {
   if (amountRaw + feeBufferRaw > cashRaw(c)) throw new Error("More than your cash");
   const w = savingsWithdrawal(amountRaw, c);
-  return assertAllowed(user, w ? [...buildWithdrawSavingsCalls(user, w.raw, w.all), ...spend] : spend);
+  return assertAllowed(user, w ? [...buildWithdrawSavingsCalls(user, w.raw, w.all), ...spend] : spend, own);
 }

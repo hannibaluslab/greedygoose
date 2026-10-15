@@ -10,7 +10,7 @@ import { Button } from "./Button";
 import { StockAvatar, tickerOf } from "./StockAvatar";
 import { NETWORK_FEE_ROW, Summary } from "./Summary";
 import { TxButton, TxError } from "./TxUi";
-import { ChevronRight, LockIcon } from "./icons";
+import { ChevronRight, BacksIcon } from "./icons";
 import { useAgents } from "@/hooks/useAgents";
 import { useBoughtHome } from "@/hooks/useBoughtHome";
 import { useBuyQuote } from "@/hooks/useBuyQuote";
@@ -465,7 +465,7 @@ function BackingRow({ holding: h, checked = false, right, onPick, reason }: {
           <span className="num whitespace-nowrap text-[12px] text-ink-mid">
             {reason ?? (
               <>
-                <LockIcon size={10} className="mr-1 inline align-[-1px] text-ink" />
+                <BacksIcon size={10} className="mr-1 inline align-[-1px] text-ink" />
                 {allInUse ? (
                   <><b className="font-semibold text-ink">All</b> in use · <Link href="/repay" className="font-semibold text-ink no-underline">Repay</Link></>
                 ) : (

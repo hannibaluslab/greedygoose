@@ -6,6 +6,7 @@ import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import { isMix } from "@/lib/agents/mix";
 import { gooseBoardAbi } from "@/lib/board/abi";
 import { GOOSE_BOARD } from "@/lib/board/config";
+import { recipientBlock } from "@/lib/contracts";
 import {
   decodeListOp,
   decodeListStorageLocation,
@@ -26,9 +27,10 @@ import { ENTRY_COINS, type EntryVenue } from "@/lib/tokens/stables";
 type Address = `0x${string}`;
 /**
  * What a check may look at besides the call's own arguments: the user's own EFP list slots (the one it already has,
- * read from Base by the caller, and any minted in the same batch), and the call's raw data.
+ * read from Base by the caller, and any minted in the same batch), the call's raw data, and who a Send pays (`sendTo`,
+ * declared by the Send builder alone; null in every other batch, so no other batch can carry a transfer).
  */
-type BatchContext = { listSlots: readonly bigint[]; data: Hex };
+type BatchContext = { listSlots: readonly bigint[]; data: Hex; sendTo: Address | null };
 /** True when a call's arguments keep the money with `user`. */
 type ArgsCheck = (args: readonly unknown[], user: Address, ctx: BatchContext) => boolean;
 type Rule = { targets: readonly Address[]; abi: Abi; functions: Record<string, ArgsCheck> };
@@ -94,6 +96,22 @@ const ownListOps: ArgsCheck = (args, _user, ctx) => {
   const [slot, ops] = args as [bigint, readonly Hex[]];
   return ctx.listSlots.includes(slot) && ops.length > 0 && ops.length <= MAX_LIST_OPS && ops.every((op) => decodeListOp(op) !== null);
 };
+/**
+ * Send (Adrian, 2026-10-15: "let user send their assets out"), the one way money leaves the user's pockets:
+ * transfer(to, amount) of USDC or a registry stock, only in a batch that declares who it pays (`sendTo`), only to that
+ * address, never to the user, the zero address or any of the app's or its protocols' contracts, and for more than 0.
+ * It is user-signed only: no agent permission lists `transfer` (lib/agents/permissions.ts).
+ */
+const transferOut: ArgsCheck = (args, user, ctx) => {
+  const [to, amount] = args as [unknown, unknown];
+  return (
+    !!ctx.sendTo &&
+    is(to, ctx.sendTo) &&
+    recipientBlock(to as Address, user) === null &&
+    typeof amount === "bigint" &&
+    amount > 0n
+  );
+};
 /** GooseBoard.join(): exactly its selector, nothing after it. */
 const JOIN = toFunctionSelector("join()");
 const bareJoin: ArgsCheck = (args, _user, ctx) => args.length === 0 && ctx.data.toLowerCase() === JOIN;
@@ -102,13 +120,14 @@ const bareJoin: ArgsCheck = (args, _user, ctx) => args.length === 0 && ctx.data.
  * The one allowlist for user-signed batches (CLAUDE.md › Transaction safety): each target, the only
  * functions it may be called with, and what their arguments must say. Money only moves between the
  * user's own pockets: an approve names only the spoke or a router, every position, withdrawal and
- * swap pays the user, and savings come out only as USDC. Buys, repays and savings-first batches mix
+ * swap pays the user, and savings come out only as USDC. The one exception is a Send's single transfer,
+ * to the recipient its batch declares (`transferOut`). Buys, repays and savings-first batches mix
  * targets, so each target is held to its own functions. An Entry coin is approved only to the venue that converts
  * it, and converted only into USDC (D20). GooseExecutor's settings move no money and apply to the signer alone
  * (`msg.sender`): a mix must add up to 100% (or clear it).
  */
 const RULES: readonly Rule[] = [
-  { targets: TOKENS, abi: erc20Abi, functions: { approve: (args) => oneOf(args[0], SPENDERS) } },
+  { targets: TOKENS, abi: erc20Abi, functions: { approve: (args) => oneOf(args[0], SPENDERS), transfer: transferOut } },
   ...ENTRY_COINS.map((c) => ({ targets: [c.address], abi: erc20Abi, functions: { approve: (args: readonly unknown[]) => is(args[0], venueOf(c.venue)) } })),
   {
     targets: [AAVE.SPOKE],
@@ -146,11 +165,20 @@ const RULES: readonly Rule[] = [
 ];
 
 /**
+ * What a batch's builder tells the allowlist: the user's EFP list slot as read from Base (`listSlot`), and, for a Send
+ * only, who it pays (`sendTo`).
+ */
+export type AllowContext = { listSlot?: bigint | null; sendTo?: Address };
+
+/**
  * Throws unless every call is allowed. `own.listSlot` is the user's EFP list slot as read from Base
  * (lib/efp/read.ts checks the list is the user's own); a batch that mints a list may also write to the slot it mints.
+ * `own.sendTo` lets the batch carry one transfer, to that address (`transferOut`).
  */
-export function assertAllowed<C extends { to: Address; data: Hex; value: bigint }>(user: Address, calls: C[], own?: { listSlot?: bigint | null }): C[] {
+export function assertAllowed<C extends { to: Address; data: Hex; value: bigint }>(user: Address, calls: C[], own?: AllowContext): C[] {
   const listSlots: bigint[] = own?.listSlot != null ? [own.listSlot] : [];
+  const sendTo = own?.sendTo ?? null;
+  let transfers = 0;
   for (const c of calls) {
     if (!isAddressEqual(c.to, EFP_LIST_MINTER)) continue;
     try {
@@ -172,12 +200,16 @@ export function assertAllowed<C extends { to: Address; data: Hex; value: bigint 
       throw new Error(`Blocked: unexpected call to ${c.to}`);
     }
     const check = Object.hasOwn(rule.functions, call.functionName) ? rule.functions[call.functionName] : undefined;
-    if (!check) throw new Error(`Blocked: unexpected call to ${c.to}`);
-    if (!check(call.args ?? [], user, { listSlots, data: c.data })) {
+    // Outside a Send (no recipient declared), transfer is no function of any target at all.
+    if (!check || (call.functionName === "transfer" && !sendTo)) throw new Error(`Blocked: unexpected call to ${c.to}`);
+    if (call.functionName === "transfer" && ++transfers > 1) throw new Error("Blocked: more than one transfer");
+    if (!check(call.args ?? [], user, { listSlots, data: c.data, sendTo })) {
       throw new Error(
         call.functionName === "approve"
           ? `Blocked: unexpected spender ${call.args?.[0]}`
-          : `Blocked: unexpected arguments to ${call.functionName} on ${c.to}`,
+          : call.functionName === "transfer"
+            ? `Blocked: unexpected recipient ${call.args?.[0]}`
+            : `Blocked: unexpected arguments to ${call.functionName} on ${c.to}`,
       );
     }
   }

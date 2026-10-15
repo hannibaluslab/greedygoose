@@ -7,7 +7,7 @@ import { MoneyCompact } from "./Money";
 import { PriceChart } from "./PriceChart";
 import { SegmentedControl } from "./SegmentedControl";
 import { StockAvatar, tickerOf } from "./StockAvatar";
-import { LockIcon } from "./icons";
+import { BacksIcon } from "./icons";
 import { useActivity } from "@/hooks/useActivity";
 import type { MarketPrices } from "@/hooks/useMarketPrices";
 import { useNowSec } from "@/hooks/useNowSec";
@@ -97,7 +97,7 @@ export function StockPosition({ holding }: { holding: Holding }) {
       </div>
       <div className="flex items-center justify-between gap-3 text-[12.5px] text-ink-mid">
         <span className="flex items-center gap-1.5 whitespace-nowrap">
-          <LockIcon size={9} className="text-ink" />
+          <BacksIcon size={9} className="text-ink" />
           <b className="font-semibold text-ink">{backsPct}%</b> backs credit · {formatShares(holding.lockedShares)}
         </span>
         <span className="whitespace-nowrap">
