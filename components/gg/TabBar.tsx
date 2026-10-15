@@ -33,15 +33,17 @@ export function TabBar() {
       >
         {TABS.map(({ href, label, Icon, match }) => {
           const active = match.some((m) => path.startsWith(m));
-          // Agents is the round lime button in the middle, 56px and raised 16px over the bar (Adrian): the agents are what
-          // the app runs on.
+          // Agents, the middle tab, is a lime button docked in the bar (Adrian: yellow, round, bigger, higher). Done the
+          // way docked centre buttons are: raised half out of the bar, a ring in the page's colour so it sits in a
+          // notch rather than on top of the bar, a soft shadow instead of a glow, and its label on the same line as
+          // the other tabs'.
           if (href === "/agents") {
             return (
-              <Link key={href} href={href} aria-label={label} aria-current={active ? "page" : undefined} className="flex items-center justify-center">
-                {/* The booth app's centre button (jaw-hackathon-booth TabBar): 56px lime, raised, a 24px lime glow. */}
-                <span className="grid size-14 -translate-y-5 place-items-center rounded-full bg-brand text-ink shadow-[0_0_24px_rgba(212,255,60,0.4)] transition active:scale-95">
+              <Link key={href} href={href} aria-current={active ? "page" : undefined} className="relative flex flex-col items-center justify-end pb-[9px]">
+                <span className="absolute left-1/2 top-0 grid size-[52px] -translate-x-1/2 -translate-y-[22px] place-items-center rounded-full bg-brand text-ink shadow-[0_6px_14px_-4px_rgba(14,13,11,0.35)] ring-[5px] ring-ground transition active:scale-95">
                   <Icon size={24} />
                 </span>
+                <span className={`text-[10px] font-medium tracking-tight ${active ? "text-on-ink" : "text-[rgba(245,240,226,0.45)]"}`}>{label}</span>
               </Link>
             );
           }
@@ -50,8 +52,8 @@ export function TabBar() {
               key={href}
               href={href}
               aria-current={active ? "page" : undefined}
-              // The booth's tabs: the one you're on in lime, the others cream at 45%.
-              className={`flex flex-col items-center justify-center gap-1 text-[10px] font-medium tracking-tight transition ${active ? "text-brand" : "text-[rgba(245,240,226,0.45)]"}`}
+              // One accent only, the lime button: the tab you're on is full cream, the others cream at 45% (the booth's dimming).
+              className={`flex flex-col items-center justify-center gap-1 text-[10px] font-medium tracking-tight transition ${active ? "text-on-ink" : "text-[rgba(245,240,226,0.45)]"}`}
             >
               <Icon />
               {label}
