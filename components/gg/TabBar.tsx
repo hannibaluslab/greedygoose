@@ -33,18 +33,30 @@ export function TabBar() {
       >
         {TABS.map(({ href, label, Icon, match }) => {
           const active = match.some((m) => path.startsWith(m));
+          // Agents, the middle tab, is a lime button docked in the bar (Adrian: yellow, round, bigger, higher). Done the
+          // way docked centre buttons are: raised half out of the bar, a ring in the page's colour so it sits in a
+          // notch rather than on top of the bar, a soft shadow instead of a glow, and its label on the same line as
+          // the other tabs'.
+          if (href === "/agents") {
+            return (
+              <Link key={href} href={href} aria-current={active ? "page" : undefined} className="relative flex flex-col items-center justify-end pb-[9px]">
+                <span className="absolute left-1/2 top-0 grid size-[52px] -translate-x-1/2 -translate-y-[22px] place-items-center rounded-full bg-brand text-ink shadow-[0_6px_14px_-4px_rgba(14,13,11,0.35)] ring-[5px] ring-ground transition active:scale-95">
+                  <Icon size={24} />
+                </span>
+                <span className={`text-[10px] font-medium tracking-tight ${active ? "text-on-ink" : "text-[rgba(245,240,226,0.45)]"}`}>{label}</span>
+              </Link>
+            );
+          }
           return (
             <Link
               key={href}
               href={href}
               aria-current={active ? "page" : undefined}
-              className={`relative flex flex-col items-center justify-center gap-[3px] text-[10px] ${active ? "font-semibold text-on-ink" : "font-medium text-[rgba(245,240,226,0.55)]"}`}
+              // One accent only, the lime button: the tab you're on is full cream, the others cream at 45% (the booth's dimming).
+              className={`flex flex-col items-center justify-center gap-1 text-[10px] font-medium tracking-tight transition ${active ? "text-on-ink" : "text-[rgba(245,240,226,0.45)]"}`}
             >
               <Icon />
               {label}
-              {active && (
-                <span aria-hidden className="absolute bottom-1 h-0.5 w-4 rounded-[1px] bg-brand" style={{ boxShadow: "0 0 12px rgba(212,255,60,0.5)" }} />
-              )}
             </Link>
           );
         })}

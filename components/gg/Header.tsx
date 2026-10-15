@@ -14,7 +14,7 @@ import { shortAddress } from "@/lib/formatting";
 export function Header({ address }: { address: `0x${string}` }) {
   const { data: name, isPending } = useAccountName(address);
   return (
-    <header className="flex items-center justify-between px-5 pt-[calc(env(safe-area-inset-top)+8px)]">
+    <header className="flex items-center justify-between px-5 pt-[calc(env(safe-area-inset-top)+2px)]">
       <div className="flex items-center gap-2.5">
         <span aria-hidden className="flex size-9 items-center justify-center rounded-[18px] bg-ink">
           <GooseMark className="h-[28px] w-auto" />

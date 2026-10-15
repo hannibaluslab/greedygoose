@@ -224,6 +224,8 @@ export function useAgents(account: `0x${string}`) {
     ranOut,
     lastTerms,
     left,
+    /** What's left of the running jobs' limits couldn't be read (`left` stays null until it is). */
+    leftUnreadable: periods.isError && !periods.data,
     /** JAW sheets it takes to turn `jobs` off: one per grant JAW lists for them that hasn't ended. */
     faceIdsOff: (jobs: readonly AgentJob[]) => jobs.reduce((n, job) => n + live[job].length, 0),
     /** The most any limit may be on this executor, once read. */

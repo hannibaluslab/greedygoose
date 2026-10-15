@@ -6,20 +6,21 @@ import { useBlockNumber, usePublicClient } from "wagmi";
 import type { Address, Hex, Log } from "viem";
 import { CHAIN_ID } from "@/lib/chain";
 import { GOOSE_EXECUTOR, GOOSE_EXECUTOR_BLOCK } from "@/lib/agents/config";
-import { decodeAgentLogs, type AgentLog } from "@/lib/agents/events";
-import { describeAgentEvent, type AgentMove } from "@/lib/agents/feed";
+import { decodeAgentLogs, type AgentEvent, type AgentLog } from "@/lib/agents/events";
+import { describeAgentEvent, type AgentMove, type MoveContext } from "@/lib/agents/feed";
 import type { AgentJob } from "@/lib/agents/permissions";
-import { LOG_CHUNK, logChunks, readAgentLogs, readMoveContext } from "@/lib/agents/history";
+import { LOG_CHUNK, WEEK_BLOCKS, logChunks, readAgentLogs, readMoveContext } from "@/lib/agents/history";
 
-/** A week of Base blocks (2 seconds each). The feed reads a week at a time, back to the executor's deploy block. */
-const WEEK_BLOCKS = 302_400n;
 /** A chunk this many blocks behind the head is final, and kept. */
 const SETTLED_BLOCKS = 300n;
 /** getLogs requests in flight at once. */
 const PARALLEL = 4;
 
-/** One agent move in the feed, at `time` (ms), with the transaction that made it. */
-export type AgentRow = AgentMove & { key: string; time: number; hash: Hex };
+/**
+ * One agent move in the feed, at `time` (ms), with the transaction that made it, the event it was decoded from and
+ * what the chain said around it (the Cash sheet reads the money in them).
+ */
+export type AgentRow = AgentMove & { key: string; time: number; hash: Hex; event: AgentEvent; ctx: MoveContext };
 
 /** A job's newest switch: on or off, whether the user turned it off, and when (seconds). */
 export type Switched = { on: boolean; byUser: boolean; at: number };
@@ -29,8 +30,8 @@ export type HeadsUp = { sellValueRaw: bigint; sellAfter: number; sentAt: number 
 
 /**
  * What GooseExecutor did for one account, read from the chain with no indexer (D12): its events indexed by the
- * account, with getLogs in chunks, newest first, then each move's block and the reads around it. Nothing is read
- * until an executor is configured.
+ * account, with getLogs in chunks, newest first, then each move's block and the reads around it, a week at a time
+ * back to the executor's deploy block. Nothing is read until an executor is configured.
  */
 export function useAgentFeed(account: Address) {
   const executor = GOOSE_EXECUTOR;
@@ -95,7 +96,7 @@ export function useAgentFeed(account: Address) {
       events.flatMap((e, i) => {
         const m = moves[i]?.data;
         const move = m && describeAgentEvent(e, m.time, m.ctx);
-        return move ? [{ ...move, key: e.key, time: m.time * 1000, hash: e.txHash }] : [];
+        return move ? [{ ...move, key: e.key, time: m.time * 1000, hash: e.txHash, event: e, ctx: m.ctx }] : [];
       }),
     [events, moves],
   );

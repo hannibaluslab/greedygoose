@@ -107,7 +107,7 @@ function feedRows(nowMs: number): FeedAgentRow[] {
       {},
     ],
   ];
-  return moves.map(([key, time, e, ctx]) => ({ ...describeAgentEvent(e, time, ctx)!, key, time: time * 1000, hash: ZERO_TX }));
+  return moves.map(([key, time, e, ctx]) => ({ ...describeAgentEvent(e, time, ctx)!, key, time: time * 1000, hash: ZERO_TX, event: e, ctx }));
 }
 
 type View = "live" | "cards" | "rows" | "notlive";
