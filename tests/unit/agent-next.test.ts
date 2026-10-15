@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agentNexts, defaultNumbers, nyDay, planNext, rebalanceCheckAt, weekendCard, whenText, type NextInput } from "@/lib/agents/next";
+import { agentNexts, beforeFreeze, defaultNumbers, nyDay, planNext, rebalanceCheckAt, weekendCard, whenText, type NextInput } from "@/lib/agents/next";
 import { rebalanceOptions } from "@/lib/agents/mix";
 import { JOBS, type AgentJob } from "@/lib/agents/permissions";
 import { USDC } from "@/lib/tokens/registry";
@@ -51,15 +51,34 @@ describe("agentNexts: each agent's rule on live data", () => {
 
   it("shows the weekend heads-up as a card only: before the Friday freeze, in Watch, when a 15% drop would reach Act", () => {
     // Friday 2025-10-17 14:30 New York (18:30 UTC); $1,400 of power against $1,120 owed is 1.25 (Watch), 1.0625 after −15%.
+    // The executor's nextFreeze: 20:00 New York, 00:00 UTC on Saturday.
     const fri = Date.UTC(2025, 9, 17, 18, 30) / 1000;
-    const card = weekendCard(input({ nowSec: fri, debtUsd: 1_120 }));
-    expect(card).toEqual({ addUsd: 129, dropPct: 15, when: `at ${new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(Date.UTC(2025, 9, 18, 0) * 1)}` });
+    const freezeAt = Date.UTC(2025, 9, 18, 0) / 1000;
+    const at = (nowSec: number, debtUsd: number, over: Partial<NextInput> = {}) => ({ ...input({ nowSec, debtUsd, ...over }), freezeAt });
+    const card = weekendCard(at(fri, 1_120));
+    expect(card).toEqual({ addUsd: 129, dropPct: 15, when: `at ${new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(freezeAt * 1000)}` });
     // No move with it: Protect's line is still Watch's.
     expect(agentNexts(input({ nowSec: fri, debtUsd: 1_120 })).protect).toEqual({ idle: "Watch. Steps in only at Act" });
-    expect(weekendCard(input({ nowSec: fri - 3 * 3600, debtUsd: 1_120 }))).toBeNull(); // 11:30: not yet
-    expect(weekendCard(input({ nowSec: WED_NOON, debtUsd: 1_120 }))).toBeNull(); // a Wednesday
-    expect(weekendCard(input({ nowSec: fri, debtUsd: 1_000 }))).toBeNull(); // 1.4: −15% leaves 1.19, still Watch
-    expect(weekendCard(input({ nowSec: fri, debtUsd: 1_300 }))).toBeNull(); // in Act, Protect acts itself
+    expect(weekendCard(at(fri - 3 * 3600, 1_120))).toBeNull(); // 11:30: not yet
+    expect(weekendCard(at(WED_NOON, 1_120))).toBeNull(); // a Wednesday
+    expect(weekendCard(at(fri, 1_000))).toBeNull(); // 1.4: −15% leaves 1.19, still Watch
+    expect(weekendCard(at(fri, 1_300))).toBeNull(); // in Act, Protect acts itself
+    expect(weekendCard({ ...at(fri, 1_120), freezeAt: null })).toBeNull(); // the executor's calendar not read yet
+  });
+
+  it("follows the executor's calendar and window, not a fixed Friday: holidays, a freeze already on, a shorter window", () => {
+    const wedFreeze = Date.UTC(2025, 9, 16, 0) / 1000; // Wednesday 20:00 New York, before a Thursday the executor holds
+    expect(weekendCard({ ...input({ debtUsd: 1_120 }), nowSec: wedFreeze - 2 * 3600, freezeAt: wedFreeze })).toMatchObject({ addUsd: 129 });
+    // Good Friday: prices are already held, so nextFreeze gives back the hour asked (not after now): no card.
+    const goodFriday = Date.UTC(2026, 3, 3, 18, 30) / 1000;
+    expect(weekendCard({ ...input({ nowSec: goodFriday, debtUsd: 1_120 }), freezeAt: goodFriday - 1_800 })).toBeNull();
+    // The window is the executor's: with 3 hours, 14:30 is too early for a 20:00 freeze.
+    const fri = Date.UTC(2025, 9, 17, 18, 30) / 1000;
+    const short = { ...defaultNumbers(rebalanceOptions()), weekendWindowSec: 3 * 3600 };
+    expect(weekendCard({ ...input({ nowSec: fri, debtUsd: 1_120, numbers: short }), freezeAt: Date.UTC(2025, 9, 18, 0) / 1000 })).toBeNull();
+    expect(beforeFreeze(100, 100, 3600)).toBe(false); // the freeze itself is not before it
+    expect(beforeFreeze(99, 100, 3600)).toBe(true);
+    expect(beforeFreeze(100 - 3601, 100, 3600)).toBe(false);
   });
 
   it("Rebalance checks its mix at the next window, trades when a stock breaks its band, and waits while the credit is in Act", () => {

@@ -268,7 +268,7 @@ contract SellRulesTest is Test {
 
     function test_limits_bounds() public pure {
         assertTrue(SellRules.limitsOk(_defaults()));
-        SellLimits[10] memory bad;
+        SellLimits[11] memory bad;
         for (uint256 i; i < bad.length; ++i) {
             bad[i] = _defaults(); // each its own copy
         }
@@ -281,7 +281,8 @@ contract SellRulesTest is Test {
         bad[6].poolCap = 999e6;
         bad[7].maxSlice = 50_001e6;
         bad[8].targetHf = 1.41e18; // back past Watch toward Safe: more stock sold than Act asks for
-        bad[9].headsUpHf = 1.04e18; // a heads-up later than 1.05
+        bad[9].headsUpHf = 1.09e18; // a heads-up line under the Act line: part of Act unwarned, and under the cash line
+        bad[10].nowHf = 1.049e18; // the at-once sale held back past 1.05
         for (uint256 i; i < bad.length; ++i) {
             assertFalse(SellRules.limitsOk(bad[i]), vm.toString(i));
         }

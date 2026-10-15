@@ -20,6 +20,7 @@ import { useAgentSettings } from "@/hooks/useAgentSettings";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import type { GrantStep } from "@/hooks/useManageSave";
 import { useHeadsUp } from "@/hooks/useHeadsUp";
+import { useNextFreeze } from "@/hooks/useNextFreeze";
 import { useNowSec } from "@/hooks/useNowSec";
 import { usePosition, type PositionData } from "@/hooks/usePosition";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
@@ -70,6 +71,7 @@ function Agents({ address }: { address: `0x${string}` }) {
   const feed = useAgentFeed(address);
   const all = useAccountFeed(address, feed);
   const nowSec = useNowSec();
+  const freezeAt = useNextFreeze(nowSec);
   const headsUp = useHeadsUp(address, feed.headsUp, settings, nowSec);
   const runner = useAgentRun(agents);
   const live = !!GOOSE_EXECUTOR;
@@ -108,7 +110,7 @@ function Agents({ address }: { address: `0x${string}` }) {
   const protectRuns = ["on", "starting"].includes(agentStatus("protect", agents.status));
   const weekend =
     position && protectRuns
-      ? weekendCard({ nowSec, collateralUsd: position.collateralUsd, avgCf: position.avgCf, debtUsd: position.debtUsd, numbers })
+      ? weekendCard({ nowSec, freezeAt, collateralUsd: position.collateralUsd, avgCf: position.avgCf, debtUsd: position.debtUsd, numbers })
       : null;
 
   const cards = agentCards({

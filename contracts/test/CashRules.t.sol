@@ -3,6 +3,7 @@ pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {Amounts, CashRules, ProtectCase, SaveCase, Thresholds} from "../src/CashRules.sol";
+import {SellRules} from "../src/SellRules.sol";
 import {Vectors} from "./Vectors.sol";
 
 /// The Solidity rules against the TypeScript reference (planGuardian and planSave in lib/guardian/plan.ts), on the
@@ -29,6 +30,20 @@ contract CashRulesTest is Test {
             }
         }
         assertGt(repays, 250, "repays are well covered");
+    }
+
+    /// The hard bounds sit on config/risk.ts's bands (defaults.json carries RISK), so moving a band without the contract
+    /// fails here: Protect's trigger and the sale's heads-up line are the Act line, and both targets stay in Watch, under
+    /// the Safe line (Act is the line, Adrian, 2026-10-15).
+    function test_the_bounds_sit_on_the_apps_bands() public view {
+        string memory json = vm.readFile("test/vectors/defaults.json");
+        uint256 actLine = vm.parseJsonUint(json, ".risk.watchMin");
+        uint256 safeLine = vm.parseJsonUint(json, ".risk.safeMin");
+        assertEq(CashRules.TRIGGER_HF, actLine, "Protect's trigger is the Act line");
+        assertEq(SellRules.HEADS_UP_HF, actLine, "the sale's heads-up line is the Act line");
+        assertLt(CashRules.TARGET_HF_MAX, safeLine, "a repay stops in Watch");
+        assertLt(SellRules.TARGET_HF_MAX, safeLine, "a sale stops in Watch");
+        assertGe(SellRules.NOW_HF_MIN, (1e18 + actLine) / 2, "the at-once line no lower than halfway to Aave's limit");
     }
 
     function test_save_agrees_with_planSave() public view {

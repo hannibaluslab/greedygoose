@@ -4,7 +4,7 @@ import { OFF_WHY } from "@/lib/agents/feed";
 import { agentOf, AGENTS, timeText, type Agent, type Next, type WeekendCard } from "@/lib/agents/list";
 import { isMix, previewTrades, type MixHolding } from "@/lib/agents/mix";
 import { JOBS, readStockLimits, type AgentJob } from "@/lib/agents/permissions";
-import { inWeekendWindow, planGuardian, weekendHeadsUp } from "@/lib/guardian/plan";
+import { planGuardian, weekendHeadsUp } from "@/lib/guardian/plan";
 import type { RebalanceOptions } from "@/lib/guardian/rebalance";
 import { formatUsdTrim } from "@/lib/formatting";
 import { STATUS_LABEL, statusFor } from "@/lib/risk/status";
@@ -27,6 +27,8 @@ export type RuleNumbers = {
   targetHf: number;
   stressDrop: number;
   stressFloorHf: number;
+  /** How long before a price freeze the weekend heads-up card shows, in seconds (the executor's `amounts`). */
+  weekendWindowSec: number;
   rebalance: RebalanceOptions;
 };
 
@@ -40,6 +42,7 @@ export function defaultNumbers(rebalance: RebalanceOptions): RuleNumbers {
     targetHf: CASH_AGENT.targetHf,
     stressDrop: CASH_AGENT.stressDrop,
     stressFloorHf: CASH_AGENT.stressFloorHf,
+    weekendWindowSec: CASH_AGENT.weekendWindowSec,
     rebalance,
   };
 }
@@ -171,7 +174,7 @@ function protectNext(i: NextInput): Next {
   }
   if (d.reason === "no-debt") return { idle: "Nothing owed. Nothing to do." };
   const status = statusFor(d.hf);
-  // Over a live trigger set under the Act line (its bounds allow 1.05), Act can be healthy for the rule too.
+  // Act is never healthy for the rule: the executor pins its trigger to the Act line (D13's was higher). A fallback line.
   if (d.reason === "healthy") {
     return { idle: status === "safe" ? "Safe. Nothing to do." : status === "watch" ? "Watch. Steps in only at Act" : "Act. Nothing to repay yet" };
   }
@@ -181,26 +184,39 @@ function protectNext(i: NextInput): Next {
 }
 
 /**
- * The weekend heads-up card (lib/guardian/plan.ts `weekendHeadsUp`, on the executor's live numbers): Friday 14:00 to
- * the 20:00 New York freeze, credit outside Act that the stress drop would take into it. No move: a card only.
+ * The weekend heads-up card (lib/guardian/plan.ts `weekendHeadsUp`, on the executor's live numbers): in the window
+ * before the next price freeze, credit outside Act that the stress drop would take into it. No move: a card only.
+ * `freezeAt` is the executor's `nextFreeze`, its own calendar with the holidays it holds, so the card shows before a
+ * freeze that starts mid-week and not while prices are already held (Good Friday); null while it isn't read.
  */
-export function weekendCard(i: Pick<NextInput, "nowSec" | "collateralUsd" | "avgCf" | "debtUsd" | "numbers">): WeekendCard | null {
+export function weekendCard(
+  i: Pick<NextInput, "nowSec" | "collateralUsd" | "avgCf" | "debtUsd" | "numbers"> & { freezeAt: number | null },
+): WeekendCard | null {
   const h = weekendHeadsUp({
     collateralUsd: i.collateralUsd,
     avgCf: i.avgCf,
     debtUsd: i.debtUsd,
-    weekendWindow: inWeekendWindow(new Date(i.nowSec * 1000)),
+    weekendWindow: beforeFreeze(i.nowSec, i.freezeAt, i.numbers.weekendWindowSec),
     triggerHf: i.numbers.triggerHf,
     targetHf: i.numbers.targetHf,
     stressDrop: i.numbers.stressDrop,
     stressFloorHf: i.numbers.stressFloorHf,
   });
-  if (!h) return null;
+  if (!h || i.freezeAt === null) return null;
   return {
     addUsd: Math.ceil(h.addUsd),
     dropPct: Math.round(i.numbers.stressDrop * 100),
-    when: `at ${timeText(nyHour(nyDay(i.nowSec), 20))}`,
+    when: `at ${timeText(i.freezeAt)}`,
   };
+}
+
+/**
+ * Whether `nowSec` is in the window before a freeze: prices still live, and the next freeze starts within `windowSec`.
+ * The executor's own test of it (ExecutorHarness.preFreeze) agrees with Leo's `inWeekendWindow` on a week with no
+ * holiday (contracts/test/NyCalendar.t.sol).
+ */
+export function beforeFreeze(nowSec: number, freezeAt: number | null, windowSec: number): boolean {
+  return freezeAt !== null && freezeAt > nowSec && freezeAt - nowSec <= windowSec;
 }
 
 /** Rebalance: the trades its rule finds for the saved mix on today's free shares, at the next window. */

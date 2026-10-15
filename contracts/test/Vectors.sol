@@ -106,17 +106,17 @@ library Vectors {
         return (1 + r1 % 9) * 10 ** between(r2, lo, hi);
     }
 
-    /// Thresholds within the executor's Act-only bounds (2026-10-15): the trigger at 1.05–1.10, the target up to 1.40;
-    /// the health from 0.80 to 1.30, so about half are in Act and the rest in Watch. The weekend numbers are the card's,
-    /// unused.
+    /// Thresholds within the executor's Act-only bounds (2026-10-15): the trigger pinned to the Act line (1.10), the
+    /// target from 1.15 to 1.40. Half the healths are in Act (0.80 to 1.10), the rest from the Act line through Watch
+    /// into Safe (1.10 to 2.00). The weekend numbers are the card's, unused.
     function protectInput(uint256 i) internal pure returns (Protect memory v) {
         uint256[19] memory r;
         for (uint256 f; f < 19; ++f) {
             r[f] = rand("protect", i, f);
         }
-        uint256 trigger = between(r[14], 1.05e18, 1.1e18);
+        uint256 trigger = 1.1e18;
         uint256 target = between(r[15], trigger + 0.05e18, 1.4e18);
-        uint256 hf = between(r[4], 0.8e18, 1.3e18);
+        uint256 hf = r[14] % 2 == 0 ? between(r[4], 0.8e18, 1.1e18) : between(r[4], 1.1e18, 2e18);
         v.t = Thresholds(uint64(trigger), uint64(target), 0.15e18, uint64(trigger));
 
         v.collateral = spread(r[0], r[1], 1, 6) * VALUE_PER_USD + r[2] % VALUE_PER_USD;
@@ -175,15 +175,15 @@ library Vectors {
         v.maxSlice = between(rand("sell", i, 8), 100e6, 50_000e6);
     }
 
-    /// Within the executor's Act-only bounds (2026-10-15): the heads-up line at 1.05–1.10, the at-once line at least
-    /// 0.02 under it; the health from 0.98 to 1.20, so Act, Watch and both lines are all well covered.
+    /// Within the executor's Act-only bounds (2026-10-15): the heads-up line pinned to the Act line (1.10), the at-once
+    /// line from 1.05 to 1.08; the health from 0.98 to 1.16, so Act, Watch and both lines are all well covered.
     function timingInput(uint256 i) internal pure returns (Timing memory v) {
         v.now_ = 1_792_000_000;
-        v.headsUpHf = uint64(between(rand("timing", i, 0), 1.05e18, 1.1e18));
-        v.hf = between(rand("timing", i, 1), 0.98e18, 1.2e18);
+        v.headsUpHf = 1.1e18;
+        v.hf = between(rand("timing", i, 1), 0.98e18, 1.16e18);
         v.headsUpAt = rand("timing", i, 2) % 2 == 0 ? 0 : v.now_ - rand("timing", i, 3) % 7_200;
         v.frozen = rand("timing", i, 4) % 4 == 0;
-        v.nowHf = uint64(between(rand("timing", i, 5), 1.02e18, v.headsUpHf - 0.02e18));
+        v.nowHf = uint64(between(rand("timing", i, 5), 1.05e18, v.headsUpHf - 0.02e18));
         v.headsUpDelay = uint32(between(rand("timing", i, 6), 600, 7_200));
     }
 

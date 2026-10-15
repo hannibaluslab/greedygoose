@@ -204,7 +204,7 @@ contract GooseExecutorTest is Test {
     }
 
     function test_thresholds_amounts_and_owner_change_after_the_delay() public {
-        Thresholds memory t = Thresholds(1.05e18, 1.15e18, 0.2e18, 1.05e18);
+        Thresholds memory t = Thresholds(1.1e18, 1.15e18, 0.2e18, 1.05e18);
         Amounts memory a = Amounts(1e6, 2e6, 0, 3 hours, 4);
         address newOwner = makeAddr("new owner");
         vm.startPrank(owner);
@@ -217,8 +217,9 @@ contract GooseExecutorTest is Test {
         x.applyChange(GooseExecutor.Change.SetOwner, abi.encode(newOwner), 2);
         vm.stopPrank();
 
-        (uint64 trigger,,, uint64 floor) = x.thresholds();
-        assertEq(trigger, 1.05e18);
+        (uint64 trigger, uint64 target,, uint64 floor) = x.thresholds();
+        assertEq(trigger, 1.1e18);
+        assertEq(target, 1.15e18);
         assertEq(floor, 1.05e18);
         (,, uint64 keepBack, uint32 window,) = x.amounts();
         assertEq(keepBack, 0);
@@ -228,7 +229,7 @@ contract GooseExecutorTest is Test {
 
     function test_bounds_are_checked_at_queue() public {
         Thresholds[7] memory bad = [
-            Thresholds(1.04e18, 1.2e18, 0.15e18, 1.04e18), // trigger below 1.05
+            Thresholds(1.05e18, 1.2e18, 0.15e18, 1.05e18), // trigger under the Act line: part of Act without Protect
             Thresholds(1.11e18, 1.2e18, 0.15e18, 1.1e18), // trigger above the Act line: a repay in Watch
             Thresholds(1.5e18, 1.65e18, 0.15e18, 1.1e18), // the old Safe-line trigger
             Thresholds(1.1e18, 1.14e18, 0.15e18, 1.1e18), // target less than 0.05 above the trigger
@@ -256,6 +257,31 @@ contract GooseExecutorTest is Test {
         x.queueChange(GooseExecutor.Change.AddForwarder, abi.encode(address(0)));
         vm.expectRevert(GooseExecutor.ZeroValue.selector);
         x.queueChange(GooseExecutor.Change.AllowCodehash, abi.encode(bytes32(0)));
+        vm.stopPrank();
+    }
+
+    /// Act is the line (Adrian, 2026-10-15): Protect's trigger and the sale's heads-up line are both pinned to the Act
+    /// line, so no change through the delay can leave part of Act without Protect, or put the sale's line above the cash
+    /// line (a sale at 1.08 with cash still in savings, the Rebalancer trading in Act), or hold the at-once sale back
+    /// past 1.05.
+    function test_protect_and_the_sale_share_the_act_line_and_no_change_moves_it() public {
+        // The inverted pair: cash repays from 1.05 while the sale warns from 1.10.
+        GooseExecutor.Config memory c = _config();
+        (c.thresholds.triggerHf, c.thresholds.stressFloorHf) = (1.05e18, 1.05e18);
+        vm.expectRevert(GooseExecutor.OutOfBounds.selector);
+        new GooseExecutor(c);
+
+        SellLimits[3] memory bad = [deploy.sellLimits(), deploy.sellLimits(), deploy.sellLimits()];
+        (bad[0].headsUpHf, bad[0].nowHf) = (1.08e18, 1.05e18); // a heads-up only from 1.08: Act from 1.10 unwarned
+        bad[1].headsUpHf = 1.12e18; // a heads-up in Watch
+        bad[2].nowHf = 1.04e18; // the at-once sale held back past 1.05
+        vm.startPrank(owner);
+        vm.expectRevert(GooseExecutor.OutOfBounds.selector);
+        x.queueChange(GooseExecutor.Change.SetThresholds, abi.encode(Thresholds(1.05e18, 1.2e18, 0.15e18, 1.05e18)));
+        for (uint256 i; i < bad.length; ++i) {
+            vm.expectRevert(GooseExecutor.OutOfBounds.selector);
+            x.queueChange(GooseExecutor.Change.SetSellLimits, abi.encode(bad[i]));
+        }
         vm.stopPrank();
     }
 

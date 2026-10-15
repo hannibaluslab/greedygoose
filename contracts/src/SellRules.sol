@@ -61,11 +61,13 @@ library SellRules {
     uint256 internal constant MAX_SLICES = 6;
 
     // Hard bounds (D18). Nothing can change them.
-    /// Act is the line (Adrian, 2026-10-15): no heads-up, and so no sale, above the Act line (1.10, config/risk.ts
-    /// RISK), whatever a threshold change says; and the heads-up goes out by 1.05 at the latest.
-    uint64 internal constant HEADS_UP_HF_MIN = 1.05e18;
-    uint64 internal constant HEADS_UP_HF_MAX = 1.1e18;
-    uint64 internal constant NOW_HF_MIN = 1.02e18;
+    /// Act is the line (Adrian, 2026-10-15): the heads-up line is the Act line (1.10, config/risk.ts RISK), the same as
+    /// Protect's trigger (CashRules.TRIGGER_HF), and pinned there. No heads-up, and so no sale, in Watch; none of Act
+    /// left without one; and never a sale line above the cash line, which would sell stock while cash sits in savings.
+    uint64 internal constant HEADS_UP_HF = 1.1e18;
+    /// A sale at once only deep in Act: 1.05 (halfway to Aave's limit at 1.0) at the lowest, so no change can hold
+    /// the at-once sale back further.
+    uint64 internal constant NOW_HF_MIN = 1.05e18;
     /// The heads-up keeps a band of its own above the at-once line, so a heads-up still goes out before most sales.
     uint64 internal constant NOW_GAP_MIN = 0.02e18;
     uint64 internal constant TARGET_GAP_MIN = 0.05e18;
@@ -82,12 +84,12 @@ library SellRules {
     uint64 internal constant MAX_SLICE_MAX = 50_000e6;
 
     function limitsOk(SellLimits memory l) internal pure returns (bool) {
-        return l.headsUpHf >= HEADS_UP_HF_MIN && l.headsUpHf <= HEADS_UP_HF_MAX && l.nowHf >= NOW_HF_MIN
-            && l.nowHf + NOW_GAP_MIN <= l.headsUpHf && l.targetHf >= l.headsUpHf + TARGET_GAP_MIN
-            && l.targetHf <= TARGET_HF_MAX && l.headsUpDelay >= HEADS_UP_DELAY_MIN
-            && l.headsUpDelay <= HEADS_UP_DELAY_MAX && l.floorBps >= FLOOR_BPS_MIN && l.actFloorBps >= l.floorBps
-            && l.actFloorBps <= FLOOR_BPS_MAX && l.poolCap >= POOL_CAP_MIN && l.poolCap <= POOL_CAP_MAX
-            && l.maxSlice >= MAX_SLICE_MIN && l.maxSlice <= MAX_SLICE_MAX;
+        return l.headsUpHf == HEADS_UP_HF && l.nowHf >= NOW_HF_MIN && l.nowHf + NOW_GAP_MIN <= HEADS_UP_HF
+            && l.targetHf >= HEADS_UP_HF + TARGET_GAP_MIN && l.targetHf <= TARGET_HF_MAX
+            && l.headsUpDelay >= HEADS_UP_DELAY_MIN && l.headsUpDelay <= HEADS_UP_DELAY_MAX
+            && l.floorBps >= FLOOR_BPS_MIN && l.actFloorBps >= l.floorBps && l.actFloorBps <= FLOOR_BPS_MAX
+            && l.poolCap >= POOL_CAP_MIN && l.poolCap <= POOL_CAP_MAX && l.maxSlice >= MAX_SLICE_MIN
+            && l.maxSlice <= MAX_SLICE_MAX;
     }
 
     /// When Protect sells (decision 3; Act is the line, 2026-10-15): below `headsUpHf` (the Act line) on a weekday a

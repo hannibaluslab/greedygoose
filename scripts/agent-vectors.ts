@@ -9,7 +9,7 @@
  */
 import { writeFileSync } from "node:fs";
 import { encodeAbiParameters, hashTypedData, keccak256, parseUnits, toHex, type Address } from "viem";
-import { CASH, CASH_AGENT, ENTRY, PROTECT_SELL, REBALANCER } from "@/config/risk";
+import { CASH, CASH_AGENT, ENTRY, PROTECT_SELL, REBALANCER, RISK } from "@/config/risk";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { planEntry, type EntryCoin } from "@/lib/guardian/entry";
 import { inWeekendWindow, planGuardian, planSave } from "@/lib/guardian/plan";
@@ -59,13 +59,13 @@ export const ENTRY_COUNT = 1000;
 export const HASH_SPENDER: Address = "0x0000000000000000000000000000000000600dE5";
 
 /** Protect inputs, in on-chain units. Mirrors Vectors.protectInput: thresholds within the executor's Act-only bounds
- *  (2026-10-15), the trigger at 1.05–1.10 and the target up to 1.40, and the health from 0.80 to 1.30, so about half
- *  are in Act and the rest in Watch. */
+ *  (2026-10-15), the trigger pinned to the Act line (1.10) and the target from 1.15 to 1.40. Half the healths are in
+ *  Act (0.80 to 1.10), the rest from the Act line through Watch into Safe (1.10 to 2.00). */
 export function protectInput(i: number) {
   const r = (f: number) => rand("protect", i, f);
-  const triggerHf = between(r(14), (WAD * 105n) / 100n, (WAD * 11n) / 10n);
+  const triggerHf = (WAD * 11n) / 10n;
   const targetHf = between(r(15), triggerHf + WAD / 20n, (WAD * 14n) / 10n);
-  const hf = between(r(4), (WAD * 8n) / 10n, (WAD * 13n) / 10n);
+  const hf = r(14) % 2n === 0n ? between(r(4), (WAD * 8n) / 10n, triggerHf) : between(r(4), triggerHf, 2n * WAD);
 
   const collateral = spread(r(0), r(1), 1n, 6n) * VALUE_PER_USD + (r(2) % VALUE_PER_USD);
   const avgCf = between(r(3), WAD / 2n, (WAD * 85n) / 100n);
@@ -139,18 +139,18 @@ export function sellInput(i: number) {
 }
 
 /** Protect · sell timing inputs. Mirrors Vectors.timingInput: within the executor's Act-only bounds (2026-10-15), the
- *  heads-up line at 1.05–1.10 and the at-once line at least 0.02 under it; the health from 0.98 to 1.20. */
+ *  heads-up line pinned to the Act line (1.10) and the at-once line from 1.05 to 1.08; the health from 0.98 to 1.16. */
 export function timingInput(i: number) {
   const r = (f: number) => rand("timing", i, f);
   const now = 1_792_000_000n;
-  const headsUpHf = between(r(0), (WAD * 105n) / 100n, (WAD * 11n) / 10n);
+  const headsUpHf = (WAD * 11n) / 10n;
   return {
-    hf: between(r(1), (WAD * 98n) / 100n, (WAD * 12n) / 10n),
+    hf: between(r(1), (WAD * 98n) / 100n, (WAD * 116n) / 100n),
     headsUpAt: r(2) % 2n === 0n ? 0n : now - (r(3) % 7_200n),
     now,
     frozen: r(4) % 4n === 0n,
     headsUpHf,
-    nowHf: between(r(5), (WAD * 102n) / 100n, headsUpHf - WAD / 50n),
+    nowHf: between(r(5), (WAD * 105n) / 100n, headsUpHf - WAD / 50n),
     headsUpDelaySec: between(r(6), 600n, 7_200n),
   };
 }
@@ -486,6 +486,8 @@ function defaultsVector() {
   const wad = (x: number) => parseUnits(x.toFixed(4), 18).toString();
   const usdc = (x: number) => parseUnits(x.toFixed(6), 6).toString();
   return {
+    /** The bands the contract's hard bounds sit on (CashRulesTest.test_the_bounds_sit_on_the_apps_bands). */
+    risk: { watchMin: wad(RISK.watchMin), safeMin: wad(RISK.safeMin) },
     triggerHf: wad(CASH_AGENT.triggerHf),
     targetHf: wad(CASH_AGENT.targetHf),
     stressDrop: wad(CASH_AGENT.stressDrop),

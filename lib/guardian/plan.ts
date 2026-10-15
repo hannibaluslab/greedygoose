@@ -139,8 +139,9 @@ function strip<T extends object>(o: T): Partial<T> {
 }
 
 /**
- * Weekend window: Friday from 14:00 until the 20:00 ET freeze, when the weekend heads-up card can show. Nothing
- * moves in it (Act is the line, 2026-10-15).
+ * Weekend window: Friday from 14:00 until the 20:00 ET freeze, with no holiday (Leo's). The weekend heads-up card
+ * reads the executor's own calendar instead (`beforeFreeze` in lib/agents/next.ts), which agrees with this on a week
+ * with no holiday (contracts/test/NyCalendar.t.sol). Nothing moves in it (Act is the line, 2026-10-15).
  */
 export function inWeekendWindow(now: Date = new Date()): boolean {
   const f = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short", hour: "numeric", hourCycle: "h23" });

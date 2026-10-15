@@ -38,7 +38,7 @@ export function useAgentSettings(account: `0x${string}`) {
 
   return useMemo(() => {
     if (!q.data) return null;
-    const [mix, a, [bandBps, bandMaxBps, , floorBps, minTrade, maxSlice], [minRepay], thresholds, sell] = q.data;
+    const [mix, a, [bandBps, bandMaxBps, , floorBps, minTrade, maxSlice], [minRepay, , , weekendWindow], thresholds, sell] = q.data;
     const [triggerHf, targetHf, stressDrop, stressFloorHf] = thresholds;
     const options = rebalanceOptions({ bandBps, bandMaxBps, floorBps, minTrade, maxSlice });
     const numbers: RuleNumbers = {
@@ -47,6 +47,7 @@ export function useAgentSettings(account: `0x${string}`) {
       targetHf: Number(targetHf) / WAD,
       stressDrop: Number(stressDrop) / WAD,
       stressFloorHf: Number(stressFloorHf) / WAD,
+      weekendWindowSec: weekendWindow,
       rebalance: options,
     };
     return {

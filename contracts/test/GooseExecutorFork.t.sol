@@ -5,6 +5,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {console} from "forge-std/console.sol";
 import {Log} from "chainlink/automation/interfaces/ILogAutomation.sol";
 import {GooseExecutor} from "../src/GooseExecutor.sol";
+import {IAeroFactory, IAeroPool, IAeroRouter} from "../src/IProtocols.sol";
 import {ProtectCase, Thresholds} from "../src/CashRules.sol";
 import {DeployExecutor} from "../script/DeployExecutor.s.sol";
 import {ExecutorHarness} from "./ExecutorHarness.sol";
@@ -666,6 +667,63 @@ contract ExecutorPageForkTest is ExecutorForkBase {
         assertTrue(shard1, "shard 1 of 2 owns page 1");
         (bool shard0,) = x.checkUpkeep(abi.encode(uint256(0), uint256(2)));
         assertFalse(shard0, "shard 0 of 2 owns page 0 only");
+    }
+}
+
+/// The same full page on a weekday, where Protect · sell plans too: every account in Act with a cent of savings and
+/// selling on, and every stock's pool too far under Aave's price to fill, so each check reads Protect's savings and
+/// limits, then SellJob's grant, limits and all seven stocks and pools, and finds nothing to do. The weekend page above
+/// skips that planning (prices are held). Measured 2026-10-15: about 21.2M gas for the whole page, so this page does
+/// not fit one check; under Base's 10M check limit the scan stops at CHECK_RESERVE without reverting, and each pass
+/// starts one account further on, so the page is still looked at in full over a few passes.
+contract ExecutorWeekdayPageForkTest is ExecutorForkBase {
+    function setUp() public {
+        _fork();
+        x = _deploy(_config());
+        for (uint256 r; r < STOCKS.length; ++r) {
+            if (STOCKS[r] != NVDAC) _useStockDouble(STOCKS[r]);
+        }
+        for (uint256 i; i < x.PAGE_SIZE(); ++i) {
+            address a = _newJawAccount(string.concat("owes ", vm.toString(i)));
+            _withSavings(a, 0.01e6);
+            _backWithAllStocks(a, 1e8);
+            uint256 drawn = _drawTo(a, 1.08e18);
+            vm.prank(a);
+            USDC.transfer(attacker, drawn);
+            _turnOn(a, GooseExecutor.Job.Protect, 5e6);
+            _turnOn(a, GooseExecutor.Job.Save, 5e6);
+            _turnOnSell(a);
+        }
+        // Every pool's price near zero, whichever side USDC is on: none can fill a sale, so there is nothing to warn
+        // about either.
+        IAeroFactory factory = IAeroFactory(IAeroRouter(x.ROUTER()).factory());
+        for (uint256 r; r < STOCKS.length; ++r) {
+            address pool = factory.getPool(STOCKS[r], address(USDC), 10);
+            assertTrue(pool != address(0), "every stock has its pool");
+            uint160 sqrtPrice = address(USDC) < STOCKS[r] ? uint160(1 << 150) : uint160(1 << 40);
+            vm.mockCall(
+                pool,
+                abi.encodeWithSelector(IAeroPool.slot0.selector),
+                abi.encode(sqrtPrice, int24(0), uint16(0), uint16(0), uint16(0), true)
+            );
+        }
+        vm.roll(vm.getBlockNumber() + vm.getBlockNumber() % 2); // even: shard 0 of 1 scans page 0
+        vm.warp(_nextFridayUtc(vm.getBlockTimestamp()) + 5 days + 16 hours); // a Wednesday, noon in New York
+    }
+
+    function test_a_worst_case_weekday_page_is_checked_over_passes_within_the_10M_limit() public {
+        assertFalse(x.frozen(vm.getBlockTimestamp()), "a weekday, prices live");
+        bytes memory checkData = abi.encode(uint256(0), uint256(1));
+        uint256 before = gasleft();
+        (bool needed,) = x.checkUpkeep(checkData);
+        console.log("worst-case weekday page, whole page in one check, gas:", before - gasleft());
+        assertFalse(needed, "page 0: nothing to do, nothing to sell");
+
+        (bool ok, bytes memory ret) =
+            address(x).staticcall{gas: 10_000_000}(abi.encodeCall(GooseExecutor.checkUpkeep, (checkData)));
+        assertTrue(ok, "the check returns within Base's 10M limit");
+        (needed,) = abi.decode(ret, (bool, bytes));
+        assertFalse(needed);
     }
 }
 

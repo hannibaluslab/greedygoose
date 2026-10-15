@@ -51,10 +51,10 @@ library CashRules {
     uint256 internal constant VALUE_PER_USDC_UNIT = 1e20;
 
     // Hard bounds (D18). Nothing can change them.
-    /// Act is the line (Adrian, 2026-10-15): Protect never steps in above the Act line (1.10, config/risk.ts RISK), so
-    /// no threshold change can make it act in Watch; and never later than 1.05, halfway to Aave's limit at 1.0.
-    uint64 internal constant TRIGGER_HF_MIN = 1.05e18;
-    uint64 internal constant TRIGGER_HF_MAX = 1.1e18;
+    /// Act is the line (Adrian, 2026-10-15): Protect steps in at the Act line (1.10, config/risk.ts RISK) and nowhere
+    /// else. Higher would repay in Watch; lower would leave part of Act without Protect. So the trigger is pinned to it,
+    /// and no threshold change can move it.
+    uint64 internal constant TRIGGER_HF = 1.1e18;
     uint64 internal constant TARGET_GAP_MIN = 0.05e18;
     /// A repay brings the credit back to Watch, never past it: the target stays under the Safe line (1.50).
     uint64 internal constant TARGET_HF_MAX = 1.4e18;
@@ -72,8 +72,7 @@ library CashRules {
     uint8 internal constant MAX_SAVES_MAX = 24;
 
     function thresholdsOk(Thresholds memory t) internal pure returns (bool) {
-        return t.triggerHf >= TRIGGER_HF_MIN && t.triggerHf <= TRIGGER_HF_MAX
-            && t.targetHf >= t.triggerHf + TARGET_GAP_MIN && t.targetHf <= TARGET_HF_MAX
+        return t.triggerHf == TRIGGER_HF && t.targetHf >= TRIGGER_HF + TARGET_GAP_MIN && t.targetHf <= TARGET_HF_MAX
             && t.stressDrop >= STRESS_DROP_MIN && t.stressDrop <= STRESS_DROP_MAX
             && t.stressFloorHf >= STRESS_FLOOR_HF_MIN && t.stressFloorHf <= t.triggerHf;
     }

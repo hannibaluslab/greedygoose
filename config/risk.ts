@@ -40,8 +40,8 @@ export const CREDIT_CAP = {
  * Act is the line (Adrian, 2026-10-15: "watch is ok, it is act that is not"): Protect steps in only below the Act line
  * and brings the credit back to Watch, not to Safe. 1.2 leaves an 8% cushion (1 − 1.1/1.2) before the credit is back
  * in Act, so a normal day's move doesn't set it off again on the next run, and spends well under half of what
- * reaching Safe would: from 1.05, 12.5% of what's owed against 30%. The executor's bounds keep the trigger at or under
- * the Act line and the target under the Safe line.
+ * reaching Safe would: from 1.05, 12.5% of what's owed against 30%. The executor's bounds pin the trigger to the Act
+ * line (contracts/src/CashRules.sol TRIGGER_HF) and keep the target under the Safe line.
  */
 export const CASH_AGENT = {
   /** Protect repays from cash below this health factor (the Act line)… */
@@ -54,7 +54,8 @@ export const CASH_AGENT = {
    */
   stressDrop: 0.15,
   stressFloorHf: RISK.watchMin,
-  /** How long before a freeze the weekend heads-up shows (Friday 14:00–20:00 New York with no holiday). */
+  /** How long before a freeze the weekend heads-up shows (Friday 14:00–20:00 New York with no holiday; the app reads
+   *  the executor's own calendar, so a holiday's eve gets it too). */
   weekendWindowSec: 6 * 3600,
   /** Smallest repay and smallest save worth a run. */
   minRepayUsd: 0.05,
