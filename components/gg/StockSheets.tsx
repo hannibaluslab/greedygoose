@@ -3,15 +3,19 @@
 import { BuySheet } from "./BuySheet";
 import { CreditBuySheet } from "./CreditBuySheet";
 import { StockSheet } from "./StockSheet";
+import { TradeSheet } from "./TradeSheet";
 import { UnlockSheet } from "./UnlockSheet";
 import { useCollateralFactors, type Holding, type PositionData } from "@/hooks/usePosition";
 import { useSheetSubject } from "@/hooks/useSheetSubject";
+import type { TradeAsset } from "@/lib/trade";
 import { EQUITIES, type ReserveAsset } from "@/lib/tokens/registry";
 
 /** The stock sheet's subject: which stock, and whether the Market opened it (its Back returns there). */
 type StockAt = { symbol: string; fromMarket?: boolean };
 /** A flow's subject: its stock (none for the Market or F2-3's picker), and the stock sheet that opened it, to go back to. */
 type FlowAt = { symbol: string | null; back?: StockAt };
+/** The Trade sheet's subject: what it opens on, when not its defaults (Home and Invest pass none). */
+type TradeAt = { from?: TradeAsset; to?: TradeAsset };
 
 /**
  * What the sheets a page shows for its stocks are open for (Home, Invest). `initialBuy` opens the Market, or one
@@ -22,14 +26,17 @@ export function useStockSheets(initialBuy: FlowAt | null = null) {
   const buy = useSheetSubject<FlowAt>(initialBuy);
   const creditBuy = useSheetSubject<FlowAt>();
   const freeUp = useSheetSubject<FlowAt & { symbol: string }>();
+  const trade = useSheetSubject<TradeAt>();
   return {
     stock,
     buy,
     creditBuy,
     freeUp,
+    trade,
     openStock: (symbol: string) => stock.show({ symbol }),
     openMarket: () => buy.show({ symbol: null }),
     openCreditBuy: () => creditBuy.show({ symbol: null }),
+    openTrade: (at: TradeAt = {}) => trade.show(at),
   };
 }
 
@@ -38,10 +45,10 @@ export type StockSheetsState = ReturnType<typeof useStockSheets>;
 /**
  * A stock's sheet and the flows it opens: Buy (Flow 1, whose Market rows open stock sheets), Credit Buy (Flow 2) and
  * Free up shares. One sheet slides out as the next slides in, and a flow opened from a stock's sheet goes Back to it.
- * Stocks resolve through the registry only.
+ * Trade (Home's and Invest's) is its own sheet. Stocks resolve through the registry only.
  */
 export function StockSheets({ sheets, user, data }: { sheets: StockSheetsState; user: `0x${string}`; data: PositionData }) {
-  const { stock, buy, creditBuy, freeUp } = sheets;
+  const { stock, buy, creditBuy, freeUp, trade } = sheets;
   const find = (symbol: string | null | undefined) => {
     const asset = EQUITIES.find((e) => e.symbol === symbol);
     const holding = data.holdings.find((h) => h.symbol === symbol);
@@ -111,6 +118,17 @@ export function StockSheets({ sheets, user, data }: { sheets: StockSheetsState; 
           symbol={creditBuy.subject.symbol}
           onClose={creditBuy.close}
           onBack={backTo(creditBuy, creditBuy.subject.back)}
+        />
+      )}
+      {trade.subject && (
+        <TradeSheet
+          key={`trade${trade.key}`}
+          open={trade.open}
+          user={user}
+          data={data}
+          from={trade.subject.from}
+          to={trade.subject.to}
+          onClose={trade.close}
         />
       )}
       {freeing && freeUp.subject && (

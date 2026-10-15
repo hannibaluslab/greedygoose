@@ -1,0 +1,166 @@
+"use client";
+
+import { useRef, useState, type ReactNode } from "react";
+import { ChevronDown } from "./icons";
+import { StockAvatar } from "./StockAvatar";
+import { useClickAway } from "@/hooks/useClickAway";
+
+/** A picker row: the asset's mark and name, the line under it, the right column and whether it can be picked. */
+export type PickerRow = {
+  id: string;
+  name: string;
+  mark: ReactNode;
+  sub?: string;
+  right?: string;
+  rightSub?: string;
+  disabled?: boolean;
+};
+
+/** The round green "$" for cash, at any size (the kit's AmountBadge is the 30px one). */
+export function CashMark({ size }: { size: number }) {
+  return (
+    <span
+      aria-hidden
+      className="flex shrink-0 items-center justify-center rounded-full bg-pos font-bold leading-none text-white"
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.52) }}
+    >
+      $
+    </span>
+  );
+}
+
+/** The mark for an asset: cash's "$", or the stock's logo. */
+export const assetMark = (asset: string, size: number) => (asset === "cash" ? <CashMark size={size} /> : <StockAvatar symbol={asset} size={size} />);
+
+/** The list's title and padding, and one row, in px: its height before it renders. */
+const MENU_CHROME_PX = 52;
+const ROW_PX = 56;
+/** NYM's flat lists open at least this tall when there's room; less room caps the list to it (it scrolls inside). */
+const MENU_FLOOR_PX = 300;
+const MENU_MIN_PX = 160;
+
+/**
+ * NYM's SourcePill (flat mode) and TokenPicker in the GreedyGoose kit: a pill in the amount card's top right that opens
+ * a list anchored under it, inside the sheet. On open it measures the room in the sheet's scroll area (SourcePill's
+ * openMenu) and flips up when the list doesn't fit below (its rows, up to NYM's 300px) and there's more room above.
+ * Its height is capped to that room, so it never runs off the sheet, and it scrolls inside. A row sets the asset; a
+ * tap away closes the list (useClickAway). Open/closed belongs to the sheet, so Escape closes the list first.
+ */
+export function AssetPicker({
+  label, title, name, mark, rows, selected, open, onToggle, onClose, onPick, disabled,
+}: {
+  /** The pill's accessible name: "Trade from: Cash". */
+  label: string;
+  /** The list's title: "Trade from". */
+  title: string;
+  name: string;
+  mark: ReactNode;
+  rows: PickerRow[];
+  selected: string;
+  open: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+  onPick: (id: string) => void;
+  disabled?: boolean;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [up, setUp] = useState(false);
+  const [maxH, setMaxH] = useState<number>();
+  useClickAway(ref, () => {
+    if (open) onClose();
+  });
+
+  const toggle = () => {
+    if (!open && ref.current) {
+      const r = ref.current.getBoundingClientRect();
+      const scroller = ref.current.closest("[data-sheet-scroll]");
+      const box = scroller?.getBoundingClientRect();
+      const top = box ? box.top : 0;
+      const bottom = box ? box.bottom : (window.visualViewport?.height ?? window.innerHeight);
+      // Clear of the scroll area's own bottom padding (the home indicator), as the sheet's content is.
+      const pad = scroller ? parseFloat(getComputedStyle(scroller).paddingBottom) || 0 : 0;
+      const below = bottom - r.bottom - Math.max(12, pad);
+      const above = r.top - top - 12;
+      const need = Math.min(MENU_CHROME_PX + rows.length * ROW_PX, MENU_FLOOR_PX);
+      const flip = below < need && above > below;
+      setUp(flip);
+      setMaxH(Math.max(MENU_MIN_PX, flip ? above : below));
+    }
+    onToggle();
+  };
+
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={label}
+        disabled={disabled}
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={toggle}
+        // 30px to the eye; the overlay takes the tap target to 44px.
+        className="relative flex h-[30px] items-center gap-1.5 whitespace-nowrap rounded-[15px] bg-pill pl-1.5 pr-2 text-[13px] font-semibold leading-none text-ink transition after:absolute after:-inset-[7px] after:content-[''] active:scale-[0.97] disabled:opacity-45"
+      >
+        {mark}
+        {name}
+        <ChevronDown size={14} className="text-ink-mid" />
+      </button>
+
+      {open && (
+        <div
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+          style={{ maxHeight: maxH }}
+          className={`absolute right-0 z-30 flex w-[min(320px,calc(100vw-40px))] flex-col rounded-[16px] border border-line-field bg-card p-2 shadow-[0_12px_32px_-12px_rgba(14,13,11,0.28)] animate-in fade-in-0 zoom-in-95 duration-150 ${
+            up ? "bottom-full mb-2 origin-bottom-right" : "top-full mt-2 origin-top-right"
+          }`}
+        >
+          <div className="shrink-0 px-2 pb-2 pt-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">{title}</div>
+          <div role="listbox" aria-label={title} className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overscroll-contain">
+            {rows.map((row) => {
+              const on = row.id === selected;
+              return (
+                <button
+                  key={row.id}
+                  type="button"
+                  role="option"
+                  aria-selected={on}
+                  aria-disabled={row.disabled || undefined}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!row.disabled) onPick(row.id);
+                  }}
+                  className={`flex min-h-[52px] w-full shrink-0 items-center gap-3 rounded-[12px] px-2 py-2.5 text-left leading-[normal] transition ${
+                    row.disabled ? "cursor-default opacity-50" : on ? "bg-pill" : "hover:bg-pill active:bg-pill-strong"
+                  }`}
+                >
+                  {row.mark}
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="truncate text-[15px] font-semibold text-ink">{row.name}</span>
+                    {row.sub && <span className="num text-[12px] leading-[1.3] text-ink-mid">{row.sub}</span>}
+                  </span>
+                  {row.right && (
+                    <span className="flex shrink-0 flex-col items-end gap-0.5">
+                      <span className="num text-[14px] font-semibold text-ink">{row.right}</span>
+                      {row.rightSub && <span className="text-[12px] text-subtle">{row.rightSub}</span>}
+                    </span>
+                  )}
+                  {on ? (
+                    <span aria-hidden className="flex size-[22px] shrink-0 items-center justify-center rounded-full bg-brand shadow-[0_0_0_1.5px_#0e0d0b]">
+                      <span className="size-2 rounded-full bg-ink" />
+                    </span>
+                  ) : (
+                    <span aria-hidden className="size-[22px] shrink-0 rounded-full border-[1.5px] border-[#d9d2c3]" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

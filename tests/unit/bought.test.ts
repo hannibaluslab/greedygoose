@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boughtLine } from "@/lib/activity/bought";
+import { boughtLine, tradedLine } from "@/lib/activity/bought";
 
 describe("boughtLine", () => {
   it("says what arrived, the way F1-6 and F2-7 do", () => {
@@ -9,5 +9,12 @@ describe("boughtLine", () => {
 
   it("leaves the figure out when the receipt couldn't be read", () => {
     expect(boughtLine(null, "TSLAc")).toBe("Bought TSLA");
+  });
+});
+
+describe("tradedLine", () => {
+  it("says what a stock → stock trade sold and what arrived", () => {
+    expect(tradedLine(0.0086, "AAPLc", "NVDAc")).toBe("Traded NVDA for 0.0086 AAPL");
+    expect(tradedLine(null, "AAPLc", "NVDAc")).toBe("Traded NVDA for AAPL");
   });
 });
