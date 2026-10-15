@@ -1,9 +1,21 @@
-import { decodeFunctionData, erc20Abi, isAddressEqual, type Abi, type Hex } from "viem";
+import { decodeFunctionData, erc20Abi, isAddressEqual, toFunctionSelector, type Abi, type Hex } from "viem";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import { isMix } from "@/lib/agents/mix";
+import { gooseBoardAbi } from "@/lib/board/abi";
+import { GOOSE_BOARD } from "@/lib/board/config";
+import {
+  decodeListOp,
+  decodeListStorageLocation,
+  efpListMinterAbi,
+  efpListRecordsAbi,
+  EFP_CHAIN_ID,
+  EFP_LIST_MINTER,
+  EFP_LIST_RECORDS,
+  MAX_LIST_OPS,
+} from "@/lib/efp/efp";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { aaveV3PoolAbi } from "@/lib/guardian/abis";
 import { aeroRouterAbi, psm3Abi, swapRouter02Abi } from "@/lib/swap/abis";
@@ -12,8 +24,13 @@ import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { ENTRY_COINS, type EntryVenue } from "@/lib/tokens/stables";
 
 type Address = `0x${string}`;
+/**
+ * What a check may look at besides the call's own arguments: the user's own EFP list slots (the one it already has,
+ * read from Base by the caller, and any minted in the same batch), and the call's raw data.
+ */
+type BatchContext = { listSlots: readonly bigint[]; data: Hex };
 /** True when a call's arguments keep the money with `user`. */
-type ArgsCheck = (args: readonly unknown[], user: Address) => boolean;
+type ArgsCheck = (args: readonly unknown[], user: Address, ctx: BatchContext) => boolean;
 type Rule = { targets: readonly Address[]; abi: Abi; functions: Record<string, ArgsCheck> };
 
 const is = (a: unknown, b: Address) => typeof a === "string" && isAddressEqual(a as Address, b);
@@ -57,10 +74,29 @@ function innerSwap(data: readonly Hex[]): readonly unknown[] | null {
   }
 }
 /** Uniswap's router takes the deadline through multicall: one swap inside, to the user. */
-const swapWithDeadline: ArgsCheck = (args, user) => {
+const swapWithDeadline: ArgsCheck = (args, user, ctx) => {
   const inner = innerSwap(args[1] as readonly Hex[]);
-  return !!inner && swapToUser(ENTRY_AT("uniswap"))(inner, user);
+  return !!inner && swapToUser(ENTRY_AT("uniswap"))(inner, user, ctx);
 };
+
+/** An EFP list location on Base, in the records contract the app reads (lib/efp/read.ts): the slot it mints. */
+function baseListSlot(location: unknown): bigint | null {
+  const loc = typeof location === "string" ? decodeListStorageLocation(location as Hex) : null;
+  return loc && loc.chainId === BigInt(EFP_CHAIN_ID) && isAddressEqual(loc.records, EFP_LIST_RECORDS) ? loc.slot : null;
+}
+/** EFP's easyMint(location): only a list on Base, in that records contract. It mints to the caller, the user. */
+const mintsBaseList: ArgsCheck = (args) => baseListSlot(args[0]) !== null;
+/**
+ * EFP's applyListOps(slot, ops): only the user's own list (its slot read from Base, or minted in the same batch), and
+ * only "add" or "remove" ops of one address each, at most MAX_LIST_OPS of them. No tags, no other record types.
+ */
+const ownListOps: ArgsCheck = (args, _user, ctx) => {
+  const [slot, ops] = args as [bigint, readonly Hex[]];
+  return ctx.listSlots.includes(slot) && ops.length > 0 && ops.length <= MAX_LIST_OPS && ops.every((op) => decodeListOp(op) !== null);
+};
+/** GooseBoard.join(): exactly its selector, nothing after it. */
+const JOIN = toFunctionSelector("join()");
+const bareJoin: ArgsCheck = (args, _user, ctx) => args.length === 0 && ctx.data.toLowerCase() === JOIN;
 
 /**
  * The one allowlist for user-signed batches (CLAUDE.md › Transaction safety): each target, the only
@@ -92,9 +128,12 @@ const RULES: readonly Rule[] = [
     abi: psm3Abi,
     functions: {
       // swapExactIn(assetIn, assetOut, amountIn, minAmountOut, receiver, referralCode)
-      swapExactIn: (args, user) => convertToUser(ENTRY_AT("psm3"))([{ tokenIn: args[0], tokenOut: args[1], recipient: args[4] }], user),
+      swapExactIn: (args, user, ctx) => convertToUser(ENTRY_AT("psm3"))([{ tokenIn: args[0], tokenOut: args[1], recipient: args[4] }], user, ctx),
     },
   },
+  { targets: [EFP_LIST_MINTER], abi: efpListMinterAbi, functions: { easyMint: mintsBaseList } },
+  { targets: [EFP_LIST_RECORDS], abi: efpListRecordsAbi, functions: { applyListOps: ownListOps } },
+  ...(GOOSE_BOARD ? [{ targets: [GOOSE_BOARD], abi: gooseBoardAbi, functions: { join: bareJoin } }] : []),
   ...(GOOSE_EXECUTOR
     ? [
         {
@@ -106,7 +145,22 @@ const RULES: readonly Rule[] = [
     : []),
 ];
 
-export function assertAllowed<C extends { to: Address; data: Hex; value: bigint }>(user: Address, calls: C[]): C[] {
+/**
+ * Throws unless every call is allowed. `own.listSlot` is the user's EFP list slot as read from Base
+ * (lib/efp/read.ts checks the list is the user's own); a batch that mints a list may also write to the slot it mints.
+ */
+export function assertAllowed<C extends { to: Address; data: Hex; value: bigint }>(user: Address, calls: C[], own?: { listSlot?: bigint | null }): C[] {
+  const listSlots: bigint[] = own?.listSlot != null ? [own.listSlot] : [];
+  for (const c of calls) {
+    if (!isAddressEqual(c.to, EFP_LIST_MINTER)) continue;
+    try {
+      const { args } = decodeFunctionData({ abi: efpListMinterAbi, data: c.data });
+      const slot = baseListSlot(args[0]);
+      if (slot !== null) listSlots.push(slot);
+    } catch {
+      /* blocked below */
+    }
+  }
   for (const c of calls) {
     const rule = RULES.find((r) => r.targets.some((t) => isAddressEqual(t, c.to)));
     if (!rule) throw new Error(`Blocked: unexpected target ${c.to}`);
@@ -119,7 +173,7 @@ export function assertAllowed<C extends { to: Address; data: Hex; value: bigint 
     }
     const check = Object.hasOwn(rule.functions, call.functionName) ? rule.functions[call.functionName] : undefined;
     if (!check) throw new Error(`Blocked: unexpected call to ${c.to}`);
-    if (!check(call.args ?? [], user)) {
+    if (!check(call.args ?? [], user, { listSlots, data: c.data })) {
       throw new Error(
         call.functionName === "approve"
           ? `Blocked: unexpected spender ${call.args?.[0]}`

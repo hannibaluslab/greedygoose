@@ -11,6 +11,7 @@ import { NOT_ATOMIC, atomicSend } from "@/lib/jaw/capabilities";
 import type { Call } from "@/lib/aave/tx";
 import type { ActivityItem } from "@/lib/activity/decode";
 import { addLocal, updateLocal } from "@/lib/activity/local";
+import { withBoardJoin } from "@/lib/board/join";
 
 export type TxPhase = "idle" | "simulating" | "signing" | "pending" | "done" | "failed";
 
@@ -23,6 +24,8 @@ export class TxStop extends Error {}
  * No optimistic state: "done" only after the batch lands. `calls` can be built at signing time, from
  * reads that must be fresh (a quote): that runs in the "simulating" phase, and a TxStop shows its words.
  * When JAW reports `atomic`, every batch requires it (atomicSend).
+ * An account's first move also puts it on the leaderboard: GooseBoard.join() rides at the end of that batch, whatever
+ * the move is, so no flow can leave it out and it never costs a prompt of its own (lib/board/join.ts).
  */
 export function useTx(failedOnChain = "This didn’t go through on Base. Nothing moved except any network fee.") {
   const client = usePublicClient({ chainId: CHAIN_ID });
@@ -66,7 +69,7 @@ export function useTx(failedOnChain = "This didn’t go through on Base. Nothing
     setPhase("simulating");
     let batch: Call[];
     try {
-      batch = typeof calls === "function" ? await calls() : calls;
+      batch = await withBoardJoin(client!, user, typeof calls === "function" ? await calls() : calls);
       const sim = await client!.simulateCalls({ account: user, calls: batch.map(({ to, data }) => ({ to, data })) });
       const bad = sim.results.findIndex((r) => r.status !== "success");
       if (bad >= 0) {
