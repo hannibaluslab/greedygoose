@@ -118,8 +118,7 @@ export function CreditSheet({
             disabled={data.debtUsd <= 0}
             onClick={() => {
               onClose();
-              if (onBuyMore) money.repayWithMarket(onBuyMore);
-              else money.repay();
+              money.repay();
             }}
           >
             Repay

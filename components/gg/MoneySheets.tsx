@@ -14,10 +14,7 @@ const PARAM: Record<MoneySheet, string> = { "top-up": "topup", repay: "repay" };
 /** Where each sheet's old page was, for a component drawn outside the host (the dev gallery): it redirects back here. */
 const ROUTE: Record<MoneySheet, string> = { "top-up": "/receive", repay: "/repay" };
 
-/** What Repay opened for: on a page that has the Market (Invest), "Buy more with credit" opens it there. */
-type RepayAt = { openMarket?: () => void };
-
-const OpenSheet = createContext<((sheet: MoneySheet, at?: RepayAt) => void) | null>(null);
+const OpenSheet = createContext<((sheet: MoneySheet) => void) | null>(null);
 
 /**
  * Opens Top up or Repay over the page. Called from inside another sheet, close that one first: one sheet slides out
@@ -27,12 +24,10 @@ const OpenSheet = createContext<((sheet: MoneySheet, at?: RepayAt) => void) | nu
 export function useMoneySheets() {
   const open = useContext(OpenSheet);
   const router = useRouter();
-  const go = (sheet: MoneySheet, at?: RepayAt) => (open ? open(sheet, at) : router.push(ROUTE[sheet]));
+  const go = (sheet: MoneySheet) => (open ? open(sheet) : router.push(ROUTE[sheet]));
   return {
     topUp: () => go("top-up"),
     repay: () => go("repay"),
-    /** Repay on a page whose Market is a sheet (Invest): its "Buy more with credit" opens that Market. */
-    repayWithMarket: (openMarket: () => void) => go("repay", { openMarket }),
   };
 }
 
@@ -51,7 +46,7 @@ function linked(): MoneySheet | null {
 export function MoneySheets({ address, children }: { address: `0x${string}`; children: ReactNode }) {
   const [initial] = useState(linked);
   const topUp = useSheetSubject<true>(initial === "top-up" ? true : null);
-  const repay = useSheetSubject<RepayAt>(initial === "repay" ? {} : null);
+  const repay = useSheetSubject<true>(initial === "repay" ? true : null);
 
   // The query that opened a sheet goes once it has: a reload or Back doesn't open it again. The rest of the query stays.
   useEffect(() => {
@@ -62,13 +57,13 @@ export function MoneySheets({ address, children }: { address: `0x${string}`; chi
     window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
   }, []);
 
-  const open = (sheet: MoneySheet, at: RepayAt = {}) => {
+  const open = (sheet: MoneySheet) => {
     if (sheet === "top-up") {
       repay.close();
       topUp.show(true);
     } else {
       topUp.close();
-      repay.show(at);
+      repay.show(true);
     }
   };
 
@@ -83,7 +78,6 @@ export function MoneySheets({ address, children }: { address: `0x${string}`; chi
           address={address}
           onClose={repay.close}
           onTopUp={() => open("top-up")}
-          onBuyMore={repay.subject.openMarket}
         />
       )}
     </OpenSheet.Provider>

@@ -276,7 +276,7 @@ export function assertAllowed<C extends { to: Address; data: Hex; value: bigint 
   return calls;
 }
 
-export type SwapParams = { tokenIn: Address; tokenOut: Address; recipient: Address; amountIn: bigint };
+export type SwapParams = { tokenIn: Address; tokenOut: Address; recipient: Address; amountIn: bigint; amountOutMinimum: bigint };
 
 /** The swap a router call makes (Uniswap's inside its multicall), or null when the call isn't a swap. */
 export function swapOf(c: { to: Address; data: Hex }): { router: Address; params: SwapParams } | null {
