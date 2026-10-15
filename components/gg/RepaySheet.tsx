@@ -34,10 +34,11 @@ import {
   type RepayView,
 } from "@/lib/repay";
 
-/** What's owed, rounded up to the dollar as on Home's Credit card: never shown as less than it is. */
-const owed = (usd: number) => formatUsdTrim(Math.max(0, Math.ceil(usd)));
 /** What's owed after, rounded up to the cent: a small repay still shows what it changes ("$2.01", "$0"). */
 const owedAfter = (usd: number) => formatUsdTrim(Math.max(0, Math.ceil(usd * 100 - 1e-6) / 100));
+// Rounded up, never shown as less than it is: to the cent under $1,000 ("$4.01", where whole dollars read "$5" for
+// $4.01 owed and didn't add up with "You owe after"), to the dollar above.
+const owed = (usd: number) => (usd < 1000 ? owedAfter(usd) : formatUsdTrim(Math.max(0, Math.ceil(usd))));
 /** A tap on the dim that just closed the Pay with list doesn't also close the sheet (the dim reports it after the list). */
 const MENU_TAP_MS = 500;
 /** The mark for a source: cash's "$", or the stock's logo. */
