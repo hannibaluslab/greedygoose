@@ -34,7 +34,7 @@ export function useCreditBuyBatch() {
     if (stop) throw new TxStop(stop);
     const quote = await quoteToSign(p.stock, p.quote);
     const cash = await cashToSign(p.user, quote.amountIn - p.plan.creditRaw);
-    return buildCreditBuyCalls({ user: p.user, stock: p.stock, quote, creditRaw: p.plan.creditRaw, backing: p.plan.backing, cash });
+    return buildCreditBuyCalls({ user: p.user, stock: p.stock, quote, creditRaw: p.plan.creditRaw, backing: p.plan.backing, limit: p.plan.limit, cash });
   };
 }
 

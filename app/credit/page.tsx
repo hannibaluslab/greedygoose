@@ -46,7 +46,7 @@ function Credit({ address }: { address: `0x${string}` }) {
           <WhiteCard className="px-[18px] pb-1 pt-1">
             <Line first label="Credit rate" value={`${formatPct(data.apr)} a year, variable`} />
             <Line label="Health factor" value={data.healthFactor === null ? "—" : data.healthFactor.toFixed(2)} />
-            <Line label="USDC Aave can still lend" value={formatUsd(data.usdcLiquidity)} />
+            <Line label="Credit left to give out" value={formatUsd(data.usdcLiquidity)} />
             <Line label="Network" value="Base" />
           </WhiteCard>
 

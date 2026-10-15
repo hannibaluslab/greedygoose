@@ -62,6 +62,7 @@ describe("a Credit Buy's key", () => {
   const plan = {
     creditRaw: 15_000_000n,
     backing: [{ stock: aapl, raw: 5_000_000n, usd: 10 }],
+    limit: { maxCreditRaw: 500_000_000n, freeRaw: { AAPLc: 5_000_000n } },
     before: "safe",
     after: "watch",
     hfAfter: 1.3,
@@ -240,6 +241,7 @@ describe("Earn with stocks' key", () => {
   const plan = {
     creditRaw: 100_000_000n,
     backing: [{ stock: aapl, raw: 5_000_000n, usd: 200 }],
+    limit: { maxCreditRaw: 900_000_000n, freeRaw: { AAPLc: 5_000_000n } },
     before: "safe",
     after: "safe",
     hfAfter: 2,

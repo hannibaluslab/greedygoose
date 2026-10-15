@@ -227,6 +227,7 @@ export function earnQuote(p: {
 export const EARN_BLOCKED: Record<CreditBlock, string> = {
   paused: EARN_CLOSED.paused,
   "no-liquidity": "There isn’t enough credit available right now. Try a smaller amount.",
+  "over-free": CREDIT_BLOCKED["over-free"],
   "too-much": "That’s more credit than your stocks can back right now. Try a smaller amount.",
   fee: CREDIT_BLOCKED.fee,
 };
