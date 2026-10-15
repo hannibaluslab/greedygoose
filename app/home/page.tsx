@@ -124,8 +124,7 @@ function Loaded({
   dim: boolean;
 }) {
   const held = data.holdings.filter((h) => h.freeShares + h.lockedShares > 0);
-  // Before the first stock, the line is the market's week: the seven stocks, each weighted the same.
-  const market = useMarketPrices(held.length > 0 ? held : data.holdings);
+  const market = useMarketPrices(held);
   const priced = held.map((h) => ({ valueUsd: h.freeUsd + h.lockedUsd, ...market.bySymbol[h.symbol] }));
   const today = dayChange(priced, data.stocksUsd + data.cashUsd);
 
@@ -154,20 +153,7 @@ function Loaded({
               ),
           }}
         />
-        {held.length > 0 ? (
-          <ValueLine points={weekValue(priced)} height={68} loading={market.loading} onRetry={market.retry} />
-        ) : (
-          <ValueLine
-            points={weekValue(data.holdings.map((h) => ({ valueUsd: 1, ...market.bySymbol[h.symbol] })))}
-            height={68}
-            loading={market.loading}
-            onRetry={market.retry}
-            label="The seven stocks over the last 7 days, each weighted the same, at market prices"
-            caption="Market · 7 days"
-            // Not the user's money: no green or red for it.
-            neutral
-          />
-        )}
+        <BalanceLine held={held.length > 0} stockWeek={weekValue(priced)} cashUsd={data.cashUsd} loading={market.loading} onRetry={market.retry} />
         <MarketBanner />
       </section>
 
@@ -260,5 +246,28 @@ function EmptyPortfolio() {
         <p className="m-0 text-[13px] leading-[1.4] text-ink-mid">{EQUITIES.map((e) => e.name).join(", ")}.</p>
       </div>
     </div>
+  );
+}
+
+/**
+ * The line under the hero is the total balance's week (Adrian): what's held now, at each day's market prices, plus
+ * the cash, so it ends on the big number. With no stocks it's the cash alone, a flat line; a flat line is neither
+ * green nor red.
+ */
+function BalanceLine({
+  held, stockWeek, cashUsd, loading, onRetry,
+}: { held: boolean; stockWeek: number[] | null; cashUsd: number; loading: boolean; onRetry: () => void }) {
+  const points = held ? (stockWeek ? stockWeek.map((v) => v + cashUsd) : null) : [cashUsd, cashUsd];
+  const flat = !!points && points[0] === points[points.length - 1];
+  return (
+    <ValueLine
+      points={points}
+      height={68}
+      loading={held && loading}
+      onRetry={onRetry}
+      label="What your total balance was worth over the last 7 days: what you hold now, at market prices"
+      caption="Total balance · 7 days"
+      neutral={flat}
+    />
   );
 }
