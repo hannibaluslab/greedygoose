@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { keepPreviousData, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useBlockNumber, usePublicClient } from "wagmi";
 import type { Address, Log } from "viem";
@@ -10,7 +10,7 @@ import { useNowSec } from "@/hooks/useNowSec";
 import { CHAIN_ID } from "@/lib/chain";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { LOG_CHUNK, WEEK_BLOCKS, logChunks } from "@/lib/agents/history";
-import { arrivalTxs, arrivalsOf, readArrivalLogs } from "@/lib/activity/arrivals";
+import { arrivalTxs, arrivalsOf, rateLimited, readArrivalLogs } from "@/lib/activity/arrivals";
 import { cashRows, type Arrival } from "@/lib/cashActivity";
 
 /** A chunk this many blocks behind the head is final, and kept (as useAgentFeed keeps its own). */
@@ -26,7 +26,8 @@ export type CashFeedError = "all" | "some" | null;
  * The Cash sheet's activity for the last 7 days: Activity's own sources filtered to the cash (the user's moves from
  * JAW's history and their receipts, and the executor's moves), plus money someone else sent, read from USDC's Transfer
  * logs to the account in useAgentFeed's chunks. Mounted only while the sheet is open; a chunk the chain has moved past
- * is read once and kept, so opening it again reads only the newest one.
+ * is read once and kept, so opening it again reads only the newest one. Only the first read shows the skeleton: after
+ * it, each new block's read keeps the rows and the notice on screen until it settles (no flicker on a busy RPC).
  */
 export function useCashActivity(account: Address) {
   const client = usePublicClient({ chainId: CHAIN_ID });
@@ -53,6 +54,8 @@ export function useCashActivity(account: Address) {
     queryKey: ["cashArrivals", account, String(from), String(head.data)],
     enabled: !!client && from !== undefined,
     placeholderData: keepPreviousData,
+    // A rate limit isn't asked again at once (viem's transport already retried it): the next block reads again.
+    retry: (n, e) => !rateLimited(e) && n < 3,
     queryFn: async () => {
       const to = head.data!;
       const settled = to - SETTLED_BLOCKS;
@@ -112,8 +115,8 @@ export function useCashActivity(account: Address) {
 
   const arrivalsFailed = head.isError || logs.isError || receipts.some((q) => q.isError) || times.some((q) => q.isError);
   const failed = [own.isError, !!GOOSE_EXECUTOR && feed.isError, arrivalsFailed];
-  const error: CashFeedError = failed.every((f, i) => f || (i === 1 && !GOOSE_EXECUTOR)) ? "all" : failed.some(Boolean) ? "some" : null;
-  const loading =
+  const live: CashFeedError = failed.every((f, i) => f || (i === 1 && !GOOSE_EXECUTOR)) ? "all" : failed.some(Boolean) ? "some" : null;
+  const reading =
     own.isLoading ||
     feed.isLoading ||
     head.isPending ||
@@ -121,9 +124,15 @@ export function useCashActivity(account: Address) {
     receipts.some((q) => q.isPending) ||
     times.some((q) => q.isPending);
 
+  // What was shown once everything settled: null until the first read has. A new block's read (a new query, which
+  // starts pending when the last one failed) keeps that on screen instead of the skeleton, until it settles too.
+  const [settled, setSettled] = useState<{ error: CashFeedError } | null>(null);
+  if ((!reading || live === "all") && settled?.error !== live) setSettled({ error: live });
+  const error = reading && settled ? settled.error : live;
+
   return {
     rows,
-    loading: loading && error !== "all",
+    loading: settled === null && reading && live !== "all",
     error,
     retry: () => {
       void own.refetch();

@@ -25,9 +25,14 @@ import { USDC } from "@/lib/tokens/registry";
 /**
  * What Save can move today (lib/earnWithStocks.ts saveRoomRaw): what's left of the Save grant's daily limit
  * (useAgents' `left`, the manager's period), and the executor's own numbers and count, read while the sheet is open.
- * Null until it's all read, or while Save isn't on (there's no period to read).
+ * `room` is null until it's all read, or while Save isn't on (there's no period to read); `unread` once a read failed.
  */
-function useSaveRoom(account: `0x${string}`, walletRaw: bigint, enabled: boolean, left: ReturnType<typeof useAgents>["left"]): SaveRoomInput | null {
+function useSaveRoom(
+  account: `0x${string}`,
+  walletRaw: bigint,
+  enabled: boolean,
+  agents: Pick<ReturnType<typeof useAgents>, "left" | "leftUnreadable">,
+): { room: SaveRoomInput | null; unread: boolean } {
   const at = GOOSE_EXECUTOR ?? zeroAddress;
   const reads = useReadContracts({
     contracts: [
@@ -38,18 +43,22 @@ function useSaveRoom(account: `0x${string}`, walletRaw: bigint, enabled: boolean
     query: { enabled: enabled && !!GOOSE_EXECUTOR, refetchInterval: 20_000 },
   });
   const nowSec = useNowSec();
-  const leftRaw = left.save?.find((s) => isAddressEqual(s.token as `0x${string}`, USDC.address))?.leftRaw;
-  if (!reads.data || leftRaw === undefined || !nowSec) return null;
+  const leftRaw = agents.left.save?.find((s) => isAddressEqual(s.token as `0x${string}`, USDC.address))?.leftRaw;
+  const unread = enabled && ((reads.isError && !reads.data) || agents.leftUnreadable);
+  if (!reads.data || leftRaw === undefined || !nowSec) return { room: null, unread };
   const [acc, amounts] = reads.data;
   return {
-    leftRaw,
-    walletRaw,
-    keepBackRaw: amounts[2],
-    minSaveRaw: amounts[1],
-    savesDay: acc[4],
-    savesToday: acc[5],
-    maxSavesPerDay: amounts[4],
-    nowSec,
+    room: {
+      leftRaw,
+      walletRaw,
+      keepBackRaw: amounts[2],
+      minSaveRaw: amounts[1],
+      savesDay: acc[4],
+      savesToday: acc[5],
+      maxSavesPerDay: amounts[4],
+      nowSec,
+    },
+    unread,
   };
 }
 
@@ -62,7 +71,7 @@ export function useEarnOffer(account: `0x${string}`, data: PositionData, save: A
   const agents = useAgents(account);
   const cfs = useCollateralFactors(open ? data.holdings : undefined);
   const options = useMemo(() => (cfs ? backingOptions(data.holdings, cfs) : undefined), [cfs, data.holdings]);
-  const room = useSaveRoom(account, data.cash.walletRaw, open && save === "on", agents.left);
+  const { room, unread } = useSaveRoom(account, data.cash.walletRaw, open && save === "on", agents);
   const offer = earnOffer({
     save,
     cashApy: aprToApy(data.savingsApr),
@@ -71,6 +80,7 @@ export function useEarnOffer(account: `0x${string}`, data: PositionData, save: A
     options,
     cash: data.cash,
     room,
+    unread,
   });
   return { offer, options: options ?? [], protect: agents.status.protect, sell: agents.status.sell, capMaxRaw: agents.capMaxRaw };
 }

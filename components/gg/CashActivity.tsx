@@ -61,6 +61,7 @@ export function CashFeed({
       <FeedCard>
         {loading ? (
           <div aria-busy className="flex flex-col gap-3 py-3.5">
+            <span className="sr-only">Loading activity</span>
             {[0, 1, 2].map((i) => <div key={i} className="h-10 animate-pulse rounded-[16px] bg-chip" />)}
           </div>
         ) : error === "all" ? (

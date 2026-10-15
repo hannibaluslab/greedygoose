@@ -19,6 +19,7 @@ import {
   earnRates,
   earnRiskLine,
   earnSmallPrint,
+  earnSmallText,
   earnStop,
   marginalApy,
   minEarnUsd,
@@ -88,8 +89,17 @@ describe("earnOffer: whether the Cash sheet offers it", () => {
     expect(earnOffer(input({ room: null }))).toEqual({ kind: "loading" });
   });
 
+  it("says one line instead of a skeleton once a read it waits on failed", () => {
+    expect(earnOffer(input({ room: null, unread: true }))).toMatchObject({ kind: "closed", why: "unread", text: "We couldn’t check this right now. Try again in a moment." });
+    expect(earnOffer(input({ options: undefined, unread: true }))).toMatchObject({ kind: "closed", why: "unread" });
+    // Once everything it needs is read, a failed refresh doesn't take the offer away.
+    expect(earnOffer(input({ unread: true }))).toMatchObject({ kind: "offer" });
+    // Earning off still says so first.
+    expect(earnOffer(input({ save: "off", room: null, unread: true }))).toMatchObject({ why: "off" });
+  });
+
   it("asks to start earning first: cash earns only through Save", () => {
-    expect(earnOffer(input({ save: "off" }))).toMatchObject({ kind: "closed", why: "off", text: "Your cash isn’t earning yet. Start earning first." });
+    expect(earnOffer(input({ save: "off" }))).toMatchObject({ kind: "closed", why: "off", text: "Start earning first. Then Earn with stocks opens." });
     expect(earnOffer(input({ save: "starting" }))).toMatchObject({ kind: "closed", why: "starting", text: EARN_CLOSED.starting });
     // Off doesn't wait on the rest.
     expect(earnOffer(input({ save: "off", options: undefined, room: null }))).toMatchObject({ kind: "closed", why: "off" });
@@ -168,6 +178,16 @@ describe("earnOffer: caps", () => {
     expect(minEarnUsd(room({ minSaveRaw: usdc(10), walletRaw: usdc(5) }))).toBe(6);
   });
 
+  it("says the stocks can back some, just under the smallest amount, when Save's smallest save raised it", () => {
+    const small = earnOffer(input({ position: position({ collateralUsd: 0 }), options: [option(10)], room: room({ minSaveRaw: usdc(10) }) }));
+    expect(small).toMatchObject({ kind: "closed", why: "small", text: "Earn with stocks starts at $10, and your stocks can back less right now." });
+    expect(small.kind === "closed" && small.text).toBe(earnSmallText(10));
+    // Under $1 they can't back more at all.
+    expect(earnOffer(input({ position: position({ collateralUsd: 0 }), options: [option(1)], room: room({ minSaveRaw: usdc(10) }) }))).toMatchObject({ why: "credit" });
+    // When today's room is what's short, it's today.
+    expect(earnOffer(input({ room: room({ minSaveRaw: usdc(10), leftRaw: usdc(5) }) }))).toMatchObject({ why: "today" });
+  });
+
   it("says the Safe line under the credit cap when it's lower", () => {
     const o = open(earnOffer(input({ room: room({ leftRaw: usdc(5_000) }) })));
     expect(o.limitedBy).toBe("credit");
@@ -198,6 +218,8 @@ describe("earnQuote: one amount", () => {
 
   it("charges this credit what it adds to the whole debt's cost: a premium rise lowers what's left", () => {
     expect(marginalApy({ debtUsd: 1_000, amountUsd: 100, apyNow: 0.0214, apyAfter: 0.023 })).toBeCloseTo(0.039, 6);
+    // A premium drop on the existing debt isn't counted as this credit being cheaper: never under its own rate.
+    expect(marginalApy({ debtUsd: 1_000, amountUsd: 100, apyNow: 0.025, apyAfter: 0.02 })).toBe(0.02);
     const big = position({ debtUsd: 1_000, collateralUsd: 5_000, healthFactor: 3.5 });
     const rise = quote(100, { pos: big, after: 0.023 });
     expect(rise.q).toMatchObject({ cost: 39, left: 2 });
@@ -267,6 +289,7 @@ describe("the words around the button", () => {
   it("never says borrow, loan, leverage or lock", () => {
     const all = [
       ...Object.values(EARN_CLOSED),
+      earnSmallText(10),
       EARN_COSTS_MORE,
       earnRiskLine({ names: ["Tesla"], protect: "off", sell: "off" }),
       earnSmallPrint({ backing: [{ symbol: "TSLAc", shares: 1 }], amountUsd: 5, owedUsd: 5, backedBy: ["Tesla"], risk: "" }),

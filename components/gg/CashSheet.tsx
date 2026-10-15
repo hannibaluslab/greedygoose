@@ -14,26 +14,23 @@ import { useFeeSupport } from "@/hooks/useFeeSupport";
 import type { PositionData } from "@/hooks/usePosition";
 import type { AgentStatus } from "@/lib/agents/status";
 import { owedBeside } from "@/lib/cashActivity";
-import { rateText, type ArrivedView } from "@/lib/cashSetup";
-import { earnDone, type EarnOffer } from "@/lib/earnWithStocks";
+import type { ArrivedView } from "@/lib/cashSetup";
+import { earnDone, earnTenths, pctText, type EarnOffer, type EarnOpen } from "@/lib/earnWithStocks";
 
 type Step = "cash" | "earn";
 
-/** The lead under the title, by earning's state (D20: the cash is one pot that earns). */
+/**
+ * The lead under the title, by earning's state (D20: the cash is one pot that earns). The rate is the Earn with stocks
+ * card's (rounded down to a tenth), so the sheet says one rate. Off says nothing more: the amount's line already does.
+ */
 export function cashLead(save: AgentStatus, apy: number): string {
-  if (save === "on") return `Ready to spend, and earning ${rateText(apy)} a year while it waits.`;
+  if (save === "on") return `Ready to spend, and earning ${pctText(earnTenths(apy))} a year while it waits.`;
   if (save === "starting") return "Ready to spend. It starts earning in a moment.";
-  if (save === "off") return "Ready to spend. It isn’t earning yet.";
   return "Ready to spend.";
 }
 
-/**
- * The cash, big, as the kit draws money, with the Cash card's own line under it; and only when something is owed, what
- * is owed beside it and how it's repaid (owedBeside: the cash has no credit part on screen, since once credit lands it
- * is the same USDC as the rest; docs/JUSTALAB-DECISIONS.md, "Cash sheet").
- */
+/** The cash, big, as the kit draws money, with the Cash card's own line under it. */
 export function CashAmount({ data, arrived }: { data: PositionData; arrived: ArrivedView }) {
-  const owed = owedBeside(data.debtUsd, data.cash);
   return (
     <div className="flex flex-col gap-2 rounded-[22px] bg-card p-4 shadow-card-elev">
       <div className="flex items-center justify-between">
@@ -44,16 +41,26 @@ export function CashAmount({ data, arrived }: { data: PositionData; arrived: Arr
       <span className="text-[13px] text-ink-mid">
         {arrived.kind === "arriving" ? `${arrived.text} arriving` : data.cash.saveOn ? "Always earning" : "Not earning yet"}
       </span>
-      {owed && (
-        <div className="mt-1 flex flex-col gap-1 border-t border-hairline pt-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[15px] text-ink-mid">You owe on credit</span>
-            <span className="text-[15px] font-semibold">{owed.owed}</span>
-          </div>
-          <span className="text-[12.5px] text-subtle">{owed.line}</span>
-        </div>
-      )}
     </div>
+  );
+}
+
+/**
+ * Only when something is owed: what is owed and how it's repaid, in its own card under the cash, not inside it
+ * (owedBeside: the cash has no credit part on screen, since once credit lands it is the same USDC as the rest, and a
+ * Credit Buy's debt never sat in the cash at all; docs/JUSTALAB-DECISIONS.md, "Cash sheet").
+ */
+export function CashOwed({ data }: { data: PositionData }) {
+  const owed = owedBeside(data.debtUsd, data.cash);
+  if (!owed) return null;
+  return (
+    <section aria-label="Credit" className="flex flex-col gap-1 rounded-[22px] bg-card px-4 py-3.5 shadow-card-elev">
+      <div className="flex items-center justify-between">
+        <span className="text-[15px] text-ink-mid">You owe on credit</span>
+        <span className="text-[15px] font-semibold">{owed.owed}</span>
+      </div>
+      <span className="text-[12.5px] text-subtle">{owed.line}</span>
+    </section>
   );
 }
 
@@ -72,6 +79,7 @@ export function CashStep({ data, arrived, offer, onEarn, activity }: { data: Pos
   return (
     <>
       <CashAmount data={data} arrived={arrived} />
+      <CashOwed data={data} />
       <EarnCard offer={offer} onOpen={onEarn} />
       {activity}
       <CashFooter owes={data.debtUsd > 0} />
@@ -136,9 +144,14 @@ export function CashSheet({
     reset();
   }, [phase, reset, sent, txHash]);
 
+  // The offer the batch was signed on stays while it confirms: the credit landing can close the live offer (the wallet
+  // grows, so Save's room shrinks) before the receipt is read, and the step mustn't drop back mid-confirmation.
+  const [signedOn, setSignedOn] = useState<EarnOpen | null>(null);
+  const offer: EarnOpen | null = earn.offer.kind === "offer" ? earn.offer : tx.busy ? signedOn : null;
+
   const preview = !signer || !isAddressEqual(signer, account);
   const feeBlocked = !!signer && fee.state === "unsupported" ? "Your account can’t pay network fees in USDC on Base right now." : null;
-  const earning = step === "earn" && earn.offer.kind === "offer";
+  const earning = step === "earn" && offer !== null;
 
   return (
     <SheetShell
@@ -150,11 +163,11 @@ export function CashSheet({
       onBack={earning ? () => !tx.busy && go("cash") : undefined}
     >
       <SheetSteps stepKey={earning ? "earn" : "cash"} direction={direction} className="num flex flex-col gap-4 leading-[normal]">
-        {earning && earn.offer.kind === "offer" ? (
+        {earning ? (
           <EarnStep
             user={account}
             data={data}
-            offer={earn.offer}
+            offer={offer}
             options={earn.options}
             protect={earn.protect}
             sell={earn.sell}
@@ -166,7 +179,8 @@ export function CashSheet({
             onEarn={(quote, confirmedRisk) => {
               if (tx.phase === "failed") tx.reset();
               setSent(quote.amountUsd);
-              void tx.earn({ user: account, quote, offer: earn.offer as Extract<EarnOffer, { kind: "offer" }>, confirmedRisk });
+              setSignedOn(offer);
+              void tx.earn({ user: account, quote, offer, confirmedRisk });
             }}
           />
         ) : (

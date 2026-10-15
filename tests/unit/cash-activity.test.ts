@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { encodeAbiParameters, encodeEventTopics, erc20Abi, getAbiItem, type Hex, type Log } from "viem";
+import { HttpRequestError, LimitExceededRpcError, RpcRequestError, encodeAbiParameters, encodeEventTopics, erc20Abi, getAbiItem, type Hex, type Log } from "viem";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
-import { arrivalTxs, arrivalsOf } from "@/lib/activity/arrivals";
+import { arrivalTxs, arrivalsOf, rateLimited } from "@/lib/activity/arrivals";
 import type { ActivityItem } from "@/lib/activity/decode";
 import type { AgentEvent } from "@/lib/agents/events";
 import { describeAgentEvent, type MoveContext } from "@/lib/agents/feed";
@@ -175,8 +175,28 @@ describe("money someone else sent", () => {
   });
 
   it("reads each transaction once, newest first", () => {
-    const logs = [transfer(other, user, 1n, tx(8), 10n), transfer(other, user, 2n, tx(9), 12n), transfer(other, user, 3n, tx(8), 10n)];
+    const logs = [transfer(other, user, usdc(1), tx(8), 10n), transfer(other, user, usdc(2), tx(9), 12n), transfer(other, user, usdc(3), tx(8), 10n)];
     expect(arrivalTxs(logs)).toEqual([{ hash: tx(9), blockNumber: 12n }, { hash: tx(8), blockNumber: 10n }]);
+  });
+
+  it("leaves out transactions that brought under a cent in all, before any receipt is fetched", () => {
+    const logs = [
+      transfer(other, user, 9_999n, tx(5), 20n), // dust: no receipt to fetch
+      transfer(other, user, 6_000n, tx(6), 21n), // two sub-cent transfers that add up to a cent or more
+      transfer(other, user, 4_000n, tx(6), 21n),
+      transfer(other, user, 10_000n, tx(7), 22n), // exactly a cent
+    ];
+    expect(arrivalTxs(logs)).toEqual([{ hash: tx(7), blockNumber: 22n }, { hash: tx(6), blockNumber: 21n }]);
+  });
+
+  it("doesn't ask again at once when the RPC rate-limits it", () => {
+    expect(rateLimited(new HttpRequestError({ status: 429, url: "https://mainnet.base.org" }))).toBe(true);
+    expect(rateLimited(new LimitExceededRpcError(new Error("limit")))).toBe(true);
+    // Base's public RPC: HTTP 429 with a JSON-RPC body viem reads as code -32011.
+    expect(rateLimited(new RpcRequestError({ body: {}, error: { code: -32011, message: "request limit reached" }, url: "https://mainnet.base.org" }))).toBe(true);
+    expect(rateLimited(new RpcRequestError({ body: {}, error: { code: -32000, message: "header not found" }, url: "https://mainnet.base.org" }))).toBe(false);
+    expect(rateLimited(new HttpRequestError({ status: 503, url: "https://mainnet.base.org" }))).toBe(false);
+    expect(rateLimited(new Error("network"))).toBe(false);
   });
 
   it("reads as Received, with no sender", () => {

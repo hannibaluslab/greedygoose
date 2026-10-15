@@ -45,11 +45,13 @@ export function earnRates(cashApy: number, creditApy: number): EarnRates {
 
 /**
  * What this credit costs a year as a rate on it (an APY): the rate and the risk premium apply to the whole debt, so
- * taking more can raise what the existing debt costs too. That rise is this credit's cost.
+ * taking more can raise what the existing debt costs too. That rise is this credit's cost. Never less than the rate
+ * the credit itself pays once it lands: if new backing ever lowered the premium on the existing debt, that saving
+ * isn't counted as this credit being cheaper, so the gap shown stays a floor.
  */
 export function marginalApy(p: { debtUsd: number; amountUsd: number; apyNow: number; apyAfter: number }): number {
   if (p.amountUsd <= 0) return p.apyAfter;
-  return ((p.debtUsd + p.amountUsd) * p.apyAfter - p.debtUsd * p.apyNow) / p.amountUsd;
+  return Math.max(p.apyAfter, ((p.debtUsd + p.amountUsd) * p.apyAfter - p.debtUsd * p.apyNow) / p.amountUsd);
 }
 
 // ── What Save can move today ─────────────────────────────────────────────────────────────────────────────────────────
@@ -96,7 +98,7 @@ export function minEarnUsd(r: SaveRoomInput): number {
 
 /** Why the card offers nothing, in its one line. */
 export const EARN_CLOSED = {
-  off: "Your cash isn’t earning yet. Start earning first.",
+  off: "Start earning first. Then Earn with stocks opens.",
   starting: "Your cash starts earning in a moment. Then Earn with stocks opens.",
   "no-stocks": "Earn with stocks needs stocks that can back credit.",
   "costs-more": "Credit costs more than your cash earns right now.",
@@ -104,8 +106,13 @@ export const EARN_CLOSED = {
   today: "Your cash can’t start earning on more today. Try again tomorrow.",
   credit: "Your stocks can’t back more credit right now.",
   fee: CREDIT_BLOCKED.fee,
+  unread: "We couldn’t check this right now. Try again in a moment.",
 } as const;
-export type EarnClosed = keyof typeof EARN_CLOSED;
+/** Why it's closed: one of EARN_CLOSED, or "small" (the stocks can back less than the smallest amount, earnSmallText). */
+export type EarnClosed = keyof typeof EARN_CLOSED | "small";
+
+/** The stocks can back some credit, but less than the smallest amount Save moves (minEarnUsd above $1). */
+export const earnSmallText = (minUsd: number) => `Earn with stocks starts at ${formatUsdTrim(minUsd)}, and your stocks can back less right now.`;
 
 /** What binds the most: what Save can move today, or the credit the stocks can back (and the USDC available). */
 export type EarnLimit = "today" | "credit";
@@ -129,22 +136,25 @@ export type EarnInput = {
   cash: Cash;
   /** What Save can move today; null while it loads. */
   room: SaveRoomInput | null;
+  /** A read the offer waits on (the stocks' backing, what Save can move today) failed: one line, not a skeleton. */
+  unread?: boolean;
   now?: Date;
 };
 
-const closed = (why: EarnClosed, rates?: EarnRates): EarnOffer => ({ kind: "closed", why, text: EARN_CLOSED[why], ...(rates ? { rates } : {}) });
+const closed = (why: Exclude<EarnClosed, "small">, rates?: EarnRates): EarnOffer => ({ kind: "closed", why, text: EARN_CLOSED[why], ...(rates ? { rates } : {}) });
 
 /**
  * Whether the Cash sheet offers Earn with stocks, and up to how much. The first rule that matches wins:
- * no executor (no card); loading; earning off or starting; no stocks that can back credit; credit costing as much as the
- * cash earns or more (as shown, in tenths); new credit paused; nothing left today (Save's room) or nothing the stocks can
- * back (99.5% of the credit limit, as /use-credit, and the USDC available); no cash for the network fee.
+ * no executor (no card); loading (or a line when a read it waits on failed); earning off or starting; no stocks that
+ * can back credit; credit costing as much as the cash earns or more (as shown, in tenths); new credit paused; nothing
+ * left today (Save's room) or nothing the stocks can back (99.5% of the credit limit, as /use-credit, and the USDC
+ * available), or less than the smallest amount; no cash for the network fee.
  */
 export function earnOffer(i: EarnInput): EarnOffer {
   if (i.save === "unconfigured") return { kind: "hidden" };
   if (i.save === "loading") return { kind: "loading" };
   if (i.save === "off" || i.save === "starting") return closed(i.save);
-  if (!i.options || !i.room) return { kind: "loading" };
+  if (!i.options || !i.room) return i.unread ? closed("unread") : { kind: "loading" };
   if (i.options.length === 0 && i.position.collateralUsd === 0) return closed("no-stocks");
   const rates = earnRates(i.cashApy, i.creditApy);
   if (rates.left <= 0) return closed("costs-more", rates);
@@ -156,7 +166,11 @@ export function earnOffer(i: EarnInput): EarnOffer {
   const limitedBy: EarnLimit = roomUsd < creditUsd ? "today" : "credit";
   const maxUsd = Math.floor(Math.min(creditUsd, roomUsd));
   const minUsd = minEarnUsd(i.room);
-  if (maxUsd < minUsd) return closed(limitedBy);
+  if (maxUsd < minUsd) {
+    // Save's smallest save raised the minimum above what the stocks can back: they can back some, just not that much.
+    if (limitedBy === "credit" && minUsd > 1 && maxUsd >= 1) return { kind: "closed", why: "small", text: earnSmallText(minUsd) };
+    return closed(limitedBy);
+  }
   if (cashRaw(i.cash) < feeBufferRaw) return closed("fee");
   return { kind: "offer", rates, maxUsd, maxSafeUsd: plan0.maxSafeUsd, minUsd, limitedBy };
 }

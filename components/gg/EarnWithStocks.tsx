@@ -41,11 +41,12 @@ function Rates({ rates, left }: { rates: EarnRates; left: boolean }) {
   const cell = (label: string, value: ReactNode) => (
     <div className="flex min-w-0 flex-col justify-between gap-1">
       <dt className={MONO}>{label}</dt>
-      <dd className="m-0 text-[20px] font-semibold leading-[1.1] tracking-[-0.02em]">{value}</dd>
+      <dd className="m-0 whitespace-nowrap text-[20px] font-semibold leading-[1.1] tracking-[-0.02em]">{value}</dd>
     </div>
   );
   return (
-    <dl className={`m-0 grid gap-2 ${left ? "grid-cols-3" : "grid-cols-2"}`}>
+    // What's left sizes to "about 1.9%" so it never wraps at 320px; the two rates share the rest.
+    <dl className={`m-0 grid gap-2 ${left ? "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" : "grid-cols-2"}`}>
       {cell("Your cash earns", pctText(rates.earn))}
       {cell("This credit costs", pctText(rates.cost))}
       {left &&
@@ -66,7 +67,12 @@ function Rates({ rates, left }: { rates: EarnRates; left: boolean }) {
  */
 export function EarnCard({ offer, onOpen }: { offer: EarnOffer; onOpen: () => void }) {
   if (offer.kind === "hidden") return null;
-  if (offer.kind === "loading") return <div aria-busy className="h-16 animate-pulse rounded-[22px] bg-chip" />;
+  if (offer.kind === "loading")
+    return (
+      <div aria-busy className="h-16 animate-pulse rounded-[22px] bg-chip">
+        <span className="sr-only">Loading Earn with stocks</span>
+      </div>
+    );
   return (
     <section aria-label="Earn with stocks" className={CARD}>
       <div className="flex flex-col gap-1">
@@ -129,6 +135,13 @@ export function EarnStep({
   const block = amount > 0 ? earnBlock(quote, offer) : null;
   const ready = amount > 0 && !block && quote.left !== null;
   const tick = ready && plan.extraConfirm;
+
+  // D2's tick is for the status it names: a price refresh that moves the result (Watch to Act) asks again.
+  const [tickedFor, setTickedFor] = useState(plan.after);
+  if (tickedFor !== plan.after) {
+    setTickedFor(plan.after);
+    setAck(false);
+  }
 
   // What backs it: what the plan puts in use and what's in use already, the stock picked first.
   const lead = plan.backing[0]?.stock.symbol ?? [...options].sort((a, b) => b.cf - a.cf)[0]?.stock.symbol;
