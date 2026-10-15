@@ -84,8 +84,8 @@ const part = (raw: bigint, f: number) => (f >= 1 ? raw : f > 0 ? (raw * BigInt(M
 /**
  * Plan a sale of `quote.amountIn` shares on Leo's maths. A backing holding comes out only as far as the loan
  * stays Safe (maxWithdrawUsd at the Safe line). Selling to repay takes the shares out first, so the loan must
- * stay within Aave's limit until the repay lands; it always ends healthier. Plan only: the batch is simulated
- * before JAW's sheet.
+ * stay within Aave's limit until the repay lands; it usually ends healthier, and one that would end in Act, lower
+ * than it started, is blocked ("act", LIMIT_HEADROOM). Plan only: the batch is simulated before JAW's sheet.
  */
 export function planSell(p: {
   from: SellFrom;
