@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode, type SVGProps } from "react";
 import { useAccount } from "wagmi";
 import { toast } from "sonner";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
@@ -286,20 +286,23 @@ function Amount({ view, form, disabled, dispatch }: { view: RepayView; form: Rep
           </span>
           <span className="truncate text-[12px] text-ink-mid">{haveWords.join(" ")}</span>
         </div>
-        <div className="flex min-w-0 flex-col gap-1 p-3.5">
-          <label htmlFor={id} className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">Repay</label>
-          <div className="num flex min-w-0 items-baseline font-semibold">
-            <span aria-hidden className="mr-0.5 text-[18px] text-subtle">$</span>
+        {/* The amount reads as a field you type in (Adrian: it looked static): its own box with a border and the pencil,
+            the ink border while focused, and a tap anywhere on this half focuses it. */}
+        <label htmlFor={id} className="flex min-w-0 cursor-text flex-col gap-1 p-3.5">
+          <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">Repay</span>
+          <span className="num flex h-10 min-w-0 items-center rounded-[12px] border-[1.5px] border-line-strong bg-ground px-2.5 font-semibold transition-colors focus-within:border-ink focus-within:bg-card">
+            <span aria-hidden className="mr-0.5 text-[16px] text-subtle">$</span>
             <AmountInput
               id={id}
               value={view.fieldText}
               onValue={(value) => dispatch({ type: "amount", value, max: view.max })}
               disabled={disabled}
-              className="text-[22px] leading-none tracking-[-0.02em]"
+              className="text-[20px] leading-none tracking-[-0.02em]"
             />
-          </div>
+            <PencilIcon aria-hidden className="ml-1 shrink-0 text-subtle" />
+          </span>
           {view.sharesLine && <span className="truncate text-[12px] text-ink-mid">{view.sharesLine}</span>}
-        </div>
+        </label>
       </div>
       <div role="radiogroup" aria-label="Amount to repay" className="grid gap-2" style={{ gridTemplateColumns: `repeat(${picks.length + 1}, minmax(0, 1fr))` }}>
         {picks.map((p) => (
@@ -326,5 +329,15 @@ function Chip({ selected, disabled, onClick, children }: { selected: boolean; di
     >
       {children}
     </button>
+  );
+}
+
+/** A small pencil: the amount can be edited. */
+function PencilIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+    </svg>
   );
 }
