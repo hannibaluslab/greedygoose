@@ -302,9 +302,13 @@ export function repayForm(state: RepayForm, action: RepayAction): RepayForm {
   return { source: state.source, amount: value, all: false };
 }
 
-/** The quick picks: $25 and $50 while they're under the most the row repays, then All. */
-export const QUICK_PICKS = [25, 50] as const;
-export const quickPicks = (max: RepayMax) => QUICK_PICKS.filter((usd) => usd < max.usd);
+/**
+ * The quick picks (Adrian, 2026-10-15): 25%, 50% and 75% of the most the row repays, rounded down to the cent, then
+ * Max. A pick under the smallest repay isn't offered.
+ */
+export const QUICK_PICKS = [0.25, 0.5, 0.75] as const;
+export const quickPicks = (max: RepayMax, minUsd = 1) =>
+  QUICK_PICKS.map((share) => ({ share, usd: Math.floor(max.usd * share * 100) / 100 })).filter((p) => p.usd >= minUsd && p.usd < max.usd);
 
 const pct = (f: number) => (f * 100).toFixed(1);
 

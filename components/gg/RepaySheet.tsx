@@ -1,15 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useAccount } from "wagmi";
 import { toast } from "sonner";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
-import { AmountBadge, AmountField } from "./AmountField";
+import { AmountInput } from "./AmountInput";
 import { AssetPicker, assetMark, type PickerRow } from "./AssetPicker";
 import { Button } from "./Button";
 import { WhiteCard } from "./Screen";
 import { StatusPill } from "./Status";
-import { StockAvatar } from "./StockAvatar";
 import { Summary } from "./Summary";
 import { TxButton, TxError } from "./TxUi";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
@@ -266,23 +265,40 @@ function PayWith({
 function Amount({ view, form, disabled, dispatch }: { view: RepayView; form: RepayForm; disabled: boolean; dispatch: (a: RepayAction) => void }) {
   const picks = quickPicks(view.max);
   const { source } = view;
+  const id = useId();
+  // What you have from the row picked, left; the amount you type, right (Adrian). "$1,941.41 in your cash" splits into
+  // the figure and its words.
+  const [have, ...haveWords] = source.sub.split(" ");
   return (
     <div className="flex flex-col gap-2.5">
-      <AmountField
-        label={REPAY_COPY.amount}
-        badge={source.kind === "cash" ? <AmountBadge kind="cash" /> : <StockAvatar symbol={source.stock!.symbol} />}
-        value={view.fieldText}
-        onValue={(value) => dispatch({ type: "amount", value, max: view.max })}
-        disabled={disabled}
-        hint={view.sharesLine ?? undefined}
-      />
+      <div className="grid grid-cols-2 rounded-[16px] border border-line-field bg-card leading-[normal] focus-within:border-ink">
+        <div className="flex min-w-0 flex-col gap-1 border-r border-line-field p-3.5">
+          <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">You have</span>
+          <span className="num truncate text-[22px] font-semibold tracking-[-0.02em]">{have}</span>
+          <span className="truncate text-[12px] text-ink-mid">{haveWords.join(" ")}</span>
+        </div>
+        <div className="flex min-w-0 flex-col gap-1 p-3.5">
+          <label htmlFor={id} className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">Repay</label>
+          <div className="num flex min-w-0 items-baseline font-semibold">
+            <span aria-hidden className="mr-0.5 text-[18px] text-subtle">$</span>
+            <AmountInput
+              id={id}
+              value={view.fieldText}
+              onValue={(value) => dispatch({ type: "amount", value, max: view.max })}
+              disabled={disabled}
+              className="text-[22px] leading-none tracking-[-0.02em]"
+            />
+          </div>
+          {view.sharesLine && <span className="truncate text-[12px] text-ink-mid">{view.sharesLine}</span>}
+        </div>
+      </div>
       <div role="radiogroup" aria-label="Amount to repay" className="grid gap-2" style={{ gridTemplateColumns: `repeat(${picks.length + 1}, minmax(0, 1fr))` }}>
-        {picks.map((usd) => (
-          <Chip key={usd} selected={!form.all && Number(form.amount) === usd} disabled={disabled} onClick={() => dispatch({ type: "chip", usd, max: view.max })}>
-            {formatUsdTrim(usd)}
+        {picks.map((p) => (
+          <Chip key={p.share} selected={!form.all && Number(form.amount) === p.usd} disabled={disabled} onClick={() => dispatch({ type: "chip", usd: p.usd, max: view.max })}>
+            {Math.round(p.share * 100)}%
           </Chip>
         ))}
-        <Chip selected={view.all} disabled={disabled} onClick={() => dispatch({ type: "all" })}>{REPAY_COPY.all}</Chip>
+        <Chip selected={view.all} disabled={disabled} onClick={() => dispatch({ type: "all" })}>Max</Chip>
       </div>
       {view.snapLine && <p role="status" className="m-0 px-1 text-[13px] leading-snug text-ink-mid">{view.snapLine}</p>}
     </div>

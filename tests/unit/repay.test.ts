@@ -204,10 +204,11 @@ describe("Amount: All by default, quick picks, never more than owed or than the 
     expect(v.fee).toBe(REPAY_COPY.feeFromCash);
   });
 
-  it("quick picks are $25 and $50 while under the most the row repays, then All", () => {
-    expect(quickPicks({ usd: 99.5, raw: 0n, coversAll: false, quoting: false })).toEqual([25, 50]);
-    expect(quickPicks({ usd: 40, raw: 0n, coversAll: false, quoting: false })).toEqual([25]);
-    expect(quickPicks({ usd: 4, raw: 0n, coversAll: true, quoting: false })).toEqual([]);
+  it("quick picks are 25%, 50% and 75% of the most the row repays, to the cent, then Max; none under the smallest repay", () => {
+    const usds = (max: number) => quickPicks({ usd: max, raw: 0n, coversAll: false, quoting: false }).map((p) => p.usd);
+    expect(usds(99.5)).toEqual([24.87, 49.75, 74.62]);
+    expect(usds(2)).toEqual([1, 1.5]);
+    expect(usds(1.23)).toEqual([]);
   });
 
   it("typed dollars or a pick at or over the most become All (NYM's clamp); under it they stay as typed", () => {
