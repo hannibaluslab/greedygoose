@@ -4,6 +4,7 @@ import { useId, type ComponentProps, type ReactNode } from "react";
 import { AmountInput } from "./AmountInput";
 import { StockAvatar, tickerOf } from "./StockAvatar";
 import { CreditIcon, TradeIcon } from "./icons";
+import { CashMark } from "./AssetPicker";
 import { formatUsd } from "@/lib/formatting";
 
 /**
@@ -99,10 +100,10 @@ export function AmountSource({ mark, children }: { mark?: ReactNode; children: R
   );
 }
 
-/** The round mark before the amount: green "$" for cash (F1-4), lime credit hand for credit (F2-5). */
+/** The round mark before the amount: the USDC coin for cash (was F1-4's green "$"), lime credit hand for credit (F2-5). */
 export function AmountBadge({ kind }: { kind: "cash" | "credit" }) {
   return kind === "cash" ? (
-    <span aria-hidden className="flex size-[30px] shrink-0 items-center justify-center rounded-[15px] bg-pos text-[15px] font-bold text-white">$</span>
+    <CashMark size={30} />
   ) : (
     <span aria-hidden className="flex size-[30px] shrink-0 items-center justify-center rounded-[15px] bg-brand text-ink">
       <CreditIcon size={16} strokeWidth={1.8} />

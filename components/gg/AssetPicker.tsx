@@ -18,20 +18,18 @@ export type PickerRow = {
   disabled?: boolean;
 };
 
-/** The round green "$" for cash, at any size (the kit's AmountBadge is the 30px one). */
+/** Cash's mark, at any size: the USDC coin it is held in (Adrian, 2026-10-15: "the cash icon should be usdc"). */
 export function CashMark({ size }: { size: number }) {
   return (
     <span
       aria-hidden
-      className="flex shrink-0 items-center justify-center rounded-full bg-pos font-bold leading-none text-white"
-      style={{ width: size, height: size, fontSize: Math.round(size * 0.52) }}
-    >
-      $
-    </span>
+      className="block shrink-0 rounded-full bg-cover bg-center"
+      style={{ width: size, height: size, backgroundImage: "url(/tokens/USDC.png)" }}
+    />
   );
 }
 
-/** The mark for an asset: cash's "$", or the stock's logo. */
+/** The mark for an asset: cash's USDC coin, or the stock's logo. */
 export const assetMark = (asset: string, size: number) => (asset === "cash" ? <CashMark size={size} /> : <StockAvatar symbol={asset} size={size} />);
 
 /**
