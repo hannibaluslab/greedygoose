@@ -11,7 +11,7 @@ import { StockAvatar, tickerOf } from "./StockAvatar";
 import { NETWORK_FEE_ROW, Summary } from "./Summary";
 import { TxButton, TxError } from "./TxUi";
 import { StatusChange } from "./Status";
-import { ChevronRight, LockIcon } from "./icons";
+import { ChevronRight, BacksIcon } from "./icons";
 import { useAgents } from "@/hooks/useAgents";
 import { useBoughtHome } from "@/hooks/useBoughtHome";
 import { useBuyQuote } from "@/hooks/useBuyQuote";
@@ -475,7 +475,7 @@ function ExistingRow({ names, valueUsd, roomUsd, checked, onPick }: {
 }) {
   const body = (
     <>
-      <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-full bg-ink text-on-ink"><LockIcon size={12} /></span>
+      <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-full bg-ink text-on-ink"><BacksIcon size={12} /></span>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-[15px] font-semibold">Already backs credit</span>
         <span className="num truncate text-[12.5px] text-ink-mid">{shortNames(names)} · {formatUsd(valueUsd)}</span>
@@ -652,7 +652,7 @@ function BackingRow({ holding: h, checked = false, right, onPick, reason }: {
           <span className="num whitespace-nowrap text-[12px] text-ink-mid">
             {reason ?? (
               <>
-                <LockIcon size={10} className="mr-1 inline align-[-1px] text-ink" />
+                <BacksIcon size={10} className="mr-1 inline align-[-1px] text-ink" />
                 {allInUse ? (
                   <><b className="font-semibold text-ink">All</b> in use · <Link href="/repay" className="font-semibold text-ink no-underline">Repay</Link></>
                 ) : (

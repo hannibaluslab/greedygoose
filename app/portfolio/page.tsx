@@ -158,7 +158,7 @@ function Loaded({
         )}
       </HoldingList>
       <p className="m-0 px-1 text-xs leading-snug text-subtle">
-        Values use Aave’s prices. Today’s change and the lines use market prices, for information only. Tokenized stocks track the share price; they are not company shares and carry no voting rights.
+        Values use the prices your credit is measured at. Today’s change and the lines use market prices, for information only. Tokenized stocks track the share price; they are not company shares and carry no voting rights.
       </p>
     </>
   );

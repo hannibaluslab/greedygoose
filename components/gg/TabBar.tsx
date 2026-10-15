@@ -2,21 +2,25 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { AgentsIcon, BoardIcon, HomeIcon, InvestIcon, PayIcon } from "./icons";
+import { AgentsIcon, BoardIcon, HomeIcon, InvestIcon, SendIcon } from "./icons";
 import { LEADERBOARD_ENABLED } from "@/lib/features";
 
-/** D16: Home / Invest / Agents / Leaderboard / Pay (Friends became the Leaderboard, 2026-10-15). `match` lists the routes that light a tab. */
+/**
+ * D16: Home / Invest / Agents / Leaderboard / Send (Friends became the Leaderboard, and Send replaced Pay, 2026-10-15).
+ * `match` lists the routes that light a tab. Receive, which Pay was, lights none by itself: it lights the tab it was
+ * opened from (`current`), Send from Send's header, else Home, since the Send tab now means money going out.
+ */
 const TABS = [
   { href: "/home", label: "Home", Icon: HomeIcon, match: ["/home"] },
   { href: "/portfolio", label: "Invest", Icon: InvestIcon, match: ["/portfolio"] },
   { href: "/agents", label: "Agents", Icon: AgentsIcon, match: ["/agents", "/activity"] },
   ...(LEADERBOARD_ENABLED ? [{ href: "/leaderboard", label: "Leaderboard", Icon: BoardIcon, match: ["/leaderboard"] }] : []),
-  { href: "/receive", label: "Pay", Icon: PayIcon, match: ["/receive"] },
+  { href: "/send", label: "Send", Icon: SendIcon, match: ["/send"] },
 ];
 
 /** Floating dark pill tab bar with the fade behind it, as in the design. The board's 24px under it sat over the home
  * indicator; in a Safari tab the page already ends above Safari's bar, so it floats 8px over the bottom inset. */
-export function TabBar() {
+export function TabBar({ current }: { current?: string } = {}) {
   const path = usePathname();
   return (
     <>
@@ -32,7 +36,7 @@ export function TabBar() {
         style={{ gridTemplateColumns: `repeat(${TABS.length}, minmax(0,1fr))`, background: "rgba(20,19,15,0.94)", boxShadow: "0 16px 48px -16px rgba(0,0,0,0.4)" }}
       >
         {TABS.map(({ href, label, Icon, match }) => {
-          const active = match.some((m) => path.startsWith(m));
+          const active = current ? href === current : match.some((m) => path.startsWith(m));
           // Agents, the middle tab, is a lime button docked in the bar (Adrian: yellow, round, bigger, higher). Done the
           // way docked centre buttons are: raised half out of the bar, a ring in the page's colour so it sits in a
           // notch rather than on top of the bar, a soft shadow instead of a glow.

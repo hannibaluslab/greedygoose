@@ -11,7 +11,7 @@ import { BottomBar } from "@/components/gg/BottomBar";
 import { LoanMeter } from "@/components/gg/LoanMeter";
 import { StatusPill } from "@/components/gg/Status";
 import { StockAvatar, tickerOf } from "@/components/gg/StockAvatar";
-import { LockIcon } from "@/components/gg/icons";
+import { BacksIcon } from "@/components/gg/icons";
 import { TxButton, TxDone, TxError } from "@/components/gg/TxUi";
 import { MarketBanner } from "@/components/ui/MarketBanner";
 import { useCollateralFactors, usePosition, type Holding, type PositionData } from "@/hooks/usePosition";
@@ -177,7 +177,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
 
       {data.collateralUsd > 0 && (
         <div className="flex items-center gap-3 rounded-2xl bg-card px-4 py-3 shadow-[0_1px_3px_rgba(14,13,11,0.06)]">
-          <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-full bg-ink text-on-ink"><LockIcon size={12} /></span>
+          <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-full bg-ink text-on-ink"><BacksIcon size={12} /></span>
           <span className="flex flex-1 flex-col">
             <span className="text-[15px] font-semibold">Already backing</span>
             <span className="num text-[12.5px] text-ink-mid">{formatUsd(data.collateralUsd)} · you owe {formatUsd(data.debtUsd)}</span>

@@ -68,8 +68,14 @@ export function AmountField({
           />
           {unit && <span className="ml-1 shrink-0 text-sm font-semibold text-subtle">{unit}</span>}
         </div>
+        {/* MAX follows the field: while it's disabled (a send or trade in flight), so is MAX. */}
         {onMax && (
-          <button type="button" onClick={onMax} className="h-7 shrink-0 rounded-[14px] bg-[rgba(15,14,11,0.06)] px-2.5 text-xs font-semibold text-ink-mid">
+          <button
+            type="button"
+            onClick={onMax}
+            disabled={rest.disabled}
+            className="h-7 shrink-0 rounded-[14px] bg-[rgba(15,14,11,0.06)] px-2.5 text-xs font-semibold text-ink-mid disabled:opacity-45"
+          >
             MAX
           </button>
         )}

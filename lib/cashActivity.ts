@@ -4,7 +4,7 @@ import { MIN_ARRIVAL_USD } from "@/lib/activity/arrivals";
 import type { AgentEvent } from "@/lib/agents/events";
 import type { AgentMove, MoveContext, Words } from "@/lib/agents/feed";
 import { maxSpendRaw, toUsd, type Cash } from "@/lib/cash";
-import { formatCoin, formatShares, formatUsd, formatUsdTrim, inWords } from "@/lib/formatting";
+import { formatCoin, formatShares, formatUsd, formatUsdTrim, inWords, shortAddress } from "@/lib/formatting";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 
@@ -137,7 +137,9 @@ export function ownCashRow(m: OwnMove): CashRow | null {
     const backed = of("supply").filter(isStock).map((i) => `Backed by ${shares(i)}`);
     return row({ ...base, title: "From credit", what: backed });
   }
-  return row({ ...base, title: usd > 0 ? "Received" : "Sent", what: [] });
+  // A Send names who it went to (the name this device sent it to, else the short address); a receive names no sender.
+  const sentTo = usd < 0 && sends.length === 1 && sends[0].to ? (sends[0].toName ?? shortAddress(sends[0].to)) : null;
+  return row({ ...base, title: usd > 0 ? "Received" : "Sent", what: [], details: sentTo ? [{ label: "To", value: [sentTo] }] : undefined });
 }
 
 /** A coin of the Entry agent's by address. */

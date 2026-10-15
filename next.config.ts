@@ -24,6 +24,8 @@ const nextConfig: NextConfig = {
     { source: "/guardian", destination: "/agents?agent=protect", permanent: false },
     // Friends became the Leaderboard: one board, filtered to All or Contacts.
     { source: "/friends", destination: "/leaderboard?filter=contacts", permanent: false },
+    // Pay became Send; Receive, which the Pay tab opened, stays at /receive.
+    { source: "/pay", destination: "/send", permanent: false },
   ],
   partialPrefetching: true,
   turbopack: {
