@@ -140,7 +140,13 @@ function Loaded({
           side={{
             label: "Credit",
             info: { label: "Your credit", onClick: () => open("credit") },
-            value: formatUsdTrim(Math.ceil(data.debtUsd)),
+            // The "$" drawn as the total balance draws it (Adrian): smaller, in the mid ink.
+            value: (
+              <>
+                <span className="text-[22px] font-medium tracking-normal text-ink-mid">$</span>
+                {formatUsdTrim(Math.ceil(data.debtUsd)).replace("$", "")}
+              </>
+            ),
             unit: "owed",
             sub:
               data.debtUsd > 0 ? (
