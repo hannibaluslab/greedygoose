@@ -33,6 +33,19 @@ export function TabBar() {
       >
         {TABS.map(({ href, label, Icon, match }) => {
           const active = match.some((m) => path.startsWith(m));
+          // Agents is the round lime button in the middle (Adrian): the agents are what the app runs on.
+          if (href === "/agents") {
+            return (
+              <Link key={href} href={href} aria-label={label} aria-current={active ? "page" : undefined} className="flex items-center justify-center">
+                <span
+                  className="flex size-11 items-center justify-center rounded-full bg-brand text-ink transition active:scale-95"
+                  style={{ boxShadow: active ? "0 0 0 2px rgba(212,255,60,0.35), 0 0 18px rgba(212,255,60,0.45)" : "0 0 14px rgba(212,255,60,0.3)" }}
+                >
+                  <Icon size={22} />
+                </span>
+              </Link>
+            );
+          }
           return (
             <Link
               key={href}
