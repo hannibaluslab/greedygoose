@@ -121,7 +121,8 @@ function Loaded({
   dim: boolean;
 }) {
   const held = data.holdings.filter((h) => h.freeShares + h.lockedShares > 0);
-  const market = useMarketPrices(held);
+  // Before the first stock, the line is the market's week: the seven stocks, each weighted the same.
+  const market = useMarketPrices(held.length > 0 ? held : data.holdings);
   const priced = held.map((h) => ({ valueUsd: h.freeUsd + h.lockedUsd, ...market.bySymbol[h.symbol] }));
   const today = dayChange(priced, data.stocksUsd + data.cashUsd);
 
@@ -150,7 +151,18 @@ function Loaded({
               ),
           }}
         />
-        {held.length > 0 && <ValueLine points={weekValue(priced)} height={68} loading={market.loading} onRetry={market.retry} />}
+        {held.length > 0 ? (
+          <ValueLine points={weekValue(priced)} height={68} loading={market.loading} onRetry={market.retry} />
+        ) : (
+          <ValueLine
+            points={weekValue(data.holdings.map((h) => ({ valueUsd: 1, ...market.bySymbol[h.symbol] })))}
+            height={68}
+            loading={market.loading}
+            onRetry={market.retry}
+            label="The seven stocks over the last 7 days, each weighted the same, at market prices"
+            caption="Market · 7 days"
+          />
+        )}
         <MarketBanner />
       </section>
 
