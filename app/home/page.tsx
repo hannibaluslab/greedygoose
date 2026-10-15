@@ -235,16 +235,15 @@ function Skeleton() {
  */
 function EmptyPortfolio() {
   return (
-    <div className="mb-4 flex min-h-[200px] grow flex-col items-center justify-center gap-4 rounded-[22px] border-[1.5px] border-dashed border-[rgba(14,13,11,0.2)] px-6 py-6 text-center">
+    <div className="mb-4 flex grow flex-col items-center justify-center gap-3 rounded-[22px] border-[1.5px] border-dashed border-[rgba(14,13,11,0.2)] px-5 py-5 text-center">
+      {/* Compact so it fits above the tab bar (Adrian); the logos name the stocks, so no list under them. */}
       <div aria-hidden className="flex gap-1">
         {EQUITIES.map((e) => (
-          <StockAvatar key={e.symbol} symbol={e.symbol} size={38} />
+          <StockAvatar key={e.symbol} symbol={e.symbol} size={32} />
         ))}
       </div>
-      <div className="flex flex-col gap-1">
-        <p className="m-0 text-[17px] font-semibold tracking-[-0.01em]">You don’t hold any stocks yet</p>
-        <p className="m-0 text-[13px] leading-[1.4] text-ink-mid">{EQUITIES.map((e) => e.name).join(", ")}.</p>
-      </div>
+      <p className="m-0 text-[15px] font-semibold tracking-[-0.01em]">You don’t hold any stocks yet</p>
+      <span className="sr-only">{EQUITIES.map((e) => e.name).join(", ")}</span>
     </div>
   );
 }
