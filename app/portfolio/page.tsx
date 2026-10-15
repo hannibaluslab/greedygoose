@@ -14,9 +14,10 @@ import { ValueLine } from "@/components/gg/ValueLine";
 import { CreditIcon, MarketIcon, TradeIcon } from "@/components/gg/icons";
 import { MarketBanner } from "@/components/ui/MarketBanner";
 import { useMarketPrices } from "@/hooks/useMarketPrices";
-import { usePosition, type PositionData } from "@/hooks/usePosition";
-import { aprToApy } from "@/lib/aave/math";
-import { formatUsd } from "@/lib/formatting";
+import { useCollateralFactorsRead, usePosition, type PositionData } from "@/hooks/usePosition";
+import { formatUsd, formatUsdTrim } from "@/lib/formatting";
+import { backingOptions, creditAvailable } from "@/lib/creditBuy";
+import { maxSpendRaw, toUsd } from "@/lib/cash";
 import { dayChange, weekValue } from "@/lib/prices/market";
 
 export default function PortfolioPage() {
@@ -85,6 +86,7 @@ function Loaded({
   data, openMarket, openTrade, openCreditBuy, openStock,
 }: { data: PositionData; openMarket: () => void; openTrade: () => void; openCreditBuy: () => void; openStock: (symbol: string) => void }) {
   const held = data.holdings.filter((h) => h.freeShares + h.lockedShares > 0);
+  const power = useBuyingPower(data, held.length > 0);
   const market = useMarketPrices(held);
   const priced = held.map((h) => ({ valueUsd: h.freeUsd + h.lockedUsd, ...market.bySymbol[h.symbol] }));
   const today = dayChange(priced, data.stocksUsd);
@@ -95,11 +97,17 @@ function Loaded({
           label="Portfolio"
           value={data.stocksUsd}
           sub={today ? <TodayChange usd={today.usd} pct={today.pct} /> : market.loading ? <TodayPending /> : undefined}
+          // Buying power (Adrian): the cash you can spend plus the credit one Credit Buy can use, the same figure the Credit
+          // Buy sheet opens on. Whole dollars, rounded down, so it's never more than there is.
           side={{
-            label: "Cash available",
-            // Whole dollars, as drawn ("$400"), and never more than there is.
-            value: formatUsd(Math.floor(data.cashUsd)).replace(/\.00$/, ""),
-            sub: <><span className="font-semibold text-pos">{(aprToApy(data.savingsApr) * 100).toFixed(1)}%</span> APY</>,
+            label: "Buying power",
+            value: power ? formatUsd(Math.floor(power.cashUsd + power.creditUsd)).replace(/\.00$/, "") : "–",
+            sub: power ? (
+              <span className="block whitespace-normal text-[12.5px] leading-[1.35]">
+                {formatUsdTrim(Math.floor(power.cashUsd))} cash
+                <br />+ {formatUsdTrim(Math.floor(power.creditUsd))} credit
+              </span>
+            ) : undefined,
           }}
         />
         {held.length > 0 && <ValueLine points={weekValue(priced)} height={34} loading={market.loading} onRetry={market.retry} />}
@@ -146,4 +154,13 @@ function Loaded({
       </p>
     </>
   );
+}
+
+/** Cash you can spend (less the network-fee buffer) and the credit one Credit Buy can use; null while the backing reads. */
+function useBuyingPower(data: PositionData, holdsStock: boolean) {
+  const cfs = useCollateralFactorsRead(data.holdings).cfs;
+  if (holdsStock && !cfs) return null;
+  const options = cfs ? backingOptions(data.holdings, cfs).filter((o) => o.freeUsd >= 1) : [];
+  const credit = creditAvailable({ position: data, options, cash: data.cash, holdsStock });
+  return { cashUsd: toUsd(maxSpendRaw(data.cash)), creditUsd: credit.usd };
 }
