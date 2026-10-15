@@ -2,16 +2,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { AgentsIcon, BoardIcon, HomeIcon, InvestIcon, PayIcon } from "./icons";
+import { AgentsIcon, BoardIcon, HomeIcon, InvestIcon, SendIcon } from "./icons";
 import { LEADERBOARD_ENABLED } from "@/lib/features";
 
-/** D16: Home / Invest / Agents / Leaderboard / Pay (Friends became the Leaderboard, 2026-10-15). `match` lists the routes that light a tab. */
+/**
+ * D16: Home / Invest / Agents / Leaderboard / Send (Friends became the Leaderboard, and Send replaced Pay, 2026-10-15).
+ * `match` lists the routes that light a tab: Receive, which Pay was, opens from Send and lights it.
+ */
 const TABS = [
   { href: "/home", label: "Home", Icon: HomeIcon, match: ["/home"] },
   { href: "/portfolio", label: "Invest", Icon: InvestIcon, match: ["/portfolio"] },
   { href: "/agents", label: "Agents", Icon: AgentsIcon, match: ["/agents", "/activity"] },
   ...(LEADERBOARD_ENABLED ? [{ href: "/leaderboard", label: "Leaderboard", Icon: BoardIcon, match: ["/leaderboard"] }] : []),
-  { href: "/receive", label: "Pay", Icon: PayIcon, match: ["/receive"] },
+  { href: "/send", label: "Send", Icon: SendIcon, match: ["/send", "/receive"] },
 ];
 
 /** Floating dark pill tab bar with the fade behind it, as in the design. The board's 24px under it sat over the home

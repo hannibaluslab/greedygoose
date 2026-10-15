@@ -18,13 +18,13 @@ export function SubHeader({ label, right, back = "/home" }: { label: string; rig
 }
 
 /**
- * Top of a tab screen (PortfolioPage): an optional back chevron, the title, then on the right the
- * credit status pill (a link or a button when given somewhere to go) and the header menu, which
- * Manage's boards leave out (`menu={false}`).
+ * Top of a tab screen (PortfolioPage): an optional back chevron, the title, then on the right an optional action
+ * (Send's Receive link), the credit status pill (a link or a button when given somewhere to go) and the header menu,
+ * which Manage's boards leave out (`menu={false}`).
  */
 export function TabHeader({
-  title, back, status, statusHref, onStatus, menu = true,
-}: { title: string; back?: string; status?: Status; statusHref?: string; onStatus?: () => void; menu?: boolean }) {
+  title, back, action, status, statusHref, onStatus, menu = true,
+}: { title: string; back?: string; action?: ReactNode; status?: Status; statusHref?: string; onStatus?: () => void; menu?: boolean }) {
   return (
     <div className="flex items-center justify-between leading-[normal]">
       <div className="flex items-center">
@@ -32,6 +32,7 @@ export function TabHeader({
         <h1 className="m-0 text-[30px] font-semibold leading-[1.1] tracking-[-0.03em]">{title}</h1>
       </div>
       <div className="flex items-center gap-2">
+        {action}
         {status && (
           <Tap href={statusHref} onClick={onStatus} label={`Credit status: ${STATUS_LABEL[status]}`} className="flex h-8 items-center">
             <StatusPill status={status} size="header" />

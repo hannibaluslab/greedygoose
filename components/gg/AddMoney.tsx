@@ -8,13 +8,13 @@ import { BackIcon, CopyIcon } from "./icons";
 import { shortAddress } from "@/lib/formatting";
 
 /**
- * Design board "Add money" (AddMoney.dc.html), the Pay tab, saying what's true now (D20): the dollars it takes on Base,
+ * Design board "Add money" (AddMoney.dc.html), Receive (it was the Pay tab until Send replaced Pay), saying what's true now (D20): the dollars it takes on Base,
  * that they arrive as cash, and the rate they earn once earning is set up (`rate`, the live one; nothing about earning
  * before then). `arrived` is the "Turn into cash" card for other dollars nothing converts on its own. The QR and the
  * copy button give the address, which every wallet reads. Auto top up is parked (PARKED.md).
  */
 export function AddMoneyView({
-  address, name, rate, arrived, onCopy,
+  address, name, rate, arrived, onCopy, back = "/home",
 }: {
   address: `0x${string}`;
   /** The account's JAW name, once read. */
@@ -23,11 +23,13 @@ export function AddMoneyView({
   rate: string | null;
   arrived?: ReactNode;
   onCopy: () => void;
+  /** Where Back goes: Home, or Send when it opened from there. */
+  back?: string;
 }) {
   return (
     <div className="relative flex min-h-dvh flex-col gap-5 px-5 pt-[calc(env(safe-area-inset-top)+14px)] leading-[normal]">
       <div className="flex items-center gap-3">
-        <Link href="/home" aria-label="Back" className="-ml-3 flex size-11 items-center justify-center text-ink"><BackIcon /></Link>
+        <Link href={back} aria-label="Back" className="-ml-3 flex size-11 items-center justify-center text-ink"><BackIcon /></Link>
         <h1 className="m-0 text-[28px] font-semibold tracking-[-0.02em]">Add money</h1>
       </div>
 

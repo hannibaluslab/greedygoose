@@ -65,6 +65,13 @@ export function fullName(input: string): string | null {
   }
 }
 
+/** Whether `address` has code on Ethereum: a contract wallet there may not be the same account on Base (Send asks). */
+export async function hasEthereumCode(address: Address): Promise<boolean> {
+  ens ??= createPublicClient({ chain: mainnet, transport: http(MAINNET_RPC) });
+  const code = await ens.getCode({ address });
+  return !!code && code !== "0x";
+}
+
 /**
  * The account a name points to, for adding a contact by name: its Base address first (ENSIP-11), then its Ethereum
  * one. JAW's names resolve through ENS's offchain lookup, which viem follows; some give a Base address and some only an
