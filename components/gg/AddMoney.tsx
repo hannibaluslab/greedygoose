@@ -59,7 +59,8 @@ export function AddMoneyView({
         </p>
       </div>
 
-      <TabBar />
+      {/* Lights the tab Back returns to: Send when opened from there, else Home. */}
+      <TabBar current={back} />
     </div>
   );
 }

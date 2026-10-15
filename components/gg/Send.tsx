@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 import { isAddressEqual, type Address } from "viem";
 import { useAccount } from "wagmi";
 import { AmountBadge, AmountField } from "./AmountField";
@@ -35,7 +35,7 @@ import {
 } from "@/lib/send";
 
 /** 0x and 40 hex characters: an address in full, whatever its capitals. */
-const FULL_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+const FULL_ADDRESS = /^0x[0-9a-f]{40}$/i;
 
 /** "0x2b8c e2c8 7c16 …": the whole address in fours, so a look-alike that shares its ends can't pass for it. */
 const grouped = (a: string) => `0x${a.slice(2).match(/.{4}/g)!.join(" ")}`;
@@ -90,6 +90,8 @@ export function SendScreen({ user, data }: { user: Address; data: PositionData }
   const contacts = contactAddrs
     .filter((a) => !recent.some((r) => isAddressEqual(r.address, a)))
     .map((a) => ({ address: a, name: contactNames.get(a.toLowerCase()) ?? null }));
+  // The quick picks' names are labels to pick by. A pick sends to the address alone; the card shows its name only
+  // once that name is checked to point back to it (useRecipient), so a name that moved on never sits over an old address.
 
   const fresh = () => {
     if (phase === "failed") reset();
@@ -101,19 +103,20 @@ export function SendScreen({ user, data }: { user: Address; data: PositionData }
   const onText = (value: string) => {
     fresh();
     setText(value);
-    // A pasted address is taken at once, or its typo shown at once; anything else waits for Find.
+    // A pasted address is taken at once, or its typo shown at once; anything else waits for Find. Any other edit drops
+    // a lookup still running, so what was typed before can't come back as the recipient.
     if (parseTo(value).kind === "address" || FULL_ADDRESS.test(value.trim())) void to.find(value);
-    else if (to.state.kind === "none") to.clear();
+    else to.edit();
   };
   const onFind = (e: FormEvent) => {
     e.preventDefault();
     fresh();
     if (text.trim()) void to.find(text);
   };
-  const pick = (address: Address, name: string | null) => {
+  const pick = (address: Address) => {
     fresh();
     setText("");
-    to.pick(address, name);
+    to.pick(address);
   };
   const change = () => {
     fresh();
@@ -180,7 +183,7 @@ export function SendScreen({ user, data }: { user: Address; data: PositionData }
               <span key={line} className="block">{line}</span>
             ))}
           />
-          {view.amountNote && <p role="status" className="m-0 px-0.5 text-[13px] leading-snug text-act">{view.amountNote}</p>}
+          {view.amountNote && <p role="alert" className="m-0 px-0.5 text-[13px] leading-snug text-act">{view.amountNote}</p>}
 
           <ToCard
             state={to.state}
@@ -265,12 +268,35 @@ function ToCard({
   waiting: boolean;
 }) {
   const looking = state.kind === "looking";
+  const card = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const had = useRef(!!recipient);
+  // When the field turns into who it is (Find, a paste, a pick), or back (Send to someone else), the control that had
+  // focus is gone and focus would drop to the page: keep it in To, on the card, or back in the field.
+  useEffect(() => {
+    if (!!recipient === had.current) return;
+    had.current = !!recipient;
+    const active = document.activeElement;
+    if (active && active !== document.body && !card.current?.contains(active)) return;
+    (recipient ? card.current : input.current)?.focus();
+  }, [recipient]);
+  const labelClass = "font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle";
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-col gap-2 rounded-[16px] border border-line-field bg-card p-3.5 leading-[normal] focus-within:border-ink">
-        <label htmlFor="send-to" className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">
-          {SEND_COPY.to}
-        </label>
+      <div
+        ref={card}
+        role="group"
+        aria-labelledby="send-to-label"
+        tabIndex={-1}
+        className="flex flex-col gap-2 rounded-[16px] border border-line-field bg-card p-3.5 leading-[normal] outline-none focus-within:border-ink focus:border-ink"
+      >
+        {recipient ? (
+          <span id="send-to-label" className={labelClass}>{SEND_COPY.to}</span>
+        ) : (
+          <label id="send-to-label" htmlFor="send-to" className={labelClass}>
+            {SEND_COPY.to}
+          </label>
+        )}
         {recipient ? (
           <div className="flex items-center gap-2.5">
             <Initial person={{ account: recipient.address, name: recipient.name }} size={36} />
@@ -294,11 +320,11 @@ function ToCard({
         ) : (
           <form onSubmit={onFind} className="flex items-center gap-2">
             <input
+              ref={input}
               id="send-to"
               value={text}
               onChange={(e) => onText(e.target.value)}
               placeholder={SEND_COPY.toPlaceholder}
-              aria-label={SEND_COPY.toLabel}
               autoCapitalize="none"
               autoCorrect="off"
               autoComplete="off"
@@ -308,7 +334,15 @@ function ToCard({
               className="h-11 min-w-0 grow bg-transparent text-base text-ink placeholder:text-ink-faint focus:outline-none"
             />
             {text && (
-              <button type="button" aria-label="Clear" onClick={() => onText("")} className="-mx-1.5 grid size-11 shrink-0 place-items-center rounded-full text-ink-mid">
+              <button
+                type="button"
+                aria-label="Clear"
+                onClick={() => {
+                  onText("");
+                  input.current?.focus();
+                }}
+                className="-mx-1.5 grid size-11 shrink-0 place-items-center rounded-full text-ink-mid"
+              >
                 <CloseIcon size={14} />
               </button>
             )}
@@ -333,9 +367,10 @@ function ToCard({
   );
 }
 
+/** A refusal is an alert; a warning is a status. */
 function Note({ tone, children }: { tone: "act" | "watch"; children: ReactNode }) {
   return (
-    <p role="status" className={`m-0 px-0.5 text-[13px] leading-snug ${tone === "act" ? "text-act" : "text-watch-text"}`}>
+    <p role={tone === "act" ? "alert" : "status"} className={`m-0 px-0.5 text-[13px] leading-snug ${tone === "act" ? "text-act" : "text-watch-text"}`}>
       {children}
     </p>
   );
@@ -347,7 +382,7 @@ function QuickPicks({
 }: {
   label: string;
   people: { address: Address; name: string | null }[];
-  onPick: (address: Address, name: string | null) => void;
+  onPick: (address: Address) => void;
   disabled?: boolean;
 }) {
   return (
@@ -358,7 +393,7 @@ function QuickPicks({
           <button
             key={p.address}
             type="button"
-            onClick={() => onPick(p.address, p.name)}
+            onClick={() => onPick(p.address)}
             disabled={disabled}
             aria-label={`Send to ${p.name ?? p.address}`}
             className="flex w-[72px] shrink-0 flex-col items-center gap-1.5 rounded-[14px] py-1 transition active:scale-95 disabled:opacity-45"

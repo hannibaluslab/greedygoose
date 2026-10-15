@@ -4,7 +4,7 @@
  * way useSigningCash reads it, and the account is read around it in the same simulated block.
  */
 import { describe, expect, it } from "vitest";
-import { createPublicClient, decodeFunctionResult, encodeFunctionData, erc20Abi, http, parseUnits, type Log } from "viem";
+import { createPublicClient, decodeFunctionResult, encodeFunctionData, erc20Abi, http, parseAbi, parseUnits, zeroAddress, type Log } from "viem";
 import { CHAIN } from "@/lib/chain";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
@@ -14,6 +14,7 @@ import { assertAllowed } from "@/lib/allowlist";
 import { cashRaw, readCash } from "@/lib/cash";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { SendStop, buildSendCalls, readRecipient } from "@/lib/send";
+import { AERODROME, UNISWAP } from "@/lib/swap/venues";
 import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
 
 type Address = `0x${string}`;
@@ -61,8 +62,37 @@ async function simulate(user: Address, token: ReserveAsset, calls: Call[], backi
 
 describe("Send on Base (the Send tab)", () => {
   it("the friend is a fresh address Base has never seen used, so the screen would warn", async () => {
-    expect(await readRecipient(client, friend)).toEqual({ code: false, used: false });
-    expect((await readRecipient(client, backer)).used).toBe(true);
+    expect(await readRecipient(client, friend)).toEqual({ code: false, used: false, notAccount: false });
+    // The preview's account is a plain key (no code): used, and an account.
+    expect(await readRecipient(client, backer)).toEqual({ code: false, used: true, notAccount: false });
+  }, 60_000);
+
+  it("a token or a trading pool isn't an account, so the screen refuses it; a JAW account is one", async () => {
+    // WETH, Base's predeploy: a token the app never lists (checked by its symbol here, not taken on trust).
+    const weth = "0x4200000000000000000000000000000000000006" as const;
+    expect(await client.readContract({ address: weth, abi: erc20Abi, functionName: "symbol" })).toBe("WETH");
+    expect((await readRecipient(client, weth)).notAccount).toBe(true);
+    // The venues' pools, which APP_CONTRACTS can't list: worked out from the registry's factories.
+    const uniPool = await client.readContract({
+      address: UNISWAP.FACTORY,
+      abi: parseAbi(["function getPool(address,address,uint24) view returns (address)"]),
+      functionName: "getPool",
+      args: [USDC.address, weth, 500],
+    });
+    const aeroPool = await client.readContract({
+      address: AERODROME.FACTORY,
+      abi: parseAbi(["function getPool(address,address,int24) view returns (address)"]),
+      functionName: "getPool",
+      args: [USDC.address, amzn.address, 10],
+    });
+    console.log(`pools: Uniswap USDC/WETH ${uniPool}, Aerodrome USDC/AMZN ${aeroPool}`);
+    for (const pool of [uniPool, aeroPool]) {
+      expect(pool).not.toBe(zeroAddress);
+      expect(await readRecipient(client, pool)).toMatchObject({ code: true, notAccount: true });
+    }
+    // A JAW smart account (extenso.justan.id's, a proxy deployed on Base) answers none of a token's or a pool's questions.
+    const extenso = "0x6478829650bC51a36ec553575077603911E72952" as const;
+    expect(await readRecipient(client, extenso)).toEqual({ code: true, used: true, notAccount: false });
   }, 60_000);
 
   it("cash, the one pot: $100 when the wallet holds less, so savings pay the rest first, and the friend gets exactly $100", async () => {

@@ -79,13 +79,18 @@ export async function hasEthereumCode(address: Address): Promise<boolean> {
  * every chain, so its Ethereum address is its Base one. For any other name an Ethereum address may be a different
  * account on Base (a contract wallet), so `onBase` is false and the screen says so. Null when the name points
  * nowhere. An address typed in is returned as it is.
+ *
+ * Only a Base lookup that says "no Base address" falls back to the Ethereum one. viem already answers null for that
+ * (no resolver, no record, a gateway that has none: cb.id's answers an HTTP error, measured 2026-10-15), so anything it
+ * throws is a real failure (the RPC or the network) and is thrown on: falling back then could pay an Ethereum address
+ * that is someone else's account on Base. Send shows "We couldn't look that up"; the Leaderboard, no one found.
  */
 export async function addressOfName(input: string): Promise<{ name: string | null; address: Address; onBase: boolean } | null> {
   if (isAddress(input.trim())) return { name: null, address: input.trim() as Address, onBase: true };
   const name = fullName(input);
   if (!name) return null;
   ens ??= createPublicClient({ chain: mainnet, transport: http(MAINNET_RPC) });
-  const base = await ens.getEnsAddress({ name, coinType: toCoinType(CHAIN_ID) }).catch(() => null);
+  const base = await ens.getEnsAddress({ name, coinType: toCoinType(CHAIN_ID) });
   if (base) return { name, address: base, onBase: true };
   const eth = await ens.getEnsAddress({ name });
   return eth ? { name, address: eth, onBase: name.endsWith(`.${NAME_PARENT}`) } : null;

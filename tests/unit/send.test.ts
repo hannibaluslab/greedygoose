@@ -44,10 +44,12 @@ import {
   sendForm,
   sendOptions,
   sendSmallPrint,
+  toLookups,
   type Recipient,
   type RecipientChecks,
   type SendData,
   type SendForm,
+  type ToState,
 } from "@/lib/send";
 import type { TradeHolding } from "@/lib/trade";
 
@@ -254,7 +256,17 @@ describe("parseTo (what was typed in To)", () => {
   it("calls mixed capitals that don't match the checksum a typo", () => {
     const wrong = sam.replace("bC51", "bc51");
     expect(parseTo(wrong)).toEqual({ kind: "invalid", text: SEND_COPY.typo });
-    expect(parseTo(`0x${sam.slice(2).toUpperCase()}`)).toEqual({ kind: "invalid", text: SEND_COPY.typo });
+  });
+
+  it("takes an address in all capitals, EIP-55's other form without a checksum (QR codes use it), with 0x or 0X", () => {
+    expect(parseTo(`0x${sam.slice(2).toUpperCase()}`)).toEqual({ kind: "address", address: sam });
+    expect(parseTo(`0X${sam.slice(2).toUpperCase()}`)).toEqual({ kind: "address", address: sam });
+    expect(parseTo(`0X${sam.slice(2).toLowerCase()}`)).toEqual({ kind: "address", address: sam });
+  });
+
+  it("reads a name that starts with 0x as a name, not a bad address", () => {
+    expect(parseTo("0xfoo.eth")).toEqual({ kind: "name", name: "0xfoo.eth" });
+    expect(parseTo("0xsam.justan.id")).toEqual({ kind: "name", name: "0xsam.justan.id" });
   });
 
   it("says what an address looks like when it's too short, too long or not hex", () => {
@@ -274,7 +286,7 @@ describe("parseTo (what was typed in To)", () => {
 
 describe("recipientNote (the guards)", () => {
   const r = (address: Address, extra: Partial<Recipient> = {}): Recipient => ({ address, name: null, onBase: true, ...extra });
-  const used: RecipientChecks = { base: { code: true, used: true } };
+  const used: RecipientChecks = { base: { code: true, used: true, notAccount: false } };
 
   it("refuses the account itself, the zero address and the app's contracts, before Base answers", () => {
     expect(recipientNote(r(user), user, {})).toEqual({ block: SEND_COPY.self, warn: null, waiting: false });
@@ -286,21 +298,121 @@ describe("recipientNote (the guards)", () => {
   it("waits for Base before it lets the send go, so a warning never lands after the tap", () => {
     expect(recipientNote(r(sam), user, {}).waiting).toBe(true);
     expect(recipientNote(r(sam), user, used)).toEqual({ block: null, warn: null, waiting: false });
-    // A read that failed says nothing and doesn't hold the send.
-    expect(recipientNote(r(sam), user, { base: null })).toEqual({ block: null, warn: null, waiting: false });
+  });
+
+  it("says so when Base couldn't be asked, rather than letting the send go as if it had been checked", () => {
+    expect(recipientNote(r(sam), user, { base: null })).toEqual({ block: null, warn: SEND_COPY.unchecked, waiting: false });
+  });
+
+  it("refuses any other token or trading pool, which Base says isn't an account", () => {
+    expect(recipientNote(r(kit), user, { base: { code: true, used: true, notAccount: true } })).toEqual({ block: SEND_COPY.notAccount, warn: null, waiting: false });
+    expect(recipientNote(r(kit, { name: "pool.eth", onBase: false }), user, { base: { code: true, used: true, notAccount: true }, ethCode: false }).block).toBe(SEND_COPY.notAccount);
   });
 
   it("warns, without blocking, on an address Base has never seen used", () => {
-    expect(recipientNote(r(sam), user, { base: { code: false, used: false } })).toEqual({ block: null, warn: SEND_COPY.unused, waiting: false });
+    expect(recipientNote(r(sam), user, { base: { code: false, used: false, notAccount: false } })).toEqual({ block: null, warn: SEND_COPY.unused, waiting: false });
   });
 
-  it("a name with only an Ethereum address: refused when it's a contract there with nothing on Base, else warned or fine", () => {
+  it("a name with only an Ethereum address: refused when it's a contract there with nothing on Base, else always warned", () => {
     const eth = r(sam, { name: "rae.eth", onBase: false });
-    expect(recipientNote(eth, user, { base: { code: false, used: false } }).waiting).toBe(true);
-    expect(recipientNote(eth, user, { base: { code: false, used: false }, ethCode: true }).block).toBe(SEND_COPY.ethOnlyContract("rae.eth"));
-    expect(recipientNote(eth, user, { base: { code: true, used: true }, ethCode: true })).toEqual({ block: null, warn: SEND_COPY.ethOnly, waiting: false });
-    // An account with a key (no code on Ethereum) is the same account on Base.
-    expect(recipientNote(eth, user, { base: { code: false, used: true }, ethCode: false })).toEqual({ block: null, warn: null, waiting: false });
+    expect(recipientNote(eth, user, { base: { code: false, used: false, notAccount: false } }).waiting).toBe(true);
+    expect(recipientNote(eth, user, { base: { code: false, used: false, notAccount: false }, ethCode: true }).block).toBe(SEND_COPY.ethOnlyContract("rae.eth"));
+    expect(recipientNote(eth, user, { base: { code: true, used: true, notAccount: false }, ethCode: true })).toEqual({ block: null, warn: SEND_COPY.ethOnly, waiting: false });
+    // A plain key is warned too: an exchange's deposit address is one, and may not take money on Base.
+    expect(recipientNote(eth, user, { base: { code: false, used: true, notAccount: false }, ethCode: false })).toEqual({ block: null, warn: SEND_COPY.ethOnly, waiting: false });
+  });
+
+  it("a name with only an Ethereum address that couldn't be checked on Ethereum or Base is refused, since a lost send can't be told apart", () => {
+    const eth = r(sam, { name: "rae.eth", onBase: false });
+    expect(recipientNote(eth, user, { base: { code: false, used: true, notAccount: false }, ethCode: null })).toEqual({ block: SEND_COPY.ethUnchecked, warn: null, waiting: false });
+    expect(recipientNote(eth, user, { base: null, ethCode: true })).toEqual({ block: SEND_COPY.ethUnchecked, warn: null, waiting: false });
+    // A JAW name is the same account everywhere: its Ethereum address is its Base one, so nothing of this applies.
+    expect(recipientNote(r(sam, { name: "sam.justan.id" }), user, used)).toEqual({ block: null, warn: null, waiting: false });
+  });
+});
+
+describe("toLookups (To's lookups, in order)", () => {
+  /** A lookup whose answers the test hands out, one per name, whenever it likes. */
+  function names() {
+    const waiting = new Map<string, { ok: (v: Awaited<ReturnType<Parameters<typeof toLookups>[1]>>) => void; fail: (e: unknown) => void }>();
+    const lookup = (name: string) => new Promise<Awaited<ReturnType<Parameters<typeof toLookups>[1]>>>((ok, fail) => waiting.set(name, { ok, fail }));
+    return { lookup, answer: (name: string, address: Address | null) => waiting.get(name)!.ok(address ? { name, address, onBase: true } : null), fail: (name: string) => waiting.get(name)!.fail(new Error("rpc down")) };
+  }
+  function setup() {
+    const n = names();
+    const states: ToState[] = [];
+    const to = toLookups((s) => states.push(s), n.lookup);
+    return { ...n, to, last: () => states.at(-1) };
+  }
+
+  it("a name looked up becomes who it is", async () => {
+    const { to, answer, last } = setup();
+    const done = to.find("extenso");
+    expect(last()).toEqual({ kind: "looking", name: "extenso.justan.id" });
+    answer("extenso.justan.id", sam);
+    await done;
+    expect(last()).toEqual({ kind: "found", recipient: { address: sam, name: "extenso.justan.id", onBase: true } });
+  });
+
+  it("an edit while looking drops the lookup: what was typed before never becomes the recipient", async () => {
+    const { to, answer, last } = setup();
+    const done = to.find("extenso");
+    to.edit(); // typed "vitalik.eth" over it
+    expect(last()).toEqual({ kind: "idle" });
+    answer("extenso.justan.id", sam);
+    await done;
+    expect(last()).toEqual({ kind: "idle" });
+  });
+
+  it("clearing the field while looking drops the lookup too, and a new Find wins over the old one", async () => {
+    const { to, answer, last } = setup();
+    const first = to.find("extenso");
+    to.clear();
+    const second = to.find("vitalik.eth");
+    answer("extenso.justan.id", sam);
+    await first;
+    expect(last()).toEqual({ kind: "looking", name: "vitalik.eth" });
+    answer("vitalik.eth", kit);
+    await second;
+    expect(last()).toEqual({ kind: "found", recipient: { address: kit, name: "vitalik.eth", onBase: true } });
+  });
+
+  it("a paste or a pick while looking wins, and the late answer is dropped", async () => {
+    const { to, answer, fail, last } = setup();
+    const a = to.find("extenso");
+    await to.find(kit);
+    answer("extenso.justan.id", sam);
+    await a;
+    expect(last()).toEqual({ kind: "found", recipient: { address: kit, name: null, onBase: true } });
+    const b = to.find("rae.eth");
+    to.pick(sam);
+    fail("rae.eth");
+    await b;
+    // A pick carries no name of its own: the screen checks the address's name again before showing one.
+    expect(last()).toEqual({ kind: "found", recipient: { address: sam, name: null, onBase: true } });
+  });
+
+  it("an edit clears why there was no one, and a failed lookup says so", async () => {
+    const { to, fail, answer, last } = setup();
+    const a = to.find("rae.eth");
+    fail("rae.eth");
+    await a;
+    expect(last()).toEqual({ kind: "none", text: SEND_COPY.lookupFailed });
+    to.edit();
+    expect(last()).toEqual({ kind: "idle" });
+    const b = to.find("nobody.eth");
+    answer("nobody.eth", null);
+    await b;
+    expect(last()).toEqual({ kind: "none", text: SEND_COPY.noName("nobody.eth") });
+  });
+
+  it("an edit leaves who it is alone (the field isn't shown then) and does nothing while idle", async () => {
+    const { to, last } = setup();
+    to.edit();
+    expect(last()).toBeUndefined();
+    await to.find(sam);
+    to.edit();
+    expect(last()).toEqual({ kind: "found", recipient: { address: sam, name: null, onBase: true } });
   });
 });
 
@@ -365,7 +477,7 @@ describe("Send's options and amount", () => {
     expect(plan(null, {}).ready).toBe(false);
     expect(plan(toSam, {}).ready).toBe(false);
     expect(plan({ ...toSam, address: user }, {}).ready).toBe(false);
-    const v = plan(toSam, { base: { code: true, used: true } });
+    const v = plan(toSam, { base: { code: true, used: true, notAccount: false } });
     expect(v.ready).toBe(true);
     expect(v.button).toBe("Send $25.00");
     expect(v.rows).toEqual([
@@ -375,16 +487,23 @@ describe("Send's options and amount", () => {
     expect(v.sentTitle).toBe("Sent $25.00 to sam.justan.id");
     expect(v.smallPrint).toBe(`In one go: exactly 25.00 USDC goes to ${sam} on Base. A send can’t be undone.`);
     // A warning lets it go.
-    const fresh = plan(toSam, { base: { code: false, used: false } });
+    const fresh = plan(toSam, { base: { code: false, used: false, notAccount: false } });
     expect(fresh.ready).toBe(true);
     expect(fresh.toNote).toEqual({ text: SEND_COPY.unused, tone: "watch" });
   });
 
   it("a stock's summary and small print give the shares, to the last decimal", () => {
-    const v = planSend({ asset: "TSLAc", amount: "10", all: false, data: backer, user, recipient: { address: sam, name: null, onBase: true }, checks: { base: { code: true, used: true } } });
+    const v = planSend({ asset: "TSLAc", amount: "10", all: false, data: backer, user, recipient: { address: sam, name: null, onBase: true }, checks: { base: { code: true, used: true, notAccount: false } } });
     expect(v.button).toBe("Send Tesla");
+    expect(v.sentTitle).toBe("Sent 0.025 Tesla to 0x6478…2952");
     expect(v.rows[0]).toEqual({ label: "To", value: "0x6478…2952" });
     expect(v.rows[1].value).toBe("0.025 TSLA · about $10.00");
+    // MAX after a refresh left fewer free shares: the fewer are sent, and "about" is what they're worth, not the dollars typed.
+    const before = sendForm({ asset: "TSLAc", amount: "", all: false }, { type: "max" }, backer);
+    const after = account(backer.cash, { AMZNc: [1.8, 1_721.43], NVDAc: [0, 1_341.83], TSLAc: [30, 0] });
+    const moved = planSend({ ...before, data: after, user, recipient: { address: sam, name: null, onBase: true }, checks: { base: { code: true, used: true, notAccount: false } } });
+    expect(moved.amountRaw).toBe(after.holdings.find((h) => h.symbol === "TSLAc")!.freeRaw);
+    expect(moved.rows[1].value).toBe("0.075 TSLA · about $30.00");
     expect(v.smallPrint).toContain("exactly 0.025 TSLA goes");
     expect(sendSmallPrint({ token: amzn, amountRaw: 723_456n, multiplier: 10n ** 18n, to: sam })).toContain("exactly 0.00723456 AMZN");
     // A split: shares shown are raw × uiMultiplier.

@@ -1,6 +1,23 @@
-import { encodeFunctionData, erc20Abi, formatUnits, getAddress, isAddress, isAddressEqual, parseUnits, type Address, type Client } from "viem";
+import {
+  AbiDecodingDataSizeTooSmallError,
+  AbiDecodingZeroDataError,
+  BaseError,
+  ContractFunctionRevertedError,
+  ContractFunctionZeroDataError,
+  encodeFunctionData,
+  erc20Abi,
+  formatUnits,
+  getAddress,
+  isAddress,
+  isAddressEqual,
+  parseAbi,
+  parseUnits,
+  type Address,
+  type Client,
+} from "viem";
 import { getBalance, getCode, getTransactionCount, readContract } from "viem/actions";
 import { CASH } from "@/config/risk";
+import { ORACLE_DECIMALS } from "@/lib/aave/addresses";
 import type { ActivityItem } from "@/lib/activity/decode";
 import type { LocalActivity } from "@/lib/activity/local";
 import type { Call } from "@/lib/aave/tx";
@@ -46,7 +63,6 @@ export const SEND_COPY = {
   toSend: "to send",
   free: "free",
   to: "To",
-  toLabel: "Name or address",
   toPlaceholder: "sam.justan.id or 0x…",
   find: "Find",
   looking: "Looking…",
@@ -60,7 +76,9 @@ export const SEND_COPY = {
   self: "That’s your own account. Send to someone else.",
   zero: "That address can’t hold money. Check it and try again.",
   contract: "That address is one of the contracts the app uses, not someone’s account. Money sent there would be lost.",
+  notAccount: "That address is a contract that holds or trades money, not someone’s account. Money sent there would be lost.",
   unused: "This address hasn’t been used on Base yet. Check it’s right.",
+  unchecked: "We couldn’t check this address on Base right now. Check it’s right.",
   typo: "This address has a typo in it. Copy it again from where you found it.",
   shape: "An address starts with 0x and has 40 more letters and numbers.",
   badName: "Type a name, like sam.justan.id or a .eth name, or a 0x address.",
@@ -68,6 +86,7 @@ export const SEND_COPY = {
   lookupFailed: "We couldn’t look that up right now. Try again.",
   ethOnly: "This name only gives an Ethereum address. Send only if it’s the same account on Base.",
   ethOnlyContract: (name: string) => `${name} is a wallet on Ethereum that isn’t on Base. Ask them for their Base address.`,
+  ethUnchecked: "We couldn’t check where this name’s address is right now. Try again in a moment.",
   // How much.
   overCash: (usd: number) => `That’s more than your cash (${formatUsd(usd)}).`,
   feeBuffer: `Leave ${formatUsd(CASH.feeBufferUsd)} for the network fee.`,
@@ -81,6 +100,7 @@ export const SEND_COPY = {
   sendStock: (name: string) => `Send ${name}`,
   feeUnsupported: "Your account can’t pay network fees in USDC on Base right now, so this can’t be sent.",
   fallback: "This send would fail right now. Check the amount and try again in a moment.",
+  stockFallback: "This stock can’t go to that address right now. Send to someone else, or try again later.",
   failedOnChain: "The send didn’t go through on Base. Nothing moved except any network fee.",
   sent: (what: string, who: string) => `Sent ${what} to ${who}`,
   sentBody: "It’s in their account on Base.",
@@ -177,18 +197,21 @@ export type ToInput =
   | { kind: "invalid"; text: string };
 
 /**
- * Reads what was typed in To. Anything starting with 0x is an address: 0x and 40 hex characters, either all lowercase
- * or in its checksum's exact capitals (viem's strict `isAddress`); a mixed-case address whose capitals don't match its
- * checksum has a typo. Anything else is a name: "sam" means sam.justan.id (the app's name parent), a dotted one is
+ * Reads what was typed in To. Anything starting with 0x and without a dot is an address: 0x and 40 hex characters,
+ * all lowercase, all capitals (EIP-55's two forms without a checksum; QR codes often use capitals) or in its
+ * checksum's exact capitals (viem's strict `isAddress`); mixed capitals that don't match the checksum have a typo.
+ * Anything else is a name, 0xfoo.eth included: "sam" means sam.justan.id (the app's name parent), a dotted one is
  * taken as typed (ENS's normalization).
  */
 export function parseTo(text: string): ToInput {
   const t = text.trim();
   if (!t) return { kind: "empty" };
-  if (/^0x/i.test(t)) {
-    if (!/^0x[0-9a-fA-F]{40}$/.test(t)) return { kind: "invalid", text: SEND_COPY.shape };
-    if (!isAddress(t, { strict: true })) return { kind: "invalid", text: SEND_COPY.typo };
-    return { kind: "address", address: getAddress(t) };
+  if (/^0x/i.test(t) && !t.includes(".")) {
+    if (!/^0x[0-9a-f]{40}$/i.test(t)) return { kind: "invalid", text: SEND_COPY.shape };
+    const hex = t.slice(2);
+    const noChecksum = hex === hex.toLowerCase() || hex === hex.toUpperCase();
+    if (!noChecksum && !isAddress(`0x${hex}`, { strict: true })) return { kind: "invalid", text: SEND_COPY.typo };
+    return { kind: "address", address: getAddress(`0x${hex.toLowerCase()}`) };
   }
   const name = fullName(t);
   return name ? { kind: "name", name } : { kind: "invalid", text: SEND_COPY.badName };
@@ -197,19 +220,61 @@ export function parseTo(text: string): ToInput {
 /** Who Send pays: the address, the name it came from (or the address's own name), and whether that's its Base address. */
 export type Recipient = { address: Address; name: string | null; onBase: boolean };
 
+/** What Base says about the recipient (readRecipient). */
+export type BaseCheck = { code: boolean; used: boolean; notAccount: boolean };
+
 /**
- * What Base says about the recipient (readRecipient): whether it has code, and whether it was ever used (code, a sent
- * transaction, ETH or USDC). `ethCode`: for a name that only gives an Ethereum address, whether that address has code on
- * Ethereum (a contract wallet there may not be the same account on Base). Undefined while reading, null if the read
- * failed (the screen then says nothing of it).
+ * What Base says about the recipient (readRecipient): whether it has code, whether it was ever used (code, a sent
+ * transaction, ETH or USDC), and whether it's a token or a trading pool rather than an account. `ethCode`: for a name
+ * that only gives an Ethereum address, whether that address has code on Ethereum (a contract wallet there may not be the
+ * same account on Base). Undefined while reading, null if the read failed.
  */
 export type RecipientChecks = {
-  base?: { code: boolean; used: boolean } | null;
+  base?: BaseCheck | null;
   ethCode?: boolean | null;
 };
 
-/** One read of the recipient on Base, in parallel: its code, its nonce, its ETH and its USDC. */
-export async function readRecipient(client: Client, address: Address): Promise<{ code: boolean; used: boolean }> {
+/** A token's and a pool's own questions: every ERC-20 answers the first two, every Uniswap- or Aerodrome-style pool the last two. */
+const tokenOrPoolAbi = parseAbi([
+  "function decimals() view returns (uint8)",
+  "function totalSupply() view returns (uint256)",
+  "function token0() view returns (address)",
+  "function token1() view returns (address)",
+]);
+
+/** The contract didn't answer that question (it reverted, or answered nothing a value can be read from); any other error is thrown on. */
+const noAnswer = (e: unknown) =>
+  e instanceof BaseError &&
+  !!e.walk(
+    (x) =>
+      x instanceof ContractFunctionRevertedError ||
+      x instanceof ContractFunctionZeroDataError ||
+      x instanceof AbiDecodingZeroDataError ||
+      x instanceof AbiDecodingDataSizeTooSmallError,
+  );
+const answers = (p: Promise<unknown>) =>
+  p.then(
+    () => true,
+    (e) => {
+      if (noAnswer(e)) return false;
+      throw e;
+    },
+  );
+
+/**
+ * Whether a contract is a token or a trading pool, not an account: a token (it answers decimals and totalSupply) or a
+ * pool (token0 and token1). Money sent to one is stuck or taken by whoever trades next. Accounts (JAW's, a Safe) answer
+ * none of these. This catches what APP_CONTRACTS can't list: other tokens (WETH) and the venues' pools, whose
+ * addresses are worked out from the factories rather than kept.
+ */
+async function isTokenOrPool(client: Client, address: Address): Promise<boolean> {
+  const ask = (functionName: "decimals" | "totalSupply" | "token0" | "token1") => answers(readContract(client, { address, abi: tokenOrPoolAbi, functionName }));
+  const [decimals, supply, token0, token1] = await Promise.all([ask("decimals"), ask("totalSupply"), ask("token0"), ask("token1")]);
+  return (decimals && supply) || (token0 && token1);
+}
+
+/** One read of the recipient on Base, in parallel: its code, its nonce, its ETH and its USDC; then, for a contract, whether it's a token or a pool. */
+export async function readRecipient(client: Client, address: Address): Promise<BaseCheck> {
   const [code, nonce, eth, usdc] = await Promise.all([
     getCode(client, { address }),
     getTransactionCount(client, { address }),
@@ -217,26 +282,87 @@ export async function readRecipient(client: Client, address: Address): Promise<{
     readContract(client, { address: USDC.address, abi: erc20Abi, functionName: "balanceOf", args: [address] }),
   ]);
   const hasCode = !!code && code !== "0x";
-  return { code: hasCode, used: hasCode || nonce > 0 || eth > 0n || usdc > 0n };
+  return { code: hasCode, used: hasCode || nonce > 0 || eth > 0n || usdc > 0n, notAccount: hasCode && (await isTokenOrPool(client, address)) };
 }
 
 const BLOCK_TEXT: Record<RecipientBlock, string> = { self: SEND_COPY.self, zero: SEND_COPY.zero, contract: SEND_COPY.contract };
 
 /**
- * The recipient's guards, refused before warned: the account itself, the zero address and the app's or its protocols'
- * contracts are refused (lib/contracts.ts); a name whose only address is a contract on Ethereum with nothing on Base is
- * refused; a name with only an Ethereum address that is a contract on both is a warning; an address Base has never seen
- * used is a warning. `waiting` until Base has answered, so a warning never lands after the tap.
+ * The recipient's guards, refused before warned. Refused: the account itself, the zero address and the app's or its
+ * protocols' contracts (lib/contracts.ts); any other token or trading pool (Base says so); a name whose only address
+ * is a contract on Ethereum with nothing on Base; and such a name when Ethereum or Base couldn't be asked, since that
+ * can't be told apart. Warned: a name that only gives an Ethereum address (it may be a different account on Base, an
+ * exchange's deposit address is a plain key too); an address Base has never seen used; an address Base couldn't be
+ * asked about. `waiting` until Base has answered, so a warning never lands after the tap.
  */
 export function recipientNote(r: Recipient, user: Address, checks: RecipientChecks): { block: string | null; warn: string | null; waiting: boolean } {
+  const note = (block: string | null, warn: string | null = null) => ({ block, warn, waiting: false });
   const blocked = recipientBlock(r.address, user);
-  if (blocked) return { block: BLOCK_TEXT[blocked], warn: null, waiting: false };
+  if (blocked) return note(BLOCK_TEXT[blocked]);
   if (checks.base === undefined || (!r.onBase && checks.ethCode === undefined)) return { block: null, warn: null, waiting: true };
-  if (!r.onBase && checks.ethCode && checks.base && !checks.base.code) {
-    return { block: SEND_COPY.ethOnlyContract(r.name ?? shortAddress(r.address)), warn: null, waiting: false };
+  if (checks.base?.notAccount) return note(SEND_COPY.notAccount);
+  if (!r.onBase) {
+    if (checks.ethCode === null || checks.base === null) return note(SEND_COPY.ethUnchecked);
+    if (checks.ethCode && !checks.base.code) return note(SEND_COPY.ethOnlyContract(r.name ?? shortAddress(r.address)));
+    return note(null, SEND_COPY.ethOnly);
   }
-  const warn = !r.onBase && checks.ethCode ? SEND_COPY.ethOnly : checks.base && !checks.base.used ? SEND_COPY.unused : null;
-  return { block: null, warn, waiting: false };
+  if (checks.base === null) return note(null, SEND_COPY.unchecked);
+  return note(null, checks.base.used ? null : SEND_COPY.unused);
+}
+
+/** Where To stands: nothing yet, looking a name up, who it is, or why there's no one. */
+export type ToState =
+  | { kind: "idle" }
+  | { kind: "looking"; name: string }
+  | { kind: "found"; recipient: Recipient }
+  | { kind: "none"; text: string };
+
+/** Looks a name up (lib/jaw/name.ts addressOfName): its address, the name it gives back, and whether that's its Base address. */
+export type NameLookup = (name: string) => Promise<{ name: string | null; address: Address; onBase: boolean } | null>;
+
+/**
+ * To's lookups, in order (useRecipient holds one). Each find, pick, edit or clear replaces whatever came before it: a
+ * lookup that answers after the user moved on (typed something else, cleared the field, pasted an address, picked
+ * someone) is dropped, so it never becomes the recipient. A pasted address is taken at once; a name is looked up. A
+ * pick has no name of its own: the address's name is checked again where it's shown (it could point elsewhere now).
+ */
+export function toLookups(set: (s: ToState) => void, lookup: NameLookup) {
+  let seq = 0;
+  let now: ToState = { kind: "idle" };
+  const put = (s: ToState) => {
+    now = s;
+    set(s);
+  };
+  return {
+    async find(text: string) {
+      const id = ++seq;
+      const parsed = parseTo(text);
+      if (parsed.kind === "empty") return put({ kind: "idle" });
+      if (parsed.kind === "invalid") return put({ kind: "none", text: parsed.text });
+      if (parsed.kind === "address") return put({ kind: "found", recipient: { address: parsed.address, name: null, onBase: true } });
+      put({ kind: "looking", name: parsed.name });
+      try {
+        const r = await lookup(parsed.name);
+        if (id !== seq) return;
+        put(r ? { kind: "found", recipient: { address: r.address, name: r.name ?? parsed.name, onBase: r.onBase } } : { kind: "none", text: SEND_COPY.noName(parsed.name) });
+      } catch {
+        if (id === seq) put({ kind: "none", text: SEND_COPY.lookupFailed });
+      }
+    },
+    pick(address: Address) {
+      seq += 1;
+      put({ kind: "found", recipient: { address, name: null, onBase: true } });
+    },
+    /** The field changed: a lookup in flight is dropped, and what the last one said (looking, or why there was no one) goes. */
+    edit() {
+      seq += 1;
+      if (now.kind === "looking" || now.kind === "none") put({ kind: "idle" });
+    },
+    clear() {
+      seq += 1;
+      put({ kind: "idle" });
+    },
+  };
 }
 
 /** The people sent to from this device, newest first, once each, for the quick picks: from Activity's own records. */
@@ -346,7 +472,10 @@ export function planSend(p: {
         ];
 
   const shown = amountRaw > 0n && !amountBlock;
-  const theyGet = !shown ? "—" : p.asset === "cash" ? formatUsd(amountUsd) : `${formatShares(shares)} ${ticker} · ${SEND_COPY.about(toUsd(usdRaw))}`;
+  // A stock's dollars are what the shares sent are worth at Aave's price, not the dollars typed: on MAX, a refresh
+  // that leaves fewer free shares sends fewer, and the summary says what they're worth.
+  const sharesUsdRaw = stock && holding ? (sharesRaw * holding.priceRaw) / 10n ** BigInt(stock.decimals + ORACLE_DECIMALS - USDC.decimals) : 0n;
+  const theyGet = !shown ? "—" : p.asset === "cash" ? formatUsd(amountUsd) : `${formatShares(shares)} ${ticker} · ${SEND_COPY.about(toUsd(sharesUsdRaw))}`;
   const rows = [
     { label: SEND_COPY.to, value: who ?? "—" },
     { label: SEND_COPY.theyGet, value: theyGet },
@@ -354,7 +483,8 @@ export function planSend(p: {
 
   const ready = !!token && amountRaw > 0n && !amountBlock && !!p.recipient && !!to && !to.block && !to.waiting;
   const button = p.asset === "cash" ? (amountUsd > 0 && !amountBlock ? SEND_COPY.sendUsd(amountUsd) : SEND_COPY.button) : holding ? SEND_COPY.sendStock(holding.name) : SEND_COPY.button;
-  const what = p.asset === "cash" ? formatUsd(amountUsd) : `${formatShares(shares)} ${ticker}`;
+  // The done line names the stock ("Sent 0.0072 Amazon"), as the Trade sheet's "Sold 0.0029 Alphabet" does.
+  const what = p.asset === "cash" ? formatUsd(amountUsd) : `${formatShares(shares)} ${holding?.name ?? ticker}`;
 
   return {
     token,
@@ -373,7 +503,7 @@ export function planSend(p: {
       ready && token && p.recipient ? sendSmallPrint({ token, amountRaw, multiplier: holding?.multiplier, to: p.recipient.address, name: holding?.name }) : null,
     button,
     ready,
-    /** "$20.00" or "0.0430 NVDA", and to whom, for the done state. */
+    /** "$20.00" or "0.043 NVIDIA", and to whom, for the done state. */
     sentTitle: who ? SEND_COPY.sent(what, who) : null,
   };
 }
