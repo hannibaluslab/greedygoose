@@ -362,17 +362,20 @@ export function CreditBuySheet({
                 room.block === "over-free"
                   ? null
                   : canUse
-                    ? creditLine
+                    ? // Ties the two dollar figures together (Adrian: "up to 3 but MAX is 3.99?"): credit is a share of what's
+                      // put in use, plus any room left on what already backs credit.
+                      creditLine === FEE_FIRST
+                      ? creditLine
+                      : `${pick.raw > 0n ? `About ${Math.round(chosen.cf * 100)}% of the ${formatUsd(backAmount || chosen.freeUsd)} of ${chosen.stock.name} you put in use${data.collateralUsd > 0 ? ", plus room on what already backs credit" : ""}.` : "From what already backs credit."}${room.maxSafeUsd >= 1 ? ` Stays Safe up to ${wholeUsd(room.maxSafeUsd)}.` : ""}`
                     : backAmount > 0 || pick.raw > 0n
                       ? `A Credit Buy needs at least ${formatUsd(BUY_LIMITS.minUsd)} of credit. Put more in use.`
                       : `Type how much ${chosen.stock.name} to put in use.`
               }
             />
-            {canUse && (room.maxSafeUsd >= 1 || data.debtUsd > 0) && (
+            {canUse && data.debtUsd > 0 && (
               <Summary
                 rows={[
                   // How much of it keeps the credit Safe (D2's bands); none at all reads in the status instead.
-                  ...(room.maxSafeUsd >= 1 ? [{ label: "Stays Safe up to", value: wholeUsd(room.maxSafeUsd) }] : []),
                   // What putting it in use does on its own, before any new credit (nothing owed has no status yet).
                   ...(data.debtUsd > 0 ? [{ label: "Status", value: <StatusChange from={room.before} to={room.after} /> }] : []),
                 ]}
@@ -541,7 +544,7 @@ function UseUpTo({ usd, line }: { usd: number; line: string | null }) {
   return (
     <div className="flex flex-col gap-1 rounded-[16px] border border-line-field bg-card px-3.5 py-3 leading-[normal]" aria-live="polite">
       {/* At $0 the label drops "up to", as step 1's CreditHero does. */}
-      <span className="label">{whole === 0 ? "Credit you can use" : "You can use up to"}</span>
+      <span className="label">{whole === 0 ? "Credit you can use" : "Credit it gives you"}</span>
       <span className="num inline-flex items-baseline">
         <span aria-hidden className="text-[18px] font-medium text-ink-mid">$</span>
         <span aria-hidden className="text-[32px] font-semibold leading-none tracking-[-0.04em]">{whole.toLocaleString("en-US")}</span>
