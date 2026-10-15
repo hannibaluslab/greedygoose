@@ -21,7 +21,8 @@ import { useCollateralFactorsRead, type Holding, type PositionData } from "@/hoo
 import { monthlyCost } from "@/lib/aave/math";
 import { cashRaw, feeBufferRaw } from "@/lib/cash";
 import {
-  CREDIT_BLOCKED, CREDIT_FROM, FEE_FIRST, backers, backingOptions, backingRaw, bestBacking, creditAvailable, creditWith, planCredit, shortNames,
+  CREDIT_BLOCKED, CREDIT_FROM, FEE_FIRST, backers, backingOptions, backingRaw, bestBacking, creditAvailable, creditWith, freeShownUsd, isAllFree,
+  planCredit, shortNames,
   type BackingOption, type BackingPick, type CreditAvailable,
 } from "@/lib/creditBuy";
 import { formatShares, formatUsd, formatUsdTrim, inWords } from "@/lib/formatting";
@@ -84,8 +85,12 @@ export function CreditBuySheet({
   const [direction, setDirection] = useState<"forward" | "back">("forward");
   const [stock, setStock] = useState<ReserveAsset | null>(preset);
   const [picked, setPicked] = useState<string | null>(null);
-  // Step 2: dollars of the picked holding, or `backAll` after MAX (exactly its free shares).
+  // Step 2: the dollars typed, and the shares they were worth as they were typed (`backRaw`), or `backAll` after MAX or
+  // the whole free value typed (exactly its free shares, whatever the price does next). `backFor` is the holding they
+  // were typed for: another holding starts empty.
+  const [backFor, setBackFor] = useState<string | null>(null);
   const [backUsd, setBackUsd] = useState("");
+  const [backRaw, setBackRaw] = useState(0n);
   const [backAll, setBackAll] = useState(false);
   const [raw, setRaw] = useState("");
   const [ack, setAck] = useState(false);
@@ -118,14 +123,22 @@ export function CreditBuySheet({
   // The room on what already backs credit alone: step 1's "already backs" row.
   const existingRoom = creditWith(data);
   const canUseExisting = data.collateralUsd > 0 && existingRoom >= BUY_LIMITS.minUsd;
-  // Step 1 picks the holding that can back the most until Sam picks another, else what already backs credit.
-  const pickedKey = picked ?? bestBacking(data, options)?.option.stock.symbol ?? (canUseExisting ? EXISTING : null);
+  // Step 1 picks the holding that can back the most until Sam picks another, else what already backs credit. A pick
+  // that can't back it any more (under $1 free, paused, or no longer read) falls back to that default on step 1.
+  const canPick = (key: string) => (key === EXISTING ? canUseExisting : options.some((o) => o.stock.symbol === key));
+  const fallbackKey = bestBacking(data, options)?.option.stock.symbol ?? (canUseExisting ? EXISTING : null);
+  const pickedKey = (step === "back" && picked && !canPick(picked) ? null : picked) ?? fallbackKey;
   const chosen = options.find((o) => o.stock.symbol === pickedKey) ?? null;
   const chosenHolding = chosen ? data.holdings.find((h) => h.symbol === chosen.stock.symbol) ?? null : null;
+  // Past step 1, a picked holding that dropped out of the list: the buy can't quietly fall back to what already backs
+  // credit, so steps 2–4 say so and send Sam back to pick again (not once the batch is on its way or has landed).
+  const lostPick = step !== "back" && !!picked && picked !== EXISTING && !chosen && !busy && phase !== "done";
 
-  // Step 2's typed backing, in raw units: MAX is exactly the free shares, so no dust is left behind.
-  const backAmount = Math.max(0, Number(backUsd) || 0);
-  const pick: BackingPick = { option: chosen, raw: chosen ? (backAll ? chosen.freeRaw : backingRaw(chosen, backAmount)) : 0n };
+  // Step 2's typed backing, in raw units: MAX, or the whole free value typed, is exactly the free shares, so no dust is
+  // left behind; otherwise the shares the dollars were worth when typed.
+  const typed = !!chosen && backFor === chosen.stock.symbol;
+  const backAmount = typed ? Math.max(0, Number(backUsd) || 0) : 0;
+  const pick: BackingPick = { option: chosen, raw: chosen && typed ? (backAll ? chosen.freeRaw : backRaw) : 0n };
   // What this backing gives: "You can use up to $X" on step 2, step 3's number and step 4's "Up to" are this one figure.
   const room = planCredit({ position: data, backing: pick, creditRaw: 0n, cash: data.cash });
   const roomUsd = room.maxUsd;
@@ -134,6 +147,13 @@ export function CreditBuySheet({
   const amount = Math.max(0, Number(raw) || 0);
   const creditRaw = parseUnits(amount.toFixed(USDC.decimals), USDC.decimals);
   const plan = planCredit({ position: data, backing: pick, creditRaw, cash: data.cash });
+
+  // D2's tick is for the status it names: a price refresh that moves the result (Watch to Act) asks again.
+  const [tickedFor, setTickedFor] = useState(plan.after);
+  if (tickedFor !== plan.after) {
+    setTickedFor(plan.after);
+    setAck(false);
+  }
 
   const quote = useBuyQuote(stock ?? undefined, amount);
   const q = quote.data ?? null;
@@ -147,7 +167,8 @@ export function CreditBuySheet({
   const againstNames = against.map((h) => h.name);
 
   let blocker: string | null = null;
-  if (amount > 0 && amount < BUY_LIMITS.minUsd) blocker = `Minimum buy is ${formatUsd(BUY_LIMITS.minUsd)}.`;
+  if (lostPick) blocker = "That stock can’t back credit right now.";
+  else if (amount > 0 && amount < BUY_LIMITS.minUsd) blocker = `Minimum buy is ${formatUsd(BUY_LIMITS.minUsd)}.`;
   else if (amount > 0 && plan.block) blocker = CREDIT_BLOCKED[plan.block];
   else if (stock && amount > 0 && quote.isSuccess && q === null) blocker = `There’s no market for ${stock.name} right now.`;
   else if (econ && econ.premium > BUY_LIMITS.blockPremium)
@@ -156,14 +177,19 @@ export function CreditBuySheet({
   const ready = amount >= BUY_LIMITS.minUsd && !!econ && q?.amountIn === creditRaw && !blocker && !quote.isFetching;
   const feeBlocked = isConnected && fee.state === "unsupported";
 
-  /** Step 1's pick: a new holding starts step 2 empty again. */
-  const choose = (key: string) => {
-    if (key !== pickedKey) {
-      setBackUsd("");
-      setBackAll(false);
-      setRaw("");
-    }
+  /** Step 1's pick: a new holding starts step 2 empty again (`backFor`), and step 4 too. */
+  const choose = (key: string | null) => {
+    if (key !== picked) setRaw("");
     setPicked(key);
+  };
+  /** Step 2's backing changed: the amount to buy was for the old one, so step 4 starts empty again. */
+  const setBacking = (usd: string, all: boolean, rawIn: bigint) => {
+    setBackFor(chosen?.stock.symbol ?? null);
+    setBackUsd(usd);
+    setBackAll(all);
+    setBackRaw(rawIn);
+    setRaw("");
+    setAck(false);
   };
   const afterBacking: Step = preset ? "amount" : "pick";
   const pickStock = (s: ReserveAsset) => {
@@ -245,7 +271,7 @@ export function CreditBuySheet({
                 disabled={!pickedKey}
                 onClick={() => {
                   // Hold the pick from here on: the default must not move to another holding when prices tick.
-                  setPicked(pickedKey);
+                  choose(pickedKey);
                   go(chosen ? "much" : afterBacking);
                 }}
                 className="mt-1"
@@ -254,18 +280,37 @@ export function CreditBuySheet({
               </Button>
             </>
           )
+        ) : lostPick ? (
+          // The holding picked on step 1 can't back credit any more (see `lostPick`): say so, and pick again.
+          !cfs ? (
+            cfRead.failed ? <CantCheck onRetry={cfRead.retry} /> : <div aria-busy className="h-[220px] animate-pulse rounded-[16px] bg-chip" />
+          ) : (
+            <>
+              <p role="status" className="m-0 px-1 pt-1 text-[15px] leading-snug text-ink">
+                {EQUITIES.find((e) => e.symbol === picked)?.name ?? "That stock"} can’t back credit right now.
+              </p>
+              <Button variant="dark" onClick={() => go("back")} className="mt-1">
+                Pick again
+              </Button>
+            </>
+          )
         ) : step === "much" && chosen && chosenHolding ? (
           <>
             <AmountField
               label="How much to put in use"
               badge={<StockAvatar symbol={chosen.stock.symbol} />}
-              value={backAll ? (Math.floor(chosen.freeUsd * 100) / 100).toFixed(2) : backUsd}
+              value={typed ? backUsd : ""}
               onValue={(v) => {
-                setBackAll(false);
-                setBackUsd(v);
+                // The whole free value typed is all of it from now on; otherwise the shares it is worth now.
+                const usd = Math.max(0, Number(v) || 0);
+                setBacking(v, isAllFree(chosen, usd), backingRaw(chosen, usd));
               }}
-              onMax={() => setBackAll(true)}
-              hint={`${formatShares(rawToShares(pick.raw, chosenHolding.multiplier, chosen.stock.decimals))} of ${formatShares(chosenHolding.freeShares)} ${tickerOf(chosen.stock.symbol)} shares · ${formatUsd(chosen.freeUsd)} free`}
+              onMax={() => setBacking(freeShownUsd(chosen).toFixed(2), true, chosen.freeRaw)}
+              hint={
+                room.block === "over-free"
+                  ? `${formatShares(chosenHolding.freeShares)} ${tickerOf(chosen.stock.symbol)} shares · ${formatUsd(chosen.freeUsd)} free`
+                  : `${formatShares(rawToShares(pick.raw, chosenHolding.multiplier, chosen.stock.decimals))} of ${formatShares(chosenHolding.freeShares)} ${tickerOf(chosen.stock.symbol)} shares · ${formatUsd(chosen.freeUsd)} free`
+              }
               autoFocus
             />
             <UseUpTo
@@ -275,7 +320,7 @@ export function CreditBuySheet({
                   ? null
                   : canUse
                     ? creditLine
-                    : backAmount > 0 || backAll
+                    : backAmount > 0 || pick.raw > 0n
                       ? `A Credit Buy needs at least ${formatUsd(BUY_LIMITS.minUsd)} of credit. Put more in use.`
                       : `Type how much ${chosen.stock.name} to put in use.`
               }
@@ -451,7 +496,8 @@ function UseUpTo({ usd, line }: { usd: number; line: string | null }) {
   const whole = Math.floor(usd);
   return (
     <div className="flex flex-col gap-1 rounded-[16px] border border-line-field bg-card px-3.5 py-3 leading-[normal]" aria-live="polite">
-      <span className="label">You can use up to</span>
+      {/* At $0 the label drops "up to", as step 1's CreditHero does. */}
+      <span className="label">{whole === 0 ? "Credit you can use" : "You can use up to"}</span>
       <span className="num inline-flex items-baseline">
         <span aria-hidden className="text-[18px] font-medium text-ink-mid">$</span>
         <span aria-hidden className="text-[32px] font-semibold leading-none tracking-[-0.04em]">{whole.toLocaleString("en-US")}</span>

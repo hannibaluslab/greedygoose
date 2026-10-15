@@ -121,14 +121,27 @@ function roomWith(pos: CreditPosition, lines: LockLine[]): { maxUsd: number; max
 const usdOf = (o: BackingOption, raw: bigint) => (o.freeRaw > 0n ? (o.freeUsd * Number(raw)) / Number(o.freeRaw) : 0);
 const usdcRaw = (usd: number) => parseUnits(Math.max(0, usd).toFixed(USDC.decimals), USDC.decimals);
 
+/** A holding's free value as step 2's MAX fills it in: floored to the cent, so it is never more than is free. */
+export const freeShownUsd = (option: BackingOption) => Math.floor(option.freeUsd * 100 + 1e-6) / 100;
+
 /**
- * "How much to put in use", typed in dollars, in raw units of the holding: in proportion to its free value. Within half
- * a cent of all of it is all of it (`freeRaw`, so no dust is left behind); more than it stays more, for the plan to
- * block ("over-free"). MAX passes the free shares straight through, not dollars.
+ * Whether dollars typed in step 2 are all of the holding's free value: from the cent it's shown at (MAX's figure, or
+ * half a cent under, whichever is lower) up to half a cent over it. Step 2 turns it into "all of it" when it's typed,
+ * so a later price move can neither make it more than is free nor leave dust behind. Clearly more stays more.
+ */
+export function isAllFree(option: BackingOption, usd: number): boolean {
+  if (!(usd > 0) || option.freeRaw <= 0n || option.freeUsd <= 0) return false;
+  return usd >= Math.min(freeShownUsd(option), option.freeUsd - 0.005) && usd <= option.freeUsd + 0.005;
+}
+
+/**
+ * "How much to put in use", typed in dollars, in raw units of the holding: in proportion to its free value. All of it
+ * (`isAllFree`) is exactly `freeRaw`, so no dust is left behind; more than it stays more, for the plan to block
+ * ("over-free"). MAX passes the free shares straight through, not dollars.
  */
 export function backingRaw(option: BackingOption, usd: number): bigint {
   if (!(usd > 0) || option.freeRaw <= 0n || option.freeUsd <= 0) return 0n;
-  if (Math.abs(usd - option.freeUsd) < 0.005) return option.freeRaw;
+  if (isAllFree(option, usd)) return option.freeRaw;
   return (option.freeRaw * BigInt(Math.round(usd * 1e6))) / BigInt(Math.max(1, Math.round(option.freeUsd * 1e6)));
 }
 
@@ -228,12 +241,13 @@ export function planCredit(
 }
 
 /** Why a Credit Buy can use nothing right now (F2-3's zero state, shown at step 1). */
-export type NoCredit = "no-stocks" | "cant-back" | "all-in-use" | "paused" | "no-liquidity";
+export type NoCredit = "no-stocks" | "cant-back" | "too-small" | "all-in-use" | "paused" | "no-liquidity";
 
 /** F2-3's line under "$0", first half: why. */
 export const NO_CREDIT: Record<NoCredit, string> = {
   "no-stocks": "Credit comes from the stocks you own.",
   "cant-back": "Your stocks can’t back credit right now.",
+  "too-small": "Your free stock is too small to back credit yet.",
   "all-in-use": "Your stocks already back what you owe. Repay some to use more.",
   paused: "New credit is paused right now.",
   "no-liquidity": "There’s no credit to give out right now.",
@@ -280,7 +294,9 @@ export function creditAvailable(p: { position: CreditPosition; options: readonly
     if (p.position.borrowPaused) return "paused";
     if (usd >= BUY_LIMITS.minUsd) return undefined;
     if (p.position.usdcLiquidity < BUY_LIMITS.minUsd) return "no-liquidity";
-    return p.options.length === 0 && p.position.collateralUsd <= 0 ? "cant-back" : "all-in-use";
+    // Nothing backs credit yet: free stock too small to give the $1 minimum buy isn't "all in use".
+    if (p.position.collateralUsd <= 0) return p.options.length === 0 ? "cant-back" : "too-small";
+    return "all-in-use";
   })();
   if (why) return { usd: 0, why, line: noCreditLine(why, toUsd(maxSpendRaw(p.cash)) >= BUY_LIMITS.minUsd) };
   return { usd, line: cashRaw(p.cash) < feeBufferRaw ? FEE_FIRST : CREDIT_FROM };

@@ -14,9 +14,10 @@ import { EQUITIES, type ReserveAsset } from "@/lib/tokens/registry";
 type StockAt = { symbol: string; fromMarket?: boolean };
 /**
  * A flow's subject: its stock (none for the Market or F2-3's picker), and the stock sheet that opened it, to go back
- * to; or, for a Buy opened from F2-3 with no credit to use, `fromCreditBuy`, whose Back returns to F2-3.
+ * to; or, for a Buy opened from Credit Buy with no credit to use, `fromCreditBuy`: that Credit Buy's own subject, so
+ * Back returns to it as it was (its stock, and the stock sheet it goes back to).
  */
-type FlowAt = { symbol: string | null; back?: StockAt; fromCreditBuy?: boolean };
+type FlowAt = { symbol: string | null; back?: StockAt; fromCreditBuy?: Omit<FlowAt, "fromCreditBuy"> };
 /** The Trade sheet's subject: what it opens on, when not its defaults (Home and Invest pass none). */
 type TradeAt = { from?: TradeAsset; to?: TradeAsset };
 
@@ -67,6 +68,9 @@ export function StockSheets({ sheets, user, data }: { sheets: StockSheetsState; 
           stock.show(at);
         }
       : undefined;
+  /** A Buy with cash opened from Credit Buy goes Back to that Credit Buy as it was (its stock, its way back). */
+  const cashFrom = buy.subject?.fromCreditBuy;
+  const creditAt = creditBuy.subject;
   /** From the stock sheet on to a flow for its stock. */
   const hop = <T,>(flow: { show: (s: T) => void }, subject: T) => () => {
     stock.close();
@@ -110,10 +114,10 @@ export function StockSheets({ sheets, user, data }: { sheets: StockSheetsState; 
             stock.show({ symbol, fromMarket: true });
           }}
           onBack={
-            buy.subject.fromCreditBuy
+            cashFrom
               ? () => {
                   buy.close();
-                  creditBuy.show({ symbol: null });
+                  creditBuy.show(cashFrom);
                 }
               : backTo(buy, buy.subject.back)
           }
@@ -130,7 +134,7 @@ export function StockSheets({ sheets, user, data }: { sheets: StockSheetsState; 
           onBack={backTo(creditBuy, creditBuy.subject.back)}
           onBuyWithCash={(symbol) => {
             creditBuy.close();
-            buy.show({ symbol, fromCreditBuy: true });
+            buy.show({ symbol, fromCreditBuy: { symbol: creditAt?.symbol ?? null, back: creditAt?.back } });
           }}
         />
       )}

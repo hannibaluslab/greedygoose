@@ -9,7 +9,7 @@ import { buildBorrowCalls } from "@/lib/aave/tx";
 import { payFromCash } from "@/lib/cash";
 import {
   CREDIT_BLOCKED, CREDIT_FROM, FEE_FIRST, NO_CREDIT, assertCreditBuy, backers, backingOptions, backingRaw, bestBacking, buildCreditBuyCalls, creditAvailable,
-  creditBuyActivity, creditBuyStop, creditWith, noCreditLine, planCredit, shortNames, splitCash,
+  creditBuyActivity, creditBuyStop, creditWith, freeShownUsd, isAllFree, noCreditLine, planCredit, shortNames, splitCash,
   type BackingOption, type CreditLimit, type CreditPosition,
 } from "@/lib/creditBuy";
 import { aaveV3PoolAbi } from "@/lib/guardian/abis";
@@ -273,6 +273,10 @@ describe("creditAvailable (F2-3's \"You can use up to\")", () => {
     const full: CreditPosition = { ...fresh, collateralUsd: 1_000, avgCf: 0.7, debtUsd: 700, healthFactor: 1 };
     expect(avail(full, [])).toMatchObject({ usd: 0, why: "all-in-use" });
     expect(avail({ ...fresh, borrowPaused: true }, [nvdaFree])).toMatchObject({ usd: 0, why: "paused" });
+    // $1.40 of free NVIDIA counts for under the $1 minimum buy, and nothing backs credit yet: too small, not "all in use".
+    const tiny: BackingOption = { stock: nvda, freeRaw: 784_000n, freeUsd: 1.4, cf: 0.7 };
+    expect(avail(fresh, [tiny])).toMatchObject({ usd: 0, why: "too-small", line: noCreditLine("too-small", true) });
+    expect(avail({ ...fresh, collateralUsd: 1_000, avgCf: 0.7, debtUsd: 700, healthFactor: 1 }, [tiny])).toMatchObject({ why: "all-in-use" });
     expect(avail({ ...fresh, usdcLiquidity: 0 }, [nvdaFree])).toMatchObject({ usd: 0, why: "no-liquidity" });
   });
 
@@ -396,6 +400,39 @@ describe("planCredit with an explicit backing (Credit Buy goes backing first, Ad
     const all = planCredit({ position: fresh, backing: { option: nvdaFree, raw: nvdaFree.freeRaw }, creditRaw: 0n, cash: walletCash });
     expect(all.backing[0].raw).toBe(nvdaFree.freeRaw);
     expect(all.maxUsd).toBe(creditWith(fresh, nvdaFree));
+  });
+
+  it("typing the whole free value is all of it, from the cent MAX shows to half a cent over; clearly more stays more", () => {
+    // Free $96.5612: MAX fills in $96.56, and typing that is all of it, as is the rounded $96.57 shown elsewhere.
+    const amzn: BackingOption = { stock: EQUITIES.find((e) => e.symbol === "AMZNc")!, freeRaw: 43_000_000n, freeUsd: 96.5612, cf: 0.7 };
+    expect(freeShownUsd(amzn)).toBe(96.56);
+    for (const typed of [96.56, 96.5612, 96.565]) {
+      expect(isAllFree(amzn, typed)).toBe(true);
+      expect(backingRaw(amzn, typed)).toBe(amzn.freeRaw);
+    }
+    expect(isAllFree(amzn, 96.55)).toBe(false);
+    expect(backingRaw(amzn, 96.55)).toBeLessThan(amzn.freeRaw);
+    expect(isAllFree(amzn, 96.58)).toBe(false);
+    expect(backingRaw(amzn, 96.58)).toBeGreaterThan(amzn.freeRaw);
+    expect(isAllFree(amzn, 0)).toBe(false);
+    // A whole-cent free value: MAX's figure is the value itself.
+    expect(freeShownUsd(nvdaFree)).toBe(2_000);
+  });
+
+  it("once it's all, a price move can't make it over-free or leave dust: the shares are what goes in", () => {
+    // Sam types $96.56 of $96.5612 free (all of it, so the sheet keeps the free shares), then the price ticks down 0.06%.
+    const amzn: BackingOption = { stock: EQUITIES.find((e) => e.symbol === "AMZNc")!, freeRaw: 43_000_000n, freeUsd: 96.5612, cf: 0.7 };
+    const ticked = { ...amzn, freeUsd: 96.5 };
+    const all = planCredit({ position: fresh, backing: { option: ticked, raw: ticked.freeRaw }, creditRaw: usd(10), cash: walletCash, now: weekday });
+    expect(all.block).toBeUndefined();
+    expect(all.backing[0].raw).toBe(amzn.freeRaw);
+    // Re-reading the same dollars at the new price would have been more than is free (what the sheet no longer does).
+    expect(backingRaw(ticked, 96.6)).toBeGreaterThan(ticked.freeRaw);
+    // Shares worked out when typed stay those shares: $50 typed, then the price moves, still the same raw and within free.
+    const half = backingRaw(amzn, 50);
+    const moved = planCredit({ position: fresh, backing: { option: ticked, raw: half }, creditRaw: usd(10), cash: walletCash, now: weekday });
+    expect(moved.backing[0].raw).toBe(half);
+    expect(moved.block).toBeUndefined();
   });
 
   it("never more than is free: more is blocked, and the plan never puts in more than the free shares", () => {

@@ -18,7 +18,9 @@ import { explainRevert } from "@/lib/aave/errors";
 import { priceToUsd, summarize, type AccountData } from "@/lib/aave/math";
 import { swapOf } from "@/lib/allowlist";
 import type { Cash } from "@/lib/cash";
-import { backingOptions, backingRaw, buildCreditBuyCalls, planCredit, splitCash, type BackingOption, type CreditPosition } from "@/lib/creditBuy";
+import {
+  backingOptions, backingRaw, buildCreditBuyCalls, freeShownUsd, isAllFree, planCredit, splitCash, type BackingOption, type CreditPosition,
+} from "@/lib/creditBuy";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { buildBuyCalls, minOut, quoteBuy, quotePool, signingQuote, type BuyQuote } from "@/lib/swap/buy";
 import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
@@ -218,6 +220,24 @@ describe("Credit Buy batches simulate on mainnet", () => {
     expect(option).toBeDefined();
     const creditRaw = usd(5);
     const plan = planCredit({ position, backing: { option, raw: option.freeRaw }, creditRaw, cash });
+    expect(plan.block).toBeUndefined();
+    const quote = await quoteToSign(aapl, creditRaw);
+    const calls = buildCreditBuyCalls({ user: backer, stock: aapl, quote, creditRaw, backing: plan.backing, limit: plan.limit, cash });
+    const r = await simulateCreditBuy(backer, aapl, [...calls, balanceRead(option.stock.address, backer)]);
+    expect(r.statuses.every((x) => x === "success")).toBe(true);
+    expect(decodeFunctionResult({ abi: erc20Abi, functionName: "balanceOf", data: r.results[calls.length].data })).toBe(0n);
+  });
+
+  it("backing first with the free value typed by hand (MAX's figure): it's all of it, and none are left behind", async () => {
+    const { position, options, cash } = await live(backer);
+    const option: BackingOption = [...options].filter((o) => o.stock.symbol !== aapl.symbol).sort((a, b) => b.freeUsd - a.freeUsd)[0];
+    expect(option).toBeDefined();
+    const typedUsd = freeShownUsd(option);
+    expect(isAllFree(option, typedUsd)).toBe(true);
+    const raw = backingRaw(option, typedUsd);
+    expect(raw).toBe(option.freeRaw);
+    const creditRaw = usd(5);
+    const plan = planCredit({ position, backing: { option, raw }, creditRaw, cash });
     expect(plan.block).toBeUndefined();
     const quote = await quoteToSign(aapl, creditRaw);
     const calls = buildCreditBuyCalls({ user: backer, stock: aapl, quote, creditRaw, backing: plan.backing, limit: plan.limit, cash });

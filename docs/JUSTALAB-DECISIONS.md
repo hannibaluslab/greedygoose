@@ -199,6 +199,18 @@ This replaces, in "Credit Buy opens on what you can use" above, the order (F2-3'
 - **Tests:** `tests/unit/credit-buy.test.ts` (the limit grows with the backing, MAX is all the free shares, never more than free, 0 uses only what already backs credit, the D2 tick, step 2's figure is step 4's, the batch's limit and backing checks, the allowlist); `tests/onchain/credit-buy.test.ts` simulates explicit backings with `eth_simulateV1`: half the preview account's free Amazon, all of it (none left behind), none at all, and $20 of NVIDIA on an account that never backed credit (the credit capped by it alone).
 - **Open:** the risk line and the tick still say "Aave can sell part of it", as they did; Adrian's "no protocol words on screen" for the new copy is kept, the old lines are left for him to call.
 
+## From the Credit Buy backing review (2026-10-15)
+
+- **No padlock on the new row:** "Already backs credit" draws welcome-bg's linked rings (`BacksIcon`, D17), like the holdings it lists.
+- **The whole free value typed by hand is all of it** (`isAllFree`): from the cent MAX fills in (or half a cent under, whichever is lower) to half a cent over. Step 2 records it as "all" when it's typed, so a later price move can't turn it into "more than you have free" or leave dust behind. Any other amount becomes shares when it's typed, and those shares are what goes in use: the price moving afterwards changes what they're worth ("You can use up to" moves with it), not how many. Clearly more than is free is still blocked (`over-free`).
+- **A new backing clears the amount to buy:** changing step 2's amount or picking another holding empties step 4, so it can't show an amount meant for a bigger backing.
+- **A picked holding that can't back credit any more** (under $1 free, paused, or no longer read) doesn't quietly fall back to what already backs credit: steps 2–4 say "{Stock} can't back credit right now" with **Pick again**, and step 1 goes back to its default pick.
+- **The D2 tick is asked again when "Status after" changes** (a price refresh from Watch to Act), as in Earn with stocks.
+- **Buy with cash from a Credit Buy keeps its way back:** Back returns to that Credit Buy as it was, with its stock and its way back to the stock's sheet.
+- **Step 2 at $0** reads "Credit you can use", as step 1's figure does. While the amount is more than is free, the line under it gives the free shares only, not "X of Y".
+- **Free stock too small to back the $1 minimum buy, with nothing backing credit yet,** gets its own reason: "Your free stock is too small to back credit yet." It used to say "Your stocks already back what you owe."
+- **Open for Adrian:** the default pick (a dust-sized free holding is picked ahead of "Already backs credit", e.g. the preview account's $1.79 of Amazon over $6,385 left), and the remaining protocol words on screen ("Paused by Aave", "Aave can sell part of it", "over Aave's price").
+
 ## The Trade sheet (Adrian, 2026-10-15)
 
 "Trade sheet should be the same as nym where you can swap between any assets you have", and Invest gets "trade cta in between market and credit buy".
