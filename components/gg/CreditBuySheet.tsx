@@ -25,7 +25,7 @@ import {
   planCredit, shortNames,
   type BackingOption, type BackingPick, type CreditAvailable,
 } from "@/lib/creditBuy";
-import { formatShares, formatUsd, formatUsdTrim, inWords } from "@/lib/formatting";
+import { formatShares, formatUsd, formatUsdTrim, inWords, monthlyCostText } from "@/lib/formatting";
 import { STATUS_LABEL, type Status } from "@/lib/risk/status";
 import { BUY_LIMITS, quoteEconomics } from "@/lib/swap/buy";
 import { VENUE_LABEL } from "@/lib/swap/venues";
@@ -270,27 +270,33 @@ export function CreditBuySheet({
                       key={h.symbol}
                       holding={h}
                       checked={pickedKey === h.symbol}
-                      right={<><span className="num text-[20px] font-bold leading-[1.1] tracking-[-0.02em]">{wholeUsd(o.freeUsd)}</span><span className="whitespace-nowrap text-[11.5px] text-ink-mid">free</span></>}
+                      right={<><span className="num text-[20px] font-bold leading-[1.1] tracking-[-0.02em]">{formatUsd(o.freeUsd)}</span><span className="whitespace-nowrap text-[11.5px] text-ink-mid">free</span></>}
                       onPick={() => choose(h.symbol)}
                     />
                   );
                 })}
-                {data.collateralUsd > 0 && (
+                {canUseExisting && (
                   <ExistingRow
                     names={backers(data.holdings, []).map((h) => h.name)}
                     valueUsd={data.collateralUsd}
                     roomUsd={existingRoom}
                     checked={pickedKey === EXISTING}
-                    onPick={canUseExisting ? () => choose(EXISTING) : undefined}
+                    onPick={() => choose(EXISTING)}
                   />
                 )}
-                {unpickable.map((h) => {
-                  const g = gives.get(h.symbol);
-                  const reason = g != null && g < BUY_LIMITS.minUsd && !h.paused && !h.frozen && h.freeUsd >= MIN_BACKING_USD ? `Gives ${formatUsd(Math.max(0, g))} of credit, under the $1 minimum` : unavailable(h);
-                  // All in use: the row above says what it backs; a holding left with dust still reads "All in use".
-                  return <BackingRow key={h.symbol} holding={h} reason={reason} />;
-                })}
               </div>
+              <CantBack
+                inUse={data.collateralUsd > 0 && !canUseExisting ? { names: backers(data.holdings, []).map((h) => h.name), usd: data.collateralUsd } : null}
+                items={unpickable.flatMap((h) => {
+                  const g = gives.get(h.symbol);
+                  const reason =
+                    g != null && g < BUY_LIMITS.minUsd && !h.paused && !h.frozen && h.freeUsd >= MIN_BACKING_USD
+                      ? `gives ${formatUsd(Math.max(0, g))} of credit, under the $1 minimum`
+                      : unavailable(h)?.toLowerCase();
+                  // All in use: the line above already names it.
+                  return reason ? [{ name: h.name, reason }] : [];
+                })}
+              />
               {available.why ? (
                 // Holdings, but none can back a Credit Buy yet: why, and the stocks still buy with cash.
                 <>
@@ -426,7 +432,7 @@ export function CreditBuySheet({
             <YouGet symbol={stock.symbol} shares={quote.isFetching && amount > 0 ? null : econ ? econ.shares : 0} priceUsd={econ ? econ.price : oraclePriceUsd} />
             <Summary
               rows={[
-                { label: "Cost", value: `${formatUsd(monthlyCost(amount, data.apr))} / month` },
+                { label: "Cost", value: `${(data.apr * 100).toFixed(1)}% a year · ${monthlyCostText(monthlyCost(amount, data.apr))}` },
                 { label: against.length === 1 ? `Credit left on ${against[0].name}` : "Credit left", value: wholeUsd(plan.maxUsd - amount) },
                 {
                   label: "Status after",
@@ -740,7 +746,7 @@ function BackingRow({ holding: h, checked = false, right, onPick, reason }: {
       <StockAvatar symbol={h.symbol} size={36} font={ticker.length > 4 ? undefined : 10.5} weight={800} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-[15px] font-semibold">{h.name}</span>
-        <span className="num whitespace-nowrap text-[12.5px] text-ink-mid">{formatUsd(valueOf(h))} · {formatShares(h.freeShares + h.lockedShares)} shares</span>
+        <span className="num whitespace-nowrap text-[12.5px] text-ink-mid">{formatShares(h.freeShares + h.lockedShares)} shares</span>
         {(h.lockedShares > 0 || reason) && (
           <span className="num whitespace-nowrap text-[12px] text-ink-mid">
             {reason ?? (
@@ -768,6 +774,30 @@ function BackingRow({ holding: h, checked = false, right, onPick, reason }: {
   ) : (
     <div role="radio" aria-checked={false} aria-disabled aria-label={`${h.name}, not available${allInUse ? ": all in use" : reason ? `: ${reason}` : ""}`} className={`${cls} border border-line-field opacity-60`}>
       {body}
+    </div>
+  );
+}
+
+/**
+ * Step 1's quiet note for what can't back this buy (Adrian: disabled rows repeated each other): what already backs
+ * credit with no room left, and holdings too small or paused, each in a few words. Nothing to pick here.
+ */
+function CantBack({ inUse, items }: { inUse: { names: string[]; usd: number } | null; items: { name: string; reason: string }[] }) {
+  if (!inUse && items.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1.5 rounded-[16px] border border-dashed border-line-field px-3.5 py-3 text-[12.5px] leading-[1.45] text-ink-mid">
+      {inUse && (
+        <p className="m-0">
+          <BacksIcon size={10} className="mr-1 inline align-[-1px] text-ink" />
+          <b className="font-semibold text-ink">{shortNames(inUse.names)}</b> ({formatUsd(inUse.usd)}) already {inUse.names.length > 1 ? "back" : "backs"} your credit, with nothing
+          left to use. <Link href="/repay" className="font-semibold text-ink no-underline">Repay</Link>
+        </p>
+      )}
+      {items.map((i) => (
+        <p key={i.name} className="m-0">
+          <b className="font-semibold text-ink">{i.name}</b>: {i.reason}.
+        </p>
+      ))}
     </div>
   );
 }
