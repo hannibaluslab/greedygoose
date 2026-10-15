@@ -14,6 +14,7 @@ import { AgentRow, AgentsFeed, AgentsView, AttentionCard, MixBar, TurnOffAll } f
 import { useAccountFeed } from "@/hooks/useAccountFeed";
 import { useAgentFeed } from "@/hooks/useAgentFeed";
 import { useAgentRun, type AgentStep } from "@/hooks/useAgentRun";
+import { TAP_AGAIN } from "@/hooks/useTx";
 import { GRANT_SECONDS, useAgents } from "@/hooks/useAgents";
 import { useAgentSettings } from "@/hooks/useAgentSettings";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
@@ -163,7 +164,10 @@ function Agents({ address }: { address: `0x${string}` }) {
     void runner
       .run(key, steps, () => toast.success(message))
       .then((error) => {
-        if (error && !(agent && shown && open === agent)) toast.error(error);
+        if (!error || (agent && shown && open === agent)) return;
+        // A sheet JAW couldn't open isn't a failure: the same control opens it on the next tap.
+        if (error.endsWith(TAP_AGAIN)) toast(error);
+        else toast.error(error);
       });
   };
 

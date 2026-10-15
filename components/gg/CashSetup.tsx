@@ -9,7 +9,7 @@ import { TxButton, TxDone, TxError } from "./TxUi";
 import { TrendUpIcon } from "./icons";
 import { NOT_FAIR, useConvert, useConvertQuotes, type ConvertQuote } from "@/hooks/useConvert";
 import type { GrantView, useCashSetup } from "@/hooks/useCashSetup";
-import type { TxPhase } from "@/hooks/useTx";
+import { usePrepare, type TxPhase } from "@/hooks/useTx";
 import { askAutomatic, arrivedText, type Arrived, type ArrivedView } from "@/lib/cashSetup";
 import { formatCoin, formatUsd, formatUsdTrim, inWords } from "@/lib/formatting";
 import { USDC } from "@/lib/tokens/registry";
@@ -73,12 +73,16 @@ const asArrived = (qs: readonly ConvertQuote[]) => qs.map((q) => ({ coin: q.coin
  * (one user-signed batch, lib/swap/entry.ts). No review of ours before it.
  */
 export function ArrivedCard({
-  text, quotes, phase, error, preview, onConvert,
+  text, quotes, phase, checking = false, blocked = false, error, preview, onConvert,
 }: {
   text: string;
   /** null while the venues are read. */
   quotes: readonly ConvertQuote[] | null;
   phase: TxPhase;
+  /** The batch is still being prepared (useTx): "Checking…" until it's ready. */
+  checking?: boolean;
+  /** The batch can't go ahead (`error` says why). */
+  blocked?: boolean;
   error: string | null;
   preview: boolean;
   onConvert: () => void;
@@ -121,7 +125,15 @@ export function ArrivedCard({
         </p>
       )}
       <TxError error={error ?? (quotes && fair.length === 0 ? NOT_FAIR : null)} />
-      <TxButton label="Turn into cash" size="md" phase={phase} preview={preview} disabled={!quotes || fair.length === 0} onClick={onConvert} />
+      <TxButton
+        label="Turn into cash"
+        size="md"
+        phase={phase}
+        checking={checking}
+        preview={preview}
+        disabled={!quotes || fair.length === 0 || blocked}
+        onClick={onConvert}
+      />
     </section>
   );
 }
@@ -166,6 +178,9 @@ export function TurnIntoCash({ user, view, setup }: { user: `0x${string}`; view:
   const live = view.kind === "ask" ? { text: view.text, coins: view.coins } : null;
   const shown = pinned ? held : live;
   const quotes = useConvertQuotes(shown?.coins ?? [], !!shown && !pinned);
+  // What the card's button would sign now, prepared while it's idle so the tap opens JAW's sheet at once.
+  const plan = shown && !pinned && quotes.data ? tx.planFor(user, quotes.data) : null;
+  const prep = usePrepare(tx.prep, plan);
   const close = () => {
     setHeld(null);
     tx.reset();
@@ -178,14 +193,17 @@ export function TurnIntoCash({ user, view, setup }: { user: `0x${string}`; view:
           text={shown.text}
           quotes={quotes.data ?? (quotes.isError ? [] : null)}
           phase={tx.phase}
-          error={tx.error}
+          checking={prep.checking}
+          blocked={prep.blocked}
+          error={tx.error ?? prep.error}
           preview={setup.preview}
           onConvert={() => {
+            if (!plan) return;
             if (tx.phase === "failed") tx.reset();
             setup.resetAutomatic();
             const all = quotes.data ?? [];
             setHeld({ text: shown.text, coins: shown.coins, sent: all.filter((q) => q.fair), ask: askAutomatic(setup.entry) });
-            void tx.convert(user, all);
+            void tx.sign(plan);
           }}
         />
       )}

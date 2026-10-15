@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { useAgents } from "@/hooks/useAgents";
 import type { GrantStep } from "@/hooks/useManageSave";
 import type { AgentJob } from "@/lib/agents/permissions";
+import { TAP_AGAIN, isPopupBlocked } from "@/lib/tx/prepared";
 
 /** One JAW screen: a job's new grant, or turning a job off (each of its grants revoked). */
 export type AgentStep = { grant: GrantStep } | { off: AgentJob };
@@ -28,8 +29,13 @@ export async function runSteps(
   return { done, rest: [], error: null };
 }
 
-/** What a change that stopped says: how many of its JAW sheets went through, and whether the user cancelled one. */
+/**
+ * What a change that stopped says: how many of its JAW sheets went through, and whether the user cancelled one. A sheet
+ * JAW couldn't open (Safari opens its popup only inside a tap, and the steps after the first come after one) is no
+ * failure: "Tap again to open JAW.", and the next tap opens it.
+ */
 export function runError(done: number, of: number, error: unknown): string {
+  if (isPopupBlocked(error)) return done > 0 ? `${done} of ${of} went through. ${TAP_AGAIN}` : TAP_AGAIN;
   const cancelled = error instanceof Error && CANCELLED.test(error.message);
   if (done > 0) return `${done} of ${of} went through, then ${cancelled ? "you cancelled on JAW’s screen" : "the next one didn’t"}. Try again for the rest.`;
   return cancelled ? "You cancelled on JAW’s screen. Nothing changed." : "We couldn’t do that right now. Nothing changed. Try again.";
@@ -37,10 +43,11 @@ export function runError(done: number, of: number, error: unknown): string {
 
 /**
  * Runs an agent change on JAW's own sheets, one for each grant or revoke (D14: each is its own user operation), in
- * order, straight from the button that asks for it, stopping at the first that doesn't go through. `key` names the
- * change: trying the same one again runs only the steps that didn't, as they were first asked for (the steps the screen
- * rebuilds from the chain leave out a job that is already off, so counting into them would skip one that is still on).
- * `run` resolves to the error it shows, or null once every step went through.
+ * order, straight from the button that asks for it (the first request is built in the tap, with nothing awaited before
+ * JAW is called), stopping at the first that doesn't go through. `key` names the change: trying the same one again
+ * runs only the steps that didn't, as they were first asked for (the steps the screen rebuilds from the chain leave out
+ * a job that is already off, so counting into them would skip one that is still on). `run` resolves to the error it
+ * shows, or null once every step went through.
  */
 export function useAgentRun(agents: ReturnType<typeof useAgents>) {
   const [running, setRunning] = useState<string | null>(null);

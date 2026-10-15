@@ -52,9 +52,11 @@ export function MixSlider({ name, bps, onChange }: { name: string; bps: number; 
 
 /** The foot of a settings body: its button to JAW's sheet, its error, and why it can't save or how many steps it takes. */
 export function SaveFooter({
-  phase, disabled, preview, onSave, error, note, steps, label = "Save",
+  phase, checking = false, disabled, preview, onSave, error, note, steps, label = "Save",
 }: {
   phase: TxPhase;
+  /** Its first batch is still being prepared (useTx): "Checking…" until it's ready. */
+  checking?: boolean;
   disabled: boolean;
   preview: boolean;
   onSave: () => void;
@@ -69,7 +71,7 @@ export function SaveFooter({
   return (
     <div className="mt-auto flex flex-col gap-2 pt-2">
       <TxError error={error} />
-      <TxButton label={label} phase={phase} steps={steps} note={note} disabled={disabled} preview={preview} onClick={onSave} />
+      <TxButton label={label} phase={phase} checking={checking} steps={steps} note={note} disabled={disabled} preview={preview} onClick={onSave} />
     </div>
   );
 }

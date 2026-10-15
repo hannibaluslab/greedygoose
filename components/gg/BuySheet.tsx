@@ -74,7 +74,6 @@ export function BuySheet({
   const quote = useBuyQuote(stock, step === "market" ? 0 : amount);
   const fee = useFeeSupport();
   const cfs = useCollateralFactors(data.holdings);
-  const { buy, phase, error, reset, busy, txHash } = useBuy();
   const [creditForBuying] = useCreditForBuying(user);
 
   const q = quote.data ?? null;
@@ -89,8 +88,6 @@ export function BuySheet({
   const plan =
     split && cfs ? planCredit({ position: data, options: backingOptions(data.holdings, cfs), creditRaw: split.creditRaw, cash }) : null;
   const creditUsd = split ? toUsd(split.creditRaw) : 0;
-  // Once the batch lands: Home, with "Bought 0.1120 NVDA" read from the receipt (F1-6).
-  useBoughtHome({ phase, user, symbol: symbol ?? "", txHash, credit: !!plan, onClose });
 
   let blocker: string | null = null;
   if (amount > 0 && amount < BUY_LIMITS.minUsd) blocker = `Minimum buy is ${formatUsd(BUY_LIMITS.minUsd)}.`;
@@ -104,6 +101,14 @@ export function BuySheet({
   const feeBlocked = isConnected && fee.state === "unsupported";
   // Past your cash, it can go ahead only with its credit plan: never a cash buy for more than the cash.
   const ready = amount > 0 && !!q && !!econ && !blocker && !quote.isFetching && (!over || !!plan);
+  // What the button would sign now, prepared while the step is idle so the tap opens JAW's sheet at once.
+  const signable =
+    open && ready && stock && q && !feeBlocked && !(plan?.extraConfirm && !ack)
+      ? { user, stock, quote: q, credit: plan ? { plan, confirmedRisk: ack } : undefined }
+      : null;
+  const { sign: signBuy, phase, error, reset, busy, txHash, checking, blocked } = useBuy(signable);
+  // Once the batch lands: Home, with "Bought 0.1120 NVDA" read from the receipt (F1-6).
+  useBoughtHome({ phase, user, symbol: symbol ?? "", txHash, credit: !!plan, onClose });
   const note =
     blocker ??
     (warnPremium && stock
@@ -121,11 +126,11 @@ export function BuySheet({
   // F1-3: every stock in one list, A to Z, the ones you own marked "You own $X".
   const stocks = [...data.holdings].sort(byName);
   const sign = () => {
-    if (!stock || !q) return;
+    if (!signable) return;
     if (phase === "failed") reset();
-    void buy({ user, stock, quote: q, credit: plan ? { plan, confirmedRisk: ack } : undefined });
+    void signBuy();
   };
-  const disabled = !ready || feeBlocked || fee.loading || (!!plan?.extraConfirm && !ack) || phase === "done";
+  const disabled = !signable || fee.loading || blocked || phase === "done";
 
   return (
     <SheetShell
@@ -201,12 +206,12 @@ export function BuySheet({
               <>
                 <Button variant="dark" disabled className="mt-1">That’s more than your cash ({formatUsd(cashUsd)})</Button>
                 {!blocker && (
-                  <TxButton label={`Use credit for the other ${formatUsd(creditUsd)}`} size="md" phase={phase} preview={!isConnected} disabled={disabled} onClick={sign} />
+                  <TxButton label={`Use credit for the other ${formatUsd(creditUsd)}`} size="md" phase={phase} checking={checking} preview={!isConnected} disabled={disabled} onClick={sign} />
                 )}
               </>
             ) : (
               <div className="mt-1">
-                <TxButton label="Buy" size="md" phase={phase} preview={!isConnected} disabled={disabled} onClick={sign} />
+                <TxButton label="Buy" size="md" phase={phase} checking={checking} preview={!isConnected} disabled={disabled} onClick={sign} />
               </div>
             )}
           </>

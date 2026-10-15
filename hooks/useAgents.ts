@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { isAddressEqual, zeroAddress } from "viem";
 import { useAccount, useReadContract, useReadContracts } from "wagmi";
 import { useGrantPermissions, usePermissions, useRevokePermissions } from "@jaw.id/wagmi";
@@ -66,6 +66,8 @@ export function useAgents(account: `0x${string}`) {
   const revoke = useRevokePermissions();
   const { address: signer } = useAccount();
   const nowSec = useNowSec();
+  // Grants revoked this session, until JAW's list shows them gone: a turn-off that stopped part way goes on with the rest.
+  const revoked = useRef(new Set<string>());
 
   /** Grants and revokes are the account's own, like useTx's calls: never while another address is shown (`?as=`). */
   function ownAccount() {
@@ -194,28 +196,39 @@ export function useAgents(account: `0x${string}`) {
 
   /**
    * One JAW sheet per job: a grant request carries one permission. Protect · sell and the Rebalancer
-   * take a limit per stock as well (`stockLimitsRaw`).
+   * take a limit per stock as well (`stockLimitsRaw`). The request is built here, synchronously from the tap, and
+   * JAW's grant is called before anything is awaited (Safari opens JAW's popup only inside the tap's activation).
    */
   async function turnOn(job: AgentJob, capRaw: bigint, limitsRaw?: StockLimits) {
     if (!executor) throw new Error("Agents aren't available yet");
     ownAccount();
-    await grant.mutateAsync({
+    const request = {
       address: account,
       chainId: CHAIN_ID,
       expiry: Math.floor(Date.now() / 1000) + GRANT_SECONDS,
       spender: executor,
       permissions: jobGrant(job, capRaw, limitsRaw),
-    });
+    };
+    await grant.mutateAsync(request);
     await refetch();
   }
 
-  /** Revokes every grant JAW lists for the job that hasn't ended, so nothing is left for the executor to use. */
+  /**
+   * Revokes every grant JAW lists for the job that hasn't ended, so nothing is left for the executor to use. The first
+   * revoke is called straight from the tap; one that stops part way (cancelled, or a sheet JAW couldn't open) leaves
+   * the rest for the next try, which skips those already revoked.
+   */
   async function turnOff(job: AgentJob) {
     ownAccount();
-    for (const g of live[job]) {
-      await revoke.mutateAsync({ address: account, chainId: CHAIN_ID, id: g.permissionId });
+    try {
+      for (const g of live[job]) {
+        if (revoked.current.has(g.permissionId)) continue;
+        await revoke.mutateAsync({ address: account, chainId: CHAIN_ID, id: g.permissionId });
+        revoked.current.add(g.permissionId);
+      }
+    } finally {
+      await refetch();
     }
-    await refetch();
   }
 
   return {

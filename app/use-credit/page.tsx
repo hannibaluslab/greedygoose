@@ -15,7 +15,7 @@ import { LockIcon } from "@/components/gg/icons";
 import { TxButton, TxDone, TxError } from "@/components/gg/TxUi";
 import { MarketBanner } from "@/components/ui/MarketBanner";
 import { useCollateralFactors, usePosition, type Holding, type PositionData } from "@/hooks/usePosition";
-import { useTx } from "@/hooks/useTx";
+import { txKey, useTx, type TxPlan } from "@/hooks/useTx";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { FILL_MARGIN, autoFill, combinedLoan } from "@/lib/aave/loan";
 import { buildLoanCalls } from "@/lib/aave/tx";
@@ -51,12 +51,11 @@ const usdFor = (h: Holding, raw: bigint, decimals: number) => (Number(raw) / 10 
 
 /**
  * Unified loan screen: choose how much of each stock to put in use and how much credit to take, then one button
- * opens JAW's own sheet for all of it. The screen says what moves, the status after and the risk, so there is no
+ * opens JAW's own sheet for all of it (its batch prepared while the screen is idle, so the tap goes straight there). The screen says what moves, the status after and the risk, so there is no
  * review of ours (Adrian, 2026-10-15). Credit can be 0 (backing only).
  */
 function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: PositionData; cfs: Record<string, number> }) {
   const { isConnected } = useAccount();
-  const tx = useTx();
   const fee = useFeeSupport();
   const [fractions, setFractions] = useState<Record<string, number>>({});
   const [raw, setRaw] = useState("");
@@ -101,6 +100,23 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
   const feeBlocked = isConnected && fee.state === "unsupported";
   const nothing = !lockingAny && amount === 0;
   const ready = !nothing && !overLimit && !(amount > 0 && data.borrowPaused);
+  const chosen = locks.filter((l) => l.raw > 0n);
+  const borrowRaw = amount > 0 ? parseUnits(amount.toFixed(USDC.decimals), USDC.decimals) : 0n;
+  // What the button would sign now, prepared while the screen is idle so the tap opens JAW's sheet at once.
+  const plan: TxPlan | null =
+    ready && !(risky && !ack) && !feeBlocked
+      ? {
+          key: txKey("loan", address, chosen.map((l) => [l.stock.symbol, l.raw]), borrowRaw),
+          user: address,
+          calls: () => Promise.resolve(buildLoanCalls({ user: address, locks: chosen.map((l) => ({ stock: l.stock, raw: l.raw })), borrowRaw })),
+          fallback: "This would fail right now — prices may have moved. Try a little less credit, or back it with a bit more.",
+          activity: [
+            ...chosen.map((l) => ({ kind: "supply" as const, symbol: l.stock.symbol, amount: Number(l.raw) / 10 ** l.stock.decimals })),
+            ...(amount > 0 ? [{ kind: "borrow" as const, symbol: "USDC", amount }] : []),
+          ],
+        }
+      : null;
+  const tx = useTx(undefined, plan);
 
   const fill = () => {
     const usd = autoFill({
@@ -325,28 +341,17 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
         <TxButton
           label={amount > 0 ? "Use credit" : "Add backing"}
           phase={tx.phase}
+          checking={tx.checking}
           preview={!isConnected}
-          disabled={!ready || (risky && !ack) || feeBlocked || fee.loading}
+          disabled={!plan || fee.loading || tx.blocked}
           onClick={() => {
+            if (!plan) return;
             if (tx.phase === "failed") tx.reset();
-            const chosen = locks.filter((l) => l.raw > 0n);
             setSent({
               borrowed: amount,
               locked: chosen.map((l) => `${formatShares(rawToShares(l.raw, l.holding.multiplier, l.stock.decimals))} ${tickerOf(l.stock.symbol)}`),
             });
-            void tx.run(
-              address,
-              buildLoanCalls({
-                user: address,
-                locks: chosen.map((l) => ({ stock: l.stock, raw: l.raw })),
-                borrowRaw: amount > 0 ? parseUnits(amount.toFixed(USDC.decimals), USDC.decimals) : 0n,
-              }),
-              "This would fail right now — prices may have moved. Try a little less credit, or back it with a bit more.",
-              [
-                ...chosen.map((l) => ({ kind: "supply" as const, symbol: l.stock.symbol, amount: Number(l.raw) / 10 ** l.stock.decimals })),
-                ...(amount > 0 ? [{ kind: "borrow" as const, symbol: "USDC", amount }] : []),
-              ],
-            );
+            void tx.sign();
           }}
         />
       </BottomBar>

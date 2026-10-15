@@ -29,7 +29,7 @@ export const saveRuns = (jobs: number) => (jobs & (1 << JOBS.indexOf("save"))) !
 
 /**
  * The account's cash as Base has it now: wallet USDC, savings and whether Save runs, the balances usePosition reads
- * every 15 s. For the batch built right before JAW's sheet (useSigningCash).
+ * every 15 s. For the batch prepared before JAW's sheet (useSigningCash).
  */
 export async function readCash(client: PublicClient<Transport, typeof CHAIN>, user: Address): Promise<Cash> {
   const [[walletRaw, savingsRaw], account] = await Promise.all([

@@ -15,12 +15,11 @@ import { useAgentSettings } from "@/hooks/useAgentSettings";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { useManageSave } from "@/hooks/useManageSave";
 import { usePosition } from "@/hooks/usePosition";
-import type { TxPhase } from "@/hooks/useTx";
+import { usePrepare, type TxPhase, type TxPlan, type TxPrep } from "@/hooks/useTx";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { MIX_WHOLE, mixWeights, nowPercents, previewTrades, rebalanceOptions, startingMix, type MixHolding, type MixRow } from "@/lib/agents/mix";
 import { limitRaw, LIMIT_USD, stockLimitsRaw, testCapNote } from "@/lib/agents/permissions";
 import { rebalanceSave, tradeLines, type RebalanceTerms, type SavePlan } from "@/lib/agents/rebalanceSettings";
-import { buildSetMixCalls } from "@/lib/agents/settings";
 import { toUsd } from "@/lib/cash";
 import { formatUsdShort, formatUsdTrim } from "@/lib/formatting";
 import type { RebalanceOptions } from "@/lib/guardian/rebalance";
@@ -66,9 +65,12 @@ export function RebalanceSettings({ account, onDone }: { account: `0x${string}`;
       busy={agents.busy || saving.busy}
       phase={saving.phase}
       error={saving.error}
+      prep={saving.prep}
+      settingPlan={saving.settingPlan}
       onSave={({ weights, capRaw, plan }) =>
         saving.save({
-          calls: plan.mixChanged ? buildSetMixCalls(account, weights) : null,
+          weights,
+          mixChanged: plan.mixChanged,
           grant: plan.needsGrant
             ? {
                 job: "rebalance",
@@ -100,7 +102,7 @@ export type SaveRequest = { weights: number[]; capRaw: bigint; plan: SavePlan };
 
 /** The settings drawn from plain values, so the dev gallery can show each state. */
 export function RebalanceSettingsView({
-  holdings, saved, options, terms, capMaxRaw, configured, connected, preview = !connected, running, feeBlocked, feeLoading, busy, phase, error, onSave, draft,
+  holdings, saved, options, terms, capMaxRaw, configured, connected, preview = !connected, running, feeBlocked, feeLoading, busy, phase, error, prep, settingPlan, onSave, draft,
 }: {
   holdings: readonly SettingsHolding[];
   /** The registry's mix, BPS by reserve id (all 0 before one is saved); null before it is read. */
@@ -118,6 +120,9 @@ export function RebalanceSettingsView({
   busy: boolean;
   phase: TxPhase;
   error: string | null;
+  /** The write's store (useManageSave's `prep`) and the `setMix` batch for a mix, so Save's batch is ready before the tap. */
+  prep?: TxPrep;
+  settingPlan?: (weights: readonly number[]) => TxPlan | null;
   onSave: (r: SaveRequest) => void;
   /** Opens on an edit (the dev gallery's states). */
   draft?: MixRow[];
@@ -141,6 +146,11 @@ export function RebalanceSettingsView({
   const now = nowPercents(holdings, rows);
   const backingUsd = holdings.reduce((a, h) => a + h.lockedUsd, 0);
   const plan = rebalanceSave({ configured, connected, saved, weights, terms, capRaw, capMaxRaw, running, feeBlocked, feeLoading, busy });
+  // Save's first JAW sheet is the mix when it changed: its batch is prepared while the body is idle, so the tap opens it.
+  const prepared = usePrepare(
+    prep,
+    plan.canSave && limitTyped && !preview && plan.mixChanged && settingPlan ? settingPlan(weights) : null,
+  );
 
   const notInMix = EQUITIES.filter((e) => !rows.some((r) => r.reserveId === e.reserveId));
   const add = (reserveId: number) => {
@@ -256,7 +266,7 @@ export function RebalanceSettingsView({
       </ManageCard>
 
       <div className="flex flex-col gap-2 pt-1">
-        <TxError error={error} />
+        <TxError error={error ?? prepared.error} />
         <div className="flex items-center justify-between px-1 text-[13px]">
           <span className="text-ink-mid">{NETWORK_FEE_ROW.label}</span>
           <span className="font-semibold">{NETWORK_FEE_ROW.value}</span>
@@ -264,9 +274,10 @@ export function RebalanceSettingsView({
         <TxButton
           label={configured && !running ? "Switch on" : "Save"}
           phase={phase}
+          checking={prepared.checking}
           steps={plan.steps}
           note={plan.note}
-          disabled={!plan.canSave || !limitTyped || busy}
+          disabled={!plan.canSave || !limitTyped || busy || prepared.blocked}
           preview={configured && preview}
           onClick={() => onSave({ weights, capRaw, plan })}
         />

@@ -16,7 +16,7 @@ import { useBuyQuote, useBuyQuoteRaw } from "@/hooks/useBuyQuote";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import type { PositionData } from "@/hooks/usePosition";
 import { useSellQuote } from "@/hooks/useSell";
-import { useTrade } from "@/hooks/useTrade";
+import { useTrade, type TradeSign } from "@/hooks/useTrade";
 import { formatShares } from "@/lib/formatting";
 import { minOut, quoteEconomics } from "@/lib/swap/buy";
 import { VENUE_LABEL } from "@/lib/swap/venues";
@@ -67,7 +67,6 @@ export function TradeSheet({
 }) {
   const { isConnected } = useAccount();
   const fee = useFeeSupport();
-  const { trade, phase, error, reset, busy, txHash } = useTrade();
   const [form, setForm] = useState<TradeForm>(() => ({ legs: defaultLegs(data, { from: seedFrom, to: seedTo }), amount: "", all: false }));
   // Opened with nothing to trade: the legs appear once there is something (money arrives while it's open).
   const legs = form.legs ?? defaultLegs(data, { from: seedFrom, to: seedTo });
@@ -88,6 +87,10 @@ export function TradeSheet({
   const cashBuyQuote = useBuyQuote(legs && a.route === "buy" ? a.toStock : undefined, a.amountUsd);
   const swapBuyQuote = useBuyQuoteRaw(legs && a.route === "swap" ? a.toStock : undefined, a.route === "swap" ? swapIn : 0n);
   const view = planTrade({ ...input, sell: sellQuote, buy: a.route === "buy" ? cashBuyQuote : swapBuyQuote });
+  const feeBlocked = isConnected && fee.state === "unsupported";
+  // What the button would sign now, per route, prepared while the sheet is idle so the tap opens JAW's sheet at once.
+  const signable = open && !feeBlocked ? tradeSign(view, user, data.debtRaw) : null;
+  const { sign: signTrade, phase, error, reset, busy, txHash, checking, blocked } = useTrade(signable);
 
   // Once a buy or a trade lands: Home, with "Bought 0.4554 NVDA" or "Traded NVDA for 0.0086 AAPL" from the receipt.
   useBoughtHome({
@@ -130,32 +133,12 @@ export function TradeSheet({
     onClose();
   };
 
-  const feeBlocked = isConnected && fee.state === "unsupported";
   const doneSale = phase === "done" && signed?.route === "sell";
   const sign = () => {
-    if (!view.ready) return;
+    if (!signable) return;
     fresh();
-    const { route, fromStock, toStock, fromHolding, sellQuote: sq, sellPlan, buyQuote: bq } = view;
-    if (route === "buy" && toStock && bq) {
-      setSigned({ route, from, to, sharesRaw: 0n });
-      void trade({ route, user, stock: toStock, quote: bq });
-    } else if (route === "sell" && fromStock && fromHolding && sq && sellPlan) {
-      setSigned({ route, from, to, sharesRaw: sellPlan.sharesRaw });
-      void trade({ route, user, stock: fromStock, quote: sq, plan: sellPlan, oraclePriceUsd: fromHolding.priceUsd, debtRaw: data.debtRaw });
-    } else if (route === "swap" && fromStock && toStock && fromHolding && sq && sellPlan && bq) {
-      setSigned({ route, from, to, sharesRaw: sellPlan.sharesRaw });
-      void trade({
-        route,
-        user,
-        from: fromStock,
-        to: toStock,
-        sellQuote: sq,
-        plan: sellPlan,
-        buyQuote: bq,
-        oraclePriceUsd: fromHolding.priceUsd,
-        feeFromSale: view.feeFromSale,
-      });
-    }
+    setSigned({ route: signable.route, from, to, sharesRaw: signable.route === "buy" ? 0n : signable.plan.sharesRaw });
+    void signTrade();
   };
 
   const nameOf = (asset: TradeAsset) => (asset === "cash" ? TRADE_COPY.cashName : (data.holdings.find((h) => h.symbol === asset)?.name ?? asset));
@@ -262,8 +245,9 @@ export function TradeSheet({
                 label={view.button}
                 size="md"
                 phase={phase}
+                checking={checking}
                 preview={!isConnected}
-                disabled={!view.ready || feeBlocked || fee.loading || phase === "done"}
+                disabled={!signable || fee.loading || blocked || phase === "done"}
                 onClick={sign}
               />
             </div>
@@ -272,4 +256,26 @@ export function TradeSheet({
       </SheetSteps>
     </SheetShell>
   );
+}
+
+/** What the Trade sheet signs for the route on screen, once it's ready (the quotes and the plan its screen shows). */
+function tradeSign(view: ReturnType<typeof planTrade>, user: `0x${string}`, debtRaw: bigint): TradeSign | null {
+  if (!view.ready) return null;
+  const { route, fromStock, toStock, fromHolding, sellQuote: sq, sellPlan, buyQuote: bq } = view;
+  if (route === "buy" && toStock && bq) return { route, user, stock: toStock, quote: bq };
+  if (route === "sell" && fromStock && fromHolding && sq && sellPlan)
+    return { route, user, stock: fromStock, quote: sq, plan: sellPlan, oraclePriceUsd: fromHolding.priceUsd, debtRaw };
+  if (route === "swap" && fromStock && toStock && fromHolding && sq && sellPlan && bq)
+    return {
+      route,
+      user,
+      from: fromStock,
+      to: toStock,
+      sellQuote: sq,
+      plan: sellPlan,
+      buyQuote: bq,
+      oraclePriceUsd: fromHolding.priceUsd,
+      feeFromSale: view.feeFromSale,
+    };
+  return null;
 }

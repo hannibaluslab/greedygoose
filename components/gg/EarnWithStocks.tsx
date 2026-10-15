@@ -8,8 +8,8 @@ import { StatusChange } from "./Status";
 import { StockAvatar } from "./StockAvatar";
 import { NETWORK_FEE_ROW, Summary } from "./Summary";
 import { TxButton, TxError } from "./TxUi";
-import type { TxPhase } from "@/hooks/useTx";
-import { useEarnRates } from "@/hooks/useEarnWithStocks";
+import { usePrepare, type TxPhase, type TxPlan, type TxPrep } from "@/hooks/useTx";
+import { useEarnRates, type EarnInput } from "@/hooks/useEarnWithStocks";
 import type { PositionData } from "@/hooks/usePosition";
 import { LIMIT_USD, testCapNote } from "@/lib/agents/permissions";
 import type { AgentStatus } from "@/lib/agents/status";
@@ -100,7 +100,7 @@ export function EarnCard({ offer, onOpen }: { offer: EarnOffer; onOpen: () => vo
  * then one button that opens JAW's sheet. No confirm screen of ours.
  */
 export function EarnStep({
-  user, data, offer, options, protect, sell, capMaxRaw, phase, error, preview, feeBlocked, onEarn, initialAmount = "", fixedApyAfter,
+  user, data, offer, options, protect, sell, capMaxRaw, phase, error, preview, feeBlocked, prep, planFor, onEarn, initialAmount = "", fixedApyAfter,
 }: {
   user: `0x${string}`;
   data: PositionData;
@@ -114,6 +114,9 @@ export function EarnStep({
   preview: boolean;
   /** Why the network fee can't be paid (D4), or null. */
   feeBlocked: string | null;
+  /** The write's store (useEarnWithStocks' `prep`) and its plan, so the batch on screen is prepared before the tap. */
+  prep?: TxPrep;
+  planFor?: (p: EarnInput) => TxPlan;
   onEarn: (quote: EarnQuote, confirmedRisk: boolean) => void;
   /** Dev gallery: an amount already typed, and the credit's rate after it instead of reading it from a simulation. */
   initialAmount?: string;
@@ -135,6 +138,9 @@ export function EarnStep({
   const block = amount > 0 ? earnBlock(quote, offer) : null;
   const ready = amount > 0 && !block && quote.left !== null;
   const tick = ready && plan.extraConfirm;
+  // What the button would sign now, prepared while the step is idle so the tap opens JAW's sheet at once.
+  const signable = ready && !(tick && !ack) && !feeBlocked && planFor ? planFor({ user, quote, offer, confirmedRisk: ack }) : null;
+  const prepared = usePrepare(prep, signable);
 
   // D2's tick is for the status it names: a price refresh that moves the result (Watch to Act) asks again.
   const [tickedFor, setTickedFor] = useState(plan.after);
@@ -223,14 +229,15 @@ export function EarnStep({
         </label>
       )}
       {feeBlocked && <p role="alert" className="m-0 text-[13px] text-act">{feeBlocked}</p>}
-      <TxError error={error} />
+      <TxError error={error ?? prepared.error} />
       <div className="mt-1">
         <TxButton
           label="Earn with stocks"
           size="md"
           phase={phase}
+          checking={prepared.checking}
           preview={preview}
-          disabled={!ready || (tick && !ack) || !!feeBlocked || phase === "done"}
+          disabled={!ready || (tick && !ack) || !!feeBlocked || prepared.blocked || phase === "done"}
           onClick={() => onEarn(quote, ack)}
         />
       </div>

@@ -53,7 +53,6 @@ export function StockSheet({
   const { isConnected } = useAccount();
   const market = useMarketPrices([holding]);
   const fee = useFeeSupport();
-  const { sell, phase, error, reset, busy, txHash } = useSell();
 
   const [step, setStep] = useState<Step>("stock");
   const [direction, setDirection] = useState<"forward" | "back">("forward");
@@ -87,6 +86,12 @@ export function StockSheet({
   const note = warning ?? (plan?.priceMayMove ? "Stock markets are closed. You can still sell, but the price can jump when they reopen." : null);
   const ready = sharesRaw > 0n && !!plan && q?.amountIn === sharesRaw && !blocker && !quote.isFetching;
   const feeBlocked = isConnected && fee.state === "unsupported";
+  // What Sell would sign now, prepared while the step is idle so the tap opens JAW's sheet at once.
+  const signable =
+    open && step === "sell" && ready && plan && q && !feeBlocked
+      ? { user, stock, quote: q, plan, oraclePriceUsd: holding.priceUsd, debtRaw: data.debtRaw }
+      : null;
+  const { sign, phase, error, reset, busy, txHash, checking, blocked } = useSell(signable);
 
   const back = () => {
     if (busy) onClose();
@@ -186,13 +191,14 @@ export function StockSheet({
                 label="Sell"
                 size="md"
                 phase={phase}
+                checking={checking}
                 preview={!isConnected}
-                disabled={!ready || !plan || !q || feeBlocked || fee.loading}
+                disabled={!signable || fee.loading || blocked}
                 onClick={() => {
-                  if (!plan || !q) return;
+                  if (!signable) return;
                   if (phase === "failed") reset();
-                  setSold(plan.sharesRaw);
-                  void sell({ user, stock, quote: q, plan, oraclePriceUsd: holding.priceUsd, debtRaw: data.debtRaw });
+                  setSold(signable.plan.sharesRaw);
+                  void sign();
                 }}
               />
             </div>

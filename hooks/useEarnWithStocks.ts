@@ -9,7 +9,7 @@ import { useDebounced } from "@/hooks/useBuyQuote";
 import { useNowSec } from "@/hooks/useNowSec";
 import { useCollateralFactors, type PositionData } from "@/hooks/usePosition";
 import { useSigningCash } from "@/hooks/useSigningCash";
-import { TxStop, useTx } from "@/hooks/useTx";
+import { TxStop, txKey, useTx, type TxPlan } from "@/hooks/useTx";
 import { AAVE } from "@/lib/aave/addresses";
 import { hubAbi } from "@/lib/aave/abis/IHub";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
@@ -122,24 +122,43 @@ export function useEarnRates(p: { user: `0x${string}`; backing: readonly Backing
 export const EARN_FAILED = "Earn with stocks didn’t go through on Base. Nothing moved except any network fee.";
 export const EARN_REVERT = "This would fail right now. Stock prices may be paused or have moved. Try a smaller amount in a moment.";
 
+/** What the earn step would sign: the quote and offer on screen, and the risk tick. */
+export type EarnInput = { user: `0x${string}`; quote: EarnQuote; offer: EarnOpen; confirmedRisk: boolean };
+
 /**
- * Earn with stocks' one write, through useTx: the screen's stops are checked again at the tap (earnStop), the cash is
- * read again for the network fee, then the batch is built, checked (assertEarn), simulated and sent to JAW's sheet.
+ * What Earn with stocks signs (useTx): the screen's stops are checked again (earnStop), the cash is read again for the
+ * network fee, then the batch is built and checked (assertEarn). Keyed by the credit, what goes in use, the status it
+ * ends in, the risk tick and the stop, so another amount or plan is another batch.
+ */
+export const earnPlan = (p: EarnInput, cashToSign: ReturnType<typeof useSigningCash>): TxPlan => ({
+  key: txKey(
+    "earn",
+    p.user,
+    p.quote.plan.creditRaw,
+    p.quote.plan.backing.map((b) => [b.stock.symbol, b.raw]),
+    p.quote.plan.after,
+    p.quote.plan.extraConfirm,
+    p.confirmedRisk,
+    earnStop(p.quote, p.offer, p.confirmedRisk),
+  ),
+  user: p.user,
+  calls: async () => {
+    const stop = earnStop(p.quote, p.offer, p.confirmedRisk);
+    if (stop) throw new TxStop(stop);
+    await cashToSign(p.user, 0n);
+    return buildEarnCalls({ user: p.user, backing: p.quote.plan.backing, creditRaw: p.quote.plan.creditRaw });
+  },
+  fallback: EARN_REVERT,
+  activity: earnActivity(p.quote.plan),
+});
+
+/**
+ * Earn with stocks' one write, through useTx. The earn step holds the amount, so it prepares the batch
+ * (`usePrepare(tx.prep, tx.planFor(input))`) and its tap signs the same plan (`tx.sign(tx.planFor(input))`), straight
+ * to JAW's sheet.
  */
 export function useEarnWithStocks() {
   const tx = useTx(EARN_FAILED);
   const cashToSign = useSigningCash();
-  const earn = (p: { user: `0x${string}`; quote: EarnQuote; offer: EarnOpen; confirmedRisk: boolean }) =>
-    tx.run(
-      p.user,
-      async () => {
-        const stop = earnStop(p.quote, p.offer, p.confirmedRisk);
-        if (stop) throw new TxStop(stop);
-        await cashToSign(p.user, 0n);
-        return buildEarnCalls({ user: p.user, backing: p.quote.plan.backing, creditRaw: p.quote.plan.creditRaw });
-      },
-      EARN_REVERT,
-      earnActivity(p.quote.plan),
-    );
-  return { ...tx, earn };
+  return { ...tx, planFor: (p: EarnInput) => earnPlan(p, cashToSign) };
 }

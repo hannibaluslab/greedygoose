@@ -2,12 +2,12 @@
 
 import { usePublicClient } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
-import { TxStop, useTx } from "./useTx";
+import { TxStop, txKey, useTx, type TxPlan } from "./useTx";
 import { useDebounced, useSigningQuote } from "./useBuyQuote";
 import { CHAIN_ID } from "@/lib/chain";
 import { SELL_BLOCKED, buildSaleCalls, saleActivity, type SellFrom, type SellPlan } from "@/lib/sell";
-import { quoteSwap } from "@/lib/swap/buy";
-import type { SellQuote } from "@/lib/swap/sell";
+import { quoteKey, quoteSwap } from "@/lib/swap/buy";
+import { sellMinOut, type SellQuote } from "@/lib/swap/sell";
 import type { ReserveAsset } from "@/lib/tokens/registry";
 
 /** Best quote for selling `sharesRaw` of `stock` for USDC, across Leo's venues. `null` = no pool can fill it. */
@@ -42,8 +42,8 @@ export const SELL_FALLBACK: Record<SellFrom, string> = {
 };
 
 /**
- * A sale's batch, built right before JAW's sheet: the screen's block still holds, and the quote is read again. The
- * stock sheet's Sell and the Trade sheet's stock → cash.
+ * A sale's batch, built from fresh reads before JAW's sheet: the screen's block still holds, and the quote is read
+ * again. The stock sheet's Sell and the Trade sheet's stock → cash.
  */
 export function useSaleBatch() {
   const quoteToSign = useSigningQuote();
@@ -55,12 +55,32 @@ export function useSaleBatch() {
 }
 
 /**
- * Sell stock in one batch (plan item 7 steps 2, 3 and 9): free shares, a backing holding, or a backing
- * holding sold to repay. The screen's block still holds, and the quote is read again right before JAW's sheet.
+ * What a sale signs (useTx), keyed by what shapes its batch: the account, the stock, the quote, the floor (the quote's
+ * and Aave's price's), where the shares come from and its stop, and what's owed for a repay by selling.
  */
-export function useSell() {
-  const tx = useTx("The sale didn’t go through on Base. Nothing moved except any network fee.");
+export const salePlan = (p: SellInput, batch: ReturnType<typeof useSaleBatch>): TxPlan => ({
+  key: txKey(
+    "sell",
+    p.user,
+    p.stock.symbol,
+    quoteKey(p.quote),
+    sellMinOut(p.quote, p.stock, p.oraclePriceUsd),
+    p.plan.from,
+    p.plan.block ?? null,
+    p.plan.from === "repay" ? p.debtRaw : null,
+  ),
+  user: p.user,
+  calls: () => batch(p),
+  fallback: SELL_FALLBACK[p.plan.from],
+  activity: saleActivity(p.stock, p.plan),
+});
+
+/**
+ * Sell stock in one batch (plan item 7 steps 2, 3 and 9): free shares, a backing holding, or a backing holding sold to
+ * repay. `input` is what the Sell step would sign now (null while it can't): its batch is prepared while the step is
+ * idle, with the screen's block checked and the quote read again, so `sign()` opens JAW's sheet straight from the tap.
+ */
+export function useSell(input: SellInput | null) {
   const batch = useSaleBatch();
-  const sell = (p: SellInput) => tx.run(p.user, () => batch(p), SELL_FALLBACK[p.plan.from], saleActivity(p.stock, p.plan));
-  return { ...tx, sell };
+  return useTx("The sale didn’t go through on Base. Nothing moved except any network fee.", input ? salePlan(input, batch) : null);
 }

@@ -176,11 +176,14 @@ export function CashSheet({
             error={tx.error}
             preview={preview}
             feeBlocked={feeBlocked}
+            // Prepared only while the sheet is open (it stays mounted while it slides away).
+            prep={open ? tx.prep : undefined}
+            planFor={tx.planFor}
             onEarn={(quote, confirmedRisk) => {
               if (tx.phase === "failed") tx.reset();
               setSent(quote.amountUsd);
               setSignedOn(offer);
-              void tx.earn({ user: account, quote, offer, confirmedRisk });
+              void tx.sign(tx.planFor({ user: account, quote, offer, confirmedRisk }));
             }}
           />
         ) : (

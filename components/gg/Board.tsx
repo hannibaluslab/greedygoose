@@ -324,7 +324,16 @@ export function BoardView({
 }
 
 /** "Add several": the count and one Add, floating over the tab bar while the list scrolls. One JAW sheet for all. */
-export function PickBar({ count, phase, disabled, onAdd }: { count: number; phase: TxPhase; disabled?: boolean; onAdd: () => void }) {
+export function PickBar({
+  count, phase, checking = false, disabled, onAdd,
+}: {
+  count: number;
+  phase: TxPhase;
+  /** The batch for the people ticked is still being prepared (useTx): "Checking…" until it's ready. */
+  checking?: boolean;
+  disabled?: boolean;
+  onAdd: () => void;
+}) {
   const busy = phase === "simulating" || phase === "signing" || phase === "pending";
   return (
     // Above the tab bar and the Agents button that rises out of it.
@@ -336,10 +345,11 @@ export function PickBar({ count, phase, disabled, onAdd }: { count: number; phas
         <button
           type="button"
           onClick={onAdd}
-          disabled={count === 0 || busy || disabled}
+          disabled={count === 0 || busy || checking || disabled}
+          aria-busy={busy || checking}
           className="flex h-11 shrink-0 items-center rounded-full bg-brand px-6 text-[15px] font-bold text-ink disabled:opacity-45"
         >
-          {phase === "simulating" ? "Checking…" : phase === "pending" ? "Confirming…" : "Add"}
+          {phase === "simulating" || (checking && !busy) ? "Checking…" : phase === "pending" ? "Confirming…" : "Add"}
         </button>
       </div>
     </div>
@@ -351,12 +361,16 @@ export function PickBar({ count, phase, disabled, onAdd }: { count: number; phas
  * them. Each opens JAW's own sheet straight away.
  */
 export function PersonSheet({
-  open, onClose, person, phase, error, note, preview, onAdd, onRemove,
+  open, onClose, person, phase, checking = false, blocked = false, error, note, preview, onAdd, onRemove,
 }: {
   open: boolean;
   onClose: () => void;
   person: (BoardPerson | (OffBoard & { contact: true; you: false })) | null;
   phase: TxPhase;
+  /** Its change is still being prepared (useTx): "Checking…" until it's ready. */
+  checking?: boolean;
+  /** Its change can't go ahead (`error` says why). */
+  blocked?: boolean;
   error: string | null;
   /** Why the action can't go ahead (fees, loading). */
   note: string | null;
@@ -398,8 +412,14 @@ export function PersonSheet({
           <p className="m-0 px-1 text-[13px] leading-[1.4] text-ink-mid">This is you. {BOARD_COPY.foot}</p>
         ) : person.contact ? (
           <div className="flex flex-col gap-2">
-            <button type="button" disabled={busy || preview || !!note || phase === "done"} onClick={onRemove} className={buttonClass("soft", "md")}>
-              {phase === "simulating" ? "Checking…" : phase === "pending" ? "Confirming on Base…" : "Remove from contacts"}
+            <button
+              type="button"
+              disabled={busy || checking || blocked || preview || !!note || phase === "done"}
+              aria-busy={busy || checking}
+              onClick={onRemove}
+              className={buttonClass("soft", "md")}
+            >
+              {phase === "simulating" || (checking && !busy) ? "Checking…" : phase === "pending" ? "Confirming on Base…" : "Remove from contacts"}
             </button>
             {preview ? (
               <p className="m-0 text-center text-xs text-subtle">Preview mode — sign in to do this.</p>
@@ -408,7 +428,7 @@ export function PersonSheet({
             )}
           </div>
         ) : (
-          <TxButton label="Add to contacts" size="md" phase={phase} note={note} preview={preview} onClick={onAdd} />
+          <TxButton label="Add to contacts" size="md" phase={phase} checking={checking} disabled={blocked} note={note} preview={preview} onClick={onAdd} />
         )}
         <TxError error={error} />
         {!person.you && <p className="m-0 px-1 text-xs leading-[1.45] text-subtle">{BOARD_COPY.contactsFoot}</p>}
@@ -426,13 +446,17 @@ export type NameLookup =
 
 /** Add a contact by name: type it, see who it is, then Add. "sam" means sam.justan.id. */
 export function AddByNameSheet({
-  open, onClose, lookup, onLookup, phase, error, note, preview, onAdd,
+  open, onClose, lookup, onLookup, phase, checking = false, blocked = false, error, note, preview, onAdd,
 }: {
   open: boolean;
   onClose: () => void;
   lookup: NameLookup;
   onLookup: (name: string) => void;
   phase: TxPhase;
+  /** Its add is still being prepared (useTx): "Checking…" until it's ready. */
+  checking?: boolean;
+  /** Its add can't go ahead (`error` says why). */
+  blocked?: boolean;
   error: string | null;
   note: string | null;
   preview: boolean;
@@ -484,7 +508,7 @@ export function AddByNameSheet({
         {found && found.you && <p className="m-0 px-1 text-[14px] text-ink-mid">That’s you.</p>}
         {found && !found.you && found.contact && <p className="m-0 px-1 text-[14px] text-ink-mid">Already in your contacts.</p>}
         {found && !found.you && !found.contact && (
-          <TxButton label="Add to contacts" size="md" phase={phase} note={note} preview={preview} onClick={onAdd} />
+          <TxButton label="Add to contacts" size="md" phase={phase} checking={checking} disabled={blocked} note={note} preview={preview} onClick={onAdd} />
         )}
         <TxError error={error} />
         <p className="m-0 px-1 text-xs leading-[1.45] text-subtle">{BOARD_COPY.contactsFoot}</p>

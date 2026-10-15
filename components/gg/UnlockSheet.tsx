@@ -8,7 +8,7 @@ import { StockAvatar, tickerOf } from "./StockAvatar";
 import { StatusPill } from "./Status";
 import { NETWORK_FEE_ROW } from "./Summary";
 import { TxButton, TxDone, TxError } from "./TxUi";
-import { useTx } from "@/hooks/useTx";
+import { txKey, useTx, type TxPlan } from "@/hooks/useTx";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import type { Holding, PositionData } from "@/hooks/usePosition";
 import { buildWithdrawCalls } from "@/lib/aave/tx";
@@ -20,7 +20,8 @@ import type { ReserveAsset } from "@/lib/tokens/registry";
 
 /**
  * "Free up shares": withdraw a stock from Aave back to the user's account, straight to JAW's own sheet from the amount
- * (with the risk tick on this screen when it ends in Watch or Act). `onBack` when opened from the stock's sheet.
+ * (with the risk tick on this screen when it ends in Watch or Act; the batch is prepared while the sheet is idle).
+ * `onBack` when opened from the stock's sheet.
  */
 export function UnlockSheet({
   open, user, stock, holding, data, cf, onClose, onBack,
@@ -36,7 +37,6 @@ export function UnlockSheet({
 }) {
   const { isConnected } = useAccount();
   const fee = useFeeSupport();
-  const tx = useTx();
   const [raw, setRaw] = useState("");
   const [all, setAll] = useState(false);
   const [ack, setAck] = useState(false);
@@ -57,6 +57,17 @@ export function UnlockSheet({
   const after = statusFor(hfAfter);
   const risky = amountRaw > 0n && needsExtraConfirm(after);
   const feeBlocked = isConnected && fee.state === "unsupported";
+  // What Free up would sign now, prepared while the sheet is idle so the tap opens JAW's sheet at once.
+  const plan: TxPlan | null =
+    open && amountRaw > 0n && !tooMuch && !(risky && !ack) && !holding.paused && !feeBlocked && cf !== undefined
+      ? {
+          key: txKey("withdraw", user, stock.symbol, amountRaw, all),
+          user,
+          calls: () => Promise.resolve(buildWithdrawCalls({ user, stock, amountRaw, all })),
+          activity: [{ kind: "withdraw", symbol: stock.symbol, amount: Number(amountRaw) / 10 ** stock.decimals }],
+        }
+      : null;
+  const tx = useTx(undefined, plan);
 
   return (
     <SheetShell
@@ -138,13 +149,13 @@ export function UnlockSheet({
             <TxButton
               label="Free up"
               phase={tx.phase}
+              checking={tx.checking}
               preview={!isConnected}
-              disabled={amountRaw === 0n || tooMuch || (risky && !ack) || holding.paused || feeBlocked || fee.loading || cf === undefined}
+              disabled={!plan || fee.loading || tx.blocked}
               onClick={() => {
+                if (!plan) return;
                 if (tx.phase === "failed") tx.reset();
-                void tx.run(user, buildWithdrawCalls({ user, stock, amountRaw, all }), undefined, [
-                  { kind: "withdraw", symbol: stock.symbol, amount: Number(amountRaw) / 10 ** stock.decimals },
-                ]);
+                void tx.sign();
               }}
             />
           </>

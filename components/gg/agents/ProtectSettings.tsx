@@ -14,7 +14,7 @@ import { useAgentSettings } from "@/hooks/useAgentSettings";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { usePosition } from "@/hooks/usePosition";
 import { useProtectSave } from "@/hooks/useProtectSave";
-import type { TxPhase } from "@/hooks/useTx";
+import { usePrepare, type TxPhase, type TxPlan, type TxPrep } from "@/hooks/useTx";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { LIMIT_USD, limitRaw, testCapNote } from "@/lib/agents/permissions";
 import {
@@ -85,6 +85,8 @@ export function ProtectSettings({ account, onDone }: { account: `0x${string}`; o
       phase={saving.phase}
       error={saving.error}
       busy={saving.busy}
+      prep={saving.prep}
+      settingPlan={saving.settingPlan}
       onSave={saving.save}
     />
   );
@@ -118,12 +120,15 @@ export type ProtectSettingsViewProps = {
   phase: TxPhase;
   error: string | null;
   busy: boolean;
+  /** The write's store (useProtectSave's `prep`) and "Sells first"'s batch, so Save's first sheet is ready before the tap. */
+  prep?: TxPrep;
+  settingPlan?: (on: boolean) => TxPlan | null;
   onSave: (steps: ProtectStep[]) => void;
 };
 
 /** The settings drawn from plain values, so the dev gallery can show each state. */
 export function ProtectSettingsView({
-  live, preview, saved, backsUsd, pricesRaw, capMaxRaw, sellGrants, feeBlocked, waiting = false, phase, error, busy, onSave,
+  live, preview, saved, backsUsd, pricesRaw, capMaxRaw, sellGrants, feeBlocked, waiting = false, phase, error, busy, prep, settingPlan, onSave,
 }: ProtectSettingsViewProps) {
   const [chosen, setChosen] = useState<Partial<ProtectChoice>>({});
   // A Custom limit that isn't a number of dollars yet: nothing to save until it is.
@@ -150,6 +155,9 @@ export function ProtectSettingsView({
     : feeBlocked
       ? "Your account can’t pay network fees in USDC on Base right now."
       : plan.blocked;
+  // Save's first JAW sheet is "Sells first" when it changed: its batch is prepared while the body is idle.
+  const first = steps[0];
+  const prepared = usePrepare(prep, canSave && first?.kind === "keepMix" && settingPlan ? settingPlan(first.on) : null);
 
   const neverChanged = choice.never.length !== start.never.length || choice.never.some((r) => !start.never.includes(r));
   const lines = steps.flatMap((s) => {
@@ -276,11 +284,12 @@ export function ProtectSettingsView({
       <SaveFooter
         label={live && off ? "Switch on" : "Save"}
         phase={phase}
+        checking={prepared.checking}
         steps={count}
-        disabled={!canSave}
+        disabled={!canSave || prepared.blocked}
         preview={live && preview}
         onSave={() => onSave(steps)}
-        error={error}
+        error={error ?? prepared.error}
         note={note}
       />
     </div>

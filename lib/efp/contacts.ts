@@ -17,7 +17,7 @@ export class ContactsStop extends Error {}
 const has = (list: readonly Address[], a: Address) => list.some((b) => isAddressEqual(a, b));
 
 /**
- * Add `targets` to the user's contacts, as the list on Base says it is now (`f`, read right before JAW's sheet): one
+ * Add `targets` to the user's contacts, as the list on Base says it is now (`f`, read again while the batch is prepared): one
  * applyListOps for all of them, after easyMint when the user has no list yet. People already in the list and the user
  * are left out. A list that lives elsewhere (another chain or records contract) is never replaced by a new one: that
  * would change which list is the account's primary.

@@ -69,7 +69,6 @@ export function CreditBuySheet({
   const cfs = cfRead.cfs;
   const protect = useAgents(user).status.protect;
   const fee = useFeeSupport();
-  const { creditBuy, phase, error, reset, busy, txHash } = useCreditBuy();
 
   const [step, setStep] = useState<Step>(preset ? "back" : "pick");
   const [direction, setDirection] = useState<"forward" | "back">("forward");
@@ -84,14 +83,6 @@ export function CreditBuySheet({
     // The extra confirmation is for the plan on screen; any step away, or a new amount, asks again.
     setAck(false);
   };
-  const close = () => {
-    onClose();
-    if (!busy) reset();
-  };
-
-  // F2-5 → F2-7: once the batch lands, Home with "Bought … with Credit Buy", the shares read from the receipt.
-  useBoughtHome({ phase, user, symbol: stock?.symbol ?? "", txHash, credit: true, onClose });
-
   const held = data.holdings.filter((h) => h.freeShares + h.lockedShares > 0).sort((a, b) => valueOf(b) - valueOf(a));
   const others = EQUITIES.filter((e) => !held.some((h) => h.symbol === e.symbol)).sort((a, b) => a.name.localeCompare(b.name));
   const priceOf = (symbol: string) => data.holdings.find((h) => h.symbol === symbol)?.priceUsd ?? 0;
@@ -139,6 +130,17 @@ export function CreditBuySheet({
   const warnPremium = !blocker && econ && econ.premium > BUY_LIMITS.warnPremium;
   const ready = amount >= BUY_LIMITS.minUsd && !!econ && q?.amountIn === creditRaw && !blocker && !quote.isFetching;
   const feeBlocked = isConnected && fee.state === "unsupported";
+  // What Credit Buy would sign now, prepared while the step is idle so the tap opens JAW's sheet at once.
+  const signable =
+    open && step === "amount" && stock && q && ready && !feeBlocked && !(plan.extraConfirm && !ack) ? { user, stock, quote: q, plan, confirmedRisk: ack } : null;
+  const { sign, phase, error, reset, busy, txHash, checking, blocked } = useCreditBuy(signable);
+  const close = () => {
+    onClose();
+    if (!busy) reset();
+  };
+
+  // F2-5 → F2-7: once the batch lands, Home with "Bought … with Credit Buy", the shares read from the receipt.
+  useBoughtHome({ phase, user, symbol: stock?.symbol ?? "", txHash, credit: true, onClose });
 
   // F2-4 lists what can back it first, then what can't, and why.
   const backRows = [...held].sort((a, b) => Number(!!optionOf(options, b)) - Number(!!optionOf(options, a)));
@@ -309,12 +311,13 @@ export function CreditBuySheet({
                 label="Credit Buy"
                 size="md"
                 phase={phase}
+                checking={checking}
                 preview={!isConnected}
-                disabled={!ready || !q || feeBlocked || fee.loading || (plan.extraConfirm && !ack) || phase === "done"}
+                disabled={!signable || fee.loading || blocked || phase === "done"}
                 onClick={() => {
-                  if (!q) return;
+                  if (!signable) return;
                   if (phase !== "idle") reset();
-                  void creditBuy({ user, stock, quote: q, plan, confirmedRisk: ack });
+                  void sign();
                 }}
               />
             </div>

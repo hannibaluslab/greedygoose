@@ -8,7 +8,8 @@ import { toast } from "sonner";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { AddByNameSheet, BoardView, PersonSheet, PickBar, type BoardState, type NameLookup } from "@/components/gg/Board";
 import { useBoard } from "@/hooks/useBoard";
-import { useContactsTx, useFollowing, useNames } from "@/hooks/useContacts";
+import { useContactsTx, useFollowing, useNames, type ContactsChange } from "@/hooks/useContacts";
+import { TAP_AGAIN } from "@/hooks/useTx";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { GOOSE_BOARD } from "@/lib/board/config";
 import { BOARD_PAGE, type BoardFilter, type BoardPerson, type OffBoard } from "@/lib/board/view";
@@ -24,7 +25,8 @@ const FEE_BLOCKED = "Your account can’t pay network fees in USDC on Base right
 /**
  * The Leaderboard tab (Adrian, 2026-10-15). Members come from GooseBoard and are scored in this browser from the
  * chain (useBoard); contacts are the account's EFP list on Base (useFollowing). Adding one person, several, or a name,
- * and removing one, each open JAW's own sheet once (useContactsTx). In the dev preview (`?as=`) nothing can be signed.
+ * and removing one, each open JAW's own sheet once (useContactsTx), the one in front prepared while the screen is
+ * idle. In the dev preview (`?as=`) nothing can be signed.
  */
 function Board({ address }: { address: Address }) {
   const { address: signer } = useAccount();
@@ -32,7 +34,6 @@ function Board({ address }: { address: Address }) {
   const fee = useFeeSupport();
   const board = useBoard();
   const following = useFollowing(address);
-  const tx = useContactsTx();
 
   const [filter, setFilter] = useState<BoardFilter>(useSearchParams().get("filter") === "contacts" ? "contacts" : "all");
   const [picking, setPicking] = useState(false);
@@ -59,6 +60,7 @@ function Board({ address }: { address: Address }) {
   const names = useNames(named);
   const nameOf = (a: string) => names.get(lower(a)) ?? null;
 
+  const note = fee.state === "unsupported" && !preview ? FEE_BLOCKED : null;
   const people: BoardPerson[] = rows.map((r) => ({
     account: r.account,
     name: nameOf(r.account),
@@ -79,6 +81,25 @@ function Board({ address }: { address: Address }) {
           ? { kind: "error", what: "contacts" }
           : { kind: "ready", people, offBoard };
 
+  const sheetPerson = person
+    ? (people.find((p) => isAddressEqual(p.account, person)) ??
+      (contactSet.has(lower(person)) ? { account: person, name: nameOf(person), contact: true as const, you: false as const } : null))
+    : null;
+
+  // The change each place would sign now. The one in front (a person's sheet, then the name sheet, then the bar) is
+  // prepared while the screen is idle, so its tap opens JAW's sheet at once.
+  const personChange: ContactsChange | null =
+    personShown && sheetPerson && !sheetPerson.you
+      ? { verb: sheetPerson.contact ? "remove" : "add", user: address, targets: [sheetPerson.account] }
+      : null;
+  const found = lookup.kind === "found" ? lookup : null;
+  const nameChange: ContactsChange | null =
+    byName && found && !found.you && !found.contact ? { verb: "add", user: address, targets: [found.account] } : null;
+  const pickChange: ContactsChange | null = picking && picked.size > 0 ? { verb: "add", user: address, targets: [...picked] as Address[] } : null;
+  const front = note ? null : (personChange ?? nameChange ?? pickChange);
+  const tx = useContactsTx(front);
+  const checkingFor = (c: ContactsChange | null) => tx.checking && !!c && c === front;
+
   // A change that landed closes what asked for it, the sheet or the bar. Derived from the phase rather than set from
   // an effect; `settle` puts it away for good before anything new starts.
   const landed = tx.phase === "done" ? from : null;
@@ -87,7 +108,9 @@ function Board({ address }: { address: Address }) {
   }, [tx.phase, verb]);
   // The bar has no room for an error: it comes as a toast.
   useEffect(() => {
-    if (from === "pick" && tx.phase === "failed" && tx.error) toast.error(tx.error);
+    if (from !== "pick" || !tx.error) return;
+    if (tx.error === TAP_AGAIN) toast(TAP_AGAIN);
+    else if (tx.phase === "failed") toast.error(tx.error);
   }, [from, tx.phase, tx.error]);
 
   const settle = () => {
@@ -101,7 +124,6 @@ function Board({ address }: { address: Address }) {
     tx.reset();
   };
 
-  const note = fee.state === "unsupported" && !preview ? FEE_BLOCKED : null;
   const start = (where: "person" | "pick" | "name", v: "add" | "remove") => {
     settle();
     setFrom(where);
@@ -114,10 +136,6 @@ function Board({ address }: { address: Address }) {
     setPerson(p.account);
     setPersonShown(true);
   };
-  const sheetPerson = person
-    ? (people.find((p) => isAddressEqual(p.account, person)) ??
-      (contactSet.has(lower(person)) ? { account: person, name: nameOf(person), contact: true as const, you: false as const } : null))
-    : null;
 
   const onLookup = async (text: string) => {
     settle();
@@ -184,12 +202,14 @@ function Board({ address }: { address: Address }) {
             <PickBar
               count={picked.size}
               phase={from === "pick" ? tx.phase : "idle"}
+              checking={checkingFor(pickChange)}
               // In the dev preview the tap says why nothing can be signed.
-              disabled={!!note || (tx.busy && from !== "pick")}
+              disabled={!!note || (tx.busy && from !== "pick") || (pickChange !== null && pickChange === front && tx.blocked)}
               onAdd={() => {
                 if (preview) return void toast("Preview mode — sign in to do this.");
+                if (!pickChange) return;
                 start("pick", "add");
-                void tx.add(address, [...picked] as Address[]);
+                void tx.sign(tx.planOf(pickChange));
               }}
             />
           ) : undefined
@@ -200,16 +220,20 @@ function Board({ address }: { address: Address }) {
         onClose={() => setPersonShown(false)}
         person={sheetPerson}
         phase={from === "person" ? tx.phase : "idle"}
-        error={from === "person" ? tx.error : null}
+        checking={checkingFor(personChange)}
+        blocked={personChange !== null && personChange === front && tx.blocked}
+        error={from === "person" || (personChange !== null && personChange === front) ? tx.error : null}
         note={note}
         preview={preview}
         onAdd={() => {
+          if (!personChange) return;
           start("person", "add");
-          void tx.add(address, [person!]);
+          void tx.sign(tx.planOf(personChange));
         }}
         onRemove={() => {
+          if (!personChange) return;
           start("person", "remove");
-          void tx.remove(address, person!);
+          void tx.sign(tx.planOf(personChange));
         }}
       />
       <AddByNameSheet
@@ -218,13 +242,15 @@ function Board({ address }: { address: Address }) {
         lookup={lookup}
         onLookup={(t) => void onLookup(t)}
         phase={from === "name" ? tx.phase : "idle"}
-        error={from === "name" ? tx.error : null}
+        checking={checkingFor(nameChange)}
+        blocked={nameChange !== null && nameChange === front && tx.blocked}
+        error={from === "name" || (nameChange !== null && nameChange === front) ? tx.error : null}
         note={note}
         preview={preview}
         onAdd={() => {
-          if (lookup.kind !== "found") return;
+          if (!nameChange) return;
           start("name", "add");
-          void tx.add(address, [lookup.account]);
+          void tx.sign(tx.planOf(nameChange));
         }}
       />
     </>

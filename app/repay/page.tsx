@@ -3,23 +3,26 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { parseUnits } from "viem";
-import { useAccount } from "wagmi";
+import { useAccount, usePublicClient } from "wagmi";
 import { toast } from "sonner";
 import Link from "next/link";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { Line, SubHeader, WhiteCard } from "@/components/gg/Screen";
 import { NETWORK_FEE_ROW } from "@/components/gg/Summary";
 import { TxButton, TxError } from "@/components/gg/TxUi";
-import { useTx } from "@/hooks/useTx";
+import { TxStop, txKey, useTx, type TxPlan } from "@/hooks/useTx";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { useSigningCash } from "@/hooks/useSigningCash";
+import { AAVE } from "@/lib/aave/addresses";
+import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { buildRepayCalls, fullRepayAmount } from "@/lib/aave/tx";
+import { CHAIN_ID } from "@/lib/chain";
 import { repayChips } from "@/lib/aave/loan";
-import { cantRepay, maxSpendRaw, payFromCash, toUsd } from "@/lib/cash";
+import { cantRepay, maxSpendRaw, payFromCash, readCash, toUsd } from "@/lib/cash";
 import { USDC } from "@/lib/tokens/registry";
 import { StatusBar, StatusPill } from "@/components/gg/Status";
 import { ChevronRight, SlidersIcon } from "@/components/gg/icons";
-import { usePosition } from "@/hooks/usePosition";
+import { usePosition, type PositionData } from "@/hooks/usePosition";
 import { formatUsdTrim } from "@/lib/formatting";
 
 export default function RepayPage() {
@@ -29,21 +32,47 @@ export default function RepayPage() {
 /**
  * Design board "5b · Repay" (CreditOn.dc.html): it opens on the larger amount ($300), and a landed repay goes Home,
  * as the board's button does, with a toast like a buy's (F1-6). Repay opens JAW's own sheet straight away: this screen
- * already says what you owe after and the fee, paid from your cash as one pot (D20). The batch is built with the cash
- * read again right before signing (useSigningCash), so cash that moved since shows in words instead of a batch that
- * can't pay.
+ * already says what you owe after and the fee, paid from your cash as one pot (D20). The batch is prepared while the
+ * screen is idle with the cash read again (useSigningCash), so cash that moved since shows in words instead of a batch
+ * that can't pay, and the tap goes straight to JAW.
  */
 function Repay({ address }: { address: `0x${string}` }) {
   const { isConnected } = useAccount();
   const router = useRouter();
   const { data } = usePosition(address);
-  const tx = useTx();
+  const client = usePublicClient({ chainId: CHAIN_ID });
   const fee = useFeeSupport();
   const cashToSign = useSigningCash();
   const [choice, setChoice] = useState<number | "all" | null>(null);
   const paid = useRef<string | null>(null);
 
   const options = useMemo(() => (data ? repayChips(Math.min(toUsd(maxSpendRaw(data.cash)), data.debtUsd)) : []), [data]);
+  const feeBlocked = isConnected && fee.state === "unsupported";
+  const pick = data ? repayPick(data, options, choice) : null;
+  // What Repay would sign now, prepared while the screen is idle (the cash read again) so the tap opens JAW's sheet.
+  // All repays what's owed when it's prepared, from the cash then (both read again, plus Aave's interest buffer), so
+  // the interest that accrues every block doesn't make it a new batch each time the position re-reads.
+  const plan: TxPlan | null =
+    pick && pick.amount > 0 && !feeBlocked
+      ? {
+          key: pick.all ? txKey("repay", address, "all") : txKey("repay", address, pick.amountRaw),
+          user: address,
+          calls: async () => {
+            if (!pick.all) {
+              return payFromCash(address, pick.amountRaw, await cashToSign(address, pick.amountRaw), buildRepayCalls({ user: address, amountRaw: pick.amountRaw, all: false }));
+            }
+            const [debtRaw, cash] = await Promise.all([
+              client!.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserTotalDebt", args: [BigInt(USDC.reserveId), address] }),
+              readCash(client!, address),
+            ]);
+            const amountRaw = fullRepayAmount(debtRaw, maxSpendRaw(cash));
+            if (amountRaw <= 0n) throw new TxStop(cantRepay(cash));
+            return payFromCash(address, amountRaw, cash, buildRepayCalls({ user: address, amountRaw, all: true }));
+          },
+          activity: [{ kind: "repay", symbol: "USDC", amount: pick.amount }],
+        }
+      : null;
+  const tx = useTx(undefined, plan);
 
   useEffect(() => {
     if (tx.phase !== "done" || paid.current === null) return;
@@ -52,35 +81,20 @@ function Repay({ address }: { address: `0x${string}` }) {
     router.push("/home");
   }, [tx.phase, router]);
 
-  if (!data) {
+  if (!data || !pick) {
     return <div className="px-5 pt-[calc(env(safe-area-inset-top)+8px)]"><div aria-busy className="h-[420px] animate-pulse rounded-[22px] bg-chip" /></div>;
   }
 
-  const maxSpend = maxSpendRaw(data.cash);
-  const maxRepay = Math.min(toUsd(maxSpend), data.debtUsd);
-  // Until a chip is tapped, the larger of the two amounts is picked, as drawn; All when it's the only chip. A tapped
-  // amount that's no longer offered (the cash fell since) goes back to that too.
-  const chosen = choice === "all" || (choice !== null && options.includes(choice)) ? choice : null;
-  const picked = chosen ?? options.at(-1) ?? (maxRepay > 0 ? "all" : null);
-  const amount = picked === "all" ? maxRepay : picked ?? 0;
-  const amountRaw =
-    picked === "all" ? fullRepayAmount(data.debtRaw, maxSpend) : parseUnits(amount.toFixed(USDC.decimals), USDC.decimals);
+  const { maxRepay, picked, amount, coversAll } = pick;
   const after = Math.max(0, data.debtUsd - amount);
   // Owed amounts are rounded up, as on Home's Credit card: never shown as less than they are.
   const owed = (usd: number) => formatUsdTrim(Math.ceil(usd));
-  const coversAll = picked === "all" && maxSpend >= data.debtRaw;
-  const feeBlocked = isConnected && fee.state === "unsupported";
 
   const submit = () => {
+    if (!plan) return;
     if (tx.phase === "failed") tx.reset();
     paid.current = coversAll ? "Repaid all your credit" : `Repaid ${formatUsdTrim(amount)}`;
-    const all = picked === "all";
-    void tx.run(
-      address,
-      async () => payFromCash(address, amountRaw, await cashToSign(address, amountRaw), buildRepayCalls({ user: address, amountRaw, all })),
-      undefined,
-      [{ kind: "repay", symbol: "USDC", amount }],
-    );
+    void tx.sign();
   };
 
   return (
@@ -143,12 +157,27 @@ function Repay({ address }: { address: `0x${string}` }) {
       <TxButton
         label="Repay"
         phase={tx.phase}
+        checking={tx.checking}
         preview={!isConnected}
-        disabled={amount <= 0 || feeBlocked || fee.loading}
+        disabled={!plan || fee.loading || tx.blocked}
         onClick={submit}
       />
     </div>
   );
+}
+
+/**
+ * The amount on screen: until a chip is tapped, the larger of the two amounts is picked, as drawn; All when it's the
+ * only chip. A tapped amount that's no longer offered (the cash fell since) goes back to that too.
+ */
+function repayPick(data: PositionData, options: number[], choice: number | "all" | null) {
+  const maxSpend = maxSpendRaw(data.cash);
+  const maxRepay = Math.min(toUsd(maxSpend), data.debtUsd);
+  const chosen = choice === "all" || (choice !== null && options.includes(choice)) ? choice : null;
+  const picked = chosen ?? options.at(-1) ?? (maxRepay > 0 ? "all" : null);
+  const amount = picked === "all" ? maxRepay : picked ?? 0;
+  const amountRaw = picked === "all" ? fullRepayAmount(data.debtRaw, maxSpend) : parseUnits(amount.toFixed(USDC.decimals), USDC.decimals);
+  return { maxRepay, picked, amount, amountRaw, all: picked === "all", coversAll: picked === "all" && maxSpend >= data.debtRaw };
 }
 
 function Chip({ selected, onClick, children }: { selected: boolean; onClick: () => void; children: React.ReactNode }) {

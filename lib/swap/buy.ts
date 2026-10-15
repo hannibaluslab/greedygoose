@@ -87,12 +87,15 @@ export async function quoteSwap(client: Client, stock: ReserveAsset, amountIn: b
 
 export const quoteBuy = (client: Client, stock: ReserveAsset, amountIn: bigint) => quoteSwap(client, stock, amountIn, "buy");
 
-/** Shown when the quote read again just before Face ID gives less than the review's "at least". */
+/** A quote's part of a write's key (useTx): a new quote is a new batch, since its floor (`minOut`) comes from amountOut. */
+export const quoteKey = (q: BuyQuote) => [q.venue, q.pool, q.amountIn, q.amountOut];
+
+/** Shown when the quote read again while the batch is prepared gives less than the screen's "at least". */
 export const QUOTE_MOVED = "The price moved since you checked. Look at the new amount, then try again.";
 
 /**
  * The quote to sign with. useBuyQuote refreshes every 15 s only, so the shown quote's pool is read
- * again right before Face ID. The review promised at least `minOut(shown)`: a fresh quote under that
+ * again while the batch is prepared (at most 30 s before the tap). The review promised at least `minOut(shown)`: a fresh quote under that
  * returns null (stop, show QUOTE_MOVED). Otherwise the floor is the higher of the two, so it never
  * drops under what the review showed.
  */
