@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { endsInAct, homeStatus, needsExtraConfirm, statusFor } from "@/lib/risk/status";
+import { barPosition } from "@/components/gg/Status";
 
 describe("statusFor", () => {
   it("is none without debt", () => {
@@ -32,5 +33,20 @@ describe("homeStatus", () => {
     expect(homeStatus("none")).toBe("safe");
     expect(homeStatus("watch")).toBe("watch");
     expect(homeStatus("act")).toBe("act");
+  });
+});
+
+describe("barPosition", () => {
+  const safeEnd = 5 / 8.4;
+  const watchEnd = 7 / 8.4;
+  it("puts each band on its own segment", () => {
+    expect(barPosition(3)).toBe(0);
+    expect(barPosition(2)).toBeLessThan(safeEnd);
+    expect(barPosition(1.5)).toBeCloseTo(safeEnd);
+    expect(barPosition(1.139)).toBeGreaterThan(safeEnd);
+    expect(barPosition(1.139)).toBeLessThan(watchEnd);
+    expect(barPosition(1.12)).toBeLessThan(watchEnd);
+    expect(barPosition(1.05)).toBeGreaterThan(watchEnd);
+    expect(barPosition(0.9)).toBe(1);
   });
 });

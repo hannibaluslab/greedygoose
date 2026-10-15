@@ -1,3 +1,4 @@
+import { RISK } from "@/config/risk";
 import { STATUS_LABEL, type Status } from "@/lib/risk/status";
 
 const PILL: Record<Status, string> = {
@@ -43,16 +44,32 @@ export function StatusChange({ from, to }: { from: Status; to: Status }) {
   );
 }
 
+/** The bar's segments, in flex units: Safe, Watch, Act. */
+const BAR = { safe: 5, watch: 2, act: 1.4 } as const;
+
+/**
+ * Where a health factor sits along the bar, 0 (left) to 1 (right). Each band's range fills its own segment, so the
+ * marker is always on the colour its pill names: Safe from 2.5 down to 1.5, Watch down to 1.1, Act down to 1.0. One
+ * straight line from 2.5 to 1.0 put every Watch below about 1.25 (the credit cap is 1.12) on the red.
+ */
+export function barPosition(healthFactor: number): number {
+  const total = BAR.safe + BAR.watch + BAR.act;
+  const along = (top: number, bottom: number, start: number, width: number) =>
+    (start + width * Math.min(1, Math.max(0, (top - healthFactor) / (top - bottom)))) / total;
+  if (healthFactor >= RISK.safeMin) return along(2.5, RISK.safeMin, 0, BAR.safe);
+  if (healthFactor >= RISK.watchMin) return along(RISK.safeMin, RISK.watchMin, BAR.safe, BAR.watch);
+  return along(RISK.watchMin, 1, BAR.safe + BAR.watch, BAR.act);
+}
+
 /** Three-segment Safe / Watch / Act bar with marker. Labels always shown. */
 export function StatusBar({ status, healthFactor, slim = false }: { status: Status; healthFactor: number | null; /** A thin bar with no labels (Repay's card, where the pill names the status). */ slim?: boolean }) {
-  // Position along the bar: HF ≥ 2.5 → far left, HF 1.0 → far right.
-  const pos = healthFactor === null ? 0 : Math.min(1, Math.max(0, (2.5 - healthFactor) / 1.5));
+  const pos = healthFactor === null ? 0 : barPosition(healthFactor);
   return (
     <div className="flex flex-col gap-2" role="img" aria-label={`Your credit is ${STATUS_LABEL[status]}`}>
       <div className={`relative flex gap-1 ${slim ? "h-1.5" : "h-2"}`}>
-        <span className="rounded bg-safe" style={{ flex: 5 }} />
-        <span className="rounded bg-watch" style={{ flex: 2 }} />
-        <span className="rounded bg-act" style={{ flex: 1.4 }} />
+        <span className="rounded bg-safe" style={{ flex: BAR.safe }} />
+        <span className="rounded bg-watch" style={{ flex: BAR.watch }} />
+        <span className="rounded bg-act" style={{ flex: BAR.act }} />
         {status !== "none" && (
           <span
             aria-hidden
@@ -63,9 +80,9 @@ export function StatusBar({ status, healthFactor, slim = false }: { status: Stat
       </div>
       {!slim && (
       <div className="flex text-xs font-semibold">
-        <span className="text-safe" style={{ flex: 5 }}>Safe</span>
-        <span className="text-watch-text" style={{ flex: 2 }}>Watch</span>
-        <span className="text-act" style={{ flex: 1.4 }}>Act</span>
+        <span className="text-safe" style={{ flex: BAR.safe }}>Safe</span>
+        <span className="text-watch-text" style={{ flex: BAR.watch }}>Watch</span>
+        <span className="text-act" style={{ flex: BAR.act }}>Act</span>
       </div>
       )}
     </div>
