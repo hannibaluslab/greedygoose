@@ -46,18 +46,19 @@ export function runError(done: number, of: number, error: unknown): string {
  * order, straight from the button that asks for it (the first request is built in the tap, with nothing awaited before
  * JAW is called), stopping at the first that doesn't go through. `key` names the change: trying the same one again
  * runs only the steps that didn't, as they were first asked for (the steps the screen rebuilds from the chain leave out
- * a job that is already off, so counting into them would skip one that is still on). `run` resolves to the error it
- * shows, or null once every step went through.
+ * a job that is already off, so counting into them would skip one that is still on). `prior` counts JAW sheets of the
+ * same change that went through before this run (Start earning's batch, before its grant), so a stop reads "1 of 2
+ * went through". `run` resolves to the error it shows, or null once every step went through.
  */
 export function useAgentRun(agents: ReturnType<typeof useAgents>) {
   const [running, setRunning] = useState<string | null>(null);
   const [failed, setFailed] = useState<{ key: string; done: number; of: number; rest: readonly AgentStep[]; message: string } | null>(null);
 
-  async function run(key: string, steps: readonly AgentStep[], onDone: () => void): Promise<string | null> {
+  async function run(key: string, steps: readonly AgentStep[], onDone: () => void, prior = 0): Promise<string | null> {
     const retry = failed?.key === key ? failed : null;
     const todo = retry?.rest ?? steps;
-    const before = retry?.done ?? 0;
-    const of = retry?.of ?? steps.length;
+    const before = retry?.done ?? prior;
+    const of = retry?.of ?? prior + steps.length;
     setRunning(key);
     setFailed(null);
     try {

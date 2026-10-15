@@ -1,5 +1,6 @@
 import type { AgentStatus } from "@/lib/agents/status";
 import { formatCoin, formatUsdTrim } from "@/lib/formatting";
+import { startEarningMinRaw } from "@/lib/startEarning";
 import { faceRaw, MIN_CONVERT_RAW } from "@/lib/swap/entry";
 import { USDC } from "@/lib/tokens/registry";
 import { ENTRY_COINS, type EntryCoinAsset } from "@/lib/tokens/stables";
@@ -14,16 +15,39 @@ import { ENTRY_COINS, type EntryCoinAsset } from "@/lib/tokens/stables";
 /** The cash rate as the screens say it: "3.9%". */
 export const rateText = (apy: number) => `${(apy * 100).toFixed(1)}%`;
 
-/** Cash it takes before Home asks to start earning: below it there's nothing to earn on, and JAW's fee is paid in it. */
-export const MIN_START_USD = 1;
+export { MIN_START_USD, startEarningMinRaw } from "@/lib/startEarning";
 
 /**
- * Whether Home asks to start earning (Adrian, 2026-10-14: when money comes in, not at $0): an executor is configured
- * (`save` isn't "unconfigured"), the account has no Save grant, neither running nor starting, and at least $1 of cash
- * is in. Not while it loads, so an earning account never sees it flash. Sign-up goes straight Home: at $0 there's
- * nothing to earn on and nothing to pay JAW's fee with.
+ * Whether Home asks to start earning, and fades its Cash and Yield cards (board 2g). Start earning moves the wallet's
+ * idle USDC into savings in the user's own batch (Adrian, 2026-10-15), so it's offered on wallet USDC alone (what's in
+ * savings already earns): at least $1 to put in plus the fee buffer that stays (startEarningMinRaw). With an executor
+ * (`save` isn't "unconfigured") only while the account has no Save grant, neither running nor starting: Save sweeps
+ * the wallet on its own once it runs. Without one (the public link) whenever that much sits idle. Never while the grant
+ * loads, so an earning account never sees it flash. At $0 there's nothing to earn on and nothing to pay JAW's fee with.
  */
-export const startEarningShown = (save: AgentStatus, cashUsd: number) => save === "off" && cashUsd >= MIN_START_USD;
+export function startEarningShown(save: AgentStatus, walletRaw: bigint): boolean {
+  if (walletRaw < startEarningMinRaw) return false;
+  return save === "unconfigured" || save === "off";
+}
+
+/**
+ * JAW sheets one Start earning tap opens: the batch, then, with an executor and no Save grant yet, JAW's own screen for
+ * the Save grant (D14: a grant can't ride in a batch). The button's "2 steps".
+ */
+export const startEarningSteps = (save: AgentStatus) => (save === "off" ? 2 : 1);
+
+/**
+ * The card's words (board 2g): money that just arrived, "Your $100 arrived · Start earning 4.6% on it."; with savings
+ * already earning and new idle cash beside them, "$40 isn't earning". `walletUsd` is the wallet's USDC, cents kept.
+ */
+export function startEarningText(p: { walletUsd: number; savingsUsd: number; rate: string | null }): { title: string; line: string } {
+  const amount = formatUsdTrim(Math.floor(p.walletUsd * 100) / 100);
+  const line = `Start earning${p.rate ? ` ${p.rate}` : ""} on it.`;
+  return { title: p.savingsUsd >= 0.01 ? `${amount} isn’t earning` : `Your ${amount} arrived`, line };
+}
+
+/** The toast once the batch lands: "Your cash is earning 3.9%". */
+export const startedEarningText = (rate: string | null) => (rate ? `Your cash is earning ${rate}` : "Your cash is earning");
 
 /** A coin sitting in the wallet: how much, in its own units. */
 export type Arrived = { coin: EntryCoinAsset; raw: bigint };

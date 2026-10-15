@@ -11,13 +11,13 @@ import { NOT_FAIR, useConvert, useConvertQuotes, type ConvertQuote } from "@/hoo
 import type { GrantView, useCashSetup } from "@/hooks/useCashSetup";
 import { usePrepare, type TxPhase } from "@/hooks/useTx";
 import { askAutomatic, arrivedText, type Arrived, type ArrivedView } from "@/lib/cashSetup";
-import { formatCoin, formatUsd, formatUsdTrim, inWords } from "@/lib/formatting";
+import { formatCoin, formatUsd, inWords, stepsNote } from "@/lib/formatting";
 import { USDC } from "@/lib/tokens/registry";
 import type { EntryVenue } from "@/lib/tokens/stables";
 
 /*
  * Earning and other dollars becoming cash, where the user meets them (D20): "Your $100 arrived · Start earning" on Home
- * once money is in (board 2g), and "120 USDT arrived · Turn into cash" on Home and Pay, then "Do this
+ * while the wallet's cash isn't earning (board 2g; its batch puts it in savings, Adrian 2026-10-15), and "120 USDT arrived · Turn into cash" on Home and Pay, then "Do this
  * automatically next time?". No agent, limit or switch, and no confirm step of ours: each button names its action and
  * opens JAW's own sheet straight away, which shows the Review and asks for Face ID. Plain values in, so the dev gallery
  * draws every state.
@@ -29,10 +29,33 @@ const SMALL_CARD = "flex flex-col gap-2 rounded-[22px] bg-card p-3.5 shadow-card
 const PILL = "flex h-9 shrink-0 items-center gap-1.5 rounded-[18px] bg-ink px-3.5 text-sm font-semibold text-on-ink disabled:opacity-45";
 
 /**
- * Home's card once money is in and the cash doesn't earn yet (board 2g): "Your $100 arrived · Start earning 4.6% on it."
- * and the Save grant on JAW's sheet. While it's open, the card adds nothing.
+ * Home's card while the wallet's cash isn't earning (board 2g): "Your $100 arrived · Start earning 4.6% on it.", or
+ * "$40 isn't earning" beside savings that already earn. Its button moves that cash into savings in one batch on JAW's
+ * sheet (useStartEarning), named for the action only; with the Save grant to follow, a small line under it says
+ * "2 steps". While JAW's sheet is open, the card adds nothing.
  */
-export function StartEarningCard({ cashUsd, rate, grant, onStart }: { cashUsd: number; rate: string | null; grant: GrantView; onStart: () => void }) {
+export function StartEarningCard({
+  title, line, phase, checking = false, blocked = false, steps = 1, note, error, preview, onStart,
+}: {
+  title: string;
+  line: string;
+  phase: TxPhase;
+  /** The batch is still being prepared (useTx): "Checking…" until it's ready. */
+  checking?: boolean;
+  /** The batch can't go ahead (`error` says why). */
+  blocked?: boolean;
+  /** JAW sheets one tap opens: the batch, and the Save grant when it follows. */
+  steps?: number;
+  /** Why it can't be signed now; null when it can. */
+  note?: string | null;
+  error: string | null;
+  preview: boolean;
+  onStart: () => void;
+}) {
+  const busy = phase === "simulating" || phase === "signing" || phase === "pending";
+  const waiting = checking && !busy && phase !== "done";
+  const label = phase === "simulating" || waiting ? "Checking…" : phase === "pending" ? "Confirming on Base…" : "Start earning";
+  const small = preview ? "Preview mode — sign in to do this." : (note ?? stepsNote(steps));
   return (
     <section aria-label="Start earning" className={SMALL_CARD}>
       <div className="flex items-center gap-2.5">
@@ -40,23 +63,22 @@ export function StartEarningCard({ cashUsd, rate, grant, onStart }: { cashUsd: n
           <TrendUpIcon size={15} />
         </span>
         <span className="flex min-w-0 grow flex-col gap-0.5">
-          <span className="num text-[15px] font-semibold leading-[1.3]">Your {formatUsdTrim(cashUsd)} arrived</span>
-          <span className="num text-[13px] leading-[1.3] text-ink-2">Start earning{rate ? ` ${rate}` : ""} on it.</span>
+          <span className="num text-[15px] font-semibold leading-[1.3]">{title}</span>
+          <span className="num text-[13px] leading-[1.3] text-ink-2">{line}</span>
         </span>
         <button
           type="button"
           onClick={onStart}
-          disabled={grant.busy || grant.preview || !!grant.blocked}
-          aria-busy={grant.busy}
+          disabled={busy || waiting || blocked || preview || !!note || phase === "done"}
+          aria-busy={busy || waiting}
+          data-tx={waiting ? "checking" : busy ? phase : undefined}
           className={PILL}
         >
-          Start earning
+          {label}
         </button>
       </div>
-      <TxError error={grant.error} />
-      {(grant.preview || grant.blocked) && (
-        <p className="m-0 text-xs text-subtle">{grant.preview ? "Preview mode — sign in to do this." : grant.blocked}</p>
-      )}
+      <TxError error={error} />
+      {small && <p className={`m-0 text-xs text-subtle ${!preview && !note ? "text-right" : ""}`}>{small}</p>}
     </section>
   );
 }

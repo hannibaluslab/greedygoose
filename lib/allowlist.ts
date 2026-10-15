@@ -29,8 +29,8 @@ type Address = `0x${string}`;
  * What a check may look at besides the call's own arguments: the user's own EFP list slots (the one it already has,
  * read from Base by the caller, and any minted in the same batch), the call's target and raw data, who a Send pays
  * (`sendTo`, declared by the Send builder alone; null in every other batch, so no other batch can carry a transfer),
- * and whether the batch saves for the user (`saveTo`, declared by the Earn with stocks builder alone) with the amount of
- * its one savings supply (`saveRaw`, read from the batch; null when it has none).
+ * and whether the batch saves for the user (`saveTo`, declared by the Earn with stocks and Start earning builders alone)
+ * with the amount of its one savings supply (`saveRaw`, read from the batch; null when it has none).
  */
 type BatchContext = { listSlots: readonly bigint[]; to: Address; data: Hex; sendTo: Address | null; saveTo: Address | null; saveRaw: bigint | null };
 /** True when a call's arguments keep the money with `user`. */
@@ -115,9 +115,10 @@ const transferOut: ArgsCheck = (args, user, ctx) => {
   );
 };
 /**
- * Earn with stocks (Adrian, 2026-10-15: "the user should be able to put stocks get cash in saving"), the one
- * user-signed savings supply: Aave V3's supply(asset, amount, onBehalfOf, referralCode) of USDC, for the user, referral
- * code 0, more than 0, only in a batch that declares it saves for the user (`saveTo`), once per batch.
+ * Earn with stocks (Adrian, 2026-10-15: "the user should be able to put stocks get cash in saving") and Start earning
+ * (the wallet's idle cash into savings, the same day), the one user-signed savings supply: Aave V3's
+ * supply(asset, amount, onBehalfOf, referralCode) of USDC, for the user, referral code 0, more than 0, only in a batch
+ * that declares it saves for the user (`saveTo`), once per batch.
  */
 const saveForUser: ArgsCheck = (args, user, ctx) => {
   const [asset, amount, onBehalfOf, referralCode] = args;
@@ -144,8 +145,8 @@ const bareJoin: ArgsCheck = (args, _user, ctx) => args.length === 0 && ctx.data.
  * functions it may be called with, and what their arguments must say. Money only moves between the
  * user's own pockets: an approve names only the spoke or a router, every position, withdrawal and
  * swap pays the user, and savings come out only as USDC. The one exception is a Send's single transfer,
- * to the recipient its batch declares (`transferOut`). Savings go in only in Earn with stocks' batch, which
- * declares it (`saveTo`): one USDC supply for the user, approved to Aave V3's pool for exactly that amount
+ * to the recipient its batch declares (`transferOut`). Savings go in only in Earn with stocks' and Start earning's
+ * batches, which declare it (`saveTo`): one USDC supply for the user, approved to Aave V3's pool for exactly that amount
  * (`saveForUser`, `savingsApprove`). Buys, repays and savings-first batches mix
  * targets, so each target is held to its own functions. An Entry coin is approved only to the venue that converts
  * it, and converted only into USDC (D20). GooseExecutor's settings move no money and apply to the signer alone
@@ -195,7 +196,8 @@ const RULES: readonly Rule[] = [
 
 /**
  * What a batch's builder tells the allowlist: the user's EFP list slot as read from Base (`listSlot`), for a Send only,
- * who it pays (`sendTo`), and for Earn with stocks only, that it saves for the user (`saveTo`, which must be the user).
+ * who it pays (`sendTo`), and for Earn with stocks and Start earning only, that it saves for the user (`saveTo`, which
+ * must be the user).
  */
 export type AllowContext = { listSlot?: bigint | null; sendTo?: Address; saveTo?: Address };
 
@@ -254,8 +256,8 @@ export function assertAllowed<C extends { to: Address; data: Hex; value: bigint 
       throw new Error(`Blocked: unexpected call to ${c.to}`);
     }
     const check = Object.hasOwn(rule.functions, call.functionName) ? rule.functions[call.functionName] : undefined;
-    // Outside a Send (no recipient declared), transfer is no function of any target at all; outside Earn with stocks
-    // (no saveTo declared), neither is a savings supply.
+    // Outside a Send (no recipient declared), transfer is no function of any target at all; outside Earn with stocks and
+    // Start earning (no saveTo declared), neither is a savings supply.
     if (!check || (call.functionName === "transfer" && !sendTo) || (isSavingsSupply(c.to, call.functionName) && !saveTo)) {
       throw new Error(`Blocked: unexpected call to ${c.to}`);
     }
