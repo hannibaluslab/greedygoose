@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { arrivedCoins, arrivedText, arrivedView, askAutomatic, earningLine, MIN_START_USD, rateText, startEarningShown } from "@/lib/cashSetup";
+import { arrivedCoins, arrivedText, arrivedView, askAutomatic, earningLine, MIN_START_USD, rateText, startEarningMinRaw, startEarningShown } from "@/lib/cashSetup";
+import { CASH } from "@/config/risk";
 import type { AgentStatus } from "@/lib/agents/status";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 
@@ -7,17 +8,22 @@ const [USDT, USDE, USDBC, USDS] = ENTRY_COINS;
 const raw = (coin: (typeof ENTRY_COINS)[number], n: number) => BigInt(Math.round(n * 100)) * 10n ** BigInt(coin.decimals - 2);
 const STATUSES: AgentStatus[] = ["unconfigured", "loading", "off", "starting", "on"];
 
-describe("start earning (the Save grant)", () => {
-  it("is asked only with an executor, once it's known the account has no Save grant", () => {
-    expect(STATUSES.filter((s) => startEarningShown(s, 100))).toEqual(["off"]);
+describe("start earning: when Home offers it", () => {
+  const usdc = (n: number) => BigInt(Math.round(n * 1e6));
+  it("is offered on idle wallet cash with no executor, or with one while the Save grant is off; never while it loads", () => {
+    expect(STATUSES.filter((s) => startEarningShown(s, usdc(100)))).toEqual(["unconfigured", "off"]);
   });
 
-  it("waits for money to come in: never at $0 or dust, from $1", () => {
-    expect(startEarningShown("off", 0)).toBe(false);
-    expect(startEarningShown("off", 0.42)).toBe(false);
-    expect(startEarningShown("off", MIN_START_USD)).toBe(true);
-    expect(startEarningShown("off", 100)).toBe(true);
-    expect(startEarningShown("on", 100)).toBe(false);
+  it("waits for $1 to put in plus the fee buffer that stays: never at $0 or dust", () => {
+    expect(startEarningMinRaw).toBe(usdc(MIN_START_USD + CASH.feeBufferUsd));
+    for (const save of ["unconfigured", "off"] as const) {
+      expect(startEarningShown(save, 0n)).toBe(false);
+      expect(startEarningShown(save, usdc(0.42))).toBe(false);
+      expect(startEarningShown(save, startEarningMinRaw - 1n)).toBe(false);
+      expect(startEarningShown(save, startEarningMinRaw)).toBe(true);
+      expect(startEarningShown(save, usdc(100))).toBe(true);
+    }
+    expect(startEarningShown("on", usdc(100))).toBe(false);
   });
 
   it("says the live rate as the screens do", () => {

@@ -69,6 +69,8 @@ const WHEN = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", 
 export const signedUsd = (usd: number) => `${usd < 0 ? "−" : "+"}${formatUsd(Math.abs(usd))}`;
 /** Earn with stocks' line, here and in Activity: "+$500.00 from credit, earning". */
 export const earnLine = (usd: number) => `${signedUsd(usd)} from credit, earning`;
+/** Start earning's line, here and in Activity: "$40.00 into savings" (the cash stayed the user's: no sign). */
+export const saveLine = (usd: number) => `${formatUsd(usd)} into savings`;
 const cents = (usd: number) => Math.round(usd * 100) / 100;
 const sum = (xs: readonly number[]) => xs.reduce((a, b) => a + b, 0);
 const ticker = (symbol: string) => symbol.replace(/c$/, "");
@@ -101,8 +103,9 @@ function row(p: Omit<CashRow, "line" | "details"> & { what: string[]; details?: 
  * One of the user's own moves as a cash row, or null when the cash didn't change by a cent (backing put in use or freed,
  * a pure Credit Buy) or it failed (nothing moved). In: credit that came to the cash (none when a buy spent it in the same
  * batch; Earn with stocks' credit, which went in to earn in the same batch, too), USDC received, what a sale brought,
- * what other dollars became. Out: USDC sent, repaid, and what a buy cost past its credit. Titled by what matters most: a
- * conversion, a buy, a sale, a repay, Earn with stocks, credit, money in, money out.
+ * what other dollars became. Out: USDC sent, repaid, and what a buy cost past its credit. Cash put into savings (Start
+ * earning) is neither: it stays in the one pot, and is a row of its own. Titled by what matters most: a conversion, a
+ * buy, a sale, a repay, Earn with stocks, credit, Start earning, money in, money out.
  */
 export function ownCashRow(m: OwnMove): CashRow | null {
   if (m.status === "failed") return null;
@@ -115,6 +118,8 @@ export function ownCashRow(m: OwnMove): CashRow | null {
   const sends = of("send").filter(isUsdc);
   const credit = sum(of("borrow").filter(isUsdc).map((i) => i.amount));
   const earned = sum(of("earn").map((i) => i.amount));
+  // Start earning: the cash went into savings. It's still the one pot (D20), so it moves nothing here, but it's a row.
+  const saved = sum(of("save").map((i) => i.amount));
   const into =
     (buys.length ? 0 : credit) +
     earned +
@@ -126,7 +131,7 @@ export function ownCashRow(m: OwnMove): CashRow | null {
   // A Credit Buy paid with credit leaves the cash as it was, but it's still the cash's story (Adrian: "I don't see the
   // credit buys"): it stays, its line saying what the credit paid.
   const creditBuy = buys.length > 0 && credit > 0;
-  if (Math.abs(usd) < MIN_USD && !creditBuy) return null;
+  if (Math.abs(usd) < MIN_USD && !creditBuy && saved < MIN_USD) return null;
 
   const base = { key: m.key, time: m.time, usd, hash: m.hash, pending: m.status === "pending", mark: { kind: "cash" } as CashMark };
   if (converts.length) {
@@ -155,6 +160,8 @@ export function ownCashRow(m: OwnMove): CashRow | null {
   // Earn with stocks: one row for the whole batch, the credit that came to the cash, earning.
   if (earned > 0) return row({ ...base, title: "Earn with stocks", what: backed, lineText: earnLine(usd) });
   if (credit > 0) return row({ ...base, title: "From credit", what: backed });
+  // Start earning: one row, "Started earning · $40.00 into savings", not money leaving.
+  if (saved > 0 && Math.abs(usd) < MIN_USD) return row({ ...base, title: "Started earning", what: [], lineText: saveLine(saved) });
   // A Send names who it went to (the name this device sent it to, else the short address); a receive names no sender.
   const sentTo = usd < 0 && sends.length === 1 && sends[0].to ? (sends[0].toName ?? shortAddress(sends[0].to)) : null;
   return row({ ...base, title: usd > 0 ? "Received" : "Sent", what: [], details: sentTo ? [{ label: "To", value: [sentTo] }] : undefined });

@@ -7,13 +7,16 @@ import { ENTRY_COINS } from "@/lib/tokens/stables";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { savingsEventsAbi } from "@/lib/board/logs";
 
-export type ActivityKind = "supply" | "withdraw" | "borrow" | "repay" | "buy" | "sell" | "receive" | "send" | "convert" | "earn";
+export type ActivityKind = "supply" | "withdraw" | "borrow" | "repay" | "buy" | "sell" | "receive" | "send" | "convert" | "earn" | "save";
 
 export type ActivityItem = {
   kind: ActivityKind;
   /** Registry symbol, e.g. NVDAc or USDC. */
   symbol: string;
-  /** Human amount in token units (raw / 10^decimals; shares use raw units). For `earn`, the credit that went in to earn. */
+  /**
+   * Human amount in token units (raw / 10^decimals; shares use raw units). For `earn`, the credit that went in to earn;
+   * for `save`, the cash that went into savings.
+   */
   amount: number;
   /** For buys: USDC paid. */
   paidUsd?: number;
@@ -82,7 +85,9 @@ function feeTransfers(logs: readonly Log[], user: `0x${string}`): Set<Log> {
  * move of its own, and a buy or a repay it paid for reads as paid from cash. JAW's network fee isn't
  * a move either (feeTransfers): it is no "Sent", and a buy's price leaves it out. Credit the user's own batch put
  * where the cash earns (Earn with stocks: a USDC savings supply for the user, by the user, beside the credit) is one
- * `earn` item, first, in place of that much credit: money that came to the cash, earning, not money that left.
+ * `earn` item, first, in place of that much credit: money that came to the cash, earning, not money that left. With no
+ * credit beside it (Start earning: the wallet's cash into savings, by the user, for the user), it is one `save` item:
+ * the cash started earning, nothing left it.
  */
 export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[] {
   const items: ActivityItem[] = [];
@@ -117,6 +122,9 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
       ...others,
       ...(rest > 0n ? [{ kind: "borrow" as const, symbol: USDC.symbol, amount: units(rest, USDC.decimals) }] : []),
     );
+  } else if (creditRaw === 0n && savedRaw > 0n) {
+    // Start earning: the wallet's cash went into savings. One move, first; the USDC to the savings pot isn't a send.
+    items.unshift({ kind: "save", symbol: USDC.symbol, amount: units(savedRaw, USDC.decimals) });
   }
 
   const tracked = [...EQUITIES.map((e) => e.address), USDC.address];

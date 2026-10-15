@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
-import { toast } from "sonner";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { Header } from "@/components/gg/Header";
 import { TabBar } from "@/components/gg/TabBar";
@@ -21,11 +20,12 @@ import { StockAvatar } from "@/components/gg/StockAvatar";
 import { ChevronRight, CreditIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/icons";
 import { MarketBanner } from "@/components/ui/MarketBanner";
 import { useCashSetup } from "@/hooks/useCashSetup";
+import { useStartEarning } from "@/hooks/useStartEarning";
 import { useEntryBalances } from "@/hooks/useEntryBalances";
 import { useMarketPrices } from "@/hooks/useMarketPrices";
 import { usePosition, type PositionData } from "@/hooks/usePosition";
 import { aprToApy } from "@/lib/aave/math";
-import { arrivedCoins, arrivedView, earningLine, rateText, startEarningShown, type ArrivedView } from "@/lib/cashSetup";
+import { arrivedCoins, arrivedView, earningLine, rateText, type ArrivedView } from "@/lib/cashSetup";
 import { homeStatus } from "@/lib/risk/status";
 import { StatusPill } from "@/components/gg/Status";
 import { formatUsdTrim, monthlyCostText } from "@/lib/formatting";
@@ -44,9 +44,10 @@ type Sheet = "total" | "yield" | "credit" | "cash";
  * from market prices (plan item 8). The board's all-time return is left out: it needs what Sam paid, which only the
  * PnL engine will read from the chain (plan item 7). A holding card opens its stock's sheet.
  *
- * Earning and other dollars becoming cash run under the hood (D20): a small card asks to finish setting up while the
- * account has no Save grant, and other dollars that nothing converts get "Turn into cash". Once they convert on their
- * own, the Cash card only says they're arriving.
+ * Earning and other dollars becoming cash run under the hood (D20): while the wallet's cash isn't earning, a small card
+ * offers Start earning, which puts it in savings in one batch (and asks for the Save grant after it, with an executor
+ * and none yet), and other dollars that nothing converts get "Turn into cash". Once they convert on their own, the
+ * Cash card only says they're arriving.
  */
 function Home({ address }: { address: `0x${string}` }) {
   const { data, isError, refetch } = usePosition(address);
@@ -56,6 +57,7 @@ function Home({ address }: { address: `0x${string}` }) {
   const apy = data ? aprToApy(data.savingsApr) : 0;
   const setup = useCashSetup(address);
   const arrived = arrivedView(arrivedCoins(useEntryBalances(address)), setup.entry);
+  const earn = useStartEarning({ account: address, cash: data?.cash, savingsUsd: data?.savingsUsd ?? 0, setup, rate: data ? rateText(apy) : null });
 
   return (
     <div className="relative flex min-h-dvh flex-col">
@@ -81,16 +83,22 @@ function Home({ address }: { address: `0x${string}` }) {
           openCreditBuy={stocks.openCreditBuy}
           openTrade={() => stocks.openTrade()}
           arrived={arrived}
-          dim={startEarningShown(setup.save, data.cashUsd)}
+          dim={earn.visible}
           cards={
             <>
               <TurnIntoCash user={address} view={arrived} setup={setup} />
-              {startEarningShown(setup.save, data.cashUsd) && (
+              {earn.visible && (
                 <StartEarningCard
-                  cashUsd={data.cashUsd}
-                  rate={rateText(apy)}
-                  grant={setup.earning}
-                  onStart={() => setup.startEarning(() => toast.success(`Your cash starts earning ${rateText(apy)}`))}
+                  title={earn.title}
+                  line={earn.line}
+                  phase={earn.phase}
+                  checking={earn.checking}
+                  blocked={earn.blocked}
+                  steps={earn.steps}
+                  note={earn.note}
+                  error={earn.error}
+                  preview={earn.preview}
+                  onStart={earn.start}
                 />
               )}
             </>
@@ -126,7 +134,7 @@ function Loaded({
   arrived: ArrivedView;
   /** What needs the user about their cash: other dollars to turn into cash, starting to earn. */
   cards: ReactNode;
-  /** Board 2g: money is in but doesn't earn yet, so Cash and Yield sit faded under "Start earning". */
+  /** Board 2g: the wallet's cash doesn't earn yet, so Cash and Yield sit faded under "Start earning" (the card's rule). */
   dim: boolean;
 }) {
   const held = data.holdings.filter((h) => h.freeShares + h.lockedShares > 0);

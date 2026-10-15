@@ -21,8 +21,9 @@ import type { ConvertQuote } from "@/hooks/useConvert";
 import { useNowSec } from "@/hooks/useNowSec";
 import type { AgentEvent } from "@/lib/agents/events";
 import { describeAgentEvent, type MoveContext } from "@/lib/agents/feed";
-import { arrivedCoins, arrivedView, rateText } from "@/lib/cashSetup";
+import { arrivedCoins, arrivedView, rateText, startEarningText } from "@/lib/cashSetup";
 import { convertFloorRaw } from "@/lib/swap/entry";
+import { TAP_AGAIN } from "@/lib/tx/prepared";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 import { CashSheetDemo, SHEET_VIEWS, type SheetView } from "./CashSheetDemo";
 
@@ -31,6 +32,8 @@ import { CashSheetDemo, SHEET_VIEWS, type SheetView } from "./CashSheetDemo";
  * rules and words (arrivedView, arrivedText, describeAgentEvent). Nothing here reads the chain or signs.
  *   /dev/ui/cash?view=home        Home with "120 USDT arrived · Turn into cash" (its one screen) and "Your $100 arrived ·
  *                                 Start earning"
+ *   ?view=start                   Start earning's other states: "$40 isn't earning" with the Save grant to follow
+ *                                 ("2 steps"), confirming on Base, and the grant left after the batch landed
  *   ?view=arriving                Home once other dollars convert on their own: the Cash card says "arriving"
  *   ?view=convert                 "Turn into cash" with one coin under the floor: it stays as it is
  *   ?view=auto                    once it lands, "Do this automatically next time?"
@@ -60,8 +63,10 @@ const GRANT: GrantView = { busy: false, error: null, blocked: null, preview: fal
 const ZERO_TX = `0x${"0".repeat(64)}` as const;
 const noop = () => toast("Dev gallery: nothing is signed");
 
-type View = "home" | "arriving" | "convert" | "auto" | "done" | "pay" | "pay-setup" | "activity" | SheetView;
-const VIEWS: View[] = ["home", "arriving", "convert", "auto", "done", "pay", "pay-setup", "activity", ...SHEET_VIEWS];
+type View = "home" | "start" | "arriving" | "convert" | "auto" | "done" | "pay" | "pay-setup" | "activity" | SheetView;
+const VIEWS: View[] = ["home", "start", "arriving", "convert", "auto", "done", "pay", "pay-setup", "activity", ...SHEET_VIEWS];
+const ARRIVED = startEarningText({ walletUsd: 100, savingsUsd: 0, rate: RATE });
+const IDLE = startEarningText({ walletUsd: 40, savingsUsd: 1_200, rate: RATE });
 const isSheetView = (v: View): v is SheetView => (SHEET_VIEWS as readonly string[]).includes(v);
 
 export function CashGallery() {
@@ -79,6 +84,20 @@ export function CashGallery() {
     );
   }
   if (view === "activity") return <ActivityFixture nowSec={nowSec} />;
+  if (view === "start") {
+    return (
+      <HomeFixture
+        cards={
+          <>
+            <StartEarningCard {...IDLE} phase="idle" steps={2} error={null} preview={false} onStart={noop} />
+            <StartEarningCard {...ARRIVED} phase="pending" error={null} preview={false} onStart={noop} />
+            <StartEarningCard {...IDLE} phase="idle" steps={2} error={`1 of 2 went through. ${TAP_AGAIN}`} preview={false} onStart={noop} />
+          </>
+        }
+        sheet={null}
+      />
+    );
+  }
   if (isSheetView(view)) return <HomeFixture cards={null} sheet={<CashSheetDemo view={view} nowSec={nowSec} />} />;
 
   // Home: before other dollars convert on their own they're asked about; after, the Cash card says they're arriving.
@@ -110,7 +129,7 @@ export function CashGallery() {
                 onConvert={noop}
               />
             )}
-            {view === "home" && <StartEarningCard cashUsd={100} rate={RATE} grant={GRANT} onStart={noop} />}
+            {view === "home" && <StartEarningCard {...ARRIVED} phase="idle" error={null} preview={false} onStart={noop} />}
           </>
         )
       }
