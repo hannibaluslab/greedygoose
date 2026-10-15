@@ -6,9 +6,22 @@ import "./globals.css";
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
+// The link preview (WhatsApp, iMessage, X…): app/opengraph-image.jpg and twitter-image.jpg, 1200x630, made absolute by
+// metadataBase. A preview deploy's own address comes from Vercel; production is greedygoose.vercel.app.
+const SITE = process.env.VERCEL_ENV === "preview" && process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://greedygoose.vercel.app";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE),
   title: "GreedyGoose",
-  description: "USDC credit backed by your tokenized stocks, without selling them.",
+  description: "Let your money get greedy. Cash, stocks and credit in one account.",
+  openGraph: {
+    type: "website",
+    url: "/",
+    siteName: "GreedyGoose",
+    title: "GreedyGoose",
+    description: "Let your money get greedy. Cash, stocks and credit in one account.",
+  },
+  twitter: { card: "summary_large_image", title: "GreedyGoose", description: "Let your money get greedy. Cash, stocks and credit in one account." },
 };
 
 // viewportFit cover: the canvas is drawn edge to edge, so the page runs under the status bar and
