@@ -164,6 +164,8 @@ function Loaded({
             onRetry={market.retry}
             label="The seven stocks over the last 7 days, each weighted the same, at market prices"
             caption="Market · 7 days"
+            // Not the user's money: no green or red for it.
+            neutral
           />
         )}
         <MarketBanner />

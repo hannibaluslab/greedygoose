@@ -17,7 +17,8 @@ const LOOK = {
   hero: { stroke: 1.8, area: 0.18, pad: { l: 2, r: 10, t: 7, b: 7 }, dotR: 4.25 },
 } as const;
 
-const TONE = { pos: "#1f6a4a", neg: "#8e2a1d" } as const;
+/** `neutral`: a line that isn't the user's money (the market's week before the first stock), so it never reads as a loss. */
+const TONE = { pos: "#1f6a4a", neg: "#8e2a1d", neutral: "#5a564e" } as const;
 
 /**
  * The caption's line: Geist Mono 10px in capitals, 0.08em apart, so each character takes 6.8px; 12px tall. The
