@@ -262,7 +262,8 @@ function BalanceLine({
   return (
     <ValueLine
       points={points}
-      height={68}
+      // 44px, down from the board's 68 (Adrian: smaller).
+      height={44}
       loading={held && loading}
       onRetry={onRetry}
       label="What your total balance was worth over the last 7 days: what you hold now, at market prices"
