@@ -147,6 +147,7 @@ export const TRADE_COPY = {
   subTooSmall: `Under ${formatUsd(SELL_LIMITS.minUsd).replace(/\.00$/, "")} free, too small to trade`,
   subNoCash: "Not enough to trade",
   free: "free",
+  toTrade: "to trade",
   aShare: (usd: number) => `${formatUsd(usd)} a share`,
   atLeast: "You get at least",
   toCash: "To your cash",
@@ -203,7 +204,9 @@ export function fromOptions(data: Pick<TradeData, "holdings" | "cash" | "cashUsd
     asset: "cash",
     name: TRADE_COPY.cashName,
     sub: cashOk ? undefined : TRADE_COPY.subNoCash,
-    right: formatUsd(data.cashUsd),
+    // What MAX takes, as the stock rows say: the cash less the network fee's $0.50, to the cent.
+    right: formatUsd(maxUsdOf("cash", data)),
+    rightSub: cashOk ? TRADE_COPY.toTrade : undefined,
     freeUsd: data.cashUsd,
     backsUsd: 0,
     disabled: !cashOk,
@@ -286,13 +289,47 @@ export function maxUsdOf(from: TradeAsset, data: Pick<TradeData, "holdings" | "c
 }
 
 /**
- * NYM's clamp: an amount over the most the From card takes snaps to it (and a stock's then sells every free share).
- * Nothing changes when there's nothing to take.
+ * NYM's clamp: an amount over the most the From card takes snaps to it, and a stock's then sells every free share. A
+ * stock's amount at exactly that most (its free value to the cent) sells every free share too, so no dust under a cent
+ * is left that could never trade. Nothing changes when there's nothing to take.
  */
 export function clampAmount(from: TradeAsset, data: Pick<TradeData, "holdings" | "cash">, amount: string): { amount: string; all: boolean } {
   const max = maxUsdOf(from, data);
-  if (max > 0 && (Number(amount) || 0) > max) return { amount: String(max), all: from !== "cash" };
-  return { amount, all: false };
+  const n = Number(amount) || 0;
+  if (max > 0 && n > max) return { amount: String(max), all: from !== "cash" };
+  return { amount, all: max > 0 && n === max && from !== "cash" };
+}
+
+/** The sheet's two legs: what you trade from, and what you get. */
+export type TradeLegs = { from: TradeAsset; to: TradeAsset };
+/** The Trade sheet's own state: the legs (null with nothing to trade), the From card's dollars, and whether it sells every free share. */
+export type TradeForm = { legs: TradeLegs | null; amount: string; all: boolean };
+export type TradeAction =
+  | { type: "pick"; which: "from" | "to"; asset: TradeAsset }
+  | { type: "flip" }
+  | { type: "amount"; value: string }
+  | { type: "max" };
+
+/**
+ * One step of the Trade sheet's legs and amount (the sheet holds no rules of its own). Typed dollars are clamped
+ * (`clampAmount`). MAX takes the most the From card takes; on a stock it sells every free share, and keeps doing so
+ * whatever To becomes while that stock stays the From. New legs keep the dollars, clamped to what the new From takes.
+ * Picking the other leg's asset flips the legs; a pick that makes no trade (cash to cash) changes nothing.
+ */
+export function tradeForm(state: TradeForm, action: TradeAction, data: Pick<TradeData, "holdings" | "cash">): TradeForm {
+  const { legs } = state;
+  if (!legs) return action.type === "amount" ? { ...state, amount: action.value, all: false } : state;
+  if (action.type === "amount") return { legs, ...clampAmount(legs.from, data, action.value) };
+  if (action.type === "max") return { legs, amount: String(maxUsdOf(legs.from, data)), all: legs.from !== "cash" };
+  const flipped = { from: legs.to, to: legs.from };
+  let next: TradeLegs = flipped;
+  if (action.type === "pick" && action.asset !== (action.which === "from" ? legs.to : legs.from)) {
+    next = action.which === "from" ? { from: action.asset, to: legs.to } : { from: legs.from, to: action.asset };
+    if (!routeOf(next.from, next.to)) return state;
+  }
+  // The same stock still sells: MAX's every free share holds.
+  if (next.from === legs.from && state.all) return { legs: next, amount: state.amount, all: true };
+  return { legs: next, ...clampAmount(next.from, data, state.amount) };
 }
 
 const usdRawOf = (amount: string): bigint => {
@@ -310,16 +347,19 @@ export function tradeAmount(p: { from: TradeAsset; to: TradeAsset; amount: strin
   const fromHolding = p.data.holdings.find((h) => h.symbol === fromStock?.symbol);
   const toHolding = p.data.holdings.find((h) => h.symbol === toStock?.symbol);
   const usdRaw = usdRawOf(p.amount);
-  // MAX sells every free share, to the last unit; typed dollars become shares at Aave's price, rounded down.
+  const maxUsd = maxUsdOf(p.from, p.data);
+  // MAX sells every free share, to the last unit, while the dollars still say all of it (more shares arriving after MAX
+  // aren't sold unseen); typed dollars become shares at Aave's price, rounded down.
+  const sellAll = p.all && maxUsd > 0 && toUsd(usdRaw) >= maxUsd;
   const sharesRaw =
-    fromStock && fromHolding ? (p.all ? fromHolding.freeRaw : sharesForUsdRaw(usdRaw, fromHolding.priceRaw, fromStock.decimals)) : 0n;
+    fromStock && fromHolding ? (sellAll ? fromHolding.freeRaw : sharesForUsdRaw(usdRaw, fromHolding.priceRaw, fromStock.decimals)) : 0n;
   return {
     route,
     fromStock,
     toStock,
     fromHolding,
     toHolding,
-    maxUsd: maxUsdOf(p.from, p.data),
+    maxUsd,
     usdRaw,
     amountUsd: toUsd(usdRaw),
     sharesRaw,

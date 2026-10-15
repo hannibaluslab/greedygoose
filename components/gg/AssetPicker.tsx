@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { ChevronDown } from "./icons";
 import { StockAvatar } from "./StockAvatar";
 import { useClickAway } from "@/hooks/useClickAway";
@@ -35,16 +35,16 @@ export const assetMark = (asset: string, size: number) => (asset === "cash" ? <C
 /** The list's title and padding, and one row, in px: its height before it renders. */
 const MENU_CHROME_PX = 52;
 const ROW_PX = 56;
-/** NYM's flat lists open at least this tall when there's room; less room caps the list to it (it scrolls inside). */
-const MENU_FLOOR_PX = 300;
 const MENU_MIN_PX = 160;
 
 /**
  * NYM's SourcePill (flat mode) and TokenPicker in the GreedyGoose kit: a pill in the amount card's top right that opens
  * a list anchored under it, inside the sheet. On open it measures the room in the sheet's scroll area (SourcePill's
- * openMenu) and flips up when the list doesn't fit below (its rows, up to NYM's 300px) and there's more room above.
- * Its height is capped to that room, so it never runs off the sheet, and it scrolls inside. A row sets the asset; a
- * tap away closes the list (useClickAway). Open/closed belongs to the sheet, so Escape closes the list first.
+ * openMenu) and flips up when the whole list doesn't fit below and there's more room above (NYM stops at 300px; a long
+ * To list then showed three rows under the To card). Its height is capped to that room, so it never runs off the sheet,
+ * and it scrolls inside. A row sets the asset; a tap away closes the list (useClickAway). Open/closed belongs to the
+ * sheet, so Escape closes the list first. Keys: the list takes focus on the picked row, ↑ ↓ Home End move between the
+ * rows that can be picked, and once the list closes focus goes back to the pill.
  */
 export function AssetPicker({
   label, title, name, mark, rows, selected, open, onToggle, onClose, onPick, disabled,
@@ -59,16 +59,46 @@ export function AssetPicker({
   selected: string;
   open: boolean;
   onToggle: () => void;
-  onClose: () => void;
+  /** A tap away closed the list; the event says where it landed. */
+  onClose: (e: Event) => void;
   onPick: (id: string) => void;
   disabled?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const pillRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const listId = useId();
   const [up, setUp] = useState(false);
   const [maxH, setMaxH] = useState<number>();
-  useClickAway(ref, () => {
-    if (open) onClose();
+  useClickAway(ref, (e) => {
+    if (open) onClose(e);
   });
+
+  const options = () => [...(listRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]:not([aria-disabled="true"])') ?? [])];
+  const wasOpen = useRef(false);
+  // As a listbox does: the open list has focus, on the picked row (or the first that can be picked). Once it closes
+  // (a pick, Escape, a tap away), focus that fell to the page goes back to the pill; focus a tap gave elsewhere stays.
+  useEffect(() => {
+    if (open) {
+      const rowsNow = options();
+      (rowsNow.find((o) => o.getAttribute("aria-selected") === "true") ?? rowsNow[0])?.focus({ preventScroll: true });
+    } else if (wasOpen.current && (!document.activeElement || document.activeElement === document.body)) {
+      pillRef.current?.focus({ preventScroll: true });
+    }
+    wasOpen.current = open;
+  }, [open]);
+  const onListKey = (e: KeyboardEvent) => {
+    const rowsNow = options();
+    const at = rowsNow.indexOf(document.activeElement as HTMLButtonElement);
+    const go = (i: number) => {
+      e.preventDefault();
+      rowsNow[(i + rowsNow.length) % rowsNow.length]?.focus();
+    };
+    if (e.key === "ArrowDown") go(at + 1);
+    else if (e.key === "ArrowUp") go(at < 0 ? rowsNow.length - 1 : at - 1);
+    else if (e.key === "Home") go(0);
+    else if (e.key === "End") go(rowsNow.length - 1);
+  };
 
   const toggle = () => {
     if (!open && ref.current) {
@@ -81,7 +111,7 @@ export function AssetPicker({
       const pad = scroller ? parseFloat(getComputedStyle(scroller).paddingBottom) || 0 : 0;
       const below = bottom - r.bottom - Math.max(12, pad);
       const above = r.top - top - 12;
-      const need = Math.min(MENU_CHROME_PX + rows.length * ROW_PX, MENU_FLOOR_PX);
+      const need = MENU_CHROME_PX + rows.length * ROW_PX;
       const flip = below < need && above > below;
       setUp(flip);
       setMaxH(Math.max(MENU_MIN_PX, flip ? above : below));
@@ -92,9 +122,11 @@ export function AssetPicker({
   return (
     <div ref={ref} className="relative shrink-0">
       <button
+        ref={pillRef}
         type="button"
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-controls={open ? listId : undefined}
         aria-label={label}
         disabled={disabled}
         onPointerDown={(e) => e.stopPropagation()}
@@ -118,7 +150,14 @@ export function AssetPicker({
           }`}
         >
           <div className="shrink-0 px-2 pb-2 pt-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">{title}</div>
-          <div role="listbox" aria-label={title} className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overscroll-contain">
+          <div
+            ref={listRef}
+            id={listId}
+            role="listbox"
+            aria-label={title}
+            onKeyDown={onListKey}
+            className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto overscroll-contain"
+          >
             {rows.map((row) => {
               const on = row.id === selected;
               return (

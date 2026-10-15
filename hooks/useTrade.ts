@@ -7,7 +7,7 @@ import { SELL_FALLBACK, useSaleBatch } from "./useSell";
 import { useSigningCash } from "./useSigningCash";
 import { payFromCash } from "@/lib/cash";
 import { saleActivity, type SellPlan } from "@/lib/sell";
-import { QUOTE_MOVED, type BuyQuote } from "@/lib/swap/buy";
+import { QUOTE_MOVED, type BuyQuote, type Call } from "@/lib/swap/buy";
 import { sellMinOut, type SellQuote } from "@/lib/swap/sell";
 import { TRADE_COPY, buildTradeCalls, saleBlockText, swapMinUsd, tradeActivity } from "@/lib/trade";
 import type { ReserveAsset } from "@/lib/tokens/registry";
@@ -34,6 +34,27 @@ export type TradeSign =
       feeFromSale: boolean;
     };
 
+/** What the stock → stock batch reads again right before JAW's sheet (useSigningQuote, useSigningCash). */
+export type SwapReads = {
+  quoteToSign: ReturnType<typeof useSigningQuote>;
+  cashToSign: ReturnType<typeof useSigningCash>;
+};
+
+/**
+ * stock → stock's batch, built right before JAW's sheet. A sale the screen blocked stops here too. Both quotes are read
+ * again on their pools (never under the screen's floors, else QUOTE_MOVED from the read itself), and the buy must still
+ * spend no more than the fresh sale's floor (else QUOTE_MOVED). When the sale pays the network fee, the batch is the
+ * sale and the buy alone; otherwise the cash is read again and pays it (payFromCash: a savings withdrawal goes first
+ * when the wallet can't be counted on for the fee).
+ */
+export async function swapBatch(p: Extract<TradeSign, { route: "swap" }>, reads: SwapReads): Promise<Call[]> {
+  if (p.plan.block) throw new TxStop(saleBlockText(p.plan.block, true, swapMinUsd(1 - p.plan.discount, p.feeFromSale)));
+  const [sellQuote, buyQuote] = await Promise.all([reads.quoteToSign(p.from, p.sellQuote, "sell"), reads.quoteToSign(p.to, p.buyQuote, "buy")]);
+  if (buyQuote.amountIn > sellMinOut(sellQuote, p.from, p.oraclePriceUsd)) throw new TxStop(QUOTE_MOVED);
+  const calls = buildTradeCalls({ user: p.user, from: p.from, to: p.to, sellQuote, buyQuote, oraclePriceUsd: p.oraclePriceUsd });
+  return p.feeFromSale ? calls : payFromCash(p.user, 0n, await reads.cashToSign(p.user, 0n), calls);
+}
+
 /**
  * The Trade sheet's one write path: one useTx, one batch per route, built right before JAW's sheet. cash → stock is the
  * Buy step's batch (useCashBuyBatch) and stock → cash the free-shares sale (useSaleBatch), unchanged. stock → stock
@@ -53,13 +74,7 @@ export function useTrade() {
     if (p.route === "sell") return tx.run(p.user, () => sale(p), SELL_FALLBACK.free, saleActivity(p.stock, p.plan));
     return tx.run(
       p.user,
-      async () => {
-        if (p.plan.block) throw new TxStop(saleBlockText(p.plan.block, true, swapMinUsd(1 - p.plan.discount, p.feeFromSale)));
-        const [sellQuote, buyQuote] = await Promise.all([quoteToSign(p.from, p.sellQuote, "sell"), quoteToSign(p.to, p.buyQuote, "buy")]);
-        if (buyQuote.amountIn > sellMinOut(sellQuote, p.from, p.oraclePriceUsd)) throw new TxStop(QUOTE_MOVED);
-        const calls = buildTradeCalls({ user: p.user, from: p.from, to: p.to, sellQuote, buyQuote, oraclePriceUsd: p.oraclePriceUsd });
-        return p.feeFromSale ? calls : payFromCash(p.user, 0n, await cashToSign(p.user, 0n), calls);
-      },
+      () => swapBatch(p, { quoteToSign, cashToSign }),
       TRADE_COPY.swapFallback,
       tradeActivity({ from: p.from, to: p.to, plan: p.plan, buyQuote: p.buyQuote }),
     );

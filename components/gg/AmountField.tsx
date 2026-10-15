@@ -119,7 +119,8 @@ export function AmountArrow({ onFlip, disabled }: { onFlip?: () => void; disable
           onClick={onFlip}
           disabled={disabled}
           aria-label="Switch what you pay and what you get"
-          className={`${circle} transition hover:border-line-strong active:scale-90 disabled:opacity-45`}
+          // 36px to the eye; the overlay takes the tap target to 44px, as the pickers' does.
+          className={`${circle} relative transition after:absolute after:-inset-[5px] after:content-[''] hover:border-line-strong active:scale-90 disabled:opacity-45`}
         >
           <TradeIcon size={15} strokeWidth={1.8} />
         </button>
