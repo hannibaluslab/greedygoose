@@ -33,15 +33,14 @@ export function TabBar() {
       >
         {TABS.map(({ href, label, Icon, match }) => {
           const active = match.some((m) => path.startsWith(m));
-          // Agents is the round lime button in the middle (Adrian): the agents are what the app runs on.
+          // Agents is the round lime button in the middle, 56px and raised 16px over the bar (Adrian): the agents are what
+          // the app runs on.
           if (href === "/agents") {
             return (
               <Link key={href} href={href} aria-label={label} aria-current={active ? "page" : undefined} className="flex items-center justify-center">
-                <span
-                  className="flex size-11 items-center justify-center rounded-full bg-brand text-ink transition active:scale-95"
-                  style={{ boxShadow: active ? "0 0 0 2px rgba(212,255,60,0.35), 0 0 18px rgba(212,255,60,0.45)" : "0 0 14px rgba(212,255,60,0.3)" }}
-                >
-                  <Icon size={22} />
+                {/* The booth app's centre button (jaw-hackathon-booth TabBar): 56px lime, raised, a 24px lime glow. */}
+                <span className="grid size-14 -translate-y-5 place-items-center rounded-full bg-brand text-ink shadow-[0_0_24px_rgba(212,255,60,0.4)] transition active:scale-95">
+                  <Icon size={24} />
                 </span>
               </Link>
             );
@@ -51,13 +50,11 @@ export function TabBar() {
               key={href}
               href={href}
               aria-current={active ? "page" : undefined}
-              className={`relative flex flex-col items-center justify-center gap-[3px] text-[10px] ${active ? "font-semibold text-on-ink" : "font-medium text-[rgba(245,240,226,0.55)]"}`}
+              // The booth's tabs: the one you're on in lime, the others cream at 45%.
+              className={`flex flex-col items-center justify-center gap-1 text-[10px] font-medium tracking-tight transition ${active ? "text-brand" : "text-[rgba(245,240,226,0.45)]"}`}
             >
               <Icon />
               {label}
-              {active && (
-                <span aria-hidden className="absolute bottom-1 h-0.5 w-4 rounded-[1px] bg-brand" style={{ boxShadow: "0 0 12px rgba(212,255,60,0.5)" }} />
-              )}
             </Link>
           );
         })}
