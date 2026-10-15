@@ -25,3 +25,32 @@ The admin (the deployer) can `cancel(hash)` a pending request to get its WETH ba
 ### Not done yet
 
 `bootstrap` has not been called. Once Chainlink approves, read both forwarders with the registry's `getForwarder` and pass them in the one `bootstrap` call. For hands-on tests before that, the deployer can be bootstrapped as the only caller (it can only trigger runs; every run is re-checked on-chain and money only moves within each account), and the Chainlink forwarders are then added through the 7-day delay.
+
+## GooseBoard — not deployed yet
+
+The leaderboard's member list (`src/GooseBoard.sol`, JUSTALAB-DECISIONS.md "The Leaderboard"). It holds nothing, calls nothing and has no owner: an account only puts itself on (`join()`) or takes itself off (`leave()`, not in the app). The deployer key pays the gas and gets no power over it. Adrian approves and signs the mainnet deploy; nobody else deploys it to Base.
+
+### Deploy
+
+```sh
+cd contracts
+forge build
+# Rehearse on a Base fork first (nothing is sent anywhere):
+BASE_RPC_URL=https://mainnet.base.org forge test --match-contract GooseBoard
+# Then Base mainnet, with the key in the environment only (never in a file in the repo):
+DEPLOYER_PRIVATE_KEY=0x… forge script script/DeployGooseBoard.s.sol --rpc-url https://mainnet.base.org --broadcast
+```
+
+The script prints the address and the block. Optionally verify the source (`forge verify-contract <address> src/GooseBoard.sol:GooseBoard --chain base`, with a Basescan key).
+
+### Then
+
+- Set `NEXT_PUBLIC_GOOSE_BOARD=<address>` in the app's environment. From then on every account's first move carries `join()` at the end of its batch, and the Leaderboard tab reads the list.
+- Set `NEXT_PUBLIC_BASE_RPC_URL` to an RPC that serves `eth_getLogs` over the board's whole history (10,000 blocks a request) and past state. Without it the board reads logs from PublicNode's keyless endpoint, which answers only for about the last 10,000 blocks (measured 2026-10-15), so it can't load once its first member joined more than about five hours earlier.
+- Record the deploy here: address, block, commit, cost.
+
+| What | Value |
+|---|---|
+| GooseBoard | not deployed |
+| Bytecode | about 1.9 KB (`forge inspect GooseBoard deployedBytecode`) |
+| Rehearsed | Base fork: `GooseBoardForkTest` (JAW account batch: EFP mint + follow + join), `scripts/board-e2e.ts` (anvil) |
