@@ -131,7 +131,7 @@ function Loaded({
 
   return (
     <>
-      <section className="flex flex-col gap-2.5 px-5 pt-[18px]">
+      <section className="flex flex-col gap-2.5 px-5 pt-3">
         <BalanceHero
           label="Total balance"
           info={{ label: "What’s in your total balance", onClick: () => open("total") }}
