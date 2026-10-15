@@ -94,6 +94,8 @@ function Loaded({
     <>
       <section className="flex flex-col gap-2.5">
         <BalanceHero
+          // Half the width for the portfolio, half for buying power (Adrian: more width for the portfolio).
+          even
           label="Portfolio"
           value={data.stocksUsd}
           sub={today ? <TodayChange usd={today.usd} pct={today.pct} /> : market.loading ? <TodayPending /> : undefined}
@@ -101,7 +103,15 @@ function Loaded({
           // Buy sheet opens on. Whole dollars, rounded down, so it's never more than there is.
           side={{
             label: "Buying power",
-            value: power ? formatUsd(Math.floor(power.cashUsd + power.creditUsd)).replace(/\.00$/, "") : "–",
+            // The "$" drawn as the portfolio's (as on Home): smaller, in the mid ink.
+            value: power ? (
+              <>
+                <span className="text-[22px] font-medium tracking-normal text-ink-mid">$</span>
+                {formatUsd(Math.floor(power.cashUsd + power.creditUsd)).replace(/\.00$/, "").replace("$", "")}
+              </>
+            ) : (
+              "–"
+            ),
             sub: power ? (
               // One line (Adrian): the total is above, so this only says what's in it.
               <span className="whitespace-nowrap">{power.creditUsd >= 1 ? `Cash + ${formatUsdTrim(Math.floor(power.creditUsd))} credit` : "Cash only"}</span>
