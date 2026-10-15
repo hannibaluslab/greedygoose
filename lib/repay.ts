@@ -65,6 +65,10 @@ export type RepaySource = {
 
 /** Every main-screen string of the Repay sheet. None names a protocol: "the stock’s price" is Aave's (the small print says so). */
 export const REPAY_COPY = {
+  /** The sheet's title once the Repay | Free up toggle shows (something backs the credit). */
+  creditTitle: "Your credit",
+  freeUpTab: "Free up",
+  tabsLabel: "Repay or free up",
   title: "Repay",
   owe: "You owe",
   payWith: "Pay with",

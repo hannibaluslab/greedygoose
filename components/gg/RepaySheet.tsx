@@ -9,6 +9,7 @@ import { StockAvatar } from "./StockAvatar";
 import { AssetPicker, assetMark, type PickerRow } from "./AssetPicker";
 import { Button } from "./Button";
 import { WhiteCard } from "./Screen";
+import { SegmentedControl } from "./SegmentedControl";
 import { UnlockSheet } from "./UnlockSheet";
 import { ChevronRight } from "./icons";
 import { StatusBar, StatusPill } from "./Status";
@@ -18,7 +19,8 @@ import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { useCollateralFactorsRead, usePosition, type PositionData } from "@/hooks/usePosition";
 import { repaySign, useRepayWith } from "@/hooks/useRepay";
 import { useSellQuote } from "@/hooks/useSell";
-import { formatUsd, formatUsdTrim, monthlyCostText } from "@/lib/formatting";
+import { formatShares, formatUsd, formatUsdTrim, monthlyCostText } from "@/lib/formatting";
+import { wholePct } from "@/lib/holding";
 import { EQUITIES } from "@/lib/tokens/registry";
 import {
   REPAY_COPY,
@@ -77,6 +79,9 @@ export function RepaySheet({
   const [menu, setMenu] = useState(false);
   // A stock picked in "Backing your credit": its Free up shows in this sheet, Back returns to Repay.
   const [freeing, setFreeing] = useState<string | null>(null);
+  const [tab, setTab] = useState<"repay" | "free">("repay");
+  // Free up's list is shorter than Repay: it keeps Repay's height, so the sheet and "You owe" don't jump on a switch.
+  const [freeHeight, setFreeHeight] = useState<number>();
   const menuClosedAt = useRef(0);
   const paid = useRef<string | null>(null);
   // Coming back from a Free up step slides Repay in as "back".
@@ -93,7 +98,7 @@ export function RepaySheet({
 
   const feeBlocked = isConnected && fee.state === "unsupported";
   // What Repay would sign now, prepared while the sheet is open and idle so the tap opens JAW's sheet at once.
-  const sign = open && !freeing && data && view && !feeBlocked ? repaySign(view, address, data.debtRaw) : null;
+  const sign = open && !freeing && tab === "repay" && data && view && !feeBlocked ? repaySign(view, address, data.debtRaw) : null;
   const tx = useRepayWith(sign);
 
   useEffect(() => {
@@ -139,17 +144,48 @@ export function RepaySheet({
     );
   }
 
+  // Repay | Free up (Adrian, 2026-10-15): Repay as it was; Free up lists the stocks backing the credit, a tap opens that
+  // stock's Free up in this sheet. The toggle shows only when something backs the credit.
+  const backing = !!data && data.holdings.some((h) => h.lockedRaw > 0n);
+  // Under "You owe", which both tabs share and which never moves (Adrian, 2026-10-16).
+  const toggle = backing && (
+    <SegmentedControl
+      options={[{ value: "repay", label: REPAY_COPY.title }, { value: "free", label: REPAY_COPY.freeUpTab }]}
+      value={tab}
+      onChange={(next) => {
+        setMenu(false);
+        if (next === "free") setFreeHeight(document.querySelector<HTMLElement>("[data-vaul-drawer] [data-sheet-scroll]")?.clientHeight);
+        setTab(next);
+      }}
+      label={REPAY_COPY.tabsLabel}
+    />
+  );
   return (
-    <SheetShell open={open} onOpenChange={onOpenChange} title={REPAY_COPY.title}>
+    <SheetShell
+      open={open}
+      onOpenChange={onOpenChange}
+      title={backing ? REPAY_COPY.creditTitle : REPAY_COPY.title}
+      contentHeightPx={tab === "free" ? freeHeight : undefined}
+    >
       <SheetSteps stepKey="repay" direction={cameBack ? "back" : "forward"} className="flex flex-col gap-4">
-        {data?.debtRaw === 0n ? (
+        {tab === "free" && data && backing ? (
+          <>
+            {data.debtRaw > 0n && <Owed data={data} />}
+            {toggle}
+            <Backing data={data} onPick={(symbol) => setFreeing(symbol)} />
+          </>
+        ) : data?.debtRaw === 0n ? (
           // Nothing owed: this line alone, with nothing to pick, type or tap.
-          <p className="m-0 px-1 pb-2 text-[17px] text-ink-mid">{REPAY_COPY.nothingOwed}</p>
+          <>
+            <p className="m-0 px-1 pb-2 text-[17px] text-ink-mid">{REPAY_COPY.nothingOwed}</p>
+            {toggle}
+          </>
         ) : !data || waitingForCfs ? (
           <div aria-busy className="h-[420px] animate-pulse rounded-[22px] bg-chip" />
         ) : !view || !source ? (
           <>
             <Owed data={data} />
+            {toggle}
             <div className="flex flex-col gap-3">
               <p className="m-0 px-1 text-[15px] leading-snug text-ink-mid">{noSourceLine(data)}</p>
               <Button variant="dark" onClick={onTopUp} className="w-full">{REPAY_COPY.addMoney}</Button>
@@ -158,10 +194,7 @@ export function RepaySheet({
         ) : (
           <>
             <Owed data={data} />
-            <Backing data={data} onPick={(symbol) => {
-              setMenu(false);
-              setFreeing(symbol);
-            }} />
+            {toggle}
             <PayWith
               data={data}
               sources={sources}
@@ -257,10 +290,16 @@ function Backing({ data, onPick }: { data: PositionData; onPick: (symbol: string
             type="button"
             onClick={() => onPick(h.symbol)}
             aria-label={`${h.name}, ${formatUsd(h.lockedUsd)} backs your credit. Free it up`}
-            className="flex min-h-12 items-center gap-3 border-b border-line-field py-2 text-left last:border-b-0"
+            className="flex min-h-14 items-center gap-3 border-b border-line-field py-2.5 text-left last:border-b-0"
           >
-            <StockAvatar symbol={h.symbol} size={28} />
-            <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{h.name}</span>
+            <StockAvatar symbol={h.symbol} size={32} />
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="truncate text-[15px] font-semibold">{h.name}</span>
+              {/* The shares that back the credit, and how much of the holding that is (Adrian, 2026-10-16). */}
+              <span className="num truncate text-[12.5px] text-ink-mid">
+                {formatShares(h.lockedShares)} shares · {wholePct(h.lockedUsd / Math.max(h.lockedUsd + h.freeUsd, 1e-9))}% backs credit
+              </span>
+            </span>
             <span className="num text-[15px] font-semibold">{formatUsd(h.lockedUsd)}</span>
             <ChevronRight strokeWidth={2.2} className="shrink-0 text-ink-faint" />
           </button>
