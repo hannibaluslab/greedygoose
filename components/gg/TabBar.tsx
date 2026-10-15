@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { AgentsIcon, FriendsIcon, HomeIcon, InvestIcon, PayIcon } from "./icons";
-import { FRIENDS_ENABLED } from "@/lib/features";
+import { AgentsIcon, BoardIcon, HomeIcon, InvestIcon, PayIcon } from "./icons";
+import { LEADERBOARD_ENABLED } from "@/lib/features";
 
-/** D16: Home / Invest / Agents / Friends / Pay. `match` lists the routes that light a tab. */
+/** D16: Home / Invest / Agents / Leaderboard / Pay (Friends became the Leaderboard, 2026-10-15). `match` lists the routes that light a tab. */
 const TABS = [
   { href: "/home", label: "Home", Icon: HomeIcon, match: ["/home"] },
   { href: "/portfolio", label: "Invest", Icon: InvestIcon, match: ["/portfolio"] },
   { href: "/agents", label: "Agents", Icon: AgentsIcon, match: ["/agents", "/activity"] },
-  ...(FRIENDS_ENABLED ? [{ href: "/friends", label: "Friends", Icon: FriendsIcon, match: ["/friends"] }] : []),
+  ...(LEADERBOARD_ENABLED ? [{ href: "/leaderboard", label: "Leaderboard", Icon: BoardIcon, match: ["/leaderboard"] }] : []),
   { href: "/receive", label: "Pay", Icon: PayIcon, match: ["/receive"] },
 ];
 

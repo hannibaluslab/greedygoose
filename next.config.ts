@@ -22,6 +22,8 @@ const nextConfig: NextConfig = {
     { source: "/setup", destination: "/home", permanent: false },
     // Guardian's savings page is gone: Protect repays from the cash, which is one pot on screen (D20).
     { source: "/guardian", destination: "/agents?agent=protect", permanent: false },
+    // Friends became the Leaderboard: one board, filtered to All or Contacts.
+    { source: "/friends", destination: "/leaderboard?filter=contacts", permanent: false },
   ],
   partialPrefetching: true,
   turbopack: {
