@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { homeStatus, needsExtraConfirm, statusFor } from "@/lib/risk/status";
+import { endsInAct, homeStatus, needsExtraConfirm, statusFor } from "@/lib/risk/status";
 
 describe("statusFor", () => {
   it("is none without debt", () => {
@@ -16,11 +16,14 @@ describe("statusFor", () => {
   it("respects custom bands", () => {
     expect(statusFor(1.3, { safeMin: 1.2, watchMin: 1.05 })).toBe("safe");
   });
-  it("requires extra confirmation only for watch/act", () => {
+  it("requires extra confirmation only for Watch; Act is blocked instead", () => {
     expect(needsExtraConfirm("safe")).toBe(false);
     expect(needsExtraConfirm("none")).toBe(false);
     expect(needsExtraConfirm("watch")).toBe(true);
-    expect(needsExtraConfirm("act")).toBe(true);
+    // Act is the line (Adrian, 2026-10-15): ending in Act is blocked, never confirmed.
+    expect(needsExtraConfirm("act")).toBe(false);
+    expect(endsInAct("act")).toBe(true);
+    expect(["none", "safe", "watch"].map((s) => endsInAct(s as "none" | "safe" | "watch"))).toEqual([false, false, false]);
   });
 });
 

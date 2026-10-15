@@ -13,7 +13,7 @@ import { describeAgentEvent, type MoveContext } from "@/lib/agents/feed";
 import type { AgentStatus } from "@/lib/agents/status";
 import { cashRaw, toUsd, type Cash } from "@/lib/cash";
 import { cashRows, type Arrival, type ExecutorMove, type OwnMove } from "@/lib/cashActivity";
-import { backingOptions } from "@/lib/creditBuy";
+import { backingOptions, creditWith } from "@/lib/creditBuy";
 import { earnOffer } from "@/lib/earnWithStocks";
 import { statusFor } from "@/lib/risk/status";
 import { EQUITIES } from "@/lib/tokens/registry";
@@ -76,7 +76,8 @@ function position(p: { owed: number; saveOn: boolean; creditApr?: number }): Pos
     stocksUsd: holdings.reduce((a, h) => a + h.freeUsd + h.lockedUsd, 0),
     collateralUsd,
     debtUsd: p.owed,
-    availableUsd: collateralUsd * CF - p.owed,
+    // As usePosition: the credit left at the one cap (Act is the line), not Aave's own limit.
+    availableUsd: creditWith({ collateralUsd, avgCf: CF, debtUsd: p.owed, healthFactor, usdcLiquidity: 2_770_000, borrowPaused: false }),
     healthFactor,
     avgCf: CF,
     status: statusFor(healthFactor),

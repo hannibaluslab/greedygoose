@@ -18,9 +18,9 @@ import { useCollateralFactors, usePosition, type Holding, type PositionData } fr
 import { useTx } from "@/hooks/useTx";
 import { loanPlan } from "@/lib/tx/plans";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
-import { FILL_MARGIN, autoFill, combinedLoan } from "@/lib/aave/loan";
+import { FILL_MARGIN, autoFill } from "@/lib/aave/loan";
+import { loanCheck } from "@/lib/creditBuy";
 import { monthlyCost } from "@/lib/aave/math";
-import { needsExtraConfirm, statusFor } from "@/lib/risk/status";
 import { rawToShares } from "@/lib/tokens/b20";
 import { marketState } from "@/lib/market-hours";
 import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
@@ -81,25 +81,22 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
     return { ...l, raw: r, usd: usdFor(l.holding, r, l.stock.decimals) };
   });
   const amount = Math.max(0, Number(raw.replace(/[^0-9.]/g, "")) || 0);
-  const calc = combinedLoan({
-    collateralUsd: data.collateralUsd,
-    avgCf: data.avgCf,
-    debtUsd: data.debtUsd,
-    borrowUsd: amount,
-    liquidityUsd: data.usdcLiquidity,
+  // The one cap (Act is the line, Adrian 2026-10-15): it can end in Watch, never in Act, with a margin for one price
+  // update between reading and signing. Nothing while the credit is in Act. Past the cap, or in or into Act, one plain
+  // line, and no tick can let it through (lib/creditBuy.ts loanCheck).
+  const check = loanCheck({
+    position: data,
     locks: locks.map((l) => ({ key: l.stock.symbol, usd: l.usd, cf: l.cf, freeUsd: l.holding.freeUsd })),
+    all: locks.map((l) => ({ key: l.stock.symbol, usd: l.holding.freeUsd, cf: l.cf, freeUsd: l.holding.freeUsd })),
+    amountUsd: amount,
+    moreToPutInUse: locks.some((l) => l.raw < l.holding.freeRaw),
   });
-  // Never let a borrow go right up to Aave's line: interest and prices move between reading and signing.
-  const hardMax = Math.floor(calc.maxAave * 0.995 * 100) / 100;
-  const safeMax = Math.floor(calc.maxSafe * 100) / 100;
-  const watchMax = Math.floor(calc.maxWatch * 100) / 100;
-  const after = statusFor(data.debtUsd + amount > 0 ? calc.hfAfter : null);
+  const { maxUsd: hardMax, maxSafeUsd: safeMax, after, line: capLine, risky, needsFill } = check;
   const lockingAny = locks.some((l) => l.raw > 0n);
-  const overLimit = amount > hardMax;
-  const risky = amount > 0 && needsExtraConfirm(after);
+  const overLimit = check.overCap;
   const feeBlocked = isConnected && fee.state === "unsupported";
   const nothing = !lockingAny && amount === 0;
-  const ready = !nothing && !overLimit && !(amount > 0 && data.borrowPaused);
+  const ready = !nothing && !overLimit && !capLine && !(amount > 0 && data.borrowPaused);
   const chosen = locks.filter((l) => l.raw > 0n);
   const borrowRaw = amount > 0 ? parseUnits(amount.toFixed(USDC.decimals), USDC.decimals) : 0n;
   // What the button would sign now, prepared while the screen is idle so the tap opens JAW's sheet at once.
@@ -116,8 +113,6 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
     });
     setFractions(Object.fromEntries(lines.map((l) => [l.stock.symbol, Math.min(1, ((usd[l.stock.symbol] ?? 0) * FILL_MARGIN) / l.holding.freeUsd)])));
   };
-  // Only offer auto-fill when there's still free stock to lock.
-  const needsFill = amount > 0 && amount > safeMax && locks.some((l) => l.raw < l.holding.freeRaw);
 
   if (tx.phase === "done" && sent) {
     return (
@@ -158,7 +153,8 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
 
   const summary = (
     <WhiteCard className="num px-4 py-0.5">
-      <Row label="Credit limit" value={formatUsd(calc.powerUsd)} />
+      {/* The most that can be owed with this backing: the cap, not Aave's own line (Act is the line). */}
+      <Row label="Credit limit" value={formatUsd(data.debtUsd + hardMax)} />
       <Row label="You owe after" value={formatUsd(data.debtUsd + amount)} />
       <Row label="Cost" value={`${(data.apr * 100).toFixed(1)}% a year · about ${monthlyCostText(monthlyCost(data.debtUsd + amount, data.apr))}`} />
       <Row label="Rate" value={`${(data.apr * 100).toFixed(2)}% a year, variable`} />
@@ -271,12 +267,10 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
             MAX
           </button>
         </div>
-        <p className={`m-0 text-[13px] ${overLimit ? "text-act" : "text-ink-mid"}`}>
-          {overLimit
-            ? `Aave won’t lend that much against these stocks. Back it with more, or take up to ${formatUsd(hardMax)}.`
-            : `Up to ${formatUsd(hardMax)} (Aave’s limit). Stay under ${formatUsd(safeMax)} to be Safe.`}
+        <p className={`m-0 text-[13px] ${capLine ? "text-act" : "text-ink-mid"}`}>
+          {capLine ?? `Up to ${formatUsd(hardMax)}. Stay under ${formatUsd(safeMax)} to be Safe.`}
         </p>
-        {hardMax > 0 && <LoanMeter amount={amount} safe={safeMax} watch={watchMax} limit={hardMax} />}
+        {hardMax > 0 && <LoanMeter amount={amount} safe={safeMax} limit={hardMax} />}
         {needsFill && (
           <button type="button" onClick={fill} className="h-11 rounded-[22px] bg-ink text-[14px] font-semibold text-on-ink">
             Pick enough backing for {formatUsd(amount)}
@@ -313,7 +307,7 @@ function LoanForm({ address, data, cfs }: { address: `0x${string}`; data: Positi
       {risky && (
         <label className="flex items-start gap-2.5 rounded-2xl bg-act-bg px-4 py-3 text-[13px] leading-snug text-act">
           <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-px size-[18px] shrink-0 accent-[#8e2a1d]" />
-          I understand this puts my credit in {after === "act" ? "Act" : "Watch"}. If my stocks fall too far, part of them can be sold to repay what I owe.
+          I understand this puts my credit in Watch. If my stocks fall too far, part of them can be sold to repay what I owe.
         </label>
       )}
       <p className="m-0 text-xs leading-snug text-subtle">

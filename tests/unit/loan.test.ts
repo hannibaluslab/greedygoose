@@ -56,6 +56,17 @@ describe("combinedLoan", () => {
     expect(r.maxSafe).toBeCloseTo(506 / 1.5);
     expect(r.maxWatch).toBeCloseTo(506 / 1.1);
     expect(r.maxAave).toBeCloseTo(506);
+    // Act is the line (Adrian, 2026-10-15): the app's cap stops at 1.12, between the Watch line and Aave's.
+    expect(r.maxCredit).toBeCloseTo(506 / 1.12);
+    expect(r.maxCredit).toBeLessThan(r.maxWatch);
+  });
+
+  it("caps maxCredit by what can be lent and nets what's owed", () => {
+    const r = combinedLoan({ collateralUsd: 1_000, avgCf: 0.7, debtUsd: 300, borrowUsd: 0, liquidityUsd: 1e9, locks: [] });
+    expect(r.maxCredit).toBeCloseTo(700 / 1.12 - 300);
+    expect(combinedLoan({ collateralUsd: 1_000, avgCf: 0.7, debtUsd: 300, borrowUsd: 0, liquidityUsd: 100, locks: [] }).maxCredit).toBe(100);
+    // Under the line already: nothing, never negative.
+    expect(combinedLoan({ collateralUsd: 1_000, avgCf: 0.7, debtUsd: 630, borrowUsd: 0, liquidityUsd: 1e9, locks: [] }).maxCredit).toBe(0);
   });
 });
 

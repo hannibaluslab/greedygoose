@@ -16,8 +16,14 @@ export function statusFor(healthFactor: number | null, bands: RiskBands = RISK):
  */
 export const homeStatus = (s: Status): Exclude<Status, "none"> => (s === "none" ? "safe" : s);
 
-/** Actions that end in Watch or Act need an extra explicit confirmation. */
-export const needsExtraConfirm = (after: Status) => after === "watch" || after === "act";
+/**
+ * Actions that end in Watch need an extra explicit confirmation (D2). Ending in Act is not confirmed but blocked, with
+ * one plain line ("Act is the line", Adrian 2026-10-15): taking credit and Free up check `endsInAct` instead.
+ */
+export const needsExtraConfirm = (after: Status) => after === "watch";
+
+/** It would end in Act: taking credit or freeing up backing that does is blocked, never confirmed (Act is the line). */
+export const endsInAct = (after: Status) => after === "act";
 
 export const STATUS_LABEL: Record<Status, string> = {
   // D17: never "loan" on screen.

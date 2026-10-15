@@ -3,7 +3,7 @@
 import { TxStop, txKey, useTx, type TxPlan } from "./useTx";
 import { useSigningQuote } from "./useBuyQuote";
 import { useSigningCash } from "./useSigningCash";
-import { buildCreditBuyCalls, creditBuyActivity, creditBuyStop, type CreditPlan } from "@/lib/creditBuy";
+import { CREDIT_FLOOR, buildCreditBuyCalls, creditBuyActivity, creditBuyStop, type CreditPlan } from "@/lib/creditBuy";
 import { quoteKey, type BuyQuote } from "@/lib/swap/buy";
 import type { ReserveAsset } from "@/lib/tokens/registry";
 
@@ -14,7 +14,7 @@ export type CreditBuyInput = {
   quote: BuyQuote;
   /** planCredit for the credit the screen shows. */
   plan: CreditPlan;
-  /** The extra confirmation when it ends in Watch or Act (D2). */
+  /** The extra confirmation when it ends in Watch (D2); ending in Act is blocked (Act is the line). */
   confirmedRisk: boolean;
 };
 
@@ -48,12 +48,16 @@ export const creditPlanKey = (plan: CreditPlan, confirmedRisk: boolean) => [
   confirmedRisk,
 ];
 
-/** What a Credit Buy signs (useTx): keyed by the account, the stock, the quote and the credit plan on screen. */
+/**
+ * What a Credit Buy signs (useTx), and decision 1's buy with credit: keyed by the account, the stock, the quote and the
+ * credit plan on screen. Its simulation reads the health on Aave after it, and one in Act stops it (CREDIT_FLOOR).
+ */
 export const creditBuyPlan = (p: CreditBuyInput, batch: ReturnType<typeof useCreditBuyBatch>): TxPlan => ({
   key: txKey("creditBuy", p.user, p.stock.symbol, quoteKey(p.quote), creditPlanKey(p.plan, p.confirmedRisk)),
   user: p.user,
   calls: () => batch(p),
   fallback: CREDIT_BUY_FALLBACK,
+  ...(p.plan.creditRaw > 0n ? { healthFloor: CREDIT_FLOOR } : {}),
   activity: creditBuyActivity(p),
 });
 

@@ -1,4 +1,5 @@
 import { decodeFunctionData, erc20Abi, isAddressEqual } from "viem";
+import { RISK } from "@/config/risk";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { buildLoanCalls, type Call } from "@/lib/aave/tx";
@@ -10,8 +11,9 @@ import { formatShares, formatUsdTrim, inWords } from "@/lib/formatting";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { aaveV3PoolAbi } from "@/lib/guardian/abis";
 import { buildAddSavingsCalls } from "@/lib/guardian/permission";
-import { STATUS_LABEL } from "@/lib/risk/status";
+import { STATUS_LABEL, statusFor } from "@/lib/risk/status";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
+import type { HealthFloor } from "@/lib/tx/prepared";
 
 /*
  * Earn with stocks (Adrian, 2026-10-15: "use your stock to add more cash to get yield"; then "the user should be able to
@@ -65,6 +67,7 @@ export const EARN_CLOSED = {
   "costs-more": "Credit costs more than your cash earns right now.",
   paused: "New credit is paused right now. Try again later.",
   credit: "Your stocks can’t back more credit right now.",
+  "in-act": CREDIT_BLOCKED["in-act"],
   fee: CREDIT_BLOCKED.fee,
   unread: "We couldn’t check this right now. Try again in a moment.",
 } as const;
@@ -98,7 +101,8 @@ const closed = (why: EarnClosed, rates?: EarnRates): EarnOffer => ({ kind: "clos
  * Whether the Cash sheet offers Earn with stocks, and up to how much. It needs no agent: the batch puts the credit
  * where the cash earns itself. The first rule that matches wins: loading (or a line when the read it waits on failed);
  * no stocks that can back credit; credit costing as much as the cash earns or more (as shown, in tenths); new credit
- * paused; less than the smallest amount the stocks can back (99.5% of the credit limit, as /use-credit, and the USDC
+ * paused; the credit already in Act (Act is the line: no more is taken until it's out); less than the smallest amount
+ * the stocks can back (creditCap, never past the Act line's margin, as every way of taking credit; and the USDC
  * available); no cash for the network fee.
  */
 export function earnOffer(i: EarnInput): EarnOffer {
@@ -107,6 +111,7 @@ export function earnOffer(i: EarnInput): EarnOffer {
   const rates = earnRates(i.cashApy, i.creditApy);
   if (rates.left <= 0) return closed("costs-more", rates);
   if (i.position.borrowPaused) return closed("paused");
+  if (statusFor(i.position.healthFactor) === "act") return closed("in-act");
 
   const plan0 = planCredit({ position: i.position, options: i.options, creditRaw: 0n, cash: i.cash, now: i.now });
   const maxUsd = Math.floor(Math.min(plan0.maxUsd, i.position.usdcLiquidity));
@@ -167,9 +172,14 @@ export const EARN_BLOCKED: Record<CreditBlock, string> = {
   paused: EARN_CLOSED.paused,
   "no-liquidity": "There isn’t enough credit available right now. Try a smaller amount.",
   "over-free": CREDIT_BLOCKED["over-free"],
+  "in-act": CREDIT_BLOCKED["in-act"],
+  act: CREDIT_BLOCKED.act,
   "too-much": "That’s more credit than your stocks can back right now. Try a smaller amount.",
   fee: CREDIT_BLOCKED.fee,
 };
+
+/** Its batch is stopped if the health on Aave after it, read in its own simulation, is in Act (lib/creditBuy.ts CREDIT_FLOOR). */
+export const EARN_FLOOR: HealthFloor = { minHf: RISK.watchMin, stop: EARN_BLOCKED.act };
 
 export const EARN_COSTS_MORE = "At this amount, credit costs more than your cash earns right now.";
 
@@ -182,7 +192,7 @@ export function earnBlock(q: EarnQuote, o: EarnOpen): string | null {
   return null;
 }
 
-/** Why it can't be signed: a block, the rate after it still being read, or a Watch/Act ending without the tick (D2). */
+/** Why it can't be signed: a block (ending in Act is one), the rate after it still being read, or a Watch ending without the tick (D2). */
 export function earnStop(q: EarnQuote, o: EarnOpen, confirmedRisk: boolean): string | null {
   const block = earnBlock(q, o);
   if (block) return block;
@@ -233,7 +243,7 @@ export function earnSmallPrint(p: {
   );
 }
 
-/** The risk tick (D2), when it ends in Watch or Act. */
+/** The risk tick (D2), when it ends in Watch (ending in Act is blocked). */
 export const earnTick = (after: CreditPlan["after"]) =>
   `I understand this puts my credit in ${STATUS_LABEL[after]}. If my stocks fall, part of them can be sold to repay what I owe.`;
 

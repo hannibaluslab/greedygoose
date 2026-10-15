@@ -14,6 +14,7 @@ import { GUARDIAN } from "@/lib/guardian/config";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import { cashRaw, saveRuns, toUsd, type Cash } from "@/lib/cash";
+import { creditWith } from "@/lib/creditBuy";
 
 /** Aave V3 getReserveData — only `currentLiquidityRate` (index 2, RAY) is used. */
 export const v3ReserveAbi = [
@@ -149,12 +150,15 @@ export function usePosition(user: `0x${string}` | undefined) {
     const apr = borrowApr(drawnRate, riskPremium);
     const debtUsd = Number(debtRaw) / 10 ** USDC.decimals;
     const cash: Cash = { walletRaw: usdcBal, savingsRaw, saveOn: saveRuns(agents?.[0] ?? 0) };
+    const usdcLiquidity = Number(liquidity) / 10 ** USDC.decimals;
+    const borrowPaused = usdcCfg.paused || usdcCfg.frozen || !usdcCfg.borrowable;
     return {
       holdings,
       stocksUsd: holdings.reduce((a, h) => a + h.freeUsd + h.lockedUsd, 0),
       collateralUsd: s.collateralUsd,
       debtUsd,
-      availableUsd: Math.min(s.availableUsd, Number(liquidity) / 10 ** USDC.decimals),
+      // The credit left on what already backs it, at the one cap (Act is the line): never more than any flow lets you take.
+      availableUsd: creditWith({ collateralUsd: s.collateralUsd, avgCf: s.avgCf, debtUsd, healthFactor: s.healthFactor, usdcLiquidity, borrowPaused }),
       healthFactor: s.healthFactor,
       avgCf: s.avgCf,
       status: statusFor(s.healthFactor),
@@ -171,8 +175,8 @@ export function usePosition(user: `0x${string}` | undefined) {
       cash,
       cashUsd: toUsd(cashRaw(cash)),
       debtRaw,
-      usdcLiquidity: Number(liquidity) / 10 ** USDC.decimals,
-      borrowPaused: usdcCfg.paused || usdcCfg.frozen || !usdcCfg.borrowable,
+      usdcLiquidity,
+      borrowPaused,
     };
   }, [query.data]);
 
