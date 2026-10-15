@@ -1,19 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { decodeFunctionData, encodeFunctionData, erc20Abi, maxUint256, parseUnits } from "viem";
-import { CASH } from "@/config/risk";
+import { CASH, CREDIT_CAP, RISK } from "@/config/risk";
 import { assertAllowed, swapOf } from "@/lib/allowlist";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { FILL_MARGIN, fillRaw } from "@/lib/aave/loan";
+import { healthAfterWithdraw, maxWithdrawUsd } from "@/lib/aave/math";
 import { buildBorrowCalls } from "@/lib/aave/tx";
 import { payFromCash } from "@/lib/cash";
 import {
   CREDIT_BLOCKED, CREDIT_FROM, FEE_FIRST, NO_CREDIT, assertCreditBuy, backers, backingOptions, backingRaw, bestBacking, buildCreditBuyCalls, creditAvailable,
-  creditBuyActivity, creditBuyStop, creditWith, freeShownUsd, isAllFree, noCreditLine, planCredit, shortNames, splitCash,
+  creditBuyActivity, creditBuyStop, creditCap, creditWith, freeShownUsd, isAllFree, loanCheck, noCreditLine, planCredit, shortNames, splitCash,
   type BackingOption, type CreditLimit, type CreditPosition,
 } from "@/lib/creditBuy";
 import { aaveV3PoolAbi } from "@/lib/guardian/abis";
-import { buildBuyCalls, minOut, type BuyQuote } from "@/lib/swap/buy";
+import { statusFor } from "@/lib/risk/status";
+import { BUY_LIMITS, buildBuyCalls, minOut, type BuyQuote } from "@/lib/swap/buy";
 import { AERODROME, UNISWAP } from "@/lib/swap/venues";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
@@ -157,7 +159,7 @@ describe("planCredit (Leo's loan maths: autoFill, combinedLoan, status)", () => 
     expect(p.extraConfirm).toBe(false);
     expect(p.block).toBeUndefined();
     expect(p.maxSafeUsd).toBe(933.33);
-    expect(p.maxUsd).toBe(1393);
+    expect(p.maxUsd).toBe(1250); // $2,000 × 70% ÷ 1.12: the most that stays out of Act with the margin
   });
 
   it("already backing: what backs credit covers it, so nothing new goes in", () => {
@@ -175,7 +177,7 @@ describe("planCredit (Leo's loan maths: autoFill, combinedLoan, status)", () => 
     expect(p.backing[1].raw).toBe(msftFree.freeRaw); // all of the MSFT ($500 × 0.78) goes in, NVIDIA covers the rest
   });
 
-  it("past Safe it puts everything in and asks for the extra confirmation (Watch or Act)", () => {
+  it("past Safe it puts everything in and asks for the extra confirmation in Watch; ending in Act is blocked, not ticked", () => {
     const watch = plan(1_100);
     expect(watch.backing[0].raw).toBe(nvdaFree.freeRaw);
     expect(watch.after).toBe("watch");
@@ -183,11 +185,13 @@ describe("planCredit (Leo's loan maths: autoFill, combinedLoan, status)", () => 
     expect(watch.block).toBeUndefined();
     const act = plan(1_350);
     expect(act.after).toBe("act");
-    expect(act.extraConfirm).toBe(true);
+    expect(act.block).toBe("act");
+    expect(act.extraConfirm).toBe(false);
   });
 
   it("blocks past the MAX, with no USDC to lend, when Aave pauses credit, or when cash can't pay the fee", () => {
-    expect(plan(1_394).block).toBe("too-much");
+    expect(plan(1_251).block).toBe("too-much"); // still Watch (1.119), but past the margin
+    expect(plan(1_394).block).toBe("act"); // what 99.5% of Aave's limit used to allow
     expect(plan(300, { ...fresh, usdcLiquidity: 299 }).block).toBe("no-liquidity");
     expect(plan(300, { ...fresh, borrowPaused: true }).block).toBe("paused");
     const broke = planCredit({ position: fresh, options: [nvdaFree], creditRaw: usd(300), cash: { walletRaw: fee - 1n, savingsRaw: 0n, saveOn: true }, now: weekday });
@@ -212,10 +216,10 @@ describe("creditAvailable (F2-3's \"You can use up to\")", () => {
   const perStock = (position: CreditPosition, o: BackingOption) => planCredit({ position, options: [o], creditRaw: 0n, cash: walletCash }).maxUsd;
 
   it("is the largest of F2-4's per-stock figures, not their sum: one buy is backed by one free holding", () => {
-    expect(avail(fresh, [nvdaFree])).toEqual({ usd: 1_393, line: CREDIT_FROM }); // $2,000 × 70%, at 99.5% of the limit
+    expect(avail(fresh, [nvdaFree])).toEqual({ usd: 1_250, line: CREDIT_FROM }); // $2,000 × 70% ÷ 1.12, the cap
     const both = avail(fresh, [msftFree, nvdaFree]);
     expect(both.usd).toBe(Math.max(perStock(fresh, nvdaFree), perStock(fresh, msftFree)));
-    expect(both.usd).toBe(1_393);
+    expect(both.usd).toBe(1_250);
   });
 
   it("creditWith is F2-4's per-stock figure: planCredit's MAX with that one option, or with none", () => {
@@ -233,7 +237,7 @@ describe("creditAvailable (F2-3's \"You can use up to\")", () => {
     const best = bestBacking(fresh, options)!;
     expect(best.option).toBe(msft900);
     const headline = avail(fresh, options).usd;
-    expect(headline).toBe(707.44); // 900 × 79% × 99.5%, not Meta's $646.75
+    expect(headline).toBe(634.82); // 900 × 79% ÷ 1.12, not Meta's $580.35
     // F2-5's "Up to" for the default pick is the plan with that one option.
     expect(planCredit({ position: fresh, options: [best.option], creditRaw: 0n, cash: walletCash }).maxUsd).toBe(headline);
     expect(best.usd).toBe(headline);
@@ -248,40 +252,44 @@ describe("creditAvailable (F2-3's \"You can use up to\")", () => {
 
   it("counts what already backs credit, net of what's owed", () => {
     const backed: CreditPosition = { ...fresh, collateralUsd: 1_000, avgCf: 0.7, debtUsd: 300, healthFactor: 2.33 };
-    // (1,000 × 0.7 + 2,000 × 0.7 − 300) × 99.5%
-    expect(avail(backed, [nvdaFree]).usd).toBe(1_791);
-    // Everything in use: the room on it alone.
-    expect(avail(backed, [])).toEqual({ usd: 398, line: CREDIT_FROM });
+    // (1,000 × 0.7 + 2,000 × 0.7) ÷ 1.12 − 300
+    expect(avail(backed, [nvdaFree]).usd).toBe(1_575);
+    // Everything in use: the room on it alone, 1,000 × 0.7 ÷ 1.12 − 300.
+    expect(avail(backed, [])).toEqual({ usd: 325, line: CREDIT_FROM });
   });
 
   it("never more than there is to lend", () => {
-    expect(avail({ ...fresh, usdcLiquidity: 500 }, [nvdaFree]).usd).toBe(497.5);
+    expect(avail({ ...fresh, usdcLiquidity: 500 }, [nvdaFree]).usd).toBe(500);
   });
 
   it("with credit but less cash than the network fee, keeps the number and asks for the fee first (F2-5 would block every amount)", () => {
     const a = avail(fresh, [nvdaFree], true, noCash);
-    expect(a).toEqual({ usd: 1_393, line: FEE_FIRST });
+    expect(a).toEqual({ usd: 1_250, line: FEE_FIRST });
     expect(FEE_FIRST).toBe("Add $0.50 to your cash for the network fee first.");
     expect(planCredit({ position: fresh, options: [nvdaFree], creditRaw: usd(10), cash: noCash }).block).toBe("fee");
     // Just enough for the fee: the usual line.
     expect(avail(fresh, [nvdaFree], true, { walletRaw: fee, savingsRaw: 0n, saveOn: true }).line).toBe(CREDIT_FROM);
   });
 
-  it("$0 with the reason: no stock, nothing that can back credit, everything in use, paused, nothing to lend", () => {
+  it("$0 with the reason: no stock, nothing that can back credit, everything in use, in Act, paused, nothing to lend", () => {
     expect(avail(fresh, [], false)).toEqual({ usd: 0, why: "no-stocks", line: noCreditLine("no-stocks", true) });
     expect(avail(fresh, [])).toMatchObject({ usd: 0, why: "cant-back" });
-    const full: CreditPosition = { ...fresh, collateralUsd: 1_000, avgCf: 0.7, debtUsd: 700, healthFactor: 1 };
+    // At the cap (700 ÷ 625 = 1.12, Watch): everything that backs credit is in use.
+    const full: CreditPosition = { ...fresh, collateralUsd: 1_000, avgCf: 0.7, debtUsd: 625, healthFactor: 1.12 };
     expect(avail(full, [])).toMatchObject({ usd: 0, why: "all-in-use" });
+    // Past Aave's limit's Act line: in Act, whatever is free.
+    const act: CreditPosition = { ...fresh, collateralUsd: 1_000, avgCf: 0.7, debtUsd: 700, healthFactor: 1 };
+    expect(avail(act, [nvdaFree])).toMatchObject({ usd: 0, why: "in-act", line: noCreditLine("in-act", true) });
     expect(avail({ ...fresh, borrowPaused: true }, [nvdaFree])).toMatchObject({ usd: 0, why: "paused" });
     // $1.40 of free NVIDIA counts for under the $1 minimum buy, and nothing backs credit yet: too small, not "all in use".
     const tiny: BackingOption = { stock: nvda, freeRaw: 784_000n, freeUsd: 1.4, cf: 0.7 };
     expect(avail(fresh, [tiny])).toMatchObject({ usd: 0, why: "too-small", line: noCreditLine("too-small", true) });
-    expect(avail({ ...fresh, collateralUsd: 1_000, avgCf: 0.7, debtUsd: 700, healthFactor: 1 }, [tiny])).toMatchObject({ why: "all-in-use" });
+    expect(avail(full, [tiny])).toMatchObject({ why: "all-in-use" });
     expect(avail({ ...fresh, usdcLiquidity: 0 }, [nvdaFree])).toMatchObject({ usd: 0, why: "no-liquidity" });
   });
 
   it("under the minimum buy is $0: no Credit Buy fits in it", () => {
-    const nearly: CreditPosition = { ...fresh, collateralUsd: 1_000, avgCf: 0.7, debtUsd: 699.5, healthFactor: 1 };
+    const nearly: CreditPosition = { ...fresh, collateralUsd: 1_000, avgCf: 0.7, debtUsd: 624.5, healthFactor: 700 / 624.5 }; // $0.50 left
     expect(avail(nearly, [])).toMatchObject({ usd: 0, why: "all-in-use" });
   });
 
@@ -319,8 +327,9 @@ describe("creditBuyStop and creditBuyActivity (what the hooks check and record)"
     expect(creditBuyStop(plan(1_100), false)).toMatch(/credit in Watch/);
     expect(creditBuyStop(plan(1_100), true)).toBeNull();
   });
-  it("a block stops it even when confirmed", () => {
-    expect(creditBuyStop(plan(5_000), true)).toBe(CREDIT_BLOCKED["too-much"]);
+  it("a block stops it even when confirmed: past the cap, and ending in Act, which no tick lets through", () => {
+    expect(creditBuyStop(plan(1_260), true)).toBe(CREDIT_BLOCKED["too-much"]);
+    expect(creditBuyStop(plan(5_000), true)).toBe(CREDIT_BLOCKED.act);
   });
   it("records the backing, the credit and the buy", () => {
     const p = plan(300);
@@ -386,9 +395,9 @@ describe("planCredit with an explicit backing (Credit Buy goes backing first, Ad
     expect(planCredit({ position: fresh, options: [nvdaFree], creditRaw: usd(300), cash: walletCash, now: weekday }).backing[0].usd).toBeCloseTo((300 * 1.5 * FILL_MARGIN) / 0.7, 0);
   });
 
-  it("the credit limit grows with the backing: what it counts for, at 99.5% of the limit", () => {
+  it("the credit limit grows with the backing: what it counts for, over the cap's line (1.12)", () => {
     const limits = [0, 100, 500, 1_000, 2_000].map((u) => withBacking(u).maxUsd);
-    expect(limits).toEqual([0, 69.65, 348.25, 696.5, 1_393]);
+    expect(limits).toEqual([0, 62.5, 312.5, 625, 1_250]);
     expect(withBacking(500).maxSafeUsd).toBe(233.33); // 500 × 70% / 1.5
   });
 
@@ -450,24 +459,24 @@ describe("planCredit with an explicit backing (Credit Buy goes backing first, Ad
   it("0 backing uses only what already backs credit", () => {
     const none = withBacking(0, 100, backed);
     expect(none.backing).toEqual([]);
-    expect(none.maxUsd).toBe(creditWith(backed)); // (1,000 × 0.7 − 300) × 99.5%
-    expect(none.maxUsd).toBe(398);
+    expect(none.maxUsd).toBe(creditWith(backed)); // 1,000 × 0.7 ÷ 1.12 − 300
+    expect(none.maxUsd).toBe(325);
     expect(none.block).toBeUndefined();
-    expect(withBacking(0, 100, backed, null).maxUsd).toBe(398);
+    expect(withBacking(0, 100, backed, null).maxUsd).toBe(325);
     // With nothing backing credit yet, 0 gives no room at all.
     expect(withBacking(0, 5).maxUsd).toBe(0);
-    expect(withBacking(0, 5).block).toBe("too-much");
+    expect(withBacking(0, 5).block).toBe("act"); // nothing backs it: it would start in Act
     // Existing backing and the typed backing add up.
-    expect(withBacking(500, 0, backed).maxUsd).toBe(746.25); // (700 + 350 − 300) × 99.5%
+    expect(withBacking(500, 0, backed).maxUsd).toBe(637.5); // (700 + 350) ÷ 1.12 − 300
   });
 
-  it("the D2 tick: Safe within what keeps it Safe, the extra confirmation past it, a block past the MAX", () => {
-    // $1,000 of NVIDIA counts for $700: Safe up to $466, Watch to $636, Act past it.
+  it("the D2 tick: Safe within what keeps it Safe, the extra confirmation past it, a block past the MAX and into Act", () => {
+    // $1,000 of NVIDIA counts for $700: Safe up to $466, the cap at $625 (1.12), Watch to $636, Act past it.
     expect(withBacking(1_000, 400)).toMatchObject({ after: "safe", extraConfirm: false });
     expect(withBacking(1_000, 500)).toMatchObject({ after: "watch", extraConfirm: true });
-    expect(withBacking(1_000, 650)).toMatchObject({ after: "act", extraConfirm: true });
-    expect(withBacking(1_000, 696.5).block).toBeUndefined();
-    expect(withBacking(1_000, 696.51).block).toBe("too-much");
+    expect(withBacking(1_000, 650)).toMatchObject({ after: "act", extraConfirm: false, block: "act" });
+    expect(withBacking(1_000, 625)).toMatchObject({ after: "watch", extraConfirm: true, block: undefined });
+    expect(withBacking(1_000, 625.01)).toMatchObject({ after: "watch", block: "too-much" });
     expect(withBacking(1_000, 0).extraConfirm).toBe(false);
     expect(creditBuyStop(withBacking(1_000, 500), false)).toMatch(/credit in Watch/);
   });
@@ -485,8 +494,8 @@ describe("planCredit with an explicit backing (Credit Buy goes backing first, Ad
   });
 
   it("carries the batch's limit: the backing's free shares and the most credit it allows", () => {
-    expect(withBacking(500, 300).limit).toEqual({ maxCreditRaw: usd(348.25), freeRaw: { NVDAc: nvdaFree.freeRaw } });
-    expect(withBacking(0, 100, backed).limit).toEqual({ maxCreditRaw: usd(398), freeRaw: {} });
+    expect(withBacking(500, 300).limit).toEqual({ maxCreditRaw: usd(312.5), freeRaw: { NVDAc: nvdaFree.freeRaw } });
+    expect(withBacking(0, 100, backed).limit).toEqual({ maxCreditRaw: usd(325), freeRaw: {} });
     // Auto mode: the room with exactly the backing autoFill puts in.
     const auto = planCredit({ position: fresh, options: [nvdaFree], creditRaw: usd(300), cash: walletCash, now: weekday });
     expect(toUsdc(auto.limit.maxCreditRaw)).toBeGreaterThanOrEqual(300);
@@ -545,5 +554,213 @@ describe("the explicit backing in the batch (buildCreditBuyCalls, assertCreditBu
 
   it("records exactly the typed backing in Activity", () => {
     expect(creditBuyActivity({ stock: aapl, quote, plan })[0]).toEqual({ kind: "supply", symbol: "NVDAc", amount: 2.8 });
+  });
+});
+
+describe("Act is the line (Adrian, 2026-10-15): every way of taking credit may end in Watch, never in Act", () => {
+  const fresh: CreditPosition = { collateralUsd: 0, avgCf: 0, debtUsd: 0, healthFactor: null, usdcLiquidity: 1_000_000, borrowPaused: false };
+  const at = (collateralUsd: number, avgCf: number, debtUsd: number): CreditPosition => ({
+    ...fresh, collateralUsd, avgCf, debtUsd, healthFactor: debtUsd > 0 ? (collateralUsd * avgCf) / debtUsd : null,
+  });
+  const opt = (stock: typeof nvda, freeUsd: number, cf: number): BackingOption => ({ stock, freeRaw: BigInt(Math.round(freeUsd * 1e6)), freeUsd, cf });
+  const nvdaFree = opt(nvda, 2_000, 0.7);
+  const msftFree = opt(msft, 500, 0.78);
+  const power = (pos: CreditPosition, options: BackingOption[]) => pos.collateralUsd * pos.avgCf + options.reduce((a, o) => a + o.freeUsd * o.cf, 0);
+
+  it("the cap's line is the Act line plus 0.02, in Watch, and lives next to the bands", () => {
+    expect(CREDIT_CAP.minHf).toBe(1.12);
+    expect(CREDIT_CAP.minHf).toBeCloseTo(RISK.watchMin + CREDIT_CAP.marginHf, 12);
+    expect(statusFor(CREDIT_CAP.minHf)).toBe("watch");
+    // One price update between reading and signing: 99% of the falls measured were 0.80% or less, 99.9% 1.10% or less.
+    // From the cap they stay in Watch; a 1.8% fall reaches Act (the measured worst single update was −2.13%).
+    expect(statusFor(CREDIT_CAP.minHf * (1 - 0.008))).toBe("watch");
+    expect(statusFor(CREDIT_CAP.minHf * (1 - 0.011))).toBe("watch");
+    expect(statusFor(CREDIT_CAP.minHf * (1 - 0.018))).toBe("act");
+  });
+
+  it("is health 1.12 at the cap, across collateral factors, existing debt and several backings", () => {
+    const cases: { pos: CreditPosition; options: BackingOption[] }[] = [
+      { pos: fresh, options: [nvdaFree] },
+      { pos: fresh, options: [opt(aapl, 1_000, 0.78)] },
+      { pos: fresh, options: [opt(meta, 1_234.56, 0.65)] },
+      { pos: fresh, options: [opt(nvda, 3_333.33, 0.5)] },
+      { pos: at(5_000, 0.74, 1_800), options: [opt(nvda, 700, 0.7)] },
+      { pos: at(5_000, 0.74, 1_800), options: [opt(nvda, 700, 0.7), msftFree, opt(aapl, 50, 0.78)] },
+      // In Watch under the line: only new backing makes room, and first covers what the credit already needs.
+      { pos: at(1_000, 0.7, 630), options: [nvdaFree] },
+    ];
+    for (const { pos, options } of cases) {
+      const cap = power(pos, options) / 1.12 - pos.debtUsd;
+      const p0 = planCredit({ position: pos, options, creditRaw: 0n, cash: walletCash });
+      expect(p0.maxUsd).toBeLessThanOrEqual(cap + 1e-9);
+      expect(p0.maxUsd).toBeGreaterThan(cap - 0.01);
+      // At the cap, to the cent: everything goes in (several backings), it ends in Watch with the tick, and no further.
+      const top = planCredit({ position: pos, options, creditRaw: usd(p0.maxUsd), cash: walletCash });
+      expect(top.block).toBeUndefined();
+      expect(top.backing.map((b) => b.raw)).toEqual(options.map((o) => o.freeRaw));
+      expect(top.after).toBe("watch");
+      expect(top.extraConfirm).toBe(true);
+      expect(top.hfAfter).toBeGreaterThanOrEqual(CREDIT_CAP.minHf - 1e-9);
+      expect(planCredit({ position: pos, options, creditRaw: usd(p0.maxUsd + 0.01), cash: walletCash }).block).toBe("too-much");
+      // The explicit pick gives the same cap with that one option.
+      if (options.length === 1) {
+        expect(planCredit({ position: pos, backing: { option: options[0], raw: options[0].freeRaw }, creditRaw: 0n, cash: walletCash }).maxUsd).toBe(p0.maxUsd);
+      }
+    }
+    // Under the line with nothing new in use: no room at all.
+    expect(creditWith(at(1_000, 0.7, 630))).toBe(0);
+  });
+
+  it("a plan that ends in Act is blocked with one plain line, and no tick lets it through; Watch goes ahead with the tick", () => {
+    const watch = planCredit({ position: fresh, options: [nvdaFree], creditRaw: usd(1_200), cash: walletCash });
+    expect(watch).toMatchObject({ after: "watch", extraConfirm: true, block: undefined });
+    expect(creditBuyStop(watch, false)).toBe("Confirm you understand this puts your credit in Watch first.");
+    expect(creditBuyStop(watch, true)).toBeNull();
+    for (const p of [
+      planCredit({ position: fresh, options: [nvdaFree], creditRaw: usd(1_300), cash: walletCash }),
+      planCredit({ position: fresh, backing: { option: nvdaFree, raw: nvdaFree.freeRaw }, creditRaw: usd(1_300), cash: walletCash }),
+    ]) {
+      expect(p).toMatchObject({ after: "act", block: "act", extraConfirm: false });
+      expect(creditBuyStop(p, true)).toBe(CREDIT_BLOCKED.act);
+      expect(CREDIT_BLOCKED.act).toBe("That would put your credit in Act. Try a smaller amount.");
+      // No limit lets the batch past the cap either.
+      expect(toUsdc(p.limit.maxCreditRaw)).toBeLessThanOrEqual(1_250);
+    }
+  });
+
+  it("in Act already: no more credit, however much new backing goes in; backing alone still goes in", () => {
+    const inAct = at(1_000, 0.7, 660); // 1.06
+    expect(statusFor(inAct.healthFactor)).toBe("act");
+    expect(creditCap(inAct, [{ key: "NVDAc", usd: 2_000, cf: 0.7, freeUsd: 2_000 }])).toEqual({ maxUsd: 0, maxSafeUsd: 0 });
+    const pick = planCredit({ position: inAct, backing: { option: nvdaFree, raw: nvdaFree.freeRaw }, creditRaw: usd(10), cash: walletCash });
+    expect(pick.block).toBe("in-act");
+    expect(creditBuyStop(pick, true)).toBe(CREDIT_BLOCKED["in-act"]);
+    // Decision 1 and Earn with stocks (autoFill) too.
+    expect(planCredit({ position: inAct, options: [nvdaFree], creditRaw: usd(10), cash: walletCash }).block).toBe("in-act");
+    // Putting stock in use on its own lifts it, and is no block.
+    const backingOnly = planCredit({ position: inAct, backing: { option: nvdaFree, raw: nvdaFree.freeRaw }, creditRaw: 0n, cash: walletCash });
+    expect(backingOnly.block).toBeUndefined();
+    expect(backingOnly.after).toBe("safe");
+    expect(creditAvailable({ position: inAct, options: [nvdaFree], cash: walletCash, holdsStock: true })).toMatchObject({ usd: 0, why: "in-act" });
+    expect(noCreditLine("in-act", true)).toBe("Your credit is in Act. Repay some to use more. You can still buy with cash.");
+  });
+
+  it("one number: Invest's buying power, step 1's pick, step 2's figure, step 3's headline, step 4's MAX and Up to, and Home's Available", () => {
+    const backed = at(1_000, 0.7, 300);
+    const options = [msftFree, nvdaFree];
+    const headline = creditAvailable({ position: backed, options, cash: walletCash, holdsStock: true }).usd;
+    const best = bestBacking(backed, options)!;
+    const all = { option: best.option, raw: best.option.freeRaw };
+    const step2 = planCredit({ position: backed, backing: all, creditRaw: 0n, cash: walletCash });
+    const step4 = planCredit({ position: backed, backing: all, creditRaw: usd(Math.floor(step2.maxUsd)), cash: walletCash });
+    expect(headline).toBe(1_575); // (700 + 1,400) ÷ 1.12 − 300
+    expect(best.usd).toBe(headline);
+    expect(step2.maxUsd).toBe(headline);
+    expect(step4.maxUsd).toBe(headline);
+    expect(step4.block).toBeUndefined();
+    expect(planCredit({ position: backed, backing: all, creditRaw: usd(headline), cash: walletCash })).toMatchObject({ after: "watch", block: undefined });
+    expect(planCredit({ position: backed, backing: all, creditRaw: usd(headline + 0.01), cash: walletCash }).block).toBe("too-much");
+    expect(toUsdc(step4.limit.maxCreditRaw)).toBe(headline);
+    // Home's and the Credit sheet's "Available" (usePosition's availableUsd) is the same cap on what already backs credit.
+    expect(creditWith(backed)).toBe(creditCap(backed).maxUsd);
+    expect(creditWith(backed)).toBe(325);
+  });
+
+  it("the leverage loop: Credit Buys backed by what the last one bought converge at the cap and never reach Act", () => {
+    for (const cf of [0.5, 0.65, 0.7, 0.78]) {
+      let pos: CreditPosition = fresh;
+      let freeUsd = 1_000;
+      let buys = 0;
+      for (; buys < 200; buys++) {
+        const option = opt(nvda, freeUsd, cf);
+        const pick = { option, raw: option.freeRaw };
+        // Step 4's MAX, in whole dollars, as Sam would tap it.
+        const max = Math.floor(planCredit({ position: pos, backing: pick, creditRaw: 0n, cash: walletCash }).maxUsd);
+        if (max < BUY_LIMITS.minUsd) break;
+        const plan = planCredit({ position: pos, backing: pick, creditRaw: usd(max), cash: walletCash });
+        expect(plan.block).toBeUndefined();
+        expect(plan.after).not.toBe("act");
+        expect(plan.hfAfter).toBeGreaterThanOrEqual(CREDIT_CAP.minHf - 1e-9);
+        // It lands: the free stock backs credit, the credit is owed, and it bought the same stock, free now.
+        const collateralUsd = pos.collateralUsd + freeUsd;
+        const backs = pos.collateralUsd * pos.avgCf + freeUsd * cf;
+        const debtUsd = pos.debtUsd + max;
+        pos = { ...pos, collateralUsd, avgCf: backs / collateralUsd, debtUsd, healthFactor: backs / debtUsd };
+        freeUsd = max;
+      }
+      // It stops on its own: each buy is cf ÷ 1.12 of the last, so what's owed tends to 1,000 × r ÷ (1 − r).
+      const r = cf / CREDIT_CAP.minHf;
+      const limit = (1_000 * r) / (1 - r);
+      expect(buys).toBeLessThan(60);
+      expect(pos.debtUsd).toBeLessThanOrEqual(limit);
+      expect(pos.debtUsd).toBeGreaterThan(limit * 0.97);
+      expect(pos.healthFactor!).toBeGreaterThanOrEqual(CREDIT_CAP.minHf - 1e-9);
+      expect(statusFor(pos.healthFactor)).toBe("watch");
+      // Backing the last buy too leaves less than the smallest Credit Buy.
+      const last = opt(nvda, freeUsd, cf);
+      expect(planCredit({ position: pos, backing: { option: last, raw: last.freeRaw }, creditRaw: 0n, cash: walletCash }).maxUsd).toBeLessThan(BUY_LIMITS.minUsd);
+    }
+  });
+
+  it("Free up stops at the same line: its MAX leaves health at 1.12, and Aave's own limit would have reached Act", () => {
+    const pos = { collateralUsd: 2_000, avgCf: 0.7, debtUsd: 800 }; // 1.75
+    const max = maxWithdrawUsd({ ...pos, cf: 0.7, lockedUsd: 2_000, targetHf: CREDIT_CAP.minHf });
+    expect(max).toBeCloseTo((1_400 - 800 * 1.12) / 0.7, 9);
+    expect(healthAfterWithdraw({ ...pos, cf: 0.7, usd: max })).toBeCloseTo(1.12, 9);
+    expect(statusFor(healthAfterWithdraw({ ...pos, cf: 0.7, usd: max }))).toBe("watch");
+    // What the sheet allowed before: 99.5% of Aave's limit, deep in Act.
+    const aave = maxWithdrawUsd({ ...pos, cf: 0.7, lockedUsd: 2_000 });
+    expect(statusFor(healthAfterWithdraw({ ...pos, cf: 0.7, usd: aave * 0.995 }))).toBe("act");
+    // Under the line already: nothing can be freed while something is owed.
+    expect(maxWithdrawUsd({ collateralUsd: 1_000, avgCf: 0.7, debtUsd: 630, cf: 0.7, lockedUsd: 1_000, targetHf: CREDIT_CAP.minHf })).toBe(0);
+  });
+
+  it("its words keep D17's and protocol words off screen", () => {
+    for (const line of [CREDIT_BLOCKED.act, CREDIT_BLOCKED["in-act"], NO_CREDIT["in-act"]]) expect(line).not.toMatch(/borrow|loan|lock|aave|collateral|health/i);
+  });
+});
+
+describe("loanCheck: /use-credit's checks (Act is the line)", () => {
+  const fresh: CreditPosition = { collateralUsd: 0, avgCf: 0, debtUsd: 0, healthFactor: null, usdcLiquidity: 1_000_000, borrowPaused: false };
+  /** $2,000 of NVIDIA free at 70%; `inUse` of it put in use on screen. */
+  const line = (inUse: number) => ({ key: "NVDAc", usd: inUse, cf: 0.7, freeUsd: 2_000 });
+  const check = (inUse: number, amountUsd: number, position = fresh) =>
+    loanCheck({ position, locks: [line(inUse)], all: [line(2_000)], amountUsd, moreToPutInUse: inUse < 2_000 });
+
+  it("MAX, Up to and the Credit limit are creditCap with what's on screen", () => {
+    const c = check(1_000, 0);
+    expect(c.maxUsd).toBe(625); // 700 ÷ 1.12
+    expect(c.maxUsd).toBe(creditCap(fresh, [line(1_000)]).maxUsd);
+    expect(c.maxSafeUsd).toBe(466.66);
+    expect(c).toMatchObject({ line: null, risky: false, needsFill: false });
+  });
+
+  it("at the cap it ends in Watch with D2's tick; past it, one line that names the cap", () => {
+    expect(check(1_000, 625)).toMatchObject({ after: "watch", line: null, risky: true, overCap: false });
+    expect(check(1_000, 630)).toMatchObject({
+      after: "watch",
+      overCap: true,
+      risky: false,
+      line: "That’s more than these stocks can back. Back it with more, or take up to $625.00.",
+    });
+  });
+
+  it("ending in Act is blocked with its own line, and no tick", () => {
+    const c = check(1_000, 650); // 700 ÷ 650 = 1.077
+    expect(c).toMatchObject({ after: "act", line: CREDIT_BLOCKED.act, risky: false });
+  });
+
+  it("in Act already: no credit, whatever goes in use; backing alone has no line", () => {
+    const inAct: CreditPosition = { ...fresh, collateralUsd: 1_000, avgCf: 0.7, debtUsd: 660, healthFactor: 700 / 660 };
+    expect(check(2_000, 10, inAct)).toMatchObject({ maxUsd: 0, line: CREDIT_BLOCKED["in-act"], risky: false });
+    expect(check(2_000, 0, inAct)).toMatchObject({ line: null, risky: false });
+  });
+
+  it("offers \"Pick enough backing\" only past Safe and within what all the free stock could back", () => {
+    expect(check(500, 500).needsFill).toBe(true); // 1,400 ÷ 1.12 = $1,250 with all of it
+    expect(check(500, 1_250).needsFill).toBe(true);
+    expect(check(500, 1_251).needsFill).toBe(false);
+    expect(check(500, 200).needsFill).toBe(false); // Safe already
+    expect(loanCheck({ position: fresh, locks: [line(2_000)], all: [line(2_000)], amountUsd: 1_300, moreToPutInUse: false }).needsFill).toBe(false);
   });
 });

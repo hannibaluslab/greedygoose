@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { AgentMark, FeedCard, FeedDays, type FeedRow } from "./Activity";
 import { Button } from "./Button";
+import { useMoneySheets } from "./MoneySheets";
 import { TabHeader } from "./Screen";
 import { stockColor } from "./StockAvatar";
 import { Switch } from "./Switch";
@@ -31,7 +32,7 @@ export function AgentsView({
 }) {
   return (
     <div className="relative flex min-h-dvh flex-col gap-3 px-5 pt-[calc(env(safe-area-inset-top)+8px)] leading-[normal]">
-      <TabHeader title="Agents" />
+      <TabHeader title="Agents" back="/home" />
       {cards}
       <section aria-label="Your agents" className="flex flex-col gap-2">
         {rows}
@@ -56,7 +57,10 @@ const TONE: Record<AgentCard["tone"], string> = {
   plain: "bg-card shadow-card-elev",
 };
 
-/** A card that needs the user: one sentence, and one or two ways to act on it. Renew opens JAW's own sheet. */
+/**
+ * A card that needs the user: one sentence, and one or two ways to act on it. Add cash and Repay open their sheets over
+ * the tab; Renew opens JAW's own sheet.
+ */
 export function AttentionCard({
   card, onRenew, disabled = false,
 }: {
@@ -66,9 +70,10 @@ export function AttentionCard({
   disabled?: boolean;
 }) {
   const urgent = card.tone !== "plain";
+  const money = useMoneySheets();
   const button = (a: CardAction, i: number) =>
-    a.kind === "link" ? (
-      <Button key={a.label} variant={i === 0 ? "dark" : "primary"} href={a.href}>
+    a.kind === "sheet" ? (
+      <Button key={a.label} variant={i === 0 ? "dark" : "primary"} onClick={a.sheet === "top-up" ? money.topUp : money.repay}>
         {a.label}
       </Button>
     ) : (

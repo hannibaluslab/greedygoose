@@ -1,7 +1,6 @@
 /**
- * Display-only status bands over Aave's health factor (decision D2).
- * The app never caps borrowing below Aave's own limit; these only drive the
- * Safe / Watch / Act label and the extra-confirmation rule.
+ * Status bands over Aave's health factor (decision D2): the Safe / Watch / Act label and the extra-confirmation rule.
+ * Since "Act is the line" (Adrian, 2026-10-15) they also set the app's own credit cap, CREDIT_CAP below.
  */
 export type RiskBands = { safeMin: number; watchMin: number };
 
@@ -11,6 +10,27 @@ export const RISK: RiskBands = {
   /** Health factor at or above this (and below safeMin) is Watch; below is Act. */
   watchMin: 1.1,
 };
+
+/**
+ * Act is the line (Adrian, 2026-10-15: "watch is ok, it is act that is not"). Every way of taking credit may end in
+ * Watch, never in Act, and Free up never ends in Act either. The most credit (and the most freed up) is what keeps the
+ * health factor at or above `minHf`: the Act line plus `marginHf`, so one price update between reading the position
+ * and signing can't land a plan taken at the cap in Act. This replaces D2's "the app does not add its own borrow cap
+ * below Aave's" (it used 99.5% of Aave's limit, a health factor of about 1.005, deep in Act).
+ *
+ * Why 0.02: health moves with the backing's price, so 1.12 → 1.10 is a 1.8% fall (1 − 1.10 / 1.12). Measured on the
+ * seven stocks' Chainlink feeds behind Aave's oracle on Base (3,666 updates, 2026-08-05 → 2026-10-15): an update fires
+ * at about a 0.5% move; 99% of the falls between weekday updates were 0.80% or less and 99.9% were 1.10% or less. Two
+ * were larger than 1.8%, both outside market hours (NVIDIA −1.87% on its earnings evening, Amazon −2.13% overnight);
+ * the worst reopening after a weekend was −1.39%. Interest adds about 0.03% of the debt a day at 10% a year. Each 0.01
+ * of margin costs about 0.9% of the credit at the cap; 1.13 would have covered every single update measured.
+ */
+const CAP_MARGIN_HF = 0.02;
+export const CREDIT_CAP = {
+  marginHf: CAP_MARGIN_HF,
+  /** 1.12. Rounded to the hundredth so the cap's figures don't carry floating-point dust. */
+  minHf: Math.round((RISK.watchMin + CAP_MARGIN_HF) * 100) / 100,
+} as const;
 
 /**
  * Protect's numbers (D18). GooseExecutor holds the live values on-chain, each within hard bounds, and a change waits a

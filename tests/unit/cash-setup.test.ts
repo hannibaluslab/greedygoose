@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { arrivedCoins, arrivedText, arrivedView, askAutomatic, MIN_START_USD, rateText, startEarningShown } from "@/lib/cashSetup";
+import { arrivedCoins, arrivedText, arrivedView, askAutomatic, earningLine, MIN_START_USD, rateText, startEarningShown } from "@/lib/cashSetup";
 import type { AgentStatus } from "@/lib/agents/status";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 
@@ -60,5 +60,14 @@ describe("other dollars in the account", () => {
   it("never name an agent, a limit or a savings pot", () => {
     const words = [arrivedText(arrivedCoins([raw(USDT, 1), raw(USDE, 1), raw(USDBC, 1), 0n])), rateText(0.04)].join(" ");
     expect(words).not.toMatch(/agent|saving|receive|limit|permission|executor/i);
+  });
+});
+
+describe("earningLine: the Cash card's line", () => {
+  it("says what earns: the agent, what's in savings, or nothing yet", () => {
+    expect(earningLine(true, 0)).toBe("Always earning");
+    expect(earningLine(false, 25)).toBe("$25 earning");
+    expect(earningLine(false, 24.567)).toBe("$24.56 earning");
+    expect(earningLine(false, 0.004)).toBe("Not earning yet");
   });
 });

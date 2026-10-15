@@ -4,6 +4,7 @@ import Link from "next/link";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { Button } from "./Button";
 import { ChevronRight, ShieldIcon, SlidersIcon } from "./icons";
+import { useMoneySheets } from "./MoneySheets";
 import { StatusBar, StatusPill } from "./Status";
 import { Switch } from "./Switch";
 import type { PositionData } from "@/hooks/usePosition";
@@ -23,7 +24,8 @@ function protection(status: AgentStatus, capRaw: bigint | null) {
 
 /**
  * Design board "2c · Credit sheet" (HomeCreditSlide.dc.html). The rate sits under the cost (CLAUDE.md: always show
- * the rate and the monthly cost); the settings button and the Protect row open Protect's sheet on the Agents tab.
+ * the rate and the monthly cost); the settings button and the Protect row open Protect's sheet on the Agents tab, and
+ * Repay opens the Repay sheet as this one slides out.
  * "Use credit for buying" (ManageCredit's switch) lives here now that Manage is gone: it's about credit, not an agent.
  */
 export function CreditSheet({
@@ -37,6 +39,7 @@ export function CreditSheet({
   onBuyMore?: () => void;
 }) {
   const agents = useAgents(account);
+  const money = useMoneySheets();
   const [creditForBuying, setCreditForBuying] = useCreditForBuying(account);
   const limit = data.debtUsd + data.availableUsd;
   const usedPct = limit > 0 ? Math.min(100, (data.debtUsd / limit) * 100) : 0;
@@ -116,7 +119,16 @@ export function CreditSheet({
 
         <div className="grid grid-cols-2 gap-2.5">
           <Button variant="soft" href={onBuyMore ? undefined : "/buy"} onClick={onBuyMore}>Buy more</Button>
-          <Button href="/repay" disabled={data.debtUsd <= 0}>Repay</Button>
+          <Button
+            disabled={data.debtUsd <= 0}
+            onClick={() => {
+              onClose();
+              if (onBuyMore) money.repayWithMarket(onBuyMore);
+              else money.repay();
+            }}
+          >
+            Repay
+          </Button>
         </div>
       </SheetSteps>
     </SheetShell>

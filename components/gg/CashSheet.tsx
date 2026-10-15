@@ -8,13 +8,14 @@ import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { Button } from "./Button";
 import { CashActivity } from "./CashActivity";
 import { EarnCard, EarnStep } from "./EarnWithStocks";
+import { useMoneySheets } from "./MoneySheets";
 import { Money } from "./Money";
 import { useEarnOffer, useEarnWithStocks } from "@/hooks/useEarnWithStocks";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import type { PositionData } from "@/hooks/usePosition";
 import type { AgentStatus } from "@/lib/agents/status";
 import { owedBeside } from "@/lib/cashActivity";
-import type { ArrivedView } from "@/lib/cashSetup";
+import { earningLine, type ArrivedView } from "@/lib/cashSetup";
 import { earnDone, earnTenths, pctText, type EarnOffer, type EarnOpen } from "@/lib/earnWithStocks";
 
 type Step = "cash" | "earn";
@@ -29,8 +30,12 @@ export function cashLead(save: AgentStatus, apy: number): string {
   return "Ready to spend.";
 }
 
-/** The cash, big, as the kit draws money, with the Cash card's own line under it. */
+/**
+ * The cash, big, as the kit draws money, with the Cash card's own line under it, and what's owed on credit in the same
+ * card under a hairline (Adrian: one section).
+ */
 export function CashAmount({ data, arrived }: { data: PositionData; arrived: ArrivedView }) {
+  const owed = owedBeside(data.debtUsd, data.cash);
   return (
     <div className="flex flex-col gap-2 rounded-[22px] bg-card p-4 shadow-card-elev">
       <div className="flex items-center justify-between">
@@ -39,50 +44,49 @@ export function CashAmount({ data, arrived }: { data: PositionData; arrived: Arr
       </div>
       <Money value={data.cashUsd} size={38} />
       <span className="text-[13px] text-ink-mid">
-        {arrived.kind === "arriving" ? `${arrived.text} arriving` : data.cash.saveOn ? "Always earning" : "Not earning yet"}
+        {arrived.kind === "arriving" ? `${arrived.text} arriving` : earningLine(data.cash.saveOn, data.savingsUsd)}
       </span>
+      {owed && (
+        <div aria-label="Credit" className="mt-1.5 flex flex-col gap-0.5 border-t border-line-field pt-3">
+          <div className="flex items-center justify-between">
+            <span className="text-[15px] text-ink-mid">You owe on credit</span>
+            <span className="text-[15px] font-semibold">{owed.owed}</span>
+          </div>
+          <span className="text-[12.5px] text-subtle">{owed.line}</span>
+        </div>
+      )}
     </div>
   );
 }
 
 /**
- * Only when something is owed: what is owed and how it's repaid, in its own card under the cash, not inside it
- * (owedBeside: the cash has no credit part on screen, since once credit lands it is the same USDC as the rest, and a
- * Credit Buy's debt never sat in the cash at all; docs/JUSTALAB-DECISIONS.md, "Cash sheet").
+ * Top up, and Repay while something is owed, each a sheet that slides in as this one slides out (`onLeave` closes it).
+ * Buttons name the action. Send is its own tab (2026-10-15), not offered here.
  */
-export function CashOwed({ data }: { data: PositionData }) {
-  const owed = owedBeside(data.debtUsd, data.cash);
-  if (!owed) return null;
-  return (
-    <section aria-label="Credit" className="flex flex-col gap-1 rounded-[22px] bg-card px-4 py-3.5 shadow-card-elev">
-      <div className="flex items-center justify-between">
-        <span className="text-[15px] text-ink-mid">You owe on credit</span>
-        <span className="text-[15px] font-semibold">{owed.owed}</span>
-      </div>
-      <span className="text-[12.5px] text-subtle">{owed.line}</span>
-    </section>
-  );
-}
-
-/** Top up, and Repay while something is owed. Buttons name the action. Send is its own tab (2026-10-15), not offered here. */
-export function CashFooter({ owes }: { owes: boolean }) {
+export function CashFooter({ owes, onLeave }: { owes: boolean; onLeave?: () => void }) {
+  const money = useMoneySheets();
+  const hop = (open: () => void) => () => {
+    onLeave?.();
+    open();
+  };
   return (
     <div className={`grid gap-2.5 ${owes ? "grid-cols-2" : "grid-cols-1"}`}>
-      <Button variant="soft" href="/receive">Top up</Button>
-      {owes && <Button variant="soft" href="/repay">Repay</Button>}
+      <Button variant="soft" onClick={hop(money.topUp)}>Top up</Button>
+      {owes && <Button variant="soft" onClick={hop(money.repay)}>Repay</Button>}
     </div>
   );
 }
 
 /** The Cash step's body, plain values in, so the dev gallery draws it with fixtures. */
-export function CashStep({ data, arrived, offer, onEarn, activity }: { data: PositionData; arrived: ArrivedView; offer: EarnOffer; onEarn: () => void; activity: ReactNode }) {
+export function CashStep({
+  data, arrived, offer, onEarn, activity, onLeave,
+}: { data: PositionData; arrived: ArrivedView; offer: EarnOffer; onEarn: () => void; activity: ReactNode; onLeave?: () => void }) {
   return (
     <>
       <CashAmount data={data} arrived={arrived} />
-      <CashOwed data={data} />
       <EarnCard offer={offer} onOpen={onEarn} />
       {activity}
-      <CashFooter owes={data.debtUsd > 0} />
+      <CashFooter owes={data.debtUsd > 0} onLeave={onLeave} />
     </>
   );
 }
@@ -108,7 +112,7 @@ export function CashSheet({
 }) {
   const [step, setStep] = useState<Step>("cash");
   const [direction, setDirection] = useState<"forward" | "back">("forward");
-  const earn = useEarnOffer(account, data, save, open);
+  const earn = useEarnOffer(account, data, open);
   const tx = useEarnWithStocks();
   const fee = useFeeSupport();
   const { address: signer } = useAccount();
@@ -144,8 +148,8 @@ export function CashSheet({
     reset();
   }, [phase, reset, sent, txHash]);
 
-  // The offer the batch was signed on stays while it confirms: the credit landing can close the live offer (the wallet
-  // grows, so Save's room shrinks) before the receipt is read, and the step mustn't drop back mid-confirmation.
+  // The offer the batch was signed on stays while it confirms: the credit landing can close the live offer (the stocks
+  // back less once it's taken) before the receipt is read, and the step mustn't drop back mid-confirmation.
   const [signedOn, setSignedOn] = useState<EarnOpen | null>(null);
   const offer: EarnOpen | null = earn.offer.kind === "offer" ? earn.offer : tx.busy ? signedOn : null;
 
@@ -171,7 +175,6 @@ export function CashSheet({
             options={earn.options}
             protect={earn.protect}
             sell={earn.sell}
-            capMaxRaw={earn.capMaxRaw}
             phase={tx.phase}
             error={tx.error}
             preview={preview}
@@ -187,7 +190,14 @@ export function CashSheet({
             }}
           />
         ) : (
-          <CashStep data={data} arrived={arrived} offer={earn.offer} onEarn={() => go("earn")} activity={open && <CashActivity account={account} />} />
+          <CashStep
+            data={data}
+            arrived={arrived}
+            offer={earn.offer}
+            onEarn={() => go("earn")}
+            activity={open && <CashActivity account={account} />}
+            onLeave={close}
+          />
         )}
       </SheetSteps>
     </SheetShell>

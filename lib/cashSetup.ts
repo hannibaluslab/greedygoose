@@ -62,3 +62,13 @@ export function arrivedView(list: readonly Arrived[], entry: AgentStatus): Arriv
 
 /** After a conversion, whether to ask "Do this automatically next time?": only with an executor, and no Entry grant yet. */
 export const askAutomatic = (entry: AgentStatus) => entry === "off";
+
+/**
+ * The Cash card's line: "Always earning" with the Save agent on; otherwise what's in savings does earn (Earn with
+ * stocks puts credit there in its own batch), so "$25 earning" rather than "Not earning yet", which only stays when
+ * nothing is in savings.
+ */
+export function earningLine(saveOn: boolean, savingsUsd: number): string {
+  if (saveOn) return "Always earning";
+  return savingsUsd >= 0.01 ? `${formatUsdTrim(Math.floor(savingsUsd * 100) / 100)} earning` : "Not earning yet";
+}

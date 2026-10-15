@@ -104,8 +104,8 @@ describe("agentCards: only when something needs the user", () => {
     const [c] = agentCards({ ...calm, headsUp: { addUsd: 120, sellUsd: 180, when: "at 3:42 PM" } });
     expect(c).toMatchObject({ tone: "act", agent: "Protect", text: "Your credit hit Act. Add $120, or Protect sells $180 at 3:42 PM." });
     expect(c.actions).toEqual([
-      { kind: "link", label: "Add cash", href: "/receive" },
-      { kind: "link", label: "Repay", href: "/repay" },
+      { kind: "sheet", label: "Add cash", sheet: "top-up" },
+      { kind: "sheet", label: "Repay", sheet: "repay" },
     ]);
     expect(agentCards({ ...calm, headsUp: { addUsd: 5, sellUsd: 9, when: "when prices reopen" } })[0].text).toBe(
       "Your credit hit Act. Add $5, or Protect sells $9 when prices reopen.",
@@ -121,7 +121,10 @@ describe("agentCards: only when something needs the user", () => {
       text: "Prices pause at 8:00 PM. If stocks reopen 15% lower, your credit reaches Act.",
       sub: "Repaying $129 now keeps it in Watch. Protect does nothing before Act.",
     });
-    expect(c.actions.map((a) => a.kind === "link" && a.label)).toEqual(["Add cash", "Repay"]);
+    expect(c.actions).toEqual([
+      { kind: "sheet", label: "Add cash", sheet: "top-up" },
+      { kind: "sheet", label: "Repay", sheet: "repay" },
+    ]);
   });
 
   it("offers Renew for an agent that stopped on its own, and not once it's back on", () => {

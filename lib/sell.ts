@@ -6,7 +6,7 @@ import { assertAllowed } from "@/lib/allowlist";
 import { feeBufferRaw, toUsd } from "@/lib/cash";
 import { formatUsdTrim } from "@/lib/formatting";
 import { marketState } from "@/lib/market-hours";
-import { statusFor, type Status } from "@/lib/risk/status";
+import { endsInAct, statusFor, type Status } from "@/lib/risk/status";
 import { SELL_LIMITS, aaveFloorRaw, buildSellCalls, sellEconomics, sellMinOut, type SellQuote } from "@/lib/swap/sell";
 import { USDC, type ReserveAsset } from "@/lib/tokens/registry";
 
@@ -24,7 +24,7 @@ export type SellHolding = { priceUsd: number; freeRaw: bigint; lockedRaw: bigint
 /** The position's fields the plan reads (usePosition's data has them all). */
 export type SellPosition = { collateralUsd: number; avgCf: number; debtUsd: number; debtRaw: bigint; healthFactor: number | null };
 
-export type SellBlock = "paused" | "not-free" | "not-backing" | "nothing-owed" | "past-safe" | "near-limit" | "too-small" | "price";
+export type SellBlock = "paused" | "not-free" | "not-backing" | "nothing-owed" | "past-safe" | "near-limit" | "too-small" | "act" | "price";
 
 export const SELL_BLOCKED: Record<SellBlock, string> = {
   paused: "Aave has paused this stock for now, so it can’t come out of backing. Try again later.",
@@ -34,10 +34,16 @@ export const SELL_BLOCKED: Record<SellBlock, string> = {
   "past-safe": "That would take your credit out of Safe. Sell less, or repay with this sale instead.",
   "near-limit": "Your credit is too close to Aave’s limit to take these shares out before they repay it. Sell fewer, or repay from cash.",
   "too-small": `The smallest sale is ${formatUsdTrim(SELL_LIMITS.minUsd)}.`,
+  act: "That would put your credit in Act. Sell more, or repay from cash.",
   price: `Too big for the market right now: you’d get more than ${SELL_LIMITS.floorBps / 100}% under Aave’s price. Try a smaller amount.`,
 };
 
-/** Headroom under Aave's limit for what comes out before the repay, for interest and price moves (as on the free-up sheet). */
+/**
+ * Headroom under Aave's limit for what comes out before the repay, for interest and price moves. A repay by selling
+ * usually ends healthier, but not always: it repays the sale's floor less the network-fee buffer, so a small sale can
+ * repay less than its shares backed. One that would end in Act, lower than it started, is blocked ("act", Act is the
+ * line, Adrian 2026-10-15).
+ */
 const LIMIT_HEADROOM = 0.995;
 
 export type SellPlan = {
@@ -119,6 +125,7 @@ export function planSell(p: {
   else if (from === "backing" && sharesRaw > maxRaw) block = "past-safe";
   else if (from === "repay" && sharesRaw > maxRaw) block = "near-limit";
   else if (econ.usd < SELL_LIMITS.minUsd || (from === "repay" && repayRaw === 0n)) block = "too-small";
+  else if (from === "repay" && hfAfter !== null && endsInAct(statusFor(hfAfter)) && hfAfter < (pos.healthFactor ?? Infinity)) block = "act";
   else if (quote.amountOut < aaveFloorRaw(sharesRaw, stock, h.priceUsd)) block = "price";
 
   return {

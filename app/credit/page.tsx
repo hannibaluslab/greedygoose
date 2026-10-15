@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
-import { Line, SubHeader, WhiteCard } from "@/components/gg/Screen";
+import { useMoneySheets } from "@/components/gg/MoneySheets";
+import { Line, TabHeader, WhiteCard } from "@/components/gg/Screen";
 import { StatusBar, StatusPill } from "@/components/gg/Status";
 import { ChevronRight, ShieldIcon } from "@/components/gg/icons";
 import { MarketBanner } from "@/components/ui/MarketBanner";
@@ -18,9 +19,10 @@ export default function CreditPage() {
 /** Credit tab — layout of design board "5b · Repay" (CreditOn.dc.html), top card + details. */
 function Credit({ address }: { address: `0x${string}` }) {
   const { data } = usePosition(address);
+  const money = useMoneySheets();
   return (
     <div className="flex min-h-dvh flex-col gap-4 px-5 pb-[34px] pt-[calc(env(safe-area-inset-top)+8px)]">
-      <SubHeader label="Credit" />
+      <TabHeader title="Credit" back="/home" />
       <MarketBanner />
       {!data ? (
         <div aria-busy className="h-[260px] animate-pulse rounded-[22px] bg-chip" />
@@ -67,7 +69,7 @@ function Credit({ address }: { address: `0x${string}` }) {
           </div>
           <div className="grid grid-cols-2 gap-2.5">
             <Link href="/use-credit" className="flex h-[52px] items-center justify-center rounded-[26px] bg-chip text-[15px] font-semibold no-underline">Use credit</Link>
-            <Link href="/repay" className="flex h-[52px] items-center justify-center rounded-[26px] bg-brand text-[15px] font-bold no-underline" style={{ boxShadow: "0 0 14px rgba(212,255,60,0.32)" }}>Repay</Link>
+            <button type="button" onClick={money.repay} className="flex h-[52px] items-center justify-center rounded-[26px] bg-brand text-[15px] font-bold" style={{ boxShadow: "0 0 14px rgba(212,255,60,0.32)" }}>Repay</button>
           </div>
         </>
       )}

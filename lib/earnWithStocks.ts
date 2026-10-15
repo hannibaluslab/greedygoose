@@ -1,25 +1,30 @@
 import { decodeFunctionData, erc20Abi, isAddressEqual } from "viem";
+import { RISK } from "@/config/risk";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { buildLoanCalls, type Call } from "@/lib/aave/tx";
 import type { ActivityItem } from "@/lib/activity/decode";
-import { nyDay } from "@/lib/agents/next";
 import type { AgentStatus } from "@/lib/agents/status";
-import { cashRaw, feeBufferRaw, toUsd, type Cash } from "@/lib/cash";
+import { cashRaw, feeBufferRaw, payFromCash, toUsd, type Cash } from "@/lib/cash";
 import { CREDIT_BLOCKED, planCredit, shortNames, type Backing, type BackingOption, type CreditBlock, type CreditPlan, type CreditPosition } from "@/lib/creditBuy";
 import { formatShares, formatUsdTrim, inWords } from "@/lib/formatting";
-import { STATUS_LABEL } from "@/lib/risk/status";
+import { GUARDIAN } from "@/lib/guardian/config";
+import { aaveV3PoolAbi } from "@/lib/guardian/abis";
+import { buildAddSavingsCalls } from "@/lib/guardian/permission";
+import { STATUS_LABEL, statusFor } from "@/lib/risk/status";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
+import type { HealthFloor } from "@/lib/tx/prepared";
 
 /*
- * Earn with stocks (Adrian, 2026-10-15: "use your stock to add more cash to get yield"): put stocks to work as backing
- * and take credit as cash in one batch, so that cash earns the cash rate. Pure, so the offer, its caps and its words are
- * unit-tested and the dev gallery draws every state.
+ * Earn with stocks (Adrian, 2026-10-15: "use your stock to add more cash to get yield"; then "the user should be able to
+ * put stocks get cash in saving"): put stocks to work as backing, take credit, and put exactly that credit where the
+ * cash earns, in one user-signed batch. Pure, so the offer, its cap and its words are unit-tested and the dev gallery
+ * draws every state.
  *
- * Cash earns only through the Save job (there is no user-signed savings supply, lib/allowlist.ts): the credit lands in
- * the wallet and Save's next run moves it. So the offer needs earning on, and it is capped at what Save can move today.
- * Both rates are variable: the cash rate (Aave V3's USDC supply) and the credit's (the Hub's drawn rate with the
- * account's risk premium), each as an APY.
+ * The credit earns from the moment the batch lands: the batch itself puts it in savings (the allowlist's one
+ * user-signed savings supply, `saveTo`), so no agent is needed and nothing waits for Save. Both rates are variable: the
+ * cash rate (Aave V3's USDC supply) and the credit's (the Hub's drawn rate with the account's risk premium), each as an
+ * APY.
  */
 
 // ── Rates ────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -54,79 +59,30 @@ export function marginalApy(p: { debtUsd: number; amountUsd: number; apyNow: num
   return Math.max(p.apyAfter, ((p.debtUsd + p.amountUsd) * p.apyAfter - p.debtUsd * p.apyNow) / p.amountUsd);
 }
 
-// ── What Save can move today ─────────────────────────────────────────────────────────────────────────────────────────
-
-/**
- * What Save reads (GooseExecutor's SaveJob): what's left of its grant's daily USDC limit (the manager's period), the
- * wallet's USDC, the executor's keep-back, smallest save and saves a day (`amounts()`), and the account's saves today
- * (`accounts()`: the New York day of the last save and the count on it).
- */
-export type SaveRoomInput = {
-  leftRaw: bigint;
-  walletRaw: bigint;
-  keepBackRaw: bigint;
-  minSaveRaw: bigint;
-  savesDay: number;
-  savesToday: number;
-  maxSavesPerDay: number;
-  nowSec: number;
-};
-
-/** Wallet USDC Save would sweep now: what's above the keep-back. */
-const idleRaw = (r: SaveRoomInput) => (r.walletRaw > r.keepBackRaw ? r.walletRaw - r.keepBackRaw : 0n);
-
-/**
- * Credit Save's next run moves in full, in USDC units: one run sweeps everything above the keep-back up to what's left
- * of today's limit, so the room is that limit less what already waits in the wallet; none once today's saves are used
- * up. The count resets on a new New York day, as SaveJob's `_savesToday` does.
- */
-export function saveRoomRaw(r: SaveRoomInput): bigint {
-  const today = r.savesDay === nyDay(r.nowSec) ? r.savesToday : 0;
-  if (today >= r.maxSavesPerDay) return 0n;
-  const idle = idleRaw(r);
-  return r.leftRaw > idle ? r.leftRaw - idle : 0n;
-}
-
-/** The smallest amount: $1, or more when Save's smallest save is more than what already waits in the wallet. */
-export function minEarnUsd(r: SaveRoomInput): number {
-  const idle = idleRaw(r);
-  const short = r.minSaveRaw > idle ? Math.ceil(toUsd(r.minSaveRaw - idle)) : 0;
-  return Math.max(1, short);
-}
-
 // ── The offer ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /** Why the card offers nothing, in its one line. */
 export const EARN_CLOSED = {
-  off: "Start earning first. Then Earn with stocks opens.",
-  starting: "Your cash starts earning in a moment. Then Earn with stocks opens.",
   "no-stocks": "Earn with stocks needs stocks that can back credit.",
   "costs-more": "Credit costs more than your cash earns right now.",
   paused: "New credit is paused right now. Try again later.",
-  today: "Your cash can’t start earning on more today. Try again tomorrow.",
   credit: "Your stocks can’t back more credit right now.",
+  "in-act": CREDIT_BLOCKED["in-act"],
   fee: CREDIT_BLOCKED.fee,
   unread: "We couldn’t check this right now. Try again in a moment.",
 } as const;
-/** Why it's closed: one of EARN_CLOSED, or "small" (the stocks can back less than the smallest amount, earnSmallText). */
-export type EarnClosed = keyof typeof EARN_CLOSED | "small";
+export type EarnClosed = keyof typeof EARN_CLOSED;
 
-/** The stocks can back some credit, but less than the smallest amount Save moves (minEarnUsd above $1). */
-export const earnSmallText = (minUsd: number) => `Earn with stocks starts at ${formatUsdTrim(minUsd)}, and your stocks can back less right now.`;
-
-/** What binds the most: what Save can move today, or the credit the stocks can back (and the USDC available). */
-export type EarnLimit = "today" | "credit";
+/** The smallest amount, the minimum buy's: under $1 a row's cost and earnings round to nothing. */
+export const EARN_MIN_USD = 1;
 
 export type EarnOffer =
-  | { kind: "hidden" }
   | { kind: "loading" }
   /** Nothing to offer, and why; with the rates when they are the reason. */
   | { kind: "closed"; why: EarnClosed; text: string; rates?: EarnRates }
-  | { kind: "offer"; rates: EarnRates; maxUsd: number; maxSafeUsd: number; minUsd: number; limitedBy: EarnLimit };
+  | { kind: "offer"; rates: EarnRates; maxUsd: number; maxSafeUsd: number; minUsd: number };
 
 export type EarnInput = {
-  /** Earning (the Save job): useCashSetup's `save`. */
-  save: AgentStatus;
   /** What the cash earns and what credit costs now, each an APY. */
   cashApy: number;
   creditApy: number;
@@ -134,57 +90,45 @@ export type EarnInput = {
   /** backingOptions on the live collateral factors; undefined while they load. */
   options: BackingOption[] | undefined;
   cash: Cash;
-  /** What Save can move today; null while it loads. */
-  room: SaveRoomInput | null;
-  /** A read the offer waits on (the stocks' backing, what Save can move today) failed: one line, not a skeleton. */
+  /** The stocks' backing couldn't be read: one line, not a skeleton. */
   unread?: boolean;
   now?: Date;
 };
 
-const closed = (why: Exclude<EarnClosed, "small">, rates?: EarnRates): EarnOffer => ({ kind: "closed", why, text: EARN_CLOSED[why], ...(rates ? { rates } : {}) });
+const closed = (why: EarnClosed, rates?: EarnRates): EarnOffer => ({ kind: "closed", why, text: EARN_CLOSED[why], ...(rates ? { rates } : {}) });
 
 /**
- * Whether the Cash sheet offers Earn with stocks, and up to how much. The first rule that matches wins:
- * no executor (no card); loading (or a line when a read it waits on failed); earning off or starting; no stocks that
- * can back credit; credit costing as much as the cash earns or more (as shown, in tenths); new credit paused; nothing
- * left today (Save's room) or nothing the stocks can back (99.5% of the credit limit, as /use-credit, and the USDC
- * available), or less than the smallest amount; no cash for the network fee.
+ * Whether the Cash sheet offers Earn with stocks, and up to how much. It needs no agent: the batch puts the credit
+ * where the cash earns itself. The first rule that matches wins: loading (or a line when the read it waits on failed);
+ * no stocks that can back credit; credit costing as much as the cash earns or more (as shown, in tenths); new credit
+ * paused; the credit already in Act (Act is the line: no more is taken until it's out); less than the smallest amount
+ * the stocks can back (creditCap, never past the Act line's margin, as every way of taking credit; and the USDC
+ * available); no cash for the network fee.
  */
 export function earnOffer(i: EarnInput): EarnOffer {
-  if (i.save === "unconfigured") return { kind: "hidden" };
-  if (i.save === "loading") return { kind: "loading" };
-  if (i.save === "off" || i.save === "starting") return closed(i.save);
-  if (!i.options || !i.room) return i.unread ? closed("unread") : { kind: "loading" };
+  if (!i.options) return i.unread ? closed("unread") : { kind: "loading" };
   if (i.options.length === 0 && i.position.collateralUsd === 0) return closed("no-stocks");
   const rates = earnRates(i.cashApy, i.creditApy);
   if (rates.left <= 0) return closed("costs-more", rates);
   if (i.position.borrowPaused) return closed("paused");
+  if (statusFor(i.position.healthFactor) === "act") return closed("in-act");
 
   const plan0 = planCredit({ position: i.position, options: i.options, creditRaw: 0n, cash: i.cash, now: i.now });
-  const creditUsd = Math.min(plan0.maxUsd, i.position.usdcLiquidity);
-  const roomUsd = toUsd(saveRoomRaw(i.room));
-  const limitedBy: EarnLimit = roomUsd < creditUsd ? "today" : "credit";
-  const maxUsd = Math.floor(Math.min(creditUsd, roomUsd));
-  const minUsd = minEarnUsd(i.room);
-  if (maxUsd < minUsd) {
-    // Save's smallest save raised the minimum above what the stocks can back: they can back some, just not that much.
-    if (limitedBy === "credit" && minUsd > 1 && maxUsd >= 1) return { kind: "closed", why: "small", text: earnSmallText(minUsd) };
-    return closed(limitedBy);
-  }
+  const maxUsd = Math.floor(Math.min(plan0.maxUsd, i.position.usdcLiquidity));
+  if (maxUsd < EARN_MIN_USD) return closed("credit");
   if (cashRaw(i.cash) < feeBufferRaw) return closed("fee");
-  return { kind: "offer", rates, maxUsd, maxSafeUsd: plan0.maxSafeUsd, minUsd, limitedBy };
+  return { kind: "offer", rates, maxUsd, maxSafeUsd: plan0.maxSafeUsd, minUsd: EARN_MIN_USD };
 }
 
 export type EarnOpen = Extract<EarnOffer, { kind: "offer" }>;
 
-/** The cap in words: "Up to $1,000 today, so all of it starts earning." or "Up to $1,000.". */
-const limitText = (o: EarnOpen) =>
-  o.limitedBy === "today" ? `Up to ${formatUsdTrim(o.maxUsd)} today, so all of it starts earning.` : `Up to ${formatUsdTrim(o.maxUsd)}.`;
+/** The cap in words: "Up to $1,000.". */
+const limitText = (o: EarnOpen) => `Up to ${formatUsdTrim(o.maxUsd)}.`;
 
-/** The amount field's hint: the cap, and for the credit cap the Safe line when it's lower. */
+/** The amount field's hint: the cap, and the Safe line when it's lower. */
 export function earnHint(o: EarnOpen): string {
   const safe = Math.floor(o.maxSafeUsd);
-  return o.limitedBy === "credit" && safe < o.maxUsd ? `${limitText(o)} Stay under ${formatUsdTrim(safe)} to stay Safe.` : limitText(o);
+  return safe < o.maxUsd ? `${limitText(o)} Stay under ${formatUsdTrim(safe)} to stay Safe.` : limitText(o);
 }
 
 // ── One amount ───────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -228,9 +172,14 @@ export const EARN_BLOCKED: Record<CreditBlock, string> = {
   paused: EARN_CLOSED.paused,
   "no-liquidity": "There isn’t enough credit available right now. Try a smaller amount.",
   "over-free": CREDIT_BLOCKED["over-free"],
+  "in-act": CREDIT_BLOCKED["in-act"],
+  act: CREDIT_BLOCKED.act,
   "too-much": "That’s more credit than your stocks can back right now. Try a smaller amount.",
   fee: CREDIT_BLOCKED.fee,
 };
+
+/** Its batch is stopped if the health on Aave after it, read in its own simulation, is in Act (lib/creditBuy.ts CREDIT_FLOOR). */
+export const EARN_FLOOR: HealthFloor = { minHf: RISK.watchMin, stop: EARN_BLOCKED.act };
 
 export const EARN_COSTS_MORE = "At this amount, credit costs more than your cash earns right now.";
 
@@ -243,7 +192,7 @@ export function earnBlock(q: EarnQuote, o: EarnOpen): string | null {
   return null;
 }
 
-/** Why it can't be signed: a block, the rate after it still being read, or a Watch/Act ending without the tick (D2). */
+/** Why it can't be signed: a block (ending in Act is one), the rate after it still being read, or a Watch ending without the tick (D2). */
 export function earnStop(q: EarnQuote, o: EarnOpen, confirmedRisk: boolean): string | null {
   const block = earnBlock(q, o);
   if (block) return block;
@@ -286,7 +235,7 @@ export function earnSmallPrint(p: {
 }): string {
   const moves = [
     ...p.backing.map((b) => `${formatShares(b.shares)} ${ticker(b.symbol)} goes in use to back credit`),
-    `${formatUsdTrim(p.amountUsd)} of credit comes to your cash, where it starts earning soon`,
+    `${formatUsdTrim(p.amountUsd)} of credit comes to your cash and starts earning`,
   ];
   // What's owed rounds up, as on Home: never shown as less than it is.
   return (
@@ -295,11 +244,11 @@ export function earnSmallPrint(p: {
   );
 }
 
-/** The risk tick (D2), when it ends in Watch or Act. */
+/** The risk tick (D2), when it ends in Watch (ending in Act is blocked). */
 export const earnTick = (after: CreditPlan["after"]) =>
   `I understand this puts my credit in ${STATUS_LABEL[after]}. If my stocks fall, part of them can be sold to repay what I owe.`;
 
-export const earnDone = (amountUsd: number) => `${formatUsdTrim(amountUsd)} is in your cash. It starts earning soon.`;
+export const earnDone = (amountUsd: number) => `${formatUsdTrim(amountUsd)} is in your cash, earning.`;
 
 // ── The batch ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -323,20 +272,34 @@ const spokeCall = (c: Call | undefined) => {
   }
 };
 
+const savingsCall = (c: Call | undefined) => {
+  if (!c || !isAddressEqual(c.to, GUARDIAN.AAVE_V3_POOL)) return null;
+  try {
+    return decodeFunctionData({ abi: aaveV3PoolAbi, data: c.data });
+  } catch {
+    return null;
+  }
+};
+
 /**
- * Earn with stocks' batch, checked against the screen: for each stock the plan puts in use, an exact approve to the
- * spoke, the supply and "use as backing", all for the user; then the credit, once, as USDC to the user, last. Nothing
- * else: no swap, no transfer, no savings call (Save moves the credit, under the hood).
+ * Earn with stocks' batch, checked against the screen: first, only when the wallet can't be counted on for the network
+ * fee, a savings withdrawal to the user (payFromCash, as every spend from cash); then for each stock the plan puts in
+ * use, an exact approve to the spoke, the supply and "use as backing", all for the user; then the credit, once, as USDC
+ * to the user; then an approve of exactly that credit to Aave V3's pool and its supply into savings for the user,
+ * referral code 0, last. Nothing else: no swap, no transfer, no other savings call.
  */
 export function assertEarn(user: Address, calls: Call[], review: { creditRaw: bigint; backing: readonly Backing[] }): Call[] {
   if (review.creditRaw <= 0n) throw new Error("Blocked: Earn with stocks takes credit");
-  if (calls.length !== review.backing.length * 3 + 1) throw new Error("Blocked: the batch differs from the screen");
   if (calls.some((c) => c.value !== 0n)) throw new Error("Blocked: unexpected value");
+  const w = savingsCall(calls[0]);
+  const lead = w?.functionName === "withdraw" ? 1 : 0;
+  if (lead && (!isAddressEqual(w!.args[0], USDC.address) || !isAddressEqual(w!.args[2], user))) throw new Error("Blocked: unexpected savings withdrawal");
+  if (calls.length !== lead + review.backing.length * 3 + 3) throw new Error("Blocked: the batch differs from the screen");
   review.backing.forEach((b, k) => {
     const stock = EQUITIES.find((e) => isAddressEqual(e.address, b.stock.address));
     if (!stock || b.raw <= 0n) throw new Error("Blocked: unexpected backing");
     const id = BigInt(stock.reserveId);
-    const [approve, supply, use] = calls.slice(k * 3, k * 3 + 3);
+    const [approve, supply, use] = calls.slice(lead + k * 3, lead + k * 3 + 3);
     const a = isAddressEqual(approve.to, stock.address) ? approveOf(approve) : null;
     if (!a || !isAddressEqual(a[0], AAVE.SPOKE) || a[1] !== b.raw) throw new Error("Blocked: the approval differs from the screen");
     const s = spokeCall(supply);
@@ -348,7 +311,8 @@ export function assertEarn(user: Address, calls: Call[], review: { creditRaw: bi
       throw new Error("Blocked: the backing differs from the screen");
     }
   });
-  const borrow = spokeCall(calls.at(-1));
+  const [credit, approveSave, save] = calls.slice(-3);
+  const borrow = spokeCall(credit);
   if (
     borrow?.functionName !== "borrow" ||
     borrow.args[0] !== BigInt(USDC.reserveId) ||
@@ -357,19 +321,40 @@ export function assertEarn(user: Address, calls: Call[], review: { creditRaw: bi
   ) {
     throw new Error("Blocked: the credit differs from the screen");
   }
+  const a = isAddressEqual(approveSave.to, USDC.address) ? approveOf(approveSave) : null;
+  if (!a || !isAddressEqual(a[0], GUARDIAN.AAVE_V3_POOL) || a[1] !== review.creditRaw) throw new Error("Blocked: the approval differs from the credit");
+  const s = savingsCall(save);
+  if (
+    s?.functionName !== "supply" ||
+    !isAddressEqual(s.args[0], USDC.address) ||
+    s.args[1] !== review.creditRaw ||
+    !isAddressEqual(s.args[2], user) ||
+    s.args[3] !== 0
+  ) {
+    throw new Error("Blocked: what earns differs from the credit");
+  }
   return calls;
 }
 
-/** The batch: put the plan's backing in use and take the credit to the user's own account (lib/aave/tx.ts), checked. */
-export function buildEarnCalls(p: { user: Address; backing: readonly Backing[]; creditRaw: bigint }): Call[] {
-  const calls = buildLoanCalls({ user: p.user, locks: [...p.backing], borrowRaw: p.creditRaw });
+/**
+ * The batch: put the plan's backing in use and take the credit (lib/aave/tx.ts), then put exactly that credit where
+ * the cash earns, for the user (buildAddSavingsCalls: an exact approve to Aave V3's pool and its supply). Cash pays the
+ * network fee, from savings first when the wallet can't (payFromCash). The allowlist runs with the savings declared
+ * (`saveTo`), and the whole batch is checked against the screen (assertEarn).
+ */
+export function buildEarnCalls(p: { user: Address; backing: readonly Backing[]; creditRaw: bigint; cash: Cash }): Call[] {
+  const loan = buildLoanCalls({ user: p.user, locks: [...p.backing], borrowRaw: p.creditRaw });
+  const calls = payFromCash(p.user, 0n, p.cash, [...loan, ...buildAddSavingsCalls(p.user, p.creditRaw)], { saveTo: p.user });
   return assertEarn(p.user, calls, { creditRaw: p.creditRaw, backing: p.backing });
 }
 
-/** What Activity shows while it confirms: the backing put in use and the credit that came to the cash. */
+/**
+ * What Activity shows while it confirms, as the receipt will read (lib/activity/decode.ts): the credit that came to the
+ * cash, earning, then the backing put in use.
+ */
 export function earnActivity(plan: CreditPlan): ActivityItem[] {
   return [
+    { kind: "earn", symbol: USDC.symbol, amount: toUsd(plan.creditRaw) },
     ...plan.backing.map((b) => ({ kind: "supply" as const, symbol: b.stock.symbol, amount: Number(b.raw) / 10 ** b.stock.decimals })),
-    { kind: "borrow", symbol: USDC.symbol, amount: toUsd(plan.creditRaw) },
   ];
 }

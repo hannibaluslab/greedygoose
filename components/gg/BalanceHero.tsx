@@ -16,7 +16,8 @@ export function BalanceHero({
   const k = fit(value);
   return (
     <div className={`num grid ${even ? "grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" : "grid-cols-[auto_1fr]"} items-baseline px-[16.75px] leading-[normal]`}>
-      <div className="flex items-center gap-1.5 pb-1">
+      {/* The left column keeps its own width, the hero's proportion (Adrian); a long right line wraps instead. */}
+      <div className="flex items-center gap-1.5 whitespace-nowrap pb-1">
         <span className="label">{label}</span>
         {info && <InfoButton {...info} />}
       </div>
@@ -37,9 +38,9 @@ export function BalanceHero({
 
       {(sub || side.sub) && (
         <>
-          <div className="pt-[5px] text-[13px] text-ink-mid">{sub}</div>
+          <div className="whitespace-nowrap pt-[5px] text-[13px] text-ink-mid">{sub}</div>
           {/* Stretched when empty, so the hairline still runs down beside the line under the big figure. */}
-          <Divided className={`whitespace-nowrap pt-[5px] text-[13px] text-ink-mid ${side.sub ? "" : "self-stretch"}`}>{side.sub}</Divided>
+          <Divided className={`min-w-0 pt-[5px] text-[13px] text-ink-mid ${side.sub ? "" : "self-stretch"}`}>{side.sub}</Divided>
         </>
       )}
     </div>

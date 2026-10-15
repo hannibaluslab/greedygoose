@@ -7,6 +7,7 @@ import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { AmountArrow, AmountBadge, AmountField, YouGet, YouGetCash } from "./AmountField";
 import { AssetPicker, assetMark, type PickerRow } from "./AssetPicker";
 import { Button } from "./Button";
+import { useMoneySheets } from "./MoneySheets";
 import { SmallPrint } from "./BuySheet";
 import { SellSmallPrint } from "./StockSheet";
 import { StockAvatar, tickerOf } from "./StockAvatar";
@@ -68,6 +69,7 @@ export function TradeSheet({
 }) {
   const { isConnected } = useAccount();
   const fee = useFeeSupport();
+  const money = useMoneySheets();
   const [form, setForm] = useState<TradeForm>(() => ({ legs: defaultLegs(data, { from: seedFrom, to: seedTo }), amount: "", all: false }));
   // Opened with nothing to trade: the legs appear once there is something (money arrives while it's open).
   const legs = form.legs ?? defaultLegs(data, { from: seedFrom, to: seedTo });
@@ -182,7 +184,16 @@ export function TradeSheet({
           <div className="flex flex-col items-start gap-3 pt-1">
             <h3 className="m-0 text-[17px] font-semibold tracking-[-0.01em]">{TRADE_COPY.emptyTitle}</h3>
             <p className="m-0 text-[14px] leading-[1.4] text-ink-mid">{emptyLine(data)}</p>
-            <Button variant="dark" href="/receive" className="mt-1 w-full">{TRADE_COPY.topUp}</Button>
+            <Button
+              variant="dark"
+              onClick={() => {
+                onClose();
+                money.topUp();
+              }}
+              className="mt-1 w-full"
+            >
+              {TRADE_COPY.topUp}
+            </Button>
           </div>
         ) : (
           <>

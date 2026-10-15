@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { AddMoneyView } from "@/components/gg/AddMoney";
+import { TopUpSheetView } from "@/components/gg/AddMoney";
 import { AgentsFeed } from "@/components/gg/Agents";
 import { BalanceHero, TodayChange } from "@/components/gg/BalanceHero";
 import { CashCard, CreditCard } from "@/components/gg/Cards";
@@ -35,14 +35,13 @@ import { CashSheetDemo, SHEET_VIEWS, type SheetView } from "./CashSheetDemo";
  *   ?view=convert                 "Turn into cash" with one coin under the floor: it stays as it is
  *   ?view=auto                    once it lands, "Do this automatically next time?"
  *   ?view=done                    converted, with nothing to ask (no executor, or it already converts on its own)
- *   ?view=pay | pay-setup         Pay while the cash earns, and before earning is set up
+ *   ?view=pay | pay-setup         the Top up sheet over Home, while the cash earns and before earning is set up
  *   ?view=activity                Activity with the cash's own events
  * The Cash sheet (CashSheetDemo), over Home:
  *   ?view=sheet                   earning, nothing owed, Earn with stocks offered, no activity yet
  *   ?view=sheet-owed              $300 owed beside the cash, and the week's cash activity
- *   ?view=sheet-start             before earning is on: "Start earning first"
+ *   ?view=sheet-start             before earning is on (as on the public link): Earn with stocks still offered
  *   ?view=sheet-costs-more        credit costs more than the cash earns: the rates, and no button
- *   ?view=sheet-no-room           today's saves are used up: "Try again tomorrow"
  *   ?view=earn | earn-watch       the earn step at $500 (Safe), and at $1,000 (Watch, with the risk tick)
  *   ?view=sheet-activity          the activity with a row open (&open=n in the screenshots)
  *   ?view=sheet-error             part of the activity couldn't be read
@@ -72,7 +71,12 @@ export function CashGallery() {
   if (!nowSec) return null;
 
   if (view === "pay" || view === "pay-setup") {
-    return <AddMoneyView address={ADDRESS} name="sam.justan.id" rate={view === "pay" ? RATE : null} onCopy={noop} />;
+    return (
+      <HomeFixture
+        cards={null}
+        sheet={<TopUpSheetView open onClose={noop} address={ADDRESS} name="sam.justan.id" rate={view === "pay" ? RATE : null} onCopy={noop} />}
+      />
+    );
   }
   if (view === "activity") return <ActivityFixture nowSec={nowSec} />;
   if (isSheetView(view)) return <HomeFixture cards={null} sheet={<CashSheetDemo view={view} nowSec={nowSec} />} />;
@@ -155,7 +159,7 @@ function HomeFixture({ note, cards, sheet }: { note?: string; cards: ReactNode; 
       </section>
       <section className="flex flex-col gap-2.5 px-5 pt-[18px] empty:hidden">{cards}</section>
       <section className="grid grid-cols-2 gap-2.5 px-5 pt-[18px]">
-        <CashCard cashUsd={400} earning note={note} href="#" />
+        <CashCard cashUsd={400} earning="Always earning" note={note} href="#" />
         <CreditCard debtUsd={600} status="safe" monthlyCostUsd={3} availableUsd={800} href="#" />
       </section>
       <TabBar />

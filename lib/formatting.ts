@@ -34,11 +34,11 @@ export const formatSignedUsd = (n: number) => {
 };
 
 /**
- * What credit costs, as a line: "$3 / month", or under a cent a month "under $0.01 / month" so a small credit never
+ * What credit costs, as a line: "$3 / month", or under a cent a month "$0.01 / month" (rounded up) so a small credit never
  * reads as free (Adrian: "$0.00 / month" on $1 of credit). Nothing owed is "$0 / month".
  */
 export function monthlyCostText(monthlyUsd: number): string {
   if (monthlyUsd <= 0) return "$0 / month";
-  if (monthlyUsd < 0.01) return "under $0.01 / month";
+  if (monthlyUsd < 0.01) return "$0.01 / month";
   return `${monthlyUsd < 10 ? usd.format(Number(monthlyUsd.toFixed(2))) : formatUsdTrim(Math.round(monthlyUsd))} / month`;
 }

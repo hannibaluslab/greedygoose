@@ -54,6 +54,14 @@ export function buildLoanCalls(p: { user: `0x${string}`; locks: { stock: Reserve
   return assertAllowed(p.user, [...lock, ...borrow]);
 }
 
+/**
+ * A read of the account on Aave (`getUserAccountData`), put after a simulated batch so the health factor it lands at is
+ * checked before JAW's sheet (lib/tx/prepared.ts checkPlan, Act is the line). Only ever simulated, never signed: it is
+ * not part of any batch and isn't on the allowlist.
+ */
+export const accountDataRead = (user: `0x${string}`): Call =>
+  spoke(encodeFunctionData({ abi: spokeAbi, functionName: "getUserAccountData", args: [user] }));
+
 /** Borrow USDC to the caller (the user's own account). */
 export function buildBorrowCalls(p: { user: `0x${string}`; amountRaw: bigint }): Call[] {
   if (p.amountRaw <= 0n) throw new Error("Amount must be positive");

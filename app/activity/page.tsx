@@ -22,7 +22,7 @@ function Activity({ address }: { address: `0x${string}` }) {
   const nowSec = useNowSec();
   return (
     <div className="relative flex min-h-dvh flex-col gap-4 px-5 pt-[calc(env(safe-area-inset-top)+8px)]">
-      <TabHeader title="Activity" />
+      <TabHeader title="Activity" back="/home" />
       <AgentsFeed
         title={null}
         empty="Nothing yet. Buys, backing, credit and repayments made in GreedyGoose show up here, and so does money arriving in your cash."

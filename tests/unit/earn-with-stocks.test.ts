@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { encodeFunctionData, erc20Abi } from "viem";
+import { decodeFunctionData, encodeFunctionData, erc20Abi } from "viem";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { buildBorrowCalls, type Call } from "@/lib/aave/tx";
-import { nyDay } from "@/lib/agents/next";
 import type { Cash } from "@/lib/cash";
 import type { BackingOption, CreditPosition } from "@/lib/creditBuy";
 import {
@@ -13,22 +12,22 @@ import {
   buildEarnCalls,
   earnActivity,
   earnBlock,
+  earnDone,
   earnHint,
   earnOffer,
   earnQuote,
   earnRates,
   earnRiskLine,
   earnSmallPrint,
-  earnSmallText,
   earnStop,
   marginalApy,
-  minEarnUsd,
   pctText,
-  saveRoomRaw,
   type EarnInput,
   type EarnOpen,
-  type SaveRoomInput,
 } from "@/lib/earnWithStocks";
+import { aaveV3PoolAbi } from "@/lib/guardian/abis";
+import { GUARDIAN } from "@/lib/guardian/config";
+import { buildAddSavingsCalls, buildWithdrawSavingsCalls } from "@/lib/guardian/permission";
 import { buildBuyCalls } from "@/lib/swap/buy";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
@@ -53,26 +52,15 @@ const position = (over: Partial<CreditPosition> = {}): CreditPosition => ({
   ...over,
 });
 const cash: Cash = { walletRaw: usdc(1), savingsRaw: usdc(2_399), saveOn: true };
-const room = (over: Partial<SaveRoomInput> = {}): SaveRoomInput => ({
-  leftRaw: usdc(1_000),
-  walletRaw: usdc(1),
-  keepBackRaw: usdc(1),
-  minSaveRaw: usdc(1),
-  savesDay: nyDay(NOW),
-  savesToday: 1,
-  maxSavesPerDay: 6,
-  nowSec: NOW,
-  ...over,
-});
+/** The public link: no agent, so nothing earns yet and all the cash is in the wallet. */
+const noAgent: Cash = { walletRaw: usdc(40), savingsRaw: 0n, saveOn: false };
 /** Today's live rates (2026-10-15): cash 4.13% APY, credit 2.14% APY. */
 const input = (over: Partial<EarnInput> = {}): EarnInput => ({
-  save: "on",
   cashApy: 0.0413,
   creditApy: 0.0214,
   position: position(),
   options: [option(1_400)],
   cash,
-  room: room(),
   now: new Date(NOW * 1000),
   ...over,
 });
@@ -82,27 +70,20 @@ const open = (o: ReturnType<typeof earnOffer>): EarnOpen => {
 };
 
 describe("earnOffer: whether the Cash sheet offers it", () => {
-  it("has no card without an executor, and a skeleton while anything loads", () => {
-    expect(earnOffer(input({ save: "unconfigured" }))).toEqual({ kind: "hidden" });
-    expect(earnOffer(input({ save: "loading" }))).toEqual({ kind: "loading" });
+  it("shows a skeleton while the stocks' backing loads, and one line once that read failed", () => {
     expect(earnOffer(input({ options: undefined }))).toEqual({ kind: "loading" });
-    expect(earnOffer(input({ room: null }))).toEqual({ kind: "loading" });
-  });
-
-  it("says one line instead of a skeleton once a read it waits on failed", () => {
-    expect(earnOffer(input({ room: null, unread: true }))).toMatchObject({ kind: "closed", why: "unread", text: "We couldn’t check this right now. Try again in a moment." });
-    expect(earnOffer(input({ options: undefined, unread: true }))).toMatchObject({ kind: "closed", why: "unread" });
-    // Once everything it needs is read, a failed refresh doesn't take the offer away.
+    expect(earnOffer(input({ options: undefined, unread: true }))).toMatchObject({ kind: "closed", why: "unread", text: "We couldn’t check this right now. Try again in a moment." });
+    // Once it's read, a failed refresh doesn't take the offer away.
     expect(earnOffer(input({ unread: true }))).toMatchObject({ kind: "offer" });
-    // Earning off still says so first.
-    expect(earnOffer(input({ save: "off", room: null, unread: true }))).toMatchObject({ why: "off" });
   });
 
-  it("asks to start earning first: cash earns only through Save", () => {
-    expect(earnOffer(input({ save: "off" }))).toMatchObject({ kind: "closed", why: "off", text: "Start earning first. Then Earn with stocks opens." });
-    expect(earnOffer(input({ save: "starting" }))).toMatchObject({ kind: "closed", why: "starting", text: EARN_CLOSED.starting });
-    // Off doesn't wait on the rest.
-    expect(earnOffer(input({ save: "off", options: undefined, room: null }))).toMatchObject({ kind: "closed", why: "off" });
+  it("needs no agent: offered with earning off, as on the public link", () => {
+    const o = open(earnOffer(input({ cash: noAgent })));
+    expect(o).toMatchObject({ kind: "offer", minUsd: 1 });
+    // The same offer whether the Save job runs or not: nothing in it waits for an agent.
+    expect(earnOffer(input({ cash: { ...noAgent, saveOn: true } }))).toEqual(o);
+    // The old closed states are gone.
+    expect(Object.keys(EARN_CLOSED)).toEqual(["no-stocks", "costs-more", "paused", "credit", "in-act", "fee", "unread"]);
   });
 
   it("needs stocks that can back credit", () => {
@@ -128,70 +109,46 @@ describe("earnOffer: whether the Cash sheet offers it", () => {
 
   it("isn't offered while new credit is paused, or with no cash for the network fee", () => {
     expect(earnOffer(input({ position: position({ borrowPaused: true }) }))).toMatchObject({ why: "paused", text: "New credit is paused right now. Try again later." });
-    const poor: Cash = { walletRaw: usdc(0.2), savingsRaw: usdc(0.2), saveOn: true };
-    expect(earnOffer(input({ cash: poor, room: room({ walletRaw: poor.walletRaw }) }))).toMatchObject({ why: "fee" });
+    const poor: Cash = { walletRaw: usdc(0.2), savingsRaw: usdc(0.2), saveOn: false };
+    expect(earnOffer(input({ cash: poor }))).toMatchObject({ why: "fee" });
+    // The fee can come from savings: wallet empty, savings enough.
+    expect(earnOffer(input({ cash: { walletRaw: 0n, savingsRaw: usdc(0.5), saveOn: true } })).kind).toBe("offer");
   });
 });
 
-describe("earnOffer: caps", () => {
-  it("is the least of what Save moves today, the credit the stocks back and the USDC available", () => {
-    // Save's room binds: $1,000 left today.
-    expect(open(earnOffer(input()))).toMatchObject({ maxUsd: 1_000, limitedBy: "today" });
-    // The credit binds: $100 of Tesla at 70%, nothing else, 99.5% of it as /use-credit.
-    expect(open(earnOffer(input({ position: position({ collateralUsd: 0 }), options: [option(100)] })))).toMatchObject({ maxUsd: 69, limitedBy: "credit" });
+describe("earnOffer: the cap", () => {
+  it("is the least of the credit the stocks back (creditCap, Act is the line, as every way of taking credit) and the USDC available", () => {
+    // $900 of NVIDIA and $1,400 of Tesla at 70%, nothing owed: no daily cap any more. At the cap's line:
+    // 1,610 ÷ 1.12 = $1,437.50, rounded down to $1,437.
+    const o = open(earnOffer(input()));
+    expect(o.maxUsd).toBeGreaterThan(1_000);
+    expect(o.maxUsd).toBe(1_437);
+    // $100 of Tesla at 70%, nothing else: 70 ÷ 1.12 = $62.50.
+    expect(open(earnOffer(input({ position: position({ collateralUsd: 0 }), options: [option(100)] })))).toMatchObject({ maxUsd: 62 });
     // The USDC available binds.
-    expect(open(earnOffer(input({ position: position({ usdcLiquidity: 50 }) })))).toMatchObject({ maxUsd: 49, limitedBy: "credit" });
+    expect(open(earnOffer(input({ position: position({ usdcLiquidity: 50 }) })))).toMatchObject({ maxUsd: 50 });
   });
 
-  it("leaves room for wallet USDC that Save hasn't moved yet", () => {
-    const r = room({ walletRaw: usdc(301) });
-    expect(saveRoomRaw(r)).toBe(usdc(700));
-    expect(open(earnOffer(input({ room: r })))).toMatchObject({ maxUsd: 700, limitedBy: "today" });
-    // The keep-back stays in the wallet and isn't swept.
-    expect(saveRoomRaw(room({ walletRaw: usdc(1) }))).toBe(usdc(1_000));
+  it("isn't offered while the credit is in Act (Act is the line), whatever is free", () => {
+    const inAct = position({ debtUsd: 600, healthFactor: 630 / 600 });
+    expect(earnOffer(input({ position: inAct }))).toMatchObject({ kind: "closed", why: "in-act", text: "Your credit is in Act. Repay some to use more." });
+    // At the cap's line it's Watch, not Act: offered, with what's left on the free Tesla (980 ÷ 1.12 = $875).
+    const atCap = position({ debtUsd: 562.5, healthFactor: 630 / 562.5 });
+    expect(open(earnOffer(input({ position: atCap })))).toMatchObject({ maxUsd: 875 });
   });
 
-  it("has no room once today's saves are used up, and counts them again on a new New York day", () => {
-    const full = room({ savesToday: 6 });
-    expect(saveRoomRaw(full)).toBe(0n);
-    expect(earnOffer(input({ room: full }))).toMatchObject({ why: "today", text: "Your cash can’t start earning on more today. Try again tomorrow." });
-    expect(saveRoomRaw(room({ savesToday: 6, savesDay: nyDay(NOW) - 1 }))).toBe(usdc(1_000));
-  });
-
-  it("stays within the test deploy's $5 cap", () => {
-    const o = open(earnOffer(input({ room: room({ leftRaw: usdc(5) }) })));
-    expect(o.maxUsd).toBeLessThanOrEqual(5);
-    expect(o).toMatchObject({ maxUsd: 5, limitedBy: "today" });
-    expect(earnHint(o)).toBe("Up to $5 today, so all of it starts earning.");
-  });
-
-  it("says when the stocks can't back more", () => {
+  it("says when the stocks can't back the smallest amount", () => {
     expect(earnOffer(input({ position: position({ collateralUsd: 0 }), options: [option(1)] }))).toMatchObject({
       why: "credit",
       text: "Your stocks can’t back more credit right now.",
     });
   });
 
-  it("starts at $1, or at Save's smallest save less what already waits", () => {
-    expect(minEarnUsd(room())).toBe(1);
-    expect(minEarnUsd(room({ minSaveRaw: usdc(10) }))).toBe(10);
-    expect(minEarnUsd(room({ minSaveRaw: usdc(10), walletRaw: usdc(5) }))).toBe(6);
-  });
-
-  it("says the stocks can back some, just under the smallest amount, when Save's smallest save raised it", () => {
-    const small = earnOffer(input({ position: position({ collateralUsd: 0 }), options: [option(10)], room: room({ minSaveRaw: usdc(10) }) }));
-    expect(small).toMatchObject({ kind: "closed", why: "small", text: "Earn with stocks starts at $10, and your stocks can back less right now." });
-    expect(small.kind === "closed" && small.text).toBe(earnSmallText(10));
-    // Under $1 they can't back more at all.
-    expect(earnOffer(input({ position: position({ collateralUsd: 0 }), options: [option(1)], room: room({ minSaveRaw: usdc(10) }) }))).toMatchObject({ why: "credit" });
-    // When today's room is what's short, it's today.
-    expect(earnOffer(input({ room: room({ minSaveRaw: usdc(10), leftRaw: usdc(5) }) }))).toMatchObject({ why: "today" });
-  });
-
-  it("says the Safe line under the credit cap when it's lower", () => {
-    const o = open(earnOffer(input({ room: room({ leftRaw: usdc(5_000) }) })));
-    expect(o.limitedBy).toBe("credit");
+  it("says the cap, and the Safe line when it's lower", () => {
+    const o = open(earnOffer(input()));
     expect(earnHint(o)).toBe(`Up to $${o.maxUsd.toLocaleString("en-US")}. Stay under $${Math.floor(o.maxSafeUsd).toLocaleString("en-US")} to stay Safe.`);
+    const small = open(earnOffer(input({ position: position({ usdcLiquidity: 50 }) })));
+    expect(earnHint(small)).toBe("Up to $50.");
   });
 });
 
@@ -207,8 +164,11 @@ describe("earnQuote: one amount", () => {
   };
 
   it("stops over the cap and under the smallest amount", () => {
-    const over = quote(1_001);
-    expect(earnBlock(over.q, over.offer)).toBe("Up to $1,000 today, so all of it starts earning.");
+    const capped = open(earnOffer(input({ position: position({ debtUsd: 300, healthFactor: 2.1, usdcLiquidity: 600 }) })));
+    // The USDC available binds, to the dollar (the cap on the stocks is $1,137).
+    expect(capped.maxUsd).toBe(600);
+    const over = quote(capped.maxUsd + 1, { offer: capped });
+    expect(earnBlock(over.q, over.offer)).toBe(`Up to $${capped.maxUsd}.`);
     const under = quote(0.5);
     expect(earnBlock(under.q, under.offer)).toBe("The smallest amount is $1.");
     const ok = quote(500);
@@ -236,7 +196,7 @@ describe("earnQuote: one amount", () => {
     expect(earnStop(q, offer, false)).toBe("One moment…");
   });
 
-  it("needs the risk tick when it ends in Watch or Act, and not in Safe", () => {
+  it("needs the risk tick when it ends in Watch, not in Safe; ending in Act is blocked, ticked or not", () => {
     const safe = quote(500);
     expect(safe.q.plan.after).toBe("safe");
     expect(earnStop(safe.q, safe.offer, false)).toBeNull();
@@ -246,11 +206,16 @@ describe("earnQuote: one amount", () => {
     expect(earnStop(watch.q, watch.offer, false)).toBe("Confirm you understand this puts your credit in Watch first.");
     expect(earnStop(watch.q, watch.offer, true)).toBeNull();
 
-    const wide = open(earnOffer(input({ position: owing, room: room({ leftRaw: usdc(5_000) }) })));
-    const act = quote(1_250, { offer: wide });
+    // The cap: (630 + 980) ÷ 1.12 − 300 = $1,137.50, rounded down to $1,137, ends in Watch.
+    expect(watch.offer.maxUsd).toBe(1_137);
+    const top = quote(1_137);
+    expect(top.q.plan).toMatchObject({ after: "watch", extraConfirm: true, block: undefined });
+    expect(earnStop(top.q, top.offer, true)).toBeNull();
+    const act = quote(1_250);
     expect(act.q.plan.after).toBe("act");
-    expect(earnStop(act.q, act.offer, false)).toBe("Confirm you understand this puts your credit in Act first.");
-    expect(earnStop(act.q, act.offer, true)).toBeNull();
+    expect(act.q.plan.extraConfirm).toBe(false);
+    expect(earnStop(act.q, act.offer, false)).toBe("That would put your credit in Act. Try a smaller amount.");
+    expect(earnStop(act.q, act.offer, true)).toBe("That would put your credit in Act. Try a smaller amount.");
   });
 
   it("puts what already backs credit first, then the free stock", () => {
@@ -259,8 +224,8 @@ describe("earnQuote: one amount", () => {
     const more = quote(500);
     expect(more.q.plan.backing.map((b) => b.stock.symbol)).toEqual(["TSLAc"]);
     expect(earnActivity(more.q.plan)).toEqual([
+      { kind: "earn", symbol: "USDC", amount: 500 },
       { kind: "supply", symbol: "TSLAc", amount: Number(more.q.plan.backing[0].raw) / 1e8 },
-      { kind: "borrow", symbol: "USDC", amount: 500 },
     ]);
   });
 });
@@ -282,14 +247,15 @@ describe("the words around the button", () => {
   it("lists every move in small print, with the tokenized-stock line", () => {
     const text = earnSmallPrint({ backing: [{ symbol: "TSLAc", shares: 0.43 }], amountUsd: 1_000, owedUsd: 1_063.2, backedBy: ["Tesla"], risk: "R." });
     expect(text).toBe(
-      "In one go: 0.43 TSLA goes in use to back credit and $1,000 of credit comes to your cash, where it starts earning soon. You’ll owe $1,064, backed by Tesla. R. Tokenized stocks track the share price; they are not company shares or voting rights.",
+      "In one go: 0.43 TSLA goes in use to back credit and $1,000 of credit comes to your cash and starts earning. You’ll owe $1,064, backed by Tesla. R. Tokenized stocks track the share price; they are not company shares or voting rights.",
     );
+    expect(earnDone(500)).toBe("$500 is in your cash, earning.");
   });
 
   it("never says borrow, loan, leverage or lock", () => {
     const all = [
       ...Object.values(EARN_CLOSED),
-      earnSmallText(10),
+      earnDone(5),
       EARN_COSTS_MORE,
       earnRiskLine({ names: ["Tesla"], protect: "off", sell: "off" }),
       earnSmallPrint({ backing: [{ symbol: "TSLAc", shares: 1 }], amountUsd: 5, owedUsd: 5, backedBy: ["Tesla"], risk: "" }),
@@ -298,29 +264,89 @@ describe("the words around the button", () => {
   });
 });
 
-describe("assertEarn: the batch is what the screen says", () => {
+const v3 = (c: Call) => decodeFunctionData({ abi: aaveV3PoolAbi, data: c.data });
+const erc20 = (c: Call) => decodeFunctionData({ abi: erc20Abi, data: c.data });
+const spoke = (c: Call) => decodeFunctionData({ abi: spokeAbi, data: c.data });
+
+describe("buildEarnCalls: one batch, stocks in use → credit → into savings", () => {
   const backing = [{ stock: tsla, raw: 50_000_000n }];
   const creditRaw = usdc(500);
 
-  it("accepts the plan's batch: backing in use, then the credit, last", () => {
-    const calls = buildEarnCalls({ user, backing, creditRaw });
-    expect(calls).toHaveLength(4);
-    expect(buildEarnCalls({ user, backing: [], creditRaw })).toHaveLength(1);
-    expect(buildEarnCalls({ user, backing: [...backing, { stock: nvda, raw: 1_000n }], creditRaw })).toHaveLength(7);
+  it("puts the stock in use, takes the credit, then approves and supplies exactly that credit for the user", () => {
+    const calls = buildEarnCalls({ user, backing, creditRaw, cash: noAgent });
+    expect(calls).toHaveLength(6);
+    expect(calls.every((c) => c.value === 0n)).toBe(true);
+    const [approveStock, supply, use, borrow, approveSave, save] = calls;
+    expect(approveStock.to).toBe(tsla.address);
+    expect(erc20(approveStock)).toMatchObject({ functionName: "approve", args: [AAVE.SPOKE, 50_000_000n] });
+    expect(spoke(supply)).toMatchObject({ functionName: "supply", args: [BigInt(tsla.reserveId), 50_000_000n, user] });
+    expect(spoke(use)).toMatchObject({ functionName: "setUsingAsCollateral", args: [BigInt(tsla.reserveId), true, user] });
+    expect(spoke(borrow)).toMatchObject({ functionName: "borrow", args: [BigInt(USDC.reserveId), creditRaw, user] });
+    expect(approveSave.to).toBe(USDC.address);
+    expect(erc20(approveSave)).toMatchObject({ functionName: "approve", args: [GUARDIAN.AAVE_V3_POOL, creditRaw] });
+    expect(save.to).toBe(GUARDIAN.AAVE_V3_POOL);
+    expect(v3(save)).toMatchObject({ functionName: "supply", args: [USDC.address, creditRaw, user, 0] });
   });
 
+  it("with what already backs credit, it's the credit and the savings only; with two stocks, both first", () => {
+    expect(buildEarnCalls({ user, backing: [], creditRaw, cash: noAgent }).map((c) => c.to)).toEqual([AAVE.SPOKE, USDC.address, GUARDIAN.AAVE_V3_POOL]);
+    expect(buildEarnCalls({ user, backing: [...backing, { stock: nvda, raw: 1_000n }], creditRaw, cash: noAgent })).toHaveLength(9);
+  });
+
+  it("pays the network fee from savings first when the wallet can't, and supplies the credit in full", () => {
+    // Save on, $0.20 in the wallet: $0.30 comes out of savings so $0.50 stays for the fee.
+    const thin: Cash = { walletRaw: usdc(0.2), savingsRaw: usdc(100), saveOn: true };
+    const calls = buildEarnCalls({ user, backing, creditRaw, cash: thin });
+    expect(calls).toHaveLength(7);
+    expect(calls[0].to).toBe(GUARDIAN.AAVE_V3_POOL);
+    expect(v3(calls[0])).toMatchObject({ functionName: "withdraw", args: [USDC.address, usdc(0.3), user] });
+    expect(v3(calls.at(-1)!)).toMatchObject({ functionName: "supply", args: [USDC.address, creditRaw, user, 0] });
+    // Enough in the wallet: nothing comes out of savings.
+    expect(buildEarnCalls({ user, backing, creditRaw, cash })[0].to).toBe(tsla.address);
+    // Not even the fee: refused.
+    expect(() => buildEarnCalls({ user, backing, creditRaw, cash: { walletRaw: usdc(0.2), savingsRaw: usdc(0.2), saveOn: false } })).toThrow(/More than your cash/);
+  });
+
+});
+
+describe("assertEarn: the batch is what the screen says", () => {
+  const backing = [{ stock: tsla, raw: 50_000_000n }];
+  const creditRaw = usdc(500);
+  const calls = buildEarnCalls({ user, backing, creditRaw, cash: noAgent });
+  const review = { creditRaw, backing };
+  const swapIn = (k: number, c: Call) => calls.map((x, i) => (i === k ? c : x));
+
   it("rejects a second credit, a different amount, a swap, a transfer and someone else's position", () => {
-    const calls = buildEarnCalls({ user, backing, creditRaw });
-    expect(() => assertEarn(user, [...calls, ...buildBorrowCalls({ user, amountRaw: creditRaw })], { creditRaw, backing })).toThrow(/Blocked/);
+    expect(() => assertEarn(user, [...calls, ...buildBorrowCalls({ user, amountRaw: creditRaw })], review)).toThrow(/Blocked/);
     expect(() => assertEarn(user, calls, { creditRaw: usdc(501), backing })).toThrow(/credit differs/);
     const swap = buildBuyCalls({ user, stock: nvda, quote: { venue: "aerodrome", pool: 10, amountIn: creditRaw, amountOut: 1n } });
-    expect(() => assertEarn(user, [...calls.slice(0, 3), ...swap], { creditRaw, backing })).toThrow(/Blocked/);
+    expect(() => assertEarn(user, [...calls.slice(0, 4), ...swap], review)).toThrow(/Blocked/);
     const transfer: Call = { to: USDC.address, data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [other, creditRaw] }), value: 0n };
-    expect(() => assertEarn(user, [...calls.slice(0, 3), transfer], { creditRaw, backing })).toThrow(/Blocked/);
+    expect(() => assertEarn(user, swapIn(5, transfer), review)).toThrow(/Blocked/);
     const theirs: Call = { to: AAVE.SPOKE, data: encodeFunctionData({ abi: spokeAbi, functionName: "borrow", args: [BigInt(USDC.reserveId), creditRaw, other] }), value: 0n };
-    expect(() => assertEarn(user, [...calls.slice(0, 3), theirs], { creditRaw, backing })).toThrow(/credit differs/);
+    expect(() => assertEarn(user, swapIn(3, theirs), review)).toThrow(/credit differs/);
     // The backing must be the plan's, for the user.
     expect(() => assertEarn(user, calls, { creditRaw, backing: [{ stock: tsla, raw: 49_000_000n }] })).toThrow(/Blocked/);
-    expect(() => assertEarn(other, calls, { creditRaw, backing })).toThrow(/Blocked/);
+    expect(() => assertEarn(other, calls, review)).toThrow(/Blocked/);
+  });
+
+  it("rejects savings that aren't exactly the credit, for the user, in USDC, or a batch without them", () => {
+    const [approveMore, saveMore] = buildAddSavingsCalls(user, creditRaw + 1n);
+    expect(() => assertEarn(user, swapIn(4, approveMore), review)).toThrow(/approval differs/);
+    expect(() => assertEarn(user, swapIn(5, saveMore), review)).toThrow(/differs from the credit/);
+    const forOther = buildAddSavingsCalls(other, creditRaw)[1];
+    expect(() => assertEarn(user, swapIn(5, forOther), review)).toThrow(/differs from the credit/);
+    const tslaIn: Call = { to: GUARDIAN.AAVE_V3_POOL, data: encodeFunctionData({ abi: aaveV3PoolAbi, functionName: "supply", args: [tsla.address, creditRaw, user, 0] }), value: 0n };
+    expect(() => assertEarn(user, swapIn(5, tslaIn), review)).toThrow(/differs from the credit/);
+    const referral: Call = { to: GUARDIAN.AAVE_V3_POOL, data: encodeFunctionData({ abi: aaveV3PoolAbi, functionName: "supply", args: [USDC.address, creditRaw, user, 7] }), value: 0n };
+    expect(() => assertEarn(user, swapIn(5, referral), review)).toThrow(/differs from the credit/);
+    // Credit that stays in the wallet (the old batch) isn't this batch.
+    expect(() => assertEarn(user, calls.slice(0, 4), review)).toThrow(/Blocked/);
+    // A savings withdrawal goes only first, and only to the user.
+    const [away] = buildWithdrawSavingsCalls(other, usdc(1), false);
+    expect(() => assertEarn(user, [away, ...calls], review)).toThrow(/unexpected savings withdrawal/);
+    const [mine] = buildWithdrawSavingsCalls(user, usdc(1), false);
+    expect(assertEarn(user, [mine, ...calls], review)).toHaveLength(7);
+    expect(() => assertEarn(user, [...calls.slice(0, 4), mine, ...calls.slice(4)], review)).toThrow(/Blocked/);
   });
 });

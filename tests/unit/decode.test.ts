@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { encodeAbiParameters, encodeEventTopics, erc20Abi, getAbiItem, getAddress, parseAbi, type Log } from "viem";
 import { entryPoint08Abi, entryPoint08Address } from "viem/account-abstraction";
+import { describeActivity } from "@/components/gg/Activity";
 import { decodeActivity } from "@/lib/activity/decode";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
@@ -157,5 +158,69 @@ describe("decodeActivity: JAW's network fee isn't a move (D4)", () => {
   it("takes out one transfer only, the one before the paymaster's record", () => {
     const logs = [transfer(USDC.address, user, other, fee), transfer(USDC.address, user, treasury, fee), sponsored(user, fee), operation(user)];
     expect(decodeActivity(logs, user)).toEqual([{ kind: "send", symbol: "USDC", amount: 0.010858, to: getAddress(other) }]);
+  });
+});
+
+describe("decodeActivity: Earn with stocks is one move (credit in, earning)", () => {
+  const tsla = EQUITIES.find((e) => e.symbol === "TSLAc")!;
+  const savingsSupplyAbi = parseAbi(["event Supply(address indexed reserve, address user, address indexed onBehalfOf, uint256 amount, uint16 indexed referralCode)"]);
+  const savingsSupply = (by: Address, onBehalfOf: Address, amount: bigint, reserve: Address = USDC.address) =>
+    log(
+      GUARDIAN.AAVE_V3_POOL,
+      encodeEventTopics({ abi: savingsSupplyAbi, eventName: "Supply", args: { reserve, onBehalfOf, referralCode: 0 } }),
+      encodeAbiParameters([{ type: "address" }, { type: "uint256" }], [by, amount]),
+    );
+  const stockSupply = (raw: bigint) =>
+    log(
+      AAVE.SPOKE,
+      encodeEventTopics({ abi: [getAbiItem({ abi: spokeAbi, name: "Supply" })], eventName: "Supply", args: { reserveId: BigInt(tsla.reserveId), caller: user, user } }),
+      encodeAbiParameters([{ type: "uint256" }, { type: "uint256" }], [raw, raw]),
+    );
+  const borrow = (raw: bigint) =>
+    log(
+      AAVE.SPOKE,
+      encodeEventTopics({ abi: [getAbiItem({ abi: spokeAbi, name: "Borrow" })], eventName: "Borrow", args: { reserveId: BigInt(USDC.reserveId), caller: user, user } }),
+      encodeAbiParameters([{ type: "uint256" }, { type: "uint256" }], [raw, raw]),
+    );
+  /** The batch's receipt: stock in use, the credit from the Hub, then the credit into savings (USDC to the aToken). */
+  const earnLogs = (creditRaw: bigint, savedRaw = creditRaw, by: Address = user) => [
+    transfer(tsla.address, user, AAVE.HUB, 50_000_000n),
+    stockSupply(50_000_000n),
+    borrow(creditRaw),
+    transfer(USDC.address, AAVE.HUB, user, creditRaw),
+    transfer(USDC.address, user, GUARDIAN.AUSDC, savedRaw),
+    savingsSupply(by, user, savedRaw),
+  ];
+
+  it("reads as the credit that came to the cash, earning, then the backing: nothing left the cash", () => {
+    const items = decodeActivity(earnLogs(500_000_000n), user);
+    expect(items).toEqual([
+      { kind: "earn", symbol: "USDC", amount: 500 },
+      { kind: "supply", symbol: "TSLAc", amount: 0.5 },
+    ]);
+    // Activity's row says it as the Cash sheet does.
+    expect(describeActivity(items[0])).toEqual({ title: "Earn with stocks", amount: "$500.00 from credit, earning", sign: "+" });
+  });
+
+  it("keeps any credit beyond what went in to earn as credit", () => {
+    expect(decodeActivity(earnLogs(500_000_000n, 300_000_000n), user)).toEqual([
+      { kind: "earn", symbol: "USDC", amount: 300 },
+      { kind: "supply", symbol: "TSLAc", amount: 0.5 },
+      { kind: "borrow", symbol: "USDC", amount: 200 },
+    ]);
+  });
+
+  it("only the user's own supply for itself counts, in USDC", () => {
+    // Someone else (an agent run, another app) putting money in for the user isn't this move.
+    expect(decodeActivity(earnLogs(500_000_000n, 500_000_000n, other), user).map((i) => i.kind)).toEqual(["supply", "borrow"]);
+    const forOther = [...earnLogs(500_000_000n).slice(0, 5), savingsSupply(user, other, 500_000_000n)];
+    expect(decodeActivity(forOther, user).map((i) => i.kind)).toEqual(["supply", "borrow"]);
+    const notUsdc = [...earnLogs(500_000_000n).slice(0, 5), savingsSupply(user, user, 500_000_000n, nvda.address)];
+    expect(decodeActivity(notUsdc, user).map((i) => i.kind)).toEqual(["supply", "borrow"]);
+  });
+
+  it("with the network fee taken from savings first, still one move", () => {
+    const logs = [transfer(USDC.address, GUARDIAN.AUSDC, user, 300_000n), ...earnLogs(500_000_000n)];
+    expect(decodeActivity(logs, user).map((i) => i.kind)).toEqual(["earn", "supply"]);
   });
 });

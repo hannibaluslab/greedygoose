@@ -1,5 +1,6 @@
 import { isAddressEqual, type Hex } from "viem";
-import type { Call } from "@/lib/aave/tx";
+import { healthFromAccountData } from "@/lib/aave/math";
+import { accountDataRead, type Call } from "@/lib/aave/tx";
 import type { ActivityItem } from "@/lib/activity/decode";
 import { NOT_ATOMIC } from "@/lib/jaw/capabilities";
 
@@ -38,6 +39,15 @@ export const COULDNT_SEND = "We couldn’t send this. Please try again.";
 export const DEFAULT_FALLBACK = "This would fail right now. Try again in a moment.";
 
 /**
+ * Act is the line (Adrian, 2026-10-15): a batch that takes credit or frees backing must not end in Act. Its screen plans
+ * it at CREDIT_CAP.minHf on the position as last read (up to 15 s old), while Aave itself lets credit go down to a
+ * health of 1.0 and, on borrow and withdraw, moves every collateral to its reserve's latest collateral factor. So the
+ * simulation reads the account on Aave right after the batch, and a health under `minHf` (RISK.watchMin: in Act) stops
+ * it with `stop`, before the tap and at the tap alike. Nothing owed after it passes.
+ */
+export type HealthFloor = { minHf: number; stop: string };
+
+/**
  * What a screen would sign right now. `key` names every input that shapes the batch (txKey: the account, amounts,
  * legs, the stock, the quote, the plan…): a batch prepared for one key is never signed for another. `calls` builds the
  * batch from fresh reads (a TxStop shows its words).
@@ -48,6 +58,8 @@ export type TxPlan = {
   calls: Call[] | (() => Promise<Call[]>);
   /** Words for a revert the simulation can't name. */
   fallback?: string;
+  /** The health the batch may not end under, read on Aave after it in the simulation (HealthFloor). */
+  healthFloor?: HealthFloor;
   /** What Activity shows while it confirms. */
   activity?: ActivityItem[];
 };
@@ -92,16 +104,26 @@ export type CheckDeps = {
 
 /**
  * Builds a plan's batch and checks it, the same way for a background preparation and at the tap: its calls (fresh
- * reads; every builder runs assertAllowed), join() when due, then the simulation. A revert or a TxStop blocks it
- * (`blocks`); Base not answering doesn't, so the tap can try again.
+ * reads; every builder runs assertAllowed), join() when due, then the simulation. With a health floor, the account is
+ * read on Aave at the end of the simulation, and a health under it stops the batch (Act is the line). A revert, a
+ * TxStop or a health under the floor blocks it (`blocks`); Base not answering doesn't, so the tap can try again. The
+ * batch signed is never the read.
  */
 export async function checkPlan(plan: TxPlan, d: CheckDeps): Promise<Checked> {
   try {
     const built = typeof plan.calls === "function" ? await plan.calls() : plan.calls;
     const batch = await d.join(plan.user, built);
-    const results = await d.simulate(plan.user, batch);
-    const bad = results.findIndex((r) => r.status !== "success");
+    const floor = plan.healthFloor;
+    const results = await d.simulate(plan.user, floor ? [...batch, accountDataRead(plan.user)] : batch);
+    const bad = results.slice(0, batch.length).findIndex((r) => r.status !== "success");
     if (bad >= 0) return { ok: false, error: d.explain(results[bad].data, plan.fallback ?? DEFAULT_FALLBACK, batch[bad]), blocks: true };
+    if (floor) {
+      const read = results[batch.length];
+      // No health after it, no signature: it's checked again, as when Base doesn't answer.
+      if (read?.status !== "success" || !read.data) return { ok: false, error: CANT_CHECK, blocks: false };
+      const hf = healthFromAccountData(read.data);
+      if (hf !== null && hf < floor.minHf) return { ok: false, error: floor.stop, blocks: true };
+    }
     return { ok: true, batch };
   } catch (e) {
     return e instanceof TxStop ? { ok: false, error: e.message, blocks: true } : { ok: false, error: CANT_CHECK, blocks: false };

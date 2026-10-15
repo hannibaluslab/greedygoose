@@ -2,7 +2,7 @@
 
 Next.js version notes: @AGENTS.md
 
-> **JustaLab decisions come first.** Read @docs/JUSTALAB-DECISIONS.md before anything below. Where it conflicts with this file or `docs/PARKED.md`, it wins (agents in scope, no server, JAW permission screens, cash is savings and one pot on screen, Save and Receive invisible, five tabs, no "borrow" or "lock" on screen).
+> **JustaLab decisions come first.** Read @docs/JUSTALAB-DECISIONS.md before anything below. Where it conflicts with this file or `docs/PARKED.md`, it wins (agents in scope, no server, JAW permission screens, cash is savings and one pot on screen, Save and Receive invisible, five tabs, no "borrow" or "lock" on screen, and "Act is the line": every way of taking credit, and Free up, stops at health 1.12 and never ends in Act, which replaces D2's "no cap below Aave's").
 
 ## Mission
 
@@ -70,7 +70,7 @@ Buy them in-app with USDC (above), or bring your own: from another JAW app (the 
 | # | Decision |
 | --- | --- |
 | D1 | **Eligibility is a feature flag; markets are undecided.** The default rule is: no US persons, sanctioned countries blocked. Implement `lib/eligibility/` as a pluggable gate (geo check plus a self-attestation checkbox at sign-up) that can be switched or replaced without touching protocol code. Never market the app as a way around issuer restrictions. |
-| D2 | **Use Aave's limits.** The app does not add its own borrow cap below Aave's. Max borrow and withdraw are whatever Aave allows. Safe / Watch / Act is display-only, derived from Aave's health factor using thresholds in `config/risk.ts`: Safe ≥ 1.5, Watch 1.1–1.5, Act < 1.1. Never hard-code them elsewhere. Any action that would end in Watch or Act needs an extra explicit confirmation. |
+| D2 | **Use Aave's limits.** The app does not add its own borrow cap below Aave's. Max borrow and withdraw are whatever Aave allows. Safe / Watch / Act is display-only, derived from Aave's health factor using thresholds in `config/risk.ts`: Safe ≥ 1.5, Watch 1.1–1.5, Act < 1.1. Never hard-code them elsewhere. Any action that would end in Watch or Act needs an extra explicit confirmation. *(Superseded in part by "Act is the line (Adrian, 2026-10-15)" in docs/JUSTALAB-DECISIONS.md: taking credit and Free up stop at health 1.12, the Act line plus a margin; ending in Act is blocked, not confirmed; the confirmation stays for Watch.)* |
 | D3 | **No alerts in the MVP.** The status shows in-app only. Protection alerts are parked, so there is no backend. |
 | D4 | **The user pays gas, in USDC**, through JAW's `feeToken` capability. Read `wallet_getCapabilities` first. If USDC is not an accepted fee token on Base, the action is blocked with a clear message. Do not silently require ETH. Copy: "Network fee ≈ $0.0X, paid in USDC". Never say "gasless" or "no fees". |
 | D5 | **Next.js (App Router), mobile-first web, installable to the home screen.** Primary target: iPhone Safari with passkeys. |

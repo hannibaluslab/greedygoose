@@ -13,6 +13,7 @@ import { StartEarningCard, TurnIntoCash } from "@/components/gg/CashSetup";
 import { AddStockCard, HoldingCard } from "@/components/gg/Holding";
 import { CreditSheet } from "@/components/gg/CreditSheet";
 import { CashSheet } from "@/components/gg/CashSheet";
+import { useMoneySheets } from "@/components/gg/MoneySheets";
 import { StockSheets, useStockSheets } from "@/components/gg/StockSheets";
 import { ValueLine } from "@/components/gg/ValueLine";
 import { TotalBalanceSheet, YieldSheet } from "@/components/gg/InfoSheets";
@@ -24,7 +25,7 @@ import { useEntryBalances } from "@/hooks/useEntryBalances";
 import { useMarketPrices } from "@/hooks/useMarketPrices";
 import { usePosition, type PositionData } from "@/hooks/usePosition";
 import { aprToApy } from "@/lib/aave/math";
-import { arrivedCoins, arrivedView, rateText, startEarningShown, type ArrivedView } from "@/lib/cashSetup";
+import { arrivedCoins, arrivedView, earningLine, rateText, startEarningShown, type ArrivedView } from "@/lib/cashSetup";
 import { homeStatus } from "@/lib/risk/status";
 import { StatusPill } from "@/components/gg/Status";
 import { formatUsdTrim, monthlyCostText } from "@/lib/formatting";
@@ -132,6 +133,7 @@ function Loaded({
   const market = useMarketPrices(held);
   const priced = held.map((h) => ({ valueUsd: h.freeUsd + h.lockedUsd, ...market.bySymbol[h.symbol] }));
   const today = dayChange(priced, data.stocksUsd + data.cashUsd);
+  const money = useMoneySheets();
 
   return (
     <>
@@ -158,9 +160,11 @@ function Loaded({
             unit: "owed",
             // Board 2f: the status and what the credit costs a month, always (Safe and $0 / month with none taken).
             sub: (
-              <span className="inline-flex items-center justify-center gap-1.5">
+              <span className="inline-flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1">
                 <StatusPill status={homeStatus(data.status)} size="sm" />
-                {monthlyCostText(data.monthlyCostUsd)}
+                <span className="whitespace-nowrap">
+                  {monthlyCostText(data.monthlyCostUsd).replace(" / month", "")} /<span className="text-[11px]">month</span>
+                </span>
               </span>
             ),
           }}
@@ -171,9 +175,9 @@ function Loaded({
 
       <section className="grid grid-cols-4 gap-2 px-5 pt-[22px]">
         <QuickAction onClick={openTrade} label="Trade" icon={<TradeIcon />} />
-        <QuickAction href="/receive" label="Top up" icon={<PlusIcon />} />
+        <QuickAction onClick={money.topUp} label="Top up" icon={<PlusIcon />} />
         <QuickAction onClick={openCreditBuy} label="Credit Buy" icon={<CreditIcon />} />
-        <QuickAction href="/repay" label="Repay" icon={<RepayIcon />} />
+        <QuickAction onClick={money.repay} label="Repay" icon={<RepayIcon />} />
       </section>
 
       <section className="flex flex-col gap-2.5 px-5 pt-[18px] empty:hidden">{cards}</section>
@@ -181,7 +185,7 @@ function Loaded({
       <section className="grid grid-cols-2 gap-2.5 px-5 pt-[18px]">
         <CashCard
           cashUsd={data.cashUsd}
-          earning={data.cash.saveOn}
+          earning={earningLine(data.cash.saveOn, data.savingsUsd)}
           dim={dim}
           note={arrived.kind === "arriving" ? `${arrived.text} arriving` : undefined}
           onClick={() => open("cash")}
