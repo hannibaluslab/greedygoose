@@ -77,6 +77,7 @@ function Home({ address }: { address: `0x${string}` }) {
           apy={apy}
           open={setSheet}
           openStock={stocks.openStock}
+          openCreditBuy={stocks.openCreditBuy}
           arrived={arrived}
           dim={startEarningShown(setup.save, data.cashUsd)}
           cards={
@@ -110,12 +111,14 @@ function Home({ address }: { address: `0x${string}` }) {
 }
 
 function Loaded({
-  data, apy, open, openStock, arrived, cards, dim,
+  data, apy, open, openStock, openCreditBuy, arrived, cards, dim,
 }: {
   data: PositionData;
   apy: number;
   open: (sheet: Sheet) => void;
   openStock: (symbol: string) => void;
+  /** The Credit Buy quick action: F2-3, the same sheet as Invest's (StockSheets). */
+  openCreditBuy: () => void;
   arrived: ArrivedView;
   /** What needs the user about their cash: other dollars to turn into cash, starting to earn. */
   cards: ReactNode;
@@ -129,37 +132,44 @@ function Loaded({
 
   return (
     <>
-      <section className="flex flex-col gap-2.5 px-5 pt-[18px]">
+      <section className="flex flex-col gap-2.5 px-5 pt-3">
         <BalanceHero
           label="Total balance"
           info={{ label: "What’s in your total balance", onClick: () => open("total") }}
           value={data.stocksUsd + data.cashUsd}
-          sub={today ? <TodayChange usd={today.usd} pct={today.pct} /> : market.loading ? <TodayPending /> : undefined}
+          // Board 2f: today's change is always there; with no stocks nothing moves, so it reads $0.00 · 0.00% today.
+          sub={
+            today ? <TodayChange usd={today.usd} pct={today.pct} /> : market.loading ? <TodayPending /> : held.length === 0 ? <TodayChange usd={0} pct={0} /> : undefined
+          }
           // Board 2f: what you have on the left, what you owe on the right. Owed is rounded up, never shown as less.
           side={{
             label: "Credit",
             info: { label: "Your credit", onClick: () => open("credit") },
-            value: formatUsdTrim(Math.ceil(data.debtUsd)),
+            // The "$" drawn as the total balance draws it (Adrian): smaller, in the mid ink.
+            value: (
+              <>
+                <span className="text-[22px] font-medium tracking-normal text-ink-mid">$</span>
+                {formatUsdTrim(Math.ceil(data.debtUsd)).replace("$", "")}
+              </>
+            ),
             unit: "owed",
-            sub:
-              data.debtUsd > 0 ? (
-                <span className="inline-flex items-center justify-center gap-1.5">
-                  <StatusPill status={homeStatus(data.status)} size="sm" />
-                  {formatUsdTrim(data.monthlyCostUsd)} / month
-                </span>
-              ) : (
-                <span className="text-subtle">None taken</span>
-              ),
+            // Board 2f: the status and what the credit costs a month, always (Safe and $0 / month with none taken).
+            sub: (
+              <span className="inline-flex items-center justify-center gap-1.5">
+                <StatusPill status={homeStatus(data.status)} size="sm" />
+                {formatUsdTrim(data.monthlyCostUsd)} / month
+              </span>
+            ),
           }}
         />
-        {held.length > 0 && <ValueLine points={weekValue(priced)} height={68} loading={market.loading} onRetry={market.retry} />}
+        <BalanceLine held={held.length > 0} stockWeek={weekValue(priced)} cashUsd={data.cashUsd} loading={market.loading} onRetry={market.retry} />
         <MarketBanner />
       </section>
 
       <section className="grid grid-cols-4 gap-2 px-5 pt-[22px]">
         <QuickAction href="/buy" label="Trade" icon={<TradeIcon />} />
         <QuickAction href="/receive" label="Top up" icon={<PlusIcon />} />
-        <QuickAction onClick={() => open("credit")} label="Credit Buy" icon={<CreditIcon />} />
+        <QuickAction onClick={openCreditBuy} label="Credit Buy" icon={<CreditIcon />} />
         <QuickAction href="/repay" label="Repay" icon={<RepayIcon />} />
       </section>
 
@@ -234,16 +244,40 @@ function Skeleton() {
  */
 function EmptyPortfolio() {
   return (
-    <div className="mb-4 flex min-h-[200px] grow flex-col items-center justify-center gap-4 rounded-[22px] border-[1.5px] border-dashed border-[rgba(14,13,11,0.2)] px-6 py-6 text-center">
+    <div className="mb-4 flex grow flex-col items-center justify-center gap-3 rounded-[22px] border-[1.5px] border-dashed border-[rgba(14,13,11,0.2)] px-5 py-5 text-center">
+      {/* Compact so it fits above the tab bar (Adrian); the logos name the stocks, so no list under them. */}
       <div aria-hidden className="flex gap-1">
         {EQUITIES.map((e) => (
-          <StockAvatar key={e.symbol} symbol={e.symbol} size={38} />
+          <StockAvatar key={e.symbol} symbol={e.symbol} size={32} />
         ))}
       </div>
-      <div className="flex flex-col gap-1">
-        <p className="m-0 text-[17px] font-semibold tracking-[-0.01em]">You don’t hold any stocks yet</p>
-        <p className="m-0 text-[13px] leading-[1.4] text-ink-mid">{EQUITIES.map((e) => e.name).join(", ")}.</p>
-      </div>
+      <p className="m-0 text-[15px] font-semibold tracking-[-0.01em]">You don’t hold any stocks yet</p>
+      <span className="sr-only">{EQUITIES.map((e) => e.name).join(", ")}</span>
     </div>
+  );
+}
+
+/**
+ * The line under the hero is the total balance's week (Adrian): what's held now, at each day's market prices, plus
+ * the cash, so it ends on the big number. With no stocks it's the cash alone, a flat line; a flat line is neither
+ * green nor red.
+ */
+function BalanceLine({
+  held, stockWeek, cashUsd, loading, onRetry,
+}: { held: boolean; stockWeek: number[] | null; cashUsd: number; loading: boolean; onRetry: () => void }) {
+  const points = held ? (stockWeek ? stockWeek.map((v) => v + cashUsd) : null) : [cashUsd, cashUsd];
+  const flat = !!points && points[0] === points[points.length - 1];
+  return (
+    <ValueLine
+      points={points}
+      // 44px, down from the board's 68 (Adrian: smaller).
+      height={44}
+      loading={held && loading}
+      onRetry={onRetry}
+      label="What your total balance was worth over the last 7 days: what you hold now, at market prices"
+      // No caption (Adrian): the line sits under the total balance, so it needs no title of its own.
+      caption=""
+      neutral={flat}
+    />
   );
 }

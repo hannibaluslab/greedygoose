@@ -59,7 +59,7 @@ export function Welcome() {
   return (
     <main
       data-welcome
-      className="relative flex min-h-dvh flex-col bg-ink px-6 pt-[calc(env(safe-area-inset-top)+16px)] pb-[calc(env(safe-area-inset-bottom)+18px)] text-on-ink"
+      className="gg-dots-lime relative flex min-h-dvh flex-col px-6 pt-[calc(env(safe-area-inset-top)+16px)] pb-[calc(env(safe-area-inset-bottom)+18px)] text-on-ink"
     >
       <section className="flex grow flex-col items-center justify-center pb-2 pt-4">
         <GooseMark glow className="h-[clamp(124px,30dvh,264px)] w-auto [@media(max-height:700px)]:h-[20dvh]" />

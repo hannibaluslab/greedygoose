@@ -20,14 +20,15 @@ export const homeStatus = (s: Status): Exclude<Status, "none"> => (s === "none" 
 export const needsExtraConfirm = (after: Status) => after === "watch" || after === "act";
 
 export const STATUS_LABEL: Record<Status, string> = {
-  none: "No loan",
+  // D17: never "loan" on screen.
+  none: "No credit",
   safe: "Safe",
   watch: "Watch",
   act: "Act",
 };
 
 export const STATUS_COPY: Record<Status, string> = {
-  none: "You have no loan.",
+  none: "You have no credit.",
   safe: "Your loan is healthy.",
   watch: "Your loan is getting close to Aave's limit. Consider repaying or adding collateral.",
   act: "Your loan is at high risk of liquidation. Repay or add collateral now.",

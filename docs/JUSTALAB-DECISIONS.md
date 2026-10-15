@@ -173,6 +173,15 @@ JAW's own sheet shows the Review and asks for Face ID, so the app shows no confi
 - **The empty portfolio fills Home down to the tab bar:** the board's dashed "add a stock" card, grown, with the seven stocks and one Buy stocks button.
 - **Home's round mark is the GreedyGoose logo,** not the name's initial.
 
+## Credit Buy opens on what you can use (Adrian, 2026-10-15)
+
+"Credit buy should open the slider, tell him how much he can borrow and show under the market so he can select which one he wants to buy with a credit."
+
+- **Home's Credit Buy opens the Credit Buy sheet,** the same one as Invest's (`StockSheets`). The Credit sheet still opens from the ⓘ beside Home's Credit (board 2f).
+- **F2-3 starts with one number, "You can use up to $X",** then "Your holdings" and "Other stocks". A Credit Buy is backed by one free holding plus what already backs credit (F2-4), so $X is the largest of F2-4's per-stock figures, not their sum (`creditAvailable`, on `planCredit`'s MAX: net of what's owed, within what Aave can lend). F2-4 picks that holding first (`bestBacking`), so F2-5's "Up to" is the same $X; collateral factors differ by stock, so it isn't always the holding with the most free stock.
+- **$0 says why in one line** (no stock yet, nothing that can back credit, all in use, new credit paused, nothing to lend), under the label "Credit you can use", and a stock tapped there opens its Buy step with cash; its Back returns to F2-3. With less cash than the smallest buy and its fee, the line says to top up first. Under the $1 minimum buy counts as $0. Opened from a stock's sheet, Credit Buy still starts at F2-4.
+- **Credit but no network fee:** with less than $0.50 of cash, the number stays and the line says "Add $0.50 to your cash for the network fee first." (D4: cash pays it, and F2-5 blocks every amount without it).
+
 ## Cash sheet (Adrian, 2026-10-15)
 
 "Cash sheet should show you the amount of cash, the part that is borrowed, and activity what was moved or converted, received and sent/pay", and "earn with stocks in the cash sheet, use your stock to add more cash to get yield". Home's Cash card opens it (it went to Pay; Pay stays on the tab bar). The info sheets' kit: one drawer, two steps (Cash, Earn with stocks).

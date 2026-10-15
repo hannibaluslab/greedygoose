@@ -222,8 +222,12 @@
   --aspect-card: 1.585 / 1;
 }
 
+/* The booth app's dot grid (jaw-hackathon-booth .dots, Adrian): 1px dots every 18px. Ink on the cream ground here; the
+   welcome, on ink, takes the booth's own lime dots. */
 body {
-  background: var(--bg-app);
+  background-color: var(--bg-app);
+  background-image: radial-gradient(rgba(14, 13, 11, 0.09) 1px, transparent 1.4px);
+  background-size: 18px 18px;
   color: var(--ink);
   font-family: var(--font-geist-sans), -apple-system, system-ui, sans-serif;
   letter-spacing: -0.005em;
@@ -323,8 +327,13 @@ input[type="range"]::-webkit-slider-thumb { width: 22px; height: 22px; }
 /* Welcome (app/(marketing)/Welcome.tsx). The page is ink edge to edge, overscroll and the desktop margins
    included, so the body takes the colour while it's on screen. A class the Welcome sets, not body:has([data-welcome]):
    with cacheComponents Next keeps the welcome mounted but hidden after sign-in, and :has() would paint every screen ink. */
+body.gg-welcome,
+.gg-dots-lime {
+  background-color: var(--ink);
+  background-image: radial-gradient(rgba(212, 255, 60, 0.07) 1px, transparent 1.4px);
+  background-size: 18px 18px;
+}
 body.gg-welcome {
-  background: var(--ink);
   color-scheme: dark;
 }
 [data-welcome] :focus-visible {

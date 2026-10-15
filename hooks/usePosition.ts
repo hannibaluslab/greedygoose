@@ -183,6 +183,11 @@ export type PositionData = NonNullable<ReturnType<typeof usePosition>["data"]>;
 
 /** Collateral factor (0–1) per equity reserve, read live from the spoke's dynamic config. */
 export function useCollateralFactors(holdings: Holding[] | undefined) {
+  return useCollateralFactorsRead(holdings).cfs;
+}
+
+/** useCollateralFactors, with whether the read failed and a retry, for a screen that says so instead of pulsing on. */
+export function useCollateralFactorsRead(holdings: Holding[] | undefined) {
   const contracts = useMemo(
     () =>
       (holdings ?? []).map((h) => ({
@@ -194,10 +199,11 @@ export function useCollateralFactors(holdings: Holding[] | undefined) {
     [holdings],
   );
   const q = useReadContracts({ contracts, allowFailure: false, query: { enabled: contracts.length > 0 } });
-  return useMemo(() => {
+  const cfs = useMemo(() => {
     if (!q.data || !holdings) return undefined;
     return Object.fromEntries(
       holdings.map((h, i) => [h.symbol, (q.data[i] as { collateralFactor: number }).collateralFactor / 10_000]),
     ) as Record<string, number>;
   }, [q.data, holdings]);
+  return { cfs, failed: !cfs && q.isError && !q.isFetching, retry: () => void q.refetch() };
 }

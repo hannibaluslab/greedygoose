@@ -8,7 +8,8 @@ import { FILL_MARGIN, fillRaw } from "@/lib/aave/loan";
 import { buildBorrowCalls } from "@/lib/aave/tx";
 import { payFromCash } from "@/lib/cash";
 import {
-  CREDIT_BLOCKED, assertCreditBuy, backers, backingOptions, buildCreditBuyCalls, creditBuyActivity, creditBuyStop, planCredit, shortNames, splitCash,
+  CREDIT_BLOCKED, CREDIT_FROM, FEE_FIRST, NO_CREDIT, assertCreditBuy, backers, backingOptions, bestBacking, buildCreditBuyCalls, creditAvailable,
+  creditBuyActivity, creditBuyStop, creditWith, noCreditLine, planCredit, shortNames, splitCash,
   type BackingOption, type CreditPosition,
 } from "@/lib/creditBuy";
 import { aaveV3PoolAbi } from "@/lib/guardian/abis";
@@ -23,6 +24,7 @@ const fee = usd(CASH.feeBufferUsd);
 const aapl = EQUITIES.find((e) => e.symbol === "AAPLc")!;
 const nvda = EQUITIES.find((e) => e.symbol === "NVDAc")!;
 const msft = EQUITIES.find((e) => e.symbol === "MSFTc")!;
+const meta = EQUITIES.find((e) => e.symbol === "METAc")!;
 const quote: BuyQuote = { venue: "aerodrome", pool: 10, amountIn: usd(300), amountOut: 135_000_000n }; // $300 → 1.35 AAPLc
 const walletCash = { walletRaw: usd(40), savingsRaw: 0n, saveOn: true };
 const fn = (data: `0x${string}`) => decodeFunctionData({ abi: [...erc20Abi, ...spokeAbi, ...aaveV3PoolAbi], data }).functionName;
@@ -194,6 +196,109 @@ describe("planCredit (Leo's loan maths: autoFill, combinedLoan, status)", () => 
     expect(p.block).toBeUndefined();
     expect(p.priceMayMove).toBe(true);
     expect(plan(300).priceMayMove).toBe(false);
+  });
+});
+
+describe("creditAvailable (F2-3's \"You can use up to\")", () => {
+  const fresh: CreditPosition = { collateralUsd: 0, avgCf: 0, debtUsd: 0, healthFactor: null, usdcLiquidity: 1_000_000, borrowPaused: false };
+  const nvdaFree: BackingOption = { stock: nvda, freeRaw: 1_120_000_000n, freeUsd: 2_000, cf: 0.7 };
+  const msftFree: BackingOption = { stock: msft, freeRaw: 100_000_000n, freeUsd: 500, cf: 0.78 };
+  const noCash = { walletRaw: fee - 1n, savingsRaw: 0n, saveOn: true };
+  const avail = (position: CreditPosition, options: BackingOption[], holdsStock = true, cash = walletCash) =>
+    creditAvailable({ position, options, cash, holdsStock });
+  const perStock = (position: CreditPosition, o: BackingOption) => planCredit({ position, options: [o], creditRaw: 0n, cash: walletCash }).maxUsd;
+
+  it("is the largest of F2-4's per-stock figures, not their sum: one buy is backed by one free holding", () => {
+    expect(avail(fresh, [nvdaFree])).toEqual({ usd: 1_393, line: CREDIT_FROM }); // $2,000 × 70%, at 99.5% of the limit
+    const both = avail(fresh, [msftFree, nvdaFree]);
+    expect(both.usd).toBe(Math.max(perStock(fresh, nvdaFree), perStock(fresh, msftFree)));
+    expect(both.usd).toBe(1_393);
+  });
+
+  it("creditWith is F2-4's per-stock figure: planCredit's MAX with that one option, or with none", () => {
+    expect(creditWith(fresh, nvdaFree)).toBe(perStock(fresh, nvdaFree));
+    expect(creditWith(fresh, msftFree)).toBe(perStock(fresh, msftFree));
+    const backed: CreditPosition = { ...fresh, collateralUsd: 1_000, avgCf: 0.7, debtUsd: 300, healthFactor: 2.33 };
+    expect(creditWith(backed)).toBe(planCredit({ position: backed, options: [], creditRaw: 0n, cash: walletCash }).maxUsd);
+  });
+
+  it("is what F2-4 picks first and F2-5 offers: the holding with the most free stock isn't always the one that backs the most", () => {
+    // Live collateral factors differ by stock: $1,000 of Meta at 65% backs less than $900 of Microsoft at 79%.
+    const metaFree: BackingOption = { stock: meta, freeRaw: 140_000_000n, freeUsd: 1_000, cf: 0.65 };
+    const msft900: BackingOption = { stock: msft, freeRaw: 180_000_000n, freeUsd: 900, cf: 0.79 };
+    const options = [metaFree, msft900]; // as the sheet sorts them: most free stock first
+    const best = bestBacking(fresh, options)!;
+    expect(best.option).toBe(msft900);
+    const headline = avail(fresh, options).usd;
+    expect(headline).toBe(707.44); // 900 × 79% × 99.5%, not Meta's $646.75
+    // F2-5's "Up to" for the default pick is the plan with that one option.
+    expect(planCredit({ position: fresh, options: [best.option], creditRaw: 0n, cash: walletCash }).maxUsd).toBe(headline);
+    expect(best.usd).toBe(headline);
+  });
+
+  it("ties go to the most free stock, whatever the order", () => {
+    const capped: CreditPosition = { ...fresh, usdcLiquidity: 100 }; // both hit what can be lent
+    expect(bestBacking(capped, [msftFree, nvdaFree])!.option).toBe(nvdaFree);
+    expect(bestBacking(capped, [nvdaFree, msftFree])!.option).toBe(nvdaFree);
+    expect(bestBacking(fresh, [])).toBeNull();
+  });
+
+  it("counts what already backs credit, net of what's owed", () => {
+    const backed: CreditPosition = { ...fresh, collateralUsd: 1_000, avgCf: 0.7, debtUsd: 300, healthFactor: 2.33 };
+    // (1,000 × 0.7 + 2,000 × 0.7 − 300) × 99.5%
+    expect(avail(backed, [nvdaFree]).usd).toBe(1_791);
+    // Everything in use: the room on it alone.
+    expect(avail(backed, [])).toEqual({ usd: 398, line: CREDIT_FROM });
+  });
+
+  it("never more than there is to lend", () => {
+    expect(avail({ ...fresh, usdcLiquidity: 500 }, [nvdaFree]).usd).toBe(497.5);
+  });
+
+  it("with credit but less cash than the network fee, keeps the number and asks for the fee first (F2-5 would block every amount)", () => {
+    const a = avail(fresh, [nvdaFree], true, noCash);
+    expect(a).toEqual({ usd: 1_393, line: FEE_FIRST });
+    expect(FEE_FIRST).toBe("Add $0.50 to your cash for the network fee first.");
+    expect(planCredit({ position: fresh, options: [nvdaFree], creditRaw: usd(10), cash: noCash }).block).toBe("fee");
+    // Just enough for the fee: the usual line.
+    expect(avail(fresh, [nvdaFree], true, { walletRaw: fee, savingsRaw: 0n, saveOn: true }).line).toBe(CREDIT_FROM);
+  });
+
+  it("$0 with the reason: no stock, nothing that can back credit, everything in use, paused, nothing to lend", () => {
+    expect(avail(fresh, [], false)).toEqual({ usd: 0, why: "no-stocks", line: noCreditLine("no-stocks", true) });
+    expect(avail(fresh, [])).toMatchObject({ usd: 0, why: "cant-back" });
+    const full: CreditPosition = { ...fresh, collateralUsd: 1_000, avgCf: 0.7, debtUsd: 700, healthFactor: 1 };
+    expect(avail(full, [])).toMatchObject({ usd: 0, why: "all-in-use" });
+    expect(avail({ ...fresh, borrowPaused: true }, [nvdaFree])).toMatchObject({ usd: 0, why: "paused" });
+    expect(avail({ ...fresh, usdcLiquidity: 0 }, [nvdaFree])).toMatchObject({ usd: 0, why: "no-liquidity" });
+  });
+
+  it("under the minimum buy is $0: no Credit Buy fits in it", () => {
+    const nearly: CreditPosition = { ...fresh, collateralUsd: 1_000, avgCf: 0.7, debtUsd: 699.5, healthFactor: 1 };
+    expect(avail(nearly, [])).toMatchObject({ usd: 0, why: "all-in-use" });
+  });
+
+  it("at $0, says cash still buys, or to top up when cash can't pay the smallest buy and its fee", () => {
+    expect(avail(fresh, [], false).line).toBe("Credit comes from the stocks you own. Buy one with cash first.");
+    expect(avail(fresh, [], false, { walletRaw: 0n, savingsRaw: 0n, saveOn: false }).line).toBe(
+      "Credit comes from the stocks you own. Top up, then buy one with cash.",
+    );
+    // $1.49: the $1 minimum buy plus the $0.50 fee doesn't fit.
+    expect(avail(fresh, [], true, { walletRaw: usd(1.49), savingsRaw: 0n, saveOn: false }).line).toBe(
+      "Your stocks can’t back credit right now. Top up to buy with cash.",
+    );
+    expect(avail(fresh, [], true, { walletRaw: usd(1.5), savingsRaw: 0n, saveOn: false }).line).toBe(
+      "Your stocks can’t back credit right now. You can still buy with cash.",
+    );
+  });
+
+  it("says why in plain words, without the words D17 keeps off screen or Aave's", () => {
+    const lines = [
+      CREDIT_FROM,
+      FEE_FIRST,
+      ...(Object.keys(NO_CREDIT) as (keyof typeof NO_CREDIT)[]).flatMap((why) => [noCreditLine(why, true), noCreditLine(why, false)]),
+    ];
+    for (const line of lines) expect(line).not.toMatch(/borrow|loan|lock|aave|collateral|health/i);
   });
 });
 
