@@ -104,9 +104,24 @@ export function CreditBuySheet({
   const others = EQUITIES.filter((e) => !held.some((h) => h.symbol === e.symbol)).sort((a, b) => a.name.localeCompare(b.name));
   const priceOf = (symbol: string) => data.holdings.find((h) => h.symbol === symbol)?.priceUsd ?? 0;
 
+  // What each free holding gives on its own (all its free shares), so a holding too small to reach the $1 minimum buy
+  // is listed with that reason instead of being offered (Adrian: $1 of Alphabet read as "nothing free").
+  const gives = useMemo(() => {
+    const m = new Map<string, number>();
+    if (!cfs) return m;
+    for (const o of backingOptions(data.holdings, cfs)) {
+      m.set(o.stock.symbol, planCredit({ position: data, backing: { option: o, raw: o.freeRaw }, creditRaw: 0n, cash: data.cash }).maxUsd);
+    }
+    return m;
+  }, [data, cfs]);
   const options = useMemo(
-    () => (cfs ? backingOptions(data.holdings, cfs).filter((o) => o.freeUsd >= MIN_BACKING_USD).sort((a, b) => b.freeUsd - a.freeUsd) : []),
-    [data.holdings, cfs],
+    () =>
+      cfs
+        ? backingOptions(data.holdings, cfs)
+            .filter((o) => o.freeUsd >= MIN_BACKING_USD && (gives.get(o.stock.symbol) ?? 0) >= BUY_LIMITS.minUsd)
+            .sort((a, b) => b.freeUsd - a.freeUsd)
+        : [],
+    [data.holdings, cfs, gives],
   );
   // Whether a Credit Buy can use anything at all (with every free holding at its best): $0 says why on step 1.
   // Owning no stock needs no collateral factors to say $0.
@@ -225,9 +240,9 @@ export function CreditBuySheet({
         {step === "back" ? (
           !available ? (
             cfRead.failed ? <CantCheck onRetry={cfRead.retry} /> : <div aria-busy className="h-[220px] animate-pulse rounded-[16px] bg-chip" />
-          ) : available.why ? (
-            // Nothing to back it with (Adrian: step 1 always shows): the step's title, an empty slot saying why, then
-            // the stocks, which buy with cash.
+          ) : available.why === "no-stocks" ? (
+            // No stocks at all (Adrian: step 1 always shows): the step's title, an empty slot saying why, then the
+            // stocks, which buy with cash. Holding any stock shows it below instead, with why it can't back this yet.
             <div className="flex flex-col gap-3 pt-1">
               <h3 className="label m-0 px-1">Back it with</h3>
               <div className="flex flex-col items-center gap-1.5 rounded-[16px] border-[1.5px] border-dashed border-[rgba(14,13,11,0.2)] px-5 py-5 text-center">
@@ -270,11 +285,26 @@ export function CreditBuySheet({
                   />
                 )}
                 {unpickable.map((h) => {
-                  const reason = unavailable(h);
+                  const g = gives.get(h.symbol);
+                  const reason = g != null && g < BUY_LIMITS.minUsd && !h.paused && !h.frozen && h.freeUsd >= MIN_BACKING_USD ? `Gives ${formatUsd(Math.max(0, g))} of credit, under the $1 minimum` : unavailable(h);
                   // All in use: the row above says what it backs; a holding left with dust still reads "All in use".
                   return <BackingRow key={h.symbol} holding={h} reason={reason} />;
                 })}
               </div>
+              {available.why ? (
+                // Holdings, but none can back a Credit Buy yet: why, and the stocks still buy with cash.
+                <>
+                  <p role="status" className="m-0 px-1 text-[13px] leading-[1.4] text-ink-mid">{available.line}</p>
+                  <StockLists
+                    held={preset ? held.filter((h) => h.symbol === preset.symbol) : held}
+                    others={preset ? others.filter((e) => e.symbol === preset.symbol) : others}
+                    priceOf={priceOf}
+                    withCash
+                    onPick={(s) => onBuyWithCash(s.symbol)}
+                  />
+                </>
+              ) : (
+              <>
               {/* The board's "Your cash isn't used": the network fee is paid from cash. D19: no "It keeps earning." */}
               <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">Amounts move with the price. Your cash only pays the network fee.</p>
               <Button
@@ -289,6 +319,8 @@ export function CreditBuySheet({
               >
                 Continue
               </Button>
+              </>
+              )}
             </>
           )
         ) : lostPick ? (
