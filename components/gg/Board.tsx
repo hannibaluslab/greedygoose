@@ -47,7 +47,7 @@ const BOARD_COPY = {
   noContacts: "No contacts yet.",
   noContactsLine: "Add people from All, or by name.",
   notRanked: "Not ranked yet",
-  // No dollar figure on the board, the threshold included (lib/board/score.ts MIN_PUT_IN_USD).
+  // No dollar figure on the board.
   notRankedLine: "Ranked once they’ve put money in.",
   notRankedYou: "Ranked once you’ve put money in.",
   offBoard: "Not on the board yet",

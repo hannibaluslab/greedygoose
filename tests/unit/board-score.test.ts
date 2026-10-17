@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Address, Hex } from "viem";
 import { flowTotals, memberFlows, peakCredit, type Amount, type BoardRecord, type FlowRules } from "@/lib/board/flows";
-import { MIN_PUT_IN_USD, rankRows, returnSinceJoining, type Flows } from "@/lib/board/score";
+import { rankRows, returnSinceJoining, type Flows } from "@/lib/board/score";
 import { stockUsd6 } from "@/lib/board/worth";
 import { PROTOCOLS } from "@/lib/protocols/config";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
@@ -273,7 +273,7 @@ describe("returnSinceJoining", () => {
     expect(pct(l.flows(SAM, start))).toBe(0);
   });
 
-  it("a Credit Buy never lifts it, whatever the stock does", () => {
+  it("a Credit Buy counts over own money: it lifts a gain and deepens a loss", () => {
     for (const move of [0.3, 0.1, 0.01, 0, -0.01, -0.1, -0.3]) {
       const cash = new Ledger();
       const credit = new Ledger();
@@ -287,8 +287,10 @@ describe("returnSinceJoining", () => {
       credit.next(p);
       const withCredit = pct(credit.flows(SAM, b));
       const without = pct(cash.flows(SAM, a));
-      expect(withCredit).toBeLessThanOrEqual(without + 1e-12);
-      if (move > 0) expect(withCredit).toBeCloseTo(without, 6); // the same +10% before interest, not +15%
+      // $1,500 of stock on $1,000 of own money: 1.5 times the move, before interest.
+      if (move > 0) expect(withCredit).toBeCloseTo(without * 1.5, 2);
+      if (move < 0) expect(withCredit).toBeLessThan(without);
+      if (move === 0) expect(withCredit).toBeLessThanOrEqual(without + 1e-12); // interest only
     }
   });
 
@@ -398,7 +400,7 @@ describe("returnSinceJoining", () => {
     expect(returnSinceJoining(l.flows(SAM, start)).gain).toBeCloseTo(0, 4);
   });
 
-  it("credit drawn on Aave V3 against savings never lifts it, kept as cash or spent on stocks", () => {
+  it("credit drawn on Aave V3 against savings counts over own money: kept as cash it changes nothing, spent on stock it moves with it", () => {
     for (const move of [0.2, 0, -0.2]) {
       const plain = new Ledger();
       const drawn = new Ledger();
@@ -417,7 +419,8 @@ describe("returnSinceJoining", () => {
       drawn.next(p);
       const without = pct(plain.flows(SAM, a));
       const withCredit = pct(drawn.flows(SAM, b));
-      expect(withCredit).toBeLessThanOrEqual(without + 1e-12);
+      if (move > 0) expect(withCredit).toBeGreaterThan(without);
+      if (move < 0) expect(withCredit).toBeLessThan(without);
       expect(drawn.flows(SAM, b).peakCredit).toBeCloseTo(500, 6);
     }
   });
@@ -432,10 +435,10 @@ describe("returnSinceJoining", () => {
     expect(returnSinceJoining(l.flows(KIT, k)).gain).toBeCloseTo(0, 6);
   });
 
-  it(`isn't ranked under $${MIN_PUT_IN_USD} of own money`, () => {
+  it("is ranked from the first dollar of own money, and not before", () => {
     expect(
-      returnSinceJoining({ worthAtJoin: 5, worthNow: 6, putIn: 14.99, takenOut: 0, peakCredit: 0 }).pct,
-    ).toBeNull();
+      returnSinceJoining({ worthAtJoin: 0, worthNow: 0.5, putIn: 0.4, takenOut: 0, peakCredit: 0 }).pct,
+    ).toBeCloseTo(0.25, 9);
     expect(returnSinceJoining({ worthAtJoin: 5, worthNow: 25, putIn: 15, takenOut: 0, peakCredit: 0 }).pct).toBeCloseTo(
       0.25,
       9,
