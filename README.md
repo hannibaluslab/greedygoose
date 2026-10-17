@@ -1,45 +1,44 @@
 # GreedyGoose
 
-Borrow USDC against your Coinbase tokenized stocks on Base, using JAW passkey accounts and the Aave V4 Equities Hub. Product rules are in `CLAUDE.md`. Anything not in the MVP is in `docs/PARKED.md`.
+GreedyGoose is a mobile-first app on Base for buying and selling supported tokenized stocks, using eligible stocks as collateral, and managing USDC credit through Aave V4. Accounts use JAW passkeys.
 
-## Run
+> **Start here:** Read [docs/JUSTALAB-DECISIONS.md](docs/JUSTALAB-DECISIONS.md) before changing product behavior. It is the current source of truth and overrides inherited guidance in CLAUDE.md and docs/PARKED.md. If this README conflicts with it, the decision log wins.
 
-```bash
-cp .env.example .env.local   # add NEXT_PUBLIC_JAW_API_KEY (dashboard.jaw.id) and a Base RPC URL
-npm install
+Tokenized stocks track stock prices; they are not company shares and do not earn yield.
+
+## Current product areas
+
+- **Portfolio:** View supported stock holdings, cash, credit, and position status.
+- **Buy and sell:** Buy supported stocks with cash or credit; sell shares that are free to move.
+- **Credit:** Add stock collateral, use USDC credit, repay, and free up shares when the position allows it.
+- **Activity and agents:** Review account activity and the Protect/Rebalance experiences. Agent actions depend on the executor being deployed and configured; check the decision log before assuming they are live.
+
+## Run locally
+
+~~~bash
+cp .env.example .env.local
+# Set the required JAW API key and Base RPC URL in .env.local.
+npm ci
 npm run dev
-```
+~~~
 
 ## Checks
 
-```bash
-npm test                 # unit tests: risk status, market hours, Aave maths
-npm run verify:registry  # re-checks addresses + simulates supply/borrow/repay on Base mainnet (nothing is sent)
+~~~bash
+npm test
+npm run verify:registry  # Checks registered assets and simulates calls; sends no transactions.
 npm run typecheck
 npm run lint
-```
+~~~
 
-## Guardian (branch `feat/guardian`)
+Contract and agent checks may need a Base RPC URL. See the scripts in package.json and the relevant docs before running them.
 
-Repays your loan from your own savings when it slips into Watch, so your stocks aren't auto-sold. See `docs/guardian.md`.
+## Repository map
 
-```bash
-npm run contracts:test   # checker unit/fuzz + Base-fork tests (needs BASE_RPC_URL)
-npm run guardian:e2e     # full keeper rehearsal on an anvil fork
-npm run guardian:keeper  # dry run (add --execute / --loop on the keeper server)
-```
-
-## Build status
-
-| Step | State |
-| --- | --- |
-| 1. Scaffold (Next.js 16, Tailwind tokens, Wagmi + JAW on Base) | done |
-| 2. Registry + on-chain verification | done |
-| 3. Read-only position (balances, collateral, debt, health, rate, liquidity, market hours) | done |
-| 4. Home, Credit, Receive and Settings from real chain data | done (the JAW subname is not shown yet; addresses are shown instead) |
-| Buy stocks with USDC (Aerodrome / Uniswap, simulated, 1% slippage cap) | done (not yet tried with a real signed-in account) |
-| 5–6. Get a loan: lock any mix of stocks (slider per stock, auto-fill to Safe) + borrow, one Face ID | done |
-| 7. Repay (partial / all, allowance reset after full repay) and Unlock (withdraw, Aave-limit aware) | done |
-| 8. Activity (JAW call history + decoded Base receipts + this device’s pending sends) | done · eligibility geo check, JAW subname: next |
-| Guardian: checker contract, keeper, savings buffer, Guardian screen | done on `feat/guardian` · audit + deploy pending |
-| 9. Fork tests in CI, security review, legal review | — |
+- app/ — Next.js routes and screens
+- components/ — UI components and sheets
+- hooks/ — wallet, market, and position state
+- lib/ — protocol integrations, quotes, and transaction builders
+- contracts/ — executor and agent contracts
+- tests/ — unit and chain-level checks
+- docs/ — product decisions and implementation notes
