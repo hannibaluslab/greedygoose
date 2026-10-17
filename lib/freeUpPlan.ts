@@ -9,9 +9,6 @@ import { statusFor, type Status } from "@/lib/risk/status";
  * is checked again on Aave's own health before JAW's sheet (FREE_UP_FLOOR).
  */
 
-/** The quick picks, as a share of the shares held. Max and All come from the limit. */
-export const FREE_UP_PICKS = [0.25, 0.5] as const;
-
 /** Under the limit by a hair when a stock comes out at its most, so a price tick before signing doesn't stop it. */
 const AT_MOST_HEADROOM = 0.995;
 const EPS = 1e-9;
@@ -28,9 +25,9 @@ export type FreeUpStock = {
 };
 
 /** A ticked stock and how much of it to take out: a share of the shares held, 1 for all of them. */
-export type FreeUpPick = { symbol: string; share: number };
+type FreeUpPick = { symbol: string; share: number };
 
-export type FreeUpRow = {
+type FreeUpRow = {
   symbol: string;
   paused: boolean;
   picked: boolean;
@@ -48,7 +45,7 @@ export type FreeUpRow = {
   all: boolean;
 };
 
-export type FreeUpPlan = {
+type FreeUpPlan = {
   rows: FreeUpRow[];
   /** How much of the limit the ticked stocks use, 0–1 (the "Free-up limit" bar). */
   used: number;
