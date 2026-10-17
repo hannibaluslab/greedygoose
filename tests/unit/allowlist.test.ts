@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { encodeFunctionData, erc20Abi } from "viem";
 import { assertAllowed } from "@/lib/allowlist";
-import { buildBorrowCalls, buildLoanCalls, buildRepayCalls, buildSupplyCalls, buildWithdrawCalls } from "@/lib/aave/tx";
+import {
+  buildCreditCalls,
+  buildBackAndCreditCalls,
+  buildRepayCalls,
+  buildSupplyCalls,
+  buildWithdrawCalls,
+} from "@/lib/aave/tx";
 import { payFromCash, type Cash } from "@/lib/cash";
 import { buildEarnCalls } from "@/lib/earnWithStocks";
 import { buildSendCalls } from "@/lib/send";
@@ -57,7 +63,7 @@ describe("assertAllowed (one allowlist for every user batch)", () => {
       ...buildRepayCalls({ user, amountRaw: 1_000_000n, all: true }),
       ...buildSupplyCalls({ user, stock: nvda, amountRaw: 1n }),
       ...buildWithdrawCalls({ user, stock: nvda, amountRaw: 1n, all: false }),
-      ...buildBorrowCalls({ user, amountRaw: 1n }),
+      ...buildCreditCalls({ user, amountRaw: 1n }),
     ];
     expect(assertAllowed(user, batch)).toBe(batch);
   });
@@ -104,7 +110,7 @@ describe("assertAllowed (one allowlist for every user batch)", () => {
       buildRepayCalls({ user: attacker, amountRaw: 1n, all: false }),
       buildSupplyCalls({ user: attacker, stock: nvda, amountRaw: 1n }),
       buildWithdrawCalls({ user: attacker, stock: nvda, amountRaw: 1n, all: false }),
-      buildBorrowCalls({ user: attacker, amountRaw: 1n }),
+      buildCreditCalls({ user: attacker, amountRaw: 1n }),
     ];
     for (const batch of other) expect(() => assertAllowed(user, batch)).toThrow(/unexpected arguments/);
   });
@@ -151,11 +157,15 @@ describe("assertAllowed: Earn with stocks' savings supply (saveTo)", () => {
     data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [PROTOCOLS.AAVE_V3_POOL, raw] }),
     value: 0n,
   });
-  const loan = buildLoanCalls({ user, locks: [{ stock: nvda, raw: 1_000_000n }], borrowRaw: amount });
+  const backAndCredit = buildBackAndCreditCalls({
+    user,
+    backing: [{ stock: nvda, raw: 1_000_000n }],
+    creditRaw: amount,
+  });
   const cash: Cash = { walletRaw: 40_000_000n, savingsRaw: 0n, saveOn: false };
 
   it("passes Earn with stocks' batch: stock in use, credit, then an exact approve and a USDC supply for the user", () => {
-    const batch = [...loan, ...save()];
+    const batch = [...backAndCredit, ...save()];
     expect(assertAllowed(user, batch, { saveTo: user })).toBe(batch);
     expect(buildEarnCalls({ user, backing: [{ stock: nvda, raw: 1_000_000n }], creditRaw: amount, cash })).toHaveLength(
       6,
@@ -169,7 +179,10 @@ describe("assertAllowed: Earn with stocks' savings supply (saveTo)", () => {
     const buy = buildBuyCalls({ user, stock: nvda, quote });
     expect(() => assertAllowed(user, [...buy, ...save()])).toThrow(/unexpected/);
     expect(() => payFromCash(user, quote.amountIn, cash, [...buy, ...save()])).toThrow(/unexpected/);
-    const creditBuy = [...loan, ...buildBuyCalls({ user, stock: nvda, quote: { ...quote, amountIn: amount } })];
+    const creditBuy = [
+      ...backAndCredit,
+      ...buildBuyCalls({ user, stock: nvda, quote: { ...quote, amountIn: amount } }),
+    ];
     expect(() => payFromCash(user, 0n, cash, [...creditBuy, ...save()])).toThrow(/unexpected/);
     const aapl = EQUITIES.find((e) => e.symbol === "AAPLc")!;
     const trade = buildTradeCalls({
@@ -189,21 +202,27 @@ describe("assertAllowed: Earn with stocks' savings supply (saveTo)", () => {
   });
 
   it("saves only for the user, only USDC, referral code 0, more than 0, no value", () => {
-    expect(() => assertAllowed(user, [...loan, ...save()], { saveTo: attacker })).toThrow(/only for the user/);
+    expect(() => assertAllowed(user, [...backAndCredit, ...save()], { saveTo: attacker })).toThrow(/only for the user/);
     expect(() =>
-      assertAllowed(user, [...loan, approveSave(amount), supplyOf(USDC.address, attacker, amount)], { saveTo: user }),
+      assertAllowed(user, [...backAndCredit, approveSave(amount), supplyOf(USDC.address, attacker, amount)], {
+        saveTo: user,
+      }),
     ).toThrow(/unexpected arguments to supply/);
     expect(() =>
-      assertAllowed(user, [...loan, approveSave(amount), supplyOf(nvda.address, user, amount)], { saveTo: user }),
+      assertAllowed(user, [...backAndCredit, approveSave(amount), supplyOf(nvda.address, user, amount)], {
+        saveTo: user,
+      }),
     ).toThrow(/unexpected arguments to supply/);
     expect(() =>
-      assertAllowed(user, [...loan, approveSave(amount), supplyOf(USDC.address, user, amount, 1)], { saveTo: user }),
+      assertAllowed(user, [...backAndCredit, approveSave(amount), supplyOf(USDC.address, user, amount, 1)], {
+        saveTo: user,
+      }),
     ).toThrow(/unexpected arguments to supply/);
     expect(() =>
-      assertAllowed(user, [...loan, approveSave(0n), supplyOf(USDC.address, user, 0n)], { saveTo: user }),
+      assertAllowed(user, [...backAndCredit, approveSave(0n), supplyOf(USDC.address, user, 0n)], { saveTo: user }),
     ).toThrow(/unexpected arguments to supply/);
     const [a, sup] = save();
-    expect(() => assertAllowed(user, [...loan, a, { ...sup, value: 1n }], { saveTo: user })).toThrow(
+    expect(() => assertAllowed(user, [...backAndCredit, a, { ...sup, value: 1n }], { saveTo: user })).toThrow(
       /unexpected value/,
     );
     // Another account's batch, checked against the user.
@@ -212,17 +231,25 @@ describe("assertAllowed: Earn with stocks' savings supply (saveTo)", () => {
 
   it("approves the pool for exactly the one supply, once", () => {
     expect(() =>
-      assertAllowed(user, [...loan, approveSave(amount + 1n), supplyOf(USDC.address, user, amount)], { saveTo: user }),
-    ).toThrow(/unexpected spender/);
-    expect(() =>
-      assertAllowed(user, [...loan, approveSave(amount - 1n), supplyOf(USDC.address, user, amount)], { saveTo: user }),
-    ).toThrow(/unexpected spender/);
-    expect(() =>
-      assertAllowed(user, [...loan, approveSave(amount), approveSave(amount), supplyOf(USDC.address, user, amount)], {
+      assertAllowed(user, [...backAndCredit, approveSave(amount + 1n), supplyOf(USDC.address, user, amount)], {
         saveTo: user,
       }),
+    ).toThrow(/unexpected spender/);
+    expect(() =>
+      assertAllowed(user, [...backAndCredit, approveSave(amount - 1n), supplyOf(USDC.address, user, amount)], {
+        saveTo: user,
+      }),
+    ).toThrow(/unexpected spender/);
+    expect(() =>
+      assertAllowed(
+        user,
+        [...backAndCredit, approveSave(amount), approveSave(amount), supplyOf(USDC.address, user, amount)],
+        {
+          saveTo: user,
+        },
+      ),
     ).toThrow(/more than one savings approval/);
-    expect(() => assertAllowed(user, [...loan, ...save(), ...save()], { saveTo: user })).toThrow(
+    expect(() => assertAllowed(user, [...backAndCredit, ...save(), ...save()], { saveTo: user })).toThrow(
       /more than one savings supply/,
     );
     // A stock approved to the pool is no spender, even in this batch.
@@ -232,7 +259,7 @@ describe("assertAllowed: Earn with stocks' savings supply (saveTo)", () => {
       value: 0n,
     };
     expect(() =>
-      assertAllowed(user, [...loan, stockToPool, supplyOf(USDC.address, user, amount)], { saveTo: user }),
+      assertAllowed(user, [...backAndCredit, stockToPool, supplyOf(USDC.address, user, amount)], { saveTo: user }),
     ).toThrow(/unexpected spender/);
   });
 
@@ -242,6 +269,8 @@ describe("assertAllowed: Earn with stocks' savings supply (saveTo)", () => {
       data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [attacker, 1n] }),
       value: 0n,
     };
-    expect(() => assertAllowed(user, [...loan, ...save(), transfer], { saveTo: user })).toThrow(/unexpected call/);
+    expect(() => assertAllowed(user, [...backAndCredit, ...save(), transfer], { saveTo: user })).toThrow(
+      /unexpected call/,
+    );
   });
 });

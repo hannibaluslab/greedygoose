@@ -75,7 +75,7 @@ export function StockSheet({
   };
 
   const ticker = tickerOf(stock.symbol);
-  const owned = holding.freeRaw + holding.lockedRaw > 0n;
+  const owned = holding.freeRaw + holding.backingRaw > 0n;
   // MAX sells every free share, to the last unit; typed shares go through the token's multiplier.
   const sharesRaw = all ? holding.freeRaw : sharesToRaw(raw, holding.multiplier, stock.decimals);
   const freeShares = rawToShares(holding.freeRaw, holding.multiplier, stock.decimals);
@@ -151,7 +151,7 @@ export function StockSheet({
                 label="Of your portfolio"
                 value={
                   owned
-                    ? `${((portfolioShare(holding.freeUsd + holding.lockedUsd, data.stocksUsd) ?? 0) * 100).toFixed(1)}%`
+                    ? `${((portfolioShare(holding.freeUsd + holding.backingUsd, data.stocksUsd) ?? 0) * 100).toFixed(1)}%`
                     : "0%"
                 }
               />
@@ -160,7 +160,7 @@ export function StockSheet({
             <Actions
               owned={owned}
               canSell={holding.freeRaw > 0n}
-              backs={holding.lockedRaw > 0n}
+              backs={holding.backingRaw > 0n}
               paused={holding.paused}
               onBuy={onBuy}
               onSell={() => go("sell")}

@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { autoFill, combinedLoan } from "@/lib/aave/loan";
+import { autoFill, combinedCredit } from "@/lib/aave/credit";
 
-describe("combinedLoan", () => {
+describe("combinedCredit", () => {
   it("adds power from several stocks", () => {
-    const r = combinedLoan({
-      collateralUsd: 100,
+    const r = combinedCredit({
+      totalBackingUsd: 100,
       avgCf: 0.7,
       debtUsd: 0,
-      borrowUsd: 300,
+      creditUsd: 300,
       liquidityUsd: 1e9,
-      locks: [
+      lines: [
         { key: "NVDAc", usd: 400, cf: 0.7, freeUsd: 400 },
         { key: "AAPLc", usd: 200, cf: 0.78, freeUsd: 500 },
       ],
@@ -26,22 +26,22 @@ describe("combinedLoan", () => {
   });
 
   it("caps maxCredit by what can be lent and nets what's owed", () => {
-    const r = combinedLoan({
-      collateralUsd: 1_000,
+    const r = combinedCredit({
+      totalBackingUsd: 1_000,
       avgCf: 0.7,
       debtUsd: 300,
-      borrowUsd: 0,
+      creditUsd: 0,
       liquidityUsd: 1e9,
-      locks: [],
+      lines: [],
     });
     expect(r.maxCredit).toBeCloseTo(700 / 1.12 - 300);
     expect(
-      combinedLoan({ collateralUsd: 1_000, avgCf: 0.7, debtUsd: 300, borrowUsd: 0, liquidityUsd: 100, locks: [] })
+      combinedCredit({ totalBackingUsd: 1_000, avgCf: 0.7, debtUsd: 300, creditUsd: 0, liquidityUsd: 100, lines: [] })
         .maxCredit,
     ).toBe(100);
     // Under the line already: nothing, never negative.
     expect(
-      combinedLoan({ collateralUsd: 1_000, avgCf: 0.7, debtUsd: 630, borrowUsd: 0, liquidityUsd: 1e9, locks: [] })
+      combinedCredit({ totalBackingUsd: 1_000, avgCf: 0.7, debtUsd: 630, creditUsd: 0, liquidityUsd: 1e9, lines: [] })
         .maxCredit,
     ).toBe(0);
   });
@@ -50,10 +50,10 @@ describe("combinedLoan", () => {
 describe("autoFill", () => {
   it("tops up from the highest collateral factor first", () => {
     const out = autoFill({
-      collateralUsd: 0,
+      totalBackingUsd: 0,
       avgCf: 0,
       debtUsd: 0,
-      borrowUsd: 300,
+      creditUsd: 300,
       lines: [
         { key: "NVDAc", usd: 0, cf: 0.7, freeUsd: 1000 },
         { key: "AAPLc", usd: 0, cf: 0.78, freeUsd: 200 },
@@ -65,10 +65,10 @@ describe("autoFill", () => {
   });
   it("keeps the user's own choices and adds nothing if already enough", () => {
     const out = autoFill({
-      collateralUsd: 0,
+      totalBackingUsd: 0,
       avgCf: 0,
       debtUsd: 0,
-      borrowUsd: 100,
+      creditUsd: 100,
       lines: [{ key: "NVDAc", usd: 500, cf: 0.7, freeUsd: 1000 }],
     });
     expect(out.NVDAc).toBe(500);

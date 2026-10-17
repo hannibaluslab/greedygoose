@@ -21,7 +21,7 @@ import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { aaveOracleAbi } from "@/lib/aave/abis/IAaveOracle";
 import { explainRevert } from "@/lib/aave/errors";
 import { priceToUsd, summarize, type AccountData } from "@/lib/aave/math";
-import { buildBorrowCalls, buildLoanCalls, type Call } from "@/lib/aave/tx";
+import { buildCreditCalls, buildBackAndCreditCalls, type Call } from "@/lib/aave/tx";
 import { decodeActivity } from "@/lib/activity/decode";
 import { buildSaleCalls, planSell, type SellFrom, type SellHolding, type SellPosition } from "@/lib/sell";
 import { quotePool, quoteSwap, signingQuote } from "@/lib/swap/buy";
@@ -61,7 +61,7 @@ const uint = (x: { data: Address }) => decodeFunctionResult({ abi: erc20Abi, fun
 const account = (x: { data: Address }) =>
   summarize(decodeFunctionResult({ abi: spokeAbi, functionName: "getUserAccountData", data: x.data }) as AccountData);
 
-/** What usePosition and useCollateralFactors read for one stock, as planSell takes it, after `before` when given. */
+/** What usePosition and useBackingFactors read for one stock, as planSell takes it, after `before` when given. */
 async function holdingOf(
   user: Address,
   stock: ReserveAsset,
@@ -83,7 +83,7 @@ async function holdingOf(
     client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getReserve", args: [id] }),
   ]);
   expect(held.results.every((x) => x.status === "success")).toBe(true);
-  const [freeRaw, lockedRaw] = held.results.slice(before.length).map(uint);
+  const [freeRaw, backingRaw] = held.results.slice(before.length).map(uint);
   const dyn = await client.readContract({
     address: AAVE.SPOKE,
     abi: spokeAbi,
@@ -94,8 +94,8 @@ async function holdingOf(
   return {
     priceUsd,
     freeRaw,
-    lockedRaw,
-    lockedUsd: (Number(lockedRaw) / 10 ** stock.decimals) * priceUsd,
+    backingRaw,
+    backingUsd: (Number(backingRaw) / 10 ** stock.decimals) * priceUsd,
     paused: cfg.paused,
     cf: dyn.collateralFactor / 10_000,
   };
@@ -109,7 +109,7 @@ async function positionOf(user: Address, before: Call[] = []): Promise<SellPosit
   const s = account(acc);
   const debtRaw = uint(debt);
   return {
-    collateralUsd: s.collateralUsd,
+    totalBackingUsd: s.totalBackingUsd,
     avgCf: s.avgCf,
     debtUsd: Number(debtRaw) / 10 ** USDC.decimals,
     debtRaw,
@@ -120,8 +120,8 @@ async function positionOf(user: Address, before: Call[] = []): Promise<SellPosit
 /** Credit that takes the account to health factor `hf`. */
 async function creditTo(user: Address, hf: number): Promise<Call[]> {
   const p = await positionOf(user);
-  const more = (p.collateralUsd * p.avgCf) / hf - p.debtUsd;
-  return buildBorrowCalls({ user, amountRaw: parseUnits(more.toFixed(6), 6) });
+  const more = (p.totalBackingUsd * p.avgCf) / hf - p.debtUsd;
+  return buildCreditCalls({ user, amountRaw: parseUnits(more.toFixed(6), 6) });
 }
 
 /** Raw shares worth `usd` at Aave's price. */
@@ -201,7 +201,7 @@ describe("selling free shares on Base (plan item 7 step 2)", () => {
     ]);
   });
 
-  it("an account that backs credit sells its free shares, and its backing and loan don't move", async () => {
+  it("an account that backs credit sells its free shares, and its backing and credit don't move", async () => {
     const holding = await holdingOf(backer, amzn);
     expect((Number(holding.freeRaw) / 10 ** amzn.decimals) * holding.priceUsd).toBeGreaterThan(1);
     const { plan, calls } = await planned("free", backer, amzn, holding.freeRaw);
@@ -237,7 +237,7 @@ describe("selling a backing holding on Base (plan item 7 step 3)", () => {
     const holding = await holdingOf(backer, nvda);
     const position = await positionOf(backer, before);
     expect(position.healthFactor!).toBeCloseTo(1.6, 2);
-    const past = await planned("backing", backer, nvda, holding.lockedRaw, before);
+    const past = await planned("backing", backer, nvda, holding.backingRaw, before);
     expect(past.plan.block).toBe("past-safe");
     expect(past.plan.maxRaw).toBeGreaterThan(0n);
 
@@ -283,13 +283,13 @@ describe("repaying by selling a holding on Base (plan item 7 step 9)", () => {
     });
   }
 
-  it("a small loan: one sale repays all of it", async () => {
+  it("a little credit: one sale repays all of it", async () => {
     // A $5 loan backed by $20 of NVDA, taken first in the same simulated block: the backer's own loan is live and moves.
     const free = await holdingOf(newcomer, nvda);
-    const before = buildLoanCalls({
+    const before = buildBackAndCreditCalls({
       user: newcomer,
-      locks: [{ stock: nvda, raw: sharesFor(20, free, nvda) }],
-      borrowRaw: parseUnits("5", 6),
+      backing: [{ stock: nvda, raw: sharesFor(20, free, nvda) }],
+      creditRaw: parseUnits("5", 6),
     });
     const position = await positionOf(newcomer, before);
     expect(position.debtRaw).toBeGreaterThan(0n);

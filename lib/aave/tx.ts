@@ -55,20 +55,20 @@ export function buildWithdrawCalls(p: {
 }
 
 /**
- * Get a loan in one signature: (optionally) lock collateral, then borrow.
+ * Credit in one signature: (optionally) put stocks in as backing, then take the credit.
  * D7: allowed because the confirm screen lists both steps.
  */
-export function buildLoanCalls(p: {
+export function buildBackAndCreditCalls(p: {
   user: `0x${string}`;
-  locks: { stock: ReserveAsset; raw: bigint }[];
-  borrowRaw: bigint;
+  backing: { stock: ReserveAsset; raw: bigint }[];
+  creditRaw: bigint;
 }): Call[] {
-  const lock = p.locks
+  const putIn = p.backing
     .filter((l) => l.raw > 0n)
     .flatMap((l) => buildSupplyCalls({ user: p.user, stock: l.stock, amountRaw: l.raw }));
-  const borrow = p.borrowRaw > 0n ? buildBorrowCalls({ user: p.user, amountRaw: p.borrowRaw }) : [];
-  if (lock.length + borrow.length === 0) throw new Error("Nothing to do");
-  return assertAllowed(p.user, [...lock, ...borrow]);
+  const take = p.creditRaw > 0n ? buildCreditCalls({ user: p.user, amountRaw: p.creditRaw }) : [];
+  if (putIn.length + take.length === 0) throw new Error("Nothing to do");
+  return assertAllowed(p.user, [...putIn, ...take]);
 }
 
 /**
@@ -80,7 +80,7 @@ export const accountDataRead = (user: `0x${string}`): Call =>
   spoke(encodeFunctionData({ abi: spokeAbi, functionName: "getUserAccountData", args: [user] }));
 
 /** Borrow USDC to the caller (the user's own account). */
-export function buildBorrowCalls(p: { user: `0x${string}`; amountRaw: bigint }): Call[] {
+export function buildCreditCalls(p: { user: `0x${string}`; amountRaw: bigint }): Call[] {
   if (p.amountRaw <= 0n) throw new Error("Amount must be positive");
   return assertAllowed(p.user, [
     spoke(

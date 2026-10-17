@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { decodeFunctionData, encodeAbiParameters, encodeErrorResult, erc20Abi, toFunctionSelector } from "viem";
-import { buildBorrowCalls, buildLoanCalls, buildRepayCalls, buildSupplyCalls, fullRepayAmount } from "@/lib/aave/tx";
+import {
+  buildCreditCalls,
+  buildBackAndCreditCalls,
+  buildRepayCalls,
+  buildSupplyCalls,
+  fullRepayAmount,
+} from "@/lib/aave/tx";
 import { CASH_STUCK, explainRevert, stockStf } from "@/lib/aave/errors";
 import { buildAddSavingsCalls, buildWithdrawSavingsCalls } from "@/lib/savings";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
@@ -33,9 +39,9 @@ describe("buildSupplyCalls", () => {
   });
 });
 
-describe("buildBorrowCalls", () => {
-  it("borrows USDC reserve 7 to the user", () => {
-    const [b] = buildBorrowCalls({ user, amountRaw: 25_000_000n });
+describe("buildCreditCalls", () => {
+  it("takes USDC reserve 7 as credit, to the user", () => {
+    const [b] = buildCreditCalls({ user, amountRaw: 25_000_000n });
     expect(decodeFunctionData({ abi: spokeAbi, data: b.data })).toMatchObject({
       functionName: "borrow",
       args: [7n, 25_000_000n, user],
@@ -66,7 +72,7 @@ describe("buildRepayCalls", () => {
 describe("explainRevert", () => {
   it("maps Aave errors to plain language", () => {
     const data = encodeErrorResult({ abi: spokeAbi, errorName: "HealthFactorBelowThreshold" });
-    expect(explainRevert(data, "x")).toMatch(/past what Aave allows/);
+    expect(explainRevert(data, "x")).toMatch(/more than your stocks can back/);
     expect(explainRevert("0x12345678", "fallback")).toBe("fallback");
   });
   it("a failed savings withdrawal means the cash can't move right now", () => {
@@ -109,29 +115,31 @@ describe("explainRevert", () => {
   });
 });
 
-describe("buildLoanCalls", () => {
-  it("lock + borrow in one batch, in order", () => {
-    const calls = buildLoanCalls({ user, locks: [{ stock: nvda, raw: 100n }], borrowRaw: 5_000_000n });
+describe("buildBackAndCreditCalls", () => {
+  it("backing + credit in one batch, in order", () => {
+    const calls = buildBackAndCreditCalls({ user, backing: [{ stock: nvda, raw: 100n }], creditRaw: 5_000_000n });
     expect(
       calls.map((c) => decodeFunctionData({ abi: [...erc20Abi, ...spokeAbi], data: c.data }).functionName),
     ).toEqual(["approve", "supply", "setUsingAsCollateral", "borrow"]);
   });
-  it("borrow only when nothing needs locking", () => {
-    expect(buildLoanCalls({ user, locks: [{ stock: nvda, raw: 0n }], borrowRaw: 5_000_000n })).toHaveLength(1);
+  it("credit only when nothing needs backing", () => {
+    expect(buildBackAndCreditCalls({ user, backing: [{ stock: nvda, raw: 0n }], creditRaw: 5_000_000n })).toHaveLength(
+      1,
+    );
   });
-  it("several stocks, then one borrow; lock-only is allowed", () => {
+  it("several stocks, then the credit once; backing alone is allowed", () => {
     const aapl = EQUITIES[0];
     expect(
-      buildLoanCalls({
+      buildBackAndCreditCalls({
         user,
-        locks: [
+        backing: [
           { stock: nvda, raw: 1n },
           { stock: aapl, raw: 2n },
         ],
-        borrowRaw: 1n,
+        creditRaw: 1n,
       }),
     ).toHaveLength(7);
-    expect(buildLoanCalls({ user, locks: [{ stock: nvda, raw: 1n }], borrowRaw: 0n })).toHaveLength(3);
-    expect(() => buildLoanCalls({ user, locks: [], borrowRaw: 0n })).toThrow();
+    expect(buildBackAndCreditCalls({ user, backing: [{ stock: nvda, raw: 1n }], creditRaw: 0n })).toHaveLength(3);
+    expect(() => buildBackAndCreditCalls({ user, backing: [], creditRaw: 0n })).toThrow();
   });
 });

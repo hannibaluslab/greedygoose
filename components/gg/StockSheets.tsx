@@ -4,8 +4,8 @@ import { BuySheet } from "./BuySheet";
 import { CreditBuySheet } from "./CreditBuySheet";
 import { StockSheet } from "./StockSheet";
 import { TradeSheet } from "./TradeSheet";
-import { UnlockSheet } from "./UnlockSheet";
-import { useCollateralFactors, type Holding, type PositionData } from "@/hooks/usePosition";
+import { FreeUpSheet } from "./FreeUpSheet";
+import { useBackingFactors, type Holding, type PositionData } from "@/hooks/usePosition";
 import { useSheetSubject } from "@/hooks/useSheetSubject";
 import type { TradeAsset } from "@/lib/trade";
 import { EQUITIES, type ReserveAsset } from "@/lib/tokens/registry";
@@ -185,6 +185,6 @@ function FreeUp(p: {
   onClose: () => void;
   onBack?: () => void;
 }) {
-  const cfs = useCollateralFactors(p.data.holdings);
-  return <UnlockSheet {...p} cf={cfs?.[p.stock.symbol]} />;
+  const cfs = useBackingFactors(p.data.holdings);
+  return <FreeUpSheet {...p} cf={cfs?.[p.stock.symbol]} />;
 }

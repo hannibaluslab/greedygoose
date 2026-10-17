@@ -10,7 +10,7 @@ import { PROTOCOLS } from "@/lib/protocols/config";
 import { USDC } from "@/lib/tokens/registry";
 
 /** $1,000 of stock at a 70% collateral factor: $700 of backing power. */
-const base = { collateralUsd: 1000, avgCf: 0.7, savingsUsd: 500, capLeftUsd: 500 };
+const base = { totalBackingUsd: 1000, avgCf: 0.7, savingsUsd: 500, capLeftUsd: 500 };
 /** What's owed for a health factor on that power. */
 const owedAt = (hf: number) => 700 / hf;
 
@@ -99,7 +99,7 @@ describe("planProtect", () => {
 describe("weekendHeadsUp: Weekend Shield is a card now, never a repay", () => {
   it("before the freeze, warns credit in Watch that a 15% drop would take into Act, with the repay that keeps it in Watch", () => {
     // 1.25 (Watch): −15% → 1.0625, under the Act line
-    const h = weekendHeadsUp({ collateralUsd: 1000, avgCf: 0.7, debtUsd: owedAt(1.25), weekendWindow: true });
+    const h = weekendHeadsUp({ totalBackingUsd: 1000, avgCf: 0.7, debtUsd: owedAt(1.25), weekendWindow: true });
     expect(h).not.toBeNull();
     expect(h!.stressedHf).toBeCloseTo(1.0625, 4);
     // the stressed health back to 1.1 + 0.1: owe 595 / 1.2 = $495.83, so $64.17 of the $560 owed
@@ -109,11 +109,11 @@ describe("weekendHeadsUp: Weekend Shield is a card now, never a repay", () => {
   });
   it("says nothing outside the window, when the drop leaves it out of Act, or in Act (Protect acts itself)", () => {
     const at = (hf: number, weekendWindow = true) =>
-      weekendHeadsUp({ collateralUsd: 1000, avgCf: 0.7, debtUsd: owedAt(hf), weekendWindow });
+      weekendHeadsUp({ totalBackingUsd: 1000, avgCf: 0.7, debtUsd: owedAt(hf), weekendWindow });
     expect(at(1.25, false)).toBeNull();
     expect(at(1.4)).toBeNull(); // −15% → 1.19, still Watch
     expect(at(1.05)).toBeNull();
-    expect(weekendHeadsUp({ collateralUsd: 1000, avgCf: 0.7, debtUsd: 0, weekendWindow: true })).toBeNull();
+    expect(weekendHeadsUp({ totalBackingUsd: 1000, avgCf: 0.7, debtUsd: 0, weekendWindow: true })).toBeNull();
   });
 });
 

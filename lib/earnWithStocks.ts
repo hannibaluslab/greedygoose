@@ -2,7 +2,7 @@ import { decodeFunctionData, erc20Abi, isAddressEqual } from "viem";
 import { RISK } from "@/config/risk";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
-import { buildLoanCalls, type Call } from "@/lib/aave/tx";
+import { buildBackAndCreditCalls, type Call } from "@/lib/aave/tx";
 import type { ActivityItem } from "@/lib/activity/decode";
 import type { AgentStatus } from "@/lib/agents/status";
 import { cashRaw, feeBufferRaw, payFromCash, toUsd, type Cash } from "@/lib/cash";
@@ -121,10 +121,10 @@ const closed = (why: EarnClosed, rates?: EarnRates): EarnOffer => ({
  */
 export function earnOffer(i: EarnInput): EarnOffer {
   if (!i.options) return i.unread ? closed("unread") : { kind: "loading" };
-  if (i.options.length === 0 && i.position.collateralUsd === 0) return closed("no-stocks");
+  if (i.options.length === 0 && i.position.totalBackingUsd === 0) return closed("no-stocks");
   const rates = earnRates(i.cashApy, i.creditApy);
   if (rates.left <= 0) return closed("costs-more", rates);
-  if (i.position.borrowPaused) return closed("paused");
+  if (i.position.creditPaused) return closed("paused");
   if (statusFor(i.position.healthFactor) === "act") return closed("in-act");
 
   const plan0 = planCredit({ position: i.position, options: i.options, creditRaw: 0n, cash: i.cash, now: i.now });
@@ -348,12 +348,12 @@ export function assertEarn(
     }
   });
   const [credit, approveSave, save] = calls.slice(-3);
-  const borrow = spokeCall(credit);
+  const creditCall = spokeCall(credit);
   if (
-    borrow?.functionName !== "borrow" ||
-    borrow.args[0] !== BigInt(USDC.reserveId) ||
-    borrow.args[1] !== review.creditRaw ||
-    !isAddressEqual(borrow.args[2], user)
+    creditCall?.functionName !== "borrow" ||
+    creditCall.args[0] !== BigInt(USDC.reserveId) ||
+    creditCall.args[1] !== review.creditRaw ||
+    !isAddressEqual(creditCall.args[2], user)
   ) {
     throw new Error("Blocked: the credit differs from the screen");
   }
@@ -385,8 +385,8 @@ export function buildEarnCalls(p: {
   creditRaw: bigint;
   cash: Cash;
 }): Call[] {
-  const loan = buildLoanCalls({ user: p.user, locks: [...p.backing], borrowRaw: p.creditRaw });
-  const calls = payFromCash(p.user, 0n, p.cash, [...loan, ...buildAddSavingsCalls(p.user, p.creditRaw)], {
+  const backAndCredit = buildBackAndCreditCalls({ user: p.user, backing: [...p.backing], creditRaw: p.creditRaw });
+  const calls = payFromCash(p.user, 0n, p.cash, [...backAndCredit, ...buildAddSavingsCalls(p.user, p.creditRaw)], {
     saveTo: p.user,
   });
   return assertEarn(p.user, calls, { creditRaw: p.creditRaw, backing: p.backing });

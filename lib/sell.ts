@@ -22,11 +22,17 @@ type Address = `0x${string}`;
 export type SellFrom = "free" | "backing" | "repay";
 
 /** The holding's fields the plan reads (usePosition's Holding has them all). */
-export type SellHolding = { priceUsd: number; freeRaw: bigint; lockedRaw: bigint; lockedUsd: number; paused: boolean };
+export type SellHolding = {
+  priceUsd: number;
+  freeRaw: bigint;
+  backingRaw: bigint;
+  backingUsd: number;
+  paused: boolean;
+};
 
 /** The position's fields the plan reads (usePosition's data has them all). */
 export type SellPosition = {
-  collateralUsd: number;
+  totalBackingUsd: number;
   avgCf: number;
   debtUsd: number;
   debtRaw: bigint;
@@ -107,12 +113,18 @@ const part = (raw: bigint, f: number) =>
  * nothing is owed. Repay's "Pay with" offers a backing stock up to this.
  */
 export function repaySaleMaxRaw(
-  h: Pick<SellHolding, "lockedRaw" | "lockedUsd">,
+  h: Pick<SellHolding, "backingRaw" | "backingUsd">,
   cf: number,
-  pos: Pick<SellPosition, "collateralUsd" | "avgCf" | "debtUsd">,
+  pos: Pick<SellPosition, "totalBackingUsd" | "avgCf" | "debtUsd">,
 ): bigint {
-  const loan = { collateralUsd: pos.collateralUsd, avgCf: pos.avgCf, debtUsd: pos.debtUsd, cf, lockedUsd: h.lockedUsd };
-  return part(h.lockedRaw, h.lockedUsd > 0 ? (maxWithdrawUsd(loan) * LIMIT_HEADROOM) / h.lockedUsd : 0);
+  const creditInput = {
+    totalBackingUsd: pos.totalBackingUsd,
+    avgCf: pos.avgCf,
+    debtUsd: pos.debtUsd,
+    cf,
+    backingUsd: h.backingUsd,
+  };
+  return part(h.backingRaw, h.backingUsd > 0 ? (maxWithdrawUsd(creditInput) * LIMIT_HEADROOM) / h.backingUsd : 0);
 }
 
 /**
@@ -125,7 +137,7 @@ export function planSell(p: {
   from: SellFrom;
   stock: ReserveAsset;
   holding: SellHolding;
-  /** The stock's collateral factor (useCollateralFactors). */
+  /** The stock's collateral factor (useBackingFactors). */
   cf: number;
   position: SellPosition;
   quote: SellQuote;
@@ -136,31 +148,31 @@ export function planSell(p: {
   const econ = sellEconomics(quote, stock, h.priceUsd);
   const minOutRaw = sellMinOut(quote, stock, h.priceUsd);
   const valueUsd = (Number(sharesRaw) / 10 ** stock.decimals) * h.priceUsd;
-  const loan = {
-    collateralUsd: pos.collateralUsd,
+  const creditInput = {
+    totalBackingUsd: pos.totalBackingUsd,
     avgCf: pos.avgCf,
     debtUsd: pos.debtUsd,
     cf: p.cf,
-    lockedUsd: h.lockedUsd,
+    backingUsd: h.backingUsd,
   };
-  const backingShare = (usd: number) => part(h.lockedRaw, h.lockedUsd > 0 ? usd / h.lockedUsd : 0);
+  const backingShare = (usd: number) => part(h.backingRaw, h.backingUsd > 0 ? usd / h.backingUsd : 0);
 
   const repayRaw = from === "repay" ? saleRepayRaw(minOutRaw, pos.debtRaw) : 0n;
   let maxRaw = h.freeRaw;
   let hfAfter = pos.healthFactor;
   if (from === "backing") {
-    maxRaw = backingShare(maxWithdrawUsd({ ...loan, targetHf: RISK.safeMin }));
-    hfAfter = healthAfterWithdraw({ ...loan, usd: valueUsd });
+    maxRaw = backingShare(maxWithdrawUsd({ ...creditInput, targetHf: RISK.safeMin }));
+    hfAfter = healthAfterWithdraw({ ...creditInput, usd: valueUsd });
   } else if (from === "repay") {
     maxRaw = repaySaleMaxRaw(h, p.cf, pos);
     const debtAfter = pos.debtUsd - toUsd(repayRaw);
-    hfAfter = debtAfter > 0 ? (pos.collateralUsd * pos.avgCf - valueUsd * p.cf) / debtAfter : null;
+    hfAfter = debtAfter > 0 ? (pos.totalBackingUsd * pos.avgCf - valueUsd * p.cf) / debtAfter : null;
   }
 
   let block: SellBlock | undefined;
   if (from !== "free" && h.paused) block = "paused";
   else if (from === "free" && sharesRaw > h.freeRaw) block = "not-free";
-  else if (from !== "free" && sharesRaw > h.lockedRaw) block = "not-backing";
+  else if (from !== "free" && sharesRaw > h.backingRaw) block = "not-backing";
   else if (from === "repay" && pos.debtRaw === 0n) block = "nothing-owed";
   else if (from === "backing" && sharesRaw > maxRaw) block = "past-safe";
   else if (from === "repay" && sharesRaw > maxRaw) block = "near-limit";

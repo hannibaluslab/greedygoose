@@ -12,10 +12,10 @@ export function wholePct(f: number): number {
  * What backs credit and what's free, as whole percents that add up to 100 (by shares, so the price doesn't matter).
  * The backing part is rounded as the chip rounds it, so the two always agree.
  */
-export function holdingSplit(h: { freeRaw: bigint; lockedRaw: bigint }): { backsPct: number; freePct: number } {
-  const total = h.freeRaw + h.lockedRaw;
+export function holdingSplit(h: { freeRaw: bigint; backingRaw: bigint }): { backsPct: number; freePct: number } {
+  const total = h.freeRaw + h.backingRaw;
   if (total <= 0n) return { backsPct: 0, freePct: 0 };
-  const backsPct = wholePct(Number((h.lockedRaw * 1_000_000n) / total) / 1_000_000);
+  const backsPct = wholePct(Number((h.backingRaw * 1_000_000n) / total) / 1_000_000);
   return { backsPct, freePct: 100 - backsPct };
 }
 

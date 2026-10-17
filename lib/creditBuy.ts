@@ -3,8 +3,8 @@ import { CASH, RISK } from "@/config/risk";
 import { swapOf } from "@/lib/allowlist";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
-import { autoFill, combinedLoan, fillRaw, type LockLine } from "@/lib/aave/loan";
-import { buildLoanCalls, type Call } from "@/lib/aave/tx";
+import { autoFill, combinedCredit, fillRaw, type BackingLine } from "@/lib/aave/credit";
+import { buildBackAndCreditCalls, type Call } from "@/lib/aave/tx";
 import { cashRaw, feeBufferRaw, maxSpendRaw, payFromCash, toUsd, type Cash } from "@/lib/cash";
 import { formatUsd } from "@/lib/formatting";
 import { marketState } from "@/lib/market-hours";
@@ -49,12 +49,12 @@ export function backingOptions(
  * What backs credit once a Credit Buy lands: the holdings `adding` puts in use and every holding already in use,
  * `lead` first (the one picked to back it) when it is among them.
  */
-export function backers<H extends { symbol: string; lockedRaw: bigint }>(
+export function backers<H extends { symbol: string; backingRaw: bigint }>(
   holdings: readonly H[],
   adding: readonly string[],
   lead?: string,
 ): H[] {
-  const backs = holdings.filter((h) => adding.includes(h.symbol) || h.lockedRaw > 0n);
+  const backs = holdings.filter((h) => adding.includes(h.symbol) || h.backingRaw > 0n);
   const rank = (h: H) => (h.symbol === lead ? 0 : adding.includes(h.symbol) ? 1 : 2);
   return backs.sort((a, b) => rank(a) - rank(b));
 }
@@ -66,12 +66,12 @@ export function shortNames(names: readonly string[]): string {
 
 /** The position fields the plan reads (usePosition's data has them all). */
 export type CreditPosition = {
-  collateralUsd: number;
+  totalBackingUsd: number;
   avgCf: number;
   debtUsd: number;
   healthFactor: number | null;
   usdcLiquidity: number;
-  borrowPaused: boolean;
+  creditPaused: boolean;
 };
 
 /**
@@ -120,8 +120,8 @@ export type CreditPlan = {
   block?: CreditBlock;
 };
 
-const loanOf = (pos: CreditPosition) => ({
-  collateralUsd: pos.collateralUsd,
+const creditInputOf = (pos: CreditPosition) => ({
+  totalBackingUsd: pos.totalBackingUsd,
   avgCf: pos.avgCf,
   debtUsd: pos.debtUsd,
   liquidityUsd: pos.usdcLiquidity,
@@ -135,16 +135,16 @@ const floorCents = (usd: number) => Math.floor(usd * 100 + 1e-6) / 100;
  * The one cap on taking credit (Act is the line, Adrian 2026-10-15), for every way of taking it: Credit Buy, decision
  * 1's "Use credit for the other $Y", Earn with stocks, and every figure that says how much (usePosition's
  * `availableUsd`, Invest's buying power, "You can use up to", MAX and "Up to"). With `lines` put in use and
- * no credit taken yet: the most credit that keeps the health factor at or above CREDIT_CAP.minHf (combinedLoan's
+ * no credit taken yet: the most credit that keeps the health factor at or above CREDIT_CAP.minHf (combinedCredit's
  * maxCredit: net of what's owed, within what can be lent), so a plan may end in Watch but never in Act, and the most
  * that stays Safe. In cents, rounded down. Nothing while the credit is in Act: more is blocked until it's out.
  */
 export function creditCap(
   pos: CreditPosition,
-  lines: readonly LockLine[] = [],
+  lines: readonly BackingLine[] = [],
 ): { maxUsd: number; maxSafeUsd: number } {
   if (statusFor(pos.healthFactor) === "act") return { maxUsd: 0, maxSafeUsd: 0 };
-  const all = combinedLoan({ ...loanOf(pos), borrowUsd: 0, locks: [...lines] });
+  const all = combinedCredit({ ...creditInputOf(pos), creditUsd: 0, lines: [...lines] });
   return { maxUsd: floorCents(all.maxCredit), maxSafeUsd: floorCents(all.maxSafe) };
 }
 
@@ -157,7 +157,7 @@ function creditRoom(pos: CreditPosition, options: readonly BackingOption[]): { m
 }
 
 /** creditCap with these lines in use. */
-const roomWith = (pos: CreditPosition, lines: LockLine[]) => creditCap(pos, lines);
+const roomWith = (pos: CreditPosition, lines: BackingLine[]) => creditCap(pos, lines);
 
 /** The value of `raw` of a free holding, at the price its free value was read at. */
 const usdOf = (o: BackingOption, raw: bigint) => (o.freeRaw > 0n ? (o.freeUsd * Number(raw)) / Number(o.freeRaw) : 0);
@@ -181,7 +181,7 @@ export function isAllFree(option: BackingOption, usd: number): boolean {
  * (`isAllFree`) is exactly `freeRaw`, so no dust is left behind; more than it stays more, for the plan to block
  * ("over-free"). MAX passes the free shares straight through, not dollars.
  */
-export function backingRaw(option: BackingOption, usd: number): bigint {
+export function backingRawFor(option: BackingOption, usd: number): bigint {
   if (!(usd > 0) || option.freeRaw <= 0n || option.freeUsd <= 0) return 0n;
   if (isAllFree(option, usd)) return option.freeRaw;
   return (option.freeRaw * BigInt(Math.round(usd * 1e6))) / BigInt(Math.max(1, Math.round(option.freeUsd * 1e6)));
@@ -233,7 +233,7 @@ export function planCredit(
 ): CreditPlan {
   const pos = p.position;
   const creditUsd = toUsd(p.creditRaw);
-  const loan = loanOf(pos);
+  const creditInput = creditInputOf(pos);
 
   let chosen: { option: BackingOption; raw: bigint; usd: number }[];
   let room: { maxUsd: number; maxSafeUsd: number };
@@ -249,7 +249,7 @@ export function planCredit(
     );
   } else {
     const options = p.options;
-    const fill = autoFill({ ...loan, borrowUsd: creditUsd, lines: options.map((o) => lineOf(o, 0)) });
+    const fill = autoFill({ ...creditInput, creditUsd: creditUsd, lines: options.map((o) => lineOf(o, 0)) });
     chosen = options.flatMap((o) => {
       const raw = fillRaw(o.freeRaw, o.freeUsd, fill[o.stock.symbol]);
       return raw > 0n ? [{ option: o, raw, usd: usdOf(o, raw) }] : [];
@@ -257,7 +257,7 @@ export function planCredit(
     room = creditRoom(pos, options);
   }
   const lines = chosen.map((c) => lineOf(c.option, c.usd));
-  const calc = combinedLoan({ ...loan, borrowUsd: creditUsd, locks: lines });
+  const calc = combinedCredit({ ...creditInput, creditUsd: creditUsd, lines: lines });
   const { maxUsd, maxSafeUsd } = room;
   const after = statusFor(pos.debtUsd + creditUsd > 0 ? calc.hfAfter : null);
   // The batch's own ceiling: the room with exactly the backing it puts in use (for an explicit pick, maxUsd itself).
@@ -269,7 +269,7 @@ export function planCredit(
   // Act is the line: credit taken while in Act, or credit that would end in Act, is blocked outright (no risk tick).
   const before = statusFor(pos.healthFactor);
   let block: CreditBlock | undefined;
-  if (pos.borrowPaused) block = "paused";
+  if (pos.creditPaused) block = "paused";
   else if (creditUsd > pos.usdcLiquidity) block = "no-liquidity";
   else if (overFree) block = "over-free";
   else if (creditUsd > 0 && before === "act") block = "in-act";
@@ -355,12 +355,12 @@ export function creditAvailable(p: {
   const usd = Math.max(creditWith(p.position), bestBacking(p.position, p.options)?.usd ?? 0);
   const why = ((): NoCredit | undefined => {
     if (!p.holdsStock) return "no-stocks";
-    if (p.position.borrowPaused) return "paused";
+    if (p.position.creditPaused) return "paused";
     if (statusFor(p.position.healthFactor) === "act") return "in-act";
     if (usd >= BUY_LIMITS.minUsd) return undefined;
     if (p.position.usdcLiquidity < BUY_LIMITS.minUsd) return "no-liquidity";
     // Nothing backs credit yet: free stock too small to give the $1 minimum buy isn't "all in use".
-    if (p.position.collateralUsd <= 0) return p.options.length === 0 ? "cant-back" : "too-small";
+    if (p.position.totalBackingUsd <= 0) return p.options.length === 0 ? "cant-back" : "too-small";
     return "all-in-use";
   })();
   if (why) return { usd: 0, why, line: noCreditLine(why, toUsd(maxSpendRaw(p.cash)) >= BUY_LIMITS.minUsd) };
@@ -424,7 +424,10 @@ export function buildCreditBuyCalls(p: {
 }): Call[] {
   const fromCash = p.quote.amountIn - p.creditRaw;
   if (p.creditRaw <= 0n || fromCash < 0n) throw new Error("Credit must be part of the buy");
-  const spend = [...buildLoanCalls({ user: p.user, locks: p.backing, borrowRaw: p.creditRaw }), ...buildBuyCalls(p)];
+  const spend = [
+    ...buildBackAndCreditCalls({ user: p.user, backing: p.backing, creditRaw: p.creditRaw }),
+    ...buildBuyCalls(p),
+  ];
   return assertCreditBuy(p.user, payFromCash(p.user, fromCash, p.cash, spend), {
     stock: p.stock,
     creditRaw: p.creditRaw,
@@ -464,7 +467,7 @@ export function assertCreditBuy(
   calls: Call[],
   review: { stock: ReserveAsset; creditRaw: bigint; cashRaw: bigint; backing: readonly Backing[]; limit: CreditLimit },
 ): Call[] {
-  const borrows = calls.flatMap((c, i) => {
+  const creditCalls = calls.flatMap((c, i) => {
     const d = spokeCall(c);
     return d?.functionName === "borrow" ? [{ i, args: d.args }] : [];
   });
@@ -476,13 +479,13 @@ export function assertCreditBuy(
     const s = swapOf(c);
     return s ? [{ i, ...s }] : [];
   });
-  if (borrows.length !== 1 || swaps.length !== 1)
+  if (creditCalls.length !== 1 || swaps.length !== 1)
     throw new Error("Blocked: a Credit Buy takes credit once and swaps once");
-  const [borrow] = borrows;
+  const [creditCall] = creditCalls;
   const [swap] = swaps;
-  if (swap.i !== calls.length - 1 || borrow.i > swap.i)
+  if (swap.i !== calls.length - 1 || creditCall.i > swap.i)
     throw new Error("Blocked: the swap must come last, after the credit");
-  const [reserveId, amount, onBehalfOf] = borrow.args;
+  const [reserveId, amount, onBehalfOf] = creditCall.args;
   if (reserveId !== BigInt(USDC.reserveId) || amount !== review.creditRaw || !isAddressEqual(onBehalfOf, user)) {
     throw new Error("Blocked: the credit differs from the review");
   }
@@ -493,7 +496,7 @@ export function assertCreditBuy(
     const s = supplies[n];
     const [id, raw, onBehalf] = s.args;
     const free = review.limit.freeRaw[b.stock.symbol];
-    if (id !== BigInt(b.stock.reserveId) || raw !== b.raw || !isAddressEqual(onBehalf, user) || s.i > borrow.i) {
+    if (id !== BigInt(b.stock.reserveId) || raw !== b.raw || !isAddressEqual(onBehalf, user) || s.i > creditCall.i) {
       throw new Error("Blocked: the backing differs from the review");
     }
     if (free === undefined || b.raw > free) throw new Error("Blocked: more backing than the free shares");

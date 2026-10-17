@@ -1,6 +1,6 @@
 /**
  * Simulates the Repay sheet's "Pay with" batches on Base mainnet (eth_simulateV1), from a real account. Nothing is
- * signed or sent. The account is read the way usePosition and useCollateralFactors read it, the rows and the amount
+ * signed or sent. The account is read the way usePosition and useBackingFactors read it, the rows and the amount
  * come from lib/repay.ts as the sheet plans them, quotes from the live pools (read again on their pools the way
  * useSigningQuote reads them before JAW's sheet), and the batch is the one useRepayWith prepares.
  */
@@ -87,7 +87,7 @@ async function noCash(user: Address): Promise<Call[]> {
   ];
 }
 
-/** The account as usePosition and useCollateralFactors read it, after `before` when given: what the Repay sheet plans on. */
+/** The account as usePosition and useBackingFactors read it, after `before` when given: what the Repay sheet plans on. */
 async function dataOf(user: Address, before: Call[] = []): Promise<{ data: RepayData; cfs: Record<string, number> }> {
   const perStock = EQUITIES.flatMap((e) => [
     read(e.address, erc20Abi, "balanceOf", [user]),
@@ -123,9 +123,9 @@ async function dataOf(user: Address, before: Call[] = []): Promise<{ data: Repay
       name: e.name,
       priceUsd,
       freeRaw: bal,
-      lockedRaw: supplied,
+      backingRaw: supplied,
       freeUsd: usd(bal),
-      lockedUsd: usd(supplied),
+      backingUsd: usd(supplied),
       paused: cfg.paused,
       multiplier: out[i * PER + 3] as bigint,
     };
@@ -155,7 +155,7 @@ async function dataOf(user: Address, before: Call[] = []): Promise<{ data: Repay
   return {
     data: {
       holdings,
-      collateralUsd: s.collateralUsd,
+      totalBackingUsd: s.totalBackingUsd,
       avgCf: s.avgCf,
       debtUsd: toUsd(debtRaw),
       debtRaw,

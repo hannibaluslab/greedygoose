@@ -17,7 +17,13 @@ import {
 } from "viem";
 import { CHAIN } from "@/lib/chain";
 import { CASH, CREDIT_CAP } from "@/config/risk";
-import { buildBorrowCalls, buildLoanCalls, buildRepayCalls, buildSupplyCalls, buildWithdrawCalls } from "@/lib/aave/tx";
+import {
+  buildCreditCalls,
+  buildBackAndCreditCalls,
+  buildRepayCalls,
+  buildSupplyCalls,
+  buildWithdrawCalls,
+} from "@/lib/aave/tx";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { aaveOracleAbi } from "@/lib/aave/abis/IAaveOracle";
 import { maxWithdrawUsd, priceToUsd, summarize, type AccountData } from "@/lib/aave/math";
@@ -43,15 +49,15 @@ const simulate = (calls: { to: `0x${string}`; data: `0x${string}` }[]) =>
   client.simulateCalls({ account: user, calls: calls.map(({ to, data }) => ({ to, data })) });
 
 describe("write batches simulate on mainnet", () => {
-  it("borrow $1 then repay $1", async () => {
+  it("take $1 of credit, then repay $1", async () => {
     const r = await simulate([
-      ...buildBorrowCalls({ user, amountRaw: 1_000_000n }),
+      ...buildCreditCalls({ user, amountRaw: 1_000_000n }),
       ...buildRepayCalls({ user, amountRaw: 1_000_000n, all: false }),
     ]);
     expect(r.results.map((x) => x.status)).toEqual(["success", "success", "success"]);
   });
 
-  it("supply a free stock balance as collateral", async () => {
+  it("put a free stock balance in as backing", async () => {
     let done = false;
     for (const stock of EQUITIES) {
       const bal = await client.readContract({
@@ -69,15 +75,15 @@ describe("write batches simulate on mainnet", () => {
     expect(done).toBe(true);
   });
 
-  it("borrowing far past the limit is rejected by Aave", async () => {
-    const r = await simulate(buildBorrowCalls({ user, amountRaw: 10n ** 12n })); // $1M
+  it("credit far past the limit is rejected by Aave", async () => {
+    const r = await simulate(buildCreditCalls({ user, amountRaw: 10n ** 12n })); // $1M
     expect(r.results[0].status).toBe("failure");
     const msg = explainRevert(r.results[0].data, "fallback");
     console.log("over-limit borrow →", msg);
     expect(msg).not.toBe("fallback");
   });
 
-  it("unlock a small slice of collateral, and refuse unlocking everything while in debt", async () => {
+  it("free up a small slice of backing, and refuse freeing everything while something is owed", async () => {
     const stock = EQUITIES.find((e) => e.symbol === "AMZNc")!;
     const supplied = await client.readContract({
       address: AAVE.SPOKE,
@@ -95,7 +101,7 @@ describe("write batches simulate on mainnet", () => {
     expect(everything.results.some((r) => r.status === "failure")).toBe(true);
   });
 
-  it("get a loan: lock a free balance + borrow $1 in one batch", async () => {
+  it("take credit: back it with a free balance + $1 of credit in one batch", async () => {
     for (const stock of EQUITIES) {
       const bal = await client.readContract({
         address: stock.address,
@@ -104,15 +110,17 @@ describe("write batches simulate on mainnet", () => {
         args: [user],
       });
       if (bal === 0n) continue;
-      const r = await simulate(buildLoanCalls({ user, locks: [{ stock, raw: bal }], borrowRaw: 1_000_000n }));
+      const r = await simulate(
+        buildBackAndCreditCalls({ user, backing: [{ stock, raw: bal }], creditRaw: 1_000_000n }),
+      );
       expect(r.results.map((x) => x.status)).toEqual(["success", "success", "success", "success"]);
       return;
     }
     throw new Error("no free stock to test with");
   });
 
-  it("get a loan with several stocks at once", async () => {
-    const locks = [];
+  it("take credit backed by several stocks at once", async () => {
+    const backing = [];
     for (const stock of EQUITIES) {
       const bal = await client.readContract({
         address: stock.address,
@@ -120,13 +128,13 @@ describe("write batches simulate on mainnet", () => {
         functionName: "balanceOf",
         args: [user],
       });
-      if (bal > 0n) locks.push({ stock, raw: bal });
-      if (locks.length === 2) break;
+      if (bal > 0n) backing.push({ stock, raw: bal });
+      if (backing.length === 2) break;
     }
-    expect(locks.length).toBeGreaterThanOrEqual(2);
-    const r = await simulate(buildLoanCalls({ user, locks, borrowRaw: 1_000_000n }));
+    expect(backing.length).toBeGreaterThanOrEqual(2);
+    const r = await simulate(buildBackAndCreditCalls({ user, backing: backing, creditRaw: 1_000_000n }));
     expect(r.results.every((x) => x.status === "success")).toBe(true);
-    expect(r.results).toHaveLength(locks.length * 3 + 1);
+    expect(r.results).toHaveLength(backing.length * 3 + 1);
   });
 });
 
@@ -303,15 +311,15 @@ describe("Free up stops at the cap's line on Base", () => {
     });
     const cf = dyn.collateralFactor / 10_000;
     const usdPerRaw = priceToUsd(price) / 10 ** nvda.decimals;
-    const lockedRaw = BigInt(Math.floor(20 / usdPerRaw));
-    expect(free).toBeGreaterThanOrEqual(lockedRaw);
-    const lockedUsd = Number(lockedRaw) * usdPerRaw;
-    const debtUsd = Math.floor(((lockedUsd * cf) / 1.75) * 1e6) / 1e6;
+    const backingRaw = BigInt(Math.floor(20 / usdPerRaw));
+    expect(free).toBeGreaterThanOrEqual(backingRaw);
+    const backingUsd = Number(backingRaw) * usdPerRaw;
+    const debtUsd = Math.floor(((backingUsd * cf) / 1.75) * 1e6) / 1e6;
     // The position, set up first in every simulation below: $20 of NVIDIA in use, credit to a health of 1.75.
-    const setup = buildLoanCalls({
+    const setup = buildBackAndCreditCalls({
       user: newcomer,
-      locks: [{ stock: nvda, raw: lockedRaw }],
-      borrowRaw: parseUnits(debtUsd.toFixed(6), 6),
+      backing: [{ stock: nvda, raw: backingRaw }],
+      creditRaw: parseUnits(debtUsd.toFixed(6), 6),
     });
     const healthAfter = async (calls: { to: `0x${string}`; data: `0x${string}` }[]) => {
       const read = {
@@ -333,20 +341,20 @@ describe("Free up stops at the cap's line on Base", () => {
     };
     expect(await healthAfter([])).toBeCloseTo(1.75, 3);
 
-    const loan = { collateralUsd: lockedUsd, avgCf: cf, debtUsd, cf, lockedUsd };
+    const creditInput = { totalBackingUsd: backingUsd, avgCf: cf, debtUsd, cf, backingUsd };
     // The sheet's MAX (freeUpCheck), as shares rounded down.
     const sheet = freeUpCheck({
-      position: loan,
-      holding: { lockedRaw, lockedUsd, priceUsd: priceToUsd(price), multiplier: 10n ** 18n },
+      position: creditInput,
+      holding: { backingRaw, backingUsd, priceUsd: priceToUsd(price), multiplier: 10n ** 18n },
       decimals: nvda.decimals,
       cf,
       amountRaw: 0n,
       all: false,
     });
-    expect(sheet.maxUsd).toBeCloseTo(maxWithdrawUsd({ ...loan, targetHf: CREDIT_CAP.minHf }), 9);
-    const rawFor = (usd: number) => (lockedRaw * BigInt(Math.floor((usd / lockedUsd) * 1e9))) / 1_000_000_000n;
+    expect(sheet.maxUsd).toBeCloseTo(maxWithdrawUsd({ ...creditInput, targetHf: CREDIT_CAP.minHf }), 9);
+    const rawFor = (usd: number) => (backingRaw * BigInt(Math.floor((usd / backingUsd) * 1e9))) / 1_000_000_000n;
     const maxRaw = rawFor(sheet.maxUsd);
-    const oldRaw = rawFor(maxWithdrawUsd(loan) * 0.995);
+    const oldRaw = rawFor(maxWithdrawUsd(creditInput) * 0.995);
     const capped = await healthAfter(
       buildWithdrawCalls({ user: newcomer, stock: nvda, amountRaw: maxRaw, all: false }),
     );

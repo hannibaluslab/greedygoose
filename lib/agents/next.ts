@@ -149,7 +149,7 @@ export type NextInput = {
   nowSec: number;
   /** Savings (Aave V3), USDC units: the cash Protect repays from. */
   savingsRaw: bigint;
-  collateralUsd: number;
+  totalBackingUsd: number;
   avgCf: number;
   debtUsd: number;
   /** Free shares and Aave's price, by reserve id. */
@@ -179,7 +179,7 @@ const smaller = (a: bigint, b: bigint) => (a < b ? a : b);
 function protectNext(i: NextInput): Next {
   const left = i.left.protect;
   const d = planProtect({
-    collateralUsd: i.collateralUsd,
+    totalBackingUsd: i.totalBackingUsd,
     avgCf: i.avgCf,
     debtUsd: i.debtUsd,
     savingsUsd: Number(i.savingsRaw) / 10 ** USDC.decimals,
@@ -217,10 +217,10 @@ function protectNext(i: NextInput): Next {
  * freeze that starts mid-week and not while prices are already held (Good Friday); null while it isn't read.
  */
 export function weekendCard(
-  i: Pick<NextInput, "nowSec" | "collateralUsd" | "avgCf" | "debtUsd" | "numbers"> & { freezeAt: number | null },
+  i: Pick<NextInput, "nowSec" | "totalBackingUsd" | "avgCf" | "debtUsd" | "numbers"> & { freezeAt: number | null },
 ): WeekendCard | null {
   const h = weekendHeadsUp({
-    collateralUsd: i.collateralUsd,
+    totalBackingUsd: i.totalBackingUsd,
     avgCf: i.avgCf,
     debtUsd: i.debtUsd,
     weekendWindow: beforeFreeze(i.nowSec, i.freezeAt, i.numbers.weekendWindowSec),
@@ -270,7 +270,7 @@ function rebalanceNext(i: NextInput): Next {
   const when = whenText(rebalanceCheckAt(i.nowSec, i.rebalanceDay), i.nowSec);
   if (trades.length === 0) return { idle: `On target. Checks ${when}` };
   // GooseExecutor's RebalanceJob waits while Protect may act: below Protect's trigger, the Act line.
-  const hf = i.debtUsd > 0 ? (i.collateralUsd * i.avgCf) / i.debtUsd : Infinity;
+  const hf = i.debtUsd > 0 ? (i.totalBackingUsd * i.avgCf) / i.debtUsd : Infinity;
   if (hf < i.numbers.triggerHf) return { idle: "Waits until your credit is out of Act" };
   const spend = usd(trades.filter((t) => t.buy).reduce((a, t) => a + t.amountIn, 0n));
   return move(`trades ${spend} ${when}`, `Would trade ${spend}`);

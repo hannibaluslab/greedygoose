@@ -17,7 +17,7 @@ import { useBoughtHome } from "@/hooks/useBoughtHome";
 import { useBuyQuote } from "@/hooks/useBuyQuote";
 import { useCreditBuy } from "@/hooks/useCreditBuy";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
-import { useCollateralFactorsRead, type Holding, type PositionData } from "@/hooks/usePosition";
+import { useBackingFactorsRead, type Holding, type PositionData } from "@/hooks/usePosition";
 import { monthlyCost } from "@/lib/aave/math";
 import { cashRaw, feeBufferRaw } from "@/lib/cash";
 import {
@@ -26,7 +26,7 @@ import {
   FEE_FIRST,
   backers,
   backingOptions,
-  backingRaw,
+  backingRawFor,
   bestBacking,
   creditAvailable,
   creditWith,
@@ -52,7 +52,7 @@ const ORDER: Step[] = ["back", "much", "pick", "amount"];
 /** Step 1's row for what already backs credit: nothing new goes in use. */
 const EXISTING = "existing";
 
-const valueOf = (h: Holding) => h.freeUsd + h.lockedUsd;
+const valueOf = (h: Holding) => h.freeUsd + h.backingUsd;
 /** "Status after" in words, coloured once it needs the extra confirmation. */
 const AFTER_TONE: Record<Status, string> = { none: "", safe: "", watch: "text-watch-text", act: "text-act" };
 /** Free stock worth less than this can't back a Credit Buy here: dust left over reads "All in use". */
@@ -95,7 +95,7 @@ export function CreditBuySheet({
 }) {
   const preset = EQUITIES.find((e) => e.symbol === symbol) ?? null;
   const { isConnected } = useAccount();
-  const cfRead = useCollateralFactorsRead(data.holdings);
+  const cfRead = useBackingFactorsRead(data.holdings);
   const cfs = cfRead.cfs;
   const protect = useAgents(user).status.protect;
   const fee = useFeeSupport();
@@ -120,7 +120,7 @@ export function CreditBuySheet({
     // The extra confirmation is for the plan on screen; any step away, or a new amount, asks again.
     setAck(false);
   };
-  const held = data.holdings.filter((h) => h.freeShares + h.lockedShares > 0).sort((a, b) => valueOf(b) - valueOf(a));
+  const held = data.holdings.filter((h) => h.freeShares + h.backingShares > 0).sort((a, b) => valueOf(b) - valueOf(a));
   const others = EQUITIES.filter((e) => !held.some((h) => h.symbol === e.symbol)).sort((a, b) =>
     a.name.localeCompare(b.name),
   );
@@ -158,7 +158,7 @@ export function CreditBuySheet({
   const existingRoom = creditWith(data);
   // In Act no credit is taken (Act is the line): step 1's one line says so, with no list of why each holding can't.
   const inAct = available?.why === "in-act";
-  const canUseExisting = data.collateralUsd > 0 && existingRoom >= BUY_LIMITS.minUsd;
+  const canUseExisting = data.totalBackingUsd > 0 && existingRoom >= BUY_LIMITS.minUsd;
   // Step 1 picks the holding that can back the most until Sam picks another, else what already backs credit. A pick
   // that can't back it any more (under $1 free, paused, or no longer read) falls back to that default on step 1.
   const canPick = (key: string) => (key === EXISTING ? canUseExisting : options.some((o) => o.stock.symbol === key));
@@ -341,7 +341,7 @@ export function CreditBuySheet({
                   {canUseExisting && (
                     <ExistingRow
                       names={backers(data.holdings, []).map((h) => h.name)}
-                      valueUsd={data.collateralUsd}
+                      valueUsd={data.totalBackingUsd}
                       roomUsd={existingRoom}
                       checked={pickedKey === EXISTING}
                       onPick={() => choose(EXISTING)}
@@ -350,8 +350,8 @@ export function CreditBuySheet({
                 </div>
                 <CantBack
                   inUse={
-                    data.collateralUsd > 0 && !canUseExisting && !inAct
-                      ? { names: backers(data.holdings, []).map((h) => h.name), usd: data.collateralUsd }
+                    data.totalBackingUsd > 0 && !canUseExisting && !inAct
+                      ? { names: backers(data.holdings, []).map((h) => h.name), usd: data.totalBackingUsd }
                       : null
                   }
                   items={
@@ -431,7 +431,7 @@ export function CreditBuySheet({
                 onValue={(v) => {
                   // The whole free value typed is all of it from now on; otherwise the shares it is worth now.
                   const usd = Math.max(0, Number(v) || 0);
-                  setBacking(v, isAllFree(chosen, usd), backingRaw(chosen, usd));
+                  setBacking(v, isAllFree(chosen, usd), backingRawFor(chosen, usd));
                 }}
                 onMax={() => setBacking(freeShownUsd(chosen).toFixed(2), true, chosen.freeRaw)}
                 hint={
@@ -786,7 +786,7 @@ function Radio({ checked }: { checked: boolean }) {
 function unavailable(h: Holding): string | undefined {
   if (h.paused || h.frozen) return "Paused by Aave";
   if (h.freeUsd >= MIN_BACKING_USD) return "Can’t back credit";
-  return h.lockedRaw > 0n ? undefined : "Too small to back credit";
+  return h.backingRaw > 0n ? undefined : "Too small to back credit";
 }
 
 /**
@@ -940,16 +940,16 @@ function BackingRow({
   reason?: string;
 }) {
   const ticker = tickerOf(h.symbol);
-  const allInUse = !reason && h.lockedRaw > 0n && !onPick;
+  const allInUse = !reason && h.backingRaw > 0n && !onPick;
   const body = (
     <>
       <StockAvatar symbol={h.symbol} size={36} font={ticker.length > 4 ? undefined : 10.5} weight={800} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-[15px] font-semibold">{h.name}</span>
         <span className="num whitespace-nowrap text-[12.5px] text-ink-mid">
-          {formatShares(h.freeShares + h.lockedShares)} shares
+          {formatShares(h.freeShares + h.backingShares)} shares
         </span>
-        {(h.lockedShares > 0 || reason) && (
+        {(h.backingShares > 0 || reason) && (
           <span className="num whitespace-nowrap text-[12px] text-ink-mid">
             {reason ?? (
               <>
@@ -960,7 +960,7 @@ function BackingRow({
                   </>
                 ) : (
                   <>
-                    <b className="font-semibold text-ink">{formatShares(h.lockedShares)}</b> in use
+                    <b className="font-semibold text-ink">{formatShares(h.backingShares)}</b> in use
                   </>
                 )}
               </>

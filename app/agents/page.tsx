@@ -92,7 +92,7 @@ function Agents({ address }: { address: `0x${string}` }) {
     ? agentNexts({
         nowSec,
         savingsRaw: position.savingsRaw,
-        collateralUsd: position.collateralUsd,
+        totalBackingUsd: position.totalBackingUsd,
         avgCf: position.avgCf,
         debtUsd: position.debtUsd,
         holdings: position.holdings,
@@ -114,7 +114,7 @@ function Agents({ address }: { address: `0x${string}` }) {
       ? weekendCard({
           nowSec,
           freezeAt,
-          collateralUsd: position.collateralUsd,
+          totalBackingUsd: position.totalBackingUsd,
           avgCf: position.avgCf,
           debtUsd: position.debtUsd,
           numbers,

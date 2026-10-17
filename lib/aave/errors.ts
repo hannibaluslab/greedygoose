@@ -9,11 +9,11 @@ import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 
 const PLAIN: Record<string, string> = {
-  HealthFactorBelowThreshold: "This would put your loan past what Aave allows. Try a smaller amount.",
+  HealthFactorBelowThreshold: "That’s more than your stocks can back right now. Try a smaller amount.",
   ReservePaused: "Aave has paused this market for now. Try again later.",
   ReserveFrozen: "Aave isn’t accepting new activity in this market right now.",
   ReserveNotBorrowable: "Aave isn’t giving new USDC credit right now.",
-  ReserveNotEnabledAsCollateral: "This stock isn’t being used as collateral yet.",
+  ReserveNotEnabledAsCollateral: "This stock doesn’t back your credit yet.",
   InsufficientLiquidity: "Aave doesn’t have enough USDC to lend right now. Try a smaller amount.",
   MustNotLeaveDust: "That would leave a tiny amount behind. Repay all, or a little less.",
   MaximumUserReservesExceeded: "You’ve reached Aave’s limit on how many markets one account can use.",

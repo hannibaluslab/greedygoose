@@ -196,7 +196,7 @@ export function EarnStep({
   const lead = plan.backing[0]?.stock.symbol ?? [...options].sort((a, b) => b.cf - a.cf)[0]?.stock.symbol;
   const adding = plan.backing.length
     ? plan.backing.map((b) => b.stock.symbol)
-    : data.collateralUsd > 0 || !lead
+    : data.totalBackingUsd > 0 || !lead
       ? []
       : [lead];
   const backedBy = backers(data.holdings, adding, lead);

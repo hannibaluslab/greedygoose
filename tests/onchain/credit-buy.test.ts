@@ -24,13 +24,13 @@ import { hubAbi } from "@/lib/aave/abis/IHub";
 import { aaveOracleAbi } from "@/lib/aave/abis/IAaveOracle";
 import { explainRevert } from "@/lib/aave/errors";
 import { priceToUsd, summarize, type AccountData } from "@/lib/aave/math";
-import { buildLoanCalls } from "@/lib/aave/tx";
+import { buildBackAndCreditCalls } from "@/lib/aave/tx";
 import { swapOf } from "@/lib/allowlist";
 import type { Cash } from "@/lib/cash";
 import {
   CREDIT_BLOCKED,
   backingOptions,
-  backingRaw,
+  backingRawFor,
   buildCreditBuyCalls,
   freeShownUsd,
   isAllFree,
@@ -61,7 +61,7 @@ const aapl = EQUITIES.find((e) => e.symbol === "AAPLc")!;
 const feeBuffer = parseUnits(CASH.feeBufferUsd.toFixed(6), 6);
 const usd = (n: number) => parseUnits(n.toFixed(6), 6);
 
-/** What usePosition and useCollateralFactors read, for planCredit. */
+/** What usePosition and useBackingFactors read, for planCredit. */
 async function live(user: Address) {
   const [account, liquidity, usdcCfg, walletRaw, savingsRaw] = await Promise.all([
     client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserAccountData", args: [user] }),
@@ -84,7 +84,7 @@ async function live(user: Address) {
   const position: CreditPosition = {
     ...s,
     usdcLiquidity: Number(liquidity) / 10 ** USDC.decimals,
-    borrowPaused: usdcCfg.paused || usdcCfg.frozen || !usdcCfg.borrowable,
+    creditPaused: usdcCfg.paused || usdcCfg.frozen || !usdcCfg.borrowable,
   };
   const holdings = await Promise.all(
     EQUITIES.map(async (e) => {
@@ -188,7 +188,7 @@ const swapAmountIn = (calls: { to: Address; data: Address }[]) => swapOf(calls.a
 describe("Credit Buy batches simulate on mainnet", () => {
   it("first-time backing: put stock in use → take credit → approve → swap, from an account that never backed credit", async () => {
     const { position, options, cash } = await live(newcomer);
-    expect(position.collateralUsd).toBe(0);
+    expect(position.totalBackingUsd).toBe(0);
     expect(options.length).toBeGreaterThan(0);
     const creditRaw = usd(5);
     const plan = planCredit({ position, options, creditRaw, cash });
@@ -254,7 +254,7 @@ describe("Credit Buy batches simulate on mainnet", () => {
     expect(option).toBeDefined();
     // Half of it, typed in dollars (the preview account keeps a little free: about $1.79 of Amazon on 2026-10-15).
     const typedUsd = Math.floor((option.freeUsd / 2) * 100) / 100;
-    const raw = backingRaw(option, typedUsd);
+    const raw = backingRawFor(option, typedUsd);
     expect(raw).toBeGreaterThan(0n);
     expect(raw).toBeLessThan(option.freeRaw);
 
@@ -307,7 +307,7 @@ describe("Credit Buy batches simulate on mainnet", () => {
     const { position, options, cash } = await live(newcomer);
     const option = options.find((o) => o.stock.symbol === "NVDAc")!;
     expect(option.freeUsd).toBeGreaterThan(20);
-    const raw = backingRaw(option, 20);
+    const raw = backingRawFor(option, 20);
     const room = planCredit({ position, backing: { option, raw }, creditRaw: 0n, cash });
     // $20 of NVIDIA at its collateral factor, over the cap's line (1.12): nothing else backs this account's credit.
     expect(room.maxUsd).toBeLessThanOrEqual((20 * option.cf) / CREDIT_CAP.minHf);
@@ -375,7 +375,7 @@ describe("Credit Buy batches simulate on mainnet", () => {
     expect(option).toBeDefined();
     const typedUsd = freeShownUsd(option);
     expect(isAllFree(option, typedUsd)).toBe(true);
-    const raw = backingRaw(option, typedUsd);
+    const raw = backingRawFor(option, typedUsd);
     expect(raw).toBe(option.freeRaw);
     const creditRaw = usd(5);
     const plan = planCredit({ position, backing: { option, raw }, creditRaw, cash });
@@ -419,7 +419,7 @@ describe("Credit Buy batches simulate on mainnet", () => {
 
   it("already backing: take credit → approve → swap, the credit spent in full", async () => {
     const { position, options, cash } = await live(backer);
-    expect(position.collateralUsd).toBeGreaterThan(0);
+    expect(position.totalBackingUsd).toBeGreaterThan(0);
     const creditRaw = usd(5);
     const plan = planCredit({ position, options, creditRaw, cash });
     expect(plan.block).toBeUndefined();
@@ -585,7 +585,7 @@ describe("Act is the line on Base (Adrian, 2026-10-15)", () => {
   it("what 99.5% of Aave's limit allowed ends in Act on Aave's own health; the plan now blocks it, and the cap ends in Watch", async () => {
     const { position, options, cash } = await live(newcomer);
     const option = options.find((o) => o.stock.symbol === "NVDAc")!;
-    const raw = backingRaw(option, 20);
+    const raw = backingRawFor(option, 20);
     const pick = { option, raw };
     const usdIn = option.freeUsd * (Number(raw) / Number(option.freeRaw));
     const oldMax = Math.floor(usdIn * option.cf * 0.995 * 100) / 100;
@@ -594,10 +594,10 @@ describe("Act is the line on Base (Adrian, 2026-10-15)", () => {
     expect(planCredit({ position, backing: pick, creditRaw: usd(oldMax), cash }).block).toBe("act");
 
     const healthWith = async (creditUsd: number) => {
-      const calls = buildLoanCalls({
+      const calls = buildBackAndCreditCalls({
         user: newcomer,
-        locks: [{ stock: option.stock, raw }],
-        borrowRaw: usd(creditUsd),
+        backing: [{ stock: option.stock, raw }],
+        creditRaw: usd(creditUsd),
       });
       const r = await client.simulateCalls({ account: newcomer, calls: [...calls, accountRead(newcomer)] });
       expect(r.results.map((x) => x.status).every((x) => x === "success")).toBe(true);
@@ -617,7 +617,7 @@ describe("Act is the line on Base (Adrian, 2026-10-15)", () => {
   it("the app's own check reads Aave's health after the batch: credit that lands in Act stops there, whatever the screen planned", async () => {
     const { position, options, cash } = await live(newcomer);
     const option = options.find((o) => o.stock.symbol === "NVDAc")!;
-    const raw = backingRaw(option, 20);
+    const raw = backingRawFor(option, 20);
     const pick = { option, raw };
     const usdIn = option.freeUsd * (Number(raw) / Number(option.freeRaw));
     const oldMax = Math.floor(usdIn * option.cf * 0.995 * 100) / 100;
@@ -661,7 +661,7 @@ describe("Act is the line on Base (Adrian, 2026-10-15)", () => {
     const usdPerRaw = option.freeUsd / Number(option.freeRaw);
 
     // 1: $20 of NVIDIA in use, the MAX in credit, NVIDIA bought with it.
-    const pick1 = { option, raw: backingRaw(option, 20) };
+    const pick1 = { option, raw: backingRawFor(option, 20) };
     const max1 = planCredit({ position, backing: pick1, creditRaw: 0n, cash }).maxUsd;
     const plan1 = planCredit({ position, backing: pick1, creditRaw: usd(max1), cash });
     expect(plan1).toMatchObject({ after: "watch", block: undefined, extraConfirm: true });

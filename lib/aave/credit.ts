@@ -1,22 +1,22 @@
 import { CREDIT_CAP, RISK } from "@/config/risk";
 
 /** One stock the user is locking in a combined loan, valued at Aave's price. */
-export type LockLine = { key: string; usd: number; cf: number; freeUsd: number };
+export type BackingLine = { key: string; usd: number; cf: number; freeUsd: number };
 
 /**
  * Combined loan: lock several stocks (any amounts) and borrow, in one go.
  * Power = what Aave lets you borrow = existing weighted collateral + Σ lock × cf.
  */
-export function combinedLoan(p: {
-  collateralUsd: number;
+export function combinedCredit(p: {
+  totalBackingUsd: number;
   avgCf: number;
   debtUsd: number;
-  locks: LockLine[];
-  borrowUsd: number;
+  lines: BackingLine[];
+  creditUsd: number;
   liquidityUsd: number;
 }) {
-  const power = p.collateralUsd * p.avgCf + p.locks.reduce((a, l) => a + l.usd * l.cf, 0);
-  const debtAfter = p.debtUsd + p.borrowUsd;
+  const power = p.totalBackingUsd * p.avgCf + p.lines.reduce((a, l) => a + l.usd * l.cf, 0);
+  const debtAfter = p.debtUsd + p.creditUsd;
   const hfAfter = debtAfter > 0 ? power / debtAfter : Infinity;
   const room = (target: number) => Math.max(0, Math.min(power / target - p.debtUsd, p.liquidityUsd));
   return {
@@ -56,22 +56,22 @@ export function fillRaw(freeRaw: bigint, freeUsd: number, usd: number): bigint {
 }
 
 /**
- * Fill locks so `borrowUsd` starts at `targetHf`, keeping what the user already chose and
+ * Fill locks so `creditUsd` starts at `targetHf`, keeping what the user already chose and
  * topping up from the stocks with the highest collateral factor first.
  * Returns a usd amount per key (never above that stock's free value).
  */
 export function autoFill(p: {
-  collateralUsd: number;
+  totalBackingUsd: number;
   avgCf: number;
   debtUsd: number;
-  borrowUsd: number;
-  lines: LockLine[];
+  creditUsd: number;
+  lines: BackingLine[];
   targetHf?: number;
 }): Record<string, number> {
   const target = Math.max(1, p.targetHf ?? RISK.safeMin);
   const out: Record<string, number> = Object.fromEntries(p.lines.map((l) => [l.key, l.usd]));
   let need =
-    target * (p.debtUsd + p.borrowUsd) - p.collateralUsd * p.avgCf - p.lines.reduce((a, l) => a + l.usd * l.cf, 0);
+    target * (p.debtUsd + p.creditUsd) - p.totalBackingUsd * p.avgCf - p.lines.reduce((a, l) => a + l.usd * l.cf, 0);
   for (const l of [...p.lines].sort((a, b) => b.cf - a.cf)) {
     if (need <= 0) break;
     if (l.cf <= 0) continue;

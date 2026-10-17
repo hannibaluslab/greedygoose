@@ -5,14 +5,14 @@ import { FREE_UP_BLOCKED, FREE_UP_FLOOR, freeUpByRepay, freeUpCheck } from "@/li
 import { statusFor } from "@/lib/risk/status";
 
 /*
- * Free up shares (UnlockSheet) on lib/freeUp.ts: Act is the line (Adrian, 2026-10-15). Its MAX keeps the health at
+ * Free up shares (FreeUpSheet) on lib/freeUp.ts: Act is the line (Adrian, 2026-10-15). Its MAX keeps the health at
  * 1.12, an amount that would end in Act is blocked with one line and no tick, and Watch keeps D2's tick.
  */
 
 const ONE = 10n ** 18n; // uiMultiplier: one share per token
 /** 8 NVIDIA at $250 back the credit at 70%: $2,000 in use. */
-const holding = { lockedRaw: 800_000_000n, lockedUsd: 2_000, priceUsd: 250, multiplier: ONE };
-const owing = (debtUsd: number) => ({ collateralUsd: 2_000, avgCf: 0.7, debtUsd });
+const holding = { backingRaw: 800_000_000n, backingUsd: 2_000, priceUsd: 250, multiplier: ONE };
+const owing = (debtUsd: number) => ({ totalBackingUsd: 2_000, avgCf: 0.7, debtUsd });
 /** `usd` of NVIDIA in raw units at $250. */
 const rawFor = (usd: number) => BigInt(Math.round((usd / 250) * 1e8));
 const check = (debtUsd: number, usd: number, all = false) =>
@@ -21,7 +21,7 @@ const check = (debtUsd: number, usd: number, all = false) =>
     holding,
     decimals: 8,
     cf: 0.7,
-    amountRaw: all ? holding.lockedRaw : rawFor(usd),
+    amountRaw: all ? holding.backingRaw : rawFor(usd),
     all,
   });
 
@@ -84,7 +84,7 @@ describe("freeUpCheck: Free up stops at the cap's line", () => {
   });
 
   it("is the line the sheet allowed before, moved: 99.5% of Aave's limit ended deep in Act", () => {
-    const aave = maxWithdrawUsd({ ...owing(800), cf: 0.7, lockedUsd: 2_000 });
+    const aave = maxWithdrawUsd({ ...owing(800), cf: 0.7, backingUsd: 2_000 });
     expect(statusFor(healthAfterWithdraw({ ...owing(800), cf: 0.7, usd: aave * 0.995 }))).toBe("act");
     expect(check(800, aave * 0.995)).toMatchObject({ endsInAct: true, ok: false });
   });
@@ -101,8 +101,8 @@ describe("freeUpCheck: Free up stops at the cap's line", () => {
 
 describe("freeUpByRepay", () => {
   // Oulina, measured 2026-10-15: $6.08 backing at an average 0.75, $4.00 owed (health 1.14); Amazon $2.03 of it.
-  const position = { collateralUsd: 6.075, avgCf: 0.75, debtUsd: 4 };
-  const holding = { lockedRaw: 8_000_000_000_000_000n, lockedUsd: 2.03 };
+  const position = { totalBackingUsd: 6.075, avgCf: 0.75, debtUsd: 4 };
+  const holding = { backingRaw: 8_000_000_000_000_000n, backingUsd: 2.03 };
   const cf = 0.75;
 
   it("says what frees all of it, and caps the field at the cash", () => {
@@ -120,14 +120,14 @@ describe("freeUpByRepay", () => {
   it("gives all of it back once the repay reaches the line", () => {
     const r = freeUpByRepay({ position, holding, cf, cashUsd: 10, repayUsd: null });
     expect(r.all).toBe(true);
-    expect(r.backRaw).toBe(holding.lockedRaw);
+    expect(r.backRaw).toBe(holding.backingRaw);
     expect(r.backUsd).toBe(2.03);
   });
 
   it("frees only what the line allows for a small repay, and snaps a too-big one", () => {
     const small = freeUpByRepay({ position, holding, cf, cashUsd: 10, repayUsd: 0.5 });
     expect(small.all).toBe(false);
-    expect(small.backRaw).toBeLessThan(holding.lockedRaw);
+    expect(small.backRaw).toBeLessThan(holding.backingRaw);
     const big = freeUpByRepay({ position, holding, cf, cashUsd: 1.23, repayUsd: 5 });
     expect(big.snapped).toBe(true);
     expect(big.repayUsd).toBe(1.23);

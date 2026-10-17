@@ -87,7 +87,7 @@ export function ProtectSettings({ account, onDone }: { account: `0x${string}`; o
       preview={!address || !isAddressEqual(address, account)}
       saved={saved}
       backsUsd={EQUITIES.map((e) =>
-        data.holdings[e.reserveId].lockedRaw > 0n ? data.holdings[e.reserveId].lockedUsd : 0,
+        data.holdings[e.reserveId].backingRaw > 0n ? data.holdings[e.reserveId].backingUsd : 0,
       )}
       pricesRaw={EQUITIES.map((e) => data.holdings[e.reserveId].priceRaw)}
       capMaxRaw={agents.capMaxRaw}

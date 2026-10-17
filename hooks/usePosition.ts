@@ -7,7 +7,7 @@ import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { hubAbi } from "@/lib/aave/abis/IHub";
 import { aaveOracleAbi } from "@/lib/aave/abis/IAaveOracle";
-import { borrowApr, monthlyCost, priceToUsd, summarize, type AccountData } from "@/lib/aave/math";
+import { creditApr, monthlyCost, priceToUsd, summarize, type AccountData } from "@/lib/aave/math";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { statusFor } from "@/lib/risk/status";
 import { PROTOCOLS } from "@/lib/protocols/config";
@@ -61,16 +61,16 @@ export type Holding = {
   priceRaw: bigint;
   /** Shares shown to the user (raw × uiMultiplier). */
   freeShares: number;
-  lockedShares: number;
+  backingShares: number;
   freeUsd: number;
-  lockedUsd: number;
+  backingUsd: number;
   paused: boolean;
   frozen: boolean;
   freeRaw: bigint;
-  lockedRaw: bigint;
+  backingRaw: bigint;
   /** B20 uiMultiplier (1e18 = 1 share per token). */
   multiplier: bigint;
-  collateralEnabled: boolean;
+  backingEnabled: boolean;
   dynamicConfigKey: number;
 };
 
@@ -136,16 +136,16 @@ export function usePosition(user: `0x${string}` | undefined) {
         priceUsd,
         priceRaw: price,
         freeShares: toShares(bal),
-        lockedShares: toShares(supplied),
+        backingShares: toShares(supplied),
         // Oracle price already reflects the multiplier, so value raw units × price.
         freeUsd: raw(bal) * priceUsd,
-        lockedUsd: raw(supplied) * priceUsd,
+        backingUsd: raw(supplied) * priceUsd,
         paused: cfg.paused,
         frozen: cfg.frozen,
         freeRaw: bal,
-        lockedRaw: supplied,
+        backingRaw: supplied,
         multiplier: mult,
-        collateralEnabled: userStatus[0],
+        backingEnabled: userStatus[0],
         dynamicConfigKey: reserve.dynamicConfigKey,
       };
     });
@@ -164,24 +164,24 @@ export function usePosition(user: `0x${string}` | undefined) {
         readonly [jobs: number, ...rest: unknown[]] | undefined,
       ];
     const s = summarize(account);
-    const apr = borrowApr(drawnRate, riskPremium);
+    const apr = creditApr(drawnRate, riskPremium);
     const debtUsd = Number(debtRaw) / 10 ** USDC.decimals;
     const cash: Cash = { walletRaw: usdcBal, savingsRaw, saveOn: saveRuns(agents?.[0] ?? 0) };
     const usdcLiquidity = Number(liquidity) / 10 ** USDC.decimals;
-    const borrowPaused = usdcCfg.paused || usdcCfg.frozen || !usdcCfg.borrowable;
+    const creditPaused = usdcCfg.paused || usdcCfg.frozen || !usdcCfg.borrowable;
     return {
       holdings,
-      stocksUsd: holdings.reduce((a, h) => a + h.freeUsd + h.lockedUsd, 0),
-      collateralUsd: s.collateralUsd,
+      stocksUsd: holdings.reduce((a, h) => a + h.freeUsd + h.backingUsd, 0),
+      totalBackingUsd: s.totalBackingUsd,
       debtUsd,
       // The credit left on what already backs it, at the one cap (Act is the line): never more than any flow lets you take.
       availableUsd: creditWith({
-        collateralUsd: s.collateralUsd,
+        totalBackingUsd: s.totalBackingUsd,
         avgCf: s.avgCf,
         debtUsd,
         healthFactor: s.healthFactor,
         usdcLiquidity,
-        borrowPaused,
+        creditPaused,
       }),
       healthFactor: s.healthFactor,
       avgCf: s.avgCf,
@@ -200,7 +200,7 @@ export function usePosition(user: `0x${string}` | undefined) {
       cashUsd: toUsd(cashRaw(cash)),
       debtRaw,
       usdcLiquidity,
-      borrowPaused,
+      creditPaused,
     };
   }, [query.data]);
 
@@ -210,12 +210,12 @@ export function usePosition(user: `0x${string}` | undefined) {
 export type PositionData = NonNullable<ReturnType<typeof usePosition>["data"]>;
 
 /** Collateral factor (0–1) per equity reserve, read live from the spoke's dynamic config. */
-export function useCollateralFactors(holdings: Holding[] | undefined) {
-  return useCollateralFactorsRead(holdings).cfs;
+export function useBackingFactors(holdings: Holding[] | undefined) {
+  return useBackingFactorsRead(holdings).cfs;
 }
 
-/** useCollateralFactors, with whether the read failed and a retry, for a screen that says so instead of pulsing on. */
-export function useCollateralFactorsRead(holdings: Holding[] | undefined) {
+/** useBackingFactors, with whether the read failed and a retry, for a screen that says so instead of pulsing on. */
+export function useBackingFactorsRead(holdings: Holding[] | undefined) {
   const contracts = useMemo(
     () =>
       (holdings ?? []).map((h) => ({

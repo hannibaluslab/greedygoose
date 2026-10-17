@@ -10,13 +10,13 @@ import { AssetPicker, assetMark, type PickerRow } from "./AssetPicker";
 import { Button } from "./Button";
 import { WhiteCard } from "./Screen";
 import { SegmentedControl } from "./SegmentedControl";
-import { UnlockSheet } from "./UnlockSheet";
+import { FreeUpSheet } from "./FreeUpSheet";
 import { ChevronRight, LockIcon } from "./icons";
 import { StatusBar, StatusPill } from "./Status";
 import { Summary } from "./Summary";
 import { TxButton, TxError } from "./TxUi";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
-import { useCollateralFactorsRead, usePosition, type PositionData } from "@/hooks/usePosition";
+import { useBackingFactorsRead, usePosition, type PositionData } from "@/hooks/usePosition";
 import { repaySign, useRepayWith } from "@/hooks/useRepay";
 import { useSellQuote } from "@/hooks/useSell";
 import { formatShares, formatUsd, formatUsdTrim, monthlyCostText } from "@/lib/formatting";
@@ -76,7 +76,7 @@ export function RepaySheet({
 }) {
   const { isConnected } = useAccount();
   const { data } = usePosition(address);
-  const cfRead = useCollateralFactorsRead(data?.holdings);
+  const cfRead = useBackingFactorsRead(data?.holdings);
   const fee = useFeeSupport();
   const [form, setForm] = useState<RepayForm>(REPAY_FORM);
   const [menu, setMenu] = useState(false);
@@ -131,7 +131,7 @@ export function RepaySheet({
     onClose();
   };
   // Backing rows wait for the collateral factors, so the default row doesn't jump once they're read.
-  const waitingForCfs = !!data && !cfRead.cfs && !cfRead.failed && data.holdings.some((h) => h.lockedRaw > 0n);
+  const waitingForCfs = !!data && !cfRead.cfs && !cfRead.failed && data.holdings.some((h) => h.backingRaw > 0n);
 
   const freeHolding = freeing ? data?.holdings.find((h) => h.symbol === freeing) : undefined;
   const freeStock = freeing ? EQUITIES.find((e) => e.symbol === freeing) : undefined;
@@ -147,7 +147,7 @@ export function RepaySheet({
         }}
       >
         <SheetSteps stepKey={`free:${freeing}`} className="flex flex-col gap-4">
-          <UnlockSheet
+          <FreeUpSheet
             open={open}
             user={address}
             stock={freeStock}
@@ -163,7 +163,7 @@ export function RepaySheet({
 
   // Repay | Free up (Adrian, 2026-10-15): Repay as it was; Free up lists the stocks backing the credit, a tap opens that
   // stock's Free up in this sheet. The toggle shows only when something backs the credit.
-  const backing = !!data && data.holdings.some((h) => h.lockedRaw > 0n);
+  const backing = !!data && data.holdings.some((h) => h.backingRaw > 0n);
   // Under "You owe", which both tabs share and which never moves (Adrian, 2026-10-16).
   const toggle = backing && (
     <SegmentedControl
@@ -316,7 +316,7 @@ function Owed({ data }: { data: PositionData }) {
  * opens that stock's Free up in this sheet, where repaying gets it back.
  */
 function Backing({ data, onPick }: { data: PositionData; onPick: (symbol: string) => void }) {
-  const rows = data.holdings.filter((h) => h.lockedRaw > 0n);
+  const rows = data.holdings.filter((h) => h.backingRaw > 0n);
   if (rows.length === 0) return null;
   return (
     <div className="flex flex-col gap-2">
@@ -329,7 +329,7 @@ function Backing({ data, onPick }: { data: PositionData; onPick: (symbol: string
             key={h.symbol}
             type="button"
             onClick={() => onPick(h.symbol)}
-            aria-label={`${h.name}, ${formatUsd(h.lockedUsd)} backs your credit. Free it up`}
+            aria-label={`${h.name}, ${formatUsd(h.backingUsd)} backs your credit. Free it up`}
             className="flex min-h-14 items-center gap-3 border-b border-line-field py-2.5 text-left last:border-b-0"
           >
             <StockAvatar symbol={h.symbol} size={32} />
@@ -338,15 +338,15 @@ function Backing({ data, onPick }: { data: PositionData; onPick: (symbol: string
               {/* The shares that back the credit, and how much of the holding that is: the figure and a padlock, no
                   sentence (Adrian, 2026-10-16: "the lock icon is too small, and it is not even a lock"; here, over D17). */}
               <span className="flex min-w-0 items-center gap-1.5 text-[12.5px] text-ink-mid">
-                <span className="num truncate">{formatShares(h.lockedShares)} shares</span>
+                <span className="num truncate">{formatShares(h.backingShares)} shares</span>
                 <span className="num inline-flex h-[22px] shrink-0 items-center gap-1 rounded-[11px] bg-ground px-2 text-[12px] font-semibold text-ink-2">
-                  {wholePct(h.lockedUsd / Math.max(h.lockedUsd + h.freeUsd, 1e-9))}%
+                  {wholePct(h.backingUsd / Math.max(h.backingUsd + h.freeUsd, 1e-9))}%
                   <LockIcon size={11} />
                   <span className="sr-only">backs your credit</span>
                 </span>
               </span>
             </span>
-            <span className="num text-[15px] font-semibold">{formatUsd(h.lockedUsd)}</span>
+            <span className="num text-[15px] font-semibold">{formatUsd(h.backingUsd)}</span>
             <ChevronRight strokeWidth={2.2} className="shrink-0 text-ink-faint" />
           </button>
         ))}

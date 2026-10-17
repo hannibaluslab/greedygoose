@@ -4,9 +4,9 @@ import { CASH, CREDIT_CAP, RISK } from "@/config/risk";
 import { assertAllowed, swapOf } from "@/lib/allowlist";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
-import { FILL_MARGIN, fillRaw } from "@/lib/aave/loan";
+import { FILL_MARGIN, fillRaw } from "@/lib/aave/credit";
 import { healthAfterWithdraw, maxWithdrawUsd } from "@/lib/aave/math";
-import { buildBorrowCalls } from "@/lib/aave/tx";
+import { buildCreditCalls } from "@/lib/aave/tx";
 import { payFromCash } from "@/lib/cash";
 import {
   CREDIT_BLOCKED,
@@ -16,7 +16,7 @@ import {
   assertCreditBuy,
   backers,
   backingOptions,
-  backingRaw,
+  backingRawFor,
   bestBacking,
   buildCreditBuyCalls,
   creditAvailable,
@@ -236,21 +236,21 @@ describe("assertCreditBuy (the batch against the review)", () => {
     expect(() => assertCreditBuy(user, theirs, review)).toThrow(/credit differs/);
   });
   it("blocks a batch out of order, with a second credit or swap, or without its approve", () => {
-    const [borrow, approve, swap] = good();
-    expect(() => assertCreditBuy(user, [approve, swap, borrow], review)).toThrow(/swap must come last/);
+    const [creditCall, approve, swap] = good();
+    expect(() => assertCreditBuy(user, [approve, swap, creditCall], review)).toThrow(/swap must come last/);
     expect(() =>
-      assertCreditBuy(user, [borrow, ...buildBorrowCalls({ user, amountRaw: 1n }), approve, swap], review),
+      assertCreditBuy(user, [creditCall, ...buildCreditCalls({ user, amountRaw: 1n }), approve, swap], review),
     ).toThrow(/once/);
-    expect(() => assertCreditBuy(user, [borrow, approve, swap, swap], review)).toThrow(/once/);
-    expect(() => assertCreditBuy(user, [borrow], review)).toThrow(/once/);
-    expect(() => assertCreditBuy(user, [approve, borrow, swap], review)).toThrow(/approval differs/);
+    expect(() => assertCreditBuy(user, [creditCall, approve, swap, swap], review)).toThrow(/once/);
+    expect(() => assertCreditBuy(user, [creditCall], review)).toThrow(/once/);
+    expect(() => assertCreditBuy(user, [approve, creditCall, swap], review)).toThrow(/approval differs/);
     const [uniApprove] = buildBuyCalls({ user, stock: aapl, quote: { ...quote, venue: "uniswap", pool: 3000 } });
-    expect(() => assertCreditBuy(user, [borrow, uniApprove, swap], review)).toThrow(/approval differs/);
+    expect(() => assertCreditBuy(user, [creditCall, uniApprove, swap], review)).toThrow(/approval differs/);
   });
 });
 
 describe("payFromCash with nothing to pay but the fee", () => {
-  const spend = buildBorrowCalls({ user, amountRaw: 1n });
+  const spend = buildCreditCalls({ user, amountRaw: 1n });
   it("takes the fee buffer out of savings when the wallet can't cover it", () => {
     const calls = payFromCash(user, 0n, { walletRaw: 0n, savingsRaw: usd(10), saveOn: true }, spend);
     expect(decodeFunctionData({ abi: aaveV3PoolAbi, data: calls[0].data }).args).toEqual([USDC.address, fee, user]);
@@ -263,15 +263,15 @@ describe("payFromCash with nothing to pay but the fee", () => {
   });
 });
 
-describe("planCredit (Leo's loan maths: autoFill, combinedLoan, status)", () => {
+describe("planCredit (Leo's credit maths: autoFill, combinedCredit, status)", () => {
   // Sam: no credit yet, $2,000 of free NVIDIA (70% counts), $40 of cash.
   const fresh: CreditPosition = {
-    collateralUsd: 0,
+    totalBackingUsd: 0,
     avgCf: 0,
     debtUsd: 0,
     healthFactor: null,
     usdcLiquidity: 1_000_000,
-    borrowPaused: false,
+    creditPaused: false,
   };
   const nvdaFree: BackingOption = { stock: nvda, freeRaw: 1_120_000_000n, freeUsd: 2_000, cf: 0.7 };
   const msftFree: BackingOption = { stock: msft, freeRaw: 100_000_000n, freeUsd: 500, cf: 0.78 };
@@ -296,7 +296,7 @@ describe("planCredit (Leo's loan maths: autoFill, combinedLoan, status)", () => 
   });
 
   it("already backing: what backs credit covers it, so nothing new goes in", () => {
-    const backed: CreditPosition = { ...fresh, collateralUsd: 9_000, avgCf: 0.73, debtUsd: 1_200, healthFactor: 5.4 };
+    const backed: CreditPosition = { ...fresh, totalBackingUsd: 9_000, avgCf: 0.73, debtUsd: 1_200, healthFactor: 5.4 };
     const p = plan(300, backed);
     expect(p.backing).toEqual([]);
     expect(p.before).toBe("safe");
@@ -326,7 +326,7 @@ describe("planCredit (Leo's loan maths: autoFill, combinedLoan, status)", () => 
     expect(plan(1_251).block).toBe("too-much"); // still Watch (1.119), but past the margin
     expect(plan(1_394).block).toBe("act"); // what 99.5% of Aave's limit used to allow
     expect(plan(300, { ...fresh, usdcLiquidity: 299 }).block).toBe("no-liquidity");
-    expect(plan(300, { ...fresh, borrowPaused: true }).block).toBe("paused");
+    expect(plan(300, { ...fresh, creditPaused: true }).block).toBe("paused");
     const broke = planCredit({
       position: fresh,
       options: [nvdaFree],
@@ -347,12 +347,12 @@ describe("planCredit (Leo's loan maths: autoFill, combinedLoan, status)", () => 
 
 describe('creditAvailable (F2-3\'s "You can use up to")', () => {
   const fresh: CreditPosition = {
-    collateralUsd: 0,
+    totalBackingUsd: 0,
     avgCf: 0,
     debtUsd: 0,
     healthFactor: null,
     usdcLiquidity: 1_000_000,
-    borrowPaused: false,
+    creditPaused: false,
   };
   const nvdaFree: BackingOption = { stock: nvda, freeRaw: 1_120_000_000n, freeUsd: 2_000, cf: 0.7 };
   const msftFree: BackingOption = { stock: msft, freeRaw: 100_000_000n, freeUsd: 500, cf: 0.78 };
@@ -372,7 +372,7 @@ describe('creditAvailable (F2-3\'s "You can use up to")', () => {
   it("creditWith is F2-4's per-stock figure: planCredit's MAX with that one option, or with none", () => {
     expect(creditWith(fresh, nvdaFree)).toBe(perStock(fresh, nvdaFree));
     expect(creditWith(fresh, msftFree)).toBe(perStock(fresh, msftFree));
-    const backed: CreditPosition = { ...fresh, collateralUsd: 1_000, avgCf: 0.7, debtUsd: 300, healthFactor: 2.33 };
+    const backed: CreditPosition = { ...fresh, totalBackingUsd: 1_000, avgCf: 0.7, debtUsd: 300, healthFactor: 2.33 };
     expect(creditWith(backed)).toBe(
       planCredit({ position: backed, options: [], creditRaw: 0n, cash: walletCash }).maxUsd,
     );
@@ -402,7 +402,7 @@ describe('creditAvailable (F2-3\'s "You can use up to")', () => {
   });
 
   it("counts what already backs credit, net of what's owed", () => {
-    const backed: CreditPosition = { ...fresh, collateralUsd: 1_000, avgCf: 0.7, debtUsd: 300, healthFactor: 2.33 };
+    const backed: CreditPosition = { ...fresh, totalBackingUsd: 1_000, avgCf: 0.7, debtUsd: 300, healthFactor: 2.33 };
     // (1,000 × 0.7 + 2,000 × 0.7) ÷ 1.12 − 300
     expect(avail(backed, [nvdaFree]).usd).toBe(1_575);
     // Everything in use: the room on it alone, 1,000 × 0.7 ÷ 1.12 − 300.
@@ -426,12 +426,12 @@ describe('creditAvailable (F2-3\'s "You can use up to")', () => {
     expect(avail(fresh, [], false)).toEqual({ usd: 0, why: "no-stocks", line: noCreditLine("no-stocks", true) });
     expect(avail(fresh, [])).toMatchObject({ usd: 0, why: "cant-back" });
     // At the cap (700 ÷ 625 = 1.12, Watch): everything that backs credit is in use.
-    const full: CreditPosition = { ...fresh, collateralUsd: 1_000, avgCf: 0.7, debtUsd: 625, healthFactor: 1.12 };
+    const full: CreditPosition = { ...fresh, totalBackingUsd: 1_000, avgCf: 0.7, debtUsd: 625, healthFactor: 1.12 };
     expect(avail(full, [])).toMatchObject({ usd: 0, why: "all-in-use" });
     // Past Aave's limit's Act line: in Act, whatever is free.
-    const act: CreditPosition = { ...fresh, collateralUsd: 1_000, avgCf: 0.7, debtUsd: 700, healthFactor: 1 };
+    const act: CreditPosition = { ...fresh, totalBackingUsd: 1_000, avgCf: 0.7, debtUsd: 700, healthFactor: 1 };
     expect(avail(act, [nvdaFree])).toMatchObject({ usd: 0, why: "in-act", line: noCreditLine("in-act", true) });
-    expect(avail({ ...fresh, borrowPaused: true }, [nvdaFree])).toMatchObject({ usd: 0, why: "paused" });
+    expect(avail({ ...fresh, creditPaused: true }, [nvdaFree])).toMatchObject({ usd: 0, why: "paused" });
     // $1.40 of free NVIDIA counts for under the $1 minimum buy, and nothing backs credit yet: too small, not "all in use".
     const tiny: BackingOption = { stock: nvda, freeRaw: 784_000n, freeUsd: 1.4, cf: 0.7 };
     expect(avail(fresh, [tiny])).toMatchObject({ usd: 0, why: "too-small", line: noCreditLine("too-small", true) });
@@ -442,7 +442,7 @@ describe('creditAvailable (F2-3\'s "You can use up to")', () => {
   it("under the minimum buy is $0: no Credit Buy fits in it", () => {
     const nearly: CreditPosition = {
       ...fresh,
-      collateralUsd: 1_000,
+      totalBackingUsd: 1_000,
       avgCf: 0.7,
       debtUsd: 624.5,
       healthFactor: 700 / 624.5,
@@ -473,18 +473,18 @@ describe('creditAvailable (F2-3\'s "You can use up to")', () => {
         noCreditLine(why, false),
       ]),
     ];
-    for (const line of lines) expect(line).not.toMatch(/borrow|loan|lock|aave|collateral|health/i);
+    for (const line of lines) expect(line).not.toMatch(/creditCall|loan|lock|aave|collateral|health/i);
   });
 });
 
 describe("creditBuyStop and creditBuyActivity (what the hooks check and record)", () => {
   const position: CreditPosition = {
-    collateralUsd: 0,
+    totalBackingUsd: 0,
     avgCf: 0,
     debtUsd: 0,
     healthFactor: null,
     usdcLiquidity: 1_000_000,
-    borrowPaused: false,
+    creditPaused: false,
   };
   const options: BackingOption[] = [{ stock: nvda, freeRaw: 1_120_000_000n, freeUsd: 2_000, cf: 0.7 }];
   const plan = (creditUsd: number) =>
@@ -545,7 +545,7 @@ describe("backingOptions", () => {
 });
 
 describe('what backs it, by name (the sheet\'s "Against" and "Backed by")', () => {
-  const h = (symbol: string, name: string, lockedRaw = 0n) => ({ symbol, name, lockedRaw });
+  const h = (symbol: string, name: string, backingRaw = 0n) => ({ symbol, name, backingRaw });
   const holdings = [h("AMZNc", "Amazon", 5n), h("METAc", "Meta"), h("NVDAc", "NVIDIA", 2n), h("TSLAc", "Tesla")];
   const names = (adding: string[], lead?: string, list = holdings) => backers(list, adding, lead).map((b) => b.name);
   it("lists what goes in use, then what's in use already, once each, with the picked holding first", () => {
@@ -579,12 +579,12 @@ describe("fillRaw", () => {
       need * FILL_MARGIN - freeUsd / Number(freeRaw),
     ); // within one raw unit
     const fresh: CreditPosition = {
-      collateralUsd: 0,
+      totalBackingUsd: 0,
       avgCf: 0,
       debtUsd: 0,
       healthFactor: null,
       usdcLiquidity: 1_000_000,
-      borrowPaused: false,
+      creditPaused: false,
     };
     const plan = planCredit({
       position: fresh,
@@ -600,27 +600,27 @@ describe("fillRaw", () => {
 describe("planCredit with an explicit backing (Credit Buy goes backing first, Adrian 2026-10-15)", () => {
   // Sam: no credit yet, $2,000 of free NVIDIA (70% counts), $40 of cash.
   const fresh: CreditPosition = {
-    collateralUsd: 0,
+    totalBackingUsd: 0,
     avgCf: 0,
     debtUsd: 0,
     healthFactor: null,
     usdcLiquidity: 1_000_000,
-    borrowPaused: false,
+    creditPaused: false,
   };
-  const backed: CreditPosition = { ...fresh, collateralUsd: 1_000, avgCf: 0.7, debtUsd: 300, healthFactor: 2.33 };
+  const backed: CreditPosition = { ...fresh, totalBackingUsd: 1_000, avgCf: 0.7, debtUsd: 300, healthFactor: 2.33 };
   const nvdaFree: BackingOption = { stock: nvda, freeRaw: 1_120_000_000n, freeUsd: 2_000, cf: 0.7 };
   const weekday = new Date("2026-10-14T15:00:00Z");
   const withBacking = (typedUsd: number, creditUsd = 0, position = fresh, option: BackingOption | null = nvdaFree) =>
     planCredit({
       position,
-      backing: { option, raw: option ? backingRaw(option, typedUsd) : 0n },
+      backing: { option, raw: option ? backingRawFor(option, typedUsd) : 0n },
       creditRaw: usd(creditUsd),
       cash: walletCash,
       now: weekday,
     });
 
   it("the typed dollars become raw units in proportion to the free value, and exactly that goes in (no fill margin)", () => {
-    expect(backingRaw(nvdaFree, 500)).toBe(280_000_000n); // a quarter of the free shares
+    expect(backingRawFor(nvdaFree, 500)).toBe(280_000_000n); // a quarter of the free shares
     const p = withBacking(500, 300);
     expect(p.backing).toEqual([{ stock: nvda, raw: 280_000_000n, usd: 500 }]);
     // autoFill would have put in $645 (300 × 1.5 / 0.7 plus the margin); the pick is what Sam typed.
@@ -637,10 +637,10 @@ describe("planCredit with an explicit backing (Credit Buy goes backing first, Ad
   });
 
   it("MAX is all the free shares exactly, and gives Invest's number (creditWith)", () => {
-    expect(backingRaw(nvdaFree, nvdaFree.freeUsd)).toBe(nvdaFree.freeRaw);
+    expect(backingRawFor(nvdaFree, nvdaFree.freeUsd)).toBe(nvdaFree.freeRaw);
     // Within half a cent of all of it is all of it: no dust left behind.
-    expect(backingRaw(nvdaFree, 1_999.996)).toBe(nvdaFree.freeRaw);
-    expect(backingRaw(nvdaFree, 1_999.99)).toBeLessThan(nvdaFree.freeRaw);
+    expect(backingRawFor(nvdaFree, 1_999.996)).toBe(nvdaFree.freeRaw);
+    expect(backingRawFor(nvdaFree, 1_999.99)).toBeLessThan(nvdaFree.freeRaw);
     const all = planCredit({
       position: fresh,
       backing: { option: nvdaFree, raw: nvdaFree.freeRaw },
@@ -662,12 +662,12 @@ describe("planCredit with an explicit backing (Credit Buy goes backing first, Ad
     expect(freeShownUsd(amzn)).toBe(96.56);
     for (const typed of [96.56, 96.5612, 96.565]) {
       expect(isAllFree(amzn, typed)).toBe(true);
-      expect(backingRaw(amzn, typed)).toBe(amzn.freeRaw);
+      expect(backingRawFor(amzn, typed)).toBe(amzn.freeRaw);
     }
     expect(isAllFree(amzn, 96.55)).toBe(false);
-    expect(backingRaw(amzn, 96.55)).toBeLessThan(amzn.freeRaw);
+    expect(backingRawFor(amzn, 96.55)).toBeLessThan(amzn.freeRaw);
     expect(isAllFree(amzn, 96.58)).toBe(false);
-    expect(backingRaw(amzn, 96.58)).toBeGreaterThan(amzn.freeRaw);
+    expect(backingRawFor(amzn, 96.58)).toBeGreaterThan(amzn.freeRaw);
     expect(isAllFree(amzn, 0)).toBe(false);
     // A whole-cent free value: MAX's figure is the value itself.
     expect(freeShownUsd(nvdaFree)).toBe(2_000);
@@ -692,9 +692,9 @@ describe("planCredit with an explicit backing (Credit Buy goes backing first, Ad
     expect(all.block).toBeUndefined();
     expect(all.backing[0].raw).toBe(amzn.freeRaw);
     // Re-reading the same dollars at the new price would have been more than is free (what the sheet no longer does).
-    expect(backingRaw(ticked, 96.6)).toBeGreaterThan(ticked.freeRaw);
+    expect(backingRawFor(ticked, 96.6)).toBeGreaterThan(ticked.freeRaw);
     // Shares worked out when typed stay those shares: $50 typed, then the price moves, still the same raw and within free.
-    const half = backingRaw(amzn, 50);
+    const half = backingRawFor(amzn, 50);
     const moved = planCredit({
       position: fresh,
       backing: { option: ticked, raw: half },
@@ -708,7 +708,7 @@ describe("planCredit with an explicit backing (Credit Buy goes backing first, Ad
 
   it("never more than is free: more is blocked, and the plan never puts in more than the free shares", () => {
     const over = withBacking(2_500, 10);
-    expect(backingRaw(nvdaFree, 2_500)).toBeGreaterThan(nvdaFree.freeRaw);
+    expect(backingRawFor(nvdaFree, 2_500)).toBeGreaterThan(nvdaFree.freeRaw);
     expect(over.block).toBe("over-free");
     expect(over.backing[0].raw).toBe(nvdaFree.freeRaw);
     expect(creditBuyStop(over, true)).toBe(CREDIT_BLOCKED["over-free"]);
@@ -716,8 +716,8 @@ describe("planCredit with an explicit backing (Credit Buy goes backing first, Ad
     expect(
       planCredit({ position: backed, backing: { option: null, raw: 1n }, creditRaw: usd(10), cash: walletCash }).block,
     ).toBe("over-free");
-    expect(backingRaw(nvdaFree, 0)).toBe(0n);
-    expect(backingRaw(nvdaFree, Number.NaN)).toBe(0n);
+    expect(backingRawFor(nvdaFree, 0)).toBe(0n);
+    expect(backingRawFor(nvdaFree, Number.NaN)).toBe(0n);
   });
 
   it("0 backing uses only what already backs credit", () => {
@@ -748,7 +748,7 @@ describe("planCredit with an explicit backing (Credit Buy goes backing first, Ad
   it("the status before → after with the backing alone: putting stock in use lifts a position", () => {
     const watching: CreditPosition = {
       ...fresh,
-      collateralUsd: 1_000,
+      totalBackingUsd: 1_000,
       avgCf: 0.7,
       debtUsd: 550,
       healthFactor: 700 / 550,
@@ -781,17 +781,17 @@ describe("planCredit with an explicit backing (Credit Buy goes backing first, Ad
 
 describe("the explicit backing in the batch (buildCreditBuyCalls, assertCreditBuy, the allowlist)", () => {
   const fresh: CreditPosition = {
-    collateralUsd: 0,
+    totalBackingUsd: 0,
     avgCf: 0,
     debtUsd: 0,
     healthFactor: null,
     usdcLiquidity: 1_000_000,
-    borrowPaused: false,
+    creditPaused: false,
   };
   const nvdaFree: BackingOption = { stock: nvda, freeRaw: 1_120_000_000n, freeUsd: 2_000, cf: 0.7 };
   const plan = planCredit({
     position: fresh,
-    backing: { option: nvdaFree, raw: backingRaw(nvdaFree, 500) },
+    backing: { option: nvdaFree, raw: backingRawFor(nvdaFree, 500) },
     creditRaw: quote.amountIn,
     cash: walletCash,
   });
@@ -844,8 +844,8 @@ describe("the explicit backing in the batch (buildCreditBuyCalls, assertCreditBu
       data: encodeFunctionData({ abi: spokeAbi, functionName: "supply", args: [5n, 280_000_000n, attacker] }),
     };
     expect(() => assertCreditBuy(user, [calls[0], theirs, ...calls.slice(2)], review)).toThrow(/backing differs/);
-    const [approve, supply, collateral, borrow, usdcApprove, swap] = calls;
-    expect(() => assertCreditBuy(user, [borrow, approve, supply, collateral, usdcApprove, swap], review)).toThrow(
+    const [approve, supply, collateral, creditCall, usdcApprove, swap] = calls;
+    expect(() => assertCreditBuy(user, [creditCall, approve, supply, collateral, usdcApprove, swap], review)).toThrow(
       /backing differs/,
     );
     const bigger = {
@@ -876,19 +876,19 @@ describe("the explicit backing in the batch (buildCreditBuyCalls, assertCreditBu
 
 describe("Act is the line (Adrian, 2026-10-15): every way of taking credit may end in Watch, never in Act", () => {
   const fresh: CreditPosition = {
-    collateralUsd: 0,
+    totalBackingUsd: 0,
     avgCf: 0,
     debtUsd: 0,
     healthFactor: null,
     usdcLiquidity: 1_000_000,
-    borrowPaused: false,
+    creditPaused: false,
   };
-  const at = (collateralUsd: number, avgCf: number, debtUsd: number): CreditPosition => ({
+  const at = (totalBackingUsd: number, avgCf: number, debtUsd: number): CreditPosition => ({
     ...fresh,
-    collateralUsd,
+    totalBackingUsd,
     avgCf,
     debtUsd,
-    healthFactor: debtUsd > 0 ? (collateralUsd * avgCf) / debtUsd : null,
+    healthFactor: debtUsd > 0 ? (totalBackingUsd * avgCf) / debtUsd : null,
   });
   const opt = (stock: typeof nvda, freeUsd: number, cf: number): BackingOption => ({
     stock,
@@ -899,7 +899,7 @@ describe("Act is the line (Adrian, 2026-10-15): every way of taking credit may e
   const nvdaFree = opt(nvda, 2_000, 0.7);
   const msftFree = opt(msft, 500, 0.78);
   const power = (pos: CreditPosition, options: BackingOption[]) =>
-    pos.collateralUsd * pos.avgCf + options.reduce((a, o) => a + o.freeUsd * o.cf, 0);
+    pos.totalBackingUsd * pos.avgCf + options.reduce((a, o) => a + o.freeUsd * o.cf, 0);
 
   it("the cap's line is the Act line plus 0.02, in Watch, and lives next to the bands", () => {
     expect(CREDIT_CAP.minHf).toBe(1.12);
@@ -1059,10 +1059,10 @@ describe("Act is the line (Adrian, 2026-10-15): every way of taking credit may e
         expect(plan.after).not.toBe("act");
         expect(plan.hfAfter).toBeGreaterThanOrEqual(CREDIT_CAP.minHf - 1e-9);
         // It lands: the free stock backs credit, the credit is owed, and it bought the same stock, free now.
-        const collateralUsd = pos.collateralUsd + freeUsd;
-        const backs = pos.collateralUsd * pos.avgCf + freeUsd * cf;
+        const totalBackingUsd = pos.totalBackingUsd + freeUsd;
+        const backs = pos.totalBackingUsd * pos.avgCf + freeUsd * cf;
         const debtUsd = pos.debtUsd + max;
-        pos = { ...pos, collateralUsd, avgCf: backs / collateralUsd, debtUsd, healthFactor: backs / debtUsd };
+        pos = { ...pos, totalBackingUsd, avgCf: backs / totalBackingUsd, debtUsd, healthFactor: backs / debtUsd };
         freeUsd = max;
       }
       // It stops on its own: each buy is cf ÷ 1.12 of the last, so what's owed tends to 1,000 × r ÷ (1 − r).
@@ -1083,22 +1083,22 @@ describe("Act is the line (Adrian, 2026-10-15): every way of taking credit may e
   });
 
   it("Free up stops at the same line: its MAX leaves health at 1.12, and Aave's own limit would have reached Act", () => {
-    const pos = { collateralUsd: 2_000, avgCf: 0.7, debtUsd: 800 }; // 1.75
-    const max = maxWithdrawUsd({ ...pos, cf: 0.7, lockedUsd: 2_000, targetHf: CREDIT_CAP.minHf });
+    const pos = { totalBackingUsd: 2_000, avgCf: 0.7, debtUsd: 800 }; // 1.75
+    const max = maxWithdrawUsd({ ...pos, cf: 0.7, backingUsd: 2_000, targetHf: CREDIT_CAP.minHf });
     expect(max).toBeCloseTo((1_400 - 800 * 1.12) / 0.7, 9);
     expect(healthAfterWithdraw({ ...pos, cf: 0.7, usd: max })).toBeCloseTo(1.12, 9);
     expect(statusFor(healthAfterWithdraw({ ...pos, cf: 0.7, usd: max }))).toBe("watch");
     // What the sheet allowed before: 99.5% of Aave's limit, deep in Act.
-    const aave = maxWithdrawUsd({ ...pos, cf: 0.7, lockedUsd: 2_000 });
+    const aave = maxWithdrawUsd({ ...pos, cf: 0.7, backingUsd: 2_000 });
     expect(statusFor(healthAfterWithdraw({ ...pos, cf: 0.7, usd: aave * 0.995 }))).toBe("act");
     // Under the line already: nothing can be freed while something is owed.
     expect(
       maxWithdrawUsd({
-        collateralUsd: 1_000,
+        totalBackingUsd: 1_000,
         avgCf: 0.7,
         debtUsd: 630,
         cf: 0.7,
-        lockedUsd: 1_000,
+        backingUsd: 1_000,
         targetHf: CREDIT_CAP.minHf,
       }),
     ).toBe(0);
@@ -1106,6 +1106,6 @@ describe("Act is the line (Adrian, 2026-10-15): every way of taking credit may e
 
   it("its words keep D17's and protocol words off screen", () => {
     for (const line of [CREDIT_BLOCKED.act, CREDIT_BLOCKED["in-act"], NO_CREDIT["in-act"]])
-      expect(line).not.toMatch(/borrow|loan|lock|aave|collateral|health/i);
+      expect(line).not.toMatch(/creditCall|loan|lock|aave|collateral|health/i);
   });
 });

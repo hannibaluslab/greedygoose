@@ -15,7 +15,7 @@ import { useBoughtHome } from "@/hooks/useBoughtHome";
 import { useBuy } from "@/hooks/useBuy";
 import { useBuyQuote } from "@/hooks/useBuyQuote";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
-import { useCollateralFactors, type PositionData } from "@/hooks/usePosition";
+import { useBackingFactors, type PositionData } from "@/hooks/usePosition";
 import { CASH } from "@/config/risk";
 import { monthlyCost } from "@/lib/aave/math";
 import { maxSpendRaw, toUsd } from "@/lib/cash";
@@ -78,7 +78,7 @@ export function BuySheet({
   const amount = Math.max(0, Number(raw.replace(/[^0-9.]/g, "")) || 0);
   const quote = useBuyQuote(stock, step === "market" ? 0 : amount);
   const fee = useFeeSupport();
-  const cfs = useCollateralFactors(data.holdings);
+  const cfs = useBackingFactors(data.holdings);
 
   const q = quote.data ?? null;
   const econ = q && stock ? quoteEconomics(q, stock, oraclePriceUsd) : null;
@@ -156,7 +156,7 @@ export function BuySheet({
                 symbol={h.symbol}
                 name={h.name}
                 priceUsd={h.priceUsd}
-                ownedUsd={h.freeRaw + h.lockedRaw > 0n ? h.freeUsd + h.lockedUsd : 0}
+                ownedUsd={h.freeRaw + h.backingRaw > 0n ? h.freeUsd + h.backingUsd : 0}
                 onClick={() => onStock(h.symbol)}
               />
             ))}
@@ -268,7 +268,7 @@ function creditRows(data: PositionData, plan: CreditPlan, cashRaw: bigint): Summ
   const creditUsd = toUsd(plan.creditRaw);
   const backers = plan.backing.length
     ? plan.backing.map((b) => b.stock.name)
-    : data.holdings.filter((h) => h.lockedRaw > 0n).map((h) => h.name);
+    : data.holdings.filter((h) => h.backingRaw > 0n).map((h) => h.name);
   return [
     { label: "From your cash", value: formatUsd(toUsd(cashRaw)) },
     { label: "On credit", value: formatUsd(creditUsd) },

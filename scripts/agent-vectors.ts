@@ -304,11 +304,11 @@ function protectVectors() {
     const t = { triggerHf: toFloat(v.triggerHf, WAD), targetHf: toFloat(v.targetHf, WAD) };
     const minRepayUsd = toFloat(v.minRepay, 1_000_000n);
     // Exact conversions, not summarize()'s cent rounding: the vectors test the rule, not the display.
-    const collateralUsd = toFloat(v.collateral, VALUE_PER_USD);
+    const totalBackingUsd = toFloat(v.collateral, VALUE_PER_USD);
     const avgCf = toFloat(v.avgCf, WAD);
     const debtUsd = toFloat(ceilDiv(v.debtRay, RAY), VALUE_PER_USD);
     const input = {
-      collateralUsd,
+      totalBackingUsd,
       avgCf,
       debtUsd,
       savingsUsd: toFloat(v.savings, 1_000_000n),
@@ -320,7 +320,7 @@ function protectVectors() {
     amounts.push(d.action === "repay" ? BigInt(Math.round(d.amountUsd * 1e6)).toString() : "0");
     // Float and integer maths may disagree within a hair of a threshold: those vectors check the amount only.
     const near = (a: number, b: number) => Math.abs(a - b) < 1e-4;
-    const hf = debtUsd > 0 ? (collateralUsd * avgCf) / debtUsd : Infinity;
+    const hf = debtUsd > 0 ? (totalBackingUsd * avgCf) / debtUsd : Infinity;
     const uncapped = planProtect({ ...input, minRepayUsd: 0 });
     const edge = near(hf, t.triggerHf) || (uncapped.action === "repay" && near(uncapped.amountUsd, minRepayUsd));
     checkKind.push(edge ? 0 : 1);

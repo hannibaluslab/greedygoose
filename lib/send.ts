@@ -42,7 +42,7 @@ export type SendAsset = "cash" | (string & {});
 export type SendData = Pick<TradeData, "holdings" | "cash" | "cashUsd">;
 
 const tickerOf = (symbol: string) => symbol.replace(/c$/, "");
-const held = (h: SendData["holdings"][number]) => h.freeRaw + h.lockedRaw > 0n;
+const held = (h: SendData["holdings"][number]) => h.freeRaw + h.backingRaw > 0n;
 
 /** Every main-screen string of Send. None names a protocol or a token standard. */
 export const SEND_COPY = {
@@ -148,8 +148,8 @@ export function sendOptions(data: SendData): SendOption[] {
       sub:
         h.freeRaw === 0n
           ? SEND_COPY.subAllBacks
-          : h.lockedRaw > 0n
-            ? SEND_COPY.subBacks(h.lockedUsd)
+          : h.backingRaw > 0n
+            ? SEND_COPY.subBacks(h.backingUsd)
             : SEND_COPY.subShares(h.freeShares),
       right: formatUsd(maxUsdOf(h.symbol, data)),
       rightSub: SEND_COPY.free,
@@ -516,7 +516,7 @@ export function planSend(p: {
       ? [SEND_COPY.cashHint(data.cashUsd)]
       : [
           SEND_COPY.freeHint(maxUsd),
-          ...(holding && holding.lockedRaw > 0n ? [SEND_COPY.backsHint(holding.lockedUsd)] : []),
+          ...(holding && holding.backingRaw > 0n ? [SEND_COPY.backsHint(holding.backingUsd)] : []),
           ...(sharesRaw > 0n && !amountBlock ? [SEND_COPY.sharesHint(formatShares(shares), ticker)] : []),
         ];
 

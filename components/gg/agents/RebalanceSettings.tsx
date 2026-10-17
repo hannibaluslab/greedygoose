@@ -110,7 +110,7 @@ function RebalanceSettingsSkeleton() {
 }
 
 /** A stock as the settings see it: the mix's free shares at Aave's price, and what backs credit. */
-export type SettingsHolding = MixHolding & { lockedUsd: number };
+export type SettingsHolding = MixHolding & { backingUsd: number };
 
 type SaveRequest = { weights: number[]; capRaw: bigint; plan: SavePlan };
 
@@ -175,7 +175,7 @@ export function RebalanceSettingsView({
   const trades = whole ? previewTrades({ holdings, rows, capRaw, capMaxRaw, options }) : [];
   const lines = tradeLines(trades, holdings);
   const now = nowPercents(holdings, rows);
-  const backingUsd = holdings.reduce((a, h) => a + h.lockedUsd, 0);
+  const backingUsd = holdings.reduce((a, h) => a + h.backingUsd, 0);
   const plan = rebalanceSave({
     configured,
     connected,

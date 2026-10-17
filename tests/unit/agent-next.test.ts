@@ -31,7 +31,7 @@ function input(over: Partial<NextInput> = {}): NextInput {
   return {
     nowSec: WED_NOON,
     savingsRaw: usdc(400),
-    collateralUsd: 2_000,
+    totalBackingUsd: 2_000,
     avgCf: 0.7,
     debtUsd: 600,
     holdings: [free(0, 5_000, 250), free(5, 5_000, 180)],

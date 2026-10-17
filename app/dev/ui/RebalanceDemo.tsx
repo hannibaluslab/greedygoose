@@ -23,7 +23,7 @@ const HOLDINGS: SettingsHolding[] = EQUITIES.map((e) => {
     reserveId: e.reserveId,
     priceRaw: BigInt(Math.round((f?.price ?? 100) * 1e8)),
     freeRaw: f ? BigInt(Math.round((f.usd / f.price) * 1e8)) : 0n,
-    lockedUsd: e.reserveId === 6 ? 3_300 : 0,
+    backingUsd: e.reserveId === 6 ? 3_300 : 0,
   };
 });
 const SAVED = EQUITIES.map((e) => ({ 5: 4_300, 0: 2_700, 6: 3_000 })[e.reserveId as 0 | 5 | 6] ?? 0);

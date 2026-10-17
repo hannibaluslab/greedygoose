@@ -173,9 +173,9 @@ function Loaded({
   /** Board 2g: the wallet's cash doesn't earn yet, so Cash and Yield sit faded under "Start earning" (the card's rule). */
   dim: boolean;
 }) {
-  const held = data.holdings.filter((h) => h.freeShares + h.lockedShares > 0);
+  const held = data.holdings.filter((h) => h.freeShares + h.backingShares > 0);
   const market = useMarketPrices(held);
-  const priced = held.map((h) => ({ valueUsd: h.freeUsd + h.lockedUsd, ...market.bySymbol[h.symbol] }));
+  const priced = held.map((h) => ({ valueUsd: h.freeUsd + h.backingUsd, ...market.bySymbol[h.symbol] }));
   const today = dayChange(priced, data.stocksUsd + data.cashUsd);
   const money = useMoneySheets();
 
@@ -272,7 +272,7 @@ function Loaded({
             className={`relative -mx-5 flex ${held.length < 2 ? "justify-start" : "justify-between"} gap-2 overflow-x-auto px-5 pb-4 pt-0.5 [scrollbar-width:none]`}
           >
             {held.map((h) => {
-              const valueUsd = h.freeUsd + h.lockedUsd;
+              const valueUsd = h.freeUsd + h.backingUsd;
               const m = market.bySymbol[h.symbol];
               return (
                 <HoldingCard
@@ -280,11 +280,11 @@ function Loaded({
                   symbol={h.symbol}
                   name={h.name}
                   valueUsd={valueUsd}
-                  backs={valueUsd > 0 ? h.lockedUsd / valueUsd : 0}
+                  backs={valueUsd > 0 ? h.backingUsd / valueUsd : 0}
                   today={m?.change}
                   spark={m?.day}
                   pending={market.loading}
-                  shares={h.freeShares + h.lockedShares}
+                  shares={h.freeShares + h.backingShares}
                   onClick={() => openStock(h.symbol)}
                 />
               );

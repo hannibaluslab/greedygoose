@@ -36,12 +36,12 @@ const steps = (calls: { data: `0x${string}`; to: `0x${string}` }[]) =>
 const holding: SellHolding = {
   priceUsd: price,
   freeRaw: shares(0.1),
-  lockedRaw: shares(4),
-  lockedUsd: 1_000,
+  backingRaw: shares(4),
+  backingUsd: 1_000,
   paused: false,
 };
 const owing = (debtUsd: number): SellPosition => ({
-  collateralUsd: 1_000,
+  totalBackingUsd: 1_000,
   avgCf: 0.7,
   debtUsd,
   debtRaw: usd(debtUsd),
@@ -111,7 +111,7 @@ describe("saleRepayRaw", () => {
 });
 
 describe("planSell: free shares", () => {
-  it("sells what's free, and the loan doesn't change", () => {
+  it("sells what's free, and the credit doesn't change", () => {
     const p = plan("free", { ...quote, amountIn: shares(0.1), amountOut: usd(24.9) });
     expect(p.block).toBeUndefined();
     expect(p.maxRaw).toBe(shares(0.1));
@@ -147,7 +147,7 @@ describe("planSell: free shares", () => {
 });
 
 describe("planSell: a backing holding (step 3)", () => {
-  it("sells only as far as the loan stays Safe", () => {
+  it("sells only as far as the credit stays Safe", () => {
     // room = 700 − 300 × 1.5 = 250 → $357.14 of NVDA → 1.4285 of the 4 shares in use
     const p = plan("backing", quote);
     expect(p.block).toBeUndefined();
@@ -218,7 +218,7 @@ describe("planSell: repay by selling a holding (step 9)", () => {
     try {
       const at50 = await import("@/lib/sell");
       const thin: SellPosition = {
-        collateralUsd: 15.75,
+        totalBackingUsd: 15.75,
         avgCf: 0.7,
         debtUsd: 10,
         debtRaw: usd(10),
@@ -227,8 +227,8 @@ describe("planSell: repay by selling a holding (step 9)", () => {
       const h: SellHolding = {
         priceUsd: price,
         freeRaw: 0n,
-        lockedRaw: shares(0.063),
-        lockedUsd: 15.75,
+        backingRaw: shares(0.063),
+        backingUsd: 15.75,
         paused: false,
       };
       const planAt50 = (q: SellQuote) =>
@@ -253,13 +253,19 @@ describe("planSell: repay by selling a holding (step 9)", () => {
     // From Watch, a sale of v dollars ends in Act only if v < 1.1 × buffer ÷ (1.1 × 0.98 − collateral factor): under
     // $0.30 at 70% and a $0.10 buffer, so under the $1 smallest sale. The rule above stays for a larger buffer.
     const thin: SellPosition = {
-      collateralUsd: 15.75,
+      totalBackingUsd: 15.75,
       avgCf: 0.7,
       debtUsd: 10,
       debtRaw: usd(10),
       healthFactor: 1.1025,
     };
-    const h: SellHolding = { priceUsd: price, freeRaw: 0n, lockedRaw: shares(0.063), lockedUsd: 15.75, paused: false };
+    const h: SellHolding = {
+      priceUsd: price,
+      freeRaw: 0n,
+      backingRaw: shares(0.063),
+      backingUsd: 15.75,
+      paused: false,
+    };
     const p = plan("repay", { ...quote, amountIn: shares(0.0048), amountOut: usd(1.194) }, thin, h);
     expect(p.repayRaw).toBe(minOut(usd(1.194)) - fee);
     expect(p.hfAfter!).toBeCloseTo((15.75 * 0.7 - 1.2 * 0.7) / (10 - Number(minOut(usd(1.194)) - fee) / 1e6), 6);
@@ -267,7 +273,7 @@ describe("planSell: repay by selling a holding (step 9)", () => {
     expect(p.block).toBeUndefined();
   });
 
-  it("repaying all of it ends with no loan", () => {
+  it("repaying all of it ends with no credit", () => {
     const p = plan("repay", quote, owing(20));
     expect(p.repayRaw).toBe(usd(20) + usd(20) / 2000n + 1n);
     expect(p.hfAfter).toBeNull();

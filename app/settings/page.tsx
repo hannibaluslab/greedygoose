@@ -29,9 +29,9 @@ function Settings({ address }: { address: `0x${string}` }) {
         <Line label="Security" value="Passkey (JAW)" />
       </WhiteCard>
       <WhiteCard className="p-4 text-[13px] leading-snug text-ink-mid">
-        GreedyGoose is a non-custodial interface. Your stocks and USDC stay in your own smart account. Loans come from
-        the Aave protocol; if your collateral value falls too far, Aave can sell part of it. Tokenized stocks track the
-        share price; they are not company shares and carry no voting rights. Not available to US persons.
+        GreedyGoose is a non-custodial interface. Your stocks and USDC stay in your own smart account. Credit comes from
+        the Aave protocol; if the stocks backing it fall too far in value, Aave can sell part of them. Not available to
+        US persons.
       </WhiteCard>
       <button
         type="button"

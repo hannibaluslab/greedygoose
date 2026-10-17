@@ -37,9 +37,9 @@ export type RepayHolding = {
   name: string;
   priceUsd: number;
   freeRaw: bigint;
-  lockedRaw: bigint;
+  backingRaw: bigint;
   freeUsd: number;
-  lockedUsd: number;
+  backingUsd: number;
   paused: boolean;
   multiplier: bigint;
 };
@@ -185,7 +185,7 @@ export function repaySources(data: RepayData, cfs: Record<string, number> | unde
   const backing = data.holdings.flatMap((h): RepaySource[] => {
     const stock = stockOf(h.symbol);
     const cf = cfs?.[h.symbol];
-    if (!stock || !cf || h.lockedRaw === 0n || h.paused) return [];
+    if (!stock || !cf || h.backingRaw === 0n || h.paused) return [];
     const maxSharesRaw = repaySaleMaxRaw(h, cf, data);
     const valueUsd = (Number(maxSharesRaw) / 10 ** stock.decimals) * h.priceUsd;
     if (valueUsd < SELL_LIMITS.minUsd) return [];
@@ -194,7 +194,7 @@ export function repaySources(data: RepayData, cfs: Record<string, number> | unde
         id: `backing:${h.symbol}`,
         kind: "backing",
         name: h.name,
-        sub: REPAY_COPY.backsSub(h.lockedUsd),
+        sub: REPAY_COPY.backsSub(h.backingUsd),
         stock,
         holding: h,
         cf,
@@ -219,7 +219,7 @@ export const pickedSource = (sources: RepaySource[], id: string | null) =>
 
 /** Why nothing can repay (no row listed while something is owed): no money at all, or not enough cash. */
 export function noSourceLine(data: Pick<RepayData, "cash" | "debtUsd" | "holdings">): string {
-  const holdsStock = data.holdings.some((h) => h.freeRaw + h.lockedRaw > 0n);
+  const holdsStock = data.holdings.some((h) => h.freeRaw + h.backingRaw > 0n);
   if (cashRaw(data.cash) === 0n && !holdsStock) return REPAY_COPY.noCash;
   return REPAY_COPY.tooLittle(minRepayUsd(data.debtUsd) + CASH.feeBufferUsd);
 }
@@ -293,12 +293,12 @@ export function sharesForRepay(p: {
 export function statusAfter(
   source: RepaySource,
   usd: number,
-  data: Pick<RepayData, "collateralUsd" | "avgCf" | "debtUsd" | "status">,
+  data: Pick<RepayData, "totalBackingUsd" | "avgCf" | "debtUsd" | "status">,
 ): Exclude<Status, "none"> {
   const r = Math.min(usd, source.estUsd);
   if (r <= 0) return homeStatus(data.status);
   if (r >= data.debtUsd - 0.005) return "safe";
-  const weighted = data.collateralUsd * data.avgCf;
+  const weighted = data.totalBackingUsd * data.avgCf;
   // A backing stock takes out the shares that bring r and the fee: (r + fee) at Aave's price less the swap's 1%.
   const removed = source.kind === "backing" ? ((r + CASH.feeBufferUsd) / SLIP) * source.cf : 0;
   return homeStatus(statusFor((weighted - removed) / (data.debtUsd - r)));
@@ -464,7 +464,7 @@ export function planRepay(p: {
         : source.kind === "backing" && sellPlan
           ? homeStatus(sellPlan.after)
           : source.kind === "free" && sellPlan
-            ? homeStatus(statusFor((data.collateralUsd * data.avgCf) / (data.debtUsd - repayUsd)))
+            ? homeStatus(statusFor((data.totalBackingUsd * data.avgCf) / (data.debtUsd - repayUsd)))
             : statusAfter(source, amountUsd, data);
 
   const ready =

@@ -15,7 +15,7 @@ import { CASH, CASH_AGENT } from "@/config/risk";
  * only (`weekendHeadsUp`), and the executor has no weekend move.
  */
 type ProtectInput = {
-  collateralUsd: number;
+  totalBackingUsd: number;
   avgCf: number;
   debtUsd: number;
   savingsUsd: number;
@@ -39,7 +39,7 @@ const PROTECT_DEFAULTS = {
 export function planProtect(i: ProtectInput): ProtectDecision {
   const o = { ...PROTECT_DEFAULTS, ...strip(i) };
   if (i.debtUsd <= 0) return { action: "none", reason: "no-debt", hf: null };
-  const power = i.collateralUsd * i.avgCf;
+  const power = i.totalBackingUsd * i.avgCf;
   const hf = power / i.debtUsd;
   // Safe and Watch are fine: Protect steps in only in Act.
   if (hf >= o.triggerHf) return { action: "none", reason: "healthy", hf };
@@ -78,7 +78,7 @@ export function planProtect(i: ProtectInput): ProtectDecision {
  * acts on its own. App-only: the executor has no weekend move, and so no port of this.
  */
 type WeekendHeadsUpInput = {
-  collateralUsd: number;
+  totalBackingUsd: number;
   avgCf: number;
   debtUsd: number;
   /** True in the window before stock prices freeze for the weekend. */
@@ -101,7 +101,7 @@ const HEADS_UP_DEFAULTS = {
 export function weekendHeadsUp(i: WeekendHeadsUpInput): WeekendHeadsUp | null {
   const o = { ...HEADS_UP_DEFAULTS, ...strip(i) };
   if (!i.weekendWindow || i.debtUsd <= 0) return null;
-  const power = i.collateralUsd * i.avgCf;
+  const power = i.totalBackingUsd * i.avgCf;
   const hf = power / i.debtUsd;
   if (hf < o.triggerHf) return null; // in Act: Protect itself steps in
   const stressedHf = (power * (1 - o.stressDrop)) / i.debtUsd;

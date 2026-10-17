@@ -48,7 +48,7 @@ const newcomer: Address = "0xb5ef91ce939f2c390cff462bb231e74bb228deb4";
 const feeBuffer = parseUnits(CASH.feeBufferUsd.toFixed(6), 6);
 const usd = (n: number) => parseUnits(n.toFixed(6), 6);
 
-/** What usePosition and useCollateralFactors read, for earnOffer and planCredit. No executor: Save is off (the public link). */
+/** What usePosition and useBackingFactors read, for earnOffer and planCredit. No executor: Save is off (the public link). */
 async function live(user: Address) {
   const [account, liquidity, usdcCfg, walletRaw, savingsRaw] = await Promise.all([
     client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserAccountData", args: [user] }),
@@ -70,7 +70,7 @@ async function live(user: Address) {
   const position: CreditPosition = {
     ...summarize(account as AccountData),
     usdcLiquidity: Number(liquidity) / 10 ** USDC.decimals,
-    borrowPaused: usdcCfg.paused || usdcCfg.frozen || !usdcCfg.borrowable,
+    creditPaused: usdcCfg.paused || usdcCfg.frozen || !usdcCfg.borrowable,
   };
   const holdings = await Promise.all(
     EQUITIES.map(async (e) => {
@@ -191,7 +191,7 @@ describe("Earn with stocks simulates on mainnet: the credit lands in savings, th
 
   it("an account that never backed credit: its stock goes in use, then the credit into savings", async () => {
     const { position, options, cash } = await live(newcomer);
-    expect(position.collateralUsd).toBe(0);
+    expect(position.totalBackingUsd).toBe(0);
     expect(options.length).toBeGreaterThan(0);
     const creditRaw = usd(5);
     const plan = planCredit({ position, options, creditRaw, cash });

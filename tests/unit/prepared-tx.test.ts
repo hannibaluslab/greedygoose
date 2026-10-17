@@ -205,7 +205,7 @@ describe("PreparedTx: a batch is signed only for the inputs it was prepared for"
     clock += PREPARE_EVERY_MS;
     store.finish(store.begin("A", SAM), {
       ok: false,
-      error: "This would put your loan past what Aave allows.",
+      error: "That’s more than your stocks can back right now.",
       blocks: true,
     });
     expect(store.usable("A", SAM)).toBeNull();
@@ -213,7 +213,7 @@ describe("PreparedTx: a batch is signed only for the inputs it was prepared for"
       ready: false,
       checking: false,
       blocked: true,
-      error: "This would put your loan past what Aave allows.",
+      error: "That’s more than your stocks can back right now.",
     });
   });
 

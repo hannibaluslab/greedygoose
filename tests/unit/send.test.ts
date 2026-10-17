@@ -77,23 +77,23 @@ const PRICE: Record<string, number> = {
 };
 
 /** A holding as usePosition reads it, from dollars free and backing at Aave's price. */
-function holding(symbol: string, freeUsd = 0, lockedUsd = 0): TradeHolding {
+function holding(symbol: string, freeUsd = 0, backingUsd = 0): TradeHolding {
   const e = stock(symbol);
   const p = PRICE[symbol];
   const raw = (v: number) => BigInt(Math.round((v / p) * 1e8));
   const freeRaw = raw(freeUsd);
-  const lockedRaw = raw(lockedUsd);
+  const backingRaw = raw(backingUsd);
   return {
     symbol,
     name: e.name,
     priceUsd: p,
     priceRaw: parseUnits(p.toFixed(8), 8),
     freeRaw,
-    lockedRaw,
+    backingRaw,
     freeUsd: (Number(freeRaw) / 1e8) * p,
-    lockedUsd: (Number(lockedRaw) / 1e8) * p,
+    backingUsd: (Number(backingRaw) / 1e8) * p,
     freeShares: Number(freeRaw) / 1e8,
-    lockedShares: Number(lockedRaw) / 1e8,
+    backingShares: Number(backingRaw) / 1e8,
     multiplier: 10n ** 18n,
     paused: false,
   };

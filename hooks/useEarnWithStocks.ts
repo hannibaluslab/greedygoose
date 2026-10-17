@@ -5,13 +5,13 @@ import { usePublicClient } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
 import { useAgents } from "@/hooks/useAgents";
 import { useDebounced } from "@/hooks/useBuyQuote";
-import { useCollateralFactorsRead, type PositionData } from "@/hooks/usePosition";
+import { useBackingFactorsRead, type PositionData } from "@/hooks/usePosition";
 import { useSigningCash } from "@/hooks/useSigningCash";
 import { TxStop, txKey, useTx, type TxPlan } from "@/hooks/useTx";
 import { AAVE } from "@/lib/aave/addresses";
 import { hubAbi } from "@/lib/aave/abis/IHub";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
-import { aprToApy, borrowApr } from "@/lib/aave/math";
+import { aprToApy, creditApr } from "@/lib/aave/math";
 import type { Cash } from "@/lib/cash";
 import { CHAIN_ID } from "@/lib/chain";
 import { backingOptions, type Backing } from "@/lib/creditBuy";
@@ -33,7 +33,7 @@ import { USDC } from "@/lib/tokens/registry";
  */
 export function useEarnOffer(account: `0x${string}`, data: PositionData, open: boolean) {
   const agents = useAgents(account);
-  const { cfs, failed } = useCollateralFactorsRead(open ? data.holdings : undefined);
+  const { cfs, failed } = useBackingFactorsRead(open ? data.holdings : undefined);
   const options = useMemo(() => (cfs ? backingOptions(data.holdings, cfs) : undefined), [cfs, data.holdings]);
   const offer = earnOffer({
     cashApy: aprToApy(data.savingsApr),
@@ -80,7 +80,7 @@ export function useEarnRates(p: {
       });
       if (r.results.some((x) => x.status !== "success")) throw new Error("The batch wouldn't go through");
       const [premium, drawn] = r.results.slice(-2).map((x) => x.result as bigint);
-      return aprToApy(borrowApr(drawn, premium));
+      return aprToApy(creditApr(drawn, premium));
     },
   });
   if (p.creditRaw <= 0n) return { apyAfter: p.apyNow };

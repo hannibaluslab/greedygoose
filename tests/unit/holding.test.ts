@@ -25,11 +25,11 @@ describe("wholePct", () => {
 
 describe("holdingSplit", () => {
   it("the boards' NVIDIA: a third backs credit, the rest is free", () => {
-    expect(holdingSplit({ lockedRaw: shares(3.7), freeRaw: shares(7.5) })).toEqual({ backsPct: 33, freePct: 67 });
+    expect(holdingSplit({ backingRaw: shares(3.7), freeRaw: shares(7.5) })).toEqual({ backsPct: 33, freePct: 67 });
   });
 
   it("adds up to 100 whatever the rounding", () => {
-    for (const [locked, free] of [
+    for (const [backing, free] of [
       [1, 2],
       [2, 1],
       [0.005, 9.995],
@@ -37,7 +37,7 @@ describe("holdingSplit", () => {
       [1, 7],
       [5, 5],
     ]) {
-      const s = holdingSplit({ lockedRaw: shares(locked), freeRaw: shares(free) });
+      const s = holdingSplit({ backingRaw: shares(backing), freeRaw: shares(free) });
       expect(s.backsPct + s.freePct).toBe(100);
       expect(s.backsPct).toBeGreaterThan(0);
     }
@@ -45,16 +45,19 @@ describe("holdingSplit", () => {
 
   it("rounds the backing part as the chip does: a few free shares' dust still reads 100% backs", () => {
     // The preview account's Amazon on 2026-10-14: 6.88 shares, all but dust backing credit.
-    expect(holdingSplit({ lockedRaw: shares(6.8799), freeRaw: shares(0.0001) })).toEqual({ backsPct: 100, freePct: 0 });
+    expect(holdingSplit({ backingRaw: shares(6.8799), freeRaw: shares(0.0001) })).toEqual({
+      backsPct: 100,
+      freePct: 0,
+    });
   });
 
   it("all backing or all free", () => {
-    expect(holdingSplit({ lockedRaw: shares(4), freeRaw: 0n })).toEqual({ backsPct: 100, freePct: 0 });
-    expect(holdingSplit({ lockedRaw: 0n, freeRaw: shares(4) })).toEqual({ backsPct: 0, freePct: 100 });
+    expect(holdingSplit({ backingRaw: shares(4), freeRaw: 0n })).toEqual({ backsPct: 100, freePct: 0 });
+    expect(holdingSplit({ backingRaw: 0n, freeRaw: shares(4) })).toEqual({ backsPct: 0, freePct: 100 });
   });
 
   it("nothing held", () => {
-    expect(holdingSplit({ lockedRaw: 0n, freeRaw: 0n })).toEqual({ backsPct: 0, freePct: 0 });
+    expect(holdingSplit({ backingRaw: 0n, freeRaw: 0n })).toEqual({ backsPct: 0, freePct: 0 });
   });
 });
 

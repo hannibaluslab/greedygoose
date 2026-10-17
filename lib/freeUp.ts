@@ -6,7 +6,7 @@ import { rawToShares } from "@/lib/tokens/b20";
 import type { HealthFloor } from "@/lib/tx/prepared";
 
 /*
- * Free up shares (UnlockSheet): how much of a stock can come out of backing, and whether the amount on screen can.
+ * Free up shares (FreeUpSheet): how much of a stock can come out of backing, and whether the amount on screen can.
  * Act is the line (Adrian, 2026-10-15): the most it frees up keeps the health factor at or above CREDIT_CAP.minHf, the
  * same line as taking credit, and an amount that would end in Act is blocked with one plain line, never a tick. Pure,
  * so it's unit-tested (tests/unit/free-up.test.ts); the batch is checked again on Aave's own health (FREE_UP_FLOOR).
@@ -45,8 +45,8 @@ type FreeUpCheck = {
 };
 
 export function freeUpCheck(p: {
-  position: { collateralUsd: number; avgCf: number; debtUsd: number };
-  holding: { lockedRaw: bigint; lockedUsd: number; priceUsd: number; multiplier: bigint };
+  position: { totalBackingUsd: number; avgCf: number; debtUsd: number };
+  holding: { backingRaw: bigint; backingUsd: number; priceUsd: number; multiplier: bigint };
   decimals: number;
   /** The stock's collateral factor (0–1). */
   cf: number;
@@ -55,10 +55,10 @@ export function freeUpCheck(p: {
   all: boolean;
 }): FreeUpCheck {
   const { position: pos, holding: h } = p;
-  const maxUsd = maxWithdrawUsd({ ...pos, cf: p.cf, lockedUsd: h.lockedUsd, targetHf: CREDIT_CAP.minHf });
-  const canAll = pos.debtUsd === 0 || maxUsd >= h.lockedUsd;
-  const lockedShares = rawToShares(h.lockedRaw, h.multiplier, p.decimals);
-  const maxShares = canAll ? lockedShares : lockedShares * (maxUsd / Math.max(h.lockedUsd, 1e-9));
+  const maxUsd = maxWithdrawUsd({ ...pos, cf: p.cf, backingUsd: h.backingUsd, targetHf: CREDIT_CAP.minHf });
+  const canAll = pos.debtUsd === 0 || maxUsd >= h.backingUsd;
+  const backingShares = rawToShares(h.backingRaw, h.multiplier, p.decimals);
+  const maxShares = canAll ? backingShares : backingShares * (maxUsd / Math.max(h.backingUsd, 1e-9));
 
   const shares = rawToShares(p.amountRaw, h.multiplier, p.decimals);
   const usd = (Number(p.amountRaw) / 10 ** p.decimals) * h.priceUsd;
@@ -122,13 +122,13 @@ export type FreeUpByRepay = {
 };
 
 /**
- * Free up by repaying (UnlockSheet, Adrian 2026-10-15): one amount, what you repay from your cash, and what of the stock
+ * Free up by repaying (FreeUpSheet, Adrian 2026-10-15): one amount, what you repay from your cash, and what of the stock
  * comes back for it. The most that comes back keeps the health at or above CREDIT_CAP.minHf after the repay, the line
  * freeUpCheck uses: power left after taking w out ≥ (owed − repay) × minHf.
  */
 export function freeUpByRepay(p: {
-  position: { collateralUsd: number; avgCf: number; debtUsd: number };
-  holding: { lockedRaw: bigint; lockedUsd: number };
+  position: { totalBackingUsd: number; avgCf: number; debtUsd: number };
+  holding: { backingRaw: bigint; backingUsd: number };
   /** The stock's collateral factor (0–1). */
   cf: number;
   /** The cash that can be spent (less the network-fee buffer), in dollars. */
@@ -137,9 +137,9 @@ export function freeUpByRepay(p: {
   repayUsd: number | null;
 }): FreeUpByRepay {
   const { position: pos, holding: h } = p;
-  const power = pos.collateralUsd * pos.avgCf;
+  const power = pos.totalBackingUsd * pos.avgCf;
   const m = CREDIT_CAP.minHf;
-  const backsUsd = h.lockedUsd;
+  const backsUsd = h.backingUsd;
   // Taking all of it out leaves `rest` of power; what's owed after must fit under it at the line.
   const rest = power - backsUsd * p.cf;
   const owed = pos.debtUsd;
@@ -156,7 +156,7 @@ export function freeUpByRepay(p: {
   const room = oweAfterUsd <= 0 ? backsUsd : (power - oweAfterUsd * m) / p.cf;
   const backUsd = all ? backsUsd : Math.max(0, Math.min(backsUsd, room));
   const share = backsUsd > 0 ? (backUsd / backsUsd) * SHARE_HEADROOM : 0;
-  const backRaw = all ? h.lockedRaw : (h.lockedRaw * BigInt(Math.floor(share * 1_000_000))) / 1_000_000n;
+  const backRaw = all ? h.backingRaw : (h.backingRaw * BigInt(Math.floor(share * 1_000_000))) / 1_000_000n;
   const hfAfter = oweAfterUsd <= 0 ? null : (power - backUsd * p.cf) / oweAfterUsd;
   return {
     backsUsd,

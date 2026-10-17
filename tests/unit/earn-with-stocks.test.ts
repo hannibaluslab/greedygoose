@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { decodeFunctionData, encodeFunctionData, erc20Abi } from "viem";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
-import { buildBorrowCalls, type Call } from "@/lib/aave/tx";
+import { buildCreditCalls, type Call } from "@/lib/aave/tx";
 import { feeBufferRaw, type Cash } from "@/lib/cash";
 import type { BackingOption, CreditPosition } from "@/lib/creditBuy";
 import {
@@ -50,12 +50,12 @@ const option = (freeUsd: number, cf = 0.7): BackingOption => ({
 });
 /** $900 of NVIDIA backs credit at 70%; nothing owed unless said. */
 const position = (over: Partial<CreditPosition> = {}): CreditPosition => ({
-  collateralUsd: 900,
+  totalBackingUsd: 900,
   avgCf: 0.7,
   debtUsd: 0,
   healthFactor: null,
   usdcLiquidity: 2_770_000,
-  borrowPaused: false,
+  creditPaused: false,
   ...over,
 });
 const cash: Cash = { walletRaw: usdc(1), savingsRaw: usdc(2_399), saveOn: true };
@@ -106,7 +106,7 @@ describe("earnOffer: whether the Cash sheet offers it", () => {
   });
 
   it("needs stocks that can back credit", () => {
-    expect(earnOffer(input({ options: [], position: position({ collateralUsd: 0 }) }))).toMatchObject({
+    expect(earnOffer(input({ options: [], position: position({ totalBackingUsd: 0 }) }))).toMatchObject({
       why: "no-stocks",
     });
     // What already backs credit counts.
@@ -134,7 +134,7 @@ describe("earnOffer: whether the Cash sheet offers it", () => {
   });
 
   it("isn't offered while new credit is paused, or with no cash for the network fee", () => {
-    expect(earnOffer(input({ position: position({ borrowPaused: true }) }))).toMatchObject({
+    expect(earnOffer(input({ position: position({ creditPaused: true }) }))).toMatchObject({
       why: "paused",
       text: "New credit is paused right now. Try again later.",
     });
@@ -152,7 +152,9 @@ describe("earnOffer: the cap", () => {
     expect(o.maxUsd).toBeGreaterThan(1_000);
     expect(o.maxUsd).toBe(1_437);
     // $100 of Tesla at 70%, nothing else: 70 ÷ 1.12 = $62.50.
-    expect(open(earnOffer(input({ position: position({ collateralUsd: 0 }), options: [option(100)] })))).toMatchObject({
+    expect(
+      open(earnOffer(input({ position: position({ totalBackingUsd: 0 }), options: [option(100)] }))),
+    ).toMatchObject({
       maxUsd: 62,
     });
     // The USDC available binds.
@@ -172,7 +174,7 @@ describe("earnOffer: the cap", () => {
   });
 
   it("says when the stocks can't back the smallest amount", () => {
-    expect(earnOffer(input({ position: position({ collateralUsd: 0 }), options: [option(1)] }))).toMatchObject({
+    expect(earnOffer(input({ position: position({ totalBackingUsd: 0 }), options: [option(1)] }))).toMatchObject({
       why: "credit",
       text: "Your stocks can’t back more credit right now.",
     });
@@ -227,7 +229,7 @@ describe("earnQuote: one amount", () => {
     expect(marginalApy({ debtUsd: 1_000, amountUsd: 100, apyNow: 0.0214, apyAfter: 0.023 })).toBeCloseTo(0.039, 6);
     // A premium drop on the existing debt isn't counted as this credit being cheaper: never under its own rate.
     expect(marginalApy({ debtUsd: 1_000, amountUsd: 100, apyNow: 0.025, apyAfter: 0.02 })).toBe(0.02);
-    const big = position({ debtUsd: 1_000, collateralUsd: 5_000, healthFactor: 3.5 });
+    const big = position({ debtUsd: 1_000, totalBackingUsd: 5_000, healthFactor: 3.5 });
     const rise = quote(100, { pos: big, after: 0.023 });
     expect(rise.q).toMatchObject({ cost: 39, left: 2 });
     const steep = quote(100, { pos: big, after: 0.0235 });
@@ -319,7 +321,7 @@ describe("the words around the button", () => {
         risk: "",
       }),
     ].join(" ");
-    expect(all).not.toMatch(/borrow|loan|lend|leverage|lock|aave|savings|vault/i);
+    expect(all).not.toMatch(/creditCall|loan|lend|leverage|lock|aave|savings|vault/i);
   });
 });
 
@@ -335,7 +337,7 @@ describe("buildEarnCalls: one batch, stocks in use → credit → into savings",
     const calls = buildEarnCalls({ user, backing, creditRaw, cash: noAgent });
     expect(calls).toHaveLength(6);
     expect(calls.every((c) => c.value === 0n)).toBe(true);
-    const [approveStock, supply, use, borrow, approveSave, save] = calls;
+    const [approveStock, supply, use, creditCall, approveSave, save] = calls;
     expect(approveStock.to).toBe(tsla.address);
     expect(erc20(approveStock)).toMatchObject({ functionName: "approve", args: [AAVE.SPOKE, 50_000_000n] });
     expect(spoke(supply)).toMatchObject({ functionName: "supply", args: [BigInt(tsla.reserveId), 50_000_000n, user] });
@@ -343,7 +345,10 @@ describe("buildEarnCalls: one batch, stocks in use → credit → into savings",
       functionName: "setUsingAsCollateral",
       args: [BigInt(tsla.reserveId), true, user],
     });
-    expect(spoke(borrow)).toMatchObject({ functionName: "borrow", args: [BigInt(USDC.reserveId), creditRaw, user] });
+    expect(spoke(creditCall)).toMatchObject({
+      functionName: "borrow",
+      args: [BigInt(USDC.reserveId), creditRaw, user],
+    });
     expect(approveSave.to).toBe(USDC.address);
     expect(erc20(approveSave)).toMatchObject({ functionName: "approve", args: [PROTOCOLS.AAVE_V3_POOL, creditRaw] });
     expect(save.to).toBe(PROTOCOLS.AAVE_V3_POOL);
@@ -387,7 +392,7 @@ describe("assertEarn: the batch is what the screen says", () => {
   const swapIn = (k: number, c: Call) => calls.map((x, i) => (i === k ? c : x));
 
   it("rejects a second credit, a different amount, a swap, a transfer and someone else's position", () => {
-    expect(() => assertEarn(user, [...calls, ...buildBorrowCalls({ user, amountRaw: creditRaw })], review)).toThrow(
+    expect(() => assertEarn(user, [...calls, ...buildCreditCalls({ user, amountRaw: creditRaw })], review)).toThrow(
       /Blocked/,
     );
     expect(() => assertEarn(user, calls, { creditRaw: usdc(501), backing })).toThrow(/credit differs/);

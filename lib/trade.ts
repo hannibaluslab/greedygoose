@@ -34,11 +34,11 @@ export type TradeHolding = {
   /** Aave's price, 8 decimals. */
   priceRaw: bigint;
   freeRaw: bigint;
-  lockedRaw: bigint;
+  backingRaw: bigint;
   freeUsd: number;
-  lockedUsd: number;
+  backingUsd: number;
   freeShares: number;
-  lockedShares: number;
+  backingShares: number;
   multiplier: bigint;
   paused: boolean;
 };
@@ -49,8 +49,8 @@ export type TradeData = SellPosition & { holdings: TradeHolding[]; cash: Cash; c
 const usdcRaw = (usd: number) => parseUnits(usd.toFixed(USDC.decimals), USDC.decimals);
 const MIN_BUY_RAW = usdcRaw(BUY_LIMITS.minUsd);
 const tickerOf = (symbol: string) => symbol.replace(/c$/, "");
-const held = (h: TradeHolding) => h.freeRaw + h.lockedRaw > 0n;
-const valueOf = (h: TradeHolding) => h.freeUsd + h.lockedUsd;
+const held = (h: TradeHolding) => h.freeRaw + h.backingRaw > 0n;
+const valueOf = (h: TradeHolding) => h.freeUsd + h.backingUsd;
 const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
 
 /** A stock from the registry, never from a string alone; undefined for cash or anything else. */
@@ -226,8 +226,8 @@ export function fromOptions(data: Pick<TradeData, "holdings" | "cash" | "cashUsd
         ? TRADE_COPY.subAllBacks
         : why === "too-small"
           ? TRADE_COPY.subTooSmall
-          : h.lockedRaw > 0n
-            ? TRADE_COPY.subBacks(h.lockedUsd)
+          : h.backingRaw > 0n
+            ? TRADE_COPY.subBacks(h.backingUsd)
             : TRADE_COPY.subShares(h.freeShares);
     return {
       asset: h.symbol,
@@ -237,7 +237,7 @@ export function fromOptions(data: Pick<TradeData, "holdings" | "cash" | "cashUsd
       right: formatUsd(maxUsdOf(h.symbol, data)),
       rightSub: TRADE_COPY.free,
       freeUsd: h.freeUsd,
-      backsUsd: h.lockedUsd,
+      backsUsd: h.backingUsd,
       disabled: !!why,
       why,
     };
@@ -292,7 +292,7 @@ export function defaultLegs(
 
 /** The empty state's line: whether the stocks there are all back credit. */
 export const emptyLine = (data: Pick<TradeData, "holdings">) =>
-  data.holdings.some((h) => h.lockedRaw > 0n) ? TRADE_COPY.emptyBacks : TRADE_COPY.emptyCash;
+  data.holdings.some((h) => h.backingRaw > 0n) ? TRADE_COPY.emptyBacks : TRADE_COPY.emptyCash;
 
 /** The most the From card takes, in dollars, rounded down to the cent: the cash less the fee buffer, or the free shares. */
 export function maxUsdOf(from: TradeAsset, data: Pick<TradeData, "holdings" | "cash">): number {
@@ -564,7 +564,7 @@ export function planTrade(p: {
     ? [TRADE_COPY.cashHint(data.cashUsd)]
     : [
         TRADE_COPY.freeHint(maxUsd),
-        ...(fromHolding && fromHolding.lockedRaw > 0n ? [TRADE_COPY.backsHint(fromHolding.lockedUsd)] : []),
+        ...(fromHolding && fromHolding.backingRaw > 0n ? [TRADE_COPY.backsHint(fromHolding.backingUsd)] : []),
       ];
 
   return {

@@ -66,7 +66,7 @@ function nextInput(nowSec: number, over: Partial<NextInput> = {}): NextInput {
   return {
     nowSec,
     savingsRaw: usdc(400),
-    collateralUsd: 2_000,
+    totalBackingUsd: 2_000,
     avgCf: 0.7,
     debtUsd: 600,
     holdings: HOLDINGS,

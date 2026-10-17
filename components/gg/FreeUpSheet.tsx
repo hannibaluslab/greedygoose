@@ -27,7 +27,7 @@ import type { ReserveAsset } from "@/lib/tokens/registry";
  * most that comes back keeps the health at the cap's line (lib/freeUp.ts freeUpByRepay); ending in Watch keeps D2's
  * tick, and the batch may not end in Act. `onBack` when opened from the stock's sheet.
  */
-export function UnlockSheet({
+export function FreeUpSheet({
   open,
   user,
   stock,

@@ -50,16 +50,16 @@ const holding = (
   name: string,
   priceUsd: number,
   free: number,
-  locked: number,
+  backing: number,
   paused = false,
 ): RepayHolding => ({
   symbol,
   name,
   priceUsd,
   freeRaw: shares(free),
-  lockedRaw: shares(locked),
+  backingRaw: shares(backing),
   freeUsd: free * priceUsd,
-  lockedUsd: locked * priceUsd,
+  backingUsd: backing * priceUsd,
   paused,
   multiplier: 10n ** 18n,
 });
@@ -73,7 +73,7 @@ const data = (p: { debt?: number; wallet?: number; savings?: number; holdings?: 
   const cash: Cash = { walletRaw: usd(p.wallet ?? 100), savingsRaw: usd(p.savings ?? 0), saveOn: false };
   const healthFactor = debt > 0 ? 700 / debt : null;
   return {
-    collateralUsd: 1_000,
+    totalBackingUsd: 1_000,
     avgCf: 0.7,
     debtUsd: debt,
     debtRaw: usd(debt),

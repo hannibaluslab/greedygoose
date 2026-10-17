@@ -13,7 +13,7 @@ import { ValueLine } from "@/components/gg/ValueLine";
 import { CreditIcon, MarketIcon, TradeIcon } from "@/components/gg/icons";
 import { MarketBanner } from "@/components/ui/MarketBanner";
 import { useMarketPrices } from "@/hooks/useMarketPrices";
-import { useCollateralFactorsRead, usePosition, type PositionData } from "@/hooks/usePosition";
+import { useBackingFactorsRead, usePosition, type PositionData } from "@/hooks/usePosition";
 import { formatUsd, formatUsdTrim } from "@/lib/formatting";
 import { backingOptions, creditAvailable } from "@/lib/creditBuy";
 import { maxSpendRaw, toUsd } from "@/lib/cash";
@@ -89,10 +89,10 @@ function Loaded({
   openCreditBuy: () => void;
   openStock: (symbol: string) => void;
 }) {
-  const held = data.holdings.filter((h) => h.freeShares + h.lockedShares > 0);
+  const held = data.holdings.filter((h) => h.freeShares + h.backingShares > 0);
   const power = useBuyingPower(data, held.length > 0);
   const market = useMarketPrices(held);
-  const priced = held.map((h) => ({ valueUsd: h.freeUsd + h.lockedUsd, ...market.bySymbol[h.symbol] }));
+  const priced = held.map((h) => ({ valueUsd: h.freeUsd + h.backingUsd, ...market.bySymbol[h.symbol] }));
   const today = dayChange(priced, data.stocksUsd);
   return (
     <>
@@ -155,8 +155,8 @@ function Loaded({
           </p>
         ) : (
           held.map((h) => {
-            const value = h.freeUsd + h.lockedUsd;
-            const backs = value > 0 ? h.lockedUsd / value : 0;
+            const value = h.freeUsd + h.backingUsd;
+            const backs = value > 0 ? h.backingUsd / value : 0;
             const m = market.bySymbol[h.symbol];
             return (
               <HoldingRow
@@ -164,7 +164,7 @@ function Loaded({
                 symbol={h.symbol}
                 name={h.name}
                 valueUsd={value}
-                shares={h.freeShares + h.lockedShares}
+                shares={h.freeShares + h.backingShares}
                 priceUsd={h.priceUsd}
                 backs={backs}
                 today={m?.change}
@@ -187,7 +187,7 @@ function Loaded({
 
 /** Cash you can spend (less the network-fee buffer) and the credit one Credit Buy can use; null while the backing reads. */
 function useBuyingPower(data: PositionData, holdsStock: boolean) {
-  const cfs = useCollateralFactorsRead(data.holdings).cfs;
+  const cfs = useBackingFactorsRead(data.holdings).cfs;
   if (holdsStock && !cfs) return null;
   const options = cfs ? backingOptions(data.holdings, cfs).filter((o) => o.freeUsd >= 1) : [];
   const credit = creditAvailable({ position: data, options, cash: data.cash, holdsStock });

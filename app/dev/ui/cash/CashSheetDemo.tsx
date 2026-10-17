@@ -48,7 +48,7 @@ const SAVINGS_APR = 0.0405;
 const CREDIT_APR = 0.0211;
 const CF = 0.7;
 
-function holding(symbol: string, price: number, free: number, locked: number): Holding {
+function holding(symbol: string, price: number, free: number, backing: number): Holding {
   const e = EQUITIES.find((x) => x.symbol === symbol)!;
   const raw = (n: number) => BigInt(Math.round(n * 1e8));
   return {
@@ -58,15 +58,15 @@ function holding(symbol: string, price: number, free: number, locked: number): H
     priceUsd: price,
     priceRaw: raw(price),
     freeShares: free,
-    lockedShares: locked,
+    backingShares: backing,
     freeUsd: free * price,
-    lockedUsd: locked * price,
+    backingUsd: backing * price,
     paused: false,
     frozen: false,
     freeRaw: raw(free),
-    lockedRaw: raw(locked),
+    backingRaw: raw(backing),
     multiplier: WAD,
-    collateralEnabled: locked > 0,
+    backingEnabled: backing > 0,
     dynamicConfigKey: 0,
   };
 }
@@ -81,22 +81,22 @@ function position(p: { owed: number; saveOn: boolean; creditApr?: number }): Pos
         : holding(e.symbol, 100, 0, 0),
   );
   const cash: Cash = { walletRaw: usdc(1), savingsRaw: usdc(2_399), saveOn: p.saveOn };
-  const collateralUsd = 900;
-  const healthFactor = p.owed > 0 ? (collateralUsd * CF) / p.owed : null;
+  const totalBackingUsd = 900;
+  const healthFactor = p.owed > 0 ? (totalBackingUsd * CF) / p.owed : null;
   const apr = p.creditApr ?? CREDIT_APR;
   return {
     holdings,
-    stocksUsd: holdings.reduce((a, h) => a + h.freeUsd + h.lockedUsd, 0),
-    collateralUsd,
+    stocksUsd: holdings.reduce((a, h) => a + h.freeUsd + h.backingUsd, 0),
+    totalBackingUsd,
     debtUsd: p.owed,
     // As usePosition: the credit left at the one cap (Act is the line), not Aave's own limit.
     availableUsd: creditWith({
-      collateralUsd,
+      totalBackingUsd,
       avgCf: CF,
       debtUsd: p.owed,
       healthFactor,
       usdcLiquidity: 2_770_000,
-      borrowPaused: false,
+      creditPaused: false,
     }),
     healthFactor,
     avgCf: CF,
@@ -112,7 +112,7 @@ function position(p: { owed: number; saveOn: boolean; creditApr?: number }): Pos
     cashUsd: toUsd(cashRaw(cash)),
     debtRaw: usdc(p.owed),
     usdcLiquidity: 2_770_000,
-    borrowPaused: false,
+    creditPaused: false,
   };
 }
 

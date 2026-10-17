@@ -90,10 +90,10 @@ export function StockPosition({ holding }: { holding: Holding }) {
       </div>
       <div className="flex items-baseline justify-between gap-3">
         <span className="text-[26px] font-semibold leading-none tracking-[-0.03em]">
-          {formatShares(holding.freeShares + holding.lockedShares)}{" "}
+          {formatShares(holding.freeShares + holding.backingShares)}{" "}
           <span className="text-[15px] font-medium tracking-normal text-subtle">{ticker}</span>
         </span>
-        <MoneyCompact value={holding.freeUsd + holding.lockedUsd} size={20} />
+        <MoneyCompact value={holding.freeUsd + holding.backingUsd} size={20} />
       </div>
       <div
         role="img"
@@ -105,7 +105,7 @@ export function StockPosition({ holding }: { holding: Holding }) {
       <div className="flex items-center justify-between gap-3 text-[12.5px] text-ink-mid">
         <span className="flex items-center gap-1.5 whitespace-nowrap">
           <BacksIcon size={9} className="text-ink" />
-          <b className="font-semibold text-ink">{backsPct}%</b> backs credit · {formatShares(holding.lockedShares)}
+          <b className="font-semibold text-ink">{backsPct}%</b> backs credit · {formatShares(holding.backingShares)}
         </span>
         <span className="whitespace-nowrap">
           <b className="font-semibold text-ink">{freePct}%</b> free · {formatShares(holding.freeShares)}

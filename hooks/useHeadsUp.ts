@@ -50,7 +50,7 @@ export function useHeadsUp(
   const credit = summarize(data);
   const hf = credit.healthFactor;
   if (statusFor(hf) !== "act" || hf === null || hf >= settings.sellHeadsUpHf) return null;
-  const addUsd = Math.ceil(credit.debtUsd - (credit.collateralUsd * credit.avgCf) / settings.sellTargetHf);
+  const addUsd = Math.ceil(credit.debtUsd - (credit.totalBackingUsd * credit.avgCf) / settings.sellTargetHf);
   if (addUsd <= 0) return null;
   const when =
     pending.sellAfter <= nowSec ? "now" : reopens ? "when prices reopen" : `at ${timeText(pending.sellAfter)}`;
