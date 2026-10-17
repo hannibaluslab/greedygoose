@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main, v2]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    name: App (lint, types, format, dead code, unit tests, build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run format:check
+      - run: npm run knip
+      - run: npm test
+      - run: npm run build
+
+  contracts:
+    name: Contracts (forge)
+    runs-on: ubuntu-latest
+    env:
+      # Fork tests read Base mainnet. They run when the BASE_RPC_URL secret is set, and are skipped otherwise.
+      BASE_RPC_URL: ${{ secrets.BASE_RPC_URL }}
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: foundry-rs/foundry-toolchain@v1
+      - run: forge build
+      - name: forge test (offline)
+        if: ${{ env.BASE_RPC_URL == '' }}
+        run: forge test --no-match-contract "Fork|DeployExecutorTest|ExecutorSpikeTest"
+      - name: forge test (with the Base fork)
+        if: ${{ env.BASE_RPC_URL != '' }}
+        run: forge test
