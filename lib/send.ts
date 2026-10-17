@@ -27,7 +27,9 @@ import { formatShares, formatUsd, shortAddress } from "@/lib/formatting";
 import { fullName } from "@/lib/jaw/name";
 import { rawToShares } from "@/lib/tokens/b20";
 import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
-import { clampAmount, maxUsdOf, sharesForUsdRaw, stockOf, type TradeData } from "@/lib/trade";
+import { TRADE_COPY, clampAmount, maxUsdOf, sellableOf, sharesForUsdRaw, stockOf, type TradeData } from "@/lib/trade";
+import { buildWithdrawCalls } from "@/lib/aave/tx";
+import type { SellPosition } from "@/lib/sell";
 
 /**
  * Send (Adrian, 2026-10-15): "replace pay by send, and let user send their assets out". NYM's SendSheet, Base only, in
@@ -39,7 +41,8 @@ import { clampAmount, maxUsdOf, sharesForUsdRaw, stockOf, type TradeData } from 
 /** "cash", or one of the seven stocks' registry symbols (resolved through the registry only, `stockOf`). */
 export type SendAsset = "cash" | (string & {});
 /** The position's fields Send reads (usePosition's data has them all). */
-export type SendData = Pick<TradeData, "holdings" | "cash" | "cashUsd">;
+export type SendData = Pick<TradeData, "holdings" | "cash" | "cashUsd"> &
+  Partial<Pick<SellPosition, "totalBackingUsd" | "avgCf" | "debtUsd">>;
 
 const tickerOf = (symbol: string) => symbol.replace(/c$/, "");
 const held = (h: SendData["holdings"][number]) => h.freeRaw + h.backingRaw > 0n;
@@ -94,6 +97,7 @@ export const SEND_COPY = {
   feeBuffer: `Leave ${formatUsd(CASH.feeBufferUsd)} for the network fee.`,
   noFee: `Add ${formatUsd(CASH.feeBufferUsd)} to your cash for the network fee first.`,
   notFree: "That’s more than your free shares.",
+  pastLine: TRADE_COPY.pastLine.replace(/trade/g, "send"),
   allBacks: (name: string) => `All of your ${name} backs your credit.`,
   tooSmall: "That’s less than the smallest part of a share.",
   // The button and what comes back.
@@ -146,14 +150,14 @@ export function sendOptions(data: SendData): SendOption[] {
       asset: h.symbol,
       name: h.name,
       sub:
-        h.freeRaw === 0n
+        sellableOf(h, data) === 0n
           ? SEND_COPY.subAllBacks
           : h.backingRaw > 0n
             ? SEND_COPY.subBacks(h.backingUsd)
             : SEND_COPY.subShares(h.freeShares),
       right: formatUsd(maxUsdOf(h.symbol, data)),
       rightSub: SEND_COPY.free,
-      disabled: h.freeRaw === 0n,
+      disabled: sellableOf(h, data) === 0n,
       freeUsd: h.freeUsd,
     }),
   );
@@ -438,6 +442,8 @@ export function buildSendCalls(p: {
   to: Address;
   amountRaw: bigint;
   cash: Cash;
+  /** A stock's shares that come out of backing first, when the free ones don't cover the send (Up to $X). */
+  takeOutRaw?: bigint;
 }): Call[] {
   if (!isRegistryToken(p.token)) throw new SendStop(SEND_COPY.fallback);
   if (p.amountRaw <= 0n) throw new SendStop(SEND_COPY.fallback);
@@ -449,7 +455,10 @@ export function buildSendCalls(p: {
     value: 0n,
   };
   const isCash = isAddressEqual(p.token.address, USDC.address);
-  return payFromCash(p.user, isCash ? p.amountRaw : 0n, p.cash, [transfer], { sendTo: p.to });
+  const out = isCash ? 0n : (p.takeOutRaw ?? 0n);
+  if (out > p.amountRaw) throw new SendStop(SEND_COPY.fallback);
+  const takeOut = out > 0n ? buildWithdrawCalls({ user: p.user, stock: p.token, amountRaw: out, all: false }) : [];
+  return payFromCash(p.user, isCash ? p.amountRaw : 0n, p.cash, [...takeOut, transfer], { sendTo: p.to });
 }
 
 /** What Activity shows while a Send confirms: the move, and who it went to (the name too, for this device's quick picks). */
@@ -492,7 +501,13 @@ export function planSend(p: {
   // Aave's price, rounded down.
   const sellAll = p.all && maxUsd > 0 && amountUsd >= maxUsd;
   const sharesRaw =
-    stock && holding ? (sellAll ? holding.freeRaw : sharesForUsdRaw(usdRaw, holding.priceRaw, stock.decimals)) : 0n;
+    stock && holding
+      ? sellAll
+        ? sellableOf(holding, data)
+        : sharesForUsdRaw(usdRaw, holding.priceRaw, stock.decimals)
+      : 0n;
+  // Up to $X: what the free shares don't cover comes out of backing in the same batch.
+  const takeOutRaw = holding && sharesRaw > holding.freeRaw ? sharesRaw - holding.freeRaw : 0n;
   const amountRaw = p.asset === "cash" ? usdRaw : sharesRaw;
   const shares = stock && holding ? rawToShares(sharesRaw, holding.multiplier, stock.decimals) : 0;
   const ticker = stock ? tickerOf(stock.symbol) : "";
@@ -503,8 +518,9 @@ export function planSend(p: {
   if (p.asset === "cash" && amountUsd > maxUsd)
     amountBlock = amountUsd > data.cashUsd ? SEND_COPY.overCash(data.cashUsd) : SEND_COPY.feeBuffer;
   else if (stock && noFee) amountBlock = SEND_COPY.noFee;
-  else if (stock && holding && holding.freeRaw === 0n) amountBlock = SEND_COPY.allBacks(holding.name);
-  else if (stock && holding && sharesRaw > holding.freeRaw) amountBlock = SEND_COPY.notFree;
+  else if (stock && holding && sellableOf(holding, data) === 0n) amountBlock = SEND_COPY.allBacks(holding.name);
+  else if (stock && holding && sharesRaw > sellableOf(holding, data))
+    amountBlock = holding.backingRaw > 0n && holding.cf ? SEND_COPY.pastLine : SEND_COPY.notFree;
   else if (stock && amountUsd > 0 && sharesRaw === 0n) amountBlock = SEND_COPY.tooSmall;
 
   const to = p.recipient ? recipientNote(p.recipient, p.user, p.checks) : null;
@@ -557,6 +573,7 @@ export function planSend(p: {
     amountUsd,
     amountRaw,
     sharesRaw,
+    takeOutRaw,
     hint,
     amountNote: amountBlock,
     toNote: to?.block

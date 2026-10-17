@@ -115,6 +115,20 @@ const part = (raw: bigint, f: number) =>
   f >= 1 ? raw : f > 0 ? (raw * BigInt(Math.floor(f * 1_000_000))) / 1_000_000n : 0n;
 
 /**
+ * Up to $X on a stock that backs credit (the "any" route, Sell, Trade and Send): its free shares plus the backing the
+ * 1.12 line lets out, raw. A paused stock, or one whose collateral factor isn't read yet, offers its free shares only.
+ */
+export function sellableRaw(
+  h: Pick<SellHolding, "freeRaw" | "backingRaw" | "backingUsd" | "paused">,
+  cf: number | undefined,
+  pos: Pick<SellPosition, "totalBackingUsd" | "avgCf" | "debtUsd">,
+): bigint {
+  if (!cf || h.paused || h.backingRaw === 0n || h.backingUsd <= 0) return h.freeRaw;
+  const usd = maxWithdrawUsd({ ...pos, cf, backingUsd: h.backingUsd, targetHf: CREDIT_CAP.minHf });
+  return h.freeRaw + part(h.backingRaw, usd / h.backingUsd);
+}
+
+/**
  * The most backing shares a repay by selling can take out (planSell's `maxRaw` for "repay"): the shares come out before
  * the repay lands, so the loan must stay within Aave's limit, with LIMIT_HEADROOM, in between. All of them when
  * nothing is owed. Repay's "Pay with" offers a backing stock up to this.
@@ -174,7 +188,7 @@ export function planSell(p: {
     takeOutRaw = sharesRaw;
     hfAfter = healthAfterWithdraw({ ...creditInput, usd: valueUsd });
   } else if (from === "any") {
-    maxRaw = h.freeRaw + (h.paused ? 0n : lineShare());
+    maxRaw = sellableRaw(h, p.cf, pos);
     takeOutRaw = sharesRaw > h.freeRaw ? sharesRaw - h.freeRaw : 0n;
     if (takeOutRaw > 0n) {
       hfAfter = healthAfterWithdraw({ ...creditInput, usd: (Number(takeOutRaw) / 10 ** stock.decimals) * h.priceUsd });
