@@ -19,6 +19,9 @@ export function Providers({ children }: { children: ReactNode }) {
         {REHEARSAL && <REHEARSAL.Badge />}
         <Toaster
           position="top-center"
+          // One at a time: a new toast replaces the one showing. Sonner's stack slid the dark pills under each other,
+          // with the older one's words showing through.
+          visibleToasts={1}
           offset={TOAST_OFFSET}
           mobileOffset={TOAST_OFFSET}
           icons={{
