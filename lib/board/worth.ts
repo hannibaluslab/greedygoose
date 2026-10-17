@@ -3,7 +3,7 @@ import { multicall } from "viem/actions";
 import { AAVE } from "@/lib/aave/addresses";
 import { aaveOracleAbi } from "@/lib/aave/abis/IAaveOracle";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
-import { GUARDIAN } from "@/lib/guardian/config";
+import { PROTOCOLS } from "@/lib/protocols/config";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 import { AAVE_V3_USDC_DEBT, USDC_RESERVE_ID } from "./tokens";
@@ -28,7 +28,7 @@ const toUsd6 = (value: bigint, decimals: number) =>
 function holdingsCalls(a: Address) {
   return [
     { address: USDC.address, abi: erc20Abi, functionName: "balanceOf", args: [a] },
-    { address: GUARDIAN.AUSDC, abi: erc20Abi, functionName: "balanceOf", args: [a] },
+    { address: PROTOCOLS.AUSDC, abi: erc20Abi, functionName: "balanceOf", args: [a] },
     ...ENTRY_COINS.map((c) => ({ address: c.address, abi: erc20Abi, functionName: "balanceOf", args: [a] }) as const),
     ...EQUITIES.flatMap((e) => [
       { address: e.address, abi: erc20Abi, functionName: "balanceOf", args: [a] } as const,

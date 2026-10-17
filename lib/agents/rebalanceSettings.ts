@@ -1,6 +1,6 @@
 import { MIX_WHOLE, type MixHolding } from "@/lib/agents/mix";
 import type { StockLimits } from "@/lib/agents/permissions";
-import type { RebalanceTrade } from "@/lib/guardian/rebalance";
+import type { RebalanceTrade } from "@/lib/agents/rules/rebalance";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
 /**

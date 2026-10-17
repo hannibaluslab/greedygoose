@@ -10,7 +10,7 @@ import { aaveOracleAbi } from "@/lib/aave/abis/IAaveOracle";
 import { borrowApr, monthlyCost, priceToUsd, summarize, type AccountData } from "@/lib/aave/math";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { statusFor } from "@/lib/risk/status";
-import { GUARDIAN } from "@/lib/guardian/config";
+import { PROTOCOLS } from "@/lib/protocols/config";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import { cashRaw, saveRuns, toUsd, type Cash } from "@/lib/cash";
@@ -98,8 +98,8 @@ export function usePosition(user: `0x${string}` | undefined) {
       { address: AAVE.HUB, abi: hubAbi, functionName: "getAssetLiquidity", args: [BigInt(USDC.reserveId)] },
       { address: USDC.address, abi: erc20Abi, functionName: "balanceOf", args: [who] },
       { address: AAVE.SPOKE, abi: spokeAbi, functionName: "getReserveConfig", args: [BigInt(USDC.reserveId)] },
-      { address: GUARDIAN.AUSDC, abi: erc20Abi, functionName: "balanceOf", args: [who] },
-      { address: GUARDIAN.AAVE_V3_POOL, abi: v3ReserveAbi, functionName: "getReserveData", args: [USDC.address] },
+      { address: PROTOCOLS.AUSDC, abi: erc20Abi, functionName: "balanceOf", args: [who] },
+      { address: PROTOCOLS.AAVE_V3_POOL, abi: v3ReserveAbi, functionName: "getReserveData", args: [USDC.address] },
       // The Cash Agent's switches, once the executor is deployed: whether Save runs decides the keep-back.
       ...(GOOSE_EXECUTOR
         ? [{ address: GOOSE_EXECUTOR, abi: gooseExecutorAbi, functionName: "accounts", args: [who] } as const]

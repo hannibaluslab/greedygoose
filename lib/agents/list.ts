@@ -164,7 +164,7 @@ export type AgentCard = {
 export type HeadsUpCard = { addUsd: number; sellUsd: number; when: string };
 
 /**
- * The weekend heads-up (lib/guardian/plan.ts `weekendHeadsUp`): no move, a card only. Before prices pause, credit in
+ * The weekend heads-up (lib/agents/rules/protect.ts `weekendHeadsUp`): no move, a card only. Before prices pause, credit in
  * Watch that a drop at the reopen would take into Act: when they pause, the drop, and the repay that keeps it in Watch.
  */
 export type WeekendCard = { addUsd: number; dropPct: number; when: string };

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { previewTrades, rebalanceOptions, type MixHolding } from "@/lib/agents/mix";
 import type { StockLimits } from "@/lib/agents/permissions";
 import { rebalanceSave, tradeLines } from "@/lib/agents/rebalanceSettings";
-import type { RebalanceTrade } from "@/lib/guardian/rebalance";
+import type { RebalanceTrade } from "@/lib/agents/rules/rebalance";
 
 const usdc = (usd: number) => BigInt(usd) * 10n ** 6n;
 const price = (usd: number) => BigInt(Math.round(usd * 1e8));

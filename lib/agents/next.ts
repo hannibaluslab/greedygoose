@@ -4,15 +4,15 @@ import { OFF_WHY } from "@/lib/agents/feed";
 import { agentOf, AGENTS, timeText, type Agent, type Next, type WeekendCard } from "@/lib/agents/list";
 import { isMix, previewTrades, type MixHolding } from "@/lib/agents/mix";
 import { JOBS, readStockLimits, type AgentJob } from "@/lib/agents/permissions";
-import { planGuardian, weekendHeadsUp } from "@/lib/guardian/plan";
-import type { RebalanceOptions } from "@/lib/guardian/rebalance";
+import { planProtect, weekendHeadsUp } from "@/lib/agents/rules/protect";
+import type { RebalanceOptions } from "@/lib/agents/rules/rebalance";
 import { formatUsdTrim } from "@/lib/formatting";
 import { STATUS_LABEL, statusFor } from "@/lib/risk/status";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
 /*
  * What each agent does next. With an executor configured, its `planOf(account)` names the first job, in its order,
- * with a move; every other agent reads its TypeScript rule (lib/guardian/*.ts, which the contract matches through the
+ * with a move; every other agent reads its TypeScript rule (lib/agents/rules/*.ts, which the contract matches through the
  * differential tests) on live data. With none configured, every agent reads its rule. Save and Entry have no agent on
  * screen (D20), so a plan for them gives no line.
  */
@@ -173,12 +173,12 @@ export type NextInput = {
 const smaller = (a: bigint, b: bigint) => (a < b ? a : b);
 
 /**
- * Protect: repays from savings only in Act, back to its target in Watch (planGuardian; Act is the line, 2026-10-15).
+ * Protect: repays from savings only in Act, back to its target in Watch (planProtect; Act is the line, 2026-10-15).
  * In Safe or Watch it says it waits for Act.
  */
 function protectNext(i: NextInput): Next {
   const left = i.left.protect;
-  const d = planGuardian({
+  const d = planProtect({
     collateralUsd: i.collateralUsd,
     avgCf: i.avgCf,
     debtUsd: i.debtUsd,
@@ -211,7 +211,7 @@ function protectNext(i: NextInput): Next {
 }
 
 /**
- * The weekend heads-up card (lib/guardian/plan.ts `weekendHeadsUp`, on the executor's live numbers): in the window
+ * The weekend heads-up card (lib/agents/rules/protect.ts `weekendHeadsUp`, on the executor's live numbers): in the window
  * before the next price freeze, credit outside Act that the stress drop would take into it. No move: a card only.
  * `freezeAt` is the executor's `nextFreeze`, its own calendar with the holidays it holds, so the card shows before a
  * freeze that starts mid-week and not while prices are already held (Good Friday); null while it isn't read.

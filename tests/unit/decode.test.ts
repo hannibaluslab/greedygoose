@@ -5,7 +5,7 @@ import { describeActivity } from "@/components/gg/Activity";
 import { decodeActivity } from "@/lib/activity/decode";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
-import { GUARDIAN } from "@/lib/guardian/config";
+import { PROTOCOLS } from "@/lib/protocols/config";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
 type Address = `0x${string}`;
@@ -101,8 +101,8 @@ describe("decodeActivity: sales", () => {
 
 describe("decodeActivity: savings stay inside the cash (D15, D20)", () => {
   // Aave V3 sends the USDC from the aToken contract to the account; the fee buffer stays behind in the wallet.
-  const fromSavings = (raw: bigint, to: Address = user) => transfer(USDC.address, GUARDIAN.AUSDC, to, raw);
-  const intoSavings = (raw: bigint) => transfer(USDC.address, user, GUARDIAN.AUSDC, raw);
+  const fromSavings = (raw: bigint, to: Address = user) => transfer(USDC.address, PROTOCOLS.AUSDC, to, raw);
+  const intoSavings = (raw: bigint) => transfer(USDC.address, user, PROTOCOLS.AUSDC, raw);
 
   it("a repay paid from savings is one repay, paid from cash", () => {
     const logs = [
@@ -263,7 +263,7 @@ describe("decodeActivity: Earn with stocks is one move (credit in, earning)", ()
   ]);
   const savingsSupply = (by: Address, onBehalfOf: Address, amount: bigint, reserve: Address = USDC.address) =>
     log(
-      GUARDIAN.AAVE_V3_POOL,
+      PROTOCOLS.AAVE_V3_POOL,
       encodeEventTopics({ abi: savingsSupplyAbi, eventName: "Supply", args: { reserve, onBehalfOf, referralCode: 0 } }),
       encodeAbiParameters([{ type: "address" }, { type: "uint256" }], [by, amount]),
     );
@@ -293,7 +293,7 @@ describe("decodeActivity: Earn with stocks is one move (credit in, earning)", ()
     stockSupply(50_000_000n),
     borrow(creditRaw),
     transfer(USDC.address, AAVE.HUB, user, creditRaw),
-    transfer(USDC.address, user, GUARDIAN.AUSDC, savedRaw),
+    transfer(USDC.address, user, PROTOCOLS.AUSDC, savedRaw),
     savingsSupply(by, user, savedRaw),
   ];
 
@@ -332,7 +332,7 @@ describe("decodeActivity: Earn with stocks is one move (credit in, earning)", ()
   });
 
   it("with the network fee taken from savings first, still one move", () => {
-    const logs = [transfer(USDC.address, GUARDIAN.AUSDC, user, 300_000n), ...earnLogs(500_000_000n)];
+    const logs = [transfer(USDC.address, PROTOCOLS.AUSDC, user, 300_000n), ...earnLogs(500_000_000n)];
     expect(decodeActivity(logs, user).map((i) => i.kind)).toEqual(["earn", "supply"]);
   });
 });

@@ -31,12 +31,12 @@ import { limitRaw, LIMIT_USD, stockLimitsRaw, testCapNote } from "@/lib/agents/p
 import { rebalanceSave, tradeLines, type RebalanceTerms, type SavePlan } from "@/lib/agents/rebalanceSettings";
 import { toUsd } from "@/lib/cash";
 import { formatUsdShort, formatUsdTrim } from "@/lib/formatting";
-import type { RebalanceOptions } from "@/lib/guardian/rebalance";
+import type { RebalanceOptions } from "@/lib/agents/rules/rebalance";
 import { EQUITIES } from "@/lib/tokens/registry";
 
 /**
  * The Rebalancer's settings, the body of its agent sheet (agents-redesign spec): your mix, its weekly limit, when it
- * runs and its next trades from its own rule (lib/guardian/rebalance.ts) on live holdings. The sheet says what it
+ * runs and its next trades from its own rule (lib/agents/rules/rebalance.ts) on live holdings. The sheet says what it
  * never does. While it's off, saving switches it on.
  * Everything comes from hooks, so it drops into the sheet with `<RebalanceSettings account={account} />`.
  * Saving is `setMix` through useTx and, when needed, a new grant on JAW's own screen (useManageSave). Without an

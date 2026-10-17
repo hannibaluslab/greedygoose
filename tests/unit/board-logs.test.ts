@@ -5,7 +5,7 @@ import { memberFlows, type FlowRules } from "@/lib/board/flows";
 import { AAVE_V4_PLACES } from "@/lib/board/inside";
 import { decodeRecords } from "@/lib/board/logs";
 import { tokenInfo } from "@/lib/board/tokens";
-import { GUARDIAN } from "@/lib/guardian/config";
+import { PROTOCOLS } from "@/lib/protocols/config";
 import { USDC } from "@/lib/tokens/registry";
 
 /*
@@ -20,7 +20,7 @@ const fixture = JSON.parse(readFileSync("tests/unit/fixtures/board-logs.json", "
 const records = (k: string) => decodeRecords(fixture.txs[k].logs.map((l) => formatLog(l)));
 const rules: FlowRules = {
   usdc: USDC.address,
-  ausdc: GUARDIAN.AUSDC,
+  ausdc: PROTOCOLS.AUSDC,
   token: tokenInfo,
   venue: () => undefined,
   aave: (a) => AAVE_V4_PLACES.some((b) => b.toLowerCase() === a.toLowerCase()),

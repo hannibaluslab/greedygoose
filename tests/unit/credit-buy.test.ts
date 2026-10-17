@@ -34,7 +34,7 @@ import {
   type CreditLimit,
   type CreditPosition,
 } from "@/lib/creditBuy";
-import { aaveV3PoolAbi } from "@/lib/guardian/abis";
+import { aaveV3PoolAbi } from "@/lib/protocols/abis";
 import { statusFor } from "@/lib/risk/status";
 import { BUY_LIMITS, buildBuyCalls, minOut, type BuyQuote } from "@/lib/swap/buy";
 import { AERODROME, UNISWAP } from "@/lib/swap/venues";

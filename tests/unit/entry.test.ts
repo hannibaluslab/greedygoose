@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planEntry, type EntryCoin } from "@/lib/guardian/entry";
+import { planEntry, type EntryCoin } from "@/lib/agents/rules/entry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 
 /** USDT, USDe, USDbC, USDS (lib/tokens/stables.ts), empty, with limits that never bind. */

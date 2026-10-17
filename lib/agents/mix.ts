@@ -1,11 +1,11 @@
 import { REBALANCER } from "@/config/risk";
 import { stockLimitsRaw, type StockLimits } from "@/lib/agents/permissions";
-import { rebalanceTrades, type RebalanceOptions, type RebalanceTrade } from "@/lib/guardian/rebalance";
+import { rebalanceTrades, type RebalanceOptions, type RebalanceTrade } from "@/lib/agents/rules/rebalance";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
 /**
  * The Rebalancer's mix (plan item 9 step 4), set in its agent sheet: the weights GooseExecutor's registry keeps
- * (`setMix`, `mixes`) and what the Rebalancer would trade for them, from its TypeScript rule (lib/guardian/rebalance.ts).
+ * (`setMix`, `mixes`) and what the Rebalancer would trade for them, from its TypeScript rule (lib/agents/rules/rebalance.ts).
  */
 
 /** A whole mix in BPS (RebalanceRules.WHOLE). */

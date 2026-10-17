@@ -14,13 +14,13 @@
  */
 import { decodeAbiParameters, encodeAbiParameters, encodeFunctionData, getAbiItem, type Address, type Hex } from "viem";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
-import { permissionManagerAbi } from "@/lib/guardian/abis";
-import { GUARDIAN } from "@/lib/guardian/config";
+import { permissionManagerAbi } from "@/lib/protocols/abis";
+import { PROTOCOLS } from "@/lib/protocols/config";
 import { connectFork, describeExecutorLogs, health, namer, readState, writeState, type Fork, type State } from "./lib";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 
-const MANAGER = GUARDIAN.PERMISSION_MANAGER as Address;
+const MANAGER = PROTOCOLS.PERMISSION_MANAGER as Address;
 const APPROVED = getAbiItem({ abi: permissionManagerAbi, name: "PermissionApproved" });
 const MODES = ["Run", "Register"] as const;
 const ACTIONS = [

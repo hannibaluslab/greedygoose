@@ -18,11 +18,11 @@ import {
   type StockLimits,
 } from "@/lib/agents/permissions";
 import { jobStatus, type AgentStatus, type Stored } from "@/lib/agents/status";
-import { GUARDIAN } from "@/lib/guardian/config";
-import { permissionManagerAbi } from "@/lib/guardian/abis";
+import { PROTOCOLS } from "@/lib/protocols/config";
+import { permissionManagerAbi } from "@/lib/protocols/abis";
 import { useNowSec } from "@/hooks/useNowSec";
 
-/** A grant lasts a year, like Guardian's. */
+/** A grant lasts a year. */
 export const GRANT_SECONDS = 365 * 86_400;
 
 /** What a job runs with: its limit, and for Protect · sell and the Rebalancer each stock's. */
@@ -184,7 +184,7 @@ export function useAgents(account: `0x${string}`) {
   );
   const periods = useReadContracts({
     contracts: spends.map(({ permission, spend }) => ({
-      address: GUARDIAN.PERMISSION_MANAGER,
+      address: PROTOCOLS.PERMISSION_MANAGER,
       abi: permissionManagerAbi,
       functionName: "getCurrentPeriod",
       args: [permission, spend],

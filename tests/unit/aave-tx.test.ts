@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { decodeFunctionData, encodeAbiParameters, encodeErrorResult, erc20Abi, toFunctionSelector } from "viem";
 import { buildBorrowCalls, buildLoanCalls, buildRepayCalls, buildSupplyCalls, fullRepayAmount } from "@/lib/aave/tx";
 import { CASH_STUCK, explainRevert, stockStf } from "@/lib/aave/errors";
-import { buildAddSavingsCalls, buildWithdrawSavingsCalls } from "@/lib/guardian/permission";
+import { buildAddSavingsCalls, buildWithdrawSavingsCalls } from "@/lib/savings";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { AAVE } from "@/lib/aave/addresses";
 import { buildBuyCalls } from "@/lib/swap/buy";

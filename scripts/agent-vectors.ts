@@ -10,11 +10,11 @@
 import { writeFileSync } from "node:fs";
 import { encodeAbiParameters, hashTypedData, keccak256, parseUnits, toHex, type Address } from "viem";
 import { CASH, CASH_AGENT, ENTRY, PROTECT_SELL, REBALANCER, RISK } from "@/config/risk";
-import { GUARDIAN } from "@/lib/guardian/config";
-import { planEntry, type EntryCoin } from "@/lib/guardian/entry";
-import { inWeekendWindow, planGuardian, planSave } from "@/lib/guardian/plan";
-import { planRebalance, rebalanceTrades, type RebalanceHolding } from "@/lib/guardian/rebalance";
-import { planSell, sellAmounts, sellTiming, type SellBook } from "@/lib/guardian/sell";
+import { PROTOCOLS } from "@/lib/protocols/config";
+import { planEntry, type EntryCoin } from "@/lib/agents/rules/entry";
+import { inWeekendWindow, planProtect, planSave } from "@/lib/agents/rules/protect";
+import { planRebalance, rebalanceTrades, type RebalanceHolding } from "@/lib/agents/rules/rebalance";
+import { planSell, sellAmounts, sellTiming, type SellBook } from "@/lib/agents/rules/protectSell";
 import { marketState } from "@/lib/market-hours";
 import {
   agentPermission,
@@ -315,13 +315,13 @@ function protectVectors() {
       capLeftUsd: toFloat(v.capLeft, 1_000_000n),
       ...t,
     };
-    const d = planGuardian({ ...input, minRepayUsd });
+    const d = planProtect({ ...input, minRepayUsd });
     kinds.push(PROTECT_CASE[d.reason]);
     amounts.push(d.action === "repay" ? BigInt(Math.round(d.amountUsd * 1e6)).toString() : "0");
     // Float and integer maths may disagree within a hair of a threshold: those vectors check the amount only.
     const near = (a: number, b: number) => Math.abs(a - b) < 1e-4;
     const hf = debtUsd > 0 ? (collateralUsd * avgCf) / debtUsd : Infinity;
-    const uncapped = planGuardian({ ...input, minRepayUsd: 0 });
+    const uncapped = planProtect({ ...input, minRepayUsd: 0 });
     const edge = near(hf, t.triggerHf) || (uncapped.action === "repay" && near(uncapped.amountUsd, minRepayUsd));
     checkKind.push(edge ? 0 : 1);
   }
@@ -431,7 +431,7 @@ function managerHash(p: ReturnType<typeof agentPermission>) {
       name: "JustaPermissionManager",
       version: "1",
       chainId: 8453,
-      verifyingContract: GUARDIAN.PERMISSION_MANAGER,
+      verifyingContract: PROTOCOLS.PERMISSION_MANAGER,
     },
     types: {
       Permission: [

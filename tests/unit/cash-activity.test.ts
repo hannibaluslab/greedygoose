@@ -28,7 +28,7 @@ import {
   type ExecutorMove,
   type OwnMove,
 } from "@/lib/cashActivity";
-import { GUARDIAN } from "@/lib/guardian/config";
+import { PROTOCOLS } from "@/lib/protocols/config";
 import { USDC } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 
@@ -318,7 +318,7 @@ describe("money someone else sent", () => {
     );
     expect(arrivalsOf([borrow, transfer(AAVE.HUB, user, usdc(100))], user)).toEqual([]);
     // Savings coming back is inside the cash (D15).
-    expect(arrivalsOf([transfer(GUARDIAN.AUSDC, user, usdc(40))], user)).toEqual([]);
+    expect(arrivalsOf([transfer(PROTOCOLS.AUSDC, user, usdc(40))], user)).toEqual([]);
   });
 
   it("reads each transaction once, newest first", () => {

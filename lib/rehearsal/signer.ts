@@ -18,8 +18,8 @@ import {
   type StorePermissionApiResponse,
 } from "@jaw.id/core";
 import { CHAIN_ID } from "@/lib/chain";
-import { justanAccountAbi, permissionManagerAbi } from "@/lib/guardian/abis";
-import { GUARDIAN } from "@/lib/guardian/config";
+import { justanAccountAbi, permissionManagerAbi } from "@/lib/protocols/abis";
+import { PROTOCOLS } from "@/lib/protocols/config";
 import { USDC } from "@/lib/tokens/registry";
 import { isLocalRpc } from "./flag";
 
@@ -49,7 +49,7 @@ import { isLocalRpc } from "./flag";
 export const REHEARSAL_SIGNER_MARKER = "gg-rehearsal-fork-signer";
 
 const CHAIN_HEX = `0x${CHAIN_ID.toString(16)}` as const;
-const MANAGER = GUARDIAN.PERMISSION_MANAGER as Address;
+const MANAGER = PROTOCOLS.PERMISSION_MANAGER as Address;
 const APPROVED = getAbiItem({ abi: permissionManagerAbi, name: "PermissionApproved" });
 const REVOKED = getAbiItem({ abi: permissionManagerAbi, name: "PermissionRevoked" });
 /** JustaPermissionManager's PeriodUnit, in the words JAW's relay stores. */

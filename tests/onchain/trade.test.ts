@@ -21,8 +21,8 @@ import { priceToUsd } from "@/lib/aave/math";
 import type { Call } from "@/lib/aave/tx";
 import { decodeActivity } from "@/lib/activity/decode";
 import { feeBufferRaw, payFromCash, readCash, type Cash } from "@/lib/cash";
-import { GUARDIAN } from "@/lib/guardian/config";
-import { aaveV3PoolAbi } from "@/lib/guardian/abis";
+import { PROTOCOLS } from "@/lib/protocols/config";
+import { aaveV3PoolAbi } from "@/lib/protocols/abis";
 import { explainRevert, stockStf } from "@/lib/aave/errors";
 import { minOut, quotePool, quoteSwap, signingQuote, type BuyQuote, type Side } from "@/lib/swap/buy";
 import { sellMinOut } from "@/lib/swap/sell";
@@ -195,11 +195,11 @@ describe("trading one stock for another on Base (the Trade sheet)", () => {
     const before: Call[] = [
       {
         to: USDC.address,
-        data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [GUARDIAN.AAVE_V3_POOL, put] }),
+        data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [PROTOCOLS.AAVE_V3_POOL, put] }),
         value: 0n,
       },
       {
-        to: GUARDIAN.AAVE_V3_POOL,
+        to: PROTOCOLS.AAVE_V3_POOL,
         data: encodeFunctionData({
           abi: aaveV3PoolAbi,
           functionName: "supply",
@@ -214,7 +214,7 @@ describe("trading one stock for another on Base (the Trade sheet)", () => {
     expect(t.buyIn).toBe(t.floor);
     const batch = payFromCash(newcomer, 0n, cash, t.calls);
     expect(batch).toHaveLength(5);
-    expect(batch[0].to).toBe(GUARDIAN.AAVE_V3_POOL);
+    expect(batch[0].to).toBe(PROTOCOLS.AAVE_V3_POOL);
     const r = await simulate(newcomer, nvda, aapl, batch, before);
     expect(r.statuses.every((s) => s === "success")).toBe(true);
     expect(r.usdcAfter).toBeGreaterThanOrEqual(feeBufferRaw);

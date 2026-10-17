@@ -23,7 +23,7 @@ import {
 import { stockLimitsRaw } from "@/lib/agents/permissions";
 import { buildSetKeepMixCalls, buildSetMixCalls } from "@/lib/agents/settings";
 import { assertAllowed } from "@/lib/allowlist";
-import { rebalanceTrades } from "@/lib/guardian/rebalance";
+import { rebalanceTrades } from "@/lib/agents/rules/rebalance";
 import { EQUITIES } from "@/lib/tokens/registry";
 
 const user = "0x000000000000000000000000000000000000dEaD";

@@ -8,7 +8,7 @@ import { readBoardRecords } from "./logs";
 import { rankRows, returnSinceJoining } from "./score";
 import { tokenInfo } from "./tokens";
 import { readHoldings, readPrices, stockUsd6, worth6, type Holdings, type Prices } from "./worth";
-import { GUARDIAN } from "@/lib/guardian/config";
+import { PROTOCOLS } from "@/lib/protocols/config";
 import { USDC } from "@/lib/tokens/registry";
 
 type Member = { account: Address; joinedAt: bigint };
@@ -184,7 +184,7 @@ export async function readBoard(p: { state: Client; logs: Client; board: Address
   ]);
   const rules: FlowRules = {
     usdc: USDC.address,
-    ausdc: GUARDIAN.AUSDC,
+    ausdc: PROTOCOLS.AUSDC,
     token: tokenInfo,
     venue: (a) => venues.get(a.toLowerCase()),
     aave: (a) => AAVE_V4_PLACES.some((b) => b.toLowerCase() === a.toLowerCase()),

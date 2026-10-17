@@ -22,7 +22,7 @@ import type { Call } from "@/lib/aave/tx";
 import { decodeActivity } from "@/lib/activity/decode";
 import { assertAllowed } from "@/lib/allowlist";
 import { cashRaw, readCash } from "@/lib/cash";
-import { GUARDIAN } from "@/lib/guardian/config";
+import { PROTOCOLS } from "@/lib/protocols/config";
 import { SendStop, buildSendCalls, readRecipient } from "@/lib/send";
 import { AERODROME, UNISWAP } from "@/lib/swap/venues";
 import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
@@ -61,7 +61,7 @@ async function simulate(user: Address, token: ReserveAsset, calls: Call[], backi
     balanceRead(token.address, user),
     balanceRead(token.address, friend),
     balanceRead(USDC.address, user),
-    balanceRead(GUARDIAN.AUSDC, user),
+    balanceRead(PROTOCOLS.AUSDC, user),
     suppliedRead(backing, user),
     debtRead(user),
   ];
@@ -124,7 +124,7 @@ describe("Send on Base (the Send tab)", () => {
     expect(cashRaw(cash)).toBeGreaterThan(amount + parseUnits("1", 6));
     const calls = buildSendCalls({ user: backer, token: USDC, to: friend, amountRaw: amount, cash });
     expect(calls).toHaveLength(2);
-    expect(calls[0].to).toBe(GUARDIAN.AAVE_V3_POOL);
+    expect(calls[0].to).toBe(PROTOCOLS.AAVE_V3_POOL);
     expect(calls[1].to).toBe(USDC.address);
     const r = await simulate(backer, USDC, calls);
     console.log(`cash send: wallet ${r.walletDelta}, savings ${r.savingsDelta}, friend +${r.friendDelta}`);
@@ -186,7 +186,7 @@ describe("Send on Base (the Send tab)", () => {
 
   it("the builder and the allowlist refuse the account itself and the app's contracts before Base is asked", async () => {
     const cash = await readCash(client, backer);
-    for (const to of [backer, AAVE.SPOKE, USDC.address, GUARDIAN.AAVE_V3_POOL]) {
+    for (const to of [backer, AAVE.SPOKE, USDC.address, PROTOCOLS.AAVE_V3_POOL]) {
       expect(() => buildSendCalls({ user: backer, token: USDC, to: to as Address, amountRaw: 1n, cash })).toThrow(
         SendStop,
       );

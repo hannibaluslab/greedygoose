@@ -3,9 +3,9 @@ import type { Call } from "@/lib/aave/tx";
 import type { ActivityItem } from "@/lib/activity/decode";
 import { assertAllowed } from "@/lib/allowlist";
 import { feeBufferRaw, toUsd } from "@/lib/cash";
-import { GUARDIAN } from "@/lib/guardian/config";
-import { aaveV3PoolAbi } from "@/lib/guardian/abis";
-import { buildAddSavingsCalls } from "@/lib/guardian/permission";
+import { PROTOCOLS } from "@/lib/protocols/config";
+import { aaveV3PoolAbi } from "@/lib/protocols/abis";
+import { buildAddSavingsCalls } from "@/lib/savings";
 import { txKey, type TxPlan } from "@/lib/tx/prepared";
 import { USDC } from "@/lib/tokens/registry";
 
@@ -40,7 +40,7 @@ const decode = (c: Call | undefined) => {
   try {
     if (isAddressEqual(c.to, USDC.address))
       return { on: "usdc" as const, ...decodeFunctionData({ abi: erc20Abi, data: c.data }) };
-    if (isAddressEqual(c.to, GUARDIAN.AAVE_V3_POOL))
+    if (isAddressEqual(c.to, PROTOCOLS.AAVE_V3_POOL))
       return { on: "pool" as const, ...decodeFunctionData({ abi: aaveV3PoolAbi, data: c.data }) };
   } catch {
     /* blocked below */
@@ -61,7 +61,7 @@ export function assertStartEarning(user: Address, calls: Call[], amountRaw: bigi
   if (approve?.on !== "usdc" || approve.functionName !== "approve")
     throw new Error("Blocked: the approval differs from the screen");
   const [spender, allowance] = approve.args as readonly [Address, bigint];
-  if (!isAddressEqual(spender, GUARDIAN.AAVE_V3_POOL) || allowance !== amountRaw)
+  if (!isAddressEqual(spender, PROTOCOLS.AAVE_V3_POOL) || allowance !== amountRaw)
     throw new Error("Blocked: the approval differs from the screen");
   if (supply?.on !== "pool" || supply.functionName !== "supply")
     throw new Error("Blocked: what earns differs from the screen");

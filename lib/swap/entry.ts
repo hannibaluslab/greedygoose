@@ -24,7 +24,7 @@ export const faceRaw = (coin: EntryCoinAsset, raw: bigint) => raw / scale(coin);
 
 /**
  * The least USDC converting `amountIn` may bring: face value less ENTRY.floorBps (99.5%), rounded up, as the Entry
- * job's rule has it (lib/guardian/entry.ts planEntry).
+ * job's rule has it (lib/agents/rules/entry.ts planEntry).
  */
 export function convertFloorRaw(coin: EntryCoinAsset, amountIn: bigint): bigint {
   const n = amountIn * (BPS - BigInt(ENTRY.floorBps));

@@ -4,7 +4,7 @@ import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { ALL_RESERVES, EQUITIES, USDC, findByAddress } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
-import { GUARDIAN } from "@/lib/guardian/config";
+import { PROTOCOLS } from "@/lib/protocols/config";
 import { savingsEventsAbi } from "@/lib/board/logs";
 
 type ActivityKind =
@@ -181,9 +181,9 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
     // Aave V4 moves are already covered by Spoke events.
     if (touchesAave(from) || touchesAave(to)) continue;
     // Aave V3 savings: USDC into or out of the aToken contract, within the user's own cash.
-    if (token.kind === "debt" && from && to && isAddressEqual(from, user) && isAddressEqual(to, GUARDIAN.AUSDC))
+    if (token.kind === "debt" && from && to && isAddressEqual(from, user) && isAddressEqual(to, PROTOCOLS.AUSDC))
       continue;
-    if (token.kind === "debt" && from && to && isAddressEqual(from, GUARDIAN.AUSDC) && isAddressEqual(to, user))
+    if (token.kind === "debt" && from && to && isAddressEqual(from, PROTOCOLS.AUSDC) && isAddressEqual(to, user))
       continue;
     if (token.kind === "debt" && from && isAddressEqual(from, user)) {
       usdcOut += value;
@@ -260,7 +260,7 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
 function savedByUser(logs: readonly Log[], user: `0x${string}`): bigint {
   return parseEventLogs({
     abi: savingsEventsAbi,
-    logs: logs.filter((l) => isAddressEqual(l.address, GUARDIAN.AAVE_V3_POOL)),
+    logs: logs.filter((l) => isAddressEqual(l.address, PROTOCOLS.AAVE_V3_POOL)),
     eventName: "Supply",
     strict: false,
   }).reduce((sum, e) => {

@@ -19,8 +19,8 @@ import { assertAllowed } from "@/lib/allowlist";
 import { feeBufferRaw, payFromCash, type Cash } from "@/lib/cash";
 import { cashRows, ownCashRow, type OwnMove } from "@/lib/cashActivity";
 import { startedEarningText, startEarningShown, startEarningSteps, startEarningText } from "@/lib/cashSetup";
-import { GUARDIAN } from "@/lib/guardian/config";
-import { aaveV3PoolAbi } from "@/lib/guardian/abis";
+import { PROTOCOLS } from "@/lib/protocols/config";
+import { aaveV3PoolAbi } from "@/lib/protocols/abis";
 import { buildSendCalls } from "@/lib/send";
 import {
   assertStartEarning,
@@ -51,14 +51,14 @@ describe("Start earning's batch: the wallet's cash into savings, the fee buffer 
   it("is an exact USDC approve to Aave V3's pool, then its supply of that amount for the user, referral 0", () => {
     const walletRaw = usdc(42.251674);
     const calls = buildStartEarningCalls({ user, walletRaw });
-    expect(calls.map((c) => c.to)).toEqual([USDC.address, GUARDIAN.AAVE_V3_POOL]);
+    expect(calls.map((c) => c.to)).toEqual([USDC.address, PROTOCOLS.AAVE_V3_POOL]);
     expect(calls.every((c) => c.value === 0n)).toBe(true);
     const { approve, supply } = decodeBatch(calls);
     expect(approve.functionName).toBe("approve");
     expect(supply.functionName).toBe("supply");
     const [spender, allowance] = approve.args as readonly [Address, bigint];
     const [asset, amount, onBehalfOf, referral] = supply.args as readonly [Address, bigint, Address, number];
-    expect(spender).toBe(GUARDIAN.AAVE_V3_POOL);
+    expect(spender).toBe(PROTOCOLS.AAVE_V3_POOL);
     // Approve exactly what's supplied: never more, never unlimited.
     expect(allowance).toBe(amount);
     expect(asset).toBe(USDC.address);
@@ -99,7 +99,7 @@ describe("Start earning's batch: the wallet's cash into savings, the fee buffer 
       value: 0n,
     });
     const supplyOf = (asset: Address, raw: bigint, onBehalfOf: Address, referral = 0) => ({
-      to: GUARDIAN.AAVE_V3_POOL,
+      to: PROTOCOLS.AAVE_V3_POOL,
       data: encodeFunctionData({
         abi: aaveV3PoolAbi,
         functionName: "supply",
@@ -109,12 +109,12 @@ describe("Start earning's batch: the wallet's cash into savings, the fee buffer 
     });
     expect(assertStartEarning(user, [approve, supply], amount)).toHaveLength(2);
     expect(() => assertStartEarning(user, [approve, supply], amount + 1n)).toThrow(/approval differs/);
-    expect(() => assertStartEarning(user, [approveOf(GUARDIAN.AAVE_V3_POOL, amount + 1n), supply], amount)).toThrow(
+    expect(() => assertStartEarning(user, [approveOf(PROTOCOLS.AAVE_V3_POOL, amount + 1n), supply], amount)).toThrow(
       /approval differs/,
     );
     expect(() => assertStartEarning(user, [approveOf(other, amount), supply], amount)).toThrow(/approval differs/);
     expect(() =>
-      assertStartEarning(user, [approveOf(GUARDIAN.AAVE_V3_POOL, amount, nvda.address), supply], amount),
+      assertStartEarning(user, [approveOf(PROTOCOLS.AAVE_V3_POOL, amount, nvda.address), supply], amount),
     ).toThrow(/approval differs/);
     expect(() => assertStartEarning(user, [approve, supplyOf(USDC.address, amount, other)], amount)).toThrow(
       /what earns differs/,
@@ -210,7 +210,7 @@ describe("Start earning in Activity and the Cash sheet: one row, not money leavi
   ]);
   const savingsSupply = (by: Address, onBehalfOf: Address, amount: bigint) =>
     log(
-      GUARDIAN.AAVE_V3_POOL,
+      PROTOCOLS.AAVE_V3_POOL,
       encodeEventTopics({
         abi: supplyAbi,
         eventName: "Supply",
@@ -220,7 +220,7 @@ describe("Start earning in Activity and the Cash sheet: one row, not money leavi
     );
   /** The batch's receipt: USDC from the wallet to the savings token, and the pool's Supply for the user, by the user. */
   const receipt = (raw: bigint, by: Address = user) => [
-    transfer(USDC.address, user, GUARDIAN.AUSDC, raw),
+    transfer(USDC.address, user, PROTOCOLS.AUSDC, raw),
     savingsSupply(by, user, raw),
   ];
 

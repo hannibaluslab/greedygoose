@@ -23,8 +23,8 @@ import {
   type ListedPermission,
 } from "@/lib/agents/permissions";
 import { jobStatus } from "@/lib/agents/status";
-import { PERIOD } from "@/lib/guardian/permission";
-import { GUARDIAN, SEL } from "@/lib/guardian/config";
+import { PERIOD } from "@/lib/agents/permissions";
+import { PROTOCOLS, SEL } from "@/lib/protocols/config";
 import { AAVE } from "@/lib/aave/addresses";
 import { AERODROME, AERODROME_V1, SPARK_PSM3, UNISWAP } from "@/lib/swap/venues";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
@@ -39,7 +39,7 @@ describe("agentGrant (what the app sends to JAW's useGrantPermissions)", () => {
     expect(agentGrant("save", 5_000_000n)).toEqual({
       calls: [
         { target: USDC.address, selector: SEL.approve },
-        { target: GUARDIAN.AAVE_V3_POOL, selector: SEL.supply },
+        { target: PROTOCOLS.AAVE_V3_POOL, selector: SEL.supply },
       ],
       spends: [{ token: USDC.address, allowance: "5000000", unit: "day" }],
     });
@@ -48,13 +48,13 @@ describe("agentGrant (what the app sends to JAW's useGrantPermissions)", () => {
   it("Protect may withdraw savings, approve USDC and repay, with the same daily limit on USDC and on savings", () => {
     expect(agentGrant("protect", 5_000_000n)).toEqual({
       calls: [
-        { target: GUARDIAN.AAVE_V3_POOL, selector: SEL.withdraw },
+        { target: PROTOCOLS.AAVE_V3_POOL, selector: SEL.withdraw },
         { target: USDC.address, selector: SEL.approve },
         { target: AAVE.SPOKE, selector: SEL.repay },
       ],
       spends: [
         { token: USDC.address, allowance: "5000000", unit: "day" },
-        { token: GUARDIAN.AUSDC, allowance: "5000000", unit: "day" },
+        { token: PROTOCOLS.AUSDC, allowance: "5000000", unit: "day" },
       ],
     });
   });
@@ -77,7 +77,7 @@ describe("agentGrant (what the app sends to JAW's useGrantPermissions)", () => {
     );
     expect(p.spends).toEqual([
       { token: USDC.address, allowance: 5_000_000n, unit: PERIOD.Day, multiplier: 1 },
-      { token: GUARDIAN.AUSDC, allowance: 5_000_000n, unit: PERIOD.Day, multiplier: 1 },
+      { token: PROTOCOLS.AUSDC, allowance: 5_000_000n, unit: PERIOD.Day, multiplier: 1 },
     ]);
   });
 });
@@ -100,7 +100,7 @@ describe("sellGrant (Protect · sell, its own JAW grant)", () => {
       ],
       spends: [
         { token: USDC.address, allowance: "5000000", unit: "day" },
-        { token: GUARDIAN.AUSDC, allowance: "5000000", unit: "day" },
+        { token: PROTOCOLS.AUSDC, allowance: "5000000", unit: "day" },
         { token: nvda, allowance: "250000000", unit: "day" },
         { token: tsla, allowance: "100000000", unit: "day" },
       ],

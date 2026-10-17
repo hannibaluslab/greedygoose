@@ -22,7 +22,7 @@ import {
 import { CHAIN } from "@/lib/chain";
 import { ENTRY } from "@/config/risk";
 import { decodeActivity } from "@/lib/activity/decode";
-import { SEL } from "@/lib/guardian/config";
+import { SEL } from "@/lib/protocols/config";
 import { buildConvertCalls, convertFloorRaw, quoteConvert, type Conversion } from "@/lib/swap/entry";
 import { AERODROME_V1, SPARK_PSM3, UNISWAP } from "@/lib/swap/venues";
 import { USDC } from "@/lib/tokens/registry";

@@ -10,8 +10,6 @@
     "test": "vitest run tests/unit",
     "typecheck": "next typegen && tsc --noEmit",
     "verify:registry": "vitest run tests/onchain",
-    "guardian:e2e": "tsx scripts/guardian-e2e.ts",
-    "guardian:keeper": "tsx keeper/run.ts",
     "contracts:test": "cd contracts && forge test",
     "contracts:vectors": "tsx scripts/agent-vectors.ts",
     "rehearsal:fork": "bash scripts/rehearsal/start-fork.sh",

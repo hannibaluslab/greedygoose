@@ -16,7 +16,7 @@ import {
 } from "viem";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
-import { GUARDIAN } from "@/lib/guardian/config";
+import { PROTOCOLS } from "@/lib/protocols/config";
 import { BOARD_LOG_CHUNK } from "./config";
 import type { BoardRecord } from "./flows";
 import { BOARD_TOKENS } from "./tokens";
@@ -141,7 +141,7 @@ export function decodeRecords(logs: readonly Log[]): BoardRecord[] {
           amount,
         });
       }
-    } else if (isAddressEqual(l.address, GUARDIAN.AAVE_V3_POOL) && t0 && SAVINGS_EVENTS.includes(t0)) {
+    } else if (isAddressEqual(l.address, PROTOCOLS.AAVE_V3_POOL) && t0 && SAVINGS_EVENTS.includes(t0)) {
       const [e] = parseEventLogs({ abi: savingsEventsAbi, logs: [l], strict: true });
       if (!e) continue;
       const b = base(l);
@@ -217,14 +217,14 @@ async function readChunkLogs(client: Client, accounts: readonly Address[], c: Ch
     // topic 3: the spoke's user; V3 Withdraw's `to`; V3 LiquidationCall's user
     getLogs(
       client,
-      [AAVE.SPOKE, GUARDIAN.AAVE_V3_POOL],
+      [AAVE.SPOKE, PROTOCOLS.AAVE_V3_POOL],
       [[...SPOKE_EVENTS, SAVINGS_WITHDRAW, SAVINGS_LIQUIDATION], null, null, topics],
       c,
     ),
     // topic 2: V3 Supply's and Borrow's onBehalfOf; V3 Withdraw's and Repay's user; the paymaster's user
     getLogs(
       client,
-      [GUARDIAN.AAVE_V3_POOL, JAW_PAYMASTER],
+      [PROTOCOLS.AAVE_V3_POOL, JAW_PAYMASTER],
       [[SAVINGS_SUPPLY, SAVINGS_WITHDRAW, SAVINGS_BORROW, SAVINGS_REPAY, SPONSORED], null, topics],
       c,
     ),

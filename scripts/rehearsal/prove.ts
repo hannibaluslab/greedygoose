@@ -24,8 +24,8 @@ import { erc20Abi, getAbiItem, isAddressEqual, parseUnits, type Address } from "
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
-import { permissionManagerAbi } from "@/lib/guardian/abis";
-import { GUARDIAN } from "@/lib/guardian/config";
+import { permissionManagerAbi } from "@/lib/protocols/abis";
+import { PROTOCOLS } from "@/lib/protocols/config";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { ROOT, STATE_DIR, connectFork, health, readState, shares, usd, type Fork } from "./lib";
 
@@ -34,7 +34,7 @@ const SHOTS = process.env.REHEARSAL_SHOTS ?? join(STATE_DIR, "shots");
 const MAC_CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const CHROME = process.env.REHEARSAL_CHROME ?? (existsSync(MAC_CHROME) ? MAC_CHROME : undefined);
 const NVDA = EQUITIES.find((e) => e.symbol === "NVDAc")!;
-const AUSDC = GUARDIAN.AUSDC as Address;
+const AUSDC = PROTOCOLS.AUSDC as Address;
 const APPROVED = getAbiItem({ abi: permissionManagerAbi, name: "PermissionApproved" });
 const PROTECT = 1;
 const PROTECT_SELL = 2;
@@ -256,7 +256,7 @@ async function jobsOf(fork: Fork, executor: Address, account: Address) {
 /** Permissions the manager approved for `account` with GooseExecutor as the spender, since the fork point. */
 async function grantsFor(fork: Fork, account: Address, executor: Address, fromBlock: number) {
   const logs = await fork.pub.getLogs({
-    address: GUARDIAN.PERMISSION_MANAGER as Address,
+    address: PROTOCOLS.PERMISSION_MANAGER as Address,
     event: APPROVED,
     fromBlock: BigInt(fromBlock),
   });

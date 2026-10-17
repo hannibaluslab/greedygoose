@@ -1,11 +1,7 @@
 import { CHAIN_ID } from "@/lib/chain";
 
-/**
- * Guardian contracts on Base. Manager / Aave V3 addresses verified on-chain 2026-10-13.
- * The GuardianChecker is NOT deployed to mainnet yet (needs an independent audit first); the keeper reads its
- * address from its own env (keeper/run.ts). The app has no Guardian screen: Protect replaced it (D11, D20).
- */
-export const GUARDIAN = {
+/** JAW's permission manager and Aave V3 (savings) on Base. Addresses verified on-chain 2026-10-13. */
+export const PROTOCOLS = {
   chainId: CHAIN_ID,
   /** JAW JustaPermissionManager (verified source on Sourcify). */
   PERMISSION_MANAGER: "0xf1b40E3D5701C04d86F7828f0EB367B9C90901D8",
@@ -14,9 +10,6 @@ export const GUARDIAN = {
   /** aBasUSDC — the savings balance token (getReserveData(USDC).aTokenAddress). */
   AUSDC: "0x4e65fE4DbA92790696d040ac24Aa414708F5c0AB",
 } as const;
-
-/** Fixed salt so a user's Guardian permission can be rebuilt deterministically for revoke / status. */
-export const GUARDIAN_SALT = BigInt("0x" + "677561726469616e2e7631".padStart(64, "0")); // "guardian.v1"
 
 /** Selectors the agent permissions whitelist. */
 export const SEL = {

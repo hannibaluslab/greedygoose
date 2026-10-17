@@ -12,8 +12,8 @@ import { swapBatch, type SwapReads } from "@/hooks/useTrade";
 import { AAVE } from "@/lib/aave/addresses";
 import { assertAllowed, swapOf } from "@/lib/allowlist";
 import { feeBufferRaw, payFromCash, type Cash } from "@/lib/cash";
-import { GUARDIAN } from "@/lib/guardian/config";
-import { aaveV3PoolAbi } from "@/lib/guardian/abis";
+import { PROTOCOLS } from "@/lib/protocols/config";
+import { aaveV3PoolAbi } from "@/lib/protocols/abis";
 import { aeroRouterAbi } from "@/lib/swap/abis";
 import { QUOTE_MOVED, minOut, type BuyQuote } from "@/lib/swap/buy";
 import { sellMinOut, type SellQuote } from "@/lib/swap/sell";
@@ -314,7 +314,7 @@ describe("buildTradeCalls (stock → stock in one batch)", () => {
     expect(feeFromSale(cash)).toBe(false);
     const batch = payFromCash(user, 0n, cash, build());
     expect(batch).toHaveLength(5);
-    expect(batch[0].to).toBe(GUARDIAN.AAVE_V3_POOL);
+    expect(batch[0].to).toBe(PROTOCOLS.AAVE_V3_POOL);
     expect(decodeFunctionData({ abi: aaveV3PoolAbi, data: batch[0].data }).args).toEqual([
       USDC.address,
       feeBufferRaw - shortRaw,
@@ -904,7 +904,7 @@ describe("useTrade: the stock → stock batch at signing (swapBatch)", () => {
     expect(r.cashToSign).toHaveBeenCalledWith(user, 0n);
     const short = await swapBatch(sign(), reads({ walletRaw: shortRaw, savingsRaw: usd(50), saveOn: false }));
     expect(short).toHaveLength(5);
-    expect(short[0].to).toBe(GUARDIAN.AAVE_V3_POOL);
+    expect(short[0].to).toBe(PROTOCOLS.AAVE_V3_POOL);
     expect(decodeFunctionData({ abi: aaveV3PoolAbi, data: short[0].data }).args).toEqual([
       USDC.address,
       feeBufferRaw - shortRaw,

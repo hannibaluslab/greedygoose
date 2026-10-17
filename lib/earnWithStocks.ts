@@ -17,9 +17,9 @@ import {
   type CreditPosition,
 } from "@/lib/creditBuy";
 import { formatShares, formatUsdTrim, inWords } from "@/lib/formatting";
-import { GUARDIAN } from "@/lib/guardian/config";
-import { aaveV3PoolAbi } from "@/lib/guardian/abis";
-import { buildAddSavingsCalls } from "@/lib/guardian/permission";
+import { PROTOCOLS } from "@/lib/protocols/config";
+import { aaveV3PoolAbi } from "@/lib/protocols/abis";
+import { buildAddSavingsCalls } from "@/lib/savings";
 import { STATUS_LABEL, statusFor } from "@/lib/risk/status";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import type { HealthFloor } from "@/lib/tx/prepared";
@@ -297,7 +297,7 @@ const spokeCall = (c: Call | undefined) => {
 };
 
 const savingsCall = (c: Call | undefined) => {
-  if (!c || !isAddressEqual(c.to, GUARDIAN.AAVE_V3_POOL)) return null;
+  if (!c || !isAddressEqual(c.to, PROTOCOLS.AAVE_V3_POOL)) return null;
   try {
     return decodeFunctionData({ abi: aaveV3PoolAbi, data: c.data });
   } catch {
@@ -358,7 +358,7 @@ export function assertEarn(
     throw new Error("Blocked: the credit differs from the screen");
   }
   const a = isAddressEqual(approveSave.to, USDC.address) ? approveOf(approveSave) : null;
-  if (!a || !isAddressEqual(a[0], GUARDIAN.AAVE_V3_POOL) || a[1] !== review.creditRaw)
+  if (!a || !isAddressEqual(a[0], PROTOCOLS.AAVE_V3_POOL) || a[1] !== review.creditRaw)
     throw new Error("Blocked: the approval differs from the credit");
   const s = savingsCall(save);
   if (

@@ -11,7 +11,7 @@ import {
   type FlowRules,
 } from "@/lib/board/flows";
 import { tokenInfo } from "@/lib/board/tokens";
-import { GUARDIAN } from "@/lib/guardian/config";
+import { PROTOCOLS } from "@/lib/protocols/config";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 import { SPARK_PSM3, UNISWAP } from "@/lib/swap/venues";
@@ -39,7 +39,7 @@ const venues =
         : undefined;
 const rules: FlowRules = {
   usdc: USDC.address,
-  ausdc: GUARDIAN.AUSDC,
+  ausdc: PROTOCOLS.AUSDC,
   token: tokenInfo,
   venue: venues([POOL, POOL2], [PSM3]),
   aave: same([HUB]),
@@ -74,7 +74,7 @@ describe("memberFlows", () => {
     const f = flows([
       transfer(11n, USDE.address, OUTSIDE, SAM, 3n * 10n ** 18n),
       transfer(12n, NVDA, SAM, OUTSIDE, 150_000_000n),
-      transfer(13n, GUARDIAN.AUSDC, KIT, SAM, 2_000_000n),
+      transfer(13n, PROTOCOLS.AUSDC, KIT, SAM, 2_000_000n),
     ]);
     expect(f.moves).toEqual([
       { block: 11n, dir: "in", usd6: 3_000_000n },
@@ -249,24 +249,24 @@ describe("memberFlows", () => {
       amount,
     });
     const own = [
-      transfer(11n, USDC.address, SAM, GUARDIAN.AUSDC, 100n, save),
-      transfer(11n, GUARDIAN.AUSDC, zeroAddress, SAM, 101n, save),
+      transfer(11n, USDC.address, SAM, PROTOCOLS.AUSDC, 100n, save),
+      transfer(11n, PROTOCOLS.AUSDC, zeroAddress, SAM, 101n, save),
       s("Supply", SAM, SAM, 100n, save, 11n),
-      transfer(12n, GUARDIAN.AUSDC, SAM, zeroAddress, 50n, take),
-      transfer(12n, USDC.address, GUARDIAN.AUSDC, SAM, 50n, take),
+      transfer(12n, PROTOCOLS.AUSDC, SAM, zeroAddress, 50n, take),
+      transfer(12n, USDC.address, PROTOCOLS.AUSDC, SAM, 50n, take),
       s("Withdraw", SAM, SAM, 50n, take, 12n),
     ];
     expect(flows(own).moves).toEqual([]);
     // USDC out of the savings token with no withdrawal or credit of the member's own beside it: money put in.
-    expect(flows([transfer(14n, USDC.address, GUARDIAN.AUSDC, SAM, 70n)]).moves).toEqual([
+    expect(flows([transfer(14n, USDC.address, PROTOCOLS.AUSDC, SAM, 70n)]).moves).toEqual([
       { block: 14n, dir: "in", usd6: 70n },
     ]);
     // Supplying savings for someone else: money taken out (and money put in for them).
     const gift = `0x${"d".repeat(64)}` as Hex;
     const forKit = [
-      transfer(15n, USDC.address, SAM, GUARDIAN.AUSDC, 30n, gift),
+      transfer(15n, USDC.address, SAM, PROTOCOLS.AUSDC, 30n, gift),
       s("Supply", SAM, KIT, 30n, gift, 15n),
-      transfer(15n, GUARDIAN.AUSDC, zeroAddress, KIT, 30n, gift),
+      transfer(15n, PROTOCOLS.AUSDC, zeroAddress, KIT, 30n, gift),
     ];
     expect(flows(forKit).moves).toEqual([{ block: 15n, dir: "out", usd6: 30n }]);
     expect(flows(forKit, KIT).moves).toEqual([{ block: 15n, dir: "in", usd6: 30n }]);
@@ -331,13 +331,13 @@ describe("memberFlows", () => {
       ...extra,
     });
     // Sam draws $700 against his savings (in Aave's own app): USDC out of the savings token, next to his own Borrow.
-    const drawn = flows([transfer(11n, USDC.address, GUARDIAN.AUSDC, SAM, 700n, tx), v3("Borrow", SAM, SAM, 700n)]);
+    const drawn = flows([transfer(11n, USDC.address, PROTOCOLS.AUSDC, SAM, 700n, tx), v3("Borrow", SAM, SAM, 700n)]);
     expect(drawn.moves).toEqual([]);
     expect(drawn.credit.map((c) => c.delta)).toEqual([700n]);
     // And repays it.
     const repaid = `0x${"f1".repeat(32)}` as Hex;
     const back = flows([
-      transfer(11n, USDC.address, SAM, GUARDIAN.AUSDC, 700n, repaid),
+      transfer(11n, USDC.address, SAM, PROTOCOLS.AUSDC, 700n, repaid),
       v3("Repay", SAM, SAM, 700n, { aTokens: false }, repaid),
     ]);
     expect(back.moves).toEqual([]);
@@ -353,7 +353,7 @@ describe("memberFlows", () => {
     expect(
       flows(
         [
-          transfer(11n, USDC.address, GUARDIAN.AUSDC, KIT, 25n, `0x${"f3".repeat(32)}`),
+          transfer(11n, USDC.address, PROTOCOLS.AUSDC, KIT, 25n, `0x${"f3".repeat(32)}`),
           v3("Borrow", SAM, KIT, 25n, {}, `0x${"f3".repeat(32)}`),
         ],
         KIT,
@@ -362,7 +362,7 @@ describe("memberFlows", () => {
     // A liquidator taking Sam's savings as savings: the liquidation's cost, not money taken out.
     const liq = `0x${"f4".repeat(32)}` as Hex;
     const liquidated = flows([
-      transfer(11n, GUARDIAN.AUSDC, SAM, OUTSIDE, 52n, liq),
+      transfer(11n, PROTOCOLS.AUSDC, SAM, OUTSIDE, 52n, liq),
       v3("LiquidationCall", SAM, OUTSIDE, 50n, { collateral: USDC.address, aTokens: true }, liq),
     ]);
     expect(liquidated.moves).toEqual([]);

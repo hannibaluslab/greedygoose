@@ -7,11 +7,11 @@ import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import type { AgentLog } from "@/lib/agents/events";
 import { limitOf, movesMoney, type MoveContext } from "@/lib/agents/feed";
 import { JOBS } from "@/lib/agents/permissions";
-import { GUARDIAN } from "@/lib/guardian/config";
-import { permissionManagerAbi } from "@/lib/guardian/abis";
+import { PROTOCOLS } from "@/lib/protocols/config";
+import { permissionManagerAbi } from "@/lib/protocols/abis";
 import { USDC } from "@/lib/tokens/registry";
 
-/** Blocks per getLogs request, the size Leo's keeper reads the manager's logs in (lib/guardian/keeper.ts). */
+/** Blocks per getLogs request. */
 export const LOG_CHUNK = 5_000n;
 
 /** A week of Base blocks (2 seconds each). The feeds read a week at a time. */
@@ -84,7 +84,7 @@ export async function readMoveContext(
           args: [BigInt(USDC.reserveId), q.account],
         },
         { address: USDC.address, abi: erc20Abi, functionName: "balanceOf", args: [q.account] },
-        { address: GUARDIAN.AUSDC, abi: erc20Abi, functionName: "balanceOf", args: [q.account] },
+        { address: PROTOCOLS.AUSDC, abi: erc20Abi, functionName: "balanceOf", args: [q.account] },
       ],
     }).catch(() => undefined);
   const [before, after, prices, permission] = await Promise.all([
@@ -125,7 +125,7 @@ export async function readMoveContext(
   const spend = limit && permission?.spends[limit.spend];
   if (limit && permission && spend) {
     const period = await readContract(client, {
-      address: GUARDIAN.PERMISSION_MANAGER,
+      address: PROTOCOLS.PERMISSION_MANAGER,
       abi: permissionManagerAbi,
       functionName: "getCurrentPeriod",
       args: [permission, spend],

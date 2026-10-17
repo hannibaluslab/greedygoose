@@ -2,7 +2,7 @@ import { decodeErrorResult, isAddressEqual, type Hex } from "viem";
 import { spokeAbi } from "./abis/ISpoke";
 import { hubAbi } from "./abis/IHub";
 import { swapOf } from "@/lib/allowlist";
-import { GUARDIAN, SEL } from "@/lib/guardian/config";
+import { PROTOCOLS, SEL } from "@/lib/protocols/config";
 import { BUY_LIMITS } from "@/lib/swap/buy";
 import { AERODROME_V1, ROUTERS, SPARK_PSM3 } from "@/lib/swap/venues";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
@@ -26,7 +26,7 @@ const PLAIN: Record<string, string> = {
 export const CASH_STUCK = "Cash can’t be moved right now. Try again soon, or use credit.";
 
 const isSavingsWithdrawal = (call: { to: `0x${string}`; data: Hex }) =>
-  isAddressEqual(call.to, GUARDIAN.AAVE_V3_POOL) && call.data.slice(0, 10) === SEL.withdraw;
+  isAddressEqual(call.to, PROTOCOLS.AAVE_V3_POOL) && call.data.slice(0, 10) === SEL.withdraw;
 
 /**
  * Swap router reverts, the same strings on Uniswap's SwapRouter02 and Aerodrome's Slipstream router

@@ -1,7 +1,7 @@
 "use client";
 
 import { useReadContract } from "wagmi";
-import { GUARDIAN } from "@/lib/guardian/config";
+import { PROTOCOLS } from "@/lib/protocols/config";
 import { USDC } from "@/lib/tokens/registry";
 import { aprToApy } from "@/lib/aave/math";
 import { v3ReserveAbi } from "@/hooks/usePosition";
@@ -12,7 +12,7 @@ import { v3ReserveAbi } from "@/hooks/usePosition";
  */
 export function useCashRate() {
   const q = useReadContract({
-    address: GUARDIAN.AAVE_V3_POOL,
+    address: PROTOCOLS.AAVE_V3_POOL,
     abi: v3ReserveAbi,
     functionName: "getReserveData",
     args: [USDC.address],

@@ -29,8 +29,8 @@ import { AAVE } from "@/lib/aave/addresses";
 import { CASH_STUCK, explainRevert } from "@/lib/aave/errors";
 import { decodeActivity } from "@/lib/activity/decode";
 import { cashRaw, cashShort, payFromCash, readCash, type Cash } from "@/lib/cash";
-import { GUARDIAN } from "@/lib/guardian/config";
-import { buildWithdrawSavingsCalls } from "@/lib/guardian/permission";
+import { PROTOCOLS } from "@/lib/protocols/config";
+import { buildWithdrawSavingsCalls } from "@/lib/savings";
 import { aeroQuoterAbi } from "@/lib/swap/abis";
 import { buildBuyCalls } from "@/lib/swap/buy";
 import { AERODROME } from "@/lib/swap/venues";
@@ -147,7 +147,7 @@ describe("savings-first batches from a $0 wallet", () => {
   const cash = async (): Promise<Cash> => ({
     walletRaw: 0n,
     savingsRaw: await client.readContract({
-      address: GUARDIAN.AUSDC,
+      address: PROTOCOLS.AUSDC,
       abi: erc20Abi,
       functionName: "balanceOf",
       args: [user],
@@ -203,7 +203,7 @@ describe("savings-first batches from a $0 wallet", () => {
     });
     const quote = { venue: "aerodrome" as const, pool, amountIn, amountOut: result[0] };
     const calls = payFromCash(user, amountIn, await cash(), buildBuyCalls({ user, stock, quote }));
-    expect(calls.map((c) => c.to)).toEqual([GUARDIAN.AAVE_V3_POOL, USDC.address, AERODROME.ROUTER]);
+    expect(calls.map((c) => c.to)).toEqual([PROTOCOLS.AAVE_V3_POOL, USDC.address, AERODROME.ROUTER]);
     const r = await simulateFromEmptyWallet(calls);
     expect(r.statuses).toEqual(["success", "success", "success"]);
     expect(r.walletAfter).toBe(feeBuffer);
@@ -222,7 +222,7 @@ describe("savings-first batches from a $0 wallet", () => {
     expect(owed, "the test account owes nothing to repay").toBeGreaterThan(0n);
     const amountRaw = owed < 1_000_000n ? owed : 1_000_000n;
     const calls = payFromCash(user, amountRaw, await cash(), buildRepayCalls({ user, amountRaw, all: false }));
-    expect(calls.map((c) => c.to)).toEqual([GUARDIAN.AAVE_V3_POOL, USDC.address, AAVE.SPOKE]);
+    expect(calls.map((c) => c.to)).toEqual([PROTOCOLS.AAVE_V3_POOL, USDC.address, AAVE.SPOKE]);
     const r = await simulateFromEmptyWallet(calls);
     expect(r.statuses).toEqual(["success", "success", "success"]);
     expect(r.walletAfter).toBe(feeBuffer);
@@ -245,9 +245,9 @@ describe("the cash a batch is signed with (readCash)", () => {
     client.readContract({ address: token, abi: erc20Abi, functionName: "balanceOf", args: [user] });
 
   it("reads what usePosition reads: wallet USDC and savings", async () => {
-    const savingsBefore = await balance(GUARDIAN.AUSDC);
+    const savingsBefore = await balance(PROTOCOLS.AUSDC);
     const [c, walletRaw] = await Promise.all([readCash(client, user), balance(USDC.address)]);
-    const savingsAfter = await balance(GUARDIAN.AUSDC);
+    const savingsAfter = await balance(PROTOCOLS.AUSDC);
     expect(c.walletRaw).toBe(walletRaw);
     // Savings earn by the second, so the read lands between the two around it.
     expect(c.savingsRaw).toBeGreaterThanOrEqual(savingsBefore);

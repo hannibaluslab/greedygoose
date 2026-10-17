@@ -10,7 +10,7 @@ import {
   SELL_RULE,
   type SellBook,
   type SellHolding,
-} from "@/lib/guardian/sell";
+} from "@/lib/agents/rules/protectSell";
 
 const WAD = 10n ** 18n;
 const ALL = 10n ** 13n;

@@ -7,8 +7,8 @@ import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { JOBS } from "@/lib/agents/permissions";
 import type { CHAIN } from "@/lib/chain";
 import { formatUsd } from "@/lib/formatting";
-import { GUARDIAN } from "@/lib/guardian/config";
-import { buildWithdrawSavingsCalls } from "@/lib/guardian/permission";
+import { PROTOCOLS } from "@/lib/protocols/config";
+import { buildWithdrawSavingsCalls } from "@/lib/savings";
 import { USDC } from "@/lib/tokens/registry";
 
 /**
@@ -37,7 +37,7 @@ export async function readCash(client: PublicClient<Transport, typeof CHAIN>, us
       allowFailure: false,
       contracts: [
         { address: USDC.address, abi: erc20Abi, functionName: "balanceOf", args: [user] },
-        { address: GUARDIAN.AUSDC, abi: erc20Abi, functionName: "balanceOf", args: [user] },
+        { address: PROTOCOLS.AUSDC, abi: erc20Abi, functionName: "balanceOf", args: [user] },
       ],
     }),
     GOOSE_EXECUTOR

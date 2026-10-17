@@ -10,8 +10,8 @@ import {
   type AgentJob,
   type StockLimits,
 } from "@/lib/agents/permissions";
-import { permissionManagerAbi } from "@/lib/guardian/abis";
-import { GUARDIAN } from "@/lib/guardian/config";
+import { permissionManagerAbi } from "@/lib/protocols/abis";
+import { PROTOCOLS } from "@/lib/protocols/config";
 import { isLocalRpc, rehearsalRpcFrom } from "@/lib/rehearsal/flag";
 
 const LOCAL = "http://127.0.0.1:18545";
@@ -123,7 +123,7 @@ describe("the fork signer's grant is JAW's (buildGrantPermissionCall) and GooseE
     ({ job, cap, limits }) => {
       const expiry = Math.floor(Date.now() / 1000) + 365 * 86_400;
       const call = buildGrantPermissionCall(account, executor, expiry, jobGrant(job, cap, limits));
-      expect(getAddress(call.to)).toBe(getAddress(GUARDIAN.PERMISSION_MANAGER));
+      expect(getAddress(call.to)).toBe(getAddress(PROTOCOLS.PERMISSION_MANAGER));
       const { functionName, args } = decodeFunctionData({ abi: permissionManagerAbi, data: call.data });
       expect(functionName).toBe("approve");
       const p = args[0] as { account: Address; spender: Address; start: number; end: number; salt: bigint };

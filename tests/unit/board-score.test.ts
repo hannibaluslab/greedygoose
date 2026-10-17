@@ -3,7 +3,7 @@ import type { Address, Hex } from "viem";
 import { flowTotals, memberFlows, peakCredit, type Amount, type BoardRecord, type FlowRules } from "@/lib/board/flows";
 import { MIN_PUT_IN_USD, rankRows, returnSinceJoining, type Flows } from "@/lib/board/score";
 import { stockUsd6 } from "@/lib/board/worth";
-import { GUARDIAN } from "@/lib/guardian/config";
+import { PROTOCOLS } from "@/lib/protocols/config";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { tokenInfo } from "@/lib/board/tokens";
 import { UNISWAP } from "@/lib/swap/venues";
@@ -35,7 +35,7 @@ const venues =
         : undefined;
 const rules: FlowRules = {
   usdc: USDC.address,
-  ausdc: GUARDIAN.AUSDC,
+  ausdc: PROTOCOLS.AUSDC,
   token: tokenInfo,
   venue: venues([POOL]),
   aave: same([HUB]),
@@ -125,8 +125,8 @@ class Ledger {
   /** Cash into savings on Aave V3 (net worth unchanged: savings are cash). */
   save(a: Address, usd: number) {
     const tx = this.tx();
-    this.transfer(tx, USDC.address, a, GUARDIAN.AUSDC, usd6(usd));
-    this.transfer(tx, GUARDIAN.AUSDC, "0x0000000000000000000000000000000000000000", a, usd6(usd));
+    this.transfer(tx, USDC.address, a, PROTOCOLS.AUSDC, usd6(usd));
+    this.transfer(tx, PROTOCOLS.AUSDC, "0x0000000000000000000000000000000000000000", a, usd6(usd));
     this.records.push({
       kind: "savings",
       ...this.base(tx),
@@ -142,8 +142,8 @@ class Ledger {
     const tx = this.tx();
     this.add(this.usd, from, -usd6(usd));
     this.add(this.usd, to, usd6(usd));
-    this.transfer(tx, USDC.address, from, GUARDIAN.AUSDC, usd6(usd));
-    this.transfer(tx, GUARDIAN.AUSDC, "0x0000000000000000000000000000000000000000", to, usd6(usd));
+    this.transfer(tx, USDC.address, from, PROTOCOLS.AUSDC, usd6(usd));
+    this.transfer(tx, PROTOCOLS.AUSDC, "0x0000000000000000000000000000000000000000", to, usd6(usd));
     this.records.push({
       kind: "savings",
       ...this.base(tx),
@@ -159,7 +159,7 @@ class Ledger {
     const tx = this.tx();
     this.add(this.owed, a, usd6(usd));
     this.add(this.usd, a, usd6(usd));
-    this.transfer(tx, USDC.address, GUARDIAN.AUSDC, a, usd6(usd));
+    this.transfer(tx, USDC.address, PROTOCOLS.AUSDC, a, usd6(usd));
     this.records.push({
       kind: "savingsCredit",
       ...this.base(tx),

@@ -42,7 +42,7 @@ import {
 } from "@/lib/creditBuy";
 import { creditBuyPlan } from "@/hooks/useCreditBuy";
 import { checkPlan, type CheckDeps } from "@/lib/tx/prepared";
-import { GUARDIAN } from "@/lib/guardian/config";
+import { PROTOCOLS } from "@/lib/protocols/config";
 import { statusFor } from "@/lib/risk/status";
 import { buildBuyCalls, minOut, quoteBuy, quotePool, signingQuote, type BuyQuote } from "@/lib/swap/buy";
 import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
@@ -78,7 +78,7 @@ async function live(user: Address) {
       args: [BigInt(USDC.reserveId)],
     }),
     client.readContract({ address: USDC.address, abi: erc20Abi, functionName: "balanceOf", args: [user] }),
-    client.readContract({ address: GUARDIAN.AUSDC, abi: erc20Abi, functionName: "balanceOf", args: [user] }),
+    client.readContract({ address: PROTOCOLS.AUSDC, abi: erc20Abi, functionName: "balanceOf", args: [user] }),
   ]);
   const s = summarize(account as AccountData);
   const position: CreditPosition = {
@@ -459,7 +459,12 @@ describe("Credit Buy batches simulate on mainnet", () => {
       limit: plan.limit,
       cash,
     });
-    expect(calls.map((c) => c.to)).toEqual([GUARDIAN.AAVE_V3_POOL, AAVE.SPOKE, USDC.address, swapOf(calls[3])!.router]);
+    expect(calls.map((c) => c.to)).toEqual([
+      PROTOCOLS.AAVE_V3_POOL,
+      AAVE.SPOKE,
+      USDC.address,
+      swapOf(calls[3])!.router,
+    ]);
     const r = await simulateCreditBuy(backer, aapl, calls, emptyWallet(backer));
     expect(r.statuses).toEqual(["success", "success", "success", "success"]);
     expect(r.walletAfter).toBe(feeBuffer);
@@ -485,7 +490,12 @@ describe("Credit Buy batches simulate on mainnet", () => {
       limit: plan.limit,
       cash,
     });
-    expect(calls.map((c) => c.to)).toEqual([GUARDIAN.AAVE_V3_POOL, AAVE.SPOKE, USDC.address, swapOf(calls[3])!.router]);
+    expect(calls.map((c) => c.to)).toEqual([
+      PROTOCOLS.AAVE_V3_POOL,
+      AAVE.SPOKE,
+      USDC.address,
+      swapOf(calls[3])!.router,
+    ]);
     expect(swapAmountIn(calls)).toBe(cashRaw + creditRaw);
     const r = await simulateCreditBuy(backer, aapl, calls, emptyWallet(backer));
     expect(r.statuses).toEqual(["success", "success", "success", "success"]);

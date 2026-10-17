@@ -14,7 +14,7 @@ import { CASH, CASH_AGENT } from "@/config/risk";
  * Weekend Shield no longer repays: before a freeze the credit is outside Act by definition, so it is a heads-up card
  * only (`weekendHeadsUp`), and the executor has no weekend move.
  */
-type GuardianInput = {
+type ProtectInput = {
   collateralUsd: number;
   avgCf: number;
   debtUsd: number;
@@ -26,18 +26,18 @@ type GuardianInput = {
   minRepayUsd?: number;
 };
 
-export type GuardianDecision =
+type ProtectDecision =
   | { action: "none"; reason: "no-debt" | "healthy" | "no-savings" | "no-cap" | "too-small"; hf: number | null }
   | { action: "repay"; amountUsd: number; reason: "act"; hf: number; hfAfter: number; limitedBy?: "savings" | "cap" };
 
-const GUARDIAN_DEFAULTS = {
+const PROTECT_DEFAULTS = {
   triggerHf: CASH_AGENT.triggerHf, // 1.1, the Act line
   targetHf: CASH_AGENT.targetHf, // 1.2, in Watch
   minRepayUsd: CASH_AGENT.minRepayUsd,
 } as const;
 
-export function planGuardian(i: GuardianInput): GuardianDecision {
-  const o = { ...GUARDIAN_DEFAULTS, ...strip(i) };
+export function planProtect(i: ProtectInput): ProtectDecision {
+  const o = { ...PROTECT_DEFAULTS, ...strip(i) };
   if (i.debtUsd <= 0) return { action: "none", reason: "no-debt", hf: null };
   const power = i.collateralUsd * i.avgCf;
   const hf = power / i.debtUsd;

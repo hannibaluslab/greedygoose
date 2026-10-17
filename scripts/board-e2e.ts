@@ -95,7 +95,7 @@ async function main() {
   const { AAVE } = await import("@/lib/aave/addresses");
   const { aaveOracleAbi } = await import("@/lib/aave/abis/IAaveOracle");
   const { EQUITIES, USDC } = await import("@/lib/tokens/registry");
-  const { buildAddSavingsCalls } = await import("@/lib/guardian/permission");
+  const { buildAddSavingsCalls } = await import("@/lib/savings");
   const { buildBuyCalls, quoteBuy } = await import("@/lib/swap/buy");
   const { payFromCash, readCash } = await import("@/lib/cash");
   const { withBoardJoin } = await import("@/lib/board/join");
@@ -353,13 +353,13 @@ async function main() {
     `Sam ${(swept.pct! * 100).toFixed(2)}%: the $5,000 is money he put in, the gain is still NVIDIA's (${(sweptPct * 100).toFixed(2)}%)`,
   );
 
-  const { GUARDIAN } = await import("@/lib/guardian/config");
+  const { PROTOCOLS } = await import("@/lib/protocols/config");
   const v3Pool = parseAbi([
     "function borrow(address asset, uint256 amount, uint256 interestRateMode, uint16 referralCode, address onBehalfOf)",
   ]);
   await userOp(sam, [
     {
-      to: GUARDIAN.AAVE_V3_POOL,
+      to: PROTOCOLS.AAVE_V3_POOL,
       data: encodeFunctionData({ abi: v3Pool, functionName: "borrow", args: [USDC.address, 100_000_000n, 2n, 0, sam] }),
       value: 0n,
     },

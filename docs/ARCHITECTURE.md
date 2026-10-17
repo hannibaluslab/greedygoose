@@ -40,7 +40,6 @@ Measured on 2026-10-18, on `v2` after V0.
 | Comments that cite people and dates       | 141 lines such as "(Adrian, 2026-10-15)"                                                       | Comments say why; who decided and when lives in the decisions log                          |
 | Oversized screens and engines             | `CreditBuySheet` 831 lines, `trade.ts` 575, `send.ts` 530, `Board` 505, `repay.ts` 476         | Under 400 lines each, split by step or concern                                             |
 | One flat component folder                 | 58 files in `components/gg/`                                                                   | Feature folders (kit, home, repay, stock, invest, agents, leaderboard, settings, send)     |
-| Leo's Guardian and keeper                 | `lib/guardian/`, `keeper/`, `contracts/src/GuardianChecker.sol`                                | Kept as they are (Adrian, 2026-10-18): not renamed, moved or deleted                       |
 | Free up outside Repay                     | `UnlockSheet` and the Repay \| Free up toggle                                                  | Gone once the Repay sheet (canvas boards 1–8) is rebuilt                                   |
 | Non-null assertions                       | 109 in the app code                                                                            | Replaced as each module is touched                                                         |
 

@@ -1,5 +1,5 @@
 import { isAddressEqual, type Address } from "viem";
-import { GUARDIAN } from "@/lib/guardian/config";
+import { PROTOCOLS } from "@/lib/protocols/config";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 import type { TokenInfo } from "./flows";
@@ -14,7 +14,7 @@ export const USDC_RESERVE_ID = USDC.reserveId;
  */
 export const BOARD_TOKENS: readonly { address: Address; info: TokenInfo }[] = [
   { address: USDC.address, info: { kind: "usd", decimals: USDC.decimals } },
-  { address: GUARDIAN.AUSDC, info: { kind: "usd", decimals: USDC.decimals } },
+  { address: PROTOCOLS.AUSDC, info: { kind: "usd", decimals: USDC.decimals } },
   ...ENTRY_COINS.map((c) => ({ address: c.address, info: { kind: "usd", decimals: c.decimals } as TokenInfo })),
   ...EQUITIES.map((e) => ({ address: e.address, info: { kind: "stock", reserveId: e.reserveId } as TokenInfo })),
 ];

@@ -3,8 +3,8 @@ import { decodeFunctionData, maxUint256, parseUnits } from "viem";
 import { CASH } from "@/config/risk";
 import { cantRepay, cashShort, maxSpendRaw, payFromCash, readCash, saveRuns, savingsWithdrawal } from "@/lib/cash";
 import { buildRepayCalls } from "@/lib/aave/tx";
-import { aaveV3PoolAbi } from "@/lib/guardian/abis";
-import { GUARDIAN } from "@/lib/guardian/config";
+import { aaveV3PoolAbi } from "@/lib/protocols/abis";
+import { PROTOCOLS } from "@/lib/protocols/config";
 import { AAVE } from "@/lib/aave/addresses";
 import { USDC } from "@/lib/tokens/registry";
 
@@ -87,7 +87,7 @@ describe("payFromCash", () => {
 
   it("puts the savings withdrawal first, to the user, in the same batch", () => {
     const calls = payFromCash(user, usd(1), { walletRaw: 0n, savingsRaw: usd(100), saveOn: true }, repay);
-    expect(calls.map((c) => c.to)).toEqual([GUARDIAN.AAVE_V3_POOL, USDC.address, AAVE.SPOKE]);
+    expect(calls.map((c) => c.to)).toEqual([PROTOCOLS.AAVE_V3_POOL, USDC.address, AAVE.SPOKE]);
     expect(decodeFunctionData({ abi: aaveV3PoolAbi, data: calls[0].data })).toMatchObject({
       functionName: "withdraw",
       args: [USDC.address, usd(1) + fee, user],
@@ -185,7 +185,7 @@ describe("readCash", () => {
     expect(await readCash(client, user)).toEqual({ walletRaw: usd(2), savingsRaw: usd(30), saveOn: false });
     expect(asked).toMatchObject([
       { address: USDC.address, functionName: "balanceOf", args: [user] },
-      { address: GUARDIAN.AUSDC, functionName: "balanceOf", args: [user] },
+      { address: PROTOCOLS.AUSDC, functionName: "balanceOf", args: [user] },
     ]);
   });
 });

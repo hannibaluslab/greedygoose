@@ -24,7 +24,7 @@ import { decodeActivity } from "@/lib/activity/decode";
 import { feeBufferRaw } from "@/lib/cash";
 import { startEarningShown } from "@/lib/cashSetup";
 import { CHAIN } from "@/lib/chain";
-import { GUARDIAN } from "@/lib/guardian/config";
+import { PROTOCOLS } from "@/lib/protocols/config";
 import { buildStartEarningCalls, startEarningMinRaw, startEarningPlan, startEarningRaw } from "@/lib/startEarning";
 import { checkPlan } from "@/lib/tx/prepared";
 import { USDC } from "@/lib/tokens/registry";
@@ -63,7 +63,7 @@ const walletOf = (user: Address, raw: bigint): StateOverride => [
 
 /** The batch between two reads of savings (aUSDC) and the wallet in the same block, so interest can't blur the deltas. */
 async function simulateStart(user: Address, calls: { to: Address; data: Address }[], stateOverrides?: StateOverride) {
-  const reads = [balanceRead(GUARDIAN.AUSDC, user), balanceRead(USDC.address, user)];
+  const reads = [balanceRead(PROTOCOLS.AUSDC, user), balanceRead(USDC.address, user)];
   const r = await client.simulateCalls({ account: user, calls: [...reads, ...calls, ...reads], stateOverrides });
   const before = r.results.slice(0, reads.length);
   const batch = r.results.slice(reads.length, reads.length + calls.length);

@@ -10,7 +10,7 @@ import { JAW_PAYMASTER } from "@/lib/board/logs";
 import { AAVE_V3_USDC_DEBT } from "@/lib/board/tokens";
 import { fetchFollowing } from "@/lib/efp/read";
 import { EFP_ACCOUNT_METADATA, EFP_LIST_MINTER, EFP_LIST_RECORDS, EFP_LIST_REGISTRY } from "@/lib/efp/efp";
-import { GUARDIAN } from "@/lib/guardian/config";
+import { PROTOCOLS } from "@/lib/protocols/config";
 import { ROUTERS, SPARK_PSM3 } from "@/lib/swap/venues";
 import { USDC } from "@/lib/tokens/registry";
 
@@ -36,12 +36,12 @@ describe("the board's reads on Base", () => {
       "function getReserveData(address asset) view returns ((uint256 configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt))",
     ]);
     const data = await client.readContract({
-      address: GUARDIAN.AAVE_V3_POOL,
+      address: PROTOCOLS.AAVE_V3_POOL,
       abi: pool,
       functionName: "getReserveData",
       args: [USDC.address],
     });
-    expect(isAddressEqual(data.aTokenAddress, GUARDIAN.AUSDC)).toBe(true);
+    expect(isAddressEqual(data.aTokenAddress, PROTOCOLS.AUSDC)).toBe(true);
     expect(isAddressEqual(data.variableDebtTokenAddress, AAVE_V3_USDC_DEBT)).toBe(true);
     expect(await client.readContract({ address: AAVE_V3_USDC_DEBT, abi: erc20Abi, functionName: "decimals" })).toBe(
       USDC.decimals,

@@ -1,12 +1,24 @@
 import { isAddressEqual, zeroAddress, type Address, type Hex } from "viem";
 import type { PermissionsDetail } from "@jaw.id/wagmi";
 import { AAVE } from "@/lib/aave/addresses";
-import { GUARDIAN, SEL } from "@/lib/guardian/config";
-import { PERIOD, type GuardianPermission } from "@/lib/guardian/permission";
+import { PROTOCOLS, SEL } from "@/lib/protocols/config";
 import { AERODROME, AERODROME_V1, SPARK_PSM3, UNISWAP } from "@/lib/swap/venues";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 import { formatUsdTrim } from "@/lib/formatting";
+
+/** PeriodUnit enum in JustaPermissionManager (JustaPermissionManager.sol:206-213). There is no Year. */
+export const PERIOD = { Minute: 0, Hour: 1, Day: 2, Week: 3, Month: 4, Forever: 5 } as const;
+
+type JawPermission = {
+  account: `0x${string}`;
+  spender: `0x${string}`;
+  start: number;
+  end: number;
+  salt: bigint;
+  calls: { target: `0x${string}`; selector: Hex; checker: `0x${string}` }[];
+  spends: { token: `0x${string}`; allowance: bigint; unit: number; multiplier: number }[];
+};
 
 /** The agents' jobs, in GooseExecutor's order (enum Job): the index is the job's id on-chain. */
 export const JOBS = ["save", "protect", "sell", "rebalance", "entry"] as const;
@@ -25,10 +37,10 @@ type StockJob = "sell" | "rebalance";
 const CALLS: Record<CashJob, readonly { target: Address; selector: Hex }[]> = {
   save: [
     { target: USDC.address, selector: SEL.approve },
-    { target: GUARDIAN.AAVE_V3_POOL, selector: SEL.supply },
+    { target: PROTOCOLS.AAVE_V3_POOL, selector: SEL.supply },
   ],
   protect: [
-    { target: GUARDIAN.AAVE_V3_POOL, selector: SEL.withdraw },
+    { target: PROTOCOLS.AAVE_V3_POOL, selector: SEL.withdraw },
     { target: USDC.address, selector: SEL.approve },
     { target: AAVE.SPOKE, selector: SEL.repay },
   ],
@@ -41,7 +53,7 @@ const CALLS: Record<CashJob, readonly { target: Address; selector: Hex }[]> = {
  */
 const LIMITED: Record<CashJob, readonly Address[]> = {
   save: [USDC.address],
-  protect: [USDC.address, GUARDIAN.AUSDC],
+  protect: [USDC.address, PROTOCOLS.AUSDC],
 };
 
 /**
@@ -105,7 +117,7 @@ export function agentGrant(job: CashJob, capRaw: bigint): PermissionsDetail {
 export function agentPermission(
   job: CashJob,
   p: { account: Address; spender: Address; start: number; end: number; salt: bigint; capRaw: bigint },
-): GuardianPermission {
+): JawPermission {
   return {
     account: p.account,
     spender: p.spender,
@@ -162,7 +174,7 @@ function sellCalls(limitsRaw: StockLimits) {
 function sellSpends(capRaw: bigint, limitsRaw: StockLimits) {
   return [
     { token: USDC.address, allowance: capRaw },
-    { token: GUARDIAN.AUSDC, allowance: capRaw },
+    { token: PROTOCOLS.AUSDC, allowance: capRaw },
     ...sellable(limitsRaw).map(({ stock, limitRaw }) => ({ token: stock, allowance: limitRaw })),
   ];
 }
@@ -189,7 +201,7 @@ export function sellPermission(p: {
   salt: bigint;
   capRaw: bigint;
   limitsRaw: StockLimits;
-}): GuardianPermission {
+}): JawPermission {
   return {
     account: p.account,
     spender: p.spender,
@@ -264,7 +276,7 @@ export function rebalancePermission(p: {
   salt: bigint;
   capRaw: bigint;
   limitsRaw: StockLimits;
-}): GuardianPermission {
+}): JawPermission {
   return {
     account: p.account,
     spender: p.spender,
@@ -326,7 +338,7 @@ export function entryPermission(p: {
   end: number;
   salt: bigint;
   capRaw: bigint;
-}): GuardianPermission {
+}): JawPermission {
   return {
     account: p.account,
     spender: p.spender,

@@ -17,8 +17,8 @@ import {
   EFP_LIST_RECORDS,
   MAX_LIST_OPS,
 } from "@/lib/efp/efp";
-import { GUARDIAN } from "@/lib/guardian/config";
-import { aaveV3PoolAbi } from "@/lib/guardian/abis";
+import { PROTOCOLS } from "@/lib/protocols/config";
+import { aaveV3PoolAbi } from "@/lib/protocols/abis";
 import { aeroRouterAbi, psm3Abi, swapRouter02Abi } from "@/lib/swap/abis";
 import { AERODROME, AERODROME_V1, ROUTERS, SPARK_PSM3, UNISWAP } from "@/lib/swap/venues";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
@@ -154,7 +154,7 @@ const savingsApprove: ArgsCheck = (args, user, ctx) =>
   is(ctx.saveTo, user) &&
   ctx.saveRaw !== null &&
   is(ctx.to, USDC.address) &&
-  is(args[0], GUARDIAN.AAVE_V3_POOL) &&
+  is(args[0], PROTOCOLS.AAVE_V3_POOL) &&
   args[1] === ctx.saveRaw;
 
 /** GooseBoard.join(): exactly its selector, nothing after it. */
@@ -193,7 +193,7 @@ const RULES: readonly Rule[] = [
     functions: { supply: forUser, setUsingAsCollateral: forUser, withdraw: forUser, borrow: forUser, repay: forUser },
   },
   {
-    targets: [GUARDIAN.AAVE_V3_POOL],
+    targets: [PROTOCOLS.AAVE_V3_POOL],
     abi: aaveV3PoolAbi,
     functions: { withdraw: (args, user) => is(args[0], USDC.address) && is(args[2], user), supply: saveForUser },
   },
@@ -238,13 +238,13 @@ const RULES: readonly Rule[] = [
 export type AllowContext = { listSlot?: bigint | null; sendTo?: Address; saveTo?: Address };
 
 const isSavingsSupply = (to: Address, functionName: string) =>
-  isAddressEqual(to, GUARDIAN.AAVE_V3_POOL) && functionName === "supply";
+  isAddressEqual(to, PROTOCOLS.AAVE_V3_POOL) && functionName === "supply";
 
 /** The amount of the batch's one savings supply (null when it has none); more than one is refused. */
 function savingsSupplyRaw(calls: readonly { to: Address; data: Hex }[]): bigint | null {
   let raw: bigint | null = null;
   for (const c of calls) {
-    if (!isAddressEqual(c.to, GUARDIAN.AAVE_V3_POOL)) continue;
+    if (!isAddressEqual(c.to, PROTOCOLS.AAVE_V3_POOL)) continue;
     let call: { functionName: string; args?: readonly unknown[] };
     try {
       call = decodeFunctionData({ abi: aaveV3PoolAbi, data: c.data });
@@ -307,7 +307,7 @@ export function assertAllowed<C extends { to: Address; data: Hex; value: bigint 
       throw new Error(`Blocked: unexpected call to ${c.to}`);
     }
     if (call.functionName === "transfer" && ++transfers > 1) throw new Error("Blocked: more than one transfer");
-    if (call.functionName === "approve" && is(call.args?.[0], GUARDIAN.AAVE_V3_POOL) && ++savingsApproves > 1) {
+    if (call.functionName === "approve" && is(call.args?.[0], PROTOCOLS.AAVE_V3_POOL) && ++savingsApproves > 1) {
       throw new Error("Blocked: more than one savings approval");
     }
     if (!check(call.args ?? [], user, { listSlots, to: c.to, data: c.data, sendTo, saveTo, saveRaw })) {

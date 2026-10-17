@@ -5,7 +5,7 @@ import {
   rebalanceTrades,
   type RebalanceBook,
   type RebalanceHolding,
-} from "@/lib/guardian/rebalance";
+} from "@/lib/agents/rules/rebalance";
 
 const usd = (n: number) => BigInt(Math.round(n * 1e6));
 const price = (n: number) => BigInt(n) * 10n ** 8n;

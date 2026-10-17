@@ -44,8 +44,8 @@ import { AAVE } from "@/lib/aave/addresses";
 import { aaveOracleAbi } from "@/lib/aave/abis/IAaveOracle";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
-import { aaveV3PoolAbi, justanAccountAbi } from "@/lib/guardian/abis";
-import { GUARDIAN } from "@/lib/guardian/config";
+import { aaveV3PoolAbi, justanAccountAbi } from "@/lib/protocols/abis";
+import { PROTOCOLS } from "@/lib/protocols/config";
 import { quotePool } from "@/lib/swap/buy";
 import { AERODROME, UNISWAP, type Venue } from "@/lib/swap/venues";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
@@ -67,7 +67,7 @@ import {
 
 /** JAW's account factory on Base (contracts/test/ForkBase.sol, the SDK's FACTORY_ADDRESS). */
 const JAW_FACTORY: Address = "0x5803c076563C85799989d42Fc00292A8aE52fa9E";
-const MANAGER = GUARDIAN.PERMISSION_MANAGER as Address;
+const MANAGER = PROTOCOLS.PERMISSION_MANAGER as Address;
 const NVDA = EQUITIES.find((e) => e.symbol === "NVDAc")!;
 const USDT = ENTRY_COINS.find((c) => c.symbol === "USDT")!;
 
@@ -216,10 +216,10 @@ async function main() {
     {
       target: USDC.address,
       value: 0n,
-      data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [GUARDIAN.AAVE_V3_POOL, amount] }),
+      data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [PROTOCOLS.AAVE_V3_POOL, amount] }),
     },
     {
-      target: GUARDIAN.AAVE_V3_POOL,
+      target: PROTOCOLS.AAVE_V3_POOL,
       value: 0n,
       data: encodeFunctionData({ abi: aaveV3PoolAbi, functionName: "supply", args: [USDC.address, amount, who, 0] }),
     },
@@ -468,7 +468,7 @@ async function printAccount(fork: Fork, name: string, account: Address) {
     fork.pub.readContract({ address: token, abi: erc20Abi, functionName: "balanceOf", args: [account] });
   const [wallet, savings, usdt, data] = await Promise.all([
     read(USDC.address),
-    read(GUARDIAN.AUSDC as Address),
+    read(PROTOCOLS.AUSDC as Address),
     read(USDT.address),
     fork.pub.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserAccountData", args: [account] }),
   ]);

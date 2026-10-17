@@ -31,8 +31,8 @@ import type { Cash } from "@/lib/cash";
 import { CHAIN } from "@/lib/chain";
 import { backingOptions, planCredit, type CreditPosition } from "@/lib/creditBuy";
 import { buildEarnCalls, earnOffer } from "@/lib/earnWithStocks";
-import { GUARDIAN } from "@/lib/guardian/config";
-import { aaveV3PoolAbi } from "@/lib/guardian/abis";
+import { PROTOCOLS } from "@/lib/protocols/config";
+import { aaveV3PoolAbi } from "@/lib/protocols/abis";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
 type Address = `0x${string}`;
@@ -65,7 +65,7 @@ async function live(user: Address) {
       args: [BigInt(USDC.reserveId)],
     }),
     client.readContract({ address: USDC.address, abi: erc20Abi, functionName: "balanceOf", args: [user] }),
-    client.readContract({ address: GUARDIAN.AUSDC, abi: erc20Abi, functionName: "balanceOf", args: [user] }),
+    client.readContract({ address: PROTOCOLS.AUSDC, abi: erc20Abi, functionName: "balanceOf", args: [user] }),
   ]);
   const position: CreditPosition = {
     ...summarize(account as AccountData),
@@ -134,7 +134,7 @@ const emptyWallet = (user: Address): StateOverride => [
  */
 async function simulateEarn(user: Address, calls: { to: Address; data: Address }[], stateOverrides?: StateOverride) {
   const reads = [
-    balanceRead(GUARDIAN.AUSDC, user),
+    balanceRead(PROTOCOLS.AUSDC, user),
     balanceRead(USDC.address, user),
     debtRead(user),
     ...EQUITIES.map((e) => balanceRead(e.address, user)),
@@ -173,7 +173,7 @@ describe("Earn with stocks simulates on mainnet: the credit lands in savings, th
     expect(plan.block).toBeUndefined();
     const calls = buildEarnCalls({ user: preview, backing: plan.backing, creditRaw, cash });
     // Enough USDC in the wallet for the fee: no savings withdrawal, so the batch ends borrow → approve → supply.
-    expect(calls.slice(-3).map((c) => c.to)).toEqual([AAVE.SPOKE, USDC.address, GUARDIAN.AAVE_V3_POOL]);
+    expect(calls.slice(-3).map((c) => c.to)).toEqual([AAVE.SPOKE, USDC.address, PROTOCOLS.AAVE_V3_POOL]);
     const r = await simulateEarn(preview, calls);
     console.log(
       `preview: wallet $${Number(cash.walletRaw) / 1e6}, savings $${Number(cash.savingsRaw) / 1e6}; backing ${plan.backing.map((b) => b.stock.symbol).join(", ") || "none new"}; ` +
@@ -219,7 +219,7 @@ describe("Earn with stocks simulates on mainnet: the credit lands in savings, th
     const creditRaw = usd(25);
     const plan = planCredit({ position, options, creditRaw, cash });
     const calls = buildEarnCalls({ user: preview, backing: plan.backing, creditRaw, cash });
-    expect(calls[0].to).toBe(GUARDIAN.AAVE_V3_POOL);
+    expect(calls[0].to).toBe(PROTOCOLS.AAVE_V3_POOL);
     const r = await simulateEarn(preview, calls, emptyWallet(preview));
     expect(r.statuses.every((s) => s === "success")).toBe(true);
     console.log(`empty wallet: savings +${r.savingsAdded}, wallet after ${r.walletAfter}`);
@@ -240,13 +240,13 @@ describe("Earn with stocks simulates on mainnet: the credit lands in savings, th
     const approve = encodeFunctionData({
       abi: erc20Abi,
       functionName: "approve",
-      args: [GUARDIAN.AAVE_V3_POOL, 1_000n],
+      args: [PROTOCOLS.AAVE_V3_POOL, 1_000n],
     });
     const r = await client.simulateCalls({
       account: preview,
       calls: [
         { to: USDC.address, data: approve },
-        { to: GUARDIAN.AAVE_V3_POOL, data: supply },
+        { to: PROTOCOLS.AAVE_V3_POOL, data: supply },
       ],
     });
     expect(r.results.map((x) => x.status)).toEqual(["success", "success"]);

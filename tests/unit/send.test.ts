@@ -26,8 +26,8 @@ import { jobGrant, JOBS, sellGrant, rebalanceGrant, entryGrant } from "@/lib/age
 import { feeBufferRaw, type Cash } from "@/lib/cash";
 import { ownCashRow } from "@/lib/cashActivity";
 import { APP_CONTRACTS, isAppContract, recipientBlock } from "@/lib/contracts";
-import { GUARDIAN } from "@/lib/guardian/config";
-import { aaveV3PoolAbi } from "@/lib/guardian/abis";
+import { PROTOCOLS } from "@/lib/protocols/config";
+import { aaveV3PoolAbi } from "@/lib/protocols/abis";
 import { AERODROME, UNISWAP } from "@/lib/swap/venues";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { CASH } from "@/config/risk";
@@ -139,7 +139,7 @@ describe("buildSendCalls (Send's one batch)", () => {
     const cash: Cash = { walletRaw: usd(20), savingsRaw: usd(1_919.18), saveOn: false };
     const calls = buildSendCalls({ user, token: USDC, to: sam, amountRaw: usd(100), cash });
     expect(calls).toHaveLength(2);
-    expect(isAddressEqual(calls[0].to, GUARDIAN.AAVE_V3_POOL)).toBe(true);
+    expect(isAddressEqual(calls[0].to, PROTOCOLS.AAVE_V3_POOL)).toBe(true);
     const w = decodeFunctionData({ abi: aaveV3PoolAbi, data: calls[0].data });
     // amount + fee buffer − wallet: 100 + the buffer − 20
     expect(w.args).toEqual([USDC.address, usd(100) + feeBufferRaw - usd(20), user]);
@@ -155,7 +155,7 @@ describe("buildSendCalls (Send's one batch)", () => {
 
     const inSavings: Cash = { walletRaw: 0n, savingsRaw: usd(50), saveOn: false };
     const both = buildSendCalls({ user, token: nvda, to: sam, amountRaw: 1n, cash: inSavings });
-    expect(both.map((c) => c.to)).toEqual([GUARDIAN.AAVE_V3_POOL, nvda.address]);
+    expect(both.map((c) => c.to)).toEqual([PROTOCOLS.AAVE_V3_POOL, nvda.address]);
     expect(decodeFunctionData({ abi: aaveV3PoolAbi, data: both[0].data }).args[1]).toBe(feeBufferRaw);
   });
 
@@ -230,8 +230,8 @@ describe("assertAllowed: the transfer rule (Send only)", () => {
     for (const to of [
       AAVE.SPOKE,
       AAVE.HUB,
-      GUARDIAN.AAVE_V3_POOL,
-      GUARDIAN.AUSDC,
+      PROTOCOLS.AAVE_V3_POOL,
+      PROTOCOLS.AUSDC,
       AERODROME.ROUTER,
       UNISWAP.SWAP_ROUTER_02,
       USDC.address,
@@ -245,7 +245,7 @@ describe("assertAllowed: the transfer rule (Send only)", () => {
     // Another dollar the app knows (USDT): approve only, to its venue.
     expect(() => assertAllowed(user, [transfer(ENTRY_COINS[0].address, sam, 1n)], ok)).toThrow(/unexpected call/);
     // Savings' own token, and an unknown token.
-    expect(() => assertAllowed(user, [transfer(GUARDIAN.AUSDC, sam, 1n)], ok)).toThrow(/unexpected target/);
+    expect(() => assertAllowed(user, [transfer(PROTOCOLS.AUSDC, sam, 1n)], ok)).toThrow(/unexpected target/);
     expect(() => assertAllowed(user, [transfer("0x00000000000000000000000000000000000000a1", sam, 1n)], ok)).toThrow(
       /unexpected target/,
     );
@@ -690,7 +690,7 @@ describe("who a send went to, read back from the chain", () => {
 
   it("a cash send from savings decodes as one send to the recipient, the savings leg left out", () => {
     const logs = [
-      log(USDC.address, GUARDIAN.AUSDC, user, usd(80) + feeBufferRaw),
+      log(USDC.address, PROTOCOLS.AUSDC, user, usd(80) + feeBufferRaw),
       log(USDC.address, user, sam, usd(100)),
     ];
     expect(decodeActivity(logs, user)).toEqual([{ kind: "send", symbol: "USDC", amount: 100, to: sam }]);

@@ -7,9 +7,9 @@ import { buildEarnCalls } from "@/lib/earnWithStocks";
 import { buildSendCalls } from "@/lib/send";
 import { buildTradeCalls } from "@/lib/trade";
 import { buildBuyCalls, type BuyQuote } from "@/lib/swap/buy";
-import { buildAddSavingsCalls, buildWithdrawSavingsCalls } from "@/lib/guardian/permission";
-import { aaveV3PoolAbi } from "@/lib/guardian/abis";
-import { GUARDIAN } from "@/lib/guardian/config";
+import { buildAddSavingsCalls, buildWithdrawSavingsCalls } from "@/lib/savings";
+import { aaveV3PoolAbi } from "@/lib/protocols/abis";
+import { PROTOCOLS } from "@/lib/protocols/config";
 import { AAVE } from "@/lib/aave/addresses";
 import { swapRouter02Abi } from "@/lib/swap/abis";
 import { UNISWAP } from "@/lib/swap/venues";
@@ -78,7 +78,7 @@ describe("assertAllowed (one allowlist for every user batch)", () => {
       value: 0n,
     };
     expect(() => assertAllowed(user, [transfer])).toThrow(/unexpected call/);
-    const poolTransfer = { ...transfer, to: GUARDIAN.AAVE_V3_POOL };
+    const poolTransfer = { ...transfer, to: PROTOCOLS.AAVE_V3_POOL };
     expect(() => assertAllowed(user, [poolTransfer])).toThrow(/unexpected call/);
     const withdrawOnRouter = {
       to: UNISWAP.SWAP_ROUTER_02,
@@ -93,7 +93,7 @@ describe("assertAllowed (one allowlist for every user batch)", () => {
       assertAllowed(user, [approve(USDC.address, AAVE.SPOKE), approve(nvda.address, UNISWAP.SWAP_ROUTER_02)]),
     ).not.toThrow();
     expect(() => assertAllowed(user, [approve(USDC.address, attacker)])).toThrow(/unexpected spender/);
-    expect(() => assertAllowed(user, [approve(USDC.address, GUARDIAN.AAVE_V3_POOL)])).toThrow(/unexpected spender/);
+    expect(() => assertAllowed(user, [approve(USDC.address, PROTOCOLS.AAVE_V3_POOL)])).toThrow(/unexpected spender/);
   });
 
   it("keeps the money with the user: every withdrawal, position and swap is the user's own", () => {
@@ -111,7 +111,7 @@ describe("assertAllowed (one allowlist for every user batch)", () => {
 
   it("takes only USDC out of savings, and swaps only between registry tokens", () => {
     const withdrawStock = {
-      to: GUARDIAN.AAVE_V3_POOL,
+      to: PROTOCOLS.AAVE_V3_POOL,
       data: encodeFunctionData({ abi: aaveV3PoolAbi, functionName: "withdraw", args: [nvda.address, 1n, user] }),
       value: 0n,
     };
@@ -142,13 +142,13 @@ describe("assertAllowed: Earn with stocks' savings supply (saveTo)", () => {
   const amount = 500_000_000n;
   const save = (who: `0x${string}` = user, raw = amount) => buildAddSavingsCalls(who, raw);
   const supplyOf = (asset: `0x${string}`, onBehalfOf: `0x${string}`, raw: bigint, referral = 0) => ({
-    to: GUARDIAN.AAVE_V3_POOL,
+    to: PROTOCOLS.AAVE_V3_POOL,
     data: encodeFunctionData({ abi: aaveV3PoolAbi, functionName: "supply", args: [asset, raw, onBehalfOf, referral] }),
     value: 0n,
   });
   const approveSave = (raw: bigint) => ({
     to: USDC.address,
-    data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [GUARDIAN.AAVE_V3_POOL, raw] }),
+    data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [PROTOCOLS.AAVE_V3_POOL, raw] }),
     value: 0n,
   });
   const loan = buildLoanCalls({ user, locks: [{ stock: nvda, raw: 1_000_000n }], borrowRaw: amount });
@@ -228,7 +228,7 @@ describe("assertAllowed: Earn with stocks' savings supply (saveTo)", () => {
     // A stock approved to the pool is no spender, even in this batch.
     const stockToPool = {
       to: nvda.address,
-      data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [GUARDIAN.AAVE_V3_POOL, amount] }),
+      data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [PROTOCOLS.AAVE_V3_POOL, amount] }),
       value: 0n,
     };
     expect(() =>

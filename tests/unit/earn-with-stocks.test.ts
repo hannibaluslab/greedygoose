@@ -25,9 +25,9 @@ import {
   type EarnInput,
   type EarnOpen,
 } from "@/lib/earnWithStocks";
-import { aaveV3PoolAbi } from "@/lib/guardian/abis";
-import { GUARDIAN } from "@/lib/guardian/config";
-import { buildAddSavingsCalls, buildWithdrawSavingsCalls } from "@/lib/guardian/permission";
+import { aaveV3PoolAbi } from "@/lib/protocols/abis";
+import { PROTOCOLS } from "@/lib/protocols/config";
+import { buildAddSavingsCalls, buildWithdrawSavingsCalls } from "@/lib/savings";
 import { buildBuyCalls } from "@/lib/swap/buy";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
@@ -345,8 +345,8 @@ describe("buildEarnCalls: one batch, stocks in use → credit → into savings",
     });
     expect(spoke(borrow)).toMatchObject({ functionName: "borrow", args: [BigInt(USDC.reserveId), creditRaw, user] });
     expect(approveSave.to).toBe(USDC.address);
-    expect(erc20(approveSave)).toMatchObject({ functionName: "approve", args: [GUARDIAN.AAVE_V3_POOL, creditRaw] });
-    expect(save.to).toBe(GUARDIAN.AAVE_V3_POOL);
+    expect(erc20(approveSave)).toMatchObject({ functionName: "approve", args: [PROTOCOLS.AAVE_V3_POOL, creditRaw] });
+    expect(save.to).toBe(PROTOCOLS.AAVE_V3_POOL);
     expect(v3(save)).toMatchObject({ functionName: "supply", args: [USDC.address, creditRaw, user, 0] });
   });
 
@@ -354,7 +354,7 @@ describe("buildEarnCalls: one batch, stocks in use → credit → into savings",
     expect(buildEarnCalls({ user, backing: [], creditRaw, cash: noAgent }).map((c) => c.to)).toEqual([
       AAVE.SPOKE,
       USDC.address,
-      GUARDIAN.AAVE_V3_POOL,
+      PROTOCOLS.AAVE_V3_POOL,
     ]);
     expect(
       buildEarnCalls({ user, backing: [...backing, { stock: nvda, raw: 1_000n }], creditRaw, cash: noAgent }),
@@ -366,7 +366,7 @@ describe("buildEarnCalls: one batch, stocks in use → credit → into savings",
     const thin: Cash = { walletRaw: (feeBufferRaw * 2n) / 5n, savingsRaw: usdc(100), saveOn: true };
     const calls = buildEarnCalls({ user, backing, creditRaw, cash: thin });
     expect(calls).toHaveLength(7);
-    expect(calls[0].to).toBe(GUARDIAN.AAVE_V3_POOL);
+    expect(calls[0].to).toBe(PROTOCOLS.AAVE_V3_POOL);
     expect(v3(calls[0])).toMatchObject({
       functionName: "withdraw",
       args: [USDC.address, feeBufferRaw - thin.walletRaw, user],
@@ -427,7 +427,7 @@ describe("assertEarn: the batch is what the screen says", () => {
     const forOther = buildAddSavingsCalls(other, creditRaw)[1];
     expect(() => assertEarn(user, swapIn(5, forOther), review)).toThrow(/differs from the credit/);
     const tslaIn: Call = {
-      to: GUARDIAN.AAVE_V3_POOL,
+      to: PROTOCOLS.AAVE_V3_POOL,
       data: encodeFunctionData({
         abi: aaveV3PoolAbi,
         functionName: "supply",
@@ -437,7 +437,7 @@ describe("assertEarn: the batch is what the screen says", () => {
     };
     expect(() => assertEarn(user, swapIn(5, tslaIn), review)).toThrow(/differs from the credit/);
     const referral: Call = {
-      to: GUARDIAN.AAVE_V3_POOL,
+      to: PROTOCOLS.AAVE_V3_POOL,
       data: encodeFunctionData({
         abi: aaveV3PoolAbi,
         functionName: "supply",

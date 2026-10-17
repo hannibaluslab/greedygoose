@@ -24,8 +24,8 @@ import { priceToUsd, summarize, type AccountData } from "@/lib/aave/math";
 import type { Call } from "@/lib/aave/tx";
 import { decodeActivity } from "@/lib/activity/decode";
 import { cashRaw, feeBufferRaw, payFromCash, toUsd, type Cash } from "@/lib/cash";
-import { GUARDIAN } from "@/lib/guardian/config";
-import { aaveV3PoolAbi } from "@/lib/guardian/abis";
+import { PROTOCOLS } from "@/lib/protocols/config";
+import { aaveV3PoolAbi } from "@/lib/protocols/abis";
 import { REPAY_FORM, planRepay, repaySources, type RepayData, type RepayForm, type RepaySource } from "@/lib/repay";
 import { statusFor } from "@/lib/risk/status";
 import { assertSaleCoversRepay, buildFreeRepayCalls, buildSaleCalls } from "@/lib/sell";
@@ -76,7 +76,7 @@ async function noCash(user: Address): Promise<Call[]> {
       value: 0n,
     },
     {
-      to: GUARDIAN.AAVE_V3_POOL,
+      to: PROTOCOLS.AAVE_V3_POOL,
       data: encodeFunctionData({
         abi: aaveV3PoolAbi,
         functionName: "withdraw",
@@ -101,7 +101,7 @@ async function dataOf(user: Address, before: Call[] = []): Promise<{ data: Repay
     read(AAVE.SPOKE, spokeAbi, "getUserAccountData", [user]),
     read(AAVE.SPOKE, spokeAbi, "getUserTotalDebt", [BigInt(USDC.reserveId), user]),
     read(USDC.address, erc20Abi, "balanceOf", [user]),
-    read(GUARDIAN.AUSDC, erc20Abi, "balanceOf", [user]),
+    read(PROTOCOLS.AUSDC, erc20Abi, "balanceOf", [user]),
   ];
   const reads = [...perStock, ...tail];
   const r = await client.simulateCalls({ account: user, calls: [...plain(before), ...plain(reads)] });
@@ -191,7 +191,7 @@ async function simulate(user: Address, stock: ReserveAsset, calls: Call[], befor
     read(stock.address, erc20Abi, "balanceOf", [user]),
     read(AAVE.SPOKE, spokeAbi, "getUserSuppliedAssets", [BigInt(stock.reserveId), user]),
     read(USDC.address, erc20Abi, "balanceOf", [user]),
-    read(GUARDIAN.AUSDC, erc20Abi, "balanceOf", [user]),
+    read(PROTOCOLS.AUSDC, erc20Abi, "balanceOf", [user]),
     read(AAVE.SPOKE, spokeAbi, "getUserTotalDebt", [BigInt(USDC.reserveId), user]),
     read(AAVE.SPOKE, spokeAbi, "getUserAccountData", [user]),
   ];
