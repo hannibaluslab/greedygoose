@@ -1,5 +1,6 @@
 "use client";
 
+import { FREE_UP_FLOOR } from "@/lib/freeUp";
 import { usePublicClient } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
 import { TxStop, txKey, useTx, type TxPlan } from "./useTx";
@@ -39,6 +40,7 @@ const SELL_FALLBACK: Record<SellFrom, string> = {
   free: "This sale would fail right now — the price may have moved or the stock may be paused. Try again in a moment.",
   backing:
     "This sale would fail right now — the price or Aave’s limits may have moved. Try a smaller amount in a moment.",
+  any: "This sale would fail right now — the price or your credit may have moved. Try a smaller amount in a moment.",
   // On the Repay sheet (Pay with a stock that backs the credit): no protocol words on screen.
   repay: "This repay would fail right now — the price or your credit may have moved. Try a smaller amount in a moment.",
 };
@@ -52,7 +54,7 @@ export function useSaleBatch() {
   return async (p: SellInput) => {
     if (p.plan.block) throw new TxStop(SELL_BLOCKED[p.plan.block]);
     const quote = await quoteToSign(p.stock, p.quote, "sell");
-    return buildSaleCalls({ ...p, from: p.plan.from, quote });
+    return buildSaleCalls({ ...p, from: p.plan.from, quote, takeOutRaw: p.plan.takeOutRaw });
   };
 }
 
@@ -72,12 +74,15 @@ export const salePlan = (p: SellInput, batch: ReturnType<typeof useSaleBatch>): 
       quoteKey(p.quote),
       floor,
       p.plan.from,
+      p.plan.takeOutRaw,
       p.plan.block ?? null,
       p.plan.from === "repay" ? (saleRepayRaw(floor, p.debtRaw) > p.debtRaw ? "full" : "part") : null,
     ),
     user: p.user,
     calls: () => batch(p),
     fallback: SELL_FALLBACK[p.plan.from],
+    // Shares taken out of backing for the sale: held to the Act line on Aave's own health, as Free up is.
+    ...(p.plan.takeOutRaw > 0n && p.plan.from !== "repay" ? { healthFloor: FREE_UP_FLOOR } : {}),
     activity: saleActivity(p.stock, p.plan),
   };
 };

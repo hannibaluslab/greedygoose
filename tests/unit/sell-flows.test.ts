@@ -48,7 +48,7 @@ const owing = (debtUsd: number): SellPosition => ({
   healthFactor: debtUsd > 0 ? 700 / debtUsd : null,
 });
 const tuesday = new Date("2026-10-13T15:00:00Z");
-const plan = (from: "free" | "backing" | "repay", q: SellQuote, position = owing(300), h = holding) =>
+const plan = (from: "free" | "backing" | "repay" | "any", q: SellQuote, position = owing(300), h = holding) =>
   planSell({ from, stock: nvda, holding: h, cf: 0.7, position, quote: q, now: tuesday });
 
 describe("buildSaleCalls", () => {
@@ -147,23 +147,24 @@ describe("planSell: free shares", () => {
 });
 
 describe("planSell: a backing holding (step 3)", () => {
-  it("sells only as far as the credit stays Safe", () => {
-    // room = 700 − 300 × 1.5 = 250 → $357.14 of NVDA → 1.4285 of the 4 shares in use
+  it("sells only as far as the 1.12 line allows (Act is the line)", () => {
+    // room = 700 − 300 × 1.12 = 364 → $520 of NVDA → 2.08 of the 4 shares in use
     const p = plan("backing", quote);
     expect(p.block).toBeUndefined();
-    expect(p.maxRaw).toBe((shares(4) * 357_142n) / 1_000_000n);
+    expect(p.maxRaw).toBe((shares(4) * 520_000n) / 1_000_000n);
+    expect(p.takeOutRaw).toBe(quote.amountIn);
     expect(p.hfAfter).toBeCloseTo((700 - 70) / 300, 6);
     expect(p.after).toBe("safe");
-    const big = plan("backing", { ...quote, amountIn: shares(1.5), amountOut: usd(373) });
-    expect(big.block).toBe("past-safe");
-    expect(SELL_BLOCKED["past-safe"]).toMatch(/out of Safe/);
+    const big = plan("backing", { ...quote, amountIn: shares(2.2), amountOut: usd(547) });
+    expect(big.block).toBe("past-line");
+    expect(SELL_BLOCKED["past-line"]).toMatch(/Repay some first/);
   });
 
-  it("already past Safe: nothing can come out", () => {
-    const p = plan("backing", quote, owing(500));
+  it("at the line already: nothing can come out", () => {
+    const p = plan("backing", quote, owing(625));
     expect(p.before).toBe("watch");
     expect(p.maxRaw).toBe(0n);
-    expect(p.block).toBe("past-safe");
+    expect(p.block).toBe("past-line");
   });
 
   it("with nothing owed, all of it can go", () => {
@@ -314,5 +315,64 @@ describe("floorPriceUsd (the review's lowest price)", () => {
 
   it("is 0 for no shares", () => {
     expect(floorPriceUsd({ minOutRaw: usd(1), sharesRaw: 0n }, nvda)).toBe(0);
+  });
+});
+
+describe('planSell "any": Sell, Trade and Send on a stock that backs credit (Up to $X)', () => {
+  it("the free shares first: nothing comes out of backing, the health doesn't move", () => {
+    const p = plan("any", { ...quote, amountIn: shares(0.1), amountOut: usd(24.9) });
+    expect(p.block).toBeUndefined();
+    expect(p.takeOutRaw).toBe(0n);
+    expect(p.hfAfter).toBeCloseTo(700 / 300, 9);
+  });
+
+  it("past the free shares, the rest comes out of backing, as far as the 1.12 line", () => {
+    // Up to: 0.1 free + 2.08 the line lets out = 2.18 shares.
+    const p = plan("any", { ...quote, amountIn: shares(1.1), amountOut: usd(273) });
+    expect(p.maxRaw).toBe(shares(0.1) + (shares(4) * 520_000n) / 1_000_000n);
+    expect(p.takeOutRaw).toBe(shares(1));
+    expect(p.block).toBeUndefined();
+    expect(p.hfAfter).toBeCloseTo((700 - 250 * 0.7) / 300, 6);
+    expect(saleActivity(nvda, p).map((a) => a.kind)).toEqual(["withdraw", "sell"]);
+    expect(saleActivity(nvda, p)[0]).toMatchObject({ amount: 1 });
+  });
+
+  it("past Up to: blocked, repay first", () => {
+    const p = plan("any", { ...quote, amountIn: shares(2.3), amountOut: usd(572) });
+    expect(p.block).toBe("past-line");
+  });
+
+  it("a paused stock sells its free shares only", () => {
+    const paused = { ...holding, paused: true };
+    expect(
+      plan("any", { ...quote, amountIn: shares(0.1), amountOut: usd(24.9) }, owing(300), paused).block,
+    ).toBeUndefined();
+    expect(plan("any", { ...quote, amountIn: shares(0.1), amountOut: usd(24.9) }, owing(300), paused).maxRaw).toBe(
+      shares(0.1),
+    );
+    expect(plan("any", quote, owing(300), paused).block).toBe("paused");
+  });
+
+  it("the batch takes out only what the free shares don't cover, then sells it all", () => {
+    const build = (takeOutRaw: bigint, q = quote) =>
+      buildSaleCalls({
+        from: "any",
+        user,
+        stock: nvda,
+        quote: q,
+        oraclePriceUsd: price,
+        debtRaw: usd(300),
+        nowSec: 1_000,
+        takeOutRaw,
+      });
+    expect(steps(build(0n))).toEqual(["approve", "swap"]);
+    const calls = build(shares(0.3));
+    expect(steps(calls)).toEqual(["withdraw", "approve", "swap"]);
+    expect(decodeFunctionData({ abi: spokeAbi, data: calls[0].data }).args).toEqual([
+      BigInt(nvda.reserveId),
+      shares(0.3),
+      user,
+    ]);
+    expect(() => build(shares(0.5))).toThrow(/more than it sells/);
   });
 });

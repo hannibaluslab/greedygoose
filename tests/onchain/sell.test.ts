@@ -5,6 +5,7 @@
  * simulation first takes credit for the account, in the same simulated block; a small loan is taken
  * the same way, backed by a stock the account supplies first.
  */
+import { CREDIT_CAP } from "@/config/risk";
 import { describe, expect, it } from "vitest";
 import {
   createPublicClient,
@@ -232,13 +233,13 @@ describe("selling a backing holding on Base (plan item 7 step 3)", () => {
     expect(decodeActivity(r.logs, backer).map((i) => i.kind)).toEqual(["withdraw", "sell"]);
   });
 
-  it("only as far as the loan stays Safe: past it is blocked with why, up to it goes through and ends Safe", async () => {
+  it("only as far as the 1.12 line: past it is blocked with why, up to it goes through and ends over the line", async () => {
     const before = await creditTo(backer, 1.6);
     const holding = await holdingOf(backer, nvda);
     const position = await positionOf(backer, before);
     expect(position.healthFactor!).toBeCloseTo(1.6, 2);
     const past = await planned("backing", backer, nvda, holding.backingRaw, before);
-    expect(past.plan.block).toBe("past-safe");
+    expect(past.plan.block).toBe("past-line");
     expect(past.plan.maxRaw).toBeGreaterThan(0n);
 
     const within = await planned("backing", backer, nvda, (past.plan.maxRaw * 9n) / 10n, before);
@@ -248,7 +249,7 @@ describe("selling a backing holding on Base (plan item 7 step 3)", () => {
       `backing at HF 1.6: up to ${past.plan.maxRaw} raw NVDA; sold 90% of it → HF ${r.hfAfter?.toFixed(3)} (planned ${within.plan.hfAfter?.toFixed(3)})`,
     );
     expect(r.statuses).toEqual(["success", "success", "success"]);
-    expect(r.hfAfter!).toBeGreaterThanOrEqual(1.5);
+    expect(r.hfAfter!).toBeGreaterThanOrEqual(CREDIT_CAP.minHf);
     expect(r.hfAfter!).toBeCloseTo(within.plan.hfAfter!, 2);
   });
 });

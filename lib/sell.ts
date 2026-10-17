@@ -1,5 +1,5 @@
 import { decodeFunctionData, erc20Abi, isAddressEqual } from "viem";
-import { RISK } from "@/config/risk";
+import { CREDIT_CAP } from "@/config/risk";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { healthAfterWithdraw, maxWithdrawUsd } from "@/lib/aave/math";
@@ -17,9 +17,11 @@ type Address = `0x${string}`;
 
 /**
  * Where the shares come from (plan item 7): free shares; a backing holding, taken out of backing in the
- * same batch; or a backing holding sold to repay credit.
+ * same batch; a backing holding sold to repay credit; or "any", the one rule for Sell, Trade and Send on a stock that
+ * backs credit (Adrian, 2026-10-17): the free shares first, then as much backing as the 1.12 line lets out, in the same
+ * batch. Its most is "Up to $X"; to do more, the user repays first.
  */
-export type SellFrom = "free" | "backing" | "repay";
+export type SellFrom = "free" | "backing" | "repay" | "any";
 
 /** The holding's fields the plan reads (usePosition's Holding has them all). */
 export type SellHolding = {
@@ -44,7 +46,7 @@ export type SellBlock =
   | "not-free"
   | "not-backing"
   | "nothing-owed"
-  | "past-safe"
+  | "past-line"
   | "near-limit"
   | "too-small"
   | "act"
@@ -55,7 +57,7 @@ export const SELL_BLOCKED: Record<SellBlock, string> = {
   "not-free": "That’s more than your free shares.",
   "not-backing": "That’s more than backs your credit.",
   "nothing-owed": "You don’t owe anything, so there’s nothing to repay.",
-  "past-safe": "That would take your credit out of Safe. Sell less, or repay with this sale instead.",
+  "past-line": "That’s more than you can sell right now. Repay some first to sell more.",
   "near-limit":
     "Your credit is too close to Aave’s limit to take these shares out before they repay it. Sell fewer, or repay from cash.",
   "too-small": `The smallest sale is ${formatUsdTrim(SELL_LIMITS.minUsd)}.`,
@@ -81,8 +83,13 @@ export type SellPlan = {
   /** How far under Aave's price the pool pays; `warn` past SELL_LIMITS.warnDiscount. */
   discount: number;
   warn: boolean;
-  /** Most shares this sale can take: the free shares; the backing that keeps the loan Safe; the backing that can come out before the repay. */
+  /**
+   * Most shares this sale can take: the free shares; the backing the 1.12 line lets out; the backing that can come out
+   * before the repay; for "any", the free shares plus that backing ("Up to $X").
+   */
   maxRaw: bigint;
+  /** The shares that come out of backing in the same batch (0 when the free shares cover the sale). */
+  takeOutRaw: bigint;
   /** Repay by selling: what the sale repays, at least (0 otherwise). */
   repayRaw: bigint;
   before: Status;
@@ -128,8 +135,8 @@ export function repaySaleMaxRaw(
 }
 
 /**
- * Plan a sale of `quote.amountIn` shares on Leo's maths. A backing holding comes out only as far as the loan
- * stays Safe (maxWithdrawUsd at the Safe line). Selling to repay takes the shares out first, so the loan must
+ * Plan a sale of `quote.amountIn` shares on Leo's maths. A backing holding comes out only as far as the 1.12 line
+ * allows (maxWithdrawUsd at CREDIT_CAP.minHf, Act is the line), and "any" sells the free shares first. Selling to repay takes the shares out first, so the loan must
  * stay within Aave's limit until the repay lands; it usually ends healthier, and one that would end in Act, lower
  * than it started, is blocked ("act", LIMIT_HEADROOM). Plan only: the batch is simulated before JAW's sheet.
  */
@@ -158,23 +165,34 @@ export function planSell(p: {
   const backingShare = (usd: number) => part(h.backingRaw, h.backingUsd > 0 ? usd / h.backingUsd : 0);
 
   const repayRaw = from === "repay" ? saleRepayRaw(minOutRaw, pos.debtRaw) : 0n;
+  const lineShare = () => backingShare(maxWithdrawUsd({ ...creditInput, targetHf: CREDIT_CAP.minHf }));
   let maxRaw = h.freeRaw;
+  let takeOutRaw = 0n;
   let hfAfter = pos.healthFactor;
   if (from === "backing") {
-    maxRaw = backingShare(maxWithdrawUsd({ ...creditInput, targetHf: RISK.safeMin }));
+    maxRaw = lineShare();
+    takeOutRaw = sharesRaw;
     hfAfter = healthAfterWithdraw({ ...creditInput, usd: valueUsd });
+  } else if (from === "any") {
+    maxRaw = h.freeRaw + (h.paused ? 0n : lineShare());
+    takeOutRaw = sharesRaw > h.freeRaw ? sharesRaw - h.freeRaw : 0n;
+    if (takeOutRaw > 0n) {
+      hfAfter = healthAfterWithdraw({ ...creditInput, usd: (Number(takeOutRaw) / 10 ** stock.decimals) * h.priceUsd });
+    }
   } else if (from === "repay") {
     maxRaw = repaySaleMaxRaw(h, p.cf, pos);
+    takeOutRaw = sharesRaw;
     const debtAfter = pos.debtUsd - toUsd(repayRaw);
     hfAfter = debtAfter > 0 ? (pos.totalBackingUsd * pos.avgCf - valueUsd * p.cf) / debtAfter : null;
   }
 
   let block: SellBlock | undefined;
-  if (from !== "free" && h.paused) block = "paused";
+  if (from !== "free" && takeOutRaw > 0n && h.paused) block = "paused";
   else if (from === "free" && sharesRaw > h.freeRaw) block = "not-free";
-  else if (from !== "free" && sharesRaw > h.backingRaw) block = "not-backing";
+  else if (from === "any" && sharesRaw > h.freeRaw + h.backingRaw) block = "not-backing";
+  else if (from !== "free" && from !== "any" && sharesRaw > h.backingRaw) block = "not-backing";
   else if (from === "repay" && pos.debtRaw === 0n) block = "nothing-owed";
-  else if (from === "backing" && sharesRaw > maxRaw) block = "past-safe";
+  else if ((from === "backing" || from === "any") && sharesRaw > maxRaw) block = "past-line";
   else if (from === "repay" && sharesRaw > maxRaw) block = "near-limit";
   else if (econ.usd < SELL_LIMITS.minUsd || (from === "repay" && repayRaw === 0n)) block = "too-small";
   else if (
@@ -194,6 +212,7 @@ export function planSell(p: {
     discount: econ.discount,
     warn: econ.discount > SELL_LIMITS.warnDiscount,
     maxRaw,
+    takeOutRaw,
     repayRaw,
     before: statusFor(pos.healthFactor),
     after: statusFor(hfAfter),
@@ -217,9 +236,20 @@ export function buildSaleCalls(p: {
   oraclePriceUsd: number;
   debtRaw: bigint;
   nowSec?: number;
+  /** "any": the shares that come out of backing first (planSell's takeOutRaw). */
+  takeOutRaw?: bigint;
 }): Call[] {
   const sell = buildSellCalls(p);
   if (p.from === "free") return sell;
+  if (p.from === "any") {
+    const out = p.takeOutRaw ?? 0n;
+    if (out <= 0n) return sell;
+    if (out > p.quote.amountIn) throw new Error("Takes out more than it sells");
+    return assertAllowed(p.user, [
+      ...buildWithdrawCalls({ user: p.user, stock: p.stock, amountRaw: out, all: false }),
+      ...sell,
+    ]);
+  }
   const sale = [
     ...buildWithdrawCalls({ user: p.user, stock: p.stock, amountRaw: p.quote.amountIn, all: false }),
     ...sell,
@@ -347,7 +377,9 @@ export function floorPriceUsd(
 export function saleActivity(stock: ReserveAsset, plan: SellPlan): ActivityItem[] {
   const amount = Number(plan.sharesRaw) / 10 ** stock.decimals;
   return [
-    ...(plan.from === "free" ? [] : [{ kind: "withdraw" as const, symbol: stock.symbol, amount }]),
+    ...(plan.takeOutRaw > 0n
+      ? [{ kind: "withdraw" as const, symbol: stock.symbol, amount: Number(plan.takeOutRaw) / 10 ** stock.decimals }]
+      : []),
     { kind: "sell", symbol: stock.symbol, amount, receivedUsd: plan.usd },
     ...(plan.from === "repay" ? [{ kind: "repay" as const, symbol: USDC.symbol, amount: toUsd(plan.repayRaw) }] : []),
   ];
