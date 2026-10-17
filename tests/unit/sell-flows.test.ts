@@ -121,9 +121,10 @@ describe("planSell: free shares", () => {
     expect(p.repayRaw).toBe(0n);
   });
 
-  it("blocks more than the free shares, under $1, and a pool paying past the floor", () => {
+  it("blocks more than the free shares, under a cent, and a pool paying past the floor", () => {
     expect(plan("free", quote).block).toBe("not-free");
-    expect(plan("free", { ...quote, amountIn: shares(0.002), amountOut: usd(0.5) }).block).toBe("too-small");
+    expect(plan("free", { ...quote, amountIn: shares(0.00002), amountOut: usd(0.005) }).block).toBe("too-small");
+    expect(plan("free", { ...quote, amountIn: shares(0.002), amountOut: usd(0.5) }).block).toBeUndefined();
     const far = plan("free", { ...quote, amountIn: shares(0.1), amountOut: usd(22) });
     expect(far.block).toBe("price");
     expect(SELL_BLOCKED.price).toMatch(/more than 10% under Aave’s price/);
@@ -281,9 +282,9 @@ describe("planSell: repay by selling a holding (step 9)", () => {
     expect(p.after).toBe("none");
   });
 
-  it("blocks when nothing is owed, and a sale under $1", () => {
+  it("blocks when nothing is owed, and a sale that repays nothing", () => {
     expect(plan("repay", quote, owing(0)).block).toBe("nothing-owed");
-    expect(plan("repay", { ...quote, amountIn: shares(0.0036), amountOut: usd(0.89) }).block).toBe("too-small");
+    expect(plan("repay", { ...quote, amountIn: shares(0.00002), amountOut: usd(0.005) }).block).toBe("too-small");
   });
 });
 

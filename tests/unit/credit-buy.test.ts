@@ -432,21 +432,21 @@ describe('creditAvailable (F2-3\'s "You can use up to")', () => {
     const act: CreditPosition = { ...fresh, totalBackingUsd: 1_000, avgCf: 0.7, debtUsd: 700, healthFactor: 1 };
     expect(avail(act, [nvdaFree])).toMatchObject({ usd: 0, why: "in-act", line: noCreditLine("in-act", true) });
     expect(avail({ ...fresh, creditPaused: true }, [nvdaFree])).toMatchObject({ usd: 0, why: "paused" });
-    // $1.40 of free NVIDIA counts for under the $1 minimum buy, and nothing backs credit yet: too small, not "all in use".
-    const tiny: BackingOption = { stock: nvda, freeRaw: 784_000n, freeUsd: 1.4, cf: 0.7 };
+    // A cent of free NVIDIA counts for under the smallest buy (a cent), and nothing backs credit yet: too small, not "all in use".
+    const tiny: BackingOption = { stock: nvda, freeRaw: 5_600n, freeUsd: 0.01, cf: 0.7 };
     expect(avail(fresh, [tiny])).toMatchObject({ usd: 0, why: "too-small", line: noCreditLine("too-small", true) });
     expect(avail(full, [tiny])).toMatchObject({ why: "all-in-use" });
     expect(avail({ ...fresh, usdcLiquidity: 0 }, [nvdaFree])).toMatchObject({ usd: 0, why: "no-liquidity" });
   });
 
-  it("under the minimum buy is $0: no Credit Buy fits in it", () => {
+  it("under the smallest buy (a cent) is $0: no Credit Buy fits in it", () => {
     const nearly: CreditPosition = {
       ...fresh,
       totalBackingUsd: 1_000,
       avgCf: 0.7,
-      debtUsd: 624.5,
-      healthFactor: 700 / 624.5,
-    }; // $0.50 left
+      debtUsd: 624.995,
+      healthFactor: 700 / 624.995,
+    }; // half a cent left
     expect(avail(nearly, [])).toMatchObject({ usd: 0, why: "all-in-use" });
   });
 
@@ -455,11 +455,11 @@ describe('creditAvailable (F2-3\'s "You can use up to")', () => {
     expect(avail(fresh, [], false, { walletRaw: 0n, savingsRaw: 0n, saveOn: false }).line).toBe(
       "Credit comes from the stocks you own. Top up, then buy one with cash.",
     );
-    // A cent short of the $1 minimum buy plus the fee buffer: it doesn't fit.
-    expect(avail(fresh, [], true, { walletRaw: usd(1 + B - 0.01), savingsRaw: 0n, saveOn: false }).line).toBe(
+    // A cent short of the smallest buy (a cent) plus the fee buffer: it doesn't fit.
+    expect(avail(fresh, [], true, { walletRaw: usd(B), savingsRaw: 0n, saveOn: false }).line).toBe(
       "Your stocks can’t back credit right now. Top up to buy with cash.",
     );
-    expect(avail(fresh, [], true, { walletRaw: usd(1 + B), savingsRaw: 0n, saveOn: false }).line).toBe(
+    expect(avail(fresh, [], true, { walletRaw: usd(0.01 + B), savingsRaw: 0n, saveOn: false }).line).toBe(
       "Your stocks can’t back credit right now. You can still buy with cash.",
     );
   });
@@ -1073,12 +1073,12 @@ describe("Act is the line (Adrian, 2026-10-15): every way of taking credit may e
       expect(pos.debtUsd).toBeGreaterThan(limit * 0.97);
       expect(pos.healthFactor!).toBeGreaterThanOrEqual(CREDIT_CAP.minHf - 1e-9);
       expect(statusFor(pos.healthFactor)).toBe("watch");
-      // Backing the last buy too leaves less than the smallest Credit Buy.
+      // Backing the last buy too leaves less than a whole dollar, the smallest MAX Sam taps.
       const last = opt(nvda, freeUsd, cf);
       expect(
         planCredit({ position: pos, backing: { option: last, raw: last.freeRaw }, creditRaw: 0n, cash: walletCash })
           .maxUsd,
-      ).toBeLessThan(BUY_LIMITS.minUsd);
+      ).toBeLessThan(1);
     }
   });
 

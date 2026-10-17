@@ -25,11 +25,12 @@ describe("start earning: when Home offers it", () => {
     expect(STATUSES.filter((s) => startEarningShown(s, usdc(100)))).toEqual(["unconfigured", "off"]);
   });
 
-  it("waits for $1 to put in plus the fee buffer that stays: never at $0 or dust", () => {
+  it("waits for a cent to put in plus the fee buffer that stays: never at $0 or under the buffer", () => {
     expect(startEarningMinRaw).toBe(usdc(MIN_START_USD + CASH.feeBufferUsd));
     for (const save of ["unconfigured", "off"] as const) {
       expect(startEarningShown(save, 0n)).toBe(false);
-      expect(startEarningShown(save, usdc(0.42))).toBe(false);
+      expect(startEarningShown(save, usdc(CASH.feeBufferUsd))).toBe(false);
+      expect(startEarningShown(save, usdc(0.42))).toBe(true);
       expect(startEarningShown(save, startEarningMinRaw - 1n)).toBe(false);
       expect(startEarningShown(save, startEarningMinRaw)).toBe(true);
       expect(startEarningShown(save, usdc(100))).toBe(true);

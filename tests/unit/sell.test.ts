@@ -73,7 +73,7 @@ describe("buildSellCalls (free shares)", () => {
 });
 
 describe("SELL_LIMITS", () => {
-  it("mirror the buy's: 10% floor, 2% warning, $1 minimum", () => {
-    expect(SELL_LIMITS).toEqual({ floorBps: 1_000, warnDiscount: 0.02, minUsd: 1 });
+  it("mirror the buy's: 10% floor, 2% warning, a cent at least (no minimum of ours)", () => {
+    expect(SELL_LIMITS).toEqual({ floorBps: 1_000, warnDiscount: 0.02, minUsd: 0.01 });
   });
 });

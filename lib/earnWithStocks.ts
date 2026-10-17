@@ -83,7 +83,8 @@ export const EARN_CLOSED = {
 type EarnClosed = keyof typeof EARN_CLOSED;
 
 /** The smallest amount, the minimum buy's: under $1 a row's cost and earnings round to nothing. */
-const EARN_MIN_USD = 1;
+/** A cent: no minimum of ours (ruling 2, Oct 17). */
+const EARN_MIN_USD = 0.01;
 
 export type EarnOffer =
   | { kind: "loading" }

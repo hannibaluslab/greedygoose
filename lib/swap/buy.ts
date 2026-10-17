@@ -13,7 +13,8 @@ export const BUY_LIMITS = {
   warnPremium: 0.02,
   /** Block when the pool price is this far above Aave's oracle price. */
   blockPremium: 0.1,
-  minUsd: 1,
+  // The smallest amount that can be typed: no minimum of ours (ruling 2, Oct 17); pools and Aave set their own.
+  minUsd: 0.01,
   /** Swap deadline, seconds from signing. */
   deadlineSec: 600,
 } as const;

@@ -107,13 +107,13 @@ export function swapBuyInRaw(sellFloorRaw: bigint, cash: Cash): bigint {
 /**
  * The smallest stock → stock trade, in dollars at Aave's price: its buy must reach BUY_LIMITS.minUsd from the sale's
  * floor (the quote less 1%), plus the fee buffer when the sale pays the fee. `rate` is what the pool pays per dollar at
- * Aave's price (1 before a quote). Rounded up to 10 cents, and never under the smallest sale.
+ * Aave's price (1 before a quote). Rounded up to the cent, and never under the smallest sale.
  */
 export function swapMinUsd(rate: number, fromSale: boolean): number {
   const need = BUY_LIMITS.minUsd + (fromSale ? CASH.feeBufferUsd : 0);
   const r = rate > 0 ? rate : 1;
   const usd = need / (r * (1 - BUY_LIMITS.slippageBps / 10_000));
-  return Math.max(SELL_LIMITS.minUsd, Math.ceil(usd * 10 - 1e-9) / 10);
+  return Math.max(SELL_LIMITS.minUsd, Math.ceil(usd * 100 - 1e-9) / 100);
 }
 
 /**

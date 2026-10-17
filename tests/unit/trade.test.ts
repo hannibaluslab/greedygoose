@@ -200,12 +200,12 @@ describe("what a stock → stock buy spends", () => {
     expect(swapBuyInRaw(floor, cash)).toBe(floor - feeBufferRaw);
     expect(swapBuyInRaw(feeBufferRaw - 1n, cash)).toBe(0n);
   });
-  it("the smallest trade reaches a $1 buy from the sale's floor, rounded up to 10 cents, never under $1", () => {
-    expect(swapMinUsd(1, false)).toBe(1.1); // 1 / 0.99 = 1.0101 → $1.10
-    expect(swapMinUsd(0.998, false)).toBe(1.1);
-    // $1 and the fee buffer, over the floor's 0.99, up to 10 cents ($1.10 / 0.99 = 1.111 → $1.20 at a $0.10 buffer).
-    expect(swapMinUsd(1, true)).toBe(Math.ceil(((1 + B) / 0.99) * 10 - 1e-9) / 10);
-    expect(swapMinUsd(0.9, false)).toBe(1.2);
+  it("the smallest trade reaches a one-cent buy from the sale's floor, rounded up to the cent", () => {
+    expect(swapMinUsd(1, false)).toBe(0.02); // 0.01 / 0.99 = 0.0101 → $0.02
+    expect(swapMinUsd(0.998, false)).toBe(0.02);
+    // A cent and the fee buffer, over the floor's 0.99, up to the cent ($0.11 / 0.99 = 0.1111 → $0.12 at a $0.10 buffer).
+    expect(swapMinUsd(1, true)).toBe(Math.ceil(((0.01 + B) / 0.99) * 100 - 1e-9) / 100);
+    expect(swapMinUsd(0.9, false)).toBe(0.02);
   });
 });
 
@@ -331,7 +331,7 @@ describe("the pickers", () => {
     expect(rows.map((r) => [r.asset, r.disabled, r.sub])).toEqual([
       ["cash", false, undefined],
       ["AMZNc", false, "$1,721.43 of it backs your credit"],
-      ["TSLAc", true, "Under $1 free, too small to trade"],
+      ["TSLAc", false, "0.0002 shares"],
       ["NVDAc", true, "All of it backs your credit"],
       ["METAc", true, "All of it backs your credit"],
       ["GOOGLc", true, "All of it backs your credit"],
@@ -362,8 +362,8 @@ describe("the pickers", () => {
     expect(rows[1].sub).toBe("0.25 shares");
     const poor = fromOptions({
       ...newcomer,
-      cash: { walletRaw: usd(1 + B - 0.01), savingsRaw: 0n, saveOn: false },
-      cashUsd: 1 + B - 0.01,
+      cash: { walletRaw: usd(B), savingsRaw: 0n, saveOn: false },
+      cashUsd: B,
     });
     expect(poor[0]).toMatchObject({ asset: "cash", disabled: true, sub: "Not enough to trade", why: "no-cash" });
   });
@@ -618,9 +618,9 @@ describe("planTrade: cash → stock", () => {
     expect(block.ready).toBe(false);
   });
 
-  it("blocks under $1, with no market, over the cash and with too little cash", () => {
-    expect(planTrade({ ...base, amount: "0.5", buy: ready(buyQuoteFor("NVDAc", usd(0.5))) }).blocker).toBe(
-      "Minimum buy is $1.00.",
+  it("blocks under a cent, with no market, over the cash and with too little cash", () => {
+    expect(planTrade({ ...base, amount: "0.005", buy: ready(buyQuoteFor("NVDAc", usd(0.005))) }).blocker).toBe(
+      "Minimum buy is $0.01.",
     );
     expect(planTrade({ ...base, amount: "100", buy: noPool }).blocker).toBe("There’s no market for NVIDIA right now.");
     // The cash moved after the amount was typed.
@@ -631,12 +631,12 @@ describe("planTrade: cash → stock", () => {
     expect(planTrade({ ...base, data: less, amount: "100" }).blocker).toBe("That’s more than your cash ($60.00).");
     const poor = {
       ...backer,
-      cash: { walletRaw: usd(1 + B - 0.01), savingsRaw: 0n, saveOn: false },
-      cashUsd: 1 + B - 0.01,
+      cash: { walletRaw: usd(B), savingsRaw: 0n, saveOn: false },
+      cashUsd: B,
     };
     expect(planTrade({ ...base, data: poor, amount: "" }).note).toEqual({
       tone: "act",
-      text: `You need at least ${formatUsd(1 + B)} in your cash to buy.`,
+      text: `You need at least ${formatUsd(0.01 + B)} in your cash to buy.`,
     });
   });
 
@@ -669,8 +669,8 @@ describe("planTrade: stock → cash", () => {
     expect(v.youGet).toMatchObject({ kind: "cash", usd: 49.9 });
   });
 
-  it("blocks under $1, more than 10% under the stock's price, more than is free, and with no market", () => {
-    expect(planTrade({ ...base, amount: "0.8" }).blocker).toBe("The smallest sale is $1.");
+  it("blocks under a cent, more than 10% under the stock's price, more than is free, and with no market", () => {
+    expect(planTrade({ ...base, amount: "0.005" }).blocker).toBe("The smallest sale is $0.01.");
     const far = planTrade({ ...base, amount: "50", sell: ready(sellQuoteFor("NVDAc", 25_000_000n, 0.12)) });
     expect(far.blocker).toBe(
       "Too big for the market right now: you’d get more than 10% under the stock’s price. Try a smaller amount.",
@@ -746,17 +746,17 @@ describe("planTrade: stock → stock", () => {
     const v = planTrade({ ...base, data: short, amount: "3", sell: ready(sq) });
     expect(v.feeFromSale).toBe(true);
     expect(v.buyInRaw).toBe(sellMinOut(sq, nvda, PRICE.NVDAc) - feeBufferRaw);
-    // $1.05 can't make a $1 buy once the fee comes out of the sale.
-    const small = sellQuoteFor("NVDAc", sharesForUsdRaw(usd(1.05), parseUnits("200", 8), 8));
-    expect(planTrade({ ...base, data: short, amount: "1.05", sell: ready(small) }).blocker).toBe(
+    // $0.11 can't make a one-cent buy once the fee comes out of the sale.
+    const small = sellQuoteFor("NVDAc", sharesForUsdRaw(usd(0.11), parseUnits("200", 8), 8));
+    expect(planTrade({ ...base, data: short, amount: "0.11", sell: ready(small) }).blocker).toBe(
       `The smallest trade is ${formatUsd(swapMinUsd(0.998, true))}.`,
     );
     // With the fee from cash it can.
-    expect(planTrade({ ...base, amount: "1.05", sell: ready(small) }).blocker).toBeNull();
+    expect(planTrade({ ...base, amount: "0.11", sell: ready(small) }).blocker).toBeNull();
   });
 
   it("blocks under the smallest trade, with no market for either stock, or far over the stock's price", () => {
-    expect(planTrade({ ...base, amount: "0.6" }).blocker).toBe("The smallest trade is $1.10.");
+    expect(planTrade({ ...base, amount: "0.005" }).blocker).toBe("The smallest trade is $0.02.");
     expect(planTrade({ ...base, amount: "3", sell: noPool }).blocker).toBe("There’s no market for NVIDIA right now.");
     expect(planTrade({ ...base, amount: "3", sell: ready(sq), buy: noPool }).blocker).toBe(
       "There’s no market for Apple right now.",
@@ -847,7 +847,7 @@ describe("useTrade: the stock → stock batch at signing (swapBatch)", () => {
     const r = reads(rich);
     const blocked = swapBatch(sign({ plan: { ...pre.sellPlan!, block: "too-small" } }), r);
     await expect(blocked).rejects.toBeInstanceOf(TxStop);
-    await expect(blocked).rejects.toThrow("The smallest trade is $1.10.");
+    await expect(blocked).rejects.toThrow(/The smallest trade is \$0\.0\d\./);
     await expect(swapBatch(sign({ plan: { ...pre.sellPlan!, block: "price" } }), r)).rejects.toThrow(
       /Too big for the market right now/,
     );

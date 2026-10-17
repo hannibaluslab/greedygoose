@@ -19,8 +19,8 @@ import { USDC } from "@/lib/tokens/registry";
 
 type Address = `0x${string}`;
 
-/** The least that goes in, in dollars: under it there's nothing worth earning on. */
-export const MIN_START_USD = 1;
+/** The least that goes in, in dollars: a cent, no minimum of ours (ruling 2, Oct 17). */
+export const MIN_START_USD = 0.01;
 const minStartRaw = parseUnits(MIN_START_USD.toFixed(USDC.decimals), USDC.decimals);
 
 /**

@@ -126,8 +126,9 @@ const SLIP = 1 - BUY_LIMITS.slippageBps / 10_000;
  * only just reaches $1 at Aave's price isn't offered and then quoted under it.
  */
 const LIST_POOL_ALLOWANCE = 0.99;
-/** The smallest repay: $1, or all of it when less is owed. */
-const MIN_REPAY_USD = 1;
+/** The smallest repay: a cent, or all of it when less is owed. */
+/** A cent: no minimum of ours (ruling 2, Oct 17); Aave's own rule against tiny debt still applies. */
+const MIN_REPAY_USD = 0.01;
 export const minRepayUsd = (debtUsd: number) => Math.min(MIN_REPAY_USD, debtUsd);
 
 const usdcRaw = (usd: number) => parseUnits(Math.max(0, usd).toFixed(USDC.decimals), USDC.decimals);

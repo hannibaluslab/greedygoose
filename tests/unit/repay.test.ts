@@ -83,7 +83,7 @@ const data = (p: { debt?: number; wallet?: number; savings?: number; holdings?: 
     cashUsd: (p.wallet ?? 100) + (p.savings ?? 0),
     holdings: p.holdings ?? [
       holding("AAPLc", "Apple", 200, 0.5, 0),
-      holding("MSFTc", "Microsoft", 400, 0.001, 0),
+      holding("MSFTc", "Microsoft", 400, 0.00001, 0),
       holding("NVDAc", "NVIDIA", 250, 0.1, 4),
     ],
   };
@@ -121,32 +121,30 @@ describe("Pay with: the rows, their order and who's listed", () => {
     expect(s[3].estUsd).toBe(300);
   });
 
-  it("the cash is the default when it can repay $1; otherwise the first row", () => {
+  it("the cash is the default when it can repay a cent; otherwise the first row", () => {
     expect(pickedSource(repaySources(data(), cfs), null)?.id).toBe("cash");
-    expect(pickedSource(repaySources(data({ wallet: 1 + B - 0.01 }), cfs), null)?.id).toBe("free:AAPLc");
+    expect(pickedSource(repaySources(data({ wallet: B }), cfs), null)?.id).toBe("free:AAPLc");
     // A picked row stays picked while it's listed, and falls back to the default once it isn't.
     expect(pickedSource(repaySources(data(), cfs), "backing:NVDAc")?.id).toBe("backing:NVDAc");
     expect(pickedSource(repaySources(data(), cfs), "free:TSLAc")?.id).toBe("cash");
   });
 
-  it("hides every row that can't repay $1: the cash under $1 and the fee buffer, a free stock under about $1, dust", () => {
-    expect(ids(repaySources(data({ wallet: 1 + B - 0.01 }), cfs))).not.toContain("cash");
-    expect(ids(repaySources(data({ wallet: 1 + B }), cfs))).toContain("cash");
+  it("hides every row that can't repay a cent: the cash under a cent and the fee buffer, a free stock under about a cent", () => {
+    expect(ids(repaySources(data({ wallet: B }), cfs))).not.toContain("cash");
+    expect(ids(repaySources(data({ wallet: 0.01 + B }), cfs))).toContain("cash");
     expect(ids(repaySources(data(), cfs))).not.toContain("free:MSFTc");
-    const tiny = data({ holdings: [holding("AAPLc", "Apple", 200, 0.005, 0)] }); // $1.00 free: $0.99 at its floor
+    const tiny = data({ holdings: [holding("AAPLc", "Apple", 200, 0.00005, 0)] }); // $0.01 free: under a cent at its floor
     expect(ids(repaySources(tiny, cfs))).toEqual(["cash"]);
-    // $1.01 free reaches $1 at Aave's price less 1%, but not with its pool up to 1% under: not offered.
-    const edge = data({ holdings: [holding("AAPLc", "Apple", 200, 0.00505, 0)] });
-    expect(ids(repaySources(edge, cfs))).toEqual(["cash"]);
-    const enough = data({ holdings: [holding("AAPLc", "Apple", 200, 0.0052, 0)] }); // $1.04
+    const enough = data({ holdings: [holding("AAPLc", "Apple", 200, 0.0001, 0)] }); // $0.02
     expect(ids(repaySources(enough, cfs))).toEqual(["cash", "free:AAPLc"]);
   });
 
-  it("owing under $1, a row that repays all of it is listed", () => {
-    const s = repaySources(data({ debt: 0.4, wallet: 0.95 }), cfs);
+  it("owing under a cent, a row that repays all of it is listed", () => {
+    const s = repaySources(data({ debt: 0.004, wallet: 0.95 }), cfs);
     expect(s[0].id).toBe("cash");
-    expect(s[0].estUsd).toBe(0.4);
-    expect(minRepayUsd(0.4)).toBe(0.4);
+    expect(s[0].estUsd).toBe(0.004);
+    expect(minRepayUsd(0.004)).toBe(0.004);
+    expect(minRepayUsd(0.4)).toBe(0.01);
   });
 
   it("a free stock pays its own fee when the cash can't keep the buffer", () => {
@@ -173,8 +171,8 @@ describe("Pay with: the rows, their order and who's listed", () => {
     const empty = data({ wallet: 0, holdings: [] });
     expect(repaySources(empty, cfs)).toEqual([]);
     expect(noSourceLine(empty)).toBe(REPAY_COPY.noCash);
-    expect(noSourceLine(data({ wallet: 1 + B - 0.14, holdings: [holding("AAPLc", "Apple", 200, 0.004, 0)] }))).toBe(
-      `You need ${formatUsd(1 + B)} in your cash to repay: ${formatUsd(B)} of it stays for the network fee.`,
+    expect(noSourceLine(data({ wallet: B - 0.01, holdings: [holding("AAPLc", "Apple", 200, 0.00004, 0)] }))).toBe(
+      `You need ${formatUsd(0.01 + B)} in your cash to repay: ${formatUsd(B)} of it stays for the network fee.`,
     );
   });
 
@@ -293,14 +291,14 @@ describe("Amount: All by default, quick picks, never more than owed or than the 
     ).toBeNull();
   });
 
-  it("a cash amount repays exactly what's typed; under $1 says the smallest repay", () => {
+  it("a cash amount repays exactly what's typed; under a cent says the smallest repay", () => {
     const d = data();
     const v = planRepay({ data: d, source: cashOf(d), form: { source: null, amount: "25", all: false } });
     expect(v.repayRaw).toBe(usd(25));
     expect(v.oweAfterUsd).toBe(275);
     expect(v.done).toBe("Repaid $25");
-    const small = planRepay({ data: d, source: cashOf(d), form: { source: null, amount: "0.5", all: false } });
-    expect(small.note?.text).toBe("The smallest repay is $1.");
+    const small = planRepay({ data: d, source: cashOf(d), form: { source: null, amount: "0.005", all: false } });
+    expect(small.note?.text).toBe("The smallest repay is $0.01.");
     expect(small.ready).toBe(false);
   });
 
@@ -357,13 +355,15 @@ describe("sharesForRepay", () => {
     expect(sellMinOut(quoteAt(s, 199), aapl, 200)).toBeLessThan(usd(25.004));
   });
 
-  it("plus the fee buffer when the sale pays it, a margin on a full repay, at least a $1 sale, never more than it has", () => {
+  it("plus the fee buffer when the sale pays it, a margin on a full repay, at least a cent's sale, never more than it has", () => {
     const plain = sharesForRepay({ ...base, targetRaw: usd(25) });
     expect(
       sellMinOut(quoteAt(sharesForRepay({ ...base, targetRaw: usd(25), feeFromSale: true }), 199), aapl, 200),
     ).toBeGreaterThanOrEqual(usd(25 + B));
     expect(sharesForRepay({ ...base, targetRaw: usd(25), full: true })).toBeGreaterThan(plain);
-    expect(quoteAt(sharesForRepay({ ...base, targetRaw: usd(0.1) }), 199).amountOut).toBeGreaterThanOrEqual(usd(1));
+    expect(quoteAt(sharesForRepay({ ...base, targetRaw: usd(0.001) }), 199).amountOut).toBeGreaterThanOrEqual(
+      usd(0.01),
+    );
     expect(sharesForRepay({ ...base, targetRaw: usd(5_000) })).toBe(maxShares);
   });
 });
@@ -431,8 +431,8 @@ describe("Pay with a stock held free: the plan", () => {
     expect(v.done).toBe(REPAY_COPY.doneAll);
   });
 
-  it("All quoted under $1 (a row listed on its estimate) says the smallest repay and can't go ahead", () => {
-    const one = data({ holdings: [holding("AAPLc", "Apple", 200, 0.0052, 0)] });
+  it("All quoted under a cent (a row listed on its estimate) says the smallest repay and can't go ahead", () => {
+    const one = data({ holdings: [holding("AAPLc", "Apple", 200, 0.000052, 0)] });
     const src = repaySources(one, cfs).find((x) => x.id === "free:AAPLc")!;
     const v = planRepay({
       data: one,
@@ -441,8 +441,8 @@ describe("Pay with a stock held free: the plan", () => {
       maxQuote: ready(quoteAt(src.maxSharesRaw, 190)),
       now: tuesday,
     });
-    expect(v.max.usd).toBeLessThan(1);
-    expect(v.note?.text).toBe("The smallest repay is $1.");
+    expect(v.max.usd).toBeLessThan(0.01);
+    expect(v.note?.text).toBe("The smallest repay is $0.01.");
     expect(v.ready).toBe(false);
   });
 

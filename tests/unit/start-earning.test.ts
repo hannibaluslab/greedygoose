@@ -150,8 +150,8 @@ describe("Start earning on Home: when the card shows, what it says, how many JAW
   });
 
   it("counts the wallet only: savings already earn", () => {
-    // $1,935 in savings and $0.40 in the wallet: nothing idle to start earning on.
-    expect(startEarningShown("unconfigured", at(0.4))).toBe(false);
+    // $1,935 in savings and the fee buffer in the wallet: nothing idle to start earning on.
+    expect(startEarningShown("unconfigured", at(CASH.feeBufferUsd))).toBe(false);
   });
 
   it(`oulina's $1.34 qualifies only once the buffer is $0.34 or less (it is $${CASH.feeBufferUsd} here)`, () => {

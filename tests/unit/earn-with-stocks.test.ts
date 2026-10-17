@@ -90,7 +90,7 @@ describe("earnOffer: whether the Cash sheet offers it", () => {
 
   it("needs no agent: offered with earning off, as on the public link", () => {
     const o = open(earnOffer(input({ cash: noAgent })));
-    expect(o).toMatchObject({ kind: "offer", minUsd: 1 });
+    expect(o).toMatchObject({ kind: "offer", minUsd: 0.01 });
     // The same offer whether the Save job runs or not: nothing in it waits for an agent.
     expect(earnOffer(input({ cash: { ...noAgent, saveOn: true } }))).toEqual(o);
     // The old closed states are gone.
@@ -218,8 +218,8 @@ describe("earnQuote: one amount", () => {
     expect(capped.maxUsd).toBe(600);
     const over = quote(capped.maxUsd + 1, { offer: capped });
     expect(earnBlock(over.q, over.offer)).toBe(`Up to $${capped.maxUsd}.`);
-    const under = quote(0.5);
-    expect(earnBlock(under.q, under.offer)).toBe("The smallest amount is $1.");
+    const under = quote(0.005);
+    expect(earnBlock(under.q, under.offer)).toBe("The smallest amount is $0.01.");
     const ok = quote(500);
     expect(earnBlock(ok.q, ok.offer)).toBeNull();
     expect(ok.q).toMatchObject({ cost: 22, left: 19, leftUsdYear: 9 });

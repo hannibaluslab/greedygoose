@@ -55,8 +55,8 @@ const EXISTING = "existing";
 const valueOf = (h: Holding) => h.freeUsd + h.backingUsd;
 /** "Status after" in words, coloured once it needs the extra confirmation. */
 const AFTER_TONE: Record<Status, string> = { none: "", safe: "", watch: "text-watch-text", act: "text-act" };
-/** Free stock worth less than this can't back a Credit Buy here: dust left over reads "All in use". */
-const MIN_BACKING_USD = 1;
+/** Free stock worth less than a cent can't back a Credit Buy: no minimum of ours (ruling 2, Oct 17). */
+const MIN_BACKING_USD = 0.01;
 /** Credit figures in whole dollars, as the boards print them ("$700", "Up to $1,000"). */
 const wholeUsd = (n: number) => formatUsdTrim(Math.max(0, Math.floor(n)));
 
@@ -361,7 +361,7 @@ export function CreditBuySheet({
                           const g = gives.get(h.symbol);
                           const reason =
                             g != null && g < BUY_LIMITS.minUsd && !h.paused && !h.frozen && h.freeUsd >= MIN_BACKING_USD
-                              ? `gives ${formatUsd(Math.max(0, g))} of credit, under the $1 minimum`
+                              ? `gives ${formatUsd(Math.max(0, g))} of credit, under the smallest buy`
                               : unavailable(h)?.toLowerCase();
                           // All in use: the line above already names it.
                           return reason ? [{ name: h.name, reason }] : [];
