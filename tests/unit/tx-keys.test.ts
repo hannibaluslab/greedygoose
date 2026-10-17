@@ -17,7 +17,7 @@ import { FREE_UP_FLOOR } from "@/lib/freeUp";
 import { RISK } from "@/config/risk";
 import type { SellPlan } from "@/lib/sell";
 import type { BuyQuote } from "@/lib/swap/buy";
-import { loanPlan, withdrawPlan } from "@/lib/tx/plans";
+import { withdrawPlan } from "@/lib/tx/plans";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 
@@ -226,30 +226,13 @@ describe("Repay's key", () => {
   });
 });
 
-describe("Use credit's and Free up's keys", () => {
-  it("Use credit by the stocks put in, their amounts and the credit", () => {
-    const k = (locks: { stock: typeof nvda; raw: bigint }[], borrowRaw: bigint) => loanPlan({ user: SAM, locks, borrowRaw }).key;
-    const base = k([{ stock: nvda, raw: 5n }], 10_000_000n);
-    expect(k([{ stock: nvda, raw: 5n }, { stock: aapl, raw: 0n }], 10_000_000n)).toBe(base);
-    for (const other of [
-      k([{ stock: nvda, raw: 6n }], 10_000_000n),
-      k([{ stock: aapl, raw: 5n }], 10_000_000n),
-      k([{ stock: nvda, raw: 5n }], 10_000_001n),
-      loanPlan({ user: ANN, locks: [{ stock: nvda, raw: 5n }], borrowRaw: 10_000_000n }).key,
-    ])
-      expect(other).not.toBe(base);
-  });
-
+describe("Free up's key", () => {
   it("Free up by the stock, the shares and All", () => {
     const k = (p: Partial<Parameters<typeof withdrawPlan>[0]> = {}) => withdrawPlan({ user: SAM, stock: nvda, amountRaw: 5n, all: false, ...p }).key;
     for (const other of [k({ stock: aapl }), k({ amountRaw: 6n }), k({ all: true }), k({ user: ANN })]) expect(other).not.toBe(k());
   });
 
-  it("credit taken and shares freed up are checked on Aave's own health after them; backing alone isn't", () => {
-    expect(loanPlan({ user: SAM, locks: [{ stock: nvda, raw: 5n }], borrowRaw: 10_000_000n }).healthFloor).toBe(CREDIT_FLOOR);
-    expect(loanPlan({ user: SAM, locks: [], borrowRaw: 10_000_000n }).healthFloor).toBe(CREDIT_FLOOR);
-    // Putting stock in use only lifts the health: it goes ahead even in Act.
-    expect(loanPlan({ user: SAM, locks: [{ stock: nvda, raw: 5n }], borrowRaw: 0n }).healthFloor).toBeUndefined();
+  it("shares freed up are checked on Aave's own health after them", () => {
     expect(withdrawPlan({ user: SAM, stock: nvda, amountRaw: 5n, all: false }).healthFloor).toBe(FREE_UP_FLOOR);
     expect(FREE_UP_FLOOR).toEqual({ minHf: RISK.watchMin, stop: "That would put your credit in Act. Free up less, or repay some first." });
   });

@@ -25,7 +25,6 @@ import {
 } from "@/lib/creditBuy";
 import { creditBuyPlan } from "@/hooks/useCreditBuy";
 import { checkPlan, type CheckDeps } from "@/lib/tx/prepared";
-import { loanPlan } from "@/lib/tx/plans";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { statusFor } from "@/lib/risk/status";
 import { buildBuyCalls, minOut, quoteBuy, quotePool, signingQuote, type BuyQuote } from "@/lib/swap/buy";
@@ -404,17 +403,12 @@ describe("Act is the line on Base (Adrian, 2026-10-15)", () => {
     const pick = { option, raw };
     const usdIn = option.freeUsd * (Number(raw) / Number(option.freeRaw));
     const oldMax = Math.floor(usdIn * option.cf * 0.995 * 100) / 100;
-    const cap = planCredit({ position, backing: pick, creditRaw: 0n, cash }).maxUsd;
     // As useTx checks a batch: eth_simulateV1 from the account, with Aave's health read after it.
     const deps: CheckDeps = {
       join: async (_u, batch) => batch,
       simulate: async (u, batch) => (await client.simulateCalls({ account: u, calls: batch.map(({ to, data }) => ({ to, data })) })).results,
       explain: explainRevert,
     };
-    const loan = (creditUsd: number) => loanPlan({ user: newcomer, locks: [{ stock: option.stock, raw }], borrowRaw: usd(creditUsd) });
-    expect(await checkPlan(loan(oldMax), deps)).toEqual({ ok: false, error: CREDIT_BLOCKED.act, blocks: true });
-    expect((await checkPlan(loan(cap), deps)).ok).toBe(true);
-
     // A Credit Buy planned on a stale reading (its screen thought the old MAX ended in Watch): Aave's health stops it.
     const shown = planCredit({ position, backing: pick, creditRaw: usd(oldMax), cash });
     const stale: CreditPlan = { ...shown, block: undefined, after: "watch", extraConfirm: true, limit: { ...shown.limit, maxCreditRaw: usd(oldMax) } };

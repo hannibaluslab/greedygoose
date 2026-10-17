@@ -42,7 +42,7 @@ const EXISTING = "existing";
 const valueOf = (h: Holding) => h.freeUsd + h.lockedUsd;
 /** "Status after" in words, coloured once it needs the extra confirmation. */
 const AFTER_TONE: Record<Status, string> = { none: "", safe: "", watch: "text-watch-text", act: "text-act" };
-/** Free stock worth less than this can't back a Credit Buy here: dust left over reads "All in use", as /use-credit tucks it away. */
+/** Free stock worth less than this can't back a Credit Buy here: dust left over reads "All in use". */
 const MIN_BACKING_USD = 1;
 /** Credit figures in whole dollars, as the boards print them ("$700", "Up to $1,000"). */
 const wholeUsd = (n: number) => formatUsdTrim(Math.max(0, Math.floor(n)));

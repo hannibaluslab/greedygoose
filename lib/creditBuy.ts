@@ -31,7 +31,7 @@ export type BackingPick = { option: BackingOption | null; raw: bigint };
  */
 export type CreditLimit = { maxCreditRaw: bigint; freeRaw: Readonly<Record<string, bigint>> };
 
-/** Free holdings that can back credit, as /use-credit lists them: a collateral factor, not paused or frozen. */
+/** Free holdings that can back credit: a collateral factor, not paused or frozen. */
 export function backingOptions(
   holdings: readonly { symbol: string; freeRaw: bigint; freeUsd: number; paused: boolean; frozen: boolean }[],
   cfs: Record<string, number>,
@@ -85,7 +85,7 @@ export const CREDIT_BLOCKED: Record<CreditBlock, string> = {
 };
 
 /**
- * Every batch that takes credit (Credit Buy, decision 1, Earn with stocks, /use-credit) is stopped if the health on Aave
+ * Every batch that takes credit (Credit Buy, decision 1, Earn with stocks) is stopped if the health on Aave
  * after it, read in its own simulation, is in Act: the screen's cap is planned on the position as last read, Aave lets
  * credit go down to 1.0, and a cut in a stock's collateral factor lands at the borrow (lib/tx/prepared.ts HealthFloor).
  */
@@ -122,7 +122,7 @@ const floorCents = (usd: number) => Math.floor(usd * 100 + 1e-6) / 100;
 
 /**
  * The one cap on taking credit (Act is the line, Adrian 2026-10-15), for every way of taking it: Credit Buy, decision
- * 1's "Use credit for the other $Y", Earn with stocks, /use-credit, and every figure that says how much (usePosition's
+ * 1's "Use credit for the other $Y", Earn with stocks, and every figure that says how much (usePosition's
  * `availableUsd`, Invest's buying power, "You can use up to", MAX and "Up to"). With `lines` put in use and
  * no credit taken yet: the most credit that keeps the health factor at or above CREDIT_CAP.minHf (combinedLoan's
  * maxCredit: net of what's owed, within what can be lent), so a plan may end in Watch but never in Act, and the most
@@ -132,32 +132,6 @@ export function creditCap(pos: CreditPosition, lines: readonly LockLine[] = []):
   if (statusFor(pos.healthFactor) === "act") return { maxUsd: 0, maxSafeUsd: 0 };
   const all = combinedLoan({ ...loanOf(pos), borrowUsd: 0, locks: [...lines] });
   return { maxUsd: floorCents(all.maxCredit), maxSafeUsd: floorCents(all.maxSafe) };
-}
-
-/**
- * /use-credit's checks on what's on screen (Act is the line): with `locks` put in use and `amountUsd` taken, the cap
- * (MAX, "Up to", Credit limit) and the Safe figure, the status after, the one line that blocks it (in Act already;
- * ending in Act; past the cap), D2's tick for Watch, and whether "Pick enough backing for $X" can help: only when the
- * amount is past Safe and all the free stock (`all`) would bring it within the cap, with some of it not in use yet.
- */
-export function loanCheck(p: { position: CreditPosition; locks: readonly LockLine[]; all: readonly LockLine[]; amountUsd: number; moreToPutInUse: boolean }) {
-  const { position: pos, amountUsd } = p;
-  const cap = creditCap(pos, p.locks);
-  const hfAfter = combinedLoan({ ...loanOf(pos), borrowUsd: amountUsd, locks: [...p.locks] }).hfAfter;
-  const after = statusFor(pos.debtUsd + amountUsd > 0 ? hfAfter : null);
-  const overCap = amountUsd > cap.maxUsd;
-  const line =
-    amountUsd <= 0
-      ? null
-      : statusFor(pos.healthFactor) === "act"
-        ? CREDIT_BLOCKED["in-act"]
-        : endsInAct(after)
-          ? CREDIT_BLOCKED.act
-          : overCap
-            ? `That’s more than these stocks can back. Back it with more, or take up to ${formatUsd(cap.maxUsd)}.`
-            : null;
-  const needsFill = amountUsd > 0 && amountUsd > cap.maxSafeUsd && amountUsd <= creditCap(pos, p.all).maxUsd && p.moreToPutInUse;
-  return { maxUsd: cap.maxUsd, maxSafeUsd: cap.maxSafeUsd, after, overCap, line, risky: amountUsd > 0 && !line && needsExtraConfirm(after), needsFill };
 }
 
 /** The most credit with every option in use (creditCap): the MAX and the most that stays Safe. */

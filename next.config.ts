@@ -6,13 +6,14 @@ const nextConfig: NextConfig = {
   // The floating dev badge overlaps the tab bar while testing on a phone.
   devIndicators: false,
   cacheComponents: true,
-  // Renamed routes (D17: no "borrow", "lock" or "unlock" on screen). Old links keep working, query included.
-  // Temporary (307), so browsers don't cache them while route names can still change.
+  // Old routes keep working, query included. Temporary (307), so browsers don't cache them while names can still change.
   redirects: async () => [
-    { source: "/loan", destination: "/use-credit", permanent: false },
-    { source: "/borrow", destination: "/use-credit", permanent: false },
-    { source: "/collateral", destination: "/use-credit", permanent: false },
-    { source: "/unlock", destination: "/free-up", permanent: false },
+    // The POC's credit pages are gone: credit, repaying and freeing up stock all live in the Repay sheet over Home.
+    ...["/credit", "/use-credit", "/free-up", "/loan", "/borrow", "/collateral", "/unlock"].map((source) => ({
+      source,
+      destination: "/home?repay",
+      permanent: false,
+    })),
     // The Market is a sheet on Invest (F1-3): /buy opens it, and /buy?s=NVDAc opens that stock's Buy step.
     { source: "/buy", destination: "/portfolio?market", permanent: false },
     // Manage is gone: each agent's settings live in its sheet on the Agents tab.

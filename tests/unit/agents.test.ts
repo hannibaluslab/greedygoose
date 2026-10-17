@@ -319,7 +319,8 @@ describe("contracts/test/vectors", () => {
       const committed = JSON.parse(readFileSync(new URL(`../../contracts/test/vectors/${name}`, import.meta.url), "utf8"));
       expect(committed, name).toEqual(JSON.parse(JSON.stringify(data)));
     }
-  });
+    // Building every vector takes about 5 s, close to vitest's default limit when the suite runs in parallel.
+  }, 30_000);
 });
 
 describe("jobStatus", () => {

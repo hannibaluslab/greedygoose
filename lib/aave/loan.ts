@@ -1,68 +1,5 @@
 import { CREDIT_CAP, RISK } from "@/config/risk";
 
-/**
- * "Get a loan" planner: given how much USDC the user wants and which stock backs it,
- * work out how much of that stock to lock so the position starts at `targetHf`
- * (default: the Safe line). Uses the position's current weighted collateral factor for
- * what's already locked and the stock's own factor for the new lock. Display/plan only —
- * Aave re-checks everything on-chain and the batch is simulated before signing.
- */
-export type LoanInput = {
-  borrowUsd: number;
-  /** Current position. */
-  collateralUsd: number;
-  avgCf: number;
-  debtUsd: number;
-  /** Backing stock. */
-  priceUsd: number;
-  cf: number;
-  freeUsd: number;
-  /** Health factor to start at (≥ 1). */
-  targetHf?: number;
-  /** USDC Aave can lend right now. */
-  liquidityUsd: number;
-};
-
-export type LoanPlan = {
-  /** USD of the backing stock to lock (0 = existing collateral is enough). */
-  lockUsd: number;
-  /** Fraction of the free balance to lock, 0–1. */
-  lockFraction: number;
-  /** Health factor after lock + borrow. */
-  hfAfter: number;
-  /** Largest borrow possible at the target health using all free stock + existing collateral. */
-  maxBorrowUsd: number;
-  feasible: boolean;
-  reason?: "too-much" | "no-liquidity" | "no-collateral";
-};
-
-export function planLoan(i: LoanInput): LoanPlan {
-  const target = Math.max(1, i.targetHf ?? RISK.safeMin);
-  const existingPower = i.collateralUsd * i.avgCf;
-  const freePower = i.freeUsd * i.cf;
-  const maxBorrowUsd = Math.max(0, Math.min((existingPower + freePower) / target - i.debtUsd, i.liquidityUsd));
-
-  const needPower = target * (i.debtUsd + i.borrowUsd) - existingPower;
-  const lockUsd = i.cf > 0 ? Math.max(0, needPower / i.cf) : needPower > 0 ? Infinity : 0;
-  const capped = Math.min(lockUsd, i.freeUsd);
-  const debtAfter = i.debtUsd + i.borrowUsd;
-  const hfAfter = debtAfter > 0 ? (existingPower + capped * i.cf) / debtAfter : Infinity;
-
-  let reason: LoanPlan["reason"];
-  if (i.borrowUsd > i.liquidityUsd) reason = "no-liquidity";
-  else if (existingPower + freePower <= 0) reason = "no-collateral";
-  else if (lockUsd > i.freeUsd + 1e-9) reason = "too-much";
-
-  return {
-    lockUsd: Number.isFinite(capped) ? capped : 0,
-    lockFraction: i.freeUsd > 0 ? Math.min(1, capped / i.freeUsd) : 0,
-    hfAfter,
-    maxBorrowUsd,
-    feasible: i.borrowUsd > 0 && !reason,
-    reason,
-  };
-}
-
 /** One stock the user is locking in a combined loan, valued at Aave's price. */
 export type LockLine = { key: string; usd: number; cf: number; freeUsd: number };
 
@@ -138,15 +75,3 @@ export function autoFill(p: {
   return out;
 }
 
-/** The Repay screen's amounts (CreditOn): $100 and $300, as the board offers them. */
-const REPAY_CHIPS = [100, 300];
-
-/**
- * Whole-dollar amounts to offer next to "All": the board's $100 and $300 when both are below `maxUsd` (the most the
- * cash can repay), else a quarter and a half of it, so a small loan still gets two choices.
- */
-export function repayChips(maxUsd: number): number[] {
-  const fit = REPAY_CHIPS.filter((v) => v < maxUsd);
-  const chips = fit.length === REPAY_CHIPS.length ? fit : [Math.floor(maxUsd / 4), Math.floor(maxUsd / 2)];
-  return chips.filter((v, i, a) => v > 0 && v < maxUsd && a.indexOf(v) === i);
-}

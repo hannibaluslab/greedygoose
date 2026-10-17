@@ -148,7 +148,7 @@
 }
 
 /* NYM's scales, as NYM ships them. Leo's code was moved off the names these redefine
-   (rounded-xs…xl, leading-tight) by scripts/rename-colors.mjs. */
+   (rounded-xs…xl, leading-tight) by a one-off rename, so both sets can live here. */
 @theme {
   --radius-xs: 6px;
   --radius-sm: 10px;
