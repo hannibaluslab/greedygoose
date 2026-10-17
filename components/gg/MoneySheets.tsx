@@ -29,7 +29,7 @@ export function useMoneySheets() {
   return {
     topUp: () => go("top-up"),
     /** The Repay sheet; with a stock, open on "free up" with that stock ticked (its stock sheet's Free up shares). */
-    repay: (free?: string) => go("repay", free),
+    repay: (free?: string) => go("repay", typeof free === "string" ? free : undefined),
   };
 }
 

@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { InfoIcon } from "./icons";
 import { Money } from "./Money";
 import { formatSignedPct, formatSignedUsd } from "@/lib/formatting";
@@ -22,12 +24,11 @@ export function BalanceHero({
   side: Column & { value: ReactNode; unit?: string };
   /** Two equal columns, not the figure's own width (Invest). */ even?: boolean;
 }) {
-  const k = fit(value);
   return (
     <div
-      className={`num grid ${even ? "grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" : "grid-cols-[auto_1fr]"} items-baseline px-[16.75px] leading-[normal]`}
+      className={`num grid ${even ? "grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" : "grid-cols-[157px_1fr]"} items-baseline px-[16.75px] leading-[normal]`}
     >
-      {/* The left column keeps its own width, the hero's proportion (Adrian); a long right line wraps instead. */}
+      {/* The left column never grows (Adrian, 2026-10-18): a total that doesn't fit gets smaller instead. */}
       <div className="flex items-center gap-1.5 whitespace-nowrap pb-1">
         <span className="label">{label}</span>
         {info && <InfoButton {...info} />}
@@ -37,7 +38,7 @@ export function BalanceHero({
         {side.info && <InfoButton {...side.info} />}
       </Divided>
 
-      <Money value={value} size={46 * k} dollarSize={22 * k} centsSize={19 * k} />
+      {even ? <ScaledMoney value={value} k={fit(value)} /> : <FitMoney value={value} />}
       {/* 8px under its label (Adrian: not tight under it, not down on the big figure's foot); stretched so the
           hairline runs on. */}
       <Divided className="flex items-start justify-center self-stretch pt-2">
@@ -57,6 +58,38 @@ export function BalanceHero({
         </>
       )}
     </div>
+  );
+}
+
+const ScaledMoney = ({ value, k }: { value: number; k: number }) => (
+  <Money value={value} size={46 * k} dollarSize={22 * k} centsSize={19 * k} />
+);
+
+/** The hero's left column: the board's "$5,000.00" at 46px. */
+const HERO_PX = 157;
+
+/**
+ * The total, as big as the board draws it, and smaller when it wouldn't fit the left column: its width is measured at
+ * full size (an invisible copy), so the figure shrinks to the column, the column never grows and Credit keeps its room.
+ */
+function FitMoney({ value }: { value: number }) {
+  const probe = useRef<HTMLSpanElement>(null);
+  const [k, setK] = useState(() => fit(value));
+  useLayoutEffect(() => {
+    const measure = () => {
+      const w = probe.current?.getBoundingClientRect().width;
+      if (w) setK(Math.min(1, HERO_PX / w));
+    };
+    measure();
+    void document.fonts?.ready.then(measure);
+  }, [value]);
+  return (
+    <span className="relative block min-w-0">
+      <span ref={probe} aria-hidden className="invisible absolute left-0 top-0 whitespace-nowrap">
+        <ScaledMoney value={value} k={1} />
+      </span>
+      <ScaledMoney value={value} k={k} />
+    </span>
   );
 }
 

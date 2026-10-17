@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { GooseMark } from "./GooseMark";
 import { MenuButton } from "./MenuButton";
 import { useAccountName } from "@/hooks/useAccountName";
@@ -11,7 +12,7 @@ import { shortAddress } from "@/lib/formatting";
  * it says "Hi there" over the short address; while the name loads, two quiet bars hold its place. The round mark
  * is the GreedyGoose logo on ink (Adrian, 2026-10-14), not the name's initial.
  */
-export function Header({ address }: { address: `0x${string}` }) {
+export function Header({ address, aside }: { address: `0x${string}`; aside?: ReactNode }) {
   const { data: name, isPending } = useAccountName(address);
   return (
     <header className="flex items-center justify-between px-5 pt-[calc(env(safe-area-inset-top)+2px)]">
@@ -31,7 +32,10 @@ export function Header({ address }: { address: `0x${string}` }) {
           </div>
         )}
       </div>
-      <MenuButton />
+      <div className="flex items-center gap-2">
+        {aside}
+        <MenuButton />
+      </div>
     </header>
   );
 }

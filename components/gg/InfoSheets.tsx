@@ -5,6 +5,9 @@ import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { Button } from "./Button";
 import { CASH } from "@/config/risk";
 import { formatUsd, formatUsdTrim } from "@/lib/formatting";
+import { leverageOf, leverageText } from "@/lib/leverage";
+import type { Status } from "@/lib/risk/status";
+import { StatusPill } from "./Status";
 
 const CASH_DOT = "#1f6a4a";
 const STOCKS_DOT = "#76b900";
@@ -154,5 +157,91 @@ function Total({ label, value }: { label: string; value: ReactNode }) {
       <span className="font-semibold">{label}</span>
       <span className="font-bold">{value}</span>
     </div>
+  );
+}
+
+/**
+ * "Your leverage" (canvas board 13, no greed points): what the 1.7x on Home means, as one division, what you hold ÷
+ * what's yours, and the bar of the two: yours, and what runs on credit. Its status pill follows the credit.
+ */
+export function LeverageSheet({
+  open,
+  onClose,
+  holdUsd,
+  owedUsd,
+  status,
+}: {
+  open: boolean;
+  onClose: () => void;
+  holdUsd: number;
+  owedUsd: number;
+  status: Status;
+}) {
+  const x = leverageOf({ holdUsd, owedUsd });
+  const yours = Math.max(0, holdUsd - owedUsd);
+  const whole = (usd: number) => formatUsdTrim(Math.round(usd));
+  return (
+    <SheetShell
+      open={open}
+      onOpenChange={(next) => !next && onClose()}
+      look="info"
+      title="Your leverage"
+      titleAccessory={<StatusPill status={status} size="sm" />}
+      description="How much of what you hold runs on credit."
+    >
+      <SheetSteps stepKey="leverage" className="num flex flex-col gap-[18px] leading-[normal]">
+        <div className="flex flex-col gap-3 rounded-[22px] bg-card p-4 shadow-card-elev">
+          <div
+            role="img"
+            aria-label={`${whole(holdUsd)} you hold divided by ${whole(yours)} yours equals ${x ? leverageText(x) : "no"} leverage`}
+            className="flex items-start justify-between"
+          >
+            <Term value={whole(holdUsd)} label="you hold" />
+            <span aria-hidden className="pt-0.5 text-[20px] text-subtle">
+              ÷
+            </span>
+            <Term value={whole(yours)} label="yours" />
+            <span aria-hidden className="pt-0.5 text-[20px] text-subtle">
+              =
+            </span>
+            <span className="flex flex-col items-center gap-0.5">
+              <span className="flex h-7 items-center rounded-[14px] bg-ink px-2.5 text-[16px] font-bold text-brand">
+                {x ? leverageText(x) : "1.0x"}
+              </span>
+              <span className="text-[12px] text-ink-mid">leverage</span>
+            </span>
+          </div>
+          <div aria-hidden className="flex h-3 gap-1">
+            <span
+              className="rounded-md bg-brand shadow-[inset_0_0_0_1px_rgba(14,13,11,0.12)]"
+              style={{ flex: yours || 1 }}
+            />
+            {owedUsd > 0 && <span className="rounded-md bg-ink" style={{ flex: owedUsd }} />}
+          </div>
+          <div className="flex justify-between text-[13px] text-ink-2">
+            <span className="flex items-center gap-1.5">
+              <span aria-hidden className="size-2 rounded-full bg-brand shadow-[inset_0_0_0_1px_rgba(14,13,11,0.2)]" />
+              Yours <b className="font-semibold text-ink">{whole(yours)}</b>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span aria-hidden className="size-2 rounded-full bg-ink" />
+              On credit <b className="font-semibold text-ink">{whole(owedUsd)}</b>
+            </span>
+          </div>
+        </div>
+        <Button variant="dark" onClick={onClose} className="w-full">
+          Got it
+        </Button>
+      </SheetSteps>
+    </SheetShell>
+  );
+}
+
+function Term({ value, label }: { value: string; label: string }) {
+  return (
+    <span className="flex flex-col items-center gap-0.5">
+      <span className="text-[22px] font-semibold tracking-[-0.02em]">{value}</span>
+      <span className="text-[12px] text-ink-mid">{label}</span>
+    </span>
   );
 }

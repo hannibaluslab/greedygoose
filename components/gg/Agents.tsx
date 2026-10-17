@@ -82,7 +82,7 @@ export function AttentionCard({
       <Button
         key={a.label}
         variant={i === 0 ? "dark" : "primary"}
-        onClick={a.sheet === "top-up" ? money.topUp : money.repay}
+        onClick={a.sheet === "top-up" ? money.topUp : () => money.repay()}
       >
         {a.label}
       </Button>

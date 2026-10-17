@@ -7,14 +7,21 @@ export function QuickAction({
   icon,
   href,
   onClick,
+  dim = false,
 }: {
   label: string;
   icon: ReactNode;
   href?: string;
   onClick?: () => void;
+  /** Nothing to do here right now (board 2g's fade): still tappable, to say why. */
+  dim?: boolean;
 }) {
   return (
-    <Tap href={href} onClick={onClick} className="flex flex-col items-center gap-[7px] leading-[normal]">
+    <Tap
+      href={href}
+      onClick={onClick}
+      className={`flex flex-col items-center gap-[7px] leading-[normal] ${dim ? "opacity-60" : ""}`}
+    >
       <span aria-hidden className="flex size-12 items-center justify-center rounded-3xl bg-ink text-on-ink">
         {icon}
       </span>

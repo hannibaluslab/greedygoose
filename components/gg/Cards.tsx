@@ -1,7 +1,7 @@
 import { MoneyCompact } from "./Money";
 import { StatusPill } from "./Status";
 import { Tap } from "./Tap";
-import { ChevronRight } from "./icons";
+import { ChevronRight, InfoIcon } from "./icons";
 import type { Status } from "@/lib/risk/status";
 import { formatUsdTrim, monthlyCostText } from "@/lib/formatting";
 
@@ -71,8 +71,10 @@ export function YieldCard({
     >
       <span className="flex items-center justify-between">
         <span className="text-[14px] font-semibold">Yield</span>
-        <span className="flex h-[22px] items-center rounded-[6px] bg-pill px-[7px] font-mono text-[10px] font-medium tracking-[0.04em] text-ink-mid">
+        {/* Ruling 4: the ⓘ says the card opens what the rate is and why it moves. */}
+        <span className="flex h-[22px] items-center gap-1 rounded-[6px] bg-pill px-[7px] font-mono text-[10px] font-medium tracking-[0.04em] text-ink-mid">
           VARIABLE
+          <InfoIcon aria-hidden size={12} />
         </span>
       </span>
       <span className="flex items-baseline gap-1.5">

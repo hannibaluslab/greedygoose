@@ -14,7 +14,7 @@ import { CashSheet } from "@/components/gg/CashSheet";
 import { useMoneySheets } from "@/components/gg/MoneySheets";
 import { StockSheets, useStockSheets } from "@/components/gg/StockSheets";
 import { ValueLine } from "@/components/gg/ValueLine";
-import { TotalBalanceSheet, YieldSheet } from "@/components/gg/InfoSheets";
+import { LeverageSheet, TotalBalanceSheet, YieldSheet } from "@/components/gg/InfoSheets";
 import { StockAvatar } from "@/components/gg/StockAvatar";
 import { ChevronRight, CreditIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/icons";
 import { MarketBanner } from "@/components/ui/MarketBanner";
@@ -26,6 +26,8 @@ import { usePosition, type PositionData } from "@/hooks/usePosition";
 import { aprToApy } from "@/lib/aave/math";
 import { arrivedCoins, arrivedView, earningLine, rateText, type ArrivedView } from "@/lib/cashSetup";
 import { homeStatus } from "@/lib/risk/status";
+import { leverageOf, leverageText } from "@/lib/leverage";
+import { toast } from "sonner";
 import { StatusPill } from "@/components/gg/Status";
 import { formatUsdTrim, monthlyCostText } from "@/lib/formatting";
 import { EQUITIES } from "@/lib/tokens/registry";
@@ -35,7 +37,7 @@ export default function HomePage() {
   return <RequireAccount>{(address) => <Home address={address} />}</RequireAccount>;
 }
 
-type Sheet = "total" | "yield" | "cash";
+type Sheet = "total" | "yield" | "cash" | "leverage";
 
 /**
  * Design board "2 · Home · portfolio: Rail" (HomeUpliftRail.dc.html), with its sheets: Total balance (HomeInfo) and
@@ -67,7 +69,7 @@ function Home({ address }: { address: `0x${string}` }) {
 
   return (
     <div className="relative flex min-h-dvh flex-col">
-      <Header address={address} />
+      <Header address={address} aside={data && <LeverageTag data={data} onOpen={() => setSheet("leverage")} />} />
 
       {isError && !data && (
         <div className="mx-5 mt-4 rounded-[22px] bg-card p-4 shadow-card-elev">
@@ -123,6 +125,13 @@ function Home({ address }: { address: `0x${string}` }) {
             cashUsd={data.cashUsd}
             stocksUsd={data.stocksUsd}
             debtUsd={data.debtUsd}
+          />
+          <LeverageSheet
+            open={sheet === "leverage"}
+            onClose={close}
+            holdUsd={data.stocksUsd + data.cashUsd}
+            owedUsd={data.debtUsd}
+            status={data.status}
           />
           <YieldSheet
             open={sheet === "yield"}
@@ -200,7 +209,7 @@ function Loaded({
           side={{
             label: "Credit",
             // The one credit sheet is Repay's (Adrian, 2026-10-15): with nothing owed it says only that.
-            info: { label: "Your credit", onClick: money.repay },
+            info: { label: "Your credit", onClick: () => money.repay() },
             // The "$" drawn as the total balance draws it (Adrian): smaller, in the mid ink.
             value: (
               <>
@@ -212,7 +221,8 @@ function Loaded({
             // Board 2f: the status and what the credit costs a month, always (Safe and $0 / month with none taken).
             sub: (
               <span className="inline-flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1">
-                <StatusPill status={homeStatus(data.status)} size="sm" />
+                {/* Ruling 1: with nothing owed it says so, not "Safe". */}
+                <StatusPill status={data.debtRaw > 0n ? homeStatus(data.status) : "none"} size="sm" />
                 <span className="whitespace-nowrap">
                   {monthlyCostText(data.monthlyCostUsd).replace(" / month", "")} /
                   <span className="text-[11px]">month</span>
@@ -235,7 +245,13 @@ function Loaded({
         <QuickAction onClick={openTrade} label="Trade" icon={<TradeIcon />} />
         <QuickAction onClick={money.topUp} label="Top up" icon={<PlusIcon />} />
         <QuickAction onClick={openCreditBuy} label="Credit Buy" icon={<CreditIcon />} />
-        <QuickAction onClick={money.repay} label="Repay" icon={<RepayIcon />} />
+        {/* Rulings 3 and 38: nothing owed, Repay fades and a tap says why. */}
+        <QuickAction
+          onClick={data.debtRaw > 0n ? () => money.repay() : () => toast("Nothing owed")}
+          dim={data.debtRaw === 0n}
+          label="Repay"
+          icon={<RepayIcon />}
+        />
       </section>
 
       <section className="flex flex-col gap-2.5 px-5 pt-[18px] empty:hidden">{cards}</section>
@@ -330,6 +346,10 @@ function EmptyPortfolio() {
       </div>
       <p className="m-0 text-[15px] font-semibold tracking-[-0.01em]">You don’t hold any stocks yet</p>
       <span className="sr-only">{EQUITIES.map((e) => e.name).join(", ")}</span>
+      {/* Ruling 5: the first step, as a text link (Top up and Trade sit above it). */}
+      <Link href="/buy" className="text-[14px] font-semibold text-ink underline underline-offset-2">
+        Buy your first stock
+      </Link>
     </div>
   );
 }
@@ -366,5 +386,25 @@ function BalanceLine({
       caption=""
       neutral={flat}
     />
+  );
+}
+
+/**
+ * The leverage tag (canvas board 12): what you hold ÷ your own money, next to the menu while something is owed. A tap
+ * opens "Your leverage".
+ */
+function LeverageTag({ data, onOpen }: { data: PositionData; onOpen: () => void }) {
+  const x = leverageOf({ holdUsd: data.stocksUsd + data.cashUsd, owedUsd: data.debtUsd });
+  if (!x) return null;
+  const text = leverageText(x);
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={`Your leverage: ${text}. What it means`}
+      className="num flex h-[30px] items-center rounded-[15px] bg-ink px-2.5 text-[13px] font-bold text-brand"
+    >
+      {text}
+    </button>
   );
 }
