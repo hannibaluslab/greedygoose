@@ -47,3 +47,6 @@ keeper/.state.json
 contracts/out/
 contracts/cache/
 contracts/broadcast/
+
+# Rehearsal (scripts/rehearsal): the local fork's state and deploy record; .env.rehearsal.local is covered by .env*
+/.rehearsal/

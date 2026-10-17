@@ -9,6 +9,7 @@ import { GooseMark } from "@/components/gg/GooseMark";
 import { CreditIcon, InvestIcon, SaveIcon } from "@/components/gg/icons";
 import { useCashRate } from "@/hooks/useCashRate";
 import { ATTESTATION_TEXT, ELIGIBILITY_MODE, hasAttested, recordAttestation } from "@/lib/eligibility";
+import { SIGN_IN_CONNECTOR_TYPE } from "@/lib/jaw/config";
 
 const noopSubscribe = () => () => {};
 
@@ -47,7 +48,7 @@ export function Welcome() {
     if (gated) return;
     recordAttestation();
     reset();
-    const jaw = connectors.find((c) => c.type === "jaw");
+    const jaw = connectors.find((c) => c.type === SIGN_IN_CONNECTOR_TYPE);
     if (jaw) connect({ connector: jaw });
   };
 
