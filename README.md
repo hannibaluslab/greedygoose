@@ -2,7 +2,7 @@
 
 GreedyGoose is a mobile-first app on Base for buying and selling supported tokenized stocks, using eligible stocks as collateral, and managing USDC credit through Aave V4. Accounts use JAW passkeys.
 
-> **Start here:** Read [docs/JUSTALAB-DECISIONS.md](docs/JUSTALAB-DECISIONS.md) before changing product behavior. It is the current source of truth and overrides inherited guidance in CLAUDE.md and docs/PARKED.md. If this README conflicts with it, the decision log wins.
+> **Start here:** [docs/SPEC.md](docs/SPEC.md) holds the product rules and wins over every other doc, this README included. [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) holds the code layout and conventions. [docs/JUSTALAB-DECISIONS.md](docs/JUSTALAB-DECISIONS.md) is the record of why each rule exists.
 
 Tokenized stocks track stock prices; they are not company shares and do not earn yield.
 
@@ -25,6 +25,7 @@ npm run dev
 ## Checks
 
 ~~~bash
+npm run check            # lint, types, format, dead code, unit tests (what CI runs, plus the build)
 npm test
 npm run verify:registry  # Checks registered assets and simulates calls; sends no transactions.
 npm run typecheck

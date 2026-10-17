@@ -2,6 +2,8 @@
 
 Next.js version notes: @AGENTS.md
 
+> **v2: read @docs/SPEC.md first.** It holds the product rules and wins over this file and the decisions log. @docs/ARCHITECTURE.md holds the code conventions; run `npm run check` before every commit.
+
 > **JustaLab decisions come first.** Read @docs/JUSTALAB-DECISIONS.md before anything below. Where it conflicts with this file or `docs/PARKED.md`, it wins (agents in scope, no server, JAW permission screens, cash is savings and one pot on screen, Save and Receive invisible, five tabs, no "borrow" or "lock" on screen, and "Act is the line": every way of taking credit, and Free up, stops at health 1.12 and never ends in Act, which replaces D2's "no cap below Aave's"; and Protect, Guardian included, steps in only in Act and brings the credit back to Watch at 1.20, never acting in Watch).
 
 ## Mission

@@ -1,0 +1,92 @@
+# GreedyGoose spec
+
+The product rules for v2, in one place. Where this file and `CLAUDE.md`, `docs/PARKED.md` or `docs/JUSTALAB-DECISIONS.md`
+disagree, this file wins. The decisions log stays as the record of why each rule exists.
+
+- Design reference: the GreedyGoose canvases (core boards; the Repay + free up canvas, boards 1–14). The coded UI matches
+  them. A rule below wins over a board when they disagree (for example, no stock APY).
+- Build plan: the GreedyGoose v2 build plan (Claude Doc), milestones V0–V5.
+- Code layout and conventions: [ARCHITECTURE.md](ARCHITECTURE.md).
+
+Rules marked **(to build)** are decided but not in the code yet.
+
+## The product
+
+An invest-and-earn app on Base, signed in with a JAW passkey.
+
+- **Cash** always earns: it is the Aave V3 savings balance plus the wallet's USDC, shown as one pot. Buys and repays
+  take from savings inside the same signature.
+- **Stocks** are the 7 Coinbase tokenized stocks (Apple, Amazon, Alphabet, Meta, Microsoft, NVIDIA, Tesla). They earn
+  no yield, so no stock shows an APY. "Not company shares" appears once, on the stock sheet.
+- **Credit** is USDC on the Aave V4 Equities spoke, backed by the user's stocks.
+- **Agents** run on-chain in `GooseExecutor`, triggered by Chainlink Automation. There is no server and no database:
+  the app reads everything from Base, and the price route is stateless.
+
+## Credit health
+
+| Band  | Health factor | What happens                                         |
+| ----- | ------------- | ---------------------------------------------------- |
+| Safe  | 1.5 and above | Nothing                                              |
+| Watch | 1.1 to 1.5    | Allowed. Ending in Watch asks for one tick           |
+| Act   | under 1.1     | Protect steps in. Nothing the user does may end here |
+
+- **1.12 is the line.** Taking credit and freeing stock never end below 1.12 (Act line + 0.02). There is no other cap
+  on leverage.
+- **Aave's own check runs before JAW's sheet.** Every batch that takes credit or frees stock is simulated on Base with
+  the health read after it; a result under 1.10 stops it.
+- **Protect** acts only in Act. It repays from cash first, sells backing stock only if cash can't, and brings the
+  credit back to 1.20. It never acts in Safe or Watch and never sells on a weekend.
+
+## Money rules
+
+- **Fuel tank:** $0.10 of cash stays back for network fees. Buying power is cash minus the fuel tank, in cents.
+  **(to build: shown in Settings, and a fee estimate of "~$0.01")**
+- **No minimums of ours.** Only Aave's and Base's own limits apply, plus the $0.01 arrivals filter. **(to build)**
+- **No dust.** Sell all or Max leaves nothing; a sale that would leave under $1 sells everything. **(to build)**
+
+## Repay **(to build: canvas boards 1–8)**
+
+- One sheet over the page: Pay with (cash or a stock) and the amount, then an optional "Also free up stocks".
+- Ticked stocks share one limit that stops at 1.12. A chip shows the % of the shares held (25%, 50%, Max, All); the
+  line under the stock shows the shares, "0.60 of 2.40 shares". All carries a padlock until the repay covers it.
+- Repay and free up go in one signature: repay first, then take each ticked stock out.
+- **Repay all** repays every cent and returns every stock, in one signature.
+- Paying with a stock that backs credit can go to Aave's own limit (less 0.5%), because the debt drops in the same
+  signature.
+
+## Stocks that back credit **(to build: canvas boards 9–11)**
+
+Sell, Trade and Send on a backing stock follow one rule: **Up to $X** = the free shares plus what the 1.12 line allows,
+in one signature. To do more, repay first. No redirects and no extra lines.
+
+## Leaderboard **(to build)**
+
+- Return counts on the user's own money only, so winning with credit lifts the rank.
+- **Greedy Fatalities:** every liquidated account is named automatically on its own tab, ranked by its multiple at the
+  end. The rule is stated once before the first credit.
+- Greed tag and levels: drawn (canvas boards 12–14), not decided.
+
+## Agents
+
+- Visible: **Protect** and **Rebalance**, on the Agents tab.
+- Invisible: earning on idle cash (Save) and turning other dollars into cash (Receive). Their permissions are asked
+  when money first arrives.
+- Permissions go through JAW's own screens; the spender is `GooseExecutor`. Each limit is one typed amount **(to
+  build)**.
+- Rebalance only moves stocks that don't back credit, and never spends cash beyond the network fee.
+
+## Words
+
+- Never on screen: borrow, loan, lock, locked, unlock, collateral, room, protocol names in instructions. Never: cooked,
+  goosed, golden.
+- Use: credit, backs credit, free up, get back, in use, Cash.
+- JAW appears only as the trust mark ("Enforced by JAW.id").
+- Buttons name the intent only ("Repay", "Repay & free up"). No confirm screens of ours: JAW's sheet is the
+  confirmation.
+
+## Working rules
+
+- Claude never moves real money; Adrian signs every real step in the app.
+- Keys are never printed. `.env.local` and the deployer key stay private.
+- Push to `origin` (hannibaluslab/greedygoose) only, never to the `leo` remote.
+- An approved screen never changes as a side effect. Big product calls are asked first.
