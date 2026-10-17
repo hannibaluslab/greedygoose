@@ -43,7 +43,7 @@ const prices = (values: unknown[] | undefined) =>
 const ticker = (symbol: string) => symbol.toUpperCase();
 
 /** A stock's quote: its price, today's change as a fraction and its 24-hour line. */
-export type JawQuote = Omit<MarketData, "week">;
+type JawQuote = Omit<MarketData, "week">;
 
 /** Quotes for these registry symbols in one /markets call. A stock JAW has no row for is left out. */
 export async function fetchJawQuotes(symbols: readonly string[], signal?: AbortSignal): Promise<Record<string, JawQuote>> {

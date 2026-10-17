@@ -21,7 +21,7 @@ export const FREE_UP_BLOCKED = {
 /** Free up's batch is stopped if the health on Aave after it, read in its simulation, is in Act (lib/tx/prepared.ts). */
 export const FREE_UP_FLOOR: HealthFloor = { minHf: RISK.watchMin, stop: FREE_UP_BLOCKED.act };
 
-export type FreeUpCheck = {
+type FreeUpCheck = {
   /** The most that comes out, in dollars at Aave's price: all of it with nothing owed, else down to the cap's line. */
   maxUsd: number;
   /** All of it can come out (the button says ALL, not MAX). */

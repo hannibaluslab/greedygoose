@@ -15,7 +15,7 @@ const NOTICE: Record<Exclude<CashFeedError, null>, string> = {
   some: "We couldn’t load all of your activity.",
 };
 
-export const CASH_EMPTY = "Nothing in the last 7 days. Money that comes in, becomes cash or goes out shows up here.";
+const CASH_EMPTY = "Nothing in the last 7 days. Money that comes in, becomes cash or goes out shows up here.";
 
 /** The Cash sheet's activity, read while the sheet is open (the hook mounts inside the drawer's content). */
 export function CashActivity({ account }: { account: `0x${string}` }) {

@@ -28,7 +28,7 @@ const CAPTION = { char: 6.8, h: 12 };
 /** Room kept between the caption and the line: half the hero's stroke and a pixel. */
 const CLEAR = 2;
 
-export type Corner = "top-left" | "bottom-left" | "top-right" | "bottom-right";
+type Corner = "top-left" | "bottom-left" | "top-right" | "bottom-right";
 const CORNERS: Corner[] = ["top-left", "bottom-left", "top-right", "bottom-right"];
 const CORNER_CLASS: Record<Corner, string> = {
   "top-left": "left-0 top-0",

@@ -4,7 +4,7 @@
  * price is held and interest still accrues. Holidays are not modelled here —
  * feed staleness is the authoritative signal once wired in.
  */
-export type MarketState = { open: boolean; reopensLabel: string };
+type MarketState = { open: boolean; reopensLabel: string };
 
 function nyParts(now: Date) {
   const f = new Intl.DateTimeFormat("en-US", {

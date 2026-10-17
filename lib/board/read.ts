@@ -11,12 +11,12 @@ import { readHoldings, readPrices, stockUsd6, worth6, type Holdings, type Prices
 import { GUARDIAN } from "@/lib/guardian/config";
 import { USDC } from "@/lib/tokens/registry";
 
-export type Member = { account: Address; joinedAt: bigint };
+type Member = { account: Address; joinedAt: bigint };
 
 /** One row of the board: percent only. `pct` is null and `rank` is null for a member who isn't ranked yet. */
-export type BoardRow = Member & { pct: number | null; rank: number | null };
+type BoardRow = Member & { pct: number | null; rank: number | null };
 
-export type Board = { head: bigint; rows: BoardRow[] };
+type Board = { head: bigint; rows: BoardRow[] };
 
 /** Members per page() call. */
 const PAGE = 500n;
@@ -35,7 +35,7 @@ const SETTLED = 64n;
 const IDLE_USD6 = 1_000_000n;
 
 /** Everyone on the board now, in the order they first joined, as of `blockNumber`. */
-export async function readMembers(client: Client, board: Address, blockNumber: bigint): Promise<Member[]> {
+async function readMembers(client: Client, board: Address, blockNumber: bigint): Promise<Member[]> {
   const count = await stateLimit(() => readContract(client, { address: board, abi: gooseBoardAbi, functionName: "memberCount", blockNumber }));
   const starts: bigint[] = [];
   for (let start = 0n; start < count; start += PAGE) starts.push(start);

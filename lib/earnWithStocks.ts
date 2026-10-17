@@ -35,7 +35,7 @@ import type { HealthFloor } from "@/lib/tx/prepared";
  * exact. The epsilon keeps a rate that is exactly on a tenth (4.1%) from rounding the wrong way in floating point.
  */
 export const earnTenths = (apy: number) => Math.floor(apy * 1000 + 1e-6);
-export const costTenths = (apy: number) => Math.ceil(apy * 1000 - 1e-6);
+const costTenths = (apy: number) => Math.ceil(apy * 1000 - 1e-6);
 /** Tenths of a point as on screen: 41 → "4.1%". */
 export const pctText = (tenths: number) => `${(tenths / 10).toFixed(1)}%`;
 
@@ -71,10 +71,10 @@ export const EARN_CLOSED = {
   fee: CREDIT_BLOCKED.fee,
   unread: "We couldn’t check this right now. Try again in a moment.",
 } as const;
-export type EarnClosed = keyof typeof EARN_CLOSED;
+type EarnClosed = keyof typeof EARN_CLOSED;
 
 /** The smallest amount, the minimum buy's: under $1 a row's cost and earnings round to nothing. */
-export const EARN_MIN_USD = 1;
+const EARN_MIN_USD = 1;
 
 export type EarnOffer =
   | { kind: "loading" }
@@ -168,7 +168,7 @@ export function earnQuote(p: {
 }
 
 /** The plan's blocks in the Cash sheet's own words: no protocol names. */
-export const EARN_BLOCKED: Record<CreditBlock, string> = {
+const EARN_BLOCKED: Record<CreditBlock, string> = {
   paused: EARN_CLOSED.paused,
   "no-liquidity": "There isn’t enough credit available right now. Try a smaller amount.",
   "over-free": CREDIT_BLOCKED["over-free"],

@@ -35,7 +35,7 @@ export type SellInput = {
   debtRaw: bigint;
 };
 
-export const SELL_FALLBACK: Record<SellFrom, string> = {
+const SELL_FALLBACK: Record<SellFrom, string> = {
   free: "This sale would fail right now — the price may have moved or the stock may be paused. Try again in a moment.",
   backing: "This sale would fail right now — the price or Aave’s limits may have moved. Try a smaller amount in a moment.",
   // On the Repay sheet (Pay with a stock that backs the credit): no protocol words on screen.

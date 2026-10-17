@@ -4,7 +4,7 @@
  * Modes: off | attest | geo+attest. The geo check is a TODO hook (needs an edge
  * header such as x-vercel-ip-country) — attestation is enforced client-side now.
  */
-export type EligibilityMode = "off" | "attest" | "geo+attest";
+type EligibilityMode = "off" | "attest" | "geo+attest";
 
 export const ELIGIBILITY_MODE: EligibilityMode =
   (process.env.NEXT_PUBLIC_ELIGIBILITY_MODE as EligibilityMode | undefined) ?? "geo+attest";

@@ -10,7 +10,7 @@
  * `lib/jaw/config.ts` checks the same two values inline before it loads the signer, so the bundler drops the signer
  * from a production build (`npm run rehearsal:check-build` proves it).
  */
-export type RehearsalEnv = { NODE_ENV?: string; NEXT_PUBLIC_REHEARSAL_RPC?: string };
+type RehearsalEnv = { NODE_ENV?: string; NEXT_PUBLIC_REHEARSAL_RPC?: string };
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 

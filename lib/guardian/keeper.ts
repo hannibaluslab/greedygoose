@@ -51,7 +51,7 @@ export async function discoverPermissions(
   return found;
 }
 
-export type AccountResult =
+type AccountResult =
   | { account: Address; status: "skipped"; why: "revoked-or-unapproved" | "expired" }
   | { account: Address; status: "checked"; decision: GuardianDecision }
   | { account: Address; status: "repaid"; decision: GuardianDecision; amountRaw: bigint; txHash: `0x${string}` }

@@ -39,7 +39,7 @@ const MIN_USD = 0.01;
 /** The round mark beside a row: the cash's green $, the stock's badge, or Protect's and Rebalance's marks. */
 export type CashMark = { kind: "cash" } | { kind: "stock"; symbol: string } | { kind: "agent"; agent: "Protect" | "Rebalance" };
 
-export type CashDetail = { label: string; value: Words };
+type CashDetail = { label: string; value: Words };
 
 export type CashRow = {
   key: string;
@@ -68,9 +68,9 @@ const WHEN = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", 
 /** "+$100.00", "−$40.00" (U+2212, as on the boards). */
 export const signedUsd = (usd: number) => `${usd < 0 ? "−" : "+"}${formatUsd(Math.abs(usd))}`;
 /** Earn with stocks' line, here and in Activity: "+$500.00 from credit, earning". */
-export const earnLine = (usd: number) => `${signedUsd(usd)} from credit, earning`;
+const earnLine = (usd: number) => `${signedUsd(usd)} from credit, earning`;
 /** Start earning's line, here and in Activity: "$40.00 into savings" (the cash stayed the user's: no sign). */
-export const saveLine = (usd: number) => `${formatUsd(usd)} into savings`;
+const saveLine = (usd: number) => `${formatUsd(usd)} into savings`;
 const cents = (usd: number) => Math.round(usd * 100) / 100;
 const sum = (xs: readonly number[]) => xs.reduce((a, b) => a + b, 0);
 const ticker = (symbol: string) => symbol.replace(/c$/, "");

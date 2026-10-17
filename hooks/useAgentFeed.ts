@@ -23,7 +23,7 @@ const PARALLEL = 4;
 export type AgentRow = AgentMove & { key: string; time: number; hash: Hex; event: AgentEvent; ctx: MoveContext };
 
 /** A job's newest switch: on or off, whether the user turned it off, and when (seconds). */
-export type Switched = { on: boolean; byUser: boolean; at: number };
+type Switched = { on: boolean; byUser: boolean; at: number };
 
 /** Protect · sell's latest heads-up: what it would sell (USDC units) and when (seconds), sent at `sentAt`. */
 export type HeadsUp = { sellValueRaw: bigint; sellAfter: number; sentAt: number };

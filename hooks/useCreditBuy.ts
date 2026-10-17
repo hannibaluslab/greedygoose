@@ -7,7 +7,7 @@ import { CREDIT_FLOOR, buildCreditBuyCalls, creditBuyActivity, creditBuyStop, ty
 import { quoteKey, type BuyQuote } from "@/lib/swap/buy";
 import type { ReserveAsset } from "@/lib/tokens/registry";
 
-export type CreditBuyInput = {
+type CreditBuyInput = {
   user: `0x${string}`;
   stock: ReserveAsset;
   /** The quote the screen shows; its amountIn is the credit plus what cash pays. */
@@ -18,7 +18,7 @@ export type CreditBuyInput = {
   confirmedRisk: boolean;
 };
 
-export const CREDIT_BUY_FALLBACK =
+const CREDIT_BUY_FALLBACK =
   "This Credit Buy would fail right now — the price or Aave’s limits may have moved. Try a smaller amount in a moment.";
 
 /**
@@ -39,7 +39,7 @@ export function useCreditBuyBatch() {
 }
 
 /** The credit plan's part of a key: the credit, what goes in use, its stop and the risk tick. */
-export const creditPlanKey = (plan: CreditPlan, confirmedRisk: boolean) => [
+const creditPlanKey = (plan: CreditPlan, confirmedRisk: boolean) => [
   plan.creditRaw,
   plan.backing.map((b) => [b.stock.symbol, b.raw]),
   plan.block ?? null,

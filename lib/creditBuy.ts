@@ -271,7 +271,7 @@ export function planCredit(
 }
 
 /** Why a Credit Buy can use nothing right now (F2-3's zero state, shown at step 1). */
-export type NoCredit = "no-stocks" | "cant-back" | "too-small" | "all-in-use" | "in-act" | "paused" | "no-liquidity";
+type NoCredit = "no-stocks" | "cant-back" | "too-small" | "all-in-use" | "in-act" | "paused" | "no-liquidity";
 
 /** F2-3's line under "$0", first half: why. */
 export const NO_CREDIT: Record<NoCredit, string> = {

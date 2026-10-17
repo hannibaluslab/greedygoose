@@ -36,7 +36,7 @@ const ORDER = [
   { keepMix: true, label: "Keep my mix", sub: "Sells the same share of each stock that backs your credit." },
 ] as const;
 
-export const NEVER_SELL_WARNING = "Protect won’t sell it, but Aave still can if your credit goes past its limit.";
+const NEVER_SELL_WARNING = "Protect won’t sell it, but Aave still can if your credit goes past its limit.";
 
 const running = (s: AgentStatus) => s === "on" || s === "starting";
 
@@ -92,7 +92,7 @@ export function ProtectSettings({ account, onDone }: { account: `0x${string}`; o
   );
 }
 
-export function ProtectSettingsSkeleton() {
+function ProtectSettingsSkeleton() {
   return (
     <div aria-busy className="flex flex-col gap-3.5">
       <div className="h-[118px] animate-pulse rounded-[22px] bg-chip" />

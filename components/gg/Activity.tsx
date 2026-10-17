@@ -87,7 +87,7 @@ const STATUS_TEXT = { safe: "text-pos", watch: "text-watch-ink", act: "text-neg"
  * A feed line: Safe, Watch and Act in their colour and weight, as the board sets them. Geist has no "→", so the arrow
  * is set in the system font, as the board draws it (StatusChange does the same).
  */
-export function WordsText({ words }: { words: Words }) {
+function WordsText({ words }: { words: Words }) {
   return words.map((w, i) =>
     typeof w !== "string" ? (
       <span key={i} className={`font-semibold ${STATUS_TEXT[w.status]}`}>

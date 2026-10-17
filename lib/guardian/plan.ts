@@ -14,7 +14,7 @@ import { CASH, CASH_AGENT } from "@/config/risk";
  * Weekend Shield no longer repays: before a freeze the credit is outside Act by definition, so it is a heads-up card
  * only (`weekendHeadsUp`), and the executor has no weekend move.
  */
-export type GuardianInput = {
+type GuardianInput = {
   collateralUsd: number;
   avgCf: number;
   debtUsd: number;
@@ -70,7 +70,7 @@ export function planGuardian(i: GuardianInput): GuardianDecision {
  * stressed health back to the Act line plus the same room a repay leaves (1.1 + 0.1). Nothing moves; in Act Protect
  * acts on its own. App-only: the executor has no weekend move, and so no port of this.
  */
-export type WeekendHeadsUpInput = {
+type WeekendHeadsUpInput = {
   collateralUsd: number;
   avgCf: number;
   debtUsd: number;
@@ -82,7 +82,7 @@ export type WeekendHeadsUpInput = {
   stressFloorHf?: number;
 };
 
-export type WeekendHeadsUp = { hf: number; stressedHf: number; addUsd: number };
+type WeekendHeadsUp = { hf: number; stressedHf: number; addUsd: number };
 
 const HEADS_UP_DEFAULTS = {
   triggerHf: CASH_AGENT.triggerHf,
@@ -108,7 +108,7 @@ export function weekendHeadsUp(i: WeekendHeadsUpInput): WeekendHeadsUp | null {
  * today's limit and at most `maxSavesPerDay` times a New York day. Integer USDC units, so GooseExecutor's port
  * (contracts/src/CashRules.sol) must agree exactly. Save never leaves the wallet below the keep-back.
  */
-export type SaveInput = {
+type SaveInput = {
   walletRaw: bigint;
   capLeftRaw: bigint;
   /** Saves already made today. */
@@ -118,7 +118,7 @@ export type SaveInput = {
   maxSavesPerDay?: number;
 };
 
-export type SaveDecision = { action: "none"; reason: "too-small" | "no-cap" | "rate" } | { action: "save"; amountRaw: bigint };
+type SaveDecision = { action: "none"; reason: "too-small" | "no-cap" | "rate" } | { action: "save"; amountRaw: bigint };
 
 const usdc = (usd: number) => parseUnits(usd.toFixed(6), 6);
 

@@ -27,7 +27,7 @@ const SIZE = {
   row: "h-[52px] min-w-0 gap-1.5 whitespace-nowrap rounded-[26px] px-0 text-[15px] max-[390px]:text-[14px] max-[360px]:[&>svg]:hidden",
 } as const;
 
-export type ButtonVariant = keyof typeof VARIANT;
+type ButtonVariant = keyof typeof VARIANT;
 export type ButtonSize = keyof typeof SIZE;
 
 export const buttonClass = (variant: ButtonVariant, size: ButtonSize) =>

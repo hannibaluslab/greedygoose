@@ -4,7 +4,7 @@ import { JOBS, type AgentJob } from "@/lib/agents/permissions";
 
 /** GooseExecutor's OffReason, in order: why a job was switched off. */
 export const OFF_REASONS = ["revoked", "expired", "not-owner", "stuck"] as const;
-export type OffReason = (typeof OFF_REASONS)[number];
+type OffReason = (typeof OFF_REASONS)[number];
 
 /**
  * CashRules' ProtectCase: only Act (5) repays. Executors deployed before Act was the line (2026-10-15) also repaid

@@ -10,10 +10,10 @@ import type { ActivityItem } from "@/lib/activity/decode";
 import type { CreditPlan } from "@/lib/creditBuy";
 import { USDC, type ReserveAsset } from "@/lib/tokens/registry";
 
-export const BUY_FALLBACK = "This buy would fail right now — the price may have moved or the stock may be paused. Try again in a moment.";
+const BUY_FALLBACK = "This buy would fail right now — the price may have moved or the stock may be paused. Try again in a moment.";
 
 /** What Activity shows while a buy confirms. */
-export const buyActivity = (stock: ReserveAsset, quote: BuyQuote): ActivityItem[] => [
+const buyActivity = (stock: ReserveAsset, quote: BuyQuote): ActivityItem[] => [
   {
     kind: "buy",
     symbol: stock.symbol,
@@ -22,7 +22,7 @@ export const buyActivity = (stock: ReserveAsset, quote: BuyQuote): ActivityItem[
   },
 ];
 
-export type CashBuyInput = { user: `0x${string}`; stock: ReserveAsset; quote: BuyQuote };
+type CashBuyInput = { user: `0x${string}`; stock: ReserveAsset; quote: BuyQuote };
 
 /**
  * A buy paid from cash, built from fresh reads before JAW's sheet: the quote and the cash are read again
@@ -47,7 +47,7 @@ export const cashBuyPlan = (p: CashBuyInput, batch: ReturnType<typeof useCashBuy
   activity: buyActivity(p.stock, p.quote),
 });
 
-export type BuyInput = CashBuyInput & { credit?: { plan: CreditPlan; confirmedRisk: boolean } };
+type BuyInput = CashBuyInput & { credit?: { plan: CreditPlan; confirmedRisk: boolean } };
 
 /**
  * Buy with cash. Decision 1: when the buy is more than the cash, `credit` (planCredit for the other part, from

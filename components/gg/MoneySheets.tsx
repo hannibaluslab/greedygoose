@@ -7,7 +7,7 @@ import { RepaySheet } from "./RepaySheet";
 import { useSheetSubject } from "@/hooks/useSheetSubject";
 
 /** The two money sheets every signed-in page can open over itself (Adrian: "top up and repay should open a sheet"). */
-export type MoneySheet = "top-up" | "repay";
+type MoneySheet = "top-up" | "repay";
 
 /** The query that opens each sheet as a page loads: `/receive` and `/repay` redirect to it (next.config.ts). */
 const PARAM: Record<MoneySheet, string> = { "top-up": "topup", repay: "repay" };

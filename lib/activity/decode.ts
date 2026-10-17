@@ -7,7 +7,7 @@ import { ENTRY_COINS } from "@/lib/tokens/stables";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { savingsEventsAbi } from "@/lib/board/logs";
 
-export type ActivityKind = "supply" | "withdraw" | "borrow" | "repay" | "buy" | "sell" | "receive" | "send" | "convert" | "earn" | "save";
+type ActivityKind = "supply" | "withdraw" | "borrow" | "repay" | "buy" | "sell" | "receive" | "send" | "convert" | "earn" | "save";
 
 export type ActivityItem = {
   kind: ActivityKind;

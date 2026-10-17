@@ -10,7 +10,7 @@ import { EQUITIES, USDC } from "@/lib/tokens/registry";
  */
 
 /** One trade of the preview: sells first, then buys, each largest first, in whole dollars at Aave's price. */
-export type TradeLine = { reserveId: number; name: string; buy: boolean; usd: number };
+type TradeLine = { reserveId: number; name: string; buy: boolean; usd: number };
 
 export function tradeLines(trades: readonly RebalanceTrade[], holdings: readonly MixHolding[]): TradeLine[] {
   const usd = (t: RebalanceTrade) => {

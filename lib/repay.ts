@@ -39,7 +39,7 @@ export type RepayHolding = {
 /** The position's fields Repay reads (usePosition's data has them all). */
 export type RepayData = SellPosition & { holdings: RepayHolding[]; cash: Cash; cashUsd: number; status: Status };
 
-export type RepayKind = "cash" | "free" | "backing";
+type RepayKind = "cash" | "free" | "backing";
 
 /** A "Pay with" row: what it is, and the most it can sell and repay. */
 export type RepaySource = {
@@ -118,7 +118,7 @@ const SLIP = 1 - BUY_LIMITS.slippageBps / 10_000;
  */
 const LIST_POOL_ALLOWANCE = 0.99;
 /** The smallest repay: $1, or all of it when less is owed. */
-export const MIN_REPAY_USD = 1;
+const MIN_REPAY_USD = 1;
 export const minRepayUsd = (debtUsd: number) => Math.min(MIN_REPAY_USD, debtUsd);
 
 const usdcRaw = (usd: number) => parseUnits(Math.max(0, usd).toFixed(USDC.decimals), USDC.decimals);
@@ -126,7 +126,7 @@ const ceilDiv = (a: bigint, b: bigint) => (a + b - 1n) / b;
 const tickerOf = (symbol: string) => symbol.replace(/c$/, "");
 const stockOf = (symbol: string) => EQUITIES.find((e) => e.symbol === symbol);
 /** Dollars to the cent: up for a full repay (what's owed is never shown as less), down otherwise. */
-export const toCents = (usd: number, up: boolean) => (up ? Math.ceil(usd * 100 - 1e-6) : Math.floor(usd * 100 + 1e-6)) / 100;
+const toCents = (usd: number, up: boolean) => (up ? Math.ceil(usd * 100 - 1e-6) : Math.floor(usd * 100 + 1e-6)) / 100;
 
 /** The cash can't keep the network-fee buffer, so a sale pays the fee (as the Trade sheet's `feeFromSale`). */
 const cashCantPayFee = (cash: Cash) => cashRaw(cash) < feeBufferRaw;
@@ -215,7 +215,7 @@ export function noSourceLine(data: Pick<RepayData, "cash" | "debtUsd" | "holding
 }
 
 /** The most a source repays: dollars (never more than owed), raw USDC, and whether that is all that's owed. */
-export type RepayMax = { usd: number; raw: bigint; coversAll: boolean; quoting: boolean };
+type RepayMax = { usd: number; raw: bigint; coversAll: boolean; quoting: boolean };
 
 /**
  * The most a source repays. Cash: all of it less the fee buffer, or a full repay (what's owed plus Aave's interest
@@ -310,7 +310,7 @@ export function repayForm(state: RepayForm, action: RepayAction): RepayForm {
  * The quick picks (Adrian, 2026-10-15): 25%, 50% and 75% of the most the row repays, rounded down to the cent, then
  * Max. A pick under the smallest repay isn't offered.
  */
-export const QUICK_PICKS = [0.25, 0.5, 0.75] as const;
+const QUICK_PICKS = [0.25, 0.5, 0.75] as const;
 export const quickPicks = (max: RepayMax, minUsd = 1) =>
   QUICK_PICKS.map((share) => ({ share, usd: Math.floor(max.usd * share * 100) / 100 })).filter((p) => p.usd >= minUsd && p.usd < max.usd);
 

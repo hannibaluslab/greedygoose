@@ -14,7 +14,7 @@ import { FREE_UP_FLOOR, type FreeUpByRepay } from "@/lib/freeUp";
 import { USDC, type ReserveAsset } from "@/lib/tokens/registry";
 
 /** What Free up signs: a repay from the cash (none when it can all come back now), then the shares out of backing. */
-export type FreeUpInput = Pick<FreeUpByRepay, "repayUsd" | "repaysAll" | "backRaw" | "all"> & {
+type FreeUpInput = Pick<FreeUpByRepay, "repayUsd" | "repaysAll" | "backRaw" | "all"> & {
   user: `0x${string}`;
   stock: ReserveAsset;
 };

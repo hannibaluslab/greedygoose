@@ -4,14 +4,14 @@ import type { JawTheme } from "@jaw.id/core";
 import { CHAIN } from "@/lib/chain";
 import type { Rehearsal } from "@/lib/rehearsal";
 
-export const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? "GreedyGoose";
-export const ENS_PARENT = process.env.NEXT_PUBLIC_ENS_PARENT ?? "justan.id";
+const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? "GreedyGoose";
+const ENS_PARENT = process.env.NEXT_PUBLIC_ENS_PARENT ?? "justan.id";
 
 /**
  * JAW's own frames (sign in, sign up, every Review + Face ID sheet) wear the app's ink and lime, so the app and
  * JAW read as one product (Adrian, 2026-10-15). Colours from the goose and the canvas tokens.
  */
-export const JAW_THEME = {
+const JAW_THEME = {
   mode: "dark",
   accentColor: "#d4ff3c",
   accentColorForeground: "#0e0d0b",

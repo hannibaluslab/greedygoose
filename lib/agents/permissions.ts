@@ -13,9 +13,9 @@ export const JOBS = ["save", "protect", "sell", "rebalance", "entry"] as const;
 export type AgentJob = (typeof JOBS)[number];
 /** The Cash Agent's two jobs (the Agents switches): one daily USDC limit each. */
 export const CASH_JOBS = ["save", "protect"] as const;
-export type CashJob = (typeof CASH_JOBS)[number];
+type CashJob = (typeof CASH_JOBS)[number];
 /** The jobs whose grant carries a limit per stock: Protect · sell (a day) and the Rebalancer (a week). */
-export type StockJob = "sell" | "rebalance";
+type StockJob = "sell" | "rebalance";
 
 /**
  * What each job may call, in the order of GooseExecutor's templates (`_permission`). JAW's screen grants every call

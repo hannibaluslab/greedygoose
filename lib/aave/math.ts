@@ -16,7 +16,7 @@ export type AccountData = {
 const MAX_UINT = 2n ** 256n - 1n;
 
 /** Value units → USD, keeping 6 decimals of precision before going to float. */
-export const valueToUsd = (v: bigint) => Number(v / (VALUE_PER_USD / 1_000_000n)) / 1_000_000;
+const valueToUsd = (v: bigint) => Number(v / (VALUE_PER_USD / 1_000_000n)) / 1_000_000;
 
 export function summarize(d: AccountData) {
   const collateralUsd = valueToUsd(d.totalCollateralValue);

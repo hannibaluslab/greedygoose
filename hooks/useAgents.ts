@@ -26,7 +26,7 @@ import { useNowSec } from "@/hooks/useNowSec";
 export const GRANT_SECONDS = 365 * 86_400;
 
 /** What a job runs with: its limit, and for Protect · sell and the Rebalancer each stock's. */
-export type JobTerms = { capRaw: bigint; limitsRaw?: StockLimits };
+type JobTerms = { capRaw: bigint; limitsRaw?: StockLimits };
 
 const byJob = <T,>(f: (job: AgentJob) => T) => Object.fromEntries(JOBS.map((job) => [job, f(job)])) as Record<AgentJob, T>;
 

@@ -27,7 +27,7 @@ export type BoardState =
   | { kind: "error"; what?: "board" | "contacts" }
   | { kind: "ready"; people: BoardPerson[]; offBoard: OffBoard[] };
 
-export const BOARD_COPY = {
+const BOARD_COPY = {
   soon: "The leaderboard opens soon.",
   soonLine: "Everyone joins with their first move. It ranks return since joining, in percent.",
   error: "Couldn’t load the board",
@@ -74,7 +74,7 @@ function Tick({ on }: { on: boolean }) {
  * One person: rank, mark, name and their percent. Your own row is lit. While picking, the rank becomes a tick for
  * anyone who can be added; you and your contacts can't be ticked.
  */
-export function BoardRowItem({
+function BoardRowItem({
   person, picking = false, picked = false, onOpen, onPick, showContact = true,
 }: {
   person: BoardPerson;

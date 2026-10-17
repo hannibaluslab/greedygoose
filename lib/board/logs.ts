@@ -33,7 +33,7 @@ export const savingsEventsAbi = parseAbi([
   "event LiquidationCall(address indexed collateralAsset, address indexed debtAsset, address indexed user, uint256 debtToCover, uint256 liquidatedCollateralAmount, address liquidator, bool receiveAToken)",
 ]);
 /** Emitted in postOp; paymasterMode 1 is ERC-20 (the fee taken in `token`), measured on Base 2026-10-15. */
-export const paymasterEventsAbi = parseAbi([
+const paymasterEventsAbi = parseAbi([
   "event UserOperationSponsored(bytes32 indexed userOpHash, address indexed user, uint8 paymasterMode, address token, uint256 tokenAmountPaid, uint256 exchangeRate)",
 ]);
 
@@ -56,10 +56,10 @@ const CONCURRENCY = 4;
 /** A chunk is kept once the chain is this many blocks past it (Base has not reorged this deep). */
 const SETTLED = 64n;
 
-export type Chunk = { from: bigint; to: bigint };
+type Chunk = { from: bigint; to: bigint };
 
 /** The chunks from `from` to `to`, cut on BOARD_LOG_CHUNK boundaries, oldest first. */
-export function boardChunks(from: bigint, to: bigint, size = BOARD_LOG_CHUNK): Chunk[] {
+function boardChunks(from: bigint, to: bigint, size = BOARD_LOG_CHUNK): Chunk[] {
   const out: Chunk[] = [];
   for (let lo = from; lo <= to; ) {
     const hi = (lo / size + 1n) * size - 1n;

@@ -32,7 +32,7 @@ export type Flows = {
   peakCredit: number;
 };
 
-export type Score = {
+type Score = {
   /** Dollars gained since joining. Never shown: the board is percent only. */
   gain: number;
   /** Own money: net worth at joining plus money put in since. */
@@ -49,7 +49,7 @@ export function returnSinceJoining(f: Flows): Score {
   return { gain, own, pct: Math.min(gain / own, gain / (own + credit)) };
 }
 
-export type RankInput = { account: `0x${string}`; joinedAt: bigint; pct: number | null };
+type RankInput = { account: `0x${string}`; joinedAt: bigint; pct: number | null };
 
 /**
  * Ranks members with a return, highest first; ties go to whoever joined first, then by address so the order is the

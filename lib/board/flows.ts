@@ -26,12 +26,12 @@ import { USDC_RESERVE_ID } from "./tokens";
 
 type Base = { block: bigint; tx: Hex; logIndex: number };
 /** An ERC-20 Transfer of a tracked token. */
-export type TransferRec = Base & { kind: "transfer"; token: Address; from: Address; to: Address; value: bigint };
+type TransferRec = Base & { kind: "transfer"; token: Address; from: Address; to: Address; value: bigint };
 /**
  * An Aave V4 spoke event about a member's position. LiquidationCall: `reserveId` is the debt reserve, `amount` the
  * debt it cleared, `caller` the liquidator.
  */
-export type SpokeRec = Base & {
+type SpokeRec = Base & {
   kind: "spoke";
   event: "Supply" | "Withdraw" | "Borrow" | "Repay" | "LiquidationCall";
   reserveId: number;
@@ -43,13 +43,13 @@ export type SpokeRec = Base & {
  * An Aave V3 savings event. Supply: `by` is who paid (msg.sender), `for` whose savings grew (onBehalfOf). Withdraw:
  * `by` whose savings shrank, `for` who got the USDC (to).
  */
-export type SavingsRec = Base & { kind: "savings"; event: "Supply" | "Withdraw"; reserve: Address; by: Address; for: Address; amount: bigint };
+type SavingsRec = Base & { kind: "savings"; event: "Supply" | "Withdraw"; reserve: Address; by: Address; for: Address; amount: bigint };
 /**
  * Aave V3 credit, which a JAW account can draw against its savings in another app. `reserve` is the debt asset and
  * `debtor` the account whose debt changed. Borrow: `by` got the money (user). Repay: `by` paid (repayer). LiquidationCall:
  * `by` is the liquidator, `collateral` the asset it took, `aTokens` when it took them as savings rather than USDC.
  */
-export type SavingsCreditRec = Base & {
+type SavingsCreditRec = Base & {
   kind: "savingsCredit";
   event: "Borrow" | "Repay" | "LiquidationCall";
   reserve: Address;
@@ -60,7 +60,7 @@ export type SavingsCreditRec = Base & {
   aTokens?: boolean;
 };
 /** JAW's paymaster took `amount` of `token` from `user` as the network fee (ERC-20 mode). */
-export type FeeRec = Base & { kind: "fee"; user: Address; token: Address; amount: bigint };
+type FeeRec = Base & { kind: "fee"; user: Address; token: Address; amount: bigint };
 export type BoardRecord = TransferRec | SpokeRec | SavingsRec | SavingsCreditRec | FeeRec;
 
 /** How a token counts: dollars (USDC, savings, other dollar coins at face value) or a stock at Aave's price. */
@@ -68,12 +68,12 @@ export type TokenInfo = { kind: "usd"; decimals: number } | { kind: "stock"; res
 
 /** A dollar amount in USDC units (6 decimals), or a stock amount to value at Aave's price at `block`. */
 export type Amount = { usd6: bigint } | { stock: { reserveId: number; raw: bigint } };
-export type Move = { block: bigint; dir: "in" | "out" } & Amount;
+type Move = { block: bigint; dir: "in" | "out" } & Amount;
 /** A trade: one venue, in one transaction, paid by the account and paying it back. */
-export type Swap = { block: bigint; venue: string; got: Amount[]; paid: Amount[] };
+type Swap = { block: bigint; venue: string; got: Amount[]; paid: Amount[] };
 /** Credit in use changing: + drawn, − repaid or cleared by a liquidation (USDC units). */
-export type CreditStep = { block: bigint; logIndex: number; delta: bigint };
-export type MemberFlows = { moves: Move[]; swaps: Swap[]; credit: CreditStep[] };
+type CreditStep = { block: bigint; logIndex: number; delta: bigint };
+type MemberFlows = { moves: Move[]; swaps: Swap[]; credit: CreditStep[] };
 
 export type FlowRules = {
   /** USDC on Base and Aave V3's savings token for it (aUSDC, which holds the savings' USDC). */

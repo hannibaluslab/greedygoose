@@ -92,7 +92,7 @@ export type FreeRepayInput = {
   feeFromSale: boolean;
 };
 
-export const FREE_REPAY_FALLBACK = "This repay would fail right now — the price may have moved or the stock may be paused. Try again in a moment.";
+const FREE_REPAY_FALLBACK = "This repay would fail right now — the price may have moved or the stock may be paused. Try again in a moment.";
 
 /**
  * A repay with free shares, built from fresh reads before JAW's sheet: the screen's stop still holds, the quote is read
@@ -130,7 +130,7 @@ export const freeRepayPlan = (p: FreeRepayInput, batch: ReturnType<typeof useFre
 };
 
 /** What the Repay sheet signs, per "Pay with" row. */
-export type RepaySign = { via: "cash"; input: RepayInput } | { via: "free"; input: FreeRepayInput } | { via: "backing"; input: SellInput };
+type RepaySign = { via: "cash"; input: RepayInput } | { via: "free"; input: FreeRepayInput } | { via: "backing"; input: SellInput };
 
 /** What the Repay sheet would sign for the row and amount on screen, once it's ready (null while it isn't). */
 export function repaySign(view: RepayView, user: `0x${string}`, debtRaw: bigint): RepaySign | null {

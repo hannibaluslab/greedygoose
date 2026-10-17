@@ -64,7 +64,7 @@ export function agentStatus(agent: Agent, status: Readonly<Record<AgentJob, Agen
 }
 
 /** "$100 a day", "$100 a week". */
-export const limitText = (usd: number, job: AgentJob) => `${formatUsdTrim(usd)} a ${LIMIT_USD[job].per}`;
+const limitText = (usd: number, job: AgentJob) => `${formatUsdTrim(usd)} a ${LIMIT_USD[job].per}`;
 const usdOf = (raw: bigint) => Number(raw) / 10 ** USDC.decimals;
 
 /**
@@ -96,7 +96,7 @@ export type AgentItem = {
   limitUsd: number;
 };
 
-export type AgentItemsInput = {
+type AgentItemsInput = {
   status: Readonly<Record<AgentJob, AgentStatus>>;
   /** Each job's limit while it has a grant (on or starting), USDC units; null otherwise. */
   capRaw: Readonly<Record<AgentJob, bigint | null>>;
@@ -133,15 +133,15 @@ export const NOT_LIVE = "Not live yet. Switching on opens after the agents’ au
 const DATE = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
 const YEAR = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
 const TIME = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" });
-export const dateText = (sec: number) => DATE.format(sec * 1000);
+const dateText = (sec: number) => DATE.format(sec * 1000);
 /** "Oct 15, 2027", for a grant's end a year out. */
 export const longDateText = (sec: number) => YEAR.format(sec * 1000);
 export const timeText = (sec: number) => TIME.format(sec * 1000);
 
 /** A grant this close to its end gets a card. */
-export const EXPIRING_SEC = 7 * 86_400;
+const EXPIRING_SEC = 7 * 86_400;
 /** Failed runs in a row before a card says so (the executor switches the account off at eight). */
-export const FAILS_CARD = 3;
+const FAILS_CARD = 3;
 const MAX_FAILS = 8;
 
 /** A card's button: the Top up or Repay sheet over the tab, or Renew (JAW's own sheet). */

@@ -35,8 +35,8 @@ export const TAP_AGAIN = "Tap again to open JAW.";
 export const CANT_CHECK = "We couldn’t check this with Base right now.";
 export const ONLY_SIGNER = "Only the signed-in account can do this. Nothing was sent.";
 export const CANCELLED = "You cancelled. Nothing was sent.";
-export const COULDNT_SEND = "We couldn’t send this. Please try again.";
-export const DEFAULT_FALLBACK = "This would fail right now. Try again in a moment.";
+const COULDNT_SEND = "We couldn’t send this. Please try again.";
+const DEFAULT_FALLBACK = "This would fail right now. Try again in a moment.";
 
 /**
  * Act is the line (Adrian, 2026-10-15): a batch that takes credit or frees backing must not end in Act. Its screen plans
@@ -149,7 +149,7 @@ export function chainMoved() {
 export const chainEpoch = () => landed;
 
 /** A batch simulated OK for `key`, from reads taken from `at` on, after `epoch` writes had landed. */
-export type PreparedBatch = { key: string; user: Address; batch: Call[]; at: number; epoch: number };
+type PreparedBatch = { key: string; user: Address; batch: Call[]; at: number; epoch: number };
 type Failure = { key: string; error: string; blocks: boolean; at: number; epoch: number };
 
 /** What the button shows for the inputs on screen. */

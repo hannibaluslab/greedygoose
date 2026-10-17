@@ -44,7 +44,7 @@ const STATES = [
   { key: "switch-on", title: "Off · first mix switches it on", configured: true, saved: EQUITIES.map(() => 0), terms: null, draft: TARGET },
 ] as const;
 
-export type RebalanceState = (typeof STATES)[number]["key"];
+type RebalanceState = (typeof STATES)[number]["key"];
 
 /** RebalanceSettings' body in one state, from fixtures: what the Agents gallery's Rebalance sheet holds. */
 export function RebalanceStateBody({ state }: { state: RebalanceState }) {

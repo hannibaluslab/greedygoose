@@ -53,7 +53,7 @@ export const toTuple = (p: GuardianPermission) => ({
   calls: p.calls.map((c) => ({ ...c, selector: c.selector as `0x${string}` })),
 });
 
-export type Call = { to: `0x${string}`; data: Hex; value: bigint };
+type Call = { to: `0x${string}`; data: Hex; value: bigint };
 
 /** User-signed: approve the permission on the manager (the manager must already own the account). */
 export const approveGuardianCall = (p: GuardianPermission): Call => ({

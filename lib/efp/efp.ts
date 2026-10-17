@@ -99,7 +99,7 @@ export function randomListSlot(): bigint {
   return bytes.reduce((acc, b) => (acc << 8n) | BigInt(b), 0n);
 }
 
-export type EfpCall = { to: Address; data: Hex; value: bigint };
+type EfpCall = { to: Address; data: Hex; value: bigint };
 
 const applyOps = (slot: bigint, ops: Hex[]): EfpCall => ({
   to: EFP_LIST_RECORDS,

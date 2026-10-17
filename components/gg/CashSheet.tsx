@@ -34,7 +34,7 @@ export function cashLead(save: AgentStatus, apy: number): string {
  * The cash, big, as the kit draws money, with the Cash card's own line under it, and what's owed on credit in the same
  * card under a hairline (Adrian: one section).
  */
-export function CashAmount({ data, arrived }: { data: PositionData; arrived: ArrivedView }) {
+function CashAmount({ data, arrived }: { data: PositionData; arrived: ArrivedView }) {
   const owed = owedBeside(data.debtUsd, data.cash);
   return (
     <div className="flex flex-col gap-2 rounded-[22px] bg-card p-4 shadow-card-elev">
@@ -63,7 +63,7 @@ export function CashAmount({ data, arrived }: { data: PositionData; arrived: Arr
  * Top up, and Repay while something is owed, each a sheet that slides in as this one slides out (`onLeave` closes it).
  * Buttons name the action. Send is its own tab (2026-10-15), not offered here.
  */
-export function CashFooter({ owes, onLeave }: { owes: boolean; onLeave?: () => void }) {
+function CashFooter({ owes, onLeave }: { owes: boolean; onLeave?: () => void }) {
   const money = useMoneySheets();
   const hop = (open: () => void) => () => {
     onLeave?.();

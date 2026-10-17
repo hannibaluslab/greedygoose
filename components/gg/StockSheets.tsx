@@ -44,7 +44,7 @@ export function useStockSheets(initialBuy: FlowAt | null = null) {
   };
 }
 
-export type StockSheetsState = ReturnType<typeof useStockSheets>;
+type StockSheetsState = ReturnType<typeof useStockSheets>;
 
 /**
  * A stock's sheet and the flows it opens: Buy (Flow 1, whose Market rows open stock sheets), Credit Buy (Flow 2) and

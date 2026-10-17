@@ -12,7 +12,7 @@ import { isPopupBlocked } from "@/lib/tx/prepared";
 export type GrantStep = { job: AgentJob; capRaw: bigint; limitsRaw?: StockLimits };
 
 /** What Rebalance's Save asks for: the mix (`setMix`, when it changed) and the job's new grant (when it's needed). */
-export type MixSave = { weights: readonly number[]; mixChanged: boolean; grant: GrantStep | null };
+type MixSave = { weights: readonly number[]; mixChanged: boolean; grant: GrantStep | null };
 
 const CANCELLED = /reject|denied|cancel/i;
 

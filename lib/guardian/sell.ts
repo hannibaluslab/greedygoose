@@ -33,7 +33,7 @@ export type SellBook = {
   usdcLeftRaw: bigint;
 };
 
-export type SellOptions = {
+type SellOptions = {
   targetHf: bigint;
   floorBps: bigint;
   /** "Keep my mix": the same % of each holding, instead of the most safety per dollar first. */
@@ -41,7 +41,7 @@ export type SellOptions = {
 };
 
 /** One withdraw → swap → repay step of the batch. */
-export type SellSlice = { reserveId: number; sharesRaw: bigint; minOutRaw: bigint };
+type SellSlice = { reserveId: number; sharesRaw: bigint; minOutRaw: bigint };
 
 export const SELL_RULE = {
   /** Collateral factors within one point of each other are a near-tie: the larger holding goes first. */
@@ -172,7 +172,7 @@ export function planSell(book: SellBook, o: SellOptions & { maxSliceRaw: bigint 
   return { slices, repayRaw: slices.reduce((t, s) => t + s.minOutRaw, 0n) };
 }
 
-export type SellTiming = "wait" | "heads-up" | "clear" | "sell";
+type SellTiming = "wait" | "heads-up" | "clear" | "sell";
 
 /**
  * When Protect sells (decision 3, Act is the line, 2026-10-15): below `headsUpHf` (the Act line) on a weekday, a

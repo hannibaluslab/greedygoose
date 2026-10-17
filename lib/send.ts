@@ -113,7 +113,7 @@ export const SEND_COPY = {
 // ─── What ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /** A row in "Send from": the asset, its name, the line under it and the right column, and why it can't be picked. */
-export type SendOption = {
+type SendOption = {
   asset: SendAsset;
   name: string;
   sub?: string;
@@ -190,7 +190,7 @@ const usdRawOf = (amount: string): bigint => {
 // ─── To ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /** What was typed in To: nothing, an address (checksum-valid or all lowercase), a name to look up, or why it's neither. */
-export type ToInput =
+type ToInput =
   | { kind: "empty" }
   | { kind: "address"; address: Address }
   | { kind: "name"; name: string }
@@ -221,7 +221,7 @@ export function parseTo(text: string): ToInput {
 export type Recipient = { address: Address; name: string | null; onBase: boolean };
 
 /** What Base says about the recipient (readRecipient). */
-export type BaseCheck = { code: boolean; used: boolean; notAccount: boolean };
+type BaseCheck = { code: boolean; used: boolean; notAccount: boolean };
 
 /**
  * What Base says about the recipient (readRecipient): whether it has code, whether it was ever used (code, a sent
@@ -318,7 +318,7 @@ export type ToState =
   | { kind: "none"; text: string };
 
 /** Looks a name up (lib/jaw/name.ts addressOfName): its address, the name it gives back, and whether that's its Base address. */
-export type NameLookup = (name: string) => Promise<{ name: string | null; address: Address; onBase: boolean } | null>;
+type NameLookup = (name: string) => Promise<{ name: string | null; address: Address; onBase: boolean } | null>;
 
 /**
  * To's lookups, in order (useRecipient holds one). Each find, pick, edit or clear replaces whatever came before it: a
@@ -386,7 +386,7 @@ export class SendStop extends Error {}
 // ─── The batch ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /** The asset a Send moves: USDC for Cash, or a registry stock; never from a string alone. */
-export const sendTokenOf = (asset: SendAsset): ReserveAsset | undefined => (asset === "cash" ? USDC : stockOf(asset));
+const sendTokenOf = (asset: SendAsset): ReserveAsset | undefined => (asset === "cash" ? USDC : stockOf(asset));
 
 const isRegistryToken = (t: ReserveAsset) => isAddressEqual(t.address, USDC.address) || EQUITIES.some((e) => isAddressEqual(e.address, t.address));
 
@@ -417,8 +417,6 @@ export function sendActivity(token: ReserveAsset, amountRaw: bigint, to: Recipie
 }
 
 // ─── The screen ─────────────────────────────────────────────────────────────────────────────────────────────────────
-
-export type SendView = ReturnType<typeof planSend>;
 
 /**
  * Everything the Send screen shows, from what is sent, the dollars, the account and the recipient: the amount card's

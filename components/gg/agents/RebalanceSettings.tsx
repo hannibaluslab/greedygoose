@@ -85,7 +85,7 @@ export function RebalanceSettings({ account, onDone }: { account: `0x${string}`;
 }
 
 /** Until the reads are in. */
-export function RebalanceSettingsSkeleton() {
+function RebalanceSettingsSkeleton() {
   return (
     <div aria-busy className="flex flex-col gap-2.5">
       <div className="h-[260px] animate-pulse rounded-[22px] bg-chip" />
@@ -98,7 +98,7 @@ export function RebalanceSettingsSkeleton() {
 /** A stock as the settings see it: the mix's free shares at Aave's price, and what backs credit. */
 export type SettingsHolding = MixHolding & { lockedUsd: number };
 
-export type SaveRequest = { weights: number[]; capRaw: bigint; plan: SavePlan };
+type SaveRequest = { weights: number[]; capRaw: bigint; plan: SavePlan };
 
 /** The settings drawn from plain values, so the dev gallery can show each state. */
 export function RebalanceSettingsView({

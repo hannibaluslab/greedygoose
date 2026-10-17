@@ -40,15 +40,6 @@ export const LockIcon = ({ size = 8, ...r }: P) => (
     <path d="M3 4.8V3.4a2 2 0 0 1 4 0v1.4" fill="none" stroke="currentColor" strokeWidth="1.4" />
   </svg>
 );
-export const UnlockIcon = ({ size = 8, ...r }: P) => (
-  <svg width={size} height={size * 1.1} viewBox="0 0 10 11" aria-hidden {...r}>
-    <rect x="1" y="4.6" width="8" height="5.6" rx="1.4" fill="none" stroke="currentColor" strokeWidth="1.3" />
-    <path d="M3 4.8V3.4a2 2 0 0 1 3.9-.6" fill="none" stroke="currentColor" strokeWidth="1.3" />
-  </svg>
-);
-export const SlidersIcon = ({ size = 18, ...r }: P) => (
-  <svg {...base(size, 1.8, r)}><path d="M4 7h10M18 7h2M4 17h4M12 17h8" /><circle cx="16" cy="7" r="2" /><circle cx="10" cy="17" r="2" /></svg>
-);
 export const ShieldIcon = ({ size = 12, ...r }: P) => <svg {...base(size, 2.2, r)}><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z" /></svg>;
 export const HomeIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M4 11l8-7 8 7v9H4zM10 20v-5h4v5" /></svg>;
 export const InvestIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M3 17l6-6 4 4 8-8M15 7h6v6" /></svg>;

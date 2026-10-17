@@ -16,7 +16,7 @@ export type EntryCoin = {
   waiting: boolean;
 };
 
-export type EntryOptions = {
+type EntryOptions = {
   /** Each swap gets at least face value less this. */
   floorBps: bigint;
   /** Smallest swap worth making, USDC units of face value. */
@@ -26,7 +26,7 @@ export type EntryOptions = {
 };
 
 /** The swap for one run: `amountIn` raw units of coin `index` for at least `minOut` USDC units. */
-export type EntryMove = { index: number; amountIn: bigint; minOut: bigint };
+type EntryMove = { index: number; amountIn: bigint; minOut: bigint };
 
 const BPS = 10_000n;
 const USDC_DECIMALS = 6;

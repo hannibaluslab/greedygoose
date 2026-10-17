@@ -33,9 +33,3 @@ export const STATUS_LABEL: Record<Status, string> = {
   act: "Act",
 };
 
-export const STATUS_COPY: Record<Status, string> = {
-  none: "You have no credit.",
-  safe: "Your loan is healthy.",
-  watch: "Your loan is getting close to Aave's limit. Consider repaying or adding collateral.",
-  act: "Your loan is at high risk of liquidation. Repay or add collateral now.",
-};

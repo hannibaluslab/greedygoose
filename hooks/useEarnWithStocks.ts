@@ -72,8 +72,8 @@ export function useEarnRates(p: { user: `0x${string}`; backing: readonly Backing
   return { apyAfter: q.isError ? p.apyNow : settled === key && q.data !== undefined ? q.data : null };
 }
 
-export const EARN_FAILED = "Earn with stocks didn’t go through on Base. Nothing moved except any network fee.";
-export const EARN_REVERT = "This would fail right now. Stock prices may be paused or have moved. Try a smaller amount in a moment.";
+const EARN_FAILED = "Earn with stocks didn’t go through on Base. Nothing moved except any network fee.";
+const EARN_REVERT = "This would fail right now. Stock prices may be paused or have moved. Try a smaller amount in a moment.";
 
 /** What the earn step would sign: the quote and offer on screen, and the risk tick. */
 export type EarnInput = { user: `0x${string}`; quote: EarnQuote; offer: EarnOpen; confirmedRisk: boolean };

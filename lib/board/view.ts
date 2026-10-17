@@ -21,9 +21,9 @@ export type BoardPerson = {
 /** A contact who isn't on the board: they haven't made a move in GreedyGoose yet. */
 export type OffBoard = { account: Address; name: string | null };
 
-export type BoardLine = { kind: "row"; person: BoardPerson } | { kind: "gap"; key: string };
+type BoardLine = { kind: "row"; person: BoardPerson } | { kind: "gap"; key: string };
 
-export type BoardSections = {
+type BoardSections = {
   ranked: BoardLine[];
   /** Not ranked yet, drawn as rows: you and your contacts. */
   unranked: BoardPerson[];

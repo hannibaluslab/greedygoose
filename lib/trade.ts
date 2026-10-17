@@ -190,8 +190,8 @@ export type AssetOption = {
   rightSub?: string;
   disabled: boolean;
 };
-export type FromOption = AssetOption & { freeUsd: number; backsUsd: number; why?: "no-cash" | "all-backs" | "too-small" };
-export type ToOption = AssetOption & { priceUsd?: number; ownedUsd: number };
+type FromOption = AssetOption & { freeUsd: number; backsUsd: number; why?: "no-cash" | "all-backs" | "too-small" };
+type ToOption = AssetOption & { priceUsd?: number; ownedUsd: number };
 
 /**
  * "Trade from": Cash, then each stock held. A stock trades only its free shares, $1 or more of them; one whose shares
@@ -301,7 +301,7 @@ export function clampAmount(from: TradeAsset, data: Pick<TradeData, "holdings" |
 }
 
 /** The sheet's two legs: what you trade from, and what you get. */
-export type TradeLegs = { from: TradeAsset; to: TradeAsset };
+type TradeLegs = { from: TradeAsset; to: TradeAsset };
 /** The Trade sheet's own state: the legs (null with nothing to trade), the From card's dollars, and whether it sells every free share. */
 export type TradeForm = { legs: TradeLegs | null; amount: string; all: boolean };
 export type TradeAction =
@@ -378,11 +378,9 @@ export function legOf<Q extends BuyQuote>(q: QuoteState<Q> | undefined, amountIn
   return { state: "quoting" };
 }
 
-export type YouGet =
+type YouGet =
   | { kind: "stock"; symbol: string; shares: number | null; priceUsd: number }
   | { kind: "cash"; usd: number | null; priceUsd: number };
-
-export type TradeView = ReturnType<typeof planTrade>;
 
 const pct = (f: number) => (f * 100).toFixed(1);
 

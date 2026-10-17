@@ -33,7 +33,7 @@ type AddMoneyProps = {
  * No SheetSteps around it: "Turn into cash" opens its own sheet once it lands ("Do this automatically next time?"),
  * which a step host would fold into this one without its title.
  */
-export function AddMoneyBody({ address, name, rate, arrived, onCopy }: AddMoneyProps) {
+function AddMoneyBody({ address, name, rate, arrived, onCopy }: AddMoneyProps) {
   return (
     <div className="flex flex-col gap-4 leading-[normal]">
       {arrived}
