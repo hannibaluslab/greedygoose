@@ -23,6 +23,12 @@ type Address = `0x${string}`;
  */
 export type SellFrom = "free" | "backing" | "repay" | "any";
 
+/**
+ * No dust (ruling 7b): a sale or send that would leave less than this of the stock takes all of it instead, and taking
+ * out every share that backs credit signs "all", so nothing is left behind on Aave.
+ */
+export const NO_DUST_USD = 1;
+
 /** The holding's fields the plan reads (usePosition's Holding has them all). */
 export type SellHolding = {
   priceUsd: number;
@@ -90,6 +96,8 @@ export type SellPlan = {
   maxRaw: bigint;
   /** The shares that come out of backing in the same batch (0 when the free shares cover the sale). */
   takeOutRaw: bigint;
+  /** Every share that backs credit comes out: the take-out signs "all" (no dust left on Aave). */
+  takeOutAll: boolean;
   /** Repay by selling: what the sale repays, at least (0 otherwise). */
   repayRaw: bigint;
   before: Status;
@@ -227,6 +235,7 @@ export function planSell(p: {
     warn: econ.discount > SELL_LIMITS.warnDiscount,
     maxRaw,
     takeOutRaw,
+    takeOutAll: from !== "free" && takeOutRaw > 0n && takeOutRaw >= h.backingRaw,
     repayRaw,
     before: statusFor(pos.healthFactor),
     after: statusFor(hfAfter),
@@ -250,8 +259,9 @@ export function buildSaleCalls(p: {
   oraclePriceUsd: number;
   debtRaw: bigint;
   nowSec?: number;
-  /** "any": the shares that come out of backing first (planSell's takeOutRaw). */
+  /** "any": the shares that come out of backing first (planSell's takeOutRaw), and whether that's all of them. */
   takeOutRaw?: bigint;
+  takeOutAll?: boolean;
 }): Call[] {
   const sell = buildSellCalls(p);
   if (p.from === "free") return sell;
@@ -260,7 +270,7 @@ export function buildSaleCalls(p: {
     if (out <= 0n) return sell;
     if (out > p.quote.amountIn) throw new Error("Takes out more than it sells");
     return assertAllowed(p.user, [
-      ...buildWithdrawCalls({ user: p.user, stock: p.stock, amountRaw: out, all: false }),
+      ...buildWithdrawCalls({ user: p.user, stock: p.stock, amountRaw: out, all: !!p.takeOutAll }),
       ...sell,
     ]);
   }

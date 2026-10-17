@@ -377,3 +377,29 @@ describe('planSell "any": Sell, Trade and Send on a stock that backs credit (Up 
     expect(() => build(shares(0.5))).toThrow(/more than it sells/);
   });
 });
+
+describe("no dust (ruling 7b)", () => {
+  it("taking out every share that backs credit signs all, so nothing is left on Aave", () => {
+    const nothingOwed = { ...owing(0) };
+    const all = plan(
+      "any",
+      { ...quote, amountIn: holding.freeRaw + holding.backingRaw, amountOut: usd(1_020) },
+      nothingOwed,
+    );
+    expect(all.block).toBeUndefined();
+    expect(all.takeOutAll).toBe(true);
+    const calls = buildSaleCalls({
+      from: "any",
+      user,
+      stock: nvda,
+      quote: { ...quote, amountIn: holding.freeRaw + holding.backingRaw, amountOut: usd(1_020) },
+      oraclePriceUsd: price,
+      debtRaw: 0n,
+      nowSec: 1_000,
+      takeOutRaw: all.takeOutRaw,
+      takeOutAll: true,
+    });
+    expect(decodeFunctionData({ abi: spokeAbi, data: calls[0].data }).args[1]).toBe(2n ** 256n - 1n);
+    expect(plan("any", { ...quote, amountIn: shares(1.1), amountOut: usd(273) }).takeOutAll).toBe(false);
+  });
+});

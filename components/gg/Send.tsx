@@ -98,7 +98,14 @@ export function SendScreen({ user, data }: { user: Address; data: PositionData }
   // What Send would sign now, prepared while the screen is idle (useSend), so the tap opens JAW's sheet straight away.
   const input =
     view.ready && view.token && to.recipient && !feeBlocked
-      ? { user, token: view.token, recipient: to.recipient, amountRaw: view.amountRaw, takeOutRaw: view.takeOutRaw }
+      ? {
+          user,
+          token: view.token,
+          recipient: to.recipient,
+          amountRaw: view.amountRaw,
+          takeOutRaw: view.takeOutRaw,
+          takeOutAll: view.takeOutAll,
+        }
       : null;
   const tx = useSend(input);
   const { phase, error, reset, busy, txHash } = tx;

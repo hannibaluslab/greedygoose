@@ -29,7 +29,7 @@ import { rawToShares } from "@/lib/tokens/b20";
 import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
 import { TRADE_COPY, clampAmount, maxUsdOf, sellableOf, sharesForUsdRaw, stockOf, type TradeData } from "@/lib/trade";
 import { buildWithdrawCalls } from "@/lib/aave/tx";
-import type { SellPosition } from "@/lib/sell";
+import { NO_DUST_USD, type SellPosition } from "@/lib/sell";
 
 /**
  * Send (Adrian, 2026-10-15): "replace pay by send, and let user send their assets out". NYM's SendSheet, Base only, in
@@ -444,6 +444,8 @@ export function buildSendCalls(p: {
   cash: Cash;
   /** A stock's shares that come out of backing first, when the free ones don't cover the send (Up to $X). */
   takeOutRaw?: bigint;
+  /** Every share that backs credit comes out: the take-out signs "all". */
+  takeOutAll?: boolean;
 }): Call[] {
   if (!isRegistryToken(p.token)) throw new SendStop(SEND_COPY.fallback);
   if (p.amountRaw <= 0n) throw new SendStop(SEND_COPY.fallback);
@@ -457,7 +459,8 @@ export function buildSendCalls(p: {
   const isCash = isAddressEqual(p.token.address, USDC.address);
   const out = isCash ? 0n : (p.takeOutRaw ?? 0n);
   if (out > p.amountRaw) throw new SendStop(SEND_COPY.fallback);
-  const takeOut = out > 0n ? buildWithdrawCalls({ user: p.user, stock: p.token, amountRaw: out, all: false }) : [];
+  const takeOut =
+    out > 0n ? buildWithdrawCalls({ user: p.user, stock: p.token, amountRaw: out, all: !!p.takeOutAll }) : [];
   return payFromCash(p.user, isCash ? p.amountRaw : 0n, p.cash, [...takeOut, transfer], { sendTo: p.to });
 }
 
@@ -499,7 +502,11 @@ export function planSend(p: {
   const maxUsd = p.asset ? maxUsdOf(p.asset, data) : 0;
   // MAX sends every free share, to the last unit, while the dollars still say all of it; typed dollars become shares at
   // Aave's price, rounded down.
-  const sellAll = p.all && maxUsd > 0 && amountUsd >= maxUsd;
+  // An amount that would leave less than NO_DUST_USD of a stock sends all of it (ruling 7b).
+  const sellAll =
+    maxUsd > 0 &&
+    amountUsd > 0 &&
+    (p.all ? amountUsd >= maxUsd : !!stock && amountUsd <= maxUsd + 1e-9 && maxUsd - amountUsd < NO_DUST_USD);
   const sharesRaw =
     stock && holding
       ? sellAll
@@ -508,6 +515,7 @@ export function planSend(p: {
       : 0n;
   // Up to $X: what the free shares don't cover comes out of backing in the same batch.
   const takeOutRaw = holding && sharesRaw > holding.freeRaw ? sharesRaw - holding.freeRaw : 0n;
+  const takeOutAll = !!holding && takeOutRaw > 0n && takeOutRaw >= holding.backingRaw;
   const amountRaw = p.asset === "cash" ? usdRaw : sharesRaw;
   const shares = stock && holding ? rawToShares(sharesRaw, holding.multiplier, stock.decimals) : 0;
   const ticker = stock ? tickerOf(stock.symbol) : "";
@@ -574,6 +582,7 @@ export function planSend(p: {
     amountRaw,
     sharesRaw,
     takeOutRaw,
+    takeOutAll,
     hint,
     amountNote: amountBlock,
     toNote: to?.block

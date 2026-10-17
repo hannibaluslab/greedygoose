@@ -85,4 +85,11 @@ describe("Send Up to $X on a stock that backs credit", () => {
       buildSendCalls({ user, token: amzn, to: sam, amountRaw: raw(0.8), cash, takeOutRaw: raw(0.9) }),
     ).toThrow();
   });
+
+  it("an amount that would leave under $1 sends all of it (no dust)", () => {
+    // $1.80 free: $1.50 would leave 30 cents, so every free share goes; $0.70 leaves $1.10 and stays as typed.
+    const d = { ...data(amazon(1.8 / price)), debtUsd: 0, totalBackingUsd: 0 };
+    expect(send(d, "1.50").sharesRaw).toBe(raw(1.8 / price));
+    expect(send(d, "0.70").sharesRaw).toBeLessThan(raw(1.8 / price));
+  });
 });

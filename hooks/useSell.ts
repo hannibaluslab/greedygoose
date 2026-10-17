@@ -54,7 +54,13 @@ export function useSaleBatch() {
   return async (p: SellInput) => {
     if (p.plan.block) throw new TxStop(SELL_BLOCKED[p.plan.block]);
     const quote = await quoteToSign(p.stock, p.quote, "sell");
-    return buildSaleCalls({ ...p, from: p.plan.from, quote, takeOutRaw: p.plan.takeOutRaw });
+    return buildSaleCalls({
+      ...p,
+      from: p.plan.from,
+      quote,
+      takeOutRaw: p.plan.takeOutRaw,
+      takeOutAll: p.plan.takeOutAll,
+    });
   };
 }
 

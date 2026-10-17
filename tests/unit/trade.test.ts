@@ -501,10 +501,14 @@ describe("the sheet's legs and amount (tradeForm)", () => {
     expect(run(f, { type: "flip" })).toEqual({ legs: { from: "cash", to: "AMZNc" }, amount: "1.79", all: false });
   });
 
-  it("typing under the most drops all of it; typing over snaps to it", () => {
+  it("typing under the most drops MAX, though an amount that leaves under $1 still sells all of it; typing over snaps to it", () => {
     const f = run(start("AMZNc", "cash"), { type: "max" }, { type: "amount", value: "1.7" });
     expect(f).toEqual({ legs: { from: "AMZNc", to: "cash" }, amount: "1.7", all: false });
-    expect(sharesOf(f)).toBe(sharesForUsdRaw(usd(1.7), amzn.priceRaw, 8));
+    // $1.70 of the $1.79 free would leave 9 cents: no dust, so every free share goes (ruling 7b).
+    expect(sharesOf(f)).toBe(amzn.freeRaw);
+    expect(sharesOf(run(start("AMZNc", "cash"), { type: "amount", value: "0.7" }))).toBe(
+      sharesForUsdRaw(usd(0.7), amzn.priceRaw, 8),
+    );
     expect(run(f, { type: "amount", value: "9" })).toMatchObject({ amount: "1.79", all: true });
     expect(run(start("cash", "NVDAc"), { type: "amount", value: "5000" })).toEqual({
       legs: { from: "cash", to: "NVDAc" },

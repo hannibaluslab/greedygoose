@@ -71,6 +71,7 @@ export async function swapBatch(p: Extract<TradeSign, { route: "swap" }>, reads:
     buyQuote,
     oraclePriceUsd: p.oraclePriceUsd,
     takeOutRaw: p.plan.takeOutRaw,
+    takeOutAll: p.plan.takeOutAll,
   });
   return p.feeFromSale ? calls : payFromCash(p.user, 0n, await reads.cashToSign(p.user, 0n), calls);
 }

@@ -30,6 +30,7 @@ export type SendInput = {
   amountRaw: bigint;
   /** A stock's shares that come out of backing first (Up to $X); 0 when the free shares cover it. */
   takeOutRaw?: bigint;
+  takeOutAll?: boolean;
 };
 
 const isCashToken = (token: ReserveAsset) => isAddressEqual(token.address, USDC.address);
@@ -52,6 +53,7 @@ export function useSendBatch() {
         amountRaw: p.amountRaw,
         cash,
         takeOutRaw: p.takeOutRaw,
+        takeOutAll: p.takeOutAll,
       });
     } catch (e) {
       throw e instanceof SendStop ? new TxStop(e.message) : e;
@@ -72,6 +74,7 @@ export const sendPlan = (p: SendInput, batch: ReturnType<typeof useSendBatch>): 
     p.recipient.address.toLowerCase(),
     p.amountRaw,
     p.takeOutRaw ?? 0n,
+    !!p.takeOutAll,
   ),
   // Shares taken out of backing for the send: held to the Act line on Aave's own health, as Free up is.
   ...((p.takeOutRaw ?? 0n) > 0n ? { healthFloor: FREE_UP_FLOOR } : {}),

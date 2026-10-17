@@ -7,7 +7,15 @@ import { assertAllowed } from "@/lib/allowlist";
 import { feeBufferRaw, maxSpendRaw, toUsd, type Cash } from "@/lib/cash";
 import { formatShares, formatUsd } from "@/lib/formatting";
 import { marketState } from "@/lib/market-hours";
-import { SELL_BLOCKED, planSell, sellableRaw, type SellBlock, type SellPlan, type SellPosition } from "@/lib/sell";
+import {
+  NO_DUST_USD,
+  SELL_BLOCKED,
+  planSell,
+  sellableRaw,
+  type SellBlock,
+  type SellPlan,
+  type SellPosition,
+} from "@/lib/sell";
 import { BUY_LIMITS, buildBuyCalls, minOut, quoteEconomics, type BuyQuote, type Call } from "@/lib/swap/buy";
 import { SELL_LIMITS, buildSellCalls, sellEconomics, sellMinOut, type SellQuote } from "@/lib/swap/sell";
 import { VENUE_LABEL } from "@/lib/swap/venues";
@@ -133,6 +141,8 @@ export function buildTradeCalls(p: {
   nowSec?: number;
   /** Shares of `from` that come out of backing first, when the free ones don't cover the sale (planSell "any"). */
   takeOutRaw?: bigint;
+  /** All of `from` that backs credit comes out: the take-out signs "all". */
+  takeOutAll?: boolean;
 }): Call[] {
   if (p.from.kind !== "equity" || p.to.kind !== "equity" || p.from.address === p.to.address)
     throw new Error("Not a supported trade");
@@ -142,7 +152,7 @@ export function buildTradeCalls(p: {
   const out = p.takeOutRaw ?? 0n;
   if (out > p.sellQuote.amountIn) throw new Error("Takes out more than it sells");
   return assertAllowed(p.user, [
-    ...(out > 0n ? buildWithdrawCalls({ user: p.user, stock: p.from, amountRaw: out, all: false }) : []),
+    ...(out > 0n ? buildWithdrawCalls({ user: p.user, stock: p.from, amountRaw: out, all: !!p.takeOutAll }) : []),
     ...buildSellCalls({ user: p.user, stock: p.from, quote: p.sellQuote, oraclePriceUsd: p.oraclePriceUsd, nowSec }),
     ...buildBuyCalls({ user: p.user, stock: p.to, quote: p.buyQuote, nowSec }),
   ]);
@@ -408,9 +418,15 @@ export function tradeAmount(p: {
   const toHolding = p.data.holdings.find((h) => h.symbol === toStock?.symbol);
   const usdRaw = usdRawOf(p.amount);
   const maxUsd = maxUsdOf(p.from, p.data);
-  // MAX sells every free share, to the last unit, while the dollars still say all of it (more shares arriving after MAX
-  // aren't sold unseen); typed dollars become shares at Aave's price, rounded down.
-  const sellAll = p.all && maxUsd > 0 && toUsd(usdRaw) >= maxUsd;
+  // MAX sells every share it can, to the last unit, while the dollars still say all of it (more shares arriving after MAX
+  // aren't sold unseen); so does an amount that would leave less than NO_DUST_USD (ruling 7b). Other typed dollars
+  // become shares at Aave's price, rounded down.
+  const typed = toUsd(usdRaw);
+  const sellAll =
+    !!fromStock &&
+    maxUsd > 0 &&
+    typed > 0 &&
+    (p.all ? typed >= maxUsd : typed <= maxUsd + 1e-9 && maxUsd - typed < NO_DUST_USD);
   const sharesRaw =
     fromStock && fromHolding
       ? sellAll
