@@ -13,12 +13,12 @@ import { TxButton, TxDone, TxError } from "./TxUi";
 import { CreditIcon } from "./icons";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { useMarketPrices } from "@/hooks/useMarketPrices";
-import type { Holding, PositionData } from "@/hooks/usePosition";
+import { useBackingFactors, type Holding, type PositionData } from "@/hooks/usePosition";
 import { useSell, useSellQuote } from "@/hooks/useSell";
 import { toUsd } from "@/lib/cash";
 import { formatShares, formatUsd } from "@/lib/formatting";
 import { portfolioShare } from "@/lib/holding";
-import { SELL_BLOCKED, floorPriceUsd, planSell, type SellPlan } from "@/lib/sell";
+import { SELL_BLOCKED, floorPriceUsd, planSell, sellableRaw, type SellPlan } from "@/lib/sell";
 import { SELL_LIMITS, sellEconomics, type SellQuote } from "@/lib/swap/sell";
 import { VENUE_LABEL } from "@/lib/swap/venues";
 import { rawToShares, sharesToRaw } from "@/lib/tokens/b20";
@@ -76,18 +76,22 @@ export function StockSheet({
 
   const ticker = tickerOf(stock.symbol);
   const owned = holding.freeRaw + holding.backingRaw > 0n;
-  // MAX sells every free share, to the last unit; typed shares go through the token's multiplier.
-  const sharesRaw = all ? holding.freeRaw : sharesToRaw(raw, holding.multiplier, stock.decimals);
-  const freeShares = rawToShares(holding.freeRaw, holding.multiplier, stock.decimals);
+  const cf = useBackingFactors(data.holdings)?.[holding.symbol];
+  // Up to $X: the free shares, then backing shares down to the 1.12 line. MAX sells all of that, to the last unit;
+  // typed shares go through the token's multiplier.
+  const maxRaw = sellableRaw(holding, cf, data);
+  const sharesRaw = all ? maxRaw : sharesToRaw(raw, holding.multiplier, stock.decimals);
+  const maxShares = rawToShares(maxRaw, holding.multiplier, stock.decimals);
+  const maxUsd = maxShares * holding.priceUsd;
 
   const quote = useSellQuote(stock, step === "stock" ? 0n : sharesRaw);
   const q = quote.data ?? null;
-  // A sale of free shares doesn't touch the loan, so planSell reads no collateral factor for it.
-  const plan = q ? planSell({ from: "free", stock, holding, cf: 0, position: data, quote: q }) : null;
+  // "any": free shares first, then backing ones, which come out in the same batch before the swap.
+  const plan = q ? planSell({ from: "any", stock, holding, cf: cf ?? 0, position: data, quote: q }) : null;
   const econ = q ? sellEconomics(q, stock, holding.priceUsd) : null;
 
   let blocker: string | null = null;
-  if (sharesRaw > holding.freeRaw) blocker = SELL_BLOCKED["not-free"];
+  if (sharesRaw > maxRaw) blocker = SELL_BLOCKED[holding.backingRaw > 0n ? "past-line" : "not-free"];
   else if (sharesRaw > 0n && quote.isSuccess && q === null) blocker = `There’s no market for ${stock.name} right now.`;
   else if (plan?.block) blocker = SELL_BLOCKED[plan.block];
   const warning =
@@ -159,7 +163,7 @@ export function StockSheet({
             </div>
             <Actions
               owned={owned}
-              canSell={holding.freeRaw > 0n}
+              canSell={maxRaw > 0n}
               backs={holding.backingRaw > 0n}
               paused={holding.paused}
               onBuy={onBuy}
@@ -183,17 +187,19 @@ export function StockSheet({
           <>
             <AmountField
               label="You sell"
-              source={<AmountSource>Free shares</AmountSource>}
+              source={
+                <AmountSource>{holding.backingRaw > 0n ? `Up to ${formatUsd(maxUsd)}` : "Free shares"}</AmountSource>
+              }
               badge={<StockAvatar symbol={stock.symbol} />}
               unit={ticker}
               decimals={6}
-              value={all ? String(Math.floor(freeShares * 1e6) / 1e6) : raw}
+              value={all ? String(Math.floor(maxShares * 1e6) / 1e6) : raw}
               onValue={(v) => {
                 setAll(false);
                 setRaw(v);
               }}
               onMax={() => setAll(true)}
-              hint={`Free: ${formatShares(freeShares)} shares · ${formatUsd(holding.freeUsd)} at Aave’s price`}
+              hint={`${formatShares(maxShares)} shares · ${formatUsd(holding.priceUsd)} each`}
               autoFocus
             />
             <AmountArrow />
