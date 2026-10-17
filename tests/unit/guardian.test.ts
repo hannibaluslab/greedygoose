@@ -25,7 +25,10 @@ describe("Act is the line (Adrian, 2026-10-15)", () => {
   });
 
   it("does nothing at 1.3 (Watch), however much cash there is", () => {
-    expect(planGuardian({ ...base, debtUsd: owedAt(1.3), savingsUsd: 10_000, capLeftUsd: 10_000 })).toMatchObject({ action: "none", reason: "healthy" });
+    expect(planGuardian({ ...base, debtUsd: owedAt(1.3), savingsUsd: 10_000, capLeftUsd: 10_000 })).toMatchObject({
+      action: "none",
+      reason: "healthy",
+    });
     // …nor anywhere in Watch, down to the line itself
     expect(planGuardian({ ...base, debtUsd: owedAt(1.49) }).action).toBe("none");
     expect(planGuardian({ ...base, debtUsd: owedAt(1.1001) }).action).toBe("none");
@@ -55,7 +58,10 @@ describe("Act is the line (Adrian, 2026-10-15)", () => {
       expect(sellTiming(wad(short.hfAfter), 0n, 1_000n, false, l)).toEqual({ timing: "sell", atOnce: true });
     }
     // No cash at all: nothing to repay with, and the sale goes on its own.
-    expect(planGuardian({ ...base, debtUsd: owedAt(1.04), savingsUsd: 0 })).toMatchObject({ action: "none", reason: "no-savings" });
+    expect(planGuardian({ ...base, debtUsd: owedAt(1.04), savingsUsd: 0 })).toMatchObject({
+      action: "none",
+      reason: "no-savings",
+    });
   });
 });
 
@@ -66,14 +72,28 @@ describe("planGuardian", () => {
   });
   it("is limited by savings and by the daily cap", () => {
     const act = owedAt(1.05);
-    expect(planGuardian({ ...base, debtUsd: act, savingsUsd: 50 })).toMatchObject({ action: "repay", amountUsd: 50, limitedBy: "savings" });
-    expect(planGuardian({ ...base, debtUsd: act, capLeftUsd: 20 })).toMatchObject({ action: "repay", amountUsd: 20, limitedBy: "cap" });
-    expect(planGuardian({ ...base, debtUsd: act, savingsUsd: 0 })).toMatchObject({ action: "none", reason: "no-savings" });
+    expect(planGuardian({ ...base, debtUsd: act, savingsUsd: 50 })).toMatchObject({
+      action: "repay",
+      amountUsd: 50,
+      limitedBy: "savings",
+    });
+    expect(planGuardian({ ...base, debtUsd: act, capLeftUsd: 20 })).toMatchObject({
+      action: "repay",
+      amountUsd: 20,
+      limitedBy: "cap",
+    });
+    expect(planGuardian({ ...base, debtUsd: act, savingsUsd: 0 })).toMatchObject({
+      action: "none",
+      reason: "no-savings",
+    });
     expect(planGuardian({ ...base, debtUsd: act, capLeftUsd: 0 })).toMatchObject({ action: "none", reason: "no-cap" });
   });
   it("skips dust repays (gas would cost more than it helps)", () => {
     // In Act, but only 1 cent of savings left → too small to be worth a transaction.
-    expect(planGuardian({ ...base, debtUsd: owedAt(1.05), savingsUsd: 0.01 })).toMatchObject({ action: "none", reason: "too-small" });
+    expect(planGuardian({ ...base, debtUsd: owedAt(1.05), savingsUsd: 0.01 })).toMatchObject({
+      action: "none",
+      reason: "too-small",
+    });
   });
 });
 
@@ -89,7 +109,8 @@ describe("weekendHeadsUp: Weekend Shield is a card now, never a repay", () => {
     expect(planGuardian({ ...base, debtUsd: owedAt(1.25) }).action).toBe("none");
   });
   it("says nothing outside the window, when the drop leaves it out of Act, or in Act (Protect acts itself)", () => {
-    const at = (hf: number, weekendWindow = true) => weekendHeadsUp({ collateralUsd: 1000, avgCf: 0.7, debtUsd: owedAt(hf), weekendWindow });
+    const at = (hf: number, weekendWindow = true) =>
+      weekendHeadsUp({ collateralUsd: 1000, avgCf: 0.7, debtUsd: owedAt(hf), weekendWindow });
     expect(at(1.25, false)).toBeNull();
     expect(at(1.4)).toBeNull(); // −15% → 1.19, still Watch
     expect(at(1.05)).toBeNull();
@@ -113,7 +134,10 @@ describe("planSave", () => {
     expect(planSave({ ...base, walletRaw: usd(500), savesToday: 6, maxSavesPerDay: 7 }).action).toBe("save");
   });
   it("skips a save the limit would shrink below the minimum", () => {
-    expect(planSave({ ...base, walletRaw: usd(500), capLeftRaw: usd(0.5) })).toEqual({ action: "none", reason: "too-small" });
+    expect(planSave({ ...base, walletRaw: usd(500), capLeftRaw: usd(0.5) })).toEqual({
+      action: "none",
+      reason: "too-small",
+    });
   });
 });
 
@@ -130,14 +154,23 @@ describe("permission + calls", () => {
   const user = "0x14087c532332dE6E971Eb2F60a252cbf511F59eA" as const;
   const checker = "0x00000000000000000000000000000000000000C1" as const;
   it("builds exactly three checked calls and a daily USDC cap", () => {
-    const p = buildGuardianPermission({ account: user, spender: "0x00000000000000000000000000000000000000EE", checker, dailyCapRaw: 50_000_000n, start: 1, end: 2 });
+    const p = buildGuardianPermission({
+      account: user,
+      spender: "0x00000000000000000000000000000000000000EE",
+      checker,
+      dailyCapRaw: 50_000_000n,
+      start: 1,
+      end: 2,
+    });
     expect(p.calls.map((c) => [c.target, c.selector, c.checker])).toEqual([
       [GUARDIAN.AAVE_V3_POOL, SEL.withdraw, checker],
       [USDC.address, SEL.approve, checker],
       [AAVE.SPOKE, SEL.repay, checker],
     ]);
     expect(p.spends).toEqual([{ token: USDC.address, allowance: 50_000_000n, unit: PERIOD.Day, multiplier: 1 }]);
-    expect(() => buildGuardianPermission({ account: user, spender: user, checker, dailyCapRaw: 0n, start: 1, end: 2 })).toThrow();
+    expect(() =>
+      buildGuardianPermission({ account: user, spender: user, checker, dailyCapRaw: 0n, start: 1, end: 2 }),
+    ).toThrow();
   });
   it("period units match the manager's enum (Day = 2, Forever = 5, no Year)", () => {
     expect(PERIOD).toEqual({ Minute: 0, Hour: 1, Day: 2, Week: 3, Month: 4, Forever: 5 });

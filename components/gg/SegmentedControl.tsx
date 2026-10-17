@@ -5,8 +5,18 @@ type Option<T extends string> = { value: T; label: string };
  * the chosen option a white pill on it. Each option is drawn 30px tall and answers taps over 44px.
  */
 export function SegmentedControl<T extends string>({
-  options, value, onChange, label, className = "",
-}: { options: Option<T>[]; value: T; onChange: (next: T) => void; label: string; className?: string }) {
+  options,
+  value,
+  onChange,
+  label,
+  className = "",
+}: {
+  options: Option<T>[];
+  value: T;
+  onChange: (next: T) => void;
+  label: string;
+  className?: string;
+}) {
   return (
     <div role="radiogroup" aria-label={label} className={`flex gap-0.5 rounded-full bg-pill p-[3px] ${className}`}>
       {options.map((opt) => {

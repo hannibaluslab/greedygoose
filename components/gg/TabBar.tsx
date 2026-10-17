@@ -13,7 +13,9 @@ const TABS = [
   { href: "/home", label: "Home", Icon: HomeIcon, match: ["/home"] },
   { href: "/portfolio", label: "Invest", Icon: InvestIcon, match: ["/portfolio"] },
   { href: "/agents", label: "Agents", Icon: AgentsIcon, match: ["/agents", "/activity"] },
-  ...(LEADERBOARD_ENABLED ? [{ href: "/leaderboard", label: "Leaderboard", Icon: BoardIcon, match: ["/leaderboard"] }] : []),
+  ...(LEADERBOARD_ENABLED
+    ? [{ href: "/leaderboard", label: "Leaderboard", Icon: BoardIcon, match: ["/leaderboard"] }]
+    : []),
   { href: "/send", label: "Send", Icon: SendIcon, match: ["/send"] },
 ];
 
@@ -32,7 +34,11 @@ export function TabBar() {
       <nav
         aria-label="Main"
         className="fixed bottom-[calc(env(safe-area-inset-bottom)+8px)] left-1/2 grid h-14 w-[calc(min(100vw,430px)-28px)] -translate-x-1/2 rounded-[28px] px-1.5"
-        style={{ gridTemplateColumns: `repeat(${TABS.length}, minmax(0,1fr))`, background: "rgba(20,19,15,0.94)", boxShadow: "0 16px 48px -16px rgba(0,0,0,0.4)" }}
+        style={{
+          gridTemplateColumns: `repeat(${TABS.length}, minmax(0,1fr))`,
+          background: "rgba(20,19,15,0.94)",
+          boxShadow: "0 16px 48px -16px rgba(0,0,0,0.4)",
+        }}
       >
         {TABS.map(({ href, label, Icon, match }) => {
           const active = match.some((m) => path.startsWith(m));
@@ -42,7 +48,13 @@ export function TabBar() {
           if (href === "/agents") {
             return (
               // No label under it (Adrian: the word looked odd there), as the booth's centre button; screen readers get it.
-              <Link key={href} href={href} aria-label={label} aria-current={active ? "page" : undefined} className="relative flex items-center justify-center">
+              <Link
+                key={href}
+                href={href}
+                aria-label={label}
+                aria-current={active ? "page" : undefined}
+                className="relative flex items-center justify-center"
+              >
                 <span className="absolute left-1/2 top-0 grid size-[52px] -translate-x-1/2 -translate-y-[14px] place-items-center rounded-full bg-brand text-ink shadow-[0_6px_14px_-4px_rgba(14,13,11,0.35)] ring-[5px] ring-ground transition active:scale-95">
                   <Icon size={24} />
                 </span>

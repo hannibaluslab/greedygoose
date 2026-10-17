@@ -32,7 +32,8 @@ async function getData<T>(path: string, signal?: AbortSignal): Promise<T> {
   } catch {
     throw new Error(`market-data request failed (${res.status}): non-JSON response`);
   }
-  if (!res.ok || body.result?.error) throw new Error(body.result?.error ?? `market-data request failed (${res.status})`);
+  if (!res.ok || body.result?.error)
+    throw new Error(body.result?.error ?? `market-data request failed (${res.status})`);
   if (body.result?.data == null) throw new Error("market-data request returned empty data");
   return body.result.data;
 }
@@ -46,8 +47,14 @@ const ticker = (symbol: string) => symbol.toUpperCase();
 type JawQuote = Omit<MarketData, "week">;
 
 /** Quotes for these registry symbols in one /markets call. A stock JAW has no row for is left out. */
-export async function fetchJawQuotes(symbols: readonly string[], signal?: AbortSignal): Promise<Record<string, JawQuote>> {
-  const rows = await getData<MarketRow[]>(`/markets?symbols=${encodeURIComponent(symbols.map(ticker).join(","))}`, signal);
+export async function fetchJawQuotes(
+  symbols: readonly string[],
+  signal?: AbortSignal,
+): Promise<Record<string, JawQuote>> {
+  const rows = await getData<MarketRow[]>(
+    `/markets?symbols=${encodeURIComponent(symbols.map(ticker).join(","))}`,
+    signal,
+  );
   const out: Record<string, JawQuote> = {};
   for (const symbol of symbols) {
     const row = rows.find((r) => r?.symbol?.toUpperCase() === ticker(symbol));
@@ -65,7 +72,10 @@ export async function fetchJawHistory(symbol: string, days: number, signal?: Abo
 }
 
 /** Each stock's hourly prices over the last 7 days, one /history call per stock. A stock whose call fails is left out. */
-export async function fetchJawWeeks(symbols: readonly string[], signal?: AbortSignal): Promise<Record<string, number[]>> {
+export async function fetchJawWeeks(
+  symbols: readonly string[],
+  signal?: AbortSignal,
+): Promise<Record<string, number[]>> {
   const weeks = await Promise.allSettled(symbols.map((s) => fetchJawHistory(s, 7, signal)));
   return Object.fromEntries(
     symbols.flatMap((s, i) => {
@@ -78,6 +88,8 @@ export async function fetchJawWeeks(symbols: readonly string[], signal?: AbortSi
 /** Quotes and weeks put together, for the stocks that have both. */
 export function jawMarketData(quotes: Record<string, JawQuote>, weeks: Record<string, number[]>): MarketMap {
   return Object.fromEntries(
-    Object.entries(quotes).flatMap(([symbol, quote]) => (weeks[symbol] ? [[symbol, { ...quote, week: weeks[symbol] }]] : [])),
+    Object.entries(quotes).flatMap(([symbol, quote]) =>
+      weeks[symbol] ? [[symbol, { ...quote, week: weeks[symbol] }]] : [],
+    ),
   );
 }

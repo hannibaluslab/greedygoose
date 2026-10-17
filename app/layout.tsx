@@ -8,7 +8,10 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 
 // The link preview (WhatsApp, iMessage, X…): app/opengraph-image.jpg and twitter-image.jpg, 1200x630, made absolute by
 // metadataBase. A preview deploy's own address comes from Vercel; production is greedygoose.vercel.app.
-const SITE = process.env.VERCEL_ENV === "preview" && process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "https://greedygoose.vercel.app";
+const SITE =
+  process.env.VERCEL_ENV === "preview" && process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : "https://greedygoose.vercel.app";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE),
@@ -21,14 +24,23 @@ export const metadata: Metadata = {
     title: "GreedyGoose",
     description: "Let your money get greedy. Cash, stocks and credit in one account.",
   },
-  twitter: { card: "summary_large_image", title: "GreedyGoose", description: "Let your money get greedy. Cash, stocks and credit in one account." },
+  twitter: {
+    card: "summary_large_image",
+    title: "GreedyGoose",
+    description: "Let your money get greedy. Cash, stocks and credit in one account.",
+  },
 };
 
 // viewportFit cover: the canvas is drawn edge to edge, so the page runs under the status bar and
 // home indicator, and fixed bars and sheets pad themselves with env(safe-area-inset-*). The boards' 54px top
 // included the status bar, so a screen's top is the inset plus the 8px left under it (0 in a Safari tab, where
 // the page starts below the bar; the bar's height once added to the Home Screen).
-export const viewport: Viewport = { themeColor: "#f4f2ec", width: "device-width", initialScale: 1, viewportFit: "cover" };
+export const viewport: Viewport = {
+  themeColor: "#f4f2ec",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (

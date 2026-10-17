@@ -1,13 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { agentNexts, beforeFreeze, defaultNumbers, nyDay, planNext, rebalanceCheckAt, weekendCard, whenText, type NextInput } from "@/lib/agents/next";
+import {
+  agentNexts,
+  beforeFreeze,
+  defaultNumbers,
+  nyDay,
+  planNext,
+  rebalanceCheckAt,
+  weekendCard,
+  whenText,
+  type NextInput,
+} from "@/lib/agents/next";
 import { rebalanceOptions } from "@/lib/agents/mix";
 import { JOBS, type AgentJob } from "@/lib/agents/permissions";
 import { USDC } from "@/lib/tokens/registry";
 
 const usdc = (x: number) => BigInt(Math.round(x * 1e6));
-const byJob = <T,>(f: (job: AgentJob) => T) => Object.fromEntries(JOBS.map((job) => [job, f(job)])) as Record<AgentJob, T>;
+const byJob = <T>(f: (job: AgentJob) => T) =>
+  Object.fromEntries(JOBS.map((job) => [job, f(job)])) as Record<AgentJob, T>;
 const price = (usd: number) => BigInt(Math.round(usd * 1e8));
-const free = (reserveId: number, usd: number, p: number) => ({ reserveId, priceRaw: price(p), freeRaw: BigInt(Math.round((usd / p) * 1e8)) });
+const free = (reserveId: number, usd: number, p: number) => ({
+  reserveId,
+  priceRaw: price(p),
+  freeRaw: BigInt(Math.round((usd / p) * 1e8)),
+});
 /** Wednesday 2025-10-15 12:00 New York (16:00 UTC, daylight time). */
 const WED_NOON = Date.UTC(2025, 9, 15, 16) / 1000;
 
@@ -43,9 +58,18 @@ describe("agentNexts: each agent's rule on live data", () => {
     expect(agentNexts(input({ debtUsd: 1_000 })).protect).toEqual({ idle: "Watch. Steps in only at Act" });
     // Against $1,300 it's 1.077 (Act); back to 1.2 needs $133.34, rounded up to the cent.
     const act = input({ debtUsd: 1_300 });
-    expect(agentNexts(act).protect).toEqual({ will: "repays $133.34 from your cash", would: "Would repay $133.34 from your cash" });
+    expect(agentNexts(act).protect).toEqual({
+      will: "repays $133.34 from your cash",
+      would: "Would repay $133.34 from your cash",
+    });
     expect(agentNexts({ ...act, savingsRaw: 0n }).protect).toEqual({ idle: "Act. No cash to repay with" });
-    const used = { ...act.left, protect: [{ token: USDC.address, leftRaw: 0n }, { token: USDC.address, leftRaw: 0n }] };
+    const used = {
+      ...act.left,
+      protect: [
+        { token: USDC.address, leftRaw: 0n },
+        { token: USDC.address, leftRaw: 0n },
+      ],
+    };
     expect(agentNexts({ ...act, left: used }).protect).toEqual({ idle: "Act. Today’s limit is used" });
   });
 
@@ -54,9 +78,16 @@ describe("agentNexts: each agent's rule on live data", () => {
     // The executor's nextFreeze: 20:00 New York, 00:00 UTC on Saturday.
     const fri = Date.UTC(2025, 9, 17, 18, 30) / 1000;
     const freezeAt = Date.UTC(2025, 9, 18, 0) / 1000;
-    const at = (nowSec: number, debtUsd: number, over: Partial<NextInput> = {}) => ({ ...input({ nowSec, debtUsd, ...over }), freezeAt });
+    const at = (nowSec: number, debtUsd: number, over: Partial<NextInput> = {}) => ({
+      ...input({ nowSec, debtUsd, ...over }),
+      freezeAt,
+    });
     const card = weekendCard(at(fri, 1_120));
-    expect(card).toEqual({ addUsd: 129, dropPct: 15, when: `at ${new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(freezeAt * 1000)}` });
+    expect(card).toEqual({
+      addUsd: 129,
+      dropPct: 15,
+      when: `at ${new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(freezeAt * 1000)}`,
+    });
     // No move with it: Protect's line is still Watch's.
     expect(agentNexts(input({ nowSec: fri, debtUsd: 1_120 })).protect).toEqual({ idle: "Watch. Steps in only at Act" });
     expect(weekendCard(at(fri - 3 * 3600, 1_120))).toBeNull(); // 11:30: not yet
@@ -68,14 +99,21 @@ describe("agentNexts: each agent's rule on live data", () => {
 
   it("follows the executor's calendar and window, not a fixed Friday: holidays, a freeze already on, a shorter window", () => {
     const wedFreeze = Date.UTC(2025, 9, 16, 0) / 1000; // Wednesday 20:00 New York, before a Thursday the executor holds
-    expect(weekendCard({ ...input({ debtUsd: 1_120 }), nowSec: wedFreeze - 2 * 3600, freezeAt: wedFreeze })).toMatchObject({ addUsd: 129 });
+    expect(
+      weekendCard({ ...input({ debtUsd: 1_120 }), nowSec: wedFreeze - 2 * 3600, freezeAt: wedFreeze }),
+    ).toMatchObject({ addUsd: 129 });
     // Good Friday: prices are already held, so nextFreeze gives back the hour asked (not after now): no card.
     const goodFriday = Date.UTC(2026, 3, 3, 18, 30) / 1000;
     expect(weekendCard({ ...input({ nowSec: goodFriday, debtUsd: 1_120 }), freezeAt: goodFriday - 1_800 })).toBeNull();
     // The window is the executor's: with 3 hours, 14:30 is too early for a 20:00 freeze.
     const fri = Date.UTC(2025, 9, 17, 18, 30) / 1000;
     const short = { ...defaultNumbers(rebalanceOptions()), weekendWindowSec: 3 * 3600 };
-    expect(weekendCard({ ...input({ nowSec: fri, debtUsd: 1_120, numbers: short }), freezeAt: Date.UTC(2025, 9, 18, 0) / 1000 })).toBeNull();
+    expect(
+      weekendCard({
+        ...input({ nowSec: fri, debtUsd: 1_120, numbers: short }),
+        freezeAt: Date.UTC(2025, 9, 18, 0) / 1000,
+      }),
+    ).toBeNull();
     expect(beforeFreeze(100, 100, 3600)).toBe(false); // the freeze itself is not before it
     expect(beforeFreeze(99, 100, 3600)).toBe(true);
     expect(beforeFreeze(100 - 3601, 100, 3600)).toBe(false);
@@ -83,7 +121,9 @@ describe("agentNexts: each agent's rule on live data", () => {
 
   it("Rebalance checks its mix at the next window, trades when a stock breaks its band, and waits while the credit is in Act", () => {
     // Thursday 10:00 New York, in the viewer's own words.
-    expect(agentNexts(input()).rebalance).toEqual({ idle: `On target. Checks ${whenText(Date.UTC(2025, 9, 16, 14) / 1000, WED_NOON)}` });
+    expect(agentNexts(input()).rebalance).toEqual({
+      idle: `On target. Checks ${whenText(Date.UTC(2025, 9, 16, 14) / 1000, WED_NOON)}`,
+    });
     expect(agentNexts(input({ mixBps: null })).rebalance).toEqual({ idle: "No mix yet" });
     // 60/40 against a 50/50 mix: Apple broke out by 10 points.
     const drifted = input({ holdings: [free(0, 6_000, 250), free(5, 4_000, 180)] });
@@ -91,8 +131,12 @@ describe("agentNexts: each agent's rule on live data", () => {
     expect(n).toMatchObject({ would: expect.stringMatching(/^Would trade \$\d+(\.\d\d)?$/) });
     expect("will" in n && n.will).toMatch(/^trades \$\d+(\.\d\d)? (today|tomorrow) /);
     // Watch is fine for the Rebalancer too: GooseExecutor waits only below Protect's trigger, the Act line.
-    expect(agentNexts({ ...drifted, debtUsd: 1_000 }).rebalance).toMatchObject({ would: expect.stringMatching(/^Would trade/) });
-    expect(agentNexts({ ...drifted, debtUsd: 1_300 }).rebalance).toEqual({ idle: "Waits until your credit is out of Act" });
+    expect(agentNexts({ ...drifted, debtUsd: 1_000 }).rebalance).toMatchObject({
+      would: expect.stringMatching(/^Would trade/),
+    });
+    expect(agentNexts({ ...drifted, debtUsd: 1_300 }).rebalance).toEqual({
+      idle: "Waits until your credit is out of Act",
+    });
   });
 
   it("takes the executor's plan for the job it names, and the rules for the rest", () => {
@@ -101,21 +145,45 @@ describe("agentNexts: each agent's rule on live data", () => {
     expect(n.protect).toEqual({ will: "repays $120 from your cash", would: "Would repay $120 from your cash" });
     expect(n.rebalance).toEqual(agentNexts(input()).rebalance);
     // A Save (action 3, job 0) or a conversion (action 9, job 4) is under the hood: every agent reads its rule.
-    expect(agentNexts(input({ plan: { action: 3, job: 0, amount: usdc(40), reason: 0, off: 0 } }))).toEqual(agentNexts(input()));
-    expect(agentNexts(input({ plan: { action: 9, job: 4, amount: usdc(119), reason: 0, off: 0 } }))).toEqual(agentNexts(input()));
+    expect(agentNexts(input({ plan: { action: 3, job: 0, amount: usdc(40), reason: 0, off: 0 } }))).toEqual(
+      agentNexts(input()),
+    );
+    expect(agentNexts(input({ plan: { action: 9, job: 4, amount: usdc(119), reason: 0, off: 0 } }))).toEqual(
+      agentNexts(input()),
+    );
     // A sale is Protect's too; a plan with nothing to do changes nothing.
-    expect(agentNexts(input({ plan: { action: 4, job: 2, amount: usdc(90), reason: 1, off: 0 } })).protect).toMatchObject({
+    expect(
+      agentNexts(input({ plan: { action: 4, job: 2, amount: usdc(90), reason: 1, off: 0 } })).protect,
+    ).toMatchObject({
       will: "sells backing stock to repay $90",
     });
-    expect(agentNexts(input({ plan: { action: 0, job: 0, amount: 0n, reason: 0, off: 0 } }))).toEqual(agentNexts(input()));
+    expect(agentNexts(input({ plan: { action: 0, job: 0, amount: 0n, reason: 0, off: 0 } }))).toEqual(
+      agentNexts(input()),
+    );
   });
 
   it("names every move the executor can plan for an agent, and none of Save's or Entry's", () => {
     // [action, job]: Prune Protect, Repay, Sell, Heads-up, Clear, Defer, Rebalance.
-    const planned = ([[1, 1], [2, 1], [4, 2], [5, 2], [6, 2], [7, 2], [8, 3]] as const).map(([action, job]) =>
-      planNext({ action, job, amount: usdc(10), reason: 0, off: 1 })!,
-    );
-    expect(planned.map((p) => p.agent)).toEqual(["protect", "protect", "protect", "protect", "protect", "protect", "rebalance"]);
+    const planned = (
+      [
+        [1, 1],
+        [2, 1],
+        [4, 2],
+        [5, 2],
+        [6, 2],
+        [7, 2],
+        [8, 3],
+      ] as const
+    ).map(([action, job]) => planNext({ action, job, amount: usdc(10), reason: 0, off: 1 })!);
+    expect(planned.map((p) => p.agent)).toEqual([
+      "protect",
+      "protect",
+      "protect",
+      "protect",
+      "protect",
+      "protect",
+      "rebalance",
+    ]);
     const words = planned.map((p) => p.next);
     expect(words[0]).toEqual({ idle: "Stopping: a year has passed since you switched it on." });
     expect(words.slice(1).map((w) => ("will" in w ? w.will : w.idle))).toEqual([
@@ -126,9 +194,15 @@ describe("agentNexts: each agent's rule on live data", () => {
       "finishes its last move",
       "trades $10",
     ]);
-    for (const w of words) expect(JSON.stringify(w)).not.toMatch(/borrow|lock|permission|executor|upkeep|registry|spender|saving/i);
+    for (const w of words)
+      expect(JSON.stringify(w)).not.toMatch(/borrow|lock|permission|executor|upkeep|registry|spender|saving/i);
     // Save (job 0) and Entry (job 4), even a prune: nothing to say on the Agents tab.
-    for (const [action, job] of [[3, 0], [1, 0], [9, 4], [1, 4]] as const) {
+    for (const [action, job] of [
+      [3, 0],
+      [1, 0],
+      [9, 4],
+      [1, 4],
+    ] as const) {
       expect(planNext({ action, job, amount: usdc(10), reason: 0, off: 1 })).toBeNull();
     }
   });

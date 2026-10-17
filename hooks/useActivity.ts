@@ -69,5 +69,10 @@ export function useActivity(address: `0x${string}`) {
     return out.filter((r) => r.items.length > 0 || r.status !== "done").sort((a, b) => b.time - a.time);
   }, [entries, receipts, local, address]);
 
-  return { rows, isLoading: history.isLoading, isError: history.isError && local.length === 0, refetch: history.refetch };
+  return {
+    rows,
+    isLoading: history.isLoading,
+    isError: history.isError && local.length === 0,
+    refetch: history.refetch,
+  };
 }

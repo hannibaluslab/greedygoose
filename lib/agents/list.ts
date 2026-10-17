@@ -48,7 +48,8 @@ export const AGENT_COPY: Record<Agent, { does: string; lead: string; never: stri
   protect: {
     does: "Steps in only at Act",
     lead: `${PROTECT_RULE} It repays from your cash, and can sell backing stock if cash isn’t enough.`,
-    never: "Protect does nothing while your credit is Safe or in Watch. It never sells a stock that doesn’t back your credit, and never sells on a weekend.",
+    never:
+      "Protect does nothing while your credit is Safe or in Watch. It never sells a stock that doesn’t back your credit, and never sells on a weekend.",
   },
   rebalance: {
     does: "Keeps your mix on target",
@@ -145,7 +146,9 @@ const FAILS_CARD = 3;
 const MAX_FAILS = 8;
 
 /** A card's button: the Top up or Repay sheet over the tab, or Renew (JAW's own sheet). */
-export type CardAction = { kind: "sheet"; label: string; sheet: "top-up" | "repay" } | { kind: "renew"; agent: Agent; jobs: AgentJob[] };
+export type CardAction =
+  | { kind: "sheet"; label: string; sheet: "top-up" | "repay" }
+  | { kind: "renew"; agent: Agent; jobs: AgentJob[] };
 
 export type AgentCard = {
   key: string;
@@ -218,7 +221,8 @@ export function agentCards(i: CardsInput): AgentCard[] {
   // Runs fail for the whole account; with neither agent running, they were earning's or converting's (D20): no card.
   const running = AGENTS.some((a) => ["on", "starting"].includes(agentStatus(a, i.status)));
   if (i.fails >= FAILS_CARD && running) {
-    const retry = i.cooldownUntil > i.nowSec ? `They try again at ${timeText(i.cooldownUntil)}` : "They try again on the next run";
+    const retry =
+      i.cooldownUntil > i.nowSec ? `They try again at ${timeText(i.cooldownUntil)}` : "They try again on the next run";
     cards.push({
       key: "fails",
       tone: "plain",

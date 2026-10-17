@@ -35,7 +35,9 @@ export default function PortfolioPage() {
 function Portfolio({ address }: { address: `0x${string}` }) {
   const { data, isError, refetch } = usePosition(address);
   const params = useSearchParams();
-  const stocks = useStockSheets(params.has("s") ? { symbol: params.get("s") } : params.has("market") ? { symbol: null } : null);
+  const stocks = useStockSheets(
+    params.has("s") ? { symbol: params.get("s") } : params.has("market") ? { symbol: null } : null,
+  );
   const money = useMoneySheets();
 
   return (
@@ -45,8 +47,14 @@ function Portfolio({ address }: { address: `0x${string}` }) {
 
         {isError && !data ? (
           <div className="rounded-[22px] bg-card p-4 shadow-card-elev">
-            <p role="alert" className="m-0 text-[15px]">We couldn’t load your account from Base.</p>
-            <button type="button" onClick={() => refetch()} className="mt-3 h-11 rounded-full bg-chip px-4 font-semibold">
+            <p role="alert" className="m-0 text-[15px]">
+              We couldn’t load your account from Base.
+            </p>
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="mt-3 h-11 rounded-full bg-chip px-4 font-semibold"
+            >
               Try again
             </button>
           </div>
@@ -69,8 +77,18 @@ function Portfolio({ address }: { address: `0x${string}` }) {
 }
 
 function Loaded({
-  data, openMarket, openTrade, openCreditBuy, openStock,
-}: { data: PositionData; openMarket: () => void; openTrade: () => void; openCreditBuy: () => void; openStock: (symbol: string) => void }) {
+  data,
+  openMarket,
+  openTrade,
+  openCreditBuy,
+  openStock,
+}: {
+  data: PositionData;
+  openMarket: () => void;
+  openTrade: () => void;
+  openCreditBuy: () => void;
+  openStock: (symbol: string) => void;
+}) {
   const held = data.holdings.filter((h) => h.freeShares + h.lockedShares > 0);
   const power = useBuyingPower(data, held.length > 0);
   const market = useMarketPrices(held);
@@ -93,33 +111,47 @@ function Loaded({
             value: power ? (
               <>
                 <span className="text-[22px] font-medium tracking-normal text-ink-mid">$</span>
-                {formatUsd(Math.floor(power.cashUsd + power.creditUsd)).replace(/\.00$/, "").replace("$", "")}
+                {formatUsd(Math.floor(power.cashUsd + power.creditUsd))
+                  .replace(/\.00$/, "")
+                  .replace("$", "")}
               </>
             ) : (
               "–"
             ),
             sub: power ? (
               // One line (Adrian): the total is above, so this only says what's in it.
-              <span className="whitespace-nowrap">{power.creditUsd >= 1 ? `Cash + ${formatUsdTrim(Math.floor(power.creditUsd))} credit` : "Cash only"}</span>
+              <span className="whitespace-nowrap">
+                {power.creditUsd >= 1 ? `Cash + ${formatUsdTrim(Math.floor(power.creditUsd))} credit` : "Cash only"}
+              </span>
             ) : undefined,
           }}
         />
-        {held.length > 0 && <ValueLine points={weekValue(priced)} height={34} loading={market.loading} onRetry={market.retry} />}
+        {held.length > 0 && (
+          <ValueLine points={weekValue(priced)} height={34} loading={market.loading} onRetry={market.retry} />
+        )}
         <MarketBanner />
       </section>
 
       {/* The board's pills (52px, 15px labels with 18px icons), three even cells with Trade between: 8px apart so Credit Buy fits at 390px. */}
       <div className="grid grid-cols-3 gap-2">
-        <Button variant="white" size="row" icon={<MarketIcon size={18} strokeWidth={1.8} />} onClick={openMarket}>Market</Button>
-        <Button variant="white" size="row" icon={<TradeIcon size={18} strokeWidth={1.8} />} onClick={openTrade}>Trade</Button>
-        <Button size="row" icon={<CreditIcon size={18} strokeWidth={1.8} />} onClick={openCreditBuy}>Credit Buy</Button>
+        <Button variant="white" size="row" icon={<MarketIcon size={18} strokeWidth={1.8} />} onClick={openMarket}>
+          Market
+        </Button>
+        <Button variant="white" size="row" icon={<TradeIcon size={18} strokeWidth={1.8} />} onClick={openTrade}>
+          Trade
+        </Button>
+        <Button size="row" icon={<CreditIcon size={18} strokeWidth={1.8} />} onClick={openCreditBuy}>
+          Credit Buy
+        </Button>
       </div>
 
       <HoldingList title="Your holdings">
         {held.length === 0 ? (
           <p className="m-0 py-4 text-[15px]">
             You don’t hold any supported stocks yet.{" "}
-            <button type="button" onClick={openMarket} className="font-semibold underline">Buy stocks</button>
+            <button type="button" onClick={openMarket} className="font-semibold underline">
+              Buy stocks
+            </button>
           </p>
         ) : (
           held.map((h) => {
@@ -145,7 +177,9 @@ function Loaded({
         )}
       </HoldingList>
       <p className="m-0 px-1 text-xs leading-snug text-subtle">
-        Values use the prices your credit is measured at. Today’s change and the lines use market prices, for information only. Tokenized stocks track the share price; they are not company shares and carry no voting rights.
+        Values use the prices your credit is measured at. Today’s change and the lines use market prices, for
+        information only. Tokenized stocks track the share price; they are not company shares and carry no voting
+        rights.
       </p>
     </>
   );

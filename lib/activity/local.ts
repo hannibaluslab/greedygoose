@@ -5,7 +5,13 @@ import type { ActivityItem } from "./decode";
  * Chain data (decoded receipts) wins once it exists. Browser storage may be unavailable — every
  * access is guarded and the app works without it.
  */
-export type LocalActivity = { id: string; time: number; items: ActivityItem[]; hash?: `0x${string}`; status: "pending" | "done" | "failed" };
+export type LocalActivity = {
+  id: string;
+  time: number;
+  items: ActivityItem[];
+  hash?: `0x${string}`;
+  status: "pending" | "done" | "failed";
+};
 
 const key = (address: string) => `gg.activity.v1.${address.toLowerCase()}`;
 const listeners = new Set<() => void>();
@@ -33,7 +39,10 @@ export function addLocal(address: string, entry: LocalActivity) {
 }
 
 export function updateLocal(address: string, id: string, patch: Partial<LocalActivity>) {
-  write(address, readLocal(address).map((e) => (e.id === id ? { ...e, ...patch } : e)));
+  write(
+    address,
+    readLocal(address).map((e) => (e.id === id ? { ...e, ...patch } : e)),
+  );
 }
 
 export function subscribeLocal(cb: () => void) {

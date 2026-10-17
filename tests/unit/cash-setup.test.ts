@@ -1,11 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { arrivedCoins, arrivedText, arrivedView, askAutomatic, earningLine, MIN_START_USD, rateText, startEarningMinRaw, startEarningShown } from "@/lib/cashSetup";
+import {
+  arrivedCoins,
+  arrivedText,
+  arrivedView,
+  askAutomatic,
+  earningLine,
+  MIN_START_USD,
+  rateText,
+  startEarningMinRaw,
+  startEarningShown,
+} from "@/lib/cashSetup";
 import { CASH } from "@/config/risk";
 import type { AgentStatus } from "@/lib/agents/status";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 
 const [USDT, USDE, USDBC, USDS] = ENTRY_COINS;
-const raw = (coin: (typeof ENTRY_COINS)[number], n: number) => BigInt(Math.round(n * 100)) * 10n ** BigInt(coin.decimals - 2);
+const raw = (coin: (typeof ENTRY_COINS)[number], n: number) =>
+  BigInt(Math.round(n * 100)) * 10n ** BigInt(coin.decimals - 2);
 const STATUSES: AgentStatus[] = ["unconfigured", "loading", "off", "starting", "on"];
 
 describe("start earning: when Home offers it", () => {
@@ -45,7 +56,9 @@ describe("other dollars in the account", () => {
   it("read as one or two amounts, or past two as their face value", () => {
     expect(arrivedText(arrivedCoins([raw(USDT, 120), 0n, 0n, 0n]))).toBe("120 USDT");
     expect(arrivedText(arrivedCoins([raw(USDT, 120), raw(USDE, 50.5), 0n, 0n]))).toBe("120 USDT and 50.5 USDe");
-    expect(arrivedText(arrivedCoins([raw(USDT, 120), raw(USDE, 50.5), 0n, raw(USDS, 1.99)]))).toBe("$172 in other dollars");
+    expect(arrivedText(arrivedCoins([raw(USDT, 120), raw(USDE, 50.5), 0n, raw(USDS, 1.99)]))).toBe(
+      "$172 in other dollars",
+    );
   });
 
   it("get 'Turn into cash' while nothing converts them, and only 'arriving' once something does", () => {
@@ -64,7 +77,9 @@ describe("other dollars in the account", () => {
   });
 
   it("never name an agent, a limit or a savings pot", () => {
-    const words = [arrivedText(arrivedCoins([raw(USDT, 1), raw(USDE, 1), raw(USDBC, 1), 0n])), rateText(0.04)].join(" ");
+    const words = [arrivedText(arrivedCoins([raw(USDT, 1), raw(USDE, 1), raw(USDBC, 1), 0n])), rateText(0.04)].join(
+      " ",
+    );
     expect(words).not.toMatch(/agent|saving|receive|limit|permission|executor/i);
   });
 });

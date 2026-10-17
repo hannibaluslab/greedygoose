@@ -31,13 +31,19 @@ import {
 
 const SAM = "0x2b8ce2c87c166d8e24e186e7e4253c11fc805427" as const;
 const OTHER = "0x00000000000000000000000000000000000000aa" as const;
-const call = (n: number): Call => ({ to: "0x00000000000000000000000000000000000000c1", data: `0x${n.toString(16).padStart(8, "0")}` as Hex, value: 0n });
+const call = (n: number): Call => ({
+  to: "0x00000000000000000000000000000000000000c1",
+  data: `0x${n.toString(16).padStart(8, "0")}` as Hex,
+  value: 0n,
+});
 const plan = (key: string, user: `0x${string}` = SAM): TxPlan => ({ key, user, calls: [call(1)] });
 const ok = (...n: number[]): Checked => ({ ok: true, batch: n.map(call) });
 
 /** JAW's popup error as it reaches the app through viem (a 4001 whose details carry JAW's words). */
 const popupError = () =>
-  new UserRejectedRequestError(Object.assign(new Error("Failed to open popup. Please allow popups for this site."), { code: 4001 }));
+  new UserRejectedRequestError(
+    Object.assign(new Error("Failed to open popup. Please allow popups for this site."), { code: 4001 }),
+  );
 
 let clock = 0;
 const now = () => clock;
@@ -94,7 +100,9 @@ describe("txKey: one key per set of inputs", () => {
   it("is the same for the same inputs, bigints included, and differs when any input does", () => {
     const quote = ["aerodrome", 10, 100_000_000n, 45_000_000n];
     expect(txKey("buy", SAM, "NVDAc", quote)).toBe(txKey("buy", SAM, "NVDAc", [...quote]));
-    expect(txKey("buy", SAM, "NVDAc", quote)).not.toBe(txKey("buy", SAM, "NVDAc", ["aerodrome", 10, 100_000_000n, 45_000_001n]));
+    expect(txKey("buy", SAM, "NVDAc", quote)).not.toBe(
+      txKey("buy", SAM, "NVDAc", ["aerodrome", 10, 100_000_000n, 45_000_001n]),
+    );
     expect(txKey("buy", SAM, "NVDAc", quote)).not.toBe(txKey("buy", SAM, "AAPLc", quote));
     expect(txKey(1n)).not.toBe(txKey("1"));
   });
@@ -195,9 +203,18 @@ describe("PreparedTx: a batch is signed only for the inputs it was prepared for"
   it("a simulation that fails blocks it, and drops the batch from before", () => {
     const store = preparedFor("A");
     clock += PREPARE_EVERY_MS;
-    store.finish(store.begin("A", SAM), { ok: false, error: "This would put your loan past what Aave allows.", blocks: true });
+    store.finish(store.begin("A", SAM), {
+      ok: false,
+      error: "This would put your loan past what Aave allows.",
+      blocks: true,
+    });
     expect(store.usable("A", SAM)).toBeNull();
-    expect(store.getSnapshot()).toMatchObject({ ready: false, checking: false, blocked: true, error: "This would put your loan past what Aave allows." });
+    expect(store.getSnapshot()).toMatchObject({
+      ready: false,
+      checking: false,
+      blocked: true,
+      error: "This would put your loan past what Aave allows.",
+    });
   });
 
   it("Base not answering doesn't block, and keeps the batch it has until its TTL", () => {
@@ -303,8 +320,15 @@ describe("checkPlan: build, join(), simulate", () => {
 
   it("a revert blocks with its words; a stop with its own; Base down doesn't block", async () => {
     const reverts = d({ simulate: async () => [{ status: "success" }, { status: "failure", data: "0x" }] });
-    expect(await checkPlan({ ...plan("A"), fallback: "Would fail." }, reverts)).toEqual({ ok: false, error: "Would fail.", blocks: true });
-    const stops = await checkPlan({ key: "A", user: SAM, calls: async () => Promise.reject(new TxStop("The price moved.")) }, d());
+    expect(await checkPlan({ ...plan("A"), fallback: "Would fail." }, reverts)).toEqual({
+      ok: false,
+      error: "Would fail.",
+      blocks: true,
+    });
+    const stops = await checkPlan(
+      { key: "A", user: SAM, calls: async () => Promise.reject(new TxStop("The price moved.")) },
+      d(),
+    );
     expect(stops).toEqual({ ok: false, error: "The price moved.", blocks: true });
     const down = await checkPlan(plan("A"), d({ simulate: async () => Promise.reject(new Error("fetch failed")) }));
     expect(down).toEqual({ ok: false, error: CANT_CHECK, blocks: false });
@@ -329,13 +353,28 @@ describe("checkPlan: the health on Aave after a batch that takes credit or frees
       },
     });
   const wad = (hf: number) => BigInt(Math.round(hf * 1e6)) * 10n ** 12n;
-  const floored: TxPlan = { key: "credit", user: SAM, calls: async () => [call(1), call(2)], healthFloor: { minHf: 1.1, stop: STOP } };
+  const floored: TxPlan = {
+    key: "credit",
+    user: SAM,
+    calls: async () => [call(1), call(2)],
+    healthFloor: { minHf: 1.1, stop: STOP },
+  };
   /** The batch succeeds; the read at its end answers `data` (or fails). */
   const withHealth = (data: Hex | null) =>
     vi.fn(async (_u: `0x${string}`, batch: Call[]) =>
-      batch.map((_, i) => (i === batch.length - 1 ? (data ? { status: "success", data } : { status: "failure", data: "0x" as Hex }) : { status: "success", data: "0x" as Hex })),
+      batch.map((_, i) =>
+        i === batch.length - 1
+          ? data
+            ? { status: "success", data }
+            : { status: "failure", data: "0x" as Hex }
+          : { status: "success", data: "0x" as Hex },
+      ),
     );
-  const deps = (simulate: CheckDeps["simulate"]): CheckDeps => ({ join: async (_u, batch) => batch, simulate, explain: (_d, fallback) => fallback });
+  const deps = (simulate: CheckDeps["simulate"]): CheckDeps => ({
+    join: async (_u, batch) => batch,
+    simulate,
+    explain: (_d, fallback) => fallback,
+  });
 
   it("reads the account on Aave at the end of the simulation, and signs only the batch", async () => {
     const simulate = withHealth(account(wad(1.1201)));
@@ -345,7 +384,11 @@ describe("checkPlan: the health on Aave after a batch that takes credit or frees
   });
 
   it("stops a batch that lands in Act, whatever the screen planned, with the floor's words", async () => {
-    expect(await checkPlan(floored, deps(withHealth(account(wad(1.0999)))))).toEqual({ ok: false, error: STOP, blocks: true });
+    expect(await checkPlan(floored, deps(withHealth(account(wad(1.0999)))))).toEqual({
+      ok: false,
+      error: STOP,
+      blocks: true,
+    });
     // At the line exactly it's Watch, and goes ahead.
     expect((await checkPlan(floored, deps(withHealth(account(wad(1.1)))))).ok).toBe(true);
     // Nothing owed after it (a full Free up with no credit): no health to fall under.
@@ -354,13 +397,22 @@ describe("checkPlan: the health on Aave after a batch that takes credit or frees
 
   it("without the health after it, it isn't signed: checked again, as when Base doesn't answer", async () => {
     expect(await checkPlan(floored, deps(withHealth(null)))).toEqual({ ok: false, error: CANT_CHECK, blocks: false });
-    expect(await checkPlan(floored, deps(withHealth("0x1234")))).toEqual({ ok: false, error: CANT_CHECK, blocks: false });
+    expect(await checkPlan(floored, deps(withHealth("0x1234")))).toEqual({
+      ok: false,
+      error: CANT_CHECK,
+      blocks: false,
+    });
   });
 
   it("a revert in the batch still names its own call, not the read", async () => {
     const explain = vi.fn((_d: Hex | undefined, fallback: string, c: Call) => `${fallback} ${c.data}`);
-    const simulate = async (_u: `0x${string}`, batch: Call[]) => batch.map((_, i) => ({ status: i === 1 ? "failure" : "success", data: "0x" as Hex }));
-    expect(await checkPlan({ ...floored, fallback: "Fails at" }, { ...deps(simulate), explain })).toEqual({ ok: false, error: `Fails at ${call(2).data}`, blocks: true });
+    const simulate = async (_u: `0x${string}`, batch: Call[]) =>
+      batch.map((_, i) => ({ status: i === 1 ? "failure" : "success", data: "0x" as Hex }));
+    expect(await checkPlan({ ...floored, fallback: "Fails at" }, { ...deps(simulate), explain })).toEqual({
+      ok: false,
+      error: `Fails at ${call(2).data}`,
+      blocks: true,
+    });
   });
 
   it("a plan without a floor (a buy, a repay, backing alone) has nothing read after it", async () => {
@@ -396,7 +448,16 @@ describe("signPlan: the tap", () => {
     const caps = { atomic: { status: "supported" } } as unknown as Parameters<typeof tapDeps>[0]["chainCaps"];
     const done = signPlan(
       plan("A"),
-      tapDeps({ address: SAM, store, chainCaps: caps, check, sendCalls, setPhase: (p) => phases.push(p), setError: vi.fn(), onSent }),
+      tapDeps({
+        address: SAM,
+        store,
+        chainCaps: caps,
+        check,
+        sendCalls,
+        setPhase: (p) => phases.push(p),
+        setError: vi.fn(),
+        onSent,
+      }),
     );
     expect(sendCalls).toHaveBeenCalledTimes(1);
     expect(sendCalls).toHaveBeenCalledWith({
@@ -419,7 +480,14 @@ describe("signPlan: the tap", () => {
     expect(send).not.toHaveBeenCalled();
     await done;
     expect(check).toHaveBeenCalledTimes(1);
-    expect(log).toEqual(["phase:simulating", "check:B", "phase:signing", `send:${call(9).data}`, "sent", "phase:pending"]);
+    expect(log).toEqual([
+      "phase:simulating",
+      "check:B",
+      "phase:signing",
+      `send:${call(9).data}`,
+      "sent",
+      "phase:pending",
+    ]);
   });
 
   it("a batch over 30 s old is checked again before JAW sees anything", async () => {
@@ -474,7 +542,9 @@ describe("signPlan: the tap", () => {
   it("a simulation that fails at the tap blocks it: nothing reaches JAW", async () => {
     const store = new PreparedTx(now);
     store.setPlan("A", SAM);
-    const { d, send, state } = deps(store, { check: vi.fn(async () => ({ ok: false as const, error: "Would fail.", blocks: true })) });
+    const { d, send, state } = deps(store, {
+      check: vi.fn(async () => ({ ok: false as const, error: "Would fail.", blocks: true })),
+    });
     await signPlan(plan("A"), d);
     expect(send).not.toHaveBeenCalled();
     expect(state).toEqual({ phase: "failed", error: "Would fail." });
@@ -482,7 +552,9 @@ describe("signPlan: the tap", () => {
 
   it("says when the user cancelled, and keeps the batch for another try", async () => {
     const store = preparedFor("A");
-    const { d, state } = deps(store, { send: vi.fn(() => Promise.reject(new UserRejectedRequestError(new Error("User rejected the request.")))) });
+    const { d, state } = deps(store, {
+      send: vi.fn(() => Promise.reject(new UserRejectedRequestError(new Error("User rejected the request.")))),
+    });
     await signPlan(plan("A"), d);
     expect(state).toEqual({ phase: "failed", error: CANCELLED });
     expect(store.usable("A", SAM)).not.toBeNull();

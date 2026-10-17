@@ -70,7 +70,9 @@ export function MoneySheets({ address, children }: { address: `0x${string}`; chi
   return (
     <OpenSheet.Provider value={open}>
       {children}
-      {topUp.subject && <TopUpSheet key={`topUp${topUp.key}`} open={topUp.open} address={address} onClose={topUp.close} />}
+      {topUp.subject && (
+        <TopUpSheet key={`topUp${topUp.key}`} open={topUp.open} address={address} onClose={topUp.close} />
+      )}
       {repay.subject && (
         <RepaySheet
           key={`repay${repay.key}`}

@@ -39,10 +39,18 @@ export function useFreeUpBatch() {
     if (!p.repaysAll) {
       const amountRaw = repayRaw(p.repayUsd);
       const cash = await cashToSign(p.user, amountRaw);
-      return [...payFromCash(p.user, amountRaw, cash, buildRepayCalls({ user: p.user, amountRaw, all: false })), ...withdraw];
+      return [
+        ...payFromCash(p.user, amountRaw, cash, buildRepayCalls({ user: p.user, amountRaw, all: false })),
+        ...withdraw,
+      ];
     }
     const [debtRaw, cash] = await Promise.all([
-      client!.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserTotalDebt", args: [BigInt(USDC.reserveId), p.user] }),
+      client!.readContract({
+        address: AAVE.SPOKE,
+        abi: spokeAbi,
+        functionName: "getUserTotalDebt",
+        args: [BigInt(USDC.reserveId), p.user],
+      }),
       readCash(client!, p.user),
     ]);
     const short = debtRaw > 0n ? cashShort(debtRaw, cash) : null;
@@ -53,7 +61,10 @@ export function useFreeUpBatch() {
     if (debtRaw === 0n) return withdraw;
     const amountRaw = fullRepayAmount(debtRaw, maxSpendRaw(cash));
     if (amountRaw <= 0n) throw new TxStop(cantRepay(cash));
-    return [...payFromCash(p.user, amountRaw, cash, buildRepayCalls({ user: p.user, amountRaw, all: true })), ...withdraw];
+    return [
+      ...payFromCash(p.user, amountRaw, cash, buildRepayCalls({ user: p.user, amountRaw, all: true })),
+      ...withdraw,
+    ];
   };
 }
 

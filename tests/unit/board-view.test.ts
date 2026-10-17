@@ -30,7 +30,13 @@ describe("boardSections", () => {
   });
 
   it("puts the not-ranked-yet after, and Contacts filters the same board to your contacts and you", () => {
-    const people = [person(0, { contact: true }), person(1), person(2, { you: true }), person(3, { pct: null, rank: null, contact: true }), person(4, { pct: null, rank: null })];
+    const people = [
+      person(0, { contact: true }),
+      person(1),
+      person(2, { you: true }),
+      person(3, { pct: null, rank: null, contact: true }),
+      person(4, { pct: null, rank: null }),
+    ];
     const all = boardSections(people, [], "all");
     // On All, only you and your contacts are drawn among those not ranked yet; everyone else is a count.
     expect(all.unranked.map((p) => p.account)).toEqual([addr(3)]);

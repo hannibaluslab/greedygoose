@@ -63,7 +63,14 @@ export function rebalanceSave(p: {
       p.weights.some((w, r) => w > 0 && !((p.terms!.limitsRaw?.[r] ?? 0n) > 0n)));
   const steps = Number(mixChanged) + Number(needsGrant);
   const canSave =
-    p.configured && p.connected && whole && steps > 0 && p.capMaxRaw !== null && !p.feeBlocked && !p.feeLoading && !p.busy;
+    p.configured &&
+    p.connected &&
+    whole &&
+    steps > 0 &&
+    p.capMaxRaw !== null &&
+    !p.feeBlocked &&
+    !p.feeLoading &&
+    !p.busy;
 
   const note = !p.configured
     ? "Not live yet"

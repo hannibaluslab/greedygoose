@@ -25,9 +25,21 @@ const JOIN = 100n;
 
 const same = (list: Address[]) => (a: Address) => list.some((b) => b.toLowerCase() === a.toLowerCase());
 /** Each pool is its own venue; PSM3 and its pocket are one. */
-const venues = (pools: Address[], psm: Address[] = []) => (a: Address) =>
-  pools.some((b) => b.toLowerCase() === a.toLowerCase()) ? a.toLowerCase() : psm.some((b) => b.toLowerCase() === a.toLowerCase()) ? "psm3" : undefined;
-const rules: FlowRules = { usdc: USDC.address, ausdc: GUARDIAN.AUSDC, token: tokenInfo, venue: venues([POOL]), aave: same([HUB]) };
+const venues =
+  (pools: Address[], psm: Address[] = []) =>
+  (a: Address) =>
+    pools.some((b) => b.toLowerCase() === a.toLowerCase())
+      ? a.toLowerCase()
+      : psm.some((b) => b.toLowerCase() === a.toLowerCase())
+        ? "psm3"
+        : undefined;
+const rules: FlowRules = {
+  usdc: USDC.address,
+  ausdc: GUARDIAN.AUSDC,
+  token: tokenInfo,
+  venue: venues([POOL]),
+  aave: same([HUB]),
+};
 
 const usd6 = (usd: number) => BigInt(Math.round(usd * 1e6));
 const priceRaw = (usd: number) => BigInt(Math.round(usd * 1e8));
@@ -59,7 +71,9 @@ class Ledger {
   priceAt = (block: bigint) => this.prices.get(block) ?? this.price;
 
   worth(a: Address) {
-    return Number(this.get(this.usd, a) + stockUsd6(this.get(this.stock, a), this.price) - this.get(this.owed, a)) / 1e6;
+    return (
+      Number(this.get(this.usd, a) + stockUsd6(this.get(this.stock, a), this.price) - this.get(this.owed, a)) / 1e6
+    );
   }
 
   private transfer(tx: Hex, token: Address, from: Address, to: Address, value: bigint) {
@@ -113,7 +127,15 @@ class Ledger {
     const tx = this.tx();
     this.transfer(tx, USDC.address, a, GUARDIAN.AUSDC, usd6(usd));
     this.transfer(tx, GUARDIAN.AUSDC, "0x0000000000000000000000000000000000000000", a, usd6(usd));
-    this.records.push({ kind: "savings", ...this.base(tx), event: "Supply", reserve: USDC.address, by: a, for: a, amount: usd6(usd) });
+    this.records.push({
+      kind: "savings",
+      ...this.base(tx),
+      event: "Supply",
+      reserve: USDC.address,
+      by: a,
+      for: a,
+      amount: usd6(usd),
+    });
   }
   /** Savings supplied by `from` for `to` (Aave V3's onBehalfOf): a payment between members. */
   saveFor(from: Address, to: Address, usd: number) {
@@ -122,7 +144,15 @@ class Ledger {
     this.add(this.usd, to, usd6(usd));
     this.transfer(tx, USDC.address, from, GUARDIAN.AUSDC, usd6(usd));
     this.transfer(tx, GUARDIAN.AUSDC, "0x0000000000000000000000000000000000000000", to, usd6(usd));
-    this.records.push({ kind: "savings", ...this.base(tx), event: "Supply", reserve: USDC.address, by: from, for: to, amount: usd6(usd) });
+    this.records.push({
+      kind: "savings",
+      ...this.base(tx),
+      event: "Supply",
+      reserve: USDC.address,
+      by: from,
+      for: to,
+      amount: usd6(usd),
+    });
   }
   /** USDC credit drawn on Aave V3 against savings, in another app (Aave's own): it lands in the wallet as cash. */
   creditV3(a: Address, usd: number) {
@@ -130,7 +160,15 @@ class Ledger {
     this.add(this.owed, a, usd6(usd));
     this.add(this.usd, a, usd6(usd));
     this.transfer(tx, USDC.address, GUARDIAN.AUSDC, a, usd6(usd));
-    this.records.push({ kind: "savingsCredit", ...this.base(tx), event: "Borrow", reserve: USDC.address, debtor: a, by: a, amount: usd6(usd) });
+    this.records.push({
+      kind: "savingsCredit",
+      ...this.base(tx),
+      event: "Borrow",
+      reserve: USDC.address,
+      debtor: a,
+      by: a,
+      amount: usd6(usd),
+    });
   }
   fee(a: Address, tx: Hex, feeUsd: number) {
     this.add(this.usd, a, -usd6(feeUsd));
@@ -141,7 +179,15 @@ class Ledger {
   creditBuy(a: Address, usd: number) {
     const tx = this.tx();
     this.add(this.owed, a, usd6(usd));
-    this.records.push({ kind: "spoke", ...this.base(tx), event: "Borrow", reserveId: USDC.reserveId, caller: a, user: a, amount: usd6(usd) });
+    this.records.push({
+      kind: "spoke",
+      ...this.base(tx),
+      event: "Borrow",
+      reserveId: USDC.reserveId,
+      caller: a,
+      user: a,
+      amount: usd6(usd),
+    });
     this.transfer(tx, USDC.address, HUB, a, usd6(usd));
     this.add(this.usd, a, usd6(usd));
     const n = (usd6(usd) * 10n ** 10n) / this.price;
@@ -160,7 +206,15 @@ class Ledger {
     const seized = (usd6(debtUsd * (1 + bonus)) * 10n ** 10n) / this.price;
     this.add(this.owed, a, -usd6(debtUsd));
     this.add(this.stock, a, -seized);
-    this.records.push({ kind: "spoke", ...this.base(tx), event: "LiquidationCall", reserveId: USDC.reserveId, caller: OUTSIDE, user: a, amount: usd6(debtUsd) });
+    this.records.push({
+      kind: "spoke",
+      ...this.base(tx),
+      event: "LiquidationCall",
+      reserveId: USDC.reserveId,
+      caller: OUTSIDE,
+      user: a,
+      amount: usd6(debtUsd),
+    });
   }
 
   /** What the board computes for `a`, given what `a` held at joining, the way lib/board/read.ts does. */
@@ -246,7 +300,17 @@ describe("returnSinceJoining", () => {
     l.next(priceRaw(90));
     const loss = pct(l.flows(SAM, start));
     // Draw $9,000 of credit and keep it as cash: net worth is unchanged, the most credit in use is $9,000.
-    l.records.push({ kind: "spoke", block: l.block, tx: `0x${"ab".repeat(32)}`, logIndex: 999, event: "Borrow", reserveId: USDC.reserveId, caller: SAM, user: SAM, amount: usd6(9_000) });
+    l.records.push({
+      kind: "spoke",
+      block: l.block,
+      tx: `0x${"ab".repeat(32)}`,
+      logIndex: 999,
+      event: "Borrow",
+      reserveId: USDC.reserveId,
+      caller: SAM,
+      user: SAM,
+      amount: usd6(9_000),
+    });
     expect(pct(l.flows(SAM, start))).toBeCloseTo(loss, 9);
     expect(loss).toBeCloseTo(-0.1, 6);
   });
@@ -369,17 +433,32 @@ describe("returnSinceJoining", () => {
   });
 
   it(`isn't ranked under $${MIN_PUT_IN_USD} of own money`, () => {
-    expect(returnSinceJoining({ worthAtJoin: 5, worthNow: 6, putIn: 14.99, takenOut: 0, peakCredit: 0 }).pct).toBeNull();
-    expect(returnSinceJoining({ worthAtJoin: 5, worthNow: 25, putIn: 15, takenOut: 0, peakCredit: 0 }).pct).toBeCloseTo(0.25, 9);
+    expect(
+      returnSinceJoining({ worthAtJoin: 5, worthNow: 6, putIn: 14.99, takenOut: 0, peakCredit: 0 }).pct,
+    ).toBeNull();
+    expect(returnSinceJoining({ worthAtJoin: 5, worthNow: 25, putIn: 15, takenOut: 0, peakCredit: 0 }).pct).toBeCloseTo(
+      0.25,
+      9,
+    );
     expect(returnSinceJoining({ worthAtJoin: 0, worthNow: 0, putIn: 0, takenOut: 0, peakCredit: 0 }).pct).toBeNull();
   });
 });
 
 describe("rankRows", () => {
-  const row = (account: string, joinedAt: bigint, p: number | null) => ({ account: account as Address, joinedAt, pct: p });
+  const row = (account: string, joinedAt: bigint, p: number | null) => ({
+    account: account as Address,
+    joinedAt,
+    pct: p,
+  });
 
   it("ranks the highest return first, ties to whoever joined first, the unranked after with no rank", () => {
-    const rows = rankRows([row("0xc", 3n, 0.05), row("0xa", 1n, null), row("0xb", 2n, 0.05), row("0xd", 4n, 0.2), row("0xe", 0n, null)]);
+    const rows = rankRows([
+      row("0xc", 3n, 0.05),
+      row("0xa", 1n, null),
+      row("0xb", 2n, 0.05),
+      row("0xd", 4n, 0.2),
+      row("0xe", 0n, null),
+    ]);
     expect(rows.map((r) => [r.account, r.rank])).toEqual([
       ["0xd", 1],
       ["0xb", 2],

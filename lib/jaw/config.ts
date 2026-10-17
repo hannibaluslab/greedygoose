@@ -78,7 +78,9 @@ export const wagmiConfig = createConfig({
         }),
       ],
   // A fork reads Base's state the first time it is touched, which can take longer than viem's 10 s.
-  transports: { [CHAIN.id]: REHEARSAL ? http(REHEARSAL.rpc, { timeout: 60_000 }) : http(process.env.NEXT_PUBLIC_BASE_RPC_URL) },
+  transports: {
+    [CHAIN.id]: REHEARSAL ? http(REHEARSAL.rpc, { timeout: 60_000 }) : http(process.env.NEXT_PUBLIC_BASE_RPC_URL),
+  },
   ssr: true,
 });
 

@@ -21,7 +21,11 @@ import { EQUITIES } from "@/lib/tokens/registry";
  */
 
 export function AgentsView({
-  cards, rows, live, feed, turnOffAll,
+  cards,
+  rows,
+  live,
+  feed,
+  turnOffAll,
 }: {
   cards: ReactNode;
   rows: ReactNode;
@@ -62,7 +66,9 @@ const TONE: Record<AgentCard["tone"], string> = {
  * the tab; Renew opens JAW's own sheet.
  */
 export function AttentionCard({
-  card, onRenew, disabled = false,
+  card,
+  onRenew,
+  disabled = false,
 }: {
   card: AgentCard;
   onRenew: (agent: Agent, jobs: AgentJob[]) => void;
@@ -73,7 +79,11 @@ export function AttentionCard({
   const money = useMoneySheets();
   const button = (a: CardAction, i: number) =>
     a.kind === "sheet" ? (
-      <Button key={a.label} variant={i === 0 ? "dark" : "primary"} onClick={a.sheet === "top-up" ? money.topUp : money.repay}>
+      <Button
+        key={a.label}
+        variant={i === 0 ? "dark" : "primary"}
+        onClick={a.sheet === "top-up" ? money.topUp : money.repay}
+      >
         {a.label}
       </Button>
     ) : (
@@ -89,7 +99,10 @@ export function AttentionCard({
     );
   const single = card.actions.length === 1 && card.actions[0].kind === "renew";
   return (
-    <section aria-label={`From ${card.agent}`} className={`flex flex-col gap-3 rounded-[22px] p-3.5 ${TONE[card.tone]}`}>
+    <section
+      aria-label={`From ${card.agent}`}
+      className={`flex flex-col gap-3 rounded-[22px] p-3.5 ${TONE[card.tone]}`}
+    >
       <div className="flex items-center gap-2.5">
         <AgentMark agent={card.agent} size={32} />
         <div className="flex min-w-0 grow flex-col gap-0.5">
@@ -126,7 +139,11 @@ export function MixBar({ mixBps }: { mixBps: readonly number[] }) {
  * agent's sheet; the switch opens JAW's own sheet for the grant at the limit shown, or for the revoke.
  */
 export function AgentRow({
-  item, switchable, onOpen, onSwitch, extra,
+  item,
+  switchable,
+  onOpen,
+  onSwitch,
+  extra,
 }: {
   item: AgentItem;
   switchable: boolean;
@@ -137,7 +154,12 @@ export function AgentRow({
 }) {
   return (
     <div className="relative rounded-[22px] bg-card shadow-card-elev">
-      <button type="button" onClick={onOpen} aria-label={`${item.name}: ${item.line}. Open`} className="absolute inset-0 rounded-[22px]" />
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={`${item.name}: ${item.line}. Open`}
+        className="absolute inset-0 rounded-[22px]"
+      />
       <div className="pointer-events-none relative flex items-center gap-2.5 px-3 pb-2.5 pt-3">
         <AgentMark agent={item.name} size={38} />
         <span className="flex min-w-0 grow flex-col gap-0.5">
@@ -146,12 +168,19 @@ export function AgentRow({
           {extra}
         </span>
         <span className="pointer-events-auto">
-          <Switch label={`${item.name} ${item.on ? "on" : "off"}`} checked={item.on} disabled={!switchable} onChange={onSwitch} />
+          <Switch
+            label={`${item.name} ${item.on ? "on" : "off"}`}
+            checked={item.on}
+            disabled={!switchable}
+            onChange={onSwitch}
+          />
         </span>
       </div>
       <div className="pointer-events-none relative flex items-center gap-2 border-t border-hairline py-2.5 pl-3 pr-2.5">
         <span className="num min-w-0 grow truncate text-[13px] text-ink-2">{item.line}</span>
-        <span className="num flex h-[22px] shrink-0 items-center rounded-[11px] bg-pill px-2 text-xs font-semibold text-ink-mid">{item.limit}</span>
+        <span className="num flex h-[22px] shrink-0 items-center rounded-[11px] bg-pill px-2 text-xs font-semibold text-ink-mid">
+          {item.limit}
+        </span>
         <ChevronRight size={16} className="shrink-0 text-subtle" />
       </div>
     </div>
@@ -159,11 +188,26 @@ export function AgentRow({
 }
 
 /** "Turn off all agents": straight to JAW's own sheet, once for each grant that's on ("3 steps"). */
-export function TurnOffAll({ steps, live, disabled, onClick }: { steps: number; live: boolean; disabled: boolean; onClick: () => void }) {
+export function TurnOffAll({
+  steps,
+  live,
+  disabled,
+  onClick,
+}: {
+  steps: number;
+  live: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}) {
   const note = !live ? "Not live yet" : steps === 0 ? "None of them is on." : stepsNote(steps);
   return (
     <div className="flex flex-col items-center gap-0.5">
-      <button type="button" disabled={disabled || steps === 0} onClick={onClick} className="flex h-11 items-center px-4 text-sm font-semibold text-act disabled:text-ink-mid disabled:opacity-60">
+      <button
+        type="button"
+        disabled={disabled || steps === 0}
+        onClick={onClick}
+        className="flex h-11 items-center px-4 text-sm font-semibold text-act disabled:text-ink-mid disabled:opacity-60"
+      >
         Turn off all agents
       </button>
       {note && <span className="text-xs text-subtle">{note}</span>}
@@ -186,7 +230,15 @@ const NOTICE: Record<Exclude<FeedError, null>, string> = {
  * draws it with no title of its own.
  */
 export function AgentsFeed({
-  title = "What they did, and why", empty, rows, nowMs, loading, error, onRetry, more, onShowEarlier,
+  title = "What they did, and why",
+  empty,
+  rows,
+  nowMs,
+  loading,
+  error,
+  onRetry,
+  more,
+  onShowEarlier,
 }: {
   title?: string | null;
   empty: string;
@@ -210,24 +262,38 @@ export function AgentsFeed({
       <FeedCard>
         {loading ? (
           <div aria-busy className="flex flex-col gap-3 py-3.5">
-            {[0, 1, 2].map((i) => <div key={i} className="h-10 animate-pulse rounded-[16px] bg-chip" />)}
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="h-10 animate-pulse rounded-[16px] bg-chip" />
+            ))}
           </div>
         ) : error === "all" ? (
           <div className="py-3.5">
-            <p role="alert" className="m-0 mb-2.5 text-sm text-ink-2">{NOTICE.all}</p>
+            <p role="alert" className="m-0 mb-2.5 text-sm text-ink-2">
+              {NOTICE.all}
+            </p>
             {retry}
           </div>
         ) : (
           <>
             {error && (
               <div className="flex items-center justify-between gap-3 border-b border-hairline py-2.5">
-                <p role="alert" className="m-0 text-[13px] leading-[1.35] text-ink-2">{NOTICE[error]}</p>
+                <p role="alert" className="m-0 text-[13px] leading-[1.35] text-ink-2">
+                  {NOTICE[error]}
+                </p>
                 {retry}
               </div>
             )}
-            {rows.length === 0 ? <p className="m-0 py-3.5 text-sm leading-[1.4] text-ink-mid">{empty}</p> : <FeedDays rows={rows} nowMs={nowMs} />}
+            {rows.length === 0 ? (
+              <p className="m-0 py-3.5 text-sm leading-[1.4] text-ink-mid">{empty}</p>
+            ) : (
+              <FeedDays rows={rows} nowMs={nowMs} />
+            )}
             {more && (
-              <button type="button" onClick={onShowEarlier} className="flex h-11 w-full items-center justify-center border-t border-hairline text-[13px] font-semibold">
+              <button
+                type="button"
+                onClick={onShowEarlier}
+                className="flex h-11 w-full items-center justify-center border-t border-hairline text-[13px] font-semibold"
+              >
                 Show earlier
               </button>
             )}

@@ -10,7 +10,8 @@ import type { ActivityItem } from "@/lib/activity/decode";
 import type { CreditPlan } from "@/lib/creditBuy";
 import { USDC, type ReserveAsset } from "@/lib/tokens/registry";
 
-const BUY_FALLBACK = "This buy would fail right now — the price may have moved or the stock may be paused. Try again in a moment.";
+const BUY_FALLBACK =
+  "This buy would fail right now — the price may have moved or the stock may be paused. Try again in a moment.";
 
 /** What Activity shows while a buy confirms. */
 const buyActivity = (stock: ReserveAsset, quote: BuyQuote): ActivityItem[] => [
@@ -34,7 +35,12 @@ export function useCashBuyBatch() {
   const cashToSign = useSigningCash();
   return async (p: CashBuyInput) => {
     const quote = await quoteToSign(p.stock, p.quote);
-    return payFromCash(p.user, quote.amountIn, await cashToSign(p.user, quote.amountIn), buildBuyCalls({ user: p.user, stock: p.stock, quote }));
+    return payFromCash(
+      p.user,
+      quote.amountIn,
+      await cashToSign(p.user, quote.amountIn),
+      buildBuyCalls({ user: p.user, stock: p.stock, quote }),
+    );
   };
 }
 

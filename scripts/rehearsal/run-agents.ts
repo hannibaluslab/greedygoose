@@ -23,7 +23,18 @@ import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 const MANAGER = GUARDIAN.PERMISSION_MANAGER as Address;
 const APPROVED = getAbiItem({ abi: permissionManagerAbi, name: "PermissionApproved" });
 const MODES = ["Run", "Register"] as const;
-const ACTIONS = ["None", "Prune", "Repay", "Save", "Sell", "HeadsUp", "ClearHeadsUp", "Defer", "Rebalance", "Convert"] as const;
+const ACTIONS = [
+  "None",
+  "Prune",
+  "Repay",
+  "Save",
+  "Sell",
+  "HeadsUp",
+  "ClearHeadsUp",
+  "Defer",
+  "Rebalance",
+  "Convert",
+] as const;
 const JOBS = ["Save", "Protect", "Protect · sell", "Rebalance", "Receive"] as const;
 
 async function main() {
@@ -31,7 +42,8 @@ async function main() {
   const state = readState();
   const fork = await connectFork(state.rpc);
   const who = namer(state);
-  if (!(await fork.pub.getCode({ address: state.executor }))) throw new Error("No executor on this fork: it restarted? Run npm run rehearsal:setup");
+  if (!(await fork.pub.getCode({ address: state.executor })))
+    throw new Error("No executor on this fork: it restarted? Run npm run rehearsal:setup");
 
   await register(fork, state, who);
 
@@ -42,10 +54,22 @@ async function main() {
 
   for (const name of Object.keys(state.accounts) as (keyof State["accounts"])[]) {
     const a = state.accounts[name].address;
-    const [jobs] = await fork.pub.readContract({ address: state.executor, abi: gooseExecutorAbi, functionName: "accounts", args: [a] });
+    const [jobs] = await fork.pub.readContract({
+      address: state.executor,
+      abi: gooseExecutorAbi,
+      functionName: "accounts",
+      args: [a],
+    });
     const on = JOBS.filter((_, j) => (jobs & (1 << j)) !== 0);
-    const d = await fork.pub.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserAccountData", args: [a] });
-    console.log(`${name}: ${on.length ? on.join(", ") + " on" : "no agents on"}${d.totalDebtValueRay > 0n ? `, health ${health(d.healthFactor)}` : ""}`);
+    const d = await fork.pub.readContract({
+      address: AAVE.SPOKE,
+      abi: spokeAbi,
+      functionName: "getUserAccountData",
+      args: [a],
+    });
+    console.log(
+      `${name}: ${on.length ? on.join(", ") + " on" : "no agents on"}${d.totalDebtValueRay > 0n ? `, health ${health(d.healthFactor)}` : ""}`,
+    );
   }
 }
 
@@ -54,7 +78,10 @@ async function register(fork: Fork, state: State, who: (a: Address) => string) {
   const latest = await fork.pub.getBlockNumber();
   const from = BigInt((state.registeredThrough ?? state.executorBlock) + 1);
   console.log(`Registrations: the manager's PermissionApproved in blocks ${from}–${latest}`);
-  const logs = from <= latest ? await fork.pub.getLogs({ address: MANAGER, event: APPROVED, fromBlock: from, toBlock: latest }) : [];
+  const logs =
+    from <= latest
+      ? await fork.pub.getLogs({ address: MANAGER, event: APPROVED, fromBlock: from, toBlock: latest })
+      : [];
   if (!logs.length) console.log("  none");
   for (const log of logs) {
     const block = await fork.pub.getBlock({ blockNumber: log.blockNumber });
@@ -77,7 +104,9 @@ async function register(fork: Fork, state: State, who: (a: Address) => string) {
     });
     const account = log.args.permission?.account;
     if (!needed) {
-      console.log(`  ${account ? who(account) : "?"}: a grant checkLog doesn't register (not a GooseExecutor template, already on, or stale)`);
+      console.log(
+        `  ${account ? who(account) : "?"}: a grant checkLog doesn't register (not a GooseExecutor template, already on, or stale)`,
+      );
       continue;
     }
     const receipt = await perform(fork, state, performData, REGISTER_GAS);
@@ -101,8 +130,14 @@ async function runOnce(fork: Fork, state: State, who: (a: Address) => string, n:
   if (!needed) {
     console.log("  nothing to do");
     for (const name of Object.keys(state.accounts) as (keyof State["accounts"])[]) {
-      const p = await fork.pub.readContract({ address: state.executor, abi: gooseExecutorAbi, functionName: "planOf", args: [state.accounts[name].address] });
-      if (p.action !== 0) console.log(`  ${name}: planOf says ${ACTIONS[p.action]} (${JOBS[p.job]}), not listed this block`);
+      const p = await fork.pub.readContract({
+        address: state.executor,
+        abi: gooseExecutorAbi,
+        functionName: "planOf",
+        args: [state.accounts[name].address],
+      });
+      if (p.action !== 0)
+        console.log(`  ${name}: planOf says ${ACTIONS[p.action]} (${JOBS[p.job]}), not listed this block`);
     }
     return false;
   }
@@ -110,7 +145,12 @@ async function runOnce(fork: Fork, state: State, who: (a: Address) => string, n:
   const listed = MODES[mode] === "Run" ? decodeAbiParameters([{ type: "address[]" }], data)[0] : [];
   console.log(`  listed: ${listed.map(who).join(", ")}`);
   for (const a of listed) {
-    const p = await fork.pub.readContract({ address: state.executor, abi: gooseExecutorAbi, functionName: "planOf", args: [a] });
+    const p = await fork.pub.readContract({
+      address: state.executor,
+      abi: gooseExecutorAbi,
+      functionName: "planOf",
+      args: [a],
+    });
     console.log(`  ${who(a)} plans ${ACTIONS[p.action]} (${JOBS[p.job]})`);
   }
   const receipt = await perform(fork, state, performData, RUN_GAS);

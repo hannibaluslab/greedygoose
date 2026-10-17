@@ -16,12 +16,28 @@ const owing = (debtUsd: number) => ({ collateralUsd: 2_000, avgCf: 0.7, debtUsd 
 /** `usd` of NVIDIA in raw units at $250. */
 const rawFor = (usd: number) => BigInt(Math.round((usd / 250) * 1e8));
 const check = (debtUsd: number, usd: number, all = false) =>
-  freeUpCheck({ position: owing(debtUsd), holding, decimals: 8, cf: 0.7, amountRaw: all ? holding.lockedRaw : rawFor(usd), all });
+  freeUpCheck({
+    position: owing(debtUsd),
+    holding,
+    decimals: 8,
+    cf: 0.7,
+    amountRaw: all ? holding.lockedRaw : rawFor(usd),
+    all,
+  });
 
 describe("freeUpCheck: Free up stops at the cap's line", () => {
   it("with nothing owed, all of it comes out, with no line and no tick", () => {
     const c = check(0, 0, true);
-    expect(c).toMatchObject({ canAll: true, maxUsd: 2_000, maxShares: 8, tooMuch: false, after: "none", risky: false, line: null, ok: true });
+    expect(c).toMatchObject({
+      canAll: true,
+      maxUsd: 2_000,
+      maxShares: 8,
+      tooMuch: false,
+      after: "none",
+      risky: false,
+      line: null,
+      ok: true,
+    });
   });
 
   it("its MAX keeps the health at 1.12, in Watch, and asks for D2's tick", () => {
@@ -41,7 +57,13 @@ describe("freeUpCheck: Free up stops at the cap's line", () => {
     // $731.43 out ends at 1.11, between the cap and the Act line.
     const c = check(800, 731.43);
     expect(statusFor(c.hfAfter)).toBe("watch");
-    expect(c).toMatchObject({ tooMuch: true, endsInAct: false, risky: false, ok: false, line: "That’s more than you can free up while you owe $800.00." });
+    expect(c).toMatchObject({
+      tooMuch: true,
+      endsInAct: false,
+      risky: false,
+      ok: false,
+      line: "That’s more than you can free up while you owe $800.00.",
+    });
   });
 
   it("an amount that would end in Act is blocked with one plain line, never a tick", () => {
@@ -56,7 +78,9 @@ describe("freeUpCheck: Free up stops at the cap's line", () => {
       // With an amount typed it's still that one line, not "Free up less" too.
       expect(check(debt, 10)).toMatchObject({ line: FREE_UP_BLOCKED["needs-all"], ok: false, risky: false });
     }
-    expect(FREE_UP_BLOCKED["needs-all"]).toBe("Your credit needs all of these shares. Repay some first to free them up.");
+    expect(FREE_UP_BLOCKED["needs-all"]).toBe(
+      "Your credit needs all of these shares. Repay some first to free them up.",
+    );
   });
 
   it("is the line the sheet allowed before, moved: 99.5% of Aave's limit ended deep in Act", () => {
@@ -70,7 +94,8 @@ describe("freeUpCheck: Free up stops at the cap's line", () => {
   });
 
   it("keeps protocol words off screen", () => {
-    for (const line of Object.values(FREE_UP_BLOCKED)) expect(line).not.toMatch(/borrow|loan|lock|aave|collateral|health/i);
+    for (const line of Object.values(FREE_UP_BLOCKED))
+      expect(line).not.toMatch(/borrow|loan|lock|aave|collateral|health/i);
   });
 });
 

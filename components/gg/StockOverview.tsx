@@ -44,17 +44,23 @@ export function StockHeader({ holding, market }: { holding: Holding; market: Mar
     <div className="flex items-center gap-3 leading-[normal]">
       <StockAvatar symbol={holding.symbol} size={48} />
       <div className="num flex min-w-0 flex-1 flex-col gap-1">
-        <span className="label">{ticker} · {m || market.loading ? "Market price" : "Aave’s price"}</span>
+        <span className="label">
+          {ticker} · {m || market.loading ? "Market price" : "Aave’s price"}
+        </span>
         {m ? (
           <span className="text-[30px] font-semibold leading-none tracking-[-0.03em]">{formatUsd(m.price)}</span>
         ) : market.loading ? (
           <span aria-hidden className="h-[30px] w-[132px] animate-pulse rounded-lg bg-chip" />
         ) : (
-          <span className="text-[30px] font-semibold leading-none tracking-[-0.03em]">{formatUsd(holding.priceUsd)}</span>
+          <span className="text-[30px] font-semibold leading-none tracking-[-0.03em]">
+            {formatUsd(holding.priceUsd)}
+          </span>
         )}
         <span className="flex items-center gap-2 text-[13px] text-ink-mid">
           {m ? (
-            <span><TodayChange usd={moveUsd(m.price, m.change)} pct={m.change} /></span>
+            <span>
+              <TodayChange usd={moveUsd(m.price, m.change)} pct={m.change} />
+            </span>
           ) : market.loading ? (
             <TodayPending />
           ) : (
@@ -84,7 +90,8 @@ export function StockPosition({ holding }: { holding: Holding }) {
       </div>
       <div className="flex items-baseline justify-between gap-3">
         <span className="text-[26px] font-semibold leading-none tracking-[-0.03em]">
-          {formatShares(holding.freeShares + holding.lockedShares)} <span className="text-[15px] font-medium tracking-normal text-subtle">{ticker}</span>
+          {formatShares(holding.freeShares + holding.lockedShares)}{" "}
+          <span className="text-[15px] font-medium tracking-normal text-subtle">{ticker}</span>
         </span>
         <MoneyCompact value={holding.freeUsd + holding.lockedUsd} size={20} />
       </div>
@@ -142,7 +149,9 @@ export function StockChart({ holding, name }: { holding: Holding; name: string }
         </p>
       )}
       <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={setRange} label="Chart range" />
-      <span className="font-mono text-[10px] uppercase leading-3 tracking-[0.08em] text-subtle">Market prices · {span}</span>
+      <span className="font-mono text-[10px] uppercase leading-3 tracking-[0.08em] text-subtle">
+        Market prices · {span}
+      </span>
     </section>
   );
 }
@@ -161,7 +170,17 @@ export function StatCard({ label, value }: { label: string; value: ReactNode }) 
  * This stock's moves only: JAW's call history for the account, each transaction decoded from its Base receipt (Leo's
  * Activity), kept when a move names this stock. With nothing to show for a stock you don't own, it isn't drawn.
  */
-export function StockActivity({ user, holding, name, owned }: { user: `0x${string}`; holding: Holding; name: string; owned: boolean }) {
+export function StockActivity({
+  user,
+  holding,
+  name,
+  owned,
+}: {
+  user: `0x${string}`;
+  holding: Holding;
+  name: string;
+  owned: boolean;
+}) {
   const { rows, isLoading, isError, refetch } = useActivity(user);
   const nowMs = useNowSec() * 1000;
   const mine = rows.filter((r) => r.items.some((i) => i.symbol === holding.symbol));
@@ -172,17 +191,27 @@ export function StockActivity({ user, holding, name, owned }: { user: `0x${strin
       <FeedCard>
         {isLoading ? (
           <div aria-busy className="flex flex-col gap-3 py-3.5">
-            {[0, 1].map((i) => <div key={i} className="h-10 animate-pulse rounded-[16px] bg-chip" />)}
+            {[0, 1].map((i) => (
+              <div key={i} className="h-10 animate-pulse rounded-[16px] bg-chip" />
+            ))}
           </div>
         ) : isError ? (
           <div className="py-3.5">
-            <p role="alert" className="m-0 text-sm text-ink-2">We couldn’t load your activity.</p>
-            <button type="button" onClick={() => refetch()} className="mt-2.5 h-11 rounded-[22px] bg-chip px-4 text-sm font-semibold">
+            <p role="alert" className="m-0 text-sm text-ink-2">
+              We couldn’t load your activity.
+            </p>
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="mt-2.5 h-11 rounded-[22px] bg-chip px-4 text-sm font-semibold"
+            >
               Try again
             </button>
           </div>
         ) : mine.length === 0 ? (
-          <p className="m-0 py-3.5 text-sm leading-[1.4] text-ink-mid">Nothing yet. What you do with {name} in GreedyGoose shows up here.</p>
+          <p className="m-0 py-3.5 text-sm leading-[1.4] text-ink-mid">
+            Nothing yet. What you do with {name} in GreedyGoose shows up here.
+          </p>
         ) : (
           <FeedDays rows={mine} nowMs={nowMs} />
         )}

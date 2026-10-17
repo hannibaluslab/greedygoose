@@ -11,7 +11,12 @@ import {
   type Log,
 } from "viem";
 import { base } from "viem/chains";
-import { buildGrantPermissionCall, buildRevokePermissionCall, type PermissionsDetail, type StorePermissionApiResponse } from "@jaw.id/core";
+import {
+  buildGrantPermissionCall,
+  buildRevokePermissionCall,
+  type PermissionsDetail,
+  type StorePermissionApiResponse,
+} from "@jaw.id/core";
 import { CHAIN_ID } from "@/lib/chain";
 import { justanAccountAbi, permissionManagerAbi } from "@/lib/guardian/abis";
 import { GUARDIAN } from "@/lib/guardian/config";
@@ -146,9 +151,16 @@ export function createForkSigner(o: ForkSignerOptions) {
       if (!String(version).startsWith("anvil/")) throw new ProviderError(4900, `Not an anvil fork: ${version}`);
       if ((await client.getChainId()) !== CHAIN_ID) throw new ProviderError(4901, "The fork isn't on chain 8453");
       const unlocked = (await client.request({ method: "eth_accounts" } as never)) as Address[];
-      if (!unlocked.some((a) => isAddressEqual(a, o.signer))) throw new ProviderError(4100, "The account's owner isn't unlocked on the fork");
-      const owns = await client.readContract({ address: o.account, abi: justanAccountAbi, functionName: "isOwnerAddress", args: [o.signer] });
-      if (!owns) throw new ProviderError(4100, "The rehearsal signer doesn't own this account: run the rehearsal setup again");
+      if (!unlocked.some((a) => isAddressEqual(a, o.signer)))
+        throw new ProviderError(4100, "The account's owner isn't unlocked on the fork");
+      const owns = await client.readContract({
+        address: o.account,
+        abi: justanAccountAbi,
+        functionName: "isOwnerAddress",
+        args: [o.signer],
+      });
+      if (!owns)
+        throw new ProviderError(4100, "The rehearsal signer doesn't own this account: run the rehearsal setup again");
     })().catch((e) => {
       checked = null;
       throw e;
@@ -208,7 +220,9 @@ export function createForkSigner(o: ForkSignerOptions) {
   async function history(params: { limit?: number; sort?: "asc" | "desc" } | undefined) {
     const items = readHistory();
     for (const item of items.filter((i) => i.status === 100 && i.transactionHash)) {
-      const r = (await client.request({ method: "eth_getTransactionReceipt", params: [item.transactionHash!] })) as { status: Hex } | null;
+      const r = (await client.request({ method: "eth_getTransactionReceipt", params: [item.transactionHash!] })) as {
+        status: Hex;
+      } | null;
       if (r) item.status = r.status === "0x1" ? 200 : 500;
     }
     writeHistory(items);
@@ -238,7 +252,12 @@ export function createForkSigner(o: ForkSignerOptions) {
           end: p.end,
           salt: hex(p.salt),
           calls: p.calls.map((c) => ({ target: c.target, selector: c.selector, checker: c.checker })),
-          spends: p.spends.map((s) => ({ token: s.token, allowance: hex(s.allowance), unit: UNITS[s.unit], multiplier: s.multiplier })),
+          spends: p.spends.map((s) => ({
+            token: s.token,
+            allowance: hex(s.allowance),
+            unit: UNITS[s.unit],
+            multiplier: s.multiplier,
+          })),
           chainId: CHAIN_HEX,
         },
       ];
@@ -246,7 +265,8 @@ export function createForkSigner(o: ForkSignerOptions) {
   }
 
   async function grant(params: { expiry: number; spender: Address; permissions: PermissionsDetail; chainId?: string }) {
-    if (params.chainId && Number(params.chainId) !== CHAIN_ID) throw new ProviderError(4902, "The rehearsal runs on Base (8453) only");
+    if (params.chainId && Number(params.chainId) !== CHAIN_ID)
+      throw new ProviderError(4902, "The rehearsal runs on Base (8453) only");
     // JAW's own builder: the permission its grant approves, and the approve call that ends its user operation.
     const call = buildGrantPermissionCall(o.account, params.spender, params.expiry, params.permissions);
     if (!isAddressEqual(call.to, MANAGER)) throw new ProviderError(-32603, "JAW's grant targets another manager");
@@ -290,18 +310,30 @@ export function createForkSigner(o: ForkSignerOptions) {
 
   // ------------------------------------------------------------------ calls
 
-  async function sendCalls(params: { chainId?: string; from?: Address; calls: { to: Address; data?: Hex; value?: Hex }[] }) {
-    if (params.chainId && Number(params.chainId) !== CHAIN_ID) throw new ProviderError(4902, "The rehearsal runs on Base (8453) only");
-    if (params.from && !isAddressEqual(params.from, o.account)) throw new ProviderError(4100, "Only the rehearsal account signs here");
+  async function sendCalls(params: {
+    chainId?: string;
+    from?: Address;
+    calls: { to: Address; data?: Hex; value?: Hex }[];
+  }) {
+    if (params.chainId && Number(params.chainId) !== CHAIN_ID)
+      throw new ProviderError(4902, "The rehearsal runs on Base (8453) only");
+    if (params.from && !isAddressEqual(params.from, o.account))
+      throw new ProviderError(4100, "Only the rehearsal account signs here");
     if (!params.calls?.length) throw new ProviderError(-32602, "No calls");
-    const calls = params.calls.map((c) => ({ target: c.to, value: c.value ? BigInt(c.value) : 0n, data: c.data ?? "0x" }));
+    const calls = params.calls.map((c) => ({
+      target: c.to,
+      value: c.value ? BigInt(c.value) : 0n,
+      data: c.data ?? "0x",
+    }));
     const hash = await sendBatch(calls);
     remember(hash);
     return { id: hash };
   }
 
   async function callsStatus(id: Hex) {
-    const receipt = (await client.request({ method: "eth_getTransactionReceipt", params: [id] })) as { status: Hex } | null;
+    const receipt = (await client.request({ method: "eth_getTransactionReceipt", params: [id] })) as {
+      status: Hex;
+    } | null;
     return {
       version: "2.0.0",
       id,
@@ -318,7 +350,16 @@ export function createForkSigner(o: ForkSignerOptions) {
       atomic: { status: "supported" },
       feeToken: {
         supported: true,
-        tokens: [{ uid: "usdc", symbol: USDC.symbol, address: USDC.address, interop: false, decimals: USDC.decimals, feeToken: true }],
+        tokens: [
+          {
+            uid: "usdc",
+            symbol: USDC.symbol,
+            address: USDC.address,
+            interop: false,
+            decimals: USDC.decimals,
+            feeToken: true,
+          },
+        ],
       },
       rehearsal: { fork: true, signer: REHEARSAL_SIGNER_MARKER },
     },
@@ -333,7 +374,8 @@ export function createForkSigner(o: ForkSignerOptions) {
       case "eth_chainId":
         return CHAIN_HEX;
       case "wallet_switchEthereumChain":
-        if (Number((p[0] as { chainId: string } | undefined)?.chainId) !== CHAIN_ID) throw new ProviderError(4902, "The rehearsal runs on Base only");
+        if (Number((p[0] as { chainId: string } | undefined)?.chainId) !== CHAIN_ID)
+          throw new ProviderError(4902, "The rehearsal runs on Base only");
         return null;
       case "wallet_getCapabilities":
         return capabilities;

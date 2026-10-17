@@ -20,13 +20,21 @@ export function buildSetMixCalls(user: `0x${string}`, weightsBps: readonly numbe
   if (!isMix(weightsBps) || weightsBps.every((w) => w === 0)) throw new Error("A mix adds up to 100%");
   const weights = weightsBps as unknown as readonly [number, number, number, number, number, number, number];
   return assertAllowed(user, [
-    { to: executor(), data: encodeFunctionData({ abi: gooseExecutorAbi, functionName: "setMix", args: [weights] }), value: 0n },
+    {
+      to: executor(),
+      data: encodeFunctionData({ abi: gooseExecutorAbi, functionName: "setMix", args: [weights] }),
+      value: 0n,
+    },
   ]);
 }
 
 /** `setKeepMix`: Protect · sell sells the same share of each holding (on), or the most safety per dollar first. */
 export function buildSetKeepMixCalls(user: `0x${string}`, on: boolean): Call[] {
   return assertAllowed(user, [
-    { to: executor(), data: encodeFunctionData({ abi: gooseExecutorAbi, functionName: "setKeepMix", args: [on] }), value: 0n },
+    {
+      to: executor(),
+      data: encodeFunctionData({ abi: gooseExecutorAbi, functionName: "setKeepMix", args: [on] }),
+      value: 0n,
+    },
   ]);
 }

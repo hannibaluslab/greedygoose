@@ -42,7 +42,13 @@ const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompar
  * switch, went with that sheet, Adrian 2026-10-15: credit is always offered for the other part.)
  */
 export function BuySheet({
-  open, user, data, symbol: initial, onClose, onStock, onBack,
+  open,
+  user,
+  data,
+  symbol: initial,
+  onClose,
+  onStock,
+  onBack,
 }: {
   open: boolean;
   user: `0x${string}`;
@@ -84,13 +90,16 @@ export function BuySheet({
   const over = amount > cashUsd;
   const split = over ? splitCash(q?.amountIn ?? parseUnits(amount.toFixed(USDC.decimals), USDC.decimals), cash) : null;
   const plan =
-    split && cfs ? planCredit({ position: data, options: backingOptions(data.holdings, cfs), creditRaw: split.creditRaw, cash }) : null;
+    split && cfs
+      ? planCredit({ position: data, options: backingOptions(data.holdings, cfs), creditRaw: split.creditRaw, cash })
+      : null;
   const creditUsd = split ? toUsd(split.creditRaw) : 0;
 
   let blocker: string | null = null;
   if (amount > 0 && amount < BUY_LIMITS.minUsd) blocker = `Minimum buy is ${formatUsd(BUY_LIMITS.minUsd)}.`;
   else if (!over && amount > maxUsd) blocker = `Leave ${formatUsd(CASH.feeBufferUsd)} for the network fee.`;
-  else if (stock && amount > 0 && quote.isSuccess && q === null) blocker = `There’s no market for ${stock.name} right now.`;
+  else if (stock && amount > 0 && quote.isSuccess && q === null)
+    blocker = `There’s no market for ${stock.name} right now.`;
   else if (econ && econ.premium > BUY_LIMITS.blockPremium)
     blocker = `Too big for the market right now: you’d pay ${(econ.premium * 100).toFixed(1)}% over Aave’s price. Try a smaller amount.`;
   else if (plan?.block) blocker = CREDIT_BLOCKED[plan.block];
@@ -172,10 +181,22 @@ export function BuySheet({
               hint={`Cash available: ${formatUsd(cashUsd)}`}
             />
             <AmountArrow />
-            <YouGet symbol={stock.symbol} shares={quote.isFetching && amount > 0 ? null : econ ? econ.shares : 0} priceUsd={econ ? econ.price : oraclePriceUsd} />
-            <Summary rows={plan && split ? creditRows(data, plan, split.cashRaw) : [{ label: "Arrives", value: "In seconds" }, NETWORK_FEE_ROW]} />
+            <YouGet
+              symbol={stock.symbol}
+              shares={quote.isFetching && amount > 0 ? null : econ ? econ.shares : 0}
+              priceUsd={econ ? econ.price : oraclePriceUsd}
+            />
+            <Summary
+              rows={
+                plan && split
+                  ? creditRows(data, plan, split.cashRaw)
+                  : [{ label: "Arrives", value: "In seconds" }, NETWORK_FEE_ROW]
+              }
+            />
             {note && (
-              <p role="status" className={`m-0 text-[13px] leading-snug ${blocker ? "text-act" : "text-watch-text"}`}>{note}</p>
+              <p role="status" className={`m-0 text-[13px] leading-snug ${blocker ? "text-act" : "text-watch-text"}`}>
+                {note}
+              </p>
             )}
             {ready && q && econ && (
               <SmallPrint
@@ -189,8 +210,14 @@ export function BuySheet({
             )}
             {ready && plan?.extraConfirm && (
               <label className="flex items-start gap-2.5 rounded-2xl bg-act-bg px-4 py-3 text-[13px] leading-snug text-act">
-                <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-px size-[18px] shrink-0 accent-[#8e2a1d]" />
-                I understand this puts my credit in {STATUS_LABEL[plan.after]}. If my stocks fall too far, part of them can be sold to repay what I owe.
+                <input
+                  type="checkbox"
+                  checked={ack}
+                  onChange={(e) => setAck(e.target.checked)}
+                  className="mt-px size-[18px] shrink-0 accent-[#8e2a1d]"
+                />
+                I understand this puts my credit in {STATUS_LABEL[plan.after]}. If my stocks fall too far, part of them
+                can be sold to repay what I owe.
               </label>
             )}
             {feeBlocked && (
@@ -201,14 +228,32 @@ export function BuySheet({
             <TxError error={error} />
             {over ? (
               <>
-                <Button variant="dark" disabled className="mt-1">That’s more than your cash ({formatUsd(cashUsd)})</Button>
+                <Button variant="dark" disabled className="mt-1">
+                  That’s more than your cash ({formatUsd(cashUsd)})
+                </Button>
                 {!blocker && (
-                  <TxButton label={`Use credit for the other ${formatUsd(creditUsd)}`} size="md" phase={phase} checking={checking} preview={!isConnected} disabled={disabled} onClick={sign} />
+                  <TxButton
+                    label={`Use credit for the other ${formatUsd(creditUsd)}`}
+                    size="md"
+                    phase={phase}
+                    checking={checking}
+                    preview={!isConnected}
+                    disabled={disabled}
+                    onClick={sign}
+                  />
                 )}
               </>
             ) : (
               <div className="mt-1">
-                <TxButton label="Buy" size="md" phase={phase} checking={checking} preview={!isConnected} disabled={disabled} onClick={sign} />
+                <TxButton
+                  label="Buy"
+                  size="md"
+                  phase={phase}
+                  checking={checking}
+                  preview={!isConnected}
+                  disabled={disabled}
+                  onClick={sign}
+                />
               </div>
             )}
           </>
@@ -221,12 +266,17 @@ export function BuySheet({
 /** Decision 1's facts, in the amount step's box: what cash and credit each pay, the cost and the status after. */
 function creditRows(data: PositionData, plan: CreditPlan, cashRaw: bigint): SummaryRow[] {
   const creditUsd = toUsd(plan.creditRaw);
-  const backers = plan.backing.length ? plan.backing.map((b) => b.stock.name) : data.holdings.filter((h) => h.lockedRaw > 0n).map((h) => h.name);
+  const backers = plan.backing.length
+    ? plan.backing.map((b) => b.stock.name)
+    : data.holdings.filter((h) => h.lockedRaw > 0n).map((h) => h.name);
   return [
     { label: "From your cash", value: formatUsd(toUsd(cashRaw)) },
     { label: "On credit", value: formatUsd(creditUsd) },
     { label: "Backed by", value: backers.length > 2 ? `${backers.length} of your stocks` : inWords(backers) },
-    { label: "Cost", value: `${(data.apr * 100).toFixed(1)}% a year · ${monthlyCostText(monthlyCost(creditUsd, data.apr))}` },
+    {
+      label: "Cost",
+      value: `${(data.apr * 100).toFixed(1)}% a year · ${monthlyCostText(monthlyCost(creditUsd, data.apr))}`,
+    },
     { label: "You owe after", value: formatUsd(data.debtUsd + creditUsd) },
     // No debt yet is as safe as it gets: the board reads "Safe → Safe" for a first Credit Buy.
     { label: "Status", value: <StatusChange from={plan.before === "none" ? "safe" : plan.before} to={plan.after} /> },
@@ -236,7 +286,12 @@ function creditRows(data: PositionData, plan: CreditPlan, cashRaw: bigint): Summ
 
 /** The small print under the Buy step (and the Trade sheet's cash → stock): every move in the batch (D7), the price guard, and what the stock is. */
 export function SmallPrint({
-  data, stock, econ, minShares, venue, credit,
+  data,
+  stock,
+  econ,
+  minShares,
+  venue,
+  credit,
 }: {
   data: PositionData;
   stock: ReserveAsset;
@@ -260,7 +315,8 @@ export function SmallPrint({
     <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">
       In one go: {inWords(moves)}. You get at least {minShares.toFixed(4)} {ticker}: if the price moves more than{" "}
       {BUY_LIMITS.slippageBps / 100}%, the buy is cancelled.{" "}
-      {plan && `Credit costs ${(data.apr * 100).toFixed(2)}% a year (variable). If your stocks fall too far, part of them can be sold to repay what you owe. `}
+      {plan &&
+        `Credit costs ${(data.apr * 100).toFixed(2)}% a year (variable). If your stocks fall too far, part of them can be sold to repay what you owe. `}
       {stock.name} here is a tokenized stock. It tracks the share price; it is not company shares or voting rights.
     </p>
   );

@@ -1,6 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { PROTECT_SELL } from "@/config/risk";
-import { planSell, sellAmounts, sellOrder, sellPower, sellSlices, sellTiming, SELL_RULE, type SellBook, type SellHolding } from "@/lib/guardian/sell";
+import {
+  planSell,
+  sellAmounts,
+  sellOrder,
+  sellPower,
+  sellSlices,
+  sellTiming,
+  SELL_RULE,
+  type SellBook,
+  type SellHolding,
+} from "@/lib/guardian/sell";
 
 const WAD = 10n ** 18n;
 const ALL = 10n ** 13n;
@@ -19,7 +29,12 @@ const holding = (n: number, usdPrice: number, cfBps: number, limit = ALL): SellH
 const bookAt = (stocks: Partial<Record<number, SellHolding>>, hf: number): SellBook => {
   const all = Array.from({ length: 7 }, (_, r) => stocks[r] ?? none);
   // Health = power × 1e14 / debt (WAD), so debt = power / (1e4 × health).
-  return { stocks: all, debtValue: sellPower(all) / (10n * BigInt(Math.round(hf * 1000))), usdcPrice: 10n ** 8n, usdcLeftRaw: ALL };
+  return {
+    stocks: all,
+    debtValue: sellPower(all) / (10n * BigInt(Math.round(hf * 1000))),
+    usdcPrice: 10n ** 8n,
+    usdcLeftRaw: ALL,
+  };
 };
 /** Back to Watch at 1.2 (PROTECT_SELL.targetHf; Act is the line, 2026-10-15). */
 const opts = { targetHf: (12n * WAD) / 10n, floorBps: 100n, keepMix: false, maxSliceRaw: 5_000n * 10n ** 6n };
@@ -32,7 +47,10 @@ describe("sellAmounts (Protect · sell, plan item 1)", () => {
   // The protect-panel example, in Act: NVDA $4,000, AAPL $3,500, TSLA $1,500 back $6,000 of credit at health 1.084.
   const panel = (half: boolean) => {
     const h = (n: number, p: number, cf: number) => holding(n, p, cf, half ? shares(n / 2) : ALL);
-    return { ...bookAt({ 0: h(10, 350, 7_800), 5: h(20, 200, 7_000), 6: h(5, 300, 6_500) }, 1), debtValue: 6_000n * 10n ** 26n };
+    return {
+      ...bookAt({ 0: h(10, 350, 7_800), 5: h(20, 200, 7_000), 6: h(5, 300, 6_500) }, 1),
+      debtValue: 6_000n * 10n ** 26n,
+    };
   };
 
   it("sells the lowest collateral factor first, then spills over at a stock's daily limit", () => {
@@ -104,7 +122,11 @@ describe("sellSlices", () => {
 
 describe("sellTiming (decision 3, Act is the line)", () => {
   const wad = (x: number) => BigInt(Math.round(x * 1000)) * 10n ** 15n;
-  const l = { headsUpHf: wad(PROTECT_SELL.headsUpHf), nowHf: wad(PROTECT_SELL.nowHf), headsUpDelaySec: BigInt(PROTECT_SELL.headsUpDelaySec) };
+  const l = {
+    headsUpHf: wad(PROTECT_SELL.headsUpHf),
+    nowHf: wad(PROTECT_SELL.nowHf),
+    headsUpDelaySec: BigInt(PROTECT_SELL.headsUpDelaySec),
+  };
   const at = wad;
 
   it("sends a heads-up in Act, sells 30 minutes later, and at once below 1.05", () => {

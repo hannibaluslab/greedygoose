@@ -3,8 +3,16 @@
  * a white thumb when off. A plain button, as NYM's toggle is: Radix's Switch fights vaul's drawer.
  */
 export function Switch({
-  checked, onChange, label, disabled,
-}: { checked: boolean; onChange: (next: boolean) => void; label: string; disabled?: boolean }) {
+  checked,
+  onChange,
+  label,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  label: string;
+  disabled?: boolean;
+}) {
   return (
     <button
       type="button"

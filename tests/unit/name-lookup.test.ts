@@ -15,7 +15,8 @@ vi.mock("viem", async (importOriginal) => {
   return {
     ...actual,
     createPublicClient: () => ({
-      getEnsAddress: ({ coinType }: { coinType?: bigint }) => (coinType === BigInt(toCoinType(8453)) ? lookups.base() : lookups.eth()),
+      getEnsAddress: ({ coinType }: { coinType?: bigint }) =>
+        coinType === BigInt(toCoinType(8453)) ? lookups.base() : lookups.eth(),
     }),
   };
 });

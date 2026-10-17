@@ -19,7 +19,8 @@ export const BOARD_TOKENS: readonly { address: Address; info: TokenInfo }[] = [
   ...EQUITIES.map((e) => ({ address: e.address, info: { kind: "stock", reserveId: e.reserveId } as TokenInfo })),
 ];
 
-export const tokenInfo = (address: Address): TokenInfo | undefined => BOARD_TOKENS.find((t) => isAddressEqual(t.address, address))?.info;
+export const tokenInfo = (address: Address): TokenInfo | undefined =>
+  BOARD_TOKENS.find((t) => isAddressEqual(t.address, address))?.info;
 
 /**
  * Aave V3's variable debt token for USDC on Base ("variableDebtBasUSDC", 6 decimals, underlying USDC): the pool's

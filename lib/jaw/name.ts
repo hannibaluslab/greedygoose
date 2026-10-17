@@ -85,7 +85,9 @@ export async function hasEthereumCode(address: Address): Promise<boolean> {
  * throws is a real failure (the RPC or the network) and is thrown on: falling back then could pay an Ethereum address
  * that is someone else's account on Base. Send shows "We couldn't look that up"; the Leaderboard, no one found.
  */
-export async function addressOfName(input: string): Promise<{ name: string | null; address: Address; onBase: boolean } | null> {
+export async function addressOfName(
+  input: string,
+): Promise<{ name: string | null; address: Address; onBase: boolean } | null> {
   if (isAddress(input.trim())) return { name: null, address: input.trim() as Address, onBase: true };
   const name = fullName(input);
   if (!name) return null;

@@ -37,12 +37,36 @@ const CASH_APY = 0.042;
 const LINE_HOME = [12.1, 16.4, 10, 22.8, 18.5, 29.1, 24.9, 37.6, 33.4, 46.1, 44, 54.6, 61];
 const LINE_INVEST = [7, 6, 10, 8, 13, 11, 16, 14, 19, 18, 23, 25, 28];
 const HOLDINGS = [
-  { symbol: "NVDA", name: "NVIDIA", valueUsd: 2000, shares: 11.2, backs: 0.33, today: 0.0142,
-    card: [5, 4, 8, 7, 11, 9, 13, 12, 15, 14, 18], row: [2, 7, 4.5, 12, 11, 17, 22] },
-  { symbol: "AAPL", name: "Apple", valueUsd: 1200, shares: 5.4, backs: 0, today: -0.0058,
-    card: [15, 16, 13, 14, 11, 13, 10, 11, 8, 9, 7], row: [22, 17, 20, 11, 13, 6, 2] },
-  { symbol: "TSLA", name: "Tesla", valueUsd: 1400, shares: 3.7, backs: 0.33, today: 0.021,
-    card: [3, 6, 4, 9, 7, 12, 10, 15, 13, 17, 19], row: [2, 6.4, 4.7, 13.1, 10.9, 18.9, 22] },
+  {
+    symbol: "NVDA",
+    name: "NVIDIA",
+    valueUsd: 2000,
+    shares: 11.2,
+    backs: 0.33,
+    today: 0.0142,
+    card: [5, 4, 8, 7, 11, 9, 13, 12, 15, 14, 18],
+    row: [2, 7, 4.5, 12, 11, 17, 22],
+  },
+  {
+    symbol: "AAPL",
+    name: "Apple",
+    valueUsd: 1200,
+    shares: 5.4,
+    backs: 0,
+    today: -0.0058,
+    card: [15, 16, 13, 14, 11, 13, 10, 11, 8, 9, 7],
+    row: [22, 17, 20, 11, 13, 6, 2],
+  },
+  {
+    symbol: "TSLA",
+    name: "Tesla",
+    valueUsd: 1400,
+    shares: 3.7,
+    backs: 0.33,
+    today: 0.021,
+    card: [3, 6, 4, 9, 7, 12, 10, 15, 13, 17, 19],
+    row: [2, 6.4, 4.7, 13.1, 10.9, 18.9, 22],
+  },
 ];
 const NVDA = { symbol: "NVDA", name: "NVIDIA", price: 178.57 };
 // F1-3's rows with a price: Apple and NVIDIA owned, Tesla not.
@@ -55,8 +79,18 @@ const HOUR = 3_600_000;
 /** Activity rows the way useActivity hands them over, timed from now so they group under Today and a weekday. */
 const MOVES = (now: number): ActivityRow[] => [
   { key: "repay", time: now - HOUR, status: "done", items: [{ kind: "repay", symbol: "USDC", amount: 180 }] },
-  { key: "convert", time: now - 2 * HOUR, status: "pending", items: [{ kind: "convert", symbol: "USDT", amount: 120, receivedUsd: 119.83 }] },
-  { key: "buy", time: now - 50 * HOUR, status: "done", items: [{ kind: "buy", symbol: "NVDAc", amount: 0.112, paidUsd: 20 }] },
+  {
+    key: "convert",
+    time: now - 2 * HOUR,
+    status: "pending",
+    items: [{ kind: "convert", symbol: "USDT", amount: 120, receivedUsd: 119.83 }],
+  },
+  {
+    key: "buy",
+    time: now - 50 * HOUR,
+    status: "done",
+    items: [{ kind: "buy", symbol: "NVDAc", amount: 0.112, paidUsd: 20 }],
+  },
 ];
 const PILL_SIZES: StatusPillSize[] = ["sm", "row", "header", "md", "lg"];
 const STATUSES: Status[] = ["safe", "watch", "act", "none"];
@@ -74,7 +108,9 @@ export function Gallery() {
       <div className="flex flex-col gap-1">
         <span className="label">Dev only</span>
         <h1 className="m-0 text-[30px] font-semibold leading-[1.1] tracking-[-0.03em]">UI kit</h1>
-        <p className="m-0 text-[13px] leading-snug text-ink-mid">The boards’ shared pieces, with the boards’ sample figures.</p>
+        <p className="m-0 text-[13px] leading-snug text-ink-mid">
+          The boards’ shared pieces, with the boards’ sample figures.
+        </p>
       </div>
 
       <Section title="Page header" kit="page-header">
@@ -93,7 +129,11 @@ export function Gallery() {
               info: { label: "How your average yield is worked out", onClick: noop },
               value: `${(CASH_APY * 100).toFixed(1)}%`,
               unit: "APY",
-              sub: <><span className="font-semibold text-pos">+$485</span> all-time return</>,
+              sub: (
+                <>
+                  <span className="font-semibold text-pos">+$485</span> all-time return
+                </>
+              ),
             }}
           />
           <Sparkline points={LINE_HOME} variant="hero" height={68} label="Return over time" />
@@ -109,7 +149,11 @@ export function Gallery() {
             side={{
               label: "Cash available",
               value: formatUsdTrim(CASH),
-              sub: <><span className="font-semibold text-pos">{(CASH_APY * 100).toFixed(1)}%</span> APY</>,
+              sub: (
+                <>
+                  <span className="font-semibold text-pos">{(CASH_APY * 100).toFixed(1)}%</span> APY
+                </>
+              ),
             }}
           />
           <Sparkline points={LINE_INVEST} variant="hero" height={34} label="Portfolio value over time" />
@@ -150,7 +194,16 @@ export function Gallery() {
       <Section title="Holding cards · Home rail" kit="holding-cards">
         <div className="flex justify-between gap-2 pb-4 pt-0.5">
           {HOLDINGS.map(({ symbol, name, valueUsd, backs, today, card }) => (
-            <HoldingCard key={symbol} symbol={symbol} name={name} valueUsd={valueUsd} backs={backs} today={today} spark={card} onClick={noop} />
+            <HoldingCard
+              key={symbol}
+              symbol={symbol}
+              name={name}
+              valueUsd={valueUsd}
+              backs={backs}
+              today={today}
+              spark={card}
+              onClick={noop}
+            />
           ))}
         </div>
       </Section>
@@ -158,7 +211,16 @@ export function Gallery() {
       <Section title="Holding cards · market prices loading" kit="holding-cards-pending">
         <div className="flex justify-between gap-2 pb-4 pt-0.5">
           {HOLDINGS.map(({ symbol, name, valueUsd, backs, shares }) => (
-            <HoldingCard key={symbol} symbol={symbol} name={name} valueUsd={valueUsd} backs={backs} shares={shares} pending onClick={noop} />
+            <HoldingCard
+              key={symbol}
+              symbol={symbol}
+              name={name}
+              valueUsd={valueUsd}
+              backs={backs}
+              shares={shares}
+              pending
+              onClick={noop}
+            />
           ))}
         </div>
       </Section>
@@ -166,7 +228,15 @@ export function Gallery() {
       <Section title="Holding cards · before price history" kit="holding-cards-shares">
         <div className="flex justify-between gap-2 pb-4 pt-0.5">
           {HOLDINGS.map(({ symbol, name, valueUsd, backs, shares }) => (
-            <HoldingCard key={symbol} symbol={symbol} name={name} valueUsd={valueUsd} backs={backs} shares={shares} onClick={noop} />
+            <HoldingCard
+              key={symbol}
+              symbol={symbol}
+              name={name}
+              valueUsd={valueUsd}
+              backs={backs}
+              shares={shares}
+              onClick={noop}
+            />
           ))}
         </div>
       </Section>
@@ -174,7 +244,15 @@ export function Gallery() {
       <Section title="Holding cards · two held, Add a stock (F2-1)" kit="holding-cards-add">
         <div className="flex justify-between gap-2 pb-4 pt-0.5">
           {[HOLDINGS[0], HOLDINGS[2]].map(({ symbol, name, valueUsd, shares }) => (
-            <HoldingCard key={symbol} symbol={symbol} name={name} valueUsd={valueUsd} backs={0} shares={shares} onClick={noop} />
+            <HoldingCard
+              key={symbol}
+              symbol={symbol}
+              name={name}
+              valueUsd={valueUsd}
+              backs={0}
+              shares={shares}
+              onClick={noop}
+            />
           ))}
           <AddStockCard href="#" />
         </div>
@@ -183,14 +261,33 @@ export function Gallery() {
       <Section title="Holding rows · Invest" kit="holding-rows">
         <HoldingList title="Your holdings">
           {HOLDINGS.map(({ symbol, name, valueUsd, shares, backs, today, row }) => (
-            <HoldingRow key={symbol} symbol={symbol} name={name} valueUsd={valueUsd} shares={shares} backs={backs} today={today} spark={row} onClick={noop} />
+            <HoldingRow
+              key={symbol}
+              symbol={symbol}
+              name={name}
+              valueUsd={valueUsd}
+              shares={shares}
+              backs={backs}
+              today={today}
+              spark={row}
+              onClick={noop}
+            />
           ))}
         </HoldingList>
       </Section>
 
       <Section title="Market rows" kit="market-rows">
         <MarketList>
-          {MARKET.map((m) => <MarketRow key={m.symbol} symbol={m.symbol} name={m.name} priceUsd={m.price} ownedUsd={m.owned} onClick={noop} />)}
+          {MARKET.map((m) => (
+            <MarketRow
+              key={m.symbol}
+              symbol={m.symbol}
+              name={m.name}
+              priceUsd={m.price}
+              ownedUsd={m.owned}
+              onClick={noop}
+            />
+          ))}
         </MarketList>
       </Section>
 
@@ -199,7 +296,9 @@ export function Gallery() {
           {PILL_SIZES.map((size) => (
             <div key={size} className="flex items-center gap-2">
               <span className="w-14 font-mono text-[11px] text-subtle">{size}</span>
-              {STATUSES.map((s) => <StatusPill key={s} status={s} size={size} />)}
+              {STATUSES.map((s) => (
+                <StatusPill key={s} status={s} size={size} />
+              ))}
             </div>
           ))}
         </div>
@@ -209,16 +308,26 @@ export function Gallery() {
         <div className="flex flex-col gap-2.5">
           <TxButton label="Repay" phase="idle" onClick={noop} />
           <TxButton label="Switch on" phase="idle" size="md" steps={2} onClick={noop} />
-          <Button variant="dark" onClick={noop}>Continue</Button>
+          <Button variant="dark" onClick={noop}>
+            Continue
+          </Button>
           <div className="grid grid-cols-2 gap-2.5">
-            <Button variant="white" icon={<TradeIcon size={18} strokeWidth={1.8} />} onClick={noop}>Market</Button>
-            <Button icon={<CreditIcon size={18} strokeWidth={1.8} />} onClick={noop}>Credit Buy</Button>
+            <Button variant="white" icon={<TradeIcon size={18} strokeWidth={1.8} />} onClick={noop}>
+              Market
+            </Button>
+            <Button icon={<CreditIcon size={18} strokeWidth={1.8} />} onClick={noop}>
+              Credit Buy
+            </Button>
           </div>
           <div className="grid grid-cols-2 gap-2.5">
-            <Button variant="soft" onClick={noop}>Buy more</Button>
+            <Button variant="soft" onClick={noop}>
+              Buy more
+            </Button>
             <Button onClick={noop}>Repay</Button>
           </div>
-          <Button variant="dark" disabled>That’s more than your cash ($400.00)</Button>
+          <Button variant="dark" disabled>
+            That’s more than your cash ($400.00)
+          </Button>
         </div>
       </Section>
 
@@ -284,14 +393,22 @@ export function Gallery() {
       </Section>
 
       <Section title="Sheet with steps" kit="sheet">
-        <Button variant="dark" onClick={() => setOpen(true)}>Open the sheet</Button>
+        <Button variant="dark" onClick={() => setOpen(true)}>
+          Open the sheet
+        </Button>
       </Section>
 
       <Section title="Toast" kit="toast">
         <div className="grid grid-cols-3 gap-2.5">
-          <Button variant="white" onClick={() => toast.success(boughtLine(0.112, "NVDAc"))}>Bought</Button>
-          <Button variant="white" onClick={() => toast.success(boughtLine(1.35, "AAPLc", true))}>On credit</Button>
-          <Button variant="white" onClick={() => toast("Address copied")}>Plain</Button>
+          <Button variant="white" onClick={() => toast.success(boughtLine(0.112, "NVDAc"))}>
+            Bought
+          </Button>
+          <Button variant="white" onClick={() => toast.success(boughtLine(1.35, "AAPLc", true))}>
+            On credit
+          </Button>
+          <Button variant="white" onClick={() => toast("Address copied")}>
+            Plain
+          </Button>
         </div>
       </Section>
 
@@ -333,7 +450,9 @@ function Section({ title, kit, children }: { title: string; kit: string; childre
   return (
     <section className="flex flex-col gap-2">
       <h2 className="label m-0 px-1">{title}</h2>
-      <div data-kit={kit} className="flex flex-col">{children}</div>
+      <div data-kit={kit} className="flex flex-col">
+        {children}
+      </div>
     </section>
   );
 }
@@ -363,7 +482,11 @@ function BuyDemoSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (op
             hint={`Cash available: ${formatUsd(CASH)}`}
           />
           <Summary rows={[{ label: "Arrives", value: "In seconds" }, NETWORK_FEE_ROW]} />
-          {usd > CASH && <Button variant="dark" disabled className="mt-1">That’s more than your cash ({formatUsd(CASH)})</Button>}
+          {usd > CASH && (
+            <Button variant="dark" disabled className="mt-1">
+              That’s more than your cash ({formatUsd(CASH)})
+            </Button>
+          )}
           <TxButton label="Buy" phase="idle" size="md" disabled={usd <= 0 || usd > CASH} onClick={finish} />
         </div>
       </SheetSteps>

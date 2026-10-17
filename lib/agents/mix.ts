@@ -131,7 +131,14 @@ export function previewTrades(p: {
   const weights = mixWeights(p.rows);
   if (!isMix(weights) || weights.every((w) => w === 0)) return [];
   const prices = EQUITIES.map((e) => holdingOf(p.holdings, e.reserveId)?.priceRaw ?? 0n);
-  const limits = p.left?.stocksRaw ?? stockLimitsRaw(p.capRaw, p.capMaxRaw ?? p.capRaw, prices, weights.map((w) => w > 0));
+  const limits =
+    p.left?.stocksRaw ??
+    stockLimitsRaw(
+      p.capRaw,
+      p.capMaxRaw ?? p.capRaw,
+      prices,
+      weights.map((w) => w > 0),
+    );
   return rebalanceTrades(
     {
       stocks: EQUITIES.map((e) => ({

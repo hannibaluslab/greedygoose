@@ -1,7 +1,15 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { describe, expect, it } from "vitest";
-import { decodeFunctionData, encodeAbiParameters, encodeEventTopics, encodeFunctionData, erc20Abi, parseAbi, type Log } from "viem";
+import {
+  decodeFunctionData,
+  encodeAbiParameters,
+  encodeEventTopics,
+  encodeFunctionData,
+  erc20Abi,
+  parseAbi,
+  type Log,
+} from "viem";
 import { describeActivity } from "@/components/gg/Activity";
 import { CASH } from "@/config/risk";
 import { buildRepayCalls } from "@/lib/aave/tx";
@@ -92,20 +100,36 @@ describe("Start earning's batch: the wallet's cash into savings, the fee buffer 
     });
     const supplyOf = (asset: Address, raw: bigint, onBehalfOf: Address, referral = 0) => ({
       to: GUARDIAN.AAVE_V3_POOL,
-      data: encodeFunctionData({ abi: aaveV3PoolAbi, functionName: "supply", args: [asset, raw, onBehalfOf, referral] }),
+      data: encodeFunctionData({
+        abi: aaveV3PoolAbi,
+        functionName: "supply",
+        args: [asset, raw, onBehalfOf, referral],
+      }),
       value: 0n,
     });
     expect(assertStartEarning(user, [approve, supply], amount)).toHaveLength(2);
     expect(() => assertStartEarning(user, [approve, supply], amount + 1n)).toThrow(/approval differs/);
-    expect(() => assertStartEarning(user, [approveOf(GUARDIAN.AAVE_V3_POOL, amount + 1n), supply], amount)).toThrow(/approval differs/);
+    expect(() => assertStartEarning(user, [approveOf(GUARDIAN.AAVE_V3_POOL, amount + 1n), supply], amount)).toThrow(
+      /approval differs/,
+    );
     expect(() => assertStartEarning(user, [approveOf(other, amount), supply], amount)).toThrow(/approval differs/);
-    expect(() => assertStartEarning(user, [approveOf(GUARDIAN.AAVE_V3_POOL, amount, nvda.address), supply], amount)).toThrow(/approval differs/);
-    expect(() => assertStartEarning(user, [approve, supplyOf(USDC.address, amount, other)], amount)).toThrow(/what earns differs/);
-    expect(() => assertStartEarning(user, [approve, supplyOf(USDC.address, amount - 1n, user)], amount)).toThrow(/what earns differs/);
-    expect(() => assertStartEarning(user, [approve, supplyOf(USDC.address, amount, user, 7)], amount)).toThrow(/what earns differs/);
+    expect(() =>
+      assertStartEarning(user, [approveOf(GUARDIAN.AAVE_V3_POOL, amount, nvda.address), supply], amount),
+    ).toThrow(/approval differs/);
+    expect(() => assertStartEarning(user, [approve, supplyOf(USDC.address, amount, other)], amount)).toThrow(
+      /what earns differs/,
+    );
+    expect(() => assertStartEarning(user, [approve, supplyOf(USDC.address, amount - 1n, user)], amount)).toThrow(
+      /what earns differs/,
+    );
+    expect(() => assertStartEarning(user, [approve, supplyOf(USDC.address, amount, user, 7)], amount)).toThrow(
+      /what earns differs/,
+    );
     expect(() => assertStartEarning(user, [supply, approve], amount)).toThrow(/approval differs/);
     expect(() => assertStartEarning(user, [approve, supply, approve], amount)).toThrow(/differs from the screen/);
-    expect(() => assertStartEarning(user, [approve, { ...supply, value: 1n }], amount)).toThrow(/differs from the screen/);
+    expect(() => assertStartEarning(user, [approve, { ...supply, value: 1n }], amount)).toThrow(
+      /differs from the screen/,
+    );
   });
 });
 
@@ -135,7 +159,10 @@ describe("Start earning on Home: when the card shows, what it says, how many JAW
   });
 
   it("says 'Your $X arrived' with nothing in savings, '$X isn't earning' beside savings", () => {
-    expect(startEarningText({ walletUsd: 100, savingsUsd: 0, rate: "3.9%" })).toEqual({ title: "Your $100 arrived", line: "Start earning 3.9% on it." });
+    expect(startEarningText({ walletUsd: 100, savingsUsd: 0, rate: "3.9%" })).toEqual({
+      title: "Your $100 arrived",
+      line: "Start earning 3.9% on it.",
+    });
     expect(startEarningText({ walletUsd: 42.251674, savingsUsd: 1935.93, rate: "3.9%" })).toEqual({
       title: "$42.25 isn’t earning",
       line: "Start earning 3.9% on it.",
@@ -161,18 +188,41 @@ describe("Start earning on Home: when the card shows, what it says, how many JAW
 
 describe("Start earning in Activity and the Cash sheet: one row, not money leaving", () => {
   const log = (address: Address, topics: ReturnType<typeof encodeEventTopics>, data: `0x${string}`) =>
-    ({ address, topics, data, blockHash: null, blockNumber: null, logIndex: null, transactionHash: null, transactionIndex: null, removed: false }) as unknown as Log;
+    ({
+      address,
+      topics,
+      data,
+      blockHash: null,
+      blockNumber: null,
+      logIndex: null,
+      transactionHash: null,
+      transactionIndex: null,
+      removed: false,
+    }) as unknown as Log;
   const transfer = (token: Address, from: Address, to: Address, value: bigint) =>
-    log(token, encodeEventTopics({ abi: erc20Abi, eventName: "Transfer", args: { from, to } }), encodeAbiParameters([{ type: "uint256" }], [value]));
-  const supplyAbi = parseAbi(["event Supply(address indexed reserve, address user, address indexed onBehalfOf, uint256 amount, uint16 indexed referralCode)"]);
+    log(
+      token,
+      encodeEventTopics({ abi: erc20Abi, eventName: "Transfer", args: { from, to } }),
+      encodeAbiParameters([{ type: "uint256" }], [value]),
+    );
+  const supplyAbi = parseAbi([
+    "event Supply(address indexed reserve, address user, address indexed onBehalfOf, uint256 amount, uint16 indexed referralCode)",
+  ]);
   const savingsSupply = (by: Address, onBehalfOf: Address, amount: bigint) =>
     log(
       GUARDIAN.AAVE_V3_POOL,
-      encodeEventTopics({ abi: supplyAbi, eventName: "Supply", args: { reserve: USDC.address, onBehalfOf, referralCode: 0 } }),
+      encodeEventTopics({
+        abi: supplyAbi,
+        eventName: "Supply",
+        args: { reserve: USDC.address, onBehalfOf, referralCode: 0 },
+      }),
       encodeAbiParameters([{ type: "address" }, { type: "uint256" }], [by, amount]),
     );
   /** The batch's receipt: USDC from the wallet to the savings token, and the pool's Supply for the user, by the user. */
-  const receipt = (raw: bigint, by: Address = user) => [transfer(USDC.address, user, GUARDIAN.AUSDC, raw), savingsSupply(by, user, raw)];
+  const receipt = (raw: bigint, by: Address = user) => [
+    transfer(USDC.address, user, GUARDIAN.AUSDC, raw),
+    savingsSupply(by, user, raw),
+  ];
 
   it("decodes as one 'save' move: no send, no receive", () => {
     const items = decodeActivity(receipt(usdc(41.751674)), user);
@@ -187,12 +237,20 @@ describe("Start earning in Activity and the Cash sheet: one row, not money leavi
   });
 
   it("is one row in the Cash sheet: 'Started earning · $X into savings', the cash unchanged", () => {
-    const move = (over: Partial<OwnMove> = {}): OwnMove => ({ key: "k", time: 1_760_000_000_000, status: "done", items: [{ kind: "save", symbol: "USDC", amount: 41.75 }], ...over });
+    const move = (over: Partial<OwnMove> = {}): OwnMove => ({
+      key: "k",
+      time: 1_760_000_000_000,
+      status: "done",
+      items: [{ kind: "save", symbol: "USDC", amount: 41.75 }],
+      ...over,
+    });
     const row = ownCashRow(move())!;
     expect([row.title, row.line, row.usd]).toEqual(["Started earning", "$41.75 into savings", 0]);
     expect(ownCashRow(move({ status: "pending" }))!.line).toBe("$41.75 into savings · Confirming");
     expect(ownCashRow(move({ status: "failed" }))).toBeNull();
-    expect(cashRows({ own: [move()], executor: [], arrivals: [], since: 0 }).map((r) => r.title)).toEqual(["Started earning"]);
+    expect(cashRows({ own: [move()], executor: [], arrivals: [], since: 0 }).map((r) => r.title)).toEqual([
+      "Started earning",
+    ]);
   });
 });
 

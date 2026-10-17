@@ -18,7 +18,17 @@ const TONE = { pos: "var(--pos)", neg: "var(--neg)" } as const;
  * the right, and the lime dot on the newest price (the hero line's). The gridlines fit the series to nice round
  * prices, so the labels read cleanly across any range. Green when the range ends up, red when it ends down.
  */
-export function PriceChart({ points, height = 150, label, className = "" }: { points: number[]; height?: number; label: string; className?: string }) {
+export function PriceChart({
+  points,
+  height = 150,
+  label,
+  className = "",
+}: {
+  points: number[];
+  height?: number;
+  label: string;
+  className?: string;
+}) {
   const gid = `chart${useId().replace(/[^\w-]/g, "")}`;
   if (points.length < 2) return null;
 
@@ -37,7 +47,10 @@ export function PriceChart({ points, height = 150, label, className = "" }: { po
   const H = 100;
   const xs = points.map((_, i) => (i / (points.length - 1)) * W);
   const ys = points.map((p) => H - ((p - gridMin) / span) * H);
-  const line = `M${xs[0]},${ys[0]} ${xs.slice(1).map((x, i) => `L${x},${ys[i + 1]}`).join(" ")}`;
+  const line = `M${xs[0]},${ys[0]} ${xs
+    .slice(1)
+    .map((x, i) => `L${x},${ys[i + 1]}`)
+    .join(" ")}`;
   const area = `${line} L${W},${H} L0,${H} Z`;
   const stroke = TONE[points[points.length - 1] >= points[0] ? "pos" : "neg"];
 
@@ -45,7 +58,12 @@ export function PriceChart({ points, height = 150, label, className = "" }: { po
     <div role="img" aria-label={label} className={`relative ${className}`} style={{ height }}>
       {/* Faint gridlines, behind the chart, full width. */}
       {levels.map((lv) => (
-        <div key={`g${lv}`} aria-hidden className="absolute inset-x-0 border-t border-hairline" style={{ top: top(lv) }} />
+        <div
+          key={`g${lv}`}
+          aria-hidden
+          className="absolute inset-x-0 border-t border-hairline"
+          style={{ top: top(lv) }}
+        />
       ))}
 
       <div aria-hidden className="absolute inset-y-0 left-0" style={{ right: GUTTER }}>
@@ -57,7 +75,15 @@ export function PriceChart({ points, height = 150, label, className = "" }: { po
             </linearGradient>
           </defs>
           <path d={area} fill={`url(#${gid})`} />
-          <path d={line} fill="none" stroke={stroke} strokeWidth={1.8} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+          <path
+            d={line}
+            fill="none"
+            stroke={stroke}
+            strokeWidth={1.8}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            vectorEffect="non-scaling-stroke"
+          />
         </svg>
         {/* HTML, so it stays round while the line stretches. */}
         <span

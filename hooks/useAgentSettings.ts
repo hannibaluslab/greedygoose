@@ -34,11 +34,23 @@ export function useAgentSettings(account: `0x${string}`) {
     query: { enabled: !!executor, refetchInterval: 20_000 },
   });
   // Apart from the rest: a view that plans every job could run out of gas or revert, and the others don't wait on it.
-  const plan = useReadContract({ ...read, functionName: "planOf", args: [account], query: { enabled: !!executor, refetchInterval: 20_000 } });
+  const plan = useReadContract({
+    ...read,
+    functionName: "planOf",
+    args: [account],
+    query: { enabled: !!executor, refetchInterval: 20_000 },
+  });
 
   return useMemo(() => {
     if (!q.data) return null;
-    const [mix, a, [bandBps, bandMaxBps, , floorBps, minTrade, maxSlice], [minRepay, , , weekendWindow], thresholds, sell] = q.data;
+    const [
+      mix,
+      a,
+      [bandBps, bandMaxBps, , floorBps, minTrade, maxSlice],
+      [minRepay, , , weekendWindow],
+      thresholds,
+      sell,
+    ] = q.data;
     const [triggerHf, targetHf, stressDrop, stressFloorHf] = thresholds;
     const options = rebalanceOptions({ bandBps, bandMaxBps, floorBps, minTrade, maxSlice });
     const numbers: RuleNumbers = {

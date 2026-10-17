@@ -1,4 +1,20 @@
-import { BaseError, HttpRequestError, LimitExceededRpcError, encodeEventTopics, erc20Abi, formatLog, hexToBigInt, pad, parseUnits, toHex, type Address, type Client, type Hex, type Log, type RpcLog } from "viem";
+import {
+  BaseError,
+  HttpRequestError,
+  LimitExceededRpcError,
+  encodeEventTopics,
+  erc20Abi,
+  formatLog,
+  hexToBigInt,
+  pad,
+  parseUnits,
+  toHex,
+  type Address,
+  type Client,
+  type Hex,
+  type Log,
+  type RpcLog,
+} from "viem";
 import { USDC } from "@/lib/tokens/registry";
 import { decodeActivity, type ActivityItem } from "./decode";
 
@@ -35,10 +51,20 @@ export function rateLimited(e: unknown): boolean {
 }
 
 /** USDC Transfer logs to `account` in one range (USDC's contract only, so no other token can pose as it). */
-export async function readArrivalLogs(client: Client, q: { account: Address; from: bigint; to: bigint }): Promise<Log[]> {
+export async function readArrivalLogs(
+  client: Client,
+  q: { account: Address; from: bigint; to: bigint },
+): Promise<Log[]> {
   const logs = (await client.request({
     method: "eth_getLogs",
-    params: [{ address: USDC.address, topics: [TRANSFER, null, pad(q.account.toLowerCase() as Address)], fromBlock: toHex(q.from), toBlock: toHex(q.to) }],
+    params: [
+      {
+        address: USDC.address,
+        topics: [TRANSFER, null, pad(q.account.toLowerCase() as Address)],
+        fromBlock: toHex(q.from),
+        toBlock: toHex(q.to),
+      },
+    ],
   })) as RpcLog[];
   return logs.map((l) => formatLog(l));
 }
@@ -73,5 +99,7 @@ export function arrivalTxs(logs: readonly Log[]): { hash: Hex; blockNumber: bigi
  * other half this read never sees (where the money went next), so it is left to the rows that do see it.
  */
 export function arrivalsOf(receiptLogs: Log[], account: Address): ActivityItem[] {
-  return decodeActivity(receiptLogs, account).filter((i) => i.kind === "receive" && i.symbol === USDC.symbol && i.amount >= MIN_ARRIVAL_USD);
+  return decodeActivity(receiptLogs, account).filter(
+    (i) => i.kind === "receive" && i.symbol === USDC.symbol && i.amount >= MIN_ARRIVAL_USD,
+  );
 }

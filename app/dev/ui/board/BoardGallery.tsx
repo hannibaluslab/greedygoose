@@ -4,7 +4,14 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { numberToHex, type Address } from "viem";
-import { AddByNameSheet, BoardView, PersonSheet, PickBar, type BoardState, type NameLookup } from "@/components/gg/Board";
+import {
+  AddByNameSheet,
+  BoardView,
+  PersonSheet,
+  PickBar,
+  type BoardState,
+  type NameLookup,
+} from "@/components/gg/Board";
 import { rankRows, returnSinceJoining } from "@/lib/board/score";
 import type { BoardFilter, BoardPerson, OffBoard } from "@/lib/board/view";
 
@@ -50,13 +57,23 @@ function people(rows: typeof FIXTURE): BoardPerson[] {
   }));
   return rankRows(scored).map((r) => {
     const i = Number(r.joinedAt - 100n);
-    return { account: r.account, name: rows[i][0], pct: r.pct, rank: r.rank, you: r.account === YOU, contact: CONTACTS.has(r.account) };
+    return {
+      account: r.account,
+      name: rows[i][0],
+      pct: r.pct,
+      rank: r.rank,
+      you: r.account === YOU,
+      contact: CONTACTS.has(r.account),
+    };
   });
 }
 
 /** 70 people, you 63rd. */
 function far(): BoardPerson[] {
-  const rows = Array.from({ length: 70 }, (_, i) => [`p${i + 1}.justan.id`, 1_000, 0, 0, 1_300 - i * 6, 0] as (typeof FIXTURE)[number]);
+  const rows = Array.from(
+    { length: 70 },
+    (_, i) => [`p${i + 1}.justan.id`, 1_000, 0, 0, 1_300 - i * 6, 0] as (typeof FIXTURE)[number],
+  );
   rows[62] = ["sam.justan.id", 1_000, 0, 0, 1_300 - 62 * 6, 0];
   return people(rows).map((p) => ({ ...p, you: p.name === "sam.justan.id", contact: false }));
 }
@@ -73,8 +90,11 @@ export function BoardGallery() {
   const [filter, setFilter] = useState<BoardFilter>(q.get("filter") === "contacts" ? "contacts" : "all");
   const [picking, setPicking] = useState(q.get("pick") === "1");
   const crowd = Array.from({ length: 300 }, () => [null, 0, 0, 0, 0, 0] as (typeof FIXTURE)[number]);
-  const list = view === "far" ? far() : view === "empty" ? [] : people(view === "crowd" ? [...FIXTURE, ...crowd] : FIXTURE);
-  const [picked, setPicked] = useState<Set<string>>(new Set(q.get("pick") === "1" ? [addr(1), addr(2)].map((a) => a.toLowerCase()) : []));
+  const list =
+    view === "far" ? far() : view === "empty" ? [] : people(view === "crowd" ? [...FIXTURE, ...crowd] : FIXTURE);
+  const [picked, setPicked] = useState<Set<string>>(
+    new Set(q.get("pick") === "1" ? [addr(1), addr(2)].map((a) => a.toLowerCase()) : []),
+  );
   const sheet = q.get("sheet");
   const state: BoardState =
     view === "soon"
@@ -89,7 +109,17 @@ export function BoardGallery() {
 
   const find = (i: number) => list.find((p) => p.account === addr(i)) ?? null;
   const sheetPerson =
-    sheet === "person" ? find(1) : sheet === "contact" ? find(0) : sheet === "you" ? find(3) : sheet === "unranked" ? find(10) : sheet === "offboard" ? { ...OFF_BOARD[0], contact: true as const, you: false as const } : null;
+    sheet === "person"
+      ? find(1)
+      : sheet === "contact"
+        ? find(0)
+        : sheet === "you"
+          ? find(3)
+          : sheet === "unranked"
+            ? find(10)
+            : sheet === "offboard"
+              ? { ...OFF_BOARD[0], contact: true as const, you: false as const }
+              : null;
   const close = () => {
     const next = new URLSearchParams(q);
     next.delete("sheet");
@@ -98,7 +128,15 @@ export function BoardGallery() {
   const lookup: NameLookup =
     sheet === "name-eth"
       ? { kind: "found", name: "rae.eth", account: addr(42), you: false, contact: false, onBoard: false, onBase: false }
-      : { kind: "found", name: "rae.justan.id", account: addr(40), you: false, contact: false, onBoard: false, onBase: true };
+      : {
+          kind: "found",
+          name: "rae.justan.id",
+          account: addr(40),
+          you: false,
+          contact: false,
+          onBoard: false,
+          onBase: true,
+        };
 
   return (
     <>
@@ -127,13 +165,32 @@ export function BoardGallery() {
         }}
         onOpen={(p) => {
           const i = list.findIndex((x) => x.account === p.account);
-          const s = p.account === YOU ? "you" : CONTACTS.has(p.account) ? "contact" : i >= 0 && list[i].pct === null ? "unranked" : "person";
+          const s =
+            p.account === YOU
+              ? "you"
+              : CONTACTS.has(p.account)
+                ? "contact"
+                : i >= 0 && list[i].pct === null
+                  ? "unranked"
+                  : "person";
           router.replace(`/dev/ui/board?${new URLSearchParams({ ...Object.fromEntries(q), sheet: s })}`);
         }}
-        onAddByName={() => router.replace(`/dev/ui/board?${new URLSearchParams({ ...Object.fromEntries(q), sheet: "name" })}`)}
+        onAddByName={() =>
+          router.replace(`/dev/ui/board?${new URLSearchParams({ ...Object.fromEntries(q), sheet: "name" })}`)
+        }
         pickBar={picking ? <PickBar count={picked.size} phase="idle" onAdd={NOTHING_SIGNED} /> : undefined}
       />
-      <PersonSheet open={!!sheetPerson} onClose={close} person={sheetPerson} phase="idle" error={null} note={null} preview={false} onAdd={NOTHING_SIGNED} onRemove={NOTHING_SIGNED} />
+      <PersonSheet
+        open={!!sheetPerson}
+        onClose={close}
+        person={sheetPerson}
+        phase="idle"
+        error={null}
+        note={null}
+        preview={false}
+        onAdd={NOTHING_SIGNED}
+        onRemove={NOTHING_SIGNED}
+      />
       <AddByNameSheet
         open={sheet === "name" || sheet === "name-eth"}
         onClose={close}

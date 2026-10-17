@@ -50,7 +50,20 @@ import { quotePool } from "@/lib/swap/buy";
 import { AERODROME, UNISWAP, type Venue } from "@/lib/swap/venues";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
-import { ENV_FILE, ROOT, STATE_DIR, connectFork, health, shares, usd, writeState, type Call, type Fork, type Name, type State } from "./lib";
+import {
+  ENV_FILE,
+  ROOT,
+  STATE_DIR,
+  connectFork,
+  health,
+  shares,
+  usd,
+  writeState,
+  type Call,
+  type Fork,
+  type Name,
+  type State,
+} from "./lib";
 
 /** JAW's account factory on Base (contracts/test/ForkBase.sol, the SDK's FACTORY_ADDRESS). */
 const JAW_FACTORY: Address = "0x5803c076563C85799989d42Fc00292A8aE52fa9E";
@@ -59,18 +72,22 @@ const NVDA = EQUITIES.find((e) => e.symbol === "NVDAc")!;
 const USDT = ENTRY_COINS.find((c) => c.symbol === "USDT")!;
 
 const factoryAbi = parseAbi(["function createAccount(bytes[] owners, uint256 nonce) payable returns (address)"]);
-const aeroFactoryAbi = parseAbi(["function getPool(address tokenA, address tokenB, int24 tickSpacing) view returns (address)"]);
+const aeroFactoryAbi = parseAbi([
+  "function getPool(address tokenA, address tokenB, int24 tickSpacing) view returns (address)",
+]);
 const uniFactoryAbi = parseAbi(["function getPool(address tokenA, address tokenB, uint24 fee) view returns (address)"]);
 const uiMultiplierAbi = parseAbi(["function uiMultiplier() view returns (uint256)"]);
 const poolLiquidityAbi = parseAbi(["function liquidity() view returns (uint128)"]);
 
 /** RehearsalStock's storage (contracts/script/rehearsal/RehearsalStock.sol). */
 const STOCK_SLOT = BigInt(keccak256(stringToHex("greedygoose.rehearsal.stock")));
-const balanceSlot = (holder: Address) => keccak256(encodeAbiParameters([{ type: "address" }, { type: "uint256" }], [holder, STOCK_SLOT]));
+const balanceSlot = (holder: Address) =>
+  keccak256(encodeAbiParameters([{ type: "address" }, { type: "uint256" }], [holder, STOCK_SLOT]));
 const UI_MULTIPLIER_SLOT = pad(toHex(STOCK_SLOT + 2n), { size: 32 });
 const word = (v: bigint) => pad(toHex(v), { size: 32 });
 
-const dollars = (name: string, fallback: number) => parseUnits(String(Number(process.env[name] ?? fallback)), USDC.decimals);
+const dollars = (name: string, fallback: number) =>
+  parseUnits(String(Number(process.env[name] ?? fallback)), USDC.decimals);
 const AMOUNTS = {
   samWallet: dollars("REHEARSAL_SAM_WALLET", 3),
   samSavings: dollars("REHEARSAL_SAM_SAVINGS", 250),
@@ -104,9 +121,11 @@ async function main() {
   };
   const forkUrl = info.forkConfig?.forkUrl;
   const forkBlock = info.forkConfig?.forkBlockNumber;
-  if (!forkUrl || forkBlock === undefined) throw new Error("anvil isn't forking Base: start it with npm run rehearsal:fork");
+  if (!forkUrl || forkBlock === undefined)
+    throw new Error("anvil isn't forking Base: start it with npm run rehearsal:fork");
   // anvil's "base" family runs B20 natively and ignores the stand-ins (start-fork.sh).
-  if (info.network === "base") throw new Error("anvil runs as its base network family: start it with npm run rehearsal:fork (--network optimism)");
+  if (info.network === "base")
+    throw new Error("anvil runs as its base network family: start it with npm run rehearsal:fork (--network optimism)");
   // Base itself, read only: the stand-ins copy what the hub and the pools hold there at the fork block.
   const upstream = createPublicClient({ chain: base, transport: http(forkUrl) });
   if ((await upstream.getChainId()) !== base.id) throw new Error(`${forkUrl} isn't Base`);
@@ -120,13 +139,23 @@ async function main() {
   for (const e of EQUITIES) {
     const holders: { label: string; address: Address }[] = [{ label: "Aave hub", address: AAVE.HUB as Address }];
     for (const ts of AERODROME.TICK_SPACINGS) {
-      const pool = await pub.readContract({ address: AERODROME.FACTORY, abi: aeroFactoryAbi, functionName: "getPool", args: [e.address, USDC.address, ts] });
+      const pool = await pub.readContract({
+        address: AERODROME.FACTORY,
+        abi: aeroFactoryAbi,
+        functionName: "getPool",
+        args: [e.address, USDC.address, ts],
+      });
       if (pool === zeroAddress) continue;
       holders.push({ label: `Aerodrome ${ts}`, address: pool });
       pools.push({ stock: e, venue: "aerodrome", id: ts, address: pool, label: `${e.symbol} Aerodrome ${ts}` });
     }
     for (const fee of UNISWAP.FEE_TIERS) {
-      const pool = await pub.readContract({ address: UNISWAP.FACTORY, abi: uniFactoryAbi, functionName: "getPool", args: [e.address, USDC.address, fee] });
+      const pool = await pub.readContract({
+        address: UNISWAP.FACTORY,
+        abi: uniFactoryAbi,
+        functionName: "getPool",
+        args: [e.address, USDC.address, fee],
+      });
       if (pool === zeroAddress) continue;
       holders.push({ label: `Uniswap ${fee / 10_000}%`, address: pool });
       pools.push({ stock: e, venue: "uniswap", id: fee, address: pool, label: `${e.symbol} Uniswap ${fee / 10_000}%` });
@@ -134,7 +163,15 @@ async function main() {
     const at = { blockNumber: BigInt(forkBlock) };
     const [multiplier, ...balances] = await Promise.all([
       upstream.readContract({ address: e.address, abi: uiMultiplierAbi, functionName: "uiMultiplier", ...at }),
-      ...holders.map((h) => upstream.readContract({ address: e.address, abi: erc20Abi, functionName: "balanceOf", args: [h.address], ...at })),
+      ...holders.map((h) =>
+        upstream.readContract({
+          address: e.address,
+          abi: erc20Abi,
+          functionName: "balanceOf",
+          args: [h.address],
+          ...at,
+        }),
+      ),
     ]);
     await test.setCode({ address: e.address, bytecode: stockCode });
     await test.setStorageAt({ address: e.address, index: UI_MULTIPLIER_SLOT, value: word(multiplier) });
@@ -142,7 +179,12 @@ async function main() {
     if (running !== multiplier) throw new Error(`${e.symbol}: the stand-in isn't running at its address`);
     for (const [i, h] of holders.entries()) {
       await test.setStorageAt({ address: e.address, index: balanceSlot(h.address), value: word(balances[i]) });
-      const check = await pub.readContract({ address: e.address, abi: erc20Abi, functionName: "balanceOf", args: [h.address] });
+      const check = await pub.readContract({
+        address: e.address,
+        abi: erc20Abi,
+        functionName: "balanceOf",
+        args: [h.address],
+      });
       if (check !== balances[i]) throw new Error(`${e.symbol}: ${h.label}'s balance didn't take`);
     }
     console.log(`   ${e.symbol}: ${holders.map((h, i) => `${h.label} ${shares(balances[i])}`).join(" · ")}`);
@@ -159,7 +201,10 @@ async function main() {
 
   console.log("\n2. Two fresh JAW accounts from JAW's factory, owned by [signer, permission manager]");
   const accounts = {} as State["accounts"];
-  for (const [name, signer] of [["sam", samSigner], ["ana", anaSigner]] as [Name, Address][]) {
+  for (const [name, signer] of [
+    ["sam", samSigner],
+    ["ana", anaSigner],
+  ] as [Name, Address][]) {
     accounts[name] = { address: await newJawAccount(fork, owner, signer, forkBlock, name), signer };
     console.log(`   ${name}: ${accounts[name].address} (signer ${signer}, an anvil dev account)`);
   }
@@ -168,22 +213,51 @@ async function main() {
   const sam = accounts.sam.address;
   await deal(fork, USDC.address, sam, AMOUNTS.samWallet + AMOUNTS.samSavings);
   const toSavings = (amount: bigint, who: Address): Call[] => [
-    { target: USDC.address, value: 0n, data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [GUARDIAN.AAVE_V3_POOL, amount] }) },
-    { target: GUARDIAN.AAVE_V3_POOL, value: 0n, data: encodeFunctionData({ abi: aaveV3PoolAbi, functionName: "supply", args: [USDC.address, amount, who, 0] }) },
+    {
+      target: USDC.address,
+      value: 0n,
+      data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [GUARDIAN.AAVE_V3_POOL, amount] }),
+    },
+    {
+      target: GUARDIAN.AAVE_V3_POOL,
+      value: 0n,
+      data: encodeFunctionData({ abi: aaveV3PoolAbi, functionName: "supply", args: [USDC.address, amount, who, 0] }),
+    },
   ];
-  if (AMOUNTS.samSavings > 0n) await fork.batch(accounts.sam.signer, sam, toSavings(AMOUNTS.samSavings, sam), "sam's savings");
+  if (AMOUNTS.samSavings > 0n)
+    await fork.batch(accounts.sam.signer, sam, toSavings(AMOUNTS.samSavings, sam), "sam's savings");
   if (AMOUNTS.samNvdaShares > 0n) {
     await test.setStorageAt({ address: NVDA.address, index: balanceSlot(sam), value: word(AMOUNTS.samNvdaShares) });
     const r = BigInt(NVDA.reserveId);
     const credit: Call[] = [
-      { target: NVDA.address, value: 0n, data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [AAVE.SPOKE, AMOUNTS.samNvdaShares] }) },
-      { target: AAVE.SPOKE, value: 0n, data: encodeFunctionData({ abi: spokeAbi, functionName: "supply", args: [r, AMOUNTS.samNvdaShares, sam] }) },
-      { target: AAVE.SPOKE, value: 0n, data: encodeFunctionData({ abi: spokeAbi, functionName: "setUsingAsCollateral", args: [r, true, sam] }) },
+      {
+        target: NVDA.address,
+        value: 0n,
+        data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [AAVE.SPOKE, AMOUNTS.samNvdaShares] }),
+      },
+      {
+        target: AAVE.SPOKE,
+        value: 0n,
+        data: encodeFunctionData({ abi: spokeAbi, functionName: "supply", args: [r, AMOUNTS.samNvdaShares, sam] }),
+      },
+      {
+        target: AAVE.SPOKE,
+        value: 0n,
+        data: encodeFunctionData({ abi: spokeAbi, functionName: "setUsingAsCollateral", args: [r, true, sam] }),
+      },
     ];
     // What the credit draws goes into savings too, so the wallet keeps only its few dollars.
     if (AMOUNTS.samCredit > 0n) {
       credit.push(
-        { target: AAVE.SPOKE, value: 0n, data: encodeFunctionData({ abi: spokeAbi, functionName: "borrow", args: [BigInt(USDC.reserveId), AMOUNTS.samCredit, sam] }) },
+        {
+          target: AAVE.SPOKE,
+          value: 0n,
+          data: encodeFunctionData({
+            abi: spokeAbi,
+            functionName: "borrow",
+            args: [BigInt(USDC.reserveId), AMOUNTS.samCredit, sam],
+          }),
+        },
         ...toSavings(AMOUNTS.samCredit, sam),
       );
     }
@@ -196,11 +270,23 @@ async function main() {
 
   console.log("\n4. GooseExecutor (D13 deploy script) and its forwarder");
   const broadcast = join(STATE_DIR, "broadcast");
-  forge(["script", "script/DeployExecutor.s.sol:DeployExecutor", "--rpc-url", fork.rpc, "--broadcast", "--unlocked", "--sender", owner], {
-    EXECUTOR_OWNER: owner,
-    // The fork's deploy record stays out of contracts/broadcast, where the real Base deploys are kept.
-    FOUNDRY_BROADCAST: broadcast,
-  });
+  forge(
+    [
+      "script",
+      "script/DeployExecutor.s.sol:DeployExecutor",
+      "--rpc-url",
+      fork.rpc,
+      "--broadcast",
+      "--unlocked",
+      "--sender",
+      owner,
+    ],
+    {
+      EXECUTOR_OWNER: owner,
+      // The fork's deploy record stays out of contracts/broadcast, where the real Base deploys are kept.
+      FOUNDRY_BROADCAST: broadcast,
+    },
+  );
   const run = JSON.parse(readFileSync(join(broadcast, "DeployExecutor.s.sol", "8453", "run-latest.json"), "utf8")) as {
     transactions: { contractName?: string; contractAddress?: Address; transactionType: string; hash: Hex }[];
     receipts: { transactionHash: Hex; blockNumber: Hex }[];
@@ -213,22 +299,38 @@ async function main() {
   const executorBlock = Number(run.receipts.find((r) => r.transactionHash === executorTx.hash)!.blockNumber);
   // forge links each job library through CREATE2, so a library Base already has (the D13 deploy's, same code) is
   // reused from the fork rather than deployed again.
-  const libraries = Object.fromEntries(run.libraries.map((l) => l.split(":")).map(([, name, a]) => [name, getAddress(a)]));
+  const libraries = Object.fromEntries(
+    run.libraries.map((l) => l.split(":")).map(([, name, a]) => [name, getAddress(a)]),
+  );
   for (const [name, a] of Object.entries(libraries)) {
     if (!(await pub.getCode({ address: a }))) throw new Error(`${name} has no code at ${a}`);
   }
-  await fork.send(owner, executor, encodeFunctionData({ abi: gooseExecutorAbi, functionName: "bootstrap", args: [[forwarder]] }), "bootstrap");
+  await fork.send(
+    owner,
+    executor,
+    encodeFunctionData({ abi: gooseExecutorAbi, functionName: "bootstrap", args: [[forwarder]] }),
+    "bootstrap",
+  );
   const [capMax, isForwarder, ...allowed] = await Promise.all([
     pub.readContract({ address: executor, abi: gooseExecutorAbi, functionName: "CAP_MAX" }),
     pub.readContract({ address: executor, abi: gooseExecutorAbi, functionName: "isForwarder", args: [forwarder] }),
     ...[sam, ana].map(async (a) =>
-      pub.readContract({ address: executor, abi: gooseExecutorAbi, functionName: "allowedCodehash", args: [keccak256((await pub.getCode({ address: a }))!)] }),
+      pub.readContract({
+        address: executor,
+        abi: gooseExecutorAbi,
+        functionName: "allowedCodehash",
+        args: [keccak256((await pub.getCode({ address: a }))!)],
+      }),
     ),
   ]);
   if (!isForwarder) throw new Error("bootstrap didn't set the forwarder");
   if (!allowed.every(Boolean)) throw new Error("the executor doesn't accept JAW's account code");
   console.log(`   GooseExecutor ${executor} (block ${executorBlock}), daily limits capped at ${usd(capMax)}`);
-  console.log(`   libraries: ${Object.entries(libraries).map(([n, a]) => `${n} ${a}`).join(", ")}`);
+  console.log(
+    `   libraries: ${Object.entries(libraries)
+      .map(([n, a]) => `${n} ${a}`)
+      .join(", ")}`,
+  );
   console.log(`   owner ${owner}, forwarder ${forwarder} (anvil dev accounts)`);
 
   console.log("\n5. Warming the fork: the app's quote on every open stock pool, both ways");
@@ -242,7 +344,9 @@ async function main() {
       quotePool(slow, stock, venue, id, parseUnits("0.01", stock.decimals), "sell"),
     ]),
   );
-  console.log(`   ${warmed.filter((w) => w.status === "fulfilled").length} of ${warmed.length} quotes answer, in ${Math.round((Date.now() - started) / 1000)} s`);
+  console.log(
+    `   ${warmed.filter((w) => w.status === "fulfilled").length} of ${warmed.length} quotes answer, in ${Math.round((Date.now() - started) / 1000)} s`,
+  );
 
   const state: State = {
     rpc: fork.rpc,
@@ -266,15 +370,37 @@ async function main() {
 
 /** A fresh JAW account from JAW's real factory, owned by `signer` and the manager. The nonce is the fork's own, so
  * every fork gets accounts no one has used, here or on Base. */
-async function newJawAccount(fork: Fork, from: Address, signer: Address, forkBlock: number, name: string): Promise<Address> {
+async function newJawAccount(
+  fork: Fork,
+  from: Address,
+  signer: Address,
+  forkBlock: number,
+  name: string,
+): Promise<Address> {
   const owners = [signer, MANAGER].map((a) => encodeAbiParameters([{ type: "address" }], [a]));
   for (let i = 0n; ; i++) {
     const nonce = BigInt(keccak256(stringToHex(`greedygoose.rehearsal.${name}.${forkBlock}`))) + i;
-    const { result } = await fork.pub.simulateContract({ address: JAW_FACTORY, abi: factoryAbi, functionName: "createAccount", args: [owners, nonce], account: from });
+    const { result } = await fork.pub.simulateContract({
+      address: JAW_FACTORY,
+      abi: factoryAbi,
+      functionName: "createAccount",
+      args: [owners, nonce],
+      account: from,
+    });
     if ((await fork.pub.getCode({ address: result }))?.length) continue; // taken
-    await fork.send(from, JAW_FACTORY, encodeFunctionData({ abi: factoryAbi, functionName: "createAccount", args: [owners, nonce] }), `${name}'s account`);
+    await fork.send(
+      from,
+      JAW_FACTORY,
+      encodeFunctionData({ abi: factoryAbi, functionName: "createAccount", args: [owners, nonce] }),
+      `${name}'s account`,
+    );
     for (const owner of [signer, MANAGER]) {
-      const owns = await fork.pub.readContract({ address: result, abi: justanAccountAbi, functionName: "isOwnerAddress", args: [owner] });
+      const owns = await fork.pub.readContract({
+        address: result,
+        abi: justanAccountAbi,
+        functionName: "isOwnerAddress",
+        args: [owner],
+      });
       if (!owns) throw new Error(`${name}'s account isn't owned by ${owner}`);
     }
     return getAddress(result);
@@ -283,12 +409,18 @@ async function newJawAccount(fork: Fork, from: Address, signer: Address, forkBlo
 
 /** A pool a rehearsal-sized trade can't use: nothing in range at its price, or under $100 of the stock or of USDC. */
 async function isDry(fork: Fork, stock: (typeof EQUITIES)[number], pool: Address): Promise<boolean> {
-  const read = (token: Address) => fork.pub.readContract({ address: token, abi: erc20Abi, functionName: "balanceOf", args: [pool] });
+  const read = (token: Address) =>
+    fork.pub.readContract({ address: token, abi: erc20Abi, functionName: "balanceOf", args: [pool] });
   const [liquidity, usdc, held, price] = await Promise.all([
     fork.pub.readContract({ address: pool, abi: poolLiquidityAbi, functionName: "liquidity" }),
     read(USDC.address),
     read(stock.address),
-    fork.pub.readContract({ address: AAVE.SPOKE_ORACLE, abi: aaveOracleAbi, functionName: "getReservePrice", args: [BigInt(stock.reserveId)] }),
+    fork.pub.readContract({
+      address: AAVE.SPOKE_ORACLE,
+      abi: aaveOracleAbi,
+      functionName: "getReservePrice",
+      args: [BigInt(stock.reserveId)],
+    }),
   ]);
   const stockUsd = (held * price) / 10n ** BigInt(stock.decimals + 2); // shares × 8-decimal price → USDC units
   return liquidity === 0n || usdc < 100_000_000n || stockUsd < 100_000_000n;
@@ -311,7 +443,7 @@ async function closePool(fork: Fork, pool: Address, label: string) {
   if (before.unlocked !== 1n) throw new Error(`${label}: slot0 isn't unlocked to begin with`);
   for (let i = 0n; i < 64n; i++) {
     const index = pad(toHex(i), { size: 32 });
-    const value = BigInt(await fork.pub.getStorageAt({ address: pool, slot: index }) ?? "0x0");
+    const value = BigInt((await fork.pub.getStorageAt({ address: pool, slot: index })) ?? "0x0");
     if ((value & ((1n << 160n) - 1n)) !== before.sqrtPrice) continue;
     for (const bit of [240n, 232n]) {
       if (((value >> bit) & 0xffn) !== 1n) continue;
@@ -332,14 +464,20 @@ async function deal(fork: Fork, token: Address, to: Address, amount: bigint) {
 }
 
 async function printAccount(fork: Fork, name: string, account: Address) {
-  const read = (token: Address) => fork.pub.readContract({ address: token, abi: erc20Abi, functionName: "balanceOf", args: [account] });
+  const read = (token: Address) =>
+    fork.pub.readContract({ address: token, abi: erc20Abi, functionName: "balanceOf", args: [account] });
   const [wallet, savings, usdt, data] = await Promise.all([
     read(USDC.address),
     read(GUARDIAN.AUSDC as Address),
     read(USDT.address),
     fork.pub.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserAccountData", args: [account] }),
   ]);
-  const owed = await fork.pub.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserTotalDebt", args: [BigInt(USDC.reserveId), account] });
+  const owed = await fork.pub.readContract({
+    address: AAVE.SPOKE,
+    abi: spokeAbi,
+    functionName: "getUserTotalDebt",
+    args: [BigInt(USDC.reserveId), account],
+  });
   console.log(
     `   ${name}: wallet ${usd(wallet)} · savings ${usd(savings)}${usdt ? ` · USDT ${usd(usdt)}` : ""}` +
       (owed > 0n ? ` · owes ${usd(owed)} · health ${health(data.healthFactor)}` : ""),

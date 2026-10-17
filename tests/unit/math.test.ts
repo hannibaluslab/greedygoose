@@ -7,15 +7,25 @@ const usd = (n: number) => BigInt(n) * VALUE_PER_USD;
 describe("summarize", () => {
   it("handles an empty position", () => {
     const s = summarize({
-      riskPremium: 0n, avgCollateralFactor: 0n, healthFactor: 2n ** 256n - 1n,
-      totalCollateralValue: 0n, totalDebtValueRay: 0n, activeCollateralCount: 0n, borrowCount: 0n,
+      riskPremium: 0n,
+      avgCollateralFactor: 0n,
+      healthFactor: 2n ** 256n - 1n,
+      totalCollateralValue: 0n,
+      totalDebtValueRay: 0n,
+      activeCollateralCount: 0n,
+      borrowCount: 0n,
     });
     expect(s).toEqual({ collateralUsd: 0, debtUsd: 0, availableUsd: 0, healthFactor: null, avgCf: 0 });
   });
   it("computes available credit from Aave's weighted CF", () => {
     const s = summarize({
-      riskPremium: 0n, avgCollateralFactor: (WAD * 78n) / 100n, healthFactor: (WAD * 26n) / 10n,
-      totalCollateralValue: usd(1000), totalDebtValueRay: usd(300) * RAY, activeCollateralCount: 1n, borrowCount: 1n,
+      riskPremium: 0n,
+      avgCollateralFactor: (WAD * 78n) / 100n,
+      healthFactor: (WAD * 26n) / 10n,
+      totalCollateralValue: usd(1000),
+      totalDebtValueRay: usd(300) * RAY,
+      activeCollateralCount: 1n,
+      borrowCount: 1n,
     });
     expect(s.collateralUsd).toBe(1000);
     expect(s.debtUsd).toBe(300);
@@ -57,13 +67,27 @@ describe("withdraw limits", () => {
   });
   it("keeps HF at a target health when given one", () => {
     // room = 1000*0.7 - 300*1.5 = 250 → 250/0.7 ≈ 357.1 of this stock, leaving HF 1.5
-    const max = maxWithdrawUsd({ collateralUsd: 1000, avgCf: 0.7, debtUsd: 300, cf: 0.7, lockedUsd: 1000, targetHf: 1.5 });
+    const max = maxWithdrawUsd({
+      collateralUsd: 1000,
+      avgCf: 0.7,
+      debtUsd: 300,
+      cf: 0.7,
+      lockedUsd: 1000,
+      targetHf: 1.5,
+    });
     expect(max).toBeCloseTo(357.14, 1);
-    expect(healthAfterWithdraw({ collateralUsd: 1000, avgCf: 0.7, debtUsd: 300, cf: 0.7, usd: max })).toBeCloseTo(1.5, 6);
+    expect(healthAfterWithdraw({ collateralUsd: 1000, avgCf: 0.7, debtUsd: 300, cf: 0.7, usd: max })).toBeCloseTo(
+      1.5,
+      6,
+    );
     // Already under the target: nothing can come out, though Aave's own limit would allow some.
-    expect(maxWithdrawUsd({ collateralUsd: 1000, avgCf: 0.7, debtUsd: 500, cf: 0.7, lockedUsd: 1000, targetHf: 1.5 })).toBe(0);
+    expect(
+      maxWithdrawUsd({ collateralUsd: 1000, avgCf: 0.7, debtUsd: 500, cf: 0.7, lockedUsd: 1000, targetHf: 1.5 }),
+    ).toBe(0);
     // A target under Aave's limit counts as the limit.
-    expect(maxWithdrawUsd({ collateralUsd: 1000, avgCf: 0.7, debtUsd: 500, cf: 0.7, lockedUsd: 1000, targetHf: 0.5 })).toBeCloseTo(285.71, 1);
+    expect(
+      maxWithdrawUsd({ collateralUsd: 1000, avgCf: 0.7, debtUsd: 500, cf: 0.7, lockedUsd: 1000, targetHf: 0.5 }),
+    ).toBeCloseTo(285.71, 1);
   });
 });
 

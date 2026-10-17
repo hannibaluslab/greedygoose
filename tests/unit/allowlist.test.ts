@@ -28,7 +28,17 @@ const exactInputSingle = (tokenOut: `0x${string}`, recipient: `0x${string}`) =>
   encodeFunctionData({
     abi: swapRouter02Abi,
     functionName: "exactInputSingle",
-    args: [{ tokenIn: USDC.address, tokenOut, fee: 3000, recipient, amountIn: 1n, amountOutMinimum: 1n, sqrtPriceLimitX96: 0n }],
+    args: [
+      {
+        tokenIn: USDC.address,
+        tokenOut,
+        fee: 3000,
+        recipient,
+        amountIn: 1n,
+        amountOutMinimum: 1n,
+        sqrtPriceLimitX96: 0n,
+      },
+    ],
   });
 const multicall = (data: `0x${string}`[]) => ({
   to: UNISWAP.SWAP_ROUTER_02,
@@ -62,16 +72,26 @@ describe("assertAllowed (one allowlist for every user batch)", () => {
     // Buys and repays only take savings out; putting them in is not part of these batches.
     const supply = buildAddSavingsCalls(user, 1n)[1];
     expect(() => assertAllowed(user, [supply])).toThrow(/unexpected call/);
-    const transfer = { to: USDC.address, data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [attacker, 1n] }), value: 0n };
+    const transfer = {
+      to: USDC.address,
+      data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [attacker, 1n] }),
+      value: 0n,
+    };
     expect(() => assertAllowed(user, [transfer])).toThrow(/unexpected call/);
     const poolTransfer = { ...transfer, to: GUARDIAN.AAVE_V3_POOL };
     expect(() => assertAllowed(user, [poolTransfer])).toThrow(/unexpected call/);
-    const withdrawOnRouter = { to: UNISWAP.SWAP_ROUTER_02, data: encodeFunctionData({ abi: aaveV3PoolAbi, functionName: "withdraw", args: [USDC.address, 1n, user] }), value: 0n };
+    const withdrawOnRouter = {
+      to: UNISWAP.SWAP_ROUTER_02,
+      data: encodeFunctionData({ abi: aaveV3PoolAbi, functionName: "withdraw", args: [USDC.address, 1n, user] }),
+      value: 0n,
+    };
     expect(() => assertAllowed(user, [withdrawOnRouter])).toThrow(/unexpected call/);
   });
 
   it("approves only the spoke and the routers", () => {
-    expect(() => assertAllowed(user, [approve(USDC.address, AAVE.SPOKE), approve(nvda.address, UNISWAP.SWAP_ROUTER_02)])).not.toThrow();
+    expect(() =>
+      assertAllowed(user, [approve(USDC.address, AAVE.SPOKE), approve(nvda.address, UNISWAP.SWAP_ROUTER_02)]),
+    ).not.toThrow();
     expect(() => assertAllowed(user, [approve(USDC.address, attacker)])).toThrow(/unexpected spender/);
     expect(() => assertAllowed(user, [approve(USDC.address, GUARDIAN.AAVE_V3_POOL)])).toThrow(/unexpected spender/);
   });
@@ -90,7 +110,11 @@ describe("assertAllowed (one allowlist for every user batch)", () => {
   });
 
   it("takes only USDC out of savings, and swaps only between registry tokens", () => {
-    const withdrawStock = { to: GUARDIAN.AAVE_V3_POOL, data: encodeFunctionData({ abi: aaveV3PoolAbi, functionName: "withdraw", args: [nvda.address, 1n, user] }), value: 0n };
+    const withdrawStock = {
+      to: GUARDIAN.AAVE_V3_POOL,
+      data: encodeFunctionData({ abi: aaveV3PoolAbi, functionName: "withdraw", args: [nvda.address, 1n, user] }),
+      value: 0n,
+    };
     expect(() => assertAllowed(user, [withdrawStock])).toThrow(/unexpected arguments/);
     expect(() => assertAllowed(user, [swap(nvda.address, user)])).not.toThrow();
     expect(() => assertAllowed(user, [swap(attacker, user)])).toThrow(/unexpected arguments/);
@@ -99,13 +123,17 @@ describe("assertAllowed (one allowlist for every user batch)", () => {
   it("takes Uniswap swaps only with their deadline, one swap per multicall", () => {
     const bare = { to: UNISWAP.SWAP_ROUTER_02, data: exactInputSingle(nvda.address, user), value: 0n };
     expect(() => assertAllowed(user, [bare])).toThrow(/unexpected call/);
-    expect(() => assertAllowed(user, [multicall([exactInputSingle(nvda.address, attacker)])])).toThrow(/unexpected arguments/);
-    expect(() => assertAllowed(user, [multicall([exactInputSingle(nvda.address, user), exactInputSingle(nvda.address, user)])])).toThrow(
+    expect(() => assertAllowed(user, [multicall([exactInputSingle(nvda.address, attacker)])])).toThrow(
       /unexpected arguments/,
     );
+    expect(() =>
+      assertAllowed(user, [multicall([exactInputSingle(nvda.address, user), exactInputSingle(nvda.address, user)])]),
+    ).toThrow(/unexpected arguments/);
     const nested = multicall([multicall([exactInputSingle(nvda.address, user)]).data]);
     expect(() => assertAllowed(user, [nested])).toThrow(/unexpected arguments/);
-    const transferInside = multicall([encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [attacker, 1n] })]);
+    const transferInside = multicall([
+      encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [attacker, 1n] }),
+    ]);
     expect(() => assertAllowed(user, [transferInside])).toThrow(/unexpected arguments/);
   });
 });
@@ -129,7 +157,9 @@ describe("assertAllowed: Earn with stocks' savings supply (saveTo)", () => {
   it("passes Earn with stocks' batch: stock in use, credit, then an exact approve and a USDC supply for the user", () => {
     const batch = [...loan, ...save()];
     expect(assertAllowed(user, batch, { saveTo: user })).toBe(batch);
-    expect(buildEarnCalls({ user, backing: [{ stock: nvda, raw: 1_000_000n }], creditRaw: amount, cash })).toHaveLength(6);
+    expect(buildEarnCalls({ user, backing: [{ stock: nvda, raw: 1_000_000n }], creditRaw: amount, cash })).toHaveLength(
+      6,
+    );
   });
 
   it("refuses a savings supply in every batch that doesn't declare it, as before", () => {
@@ -160,42 +190,58 @@ describe("assertAllowed: Earn with stocks' savings supply (saveTo)", () => {
 
   it("saves only for the user, only USDC, referral code 0, more than 0, no value", () => {
     expect(() => assertAllowed(user, [...loan, ...save()], { saveTo: attacker })).toThrow(/only for the user/);
-    expect(() => assertAllowed(user, [...loan, approveSave(amount), supplyOf(USDC.address, attacker, amount)], { saveTo: user })).toThrow(
-      /unexpected arguments to supply/,
-    );
-    expect(() => assertAllowed(user, [...loan, approveSave(amount), supplyOf(nvda.address, user, amount)], { saveTo: user })).toThrow(
-      /unexpected arguments to supply/,
-    );
-    expect(() => assertAllowed(user, [...loan, approveSave(amount), supplyOf(USDC.address, user, amount, 1)], { saveTo: user })).toThrow(
-      /unexpected arguments to supply/,
-    );
-    expect(() => assertAllowed(user, [...loan, approveSave(0n), supplyOf(USDC.address, user, 0n)], { saveTo: user })).toThrow(
-      /unexpected arguments to supply/,
-    );
+    expect(() =>
+      assertAllowed(user, [...loan, approveSave(amount), supplyOf(USDC.address, attacker, amount)], { saveTo: user }),
+    ).toThrow(/unexpected arguments to supply/);
+    expect(() =>
+      assertAllowed(user, [...loan, approveSave(amount), supplyOf(nvda.address, user, amount)], { saveTo: user }),
+    ).toThrow(/unexpected arguments to supply/);
+    expect(() =>
+      assertAllowed(user, [...loan, approveSave(amount), supplyOf(USDC.address, user, amount, 1)], { saveTo: user }),
+    ).toThrow(/unexpected arguments to supply/);
+    expect(() =>
+      assertAllowed(user, [...loan, approveSave(0n), supplyOf(USDC.address, user, 0n)], { saveTo: user }),
+    ).toThrow(/unexpected arguments to supply/);
     const [a, sup] = save();
-    expect(() => assertAllowed(user, [...loan, a, { ...sup, value: 1n }], { saveTo: user })).toThrow(/unexpected value/);
+    expect(() => assertAllowed(user, [...loan, a, { ...sup, value: 1n }], { saveTo: user })).toThrow(
+      /unexpected value/,
+    );
     // Another account's batch, checked against the user.
     expect(() => assertAllowed(user, [...save(attacker)], { saveTo: user })).toThrow(/unexpected arguments to supply/);
   });
 
   it("approves the pool for exactly the one supply, once", () => {
-    expect(() => assertAllowed(user, [...loan, approveSave(amount + 1n), supplyOf(USDC.address, user, amount)], { saveTo: user })).toThrow(
-      /unexpected spender/,
+    expect(() =>
+      assertAllowed(user, [...loan, approveSave(amount + 1n), supplyOf(USDC.address, user, amount)], { saveTo: user }),
+    ).toThrow(/unexpected spender/);
+    expect(() =>
+      assertAllowed(user, [...loan, approveSave(amount - 1n), supplyOf(USDC.address, user, amount)], { saveTo: user }),
+    ).toThrow(/unexpected spender/);
+    expect(() =>
+      assertAllowed(user, [...loan, approveSave(amount), approveSave(amount), supplyOf(USDC.address, user, amount)], {
+        saveTo: user,
+      }),
+    ).toThrow(/more than one savings approval/);
+    expect(() => assertAllowed(user, [...loan, ...save(), ...save()], { saveTo: user })).toThrow(
+      /more than one savings supply/,
     );
-    expect(() => assertAllowed(user, [...loan, approveSave(amount - 1n), supplyOf(USDC.address, user, amount)], { saveTo: user })).toThrow(
-      /unexpected spender/,
-    );
-    expect(() => assertAllowed(user, [...loan, approveSave(amount), approveSave(amount), supplyOf(USDC.address, user, amount)], { saveTo: user })).toThrow(
-      /more than one savings approval/,
-    );
-    expect(() => assertAllowed(user, [...loan, ...save(), ...save()], { saveTo: user })).toThrow(/more than one savings supply/);
     // A stock approved to the pool is no spender, even in this batch.
-    const stockToPool = { to: nvda.address, data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [GUARDIAN.AAVE_V3_POOL, amount] }), value: 0n };
-    expect(() => assertAllowed(user, [...loan, stockToPool, supplyOf(USDC.address, user, amount)], { saveTo: user })).toThrow(/unexpected spender/);
+    const stockToPool = {
+      to: nvda.address,
+      data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [GUARDIAN.AAVE_V3_POOL, amount] }),
+      value: 0n,
+    };
+    expect(() =>
+      assertAllowed(user, [...loan, stockToPool, supplyOf(USDC.address, user, amount)], { saveTo: user }),
+    ).toThrow(/unexpected spender/);
   });
 
   it("leaves Send's one transfer as it was: saveTo doesn't open transfers", () => {
-    const transfer = { to: USDC.address, data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [attacker, 1n] }), value: 0n };
+    const transfer = {
+      to: USDC.address,
+      data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [attacker, 1n] }),
+      value: 0n,
+    };
     expect(() => assertAllowed(user, [...loan, ...save(), transfer], { saveTo: user })).toThrow(/unexpected call/);
   });
 });

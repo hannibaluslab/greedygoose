@@ -37,7 +37,8 @@ export type SellInput = {
 
 const SELL_FALLBACK: Record<SellFrom, string> = {
   free: "This sale would fail right now — the price may have moved or the stock may be paused. Try again in a moment.",
-  backing: "This sale would fail right now — the price or Aave’s limits may have moved. Try a smaller amount in a moment.",
+  backing:
+    "This sale would fail right now — the price or Aave’s limits may have moved. Try a smaller amount in a moment.",
   // On the Repay sheet (Pay with a stock that backs the credit): no protocol words on screen.
   repay: "This repay would fail right now — the price or your credit may have moved. Try a smaller amount in a moment.",
 };
@@ -88,5 +89,8 @@ export const salePlan = (p: SellInput, batch: ReturnType<typeof useSaleBatch>): 
  */
 export function useSell(input: SellInput | null) {
   const batch = useSaleBatch();
-  return useTx("The sale didn’t go through on Base. Nothing moved except any network fee.", input ? salePlan(input, batch) : null);
+  return useTx(
+    "The sale didn’t go through on Base. Nothing moved except any network fee.",
+    input ? salePlan(input, batch) : null,
+  );
 }

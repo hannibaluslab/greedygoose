@@ -69,14 +69,19 @@ export function afterFirstDay(range: Range, points: number[]): number[] {
 }
 
 /** A price line to draw, if it has two points or more and its last price agrees with Aave's (as `checked`). */
-export function checkedLine(points: readonly number[] | undefined, aaveUsd: number, tolerance: number): number[] | undefined {
+export function checkedLine(
+  points: readonly number[] | undefined,
+  aaveUsd: number,
+  tolerance: number,
+): number[] | undefined {
   if (!points || points.length < 2 || !points.every(isPrice)) return undefined;
   return agreesWithAave(points[points.length - 1], aaveUsd, tolerance) ? [...points] : undefined;
 }
 
 /** The data, if its price and the week's last price both agree with Aave's and there are lines to draw. */
 export function checked(data: MarketData | undefined, aaveUsd: number, tolerance: number): MarketData | undefined {
-  if (!data || !Number.isFinite(data.change) || data.change <= -1 || data.day.length < 2 || data.week.length < 2) return undefined;
+  if (!data || !Number.isFinite(data.change) || data.change <= -1 || data.day.length < 2 || data.week.length < 2)
+    return undefined;
   const agrees = (price: number) => agreesWithAave(price, aaveUsd, tolerance);
   return agrees(data.price) && agrees(data.week[data.week.length - 1]) ? data : undefined;
 }
@@ -133,7 +138,10 @@ export function weekValue(stocks: readonly { valueUsd: number; week?: number[] }
   const n = Math.min(...weeks.map((w) => w.length));
   if (stocks.length === 0 || n < 2) return null;
   return Array.from({ length: n }, (_, i) =>
-    stocks.reduce((sum, { valueUsd }, k) => sum + (valueUsd * weeks[k][weeks[k].length - n + i]) / weeks[k][weeks[k].length - 1], 0),
+    stocks.reduce(
+      (sum, { valueUsd }, k) => sum + (valueUsd * weeks[k][weeks[k].length - n + i]) / weeks[k][weeks[k].length - 1],
+      0,
+    ),
   );
 }
 

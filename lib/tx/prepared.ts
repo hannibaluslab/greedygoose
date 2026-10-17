@@ -116,7 +116,12 @@ export async function checkPlan(plan: TxPlan, d: CheckDeps): Promise<Checked> {
     const floor = plan.healthFloor;
     const results = await d.simulate(plan.user, floor ? [...batch, accountDataRead(plan.user)] : batch);
     const bad = results.slice(0, batch.length).findIndex((r) => r.status !== "success");
-    if (bad >= 0) return { ok: false, error: d.explain(results[bad].data, plan.fallback ?? DEFAULT_FALLBACK, batch[bad]), blocks: true };
+    if (bad >= 0)
+      return {
+        ok: false,
+        error: d.explain(results[bad].data, plan.fallback ?? DEFAULT_FALLBACK, batch[bad]),
+        blocks: true,
+      };
     if (floor) {
       const read = results[batch.length];
       // No health after it, no signature: it's checked again, as when Base doesn't answer.
@@ -126,7 +131,9 @@ export async function checkPlan(plan: TxPlan, d: CheckDeps): Promise<Checked> {
     }
     return { ok: true, batch };
   } catch (e) {
-    return e instanceof TxStop ? { ok: false, error: e.message, blocks: true } : { ok: false, error: CANT_CHECK, blocks: false };
+    return e instanceof TxStop
+      ? { ok: false, error: e.message, blocks: true }
+      : { ok: false, error: CANT_CHECK, blocks: false };
   }
 }
 
@@ -164,8 +171,20 @@ export type PrepView = {
   blocked: boolean;
 };
 
-export const idleView = (key: string | null = null): PrepView => ({ key, ready: false, checking: false, error: null, blocked: false });
-export const checkingView = (key: string): PrepView => ({ key, ready: false, checking: true, error: null, blocked: false });
+export const idleView = (key: string | null = null): PrepView => ({
+  key,
+  ready: false,
+  checking: false,
+  error: null,
+  blocked: false,
+});
+export const checkingView = (key: string): PrepView => ({
+  key,
+  ready: false,
+  checking: true,
+  error: null,
+  blocked: false,
+});
 const sameView = (a: PrepView, b: PrepView) =>
   a.key === b.key && a.ready === b.ready && a.checking === b.checking && a.error === b.error && a.blocked === b.blocked;
 

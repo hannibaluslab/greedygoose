@@ -34,7 +34,14 @@ const DAY = 86_400n;
 
 /** The same draw as Vectors.sol: uint256(keccak256(abi.encode(tag, i, field))). */
 const rand = (tag: string, i: number, field: number) =>
-  BigInt(keccak256(encodeAbiParameters([{ type: "string" }, { type: "uint256" }, { type: "uint256" }], [tag, BigInt(i), BigInt(field)])));
+  BigInt(
+    keccak256(
+      encodeAbiParameters(
+        [{ type: "string" }, { type: "uint256" }, { type: "uint256" }],
+        [tag, BigInt(i), BigInt(field)],
+      ),
+    ),
+  );
 const between = (r: bigint, lo: bigint, hi: bigint) => lo + (r % (hi - lo + 1n));
 /** A wide spread of magnitudes: (1 to 9) × 10^(lo to hi). */
 const spread = (r1: bigint, r2: bigint, lo: bigint, hi: bigint) => (1n + (r1 % 9n)) * 10n ** between(r2, lo, hi);
@@ -161,7 +168,9 @@ export function timingInput(i: number) {
 export function rebalanceInput(i: number) {
   const r = (f: number) => rand("rebalance", i, f);
   const first = Number(r(0) % 7n);
-  const raw = Array.from({ length: 7 }, (_, k) => (k === first || r(1 + k) % 3n !== 0n ? 1n + (r(10 + k) % 1000n) : 0n));
+  const raw = Array.from({ length: 7 }, (_, k) =>
+    k === first || r(1 + k) % 3n !== 0n ? 1n + (r(10 + k) % 1000n) : 0n,
+  );
   const sum = raw.reduce((a, b) => a + b, 0n);
   const weights = raw.map((w) => (w * 10_000n) / sum);
   weights[first] += 10_000n - weights.reduce((a, b) => a + b, 0n);
@@ -418,7 +427,12 @@ function entryVectors() {
 /** The manager's EIP-712 hash (getHash) of a permission, as `getHash` computes it on Base. */
 function managerHash(p: ReturnType<typeof agentPermission>) {
   return hashTypedData({
-    domain: { name: "JustaPermissionManager", version: "1", chainId: 8453, verifyingContract: GUARDIAN.PERMISSION_MANAGER },
+    domain: {
+      name: "JustaPermissionManager",
+      version: "1",
+      chainId: 8453,
+      verifyingContract: GUARDIAN.PERMISSION_MANAGER,
+    },
     types: {
       Permission: [
         { name: "account", type: "address" },
@@ -451,14 +465,33 @@ function hashVectors() {
   const hashes = [];
   for (let i = 0; i < HASH_COUNT; i++) {
     const v = hashInput(i);
-    hashes.push(managerHash(agentPermission(v.job, { account: v.account, spender: HASH_SPENDER, start: Number(v.start), end: Number(v.end), salt: v.salt, capRaw: v.cap })));
+    hashes.push(
+      managerHash(
+        agentPermission(v.job, {
+          account: v.account,
+          spender: HASH_SPENDER,
+          start: Number(v.start),
+          end: Number(v.end),
+          salt: v.salt,
+          capRaw: v.cap,
+        }),
+      ),
+    );
   }
   const sellHashes = [];
   for (let i = 0; i < HASH_COUNT; i++) {
     const v = sellHashInput(i);
     sellHashes.push(
       managerHash(
-        sellPermission({ account: v.account, spender: HASH_SPENDER, start: Number(v.start), end: Number(v.end), salt: v.salt, capRaw: v.cap, limitsRaw: v.limitsRaw }),
+        sellPermission({
+          account: v.account,
+          spender: HASH_SPENDER,
+          start: Number(v.start),
+          end: Number(v.end),
+          salt: v.salt,
+          capRaw: v.cap,
+          limitsRaw: v.limitsRaw,
+        }),
       ),
     );
   }
@@ -467,7 +500,15 @@ function hashVectors() {
     const v = rebalanceHashInput(i);
     rebalanceHashes.push(
       managerHash(
-        rebalancePermission({ account: v.account, spender: HASH_SPENDER, start: Number(v.start), end: Number(v.end), salt: v.salt, capRaw: v.cap, limitsRaw: v.limitsRaw }),
+        rebalancePermission({
+          account: v.account,
+          spender: HASH_SPENDER,
+          start: Number(v.start),
+          end: Number(v.end),
+          salt: v.salt,
+          capRaw: v.cap,
+          limitsRaw: v.limitsRaw,
+        }),
       ),
     );
   }
@@ -475,7 +516,16 @@ function hashVectors() {
   for (let i = 0; i < HASH_COUNT; i++) {
     const v = entryHashInput(i);
     entryHashes.push(
-      managerHash(entryPermission({ account: v.account, spender: HASH_SPENDER, start: Number(v.start), end: Number(v.end), salt: v.salt, capRaw: v.cap })),
+      managerHash(
+        entryPermission({
+          account: v.account,
+          spender: HASH_SPENDER,
+          start: Number(v.start),
+          end: Number(v.end),
+          salt: v.salt,
+          capRaw: v.cap,
+        }),
+      ),
     );
   }
   return { spender: HASH_SPENDER, hashes, sellHashes, rebalanceHashes, entryHashes };

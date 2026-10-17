@@ -6,8 +6,17 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  createPublicClient, decodeFunctionResult, encodeAbiParameters, encodeFunctionData, erc20Abi, http, keccak256, numberToHex, pad,
-  type Log, type StateOverride,
+  createPublicClient,
+  decodeFunctionResult,
+  encodeAbiParameters,
+  encodeFunctionData,
+  erc20Abi,
+  http,
+  keccak256,
+  numberToHex,
+  pad,
+  type Log,
+  type StateOverride,
 } from "viem";
 import { CASH } from "@/config/risk";
 import { explainRevert } from "@/lib/aave/errors";
@@ -21,21 +30,34 @@ import { checkPlan } from "@/lib/tx/prepared";
 import { USDC } from "@/lib/tokens/registry";
 
 type Address = `0x${string}`;
-const client = createPublicClient({ chain: CHAIN, transport: http(process.env.NEXT_PUBLIC_BASE_RPC_URL), batch: { multicall: true } });
+const client = createPublicClient({
+  chain: CHAIN,
+  transport: http(process.env.NEXT_PUBLIC_BASE_RPC_URL),
+  batch: { multicall: true },
+});
 /** The dev preview's account: idle USDC in the wallet beside savings that already earn. */
 const preview: Address = "0x2b8ce2c87c166d8e24e186e7e4253c11fc805427";
 /** oulina: about $1.36 of idle cash, nothing in savings. */
 const oulina: Address = "0xFf13Dc32AcA90b3D61058ea26Df1D895F842eE1F";
 
-const balanceRead = (token: Address, user: Address) => ({ to: token, data: encodeFunctionData({ abi: erc20Abi, functionName: "balanceOf", args: [user] }) });
+const balanceRead = (token: Address, user: Address) => ({
+  to: token,
+  data: encodeFunctionData({ abi: erc20Abi, functionName: "balanceOf", args: [user] }),
+});
 const uint = (x: { data: Address }) => decodeFunctionResult({ abi: erc20Abi, functionName: "balanceOf", data: x.data });
-const balance = (token: Address, user: Address) => client.readContract({ address: token, abi: erc20Abi, functionName: "balanceOf", args: [user] });
+const balance = (token: Address, user: Address) =>
+  client.readContract({ address: token, abi: erc20Abi, functionName: "balanceOf", args: [user] });
 
 /** FiatTokenV2_2 keeps balances in the mapping at slot 9 (checked in flows.test.ts): this sets the wallet's USDC. */
 const walletOf = (user: Address, raw: bigint): StateOverride => [
   {
     address: USDC.address,
-    stateDiff: [{ slot: keccak256(encodeAbiParameters([{ type: "address" }, { type: "uint256" }], [user, 9n])), value: pad(numberToHex(raw), { size: 32 }) }],
+    stateDiff: [
+      {
+        slot: keccak256(encodeAbiParameters([{ type: "address" }, { type: "uint256" }], [user, 9n])),
+        value: pad(numberToHex(raw), { size: 32 }),
+      },
+    ],
   },
 ];
 
@@ -65,7 +87,9 @@ describe("Start earning simulates on mainnet: the wallet's cash goes into saving
     const amount = startEarningRaw(walletRaw)!;
     const calls = buildStartEarningCalls({ user: preview, walletRaw });
     const r = await simulateStart(preview, calls);
-    console.log(`preview: wallet $${Number(walletRaw) / 1e6} → savings +${r.savingsAdded} (asked ${amount}), wallet after ${r.walletAfter}`);
+    console.log(
+      `preview: wallet $${Number(walletRaw) / 1e6} → savings +${r.savingsAdded} (asked ${amount}), wallet after ${r.walletAfter}`,
+    );
     expect(r.walletBefore).toBe(walletRaw);
     expect(r.statuses).toEqual(["success", "success"]);
     expect(closeTo(r.savingsAdded, amount)).toBe(true);
@@ -75,7 +99,11 @@ describe("Start earning simulates on mainnet: the wallet's cash goes into saving
   });
 
   it("at the smallest wallet that qualifies, $1 goes in and the buffer stays", async () => {
-    const r = await simulateStart(preview, buildStartEarningCalls({ user: preview, walletRaw: startEarningMinRaw }), walletOf(preview, startEarningMinRaw));
+    const r = await simulateStart(
+      preview,
+      buildStartEarningCalls({ user: preview, walletRaw: startEarningMinRaw }),
+      walletOf(preview, startEarningMinRaw),
+    );
     expect(r.walletBefore).toBe(startEarningMinRaw);
     expect(r.statuses).toEqual(["success", "success"]);
     expect(closeTo(r.savingsAdded, 1_000_000n)).toBe(true);
@@ -87,19 +115,25 @@ describe("Start earning simulates on mainnet: the wallet's cash goes into saving
     const plan = startEarningPlan(preview, walletRaw)!;
     const checked = await checkPlan(plan, {
       join: async (_user, batch) => batch,
-      simulate: async (user, batch) => (await client.simulateCalls({ account: user, calls: batch.map(({ to, data }) => ({ to, data })) })).results,
+      simulate: async (user, batch) =>
+        (await client.simulateCalls({ account: user, calls: batch.map(({ to, data }) => ({ to, data })) })).results,
       explain: explainRevert,
     });
     expect(checked.ok).toBe(true);
     // One unit more than the wallet holds reverts: the batch can't take what isn't there.
-    const over = await simulateStart(preview, buildStartEarningCalls({ user: preview, walletRaw: walletRaw + feeBufferRaw + 1n }));
+    const over = await simulateStart(
+      preview,
+      buildStartEarningCalls({ user: preview, walletRaw: walletRaw + feeBufferRaw + 1n }),
+    );
     expect(over.statuses).toContain("failure");
   });
 
   it(`oulina: her idle cash qualifies only at $1 plus the buffer ($${(1 + CASH.feeBufferUsd).toFixed(2)} today)`, async () => {
     const walletRaw = await balance(USDC.address, oulina);
     const qualifies = walletRaw >= startEarningMinRaw;
-    console.log(`oulina: wallet $${Number(walletRaw) / 1e6}; buffer $${CASH.feeBufferUsd}; Start earning ${qualifies ? "shows" : "doesn't show"}`);
+    console.log(
+      `oulina: wallet $${Number(walletRaw) / 1e6}; buffer $${CASH.feeBufferUsd}; Start earning ${qualifies ? "shows" : "doesn't show"}`,
+    );
     expect(startEarningShown("unconfigured", walletRaw)).toBe(qualifies);
     if (!qualifies) return;
     const r = await simulateStart(oulina, buildStartEarningCalls({ user: oulina, walletRaw }));

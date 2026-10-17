@@ -29,7 +29,12 @@ const nextConfig: NextConfig = {
     { source: "/pay", destination: "/send", permanent: false },
     // Top up (Receive) and Repay are sheets over the page they open from (components/gg/MoneySheets.tsx): their old
     // pages open them over Home, or over Send for Send's old Receive link.
-    { source: "/receive", has: [{ type: "query", key: "from", value: "send" }], destination: "/send?topup", permanent: false },
+    {
+      source: "/receive",
+      has: [{ type: "query", key: "from", value: "send" }],
+      destination: "/send?topup",
+      permanent: false,
+    },
     { source: "/receive", destination: "/home?topup", permanent: false },
     { source: "/repay", destination: "/home?repay", permanent: false },
   ],

@@ -14,8 +14,15 @@ export function cleanAmount(v: string, decimals = 2): string {
 }
 
 export function AmountInput({
-  value, onValue, decimals = 2, className = "", ...rest
-}: { value: string; onValue: (v: string) => void; decimals?: number } & Omit<InputHTMLAttributes<HTMLInputElement>, "value" | "onChange">) {
+  value,
+  onValue,
+  decimals = 2,
+  className = "",
+  ...rest
+}: { value: string; onValue: (v: string) => void; decimals?: number } & Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  "value" | "onChange"
+>) {
   return (
     <input
       inputMode="decimal"

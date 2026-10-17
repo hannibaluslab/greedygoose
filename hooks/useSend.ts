@@ -8,7 +8,17 @@ import { TxStop, txKey, useTx, type TxPlan } from "./useTx";
 import { useSigningCash } from "./useSigningCash";
 import { CHAIN_ID } from "@/lib/chain";
 import { accountName, addressOfName, hasEthereumCode } from "@/lib/jaw/name";
-import { SEND_COPY, SendStop, buildSendCalls, readRecipient, sendActivity, toLookups, type Recipient, type RecipientChecks, type ToState } from "@/lib/send";
+import {
+  SEND_COPY,
+  SendStop,
+  buildSendCalls,
+  readRecipient,
+  sendActivity,
+  toLookups,
+  type Recipient,
+  type RecipientChecks,
+  type ToState,
+} from "@/lib/send";
 import { USDC, type ReserveAsset } from "@/lib/tokens/registry";
 
 /** What a Send signs: from the account, the token, the recipient on screen and the exact amount (raw units). */
@@ -40,7 +50,13 @@ export function useSendBatch() {
  * recipient's name only labels Activity, so it isn't in the key.
  */
 export const sendPlan = (p: SendInput, batch: ReturnType<typeof useSendBatch>): TxPlan => ({
-  key: txKey("send", p.user.toLowerCase(), p.token.address.toLowerCase(), p.recipient.address.toLowerCase(), p.amountRaw),
+  key: txKey(
+    "send",
+    p.user.toLowerCase(),
+    p.token.address.toLowerCase(),
+    p.recipient.address.toLowerCase(),
+    p.amountRaw,
+  ),
   user: p.user,
   calls: () => batch(p),
   fallback: isCashToken(p.token) ? SEND_COPY.fallback : SEND_COPY.stockFallback,

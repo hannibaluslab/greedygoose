@@ -41,7 +41,8 @@ import { privateKeyToAccount } from "viem/accounts";
 import { base } from "viem/chains";
 
 const RPC = process.env.BOARD_FORK_RPC ?? "http://127.0.0.1:8546";
-if (!/^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(RPC)) throw new Error(`Refusing ${RPC}: this script runs on a local anvil fork only`);
+if (!/^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(RPC))
+  throw new Error(`Refusing ${RPC}: this script runs on a local anvil fork only`);
 // Set before the app's modules read it: the allowlist lets join() through only for the configured board.
 process.env.NEXT_PUBLIC_BASE_RPC_URL = RPC;
 
@@ -54,11 +55,16 @@ const ENTRY_POINT: Address = "0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108";
 const WHALE: Address = "0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb";
 
 const factoryAbi = parseAbi(["function createAccount(bytes[] owners, uint256 nonce) payable returns (address)"]);
-const accountAbi = parseAbi(["struct Call { address target; uint256 value; bytes data; }", "function executeBatch(Call[] calls)"]);
+const accountAbi = parseAbi([
+  "struct Call { address target; uint256 value; bytes data; }",
+  "function executeBatch(Call[] calls)",
+]);
 const oracleDoubleAbi = parseAbi(["function setReservePrice(uint256 reserveId, uint256 price)"]);
 /** Aerodrome Slipstream's factory (lib/swap/venues.ts): the stock pools that hand out the shares. */
 const AERO_FACTORY: Address = "0xf8f2eB4940CFE7d13603DDDD87f123820Fc061Ef";
-const aeroFactoryAbi = parseAbi(["function getPool(address tokenA, address tokenB, int24 tickSpacing) view returns (address)"]);
+const aeroFactoryAbi = parseAbi([
+  "function getPool(address tokenA, address tokenB, int24 tickSpacing) view returns (address)",
+]);
 
 /** A fork fetches Base's state as it goes: a first swap through a pool can take a few minutes. */
 const RECEIPT_TIMEOUT = 15 * 60_000;
@@ -100,11 +106,27 @@ async function main() {
 
   const prices = await client.multicall({
     allowFailure: false,
-    contracts: EQUITIES.map((e) => ({ address: AAVE.SPOKE_ORACLE, abi: aaveOracleAbi, functionName: "getReservePrice", args: [BigInt(e.reserveId)] }) as const),
+    contracts: EQUITIES.map(
+      (e) =>
+        ({
+          address: AAVE.SPOKE_ORACLE,
+          abi: aaveOracleAbi,
+          functionName: "getReservePrice",
+          args: [BigInt(e.reserveId)],
+        }) as const,
+    ),
   });
-  await test.setCode({ address: AAVE.SPOKE_ORACLE, bytecode: artifact("OracleDouble.sol", "OracleDouble").deployedBytecode.object });
+  await test.setCode({
+    address: AAVE.SPOKE_ORACLE,
+    bytecode: artifact("OracleDouble.sol", "OracleDouble").deployedBytecode.object,
+  });
   const setPrice = async (reserveId: number, price: bigint) => {
-    const h = await deployer.writeContract({ address: AAVE.SPOKE_ORACLE, abi: oracleDoubleAbi, functionName: "setReservePrice", args: [BigInt(reserveId), price] });
+    const h = await deployer.writeContract({
+      address: AAVE.SPOKE_ORACLE,
+      abi: oracleDoubleAbi,
+      functionName: "setReservePrice",
+      args: [BigInt(reserveId), price],
+    });
     await client.waitForTransactionReceipt({ hash: h, timeout: RECEIPT_TIMEOUT });
   };
   for (const e of EQUITIES) await setPrice(e.reserveId, prices[e.reserveId]);
@@ -114,18 +136,33 @@ async function main() {
   const accounts: Record<string, Address> = {};
   for (const name of ["sam", "kit", "leo", "ana"]) {
     const owners = [pad(privateKeyToAccount(keccak256(toHex(name))).address), pad(MANAGER)];
-    const { result, request } = await client.simulateContract({ account: DEPLOYER, address: JAW_FACTORY, abi: factoryAbi, functionName: "createAccount", args: [owners, 0n] });
+    const { result, request } = await client.simulateContract({
+      account: DEPLOYER,
+      address: JAW_FACTORY,
+      abi: factoryAbi,
+      functionName: "createAccount",
+      args: [owners, 0n],
+    });
     await client.waitForTransactionReceipt({ hash: await deployer.writeContract(request), timeout: RECEIPT_TIMEOUT });
     accounts[name] = result;
   }
   const { sam, kit, leo, ana } = accounts;
-  console.log(Object.entries(accounts).map(([n, a]) => `${n} ${a}`).join("\n"));
+  console.log(
+    Object.entries(accounts)
+      .map(([n, a]) => `${n} ${a}`)
+      .join("\n"),
+  );
 
   await test.impersonateAccount({ address: WHALE });
   await test.setBalance({ address: WHALE, value: parseEther("1") });
   const whale = createWalletClient({ chain: base, transport: http(RPC), account: WHALE });
   const deposit = async (to: Address, usd: number) => {
-    const h = await whale.writeContract({ address: USDC.address, abi: erc20Abi, functionName: "transfer", args: [to, BigInt(usd * 1e6)] });
+    const h = await whale.writeContract({
+      address: USDC.address,
+      abi: erc20Abi,
+      functionName: "transfer",
+      args: [to, BigInt(usd * 1e6)],
+    });
     await client.waitForTransactionReceipt({ hash: h, timeout: RECEIPT_TIMEOUT });
   };
   // Before joining: what each starts from.
@@ -133,7 +170,12 @@ async function main() {
   const TSLA = EQUITIES.find((e) => e.symbol === "TSLAc")!;
   // Stocks arrive from outside too: shares sent from a pool (a plain B20 transfer, which anvil mines).
   const giveShares = async (stock: Address, to: Address, raw: bigint) => {
-    const from = await client.readContract({ address: AERO_FACTORY, abi: aeroFactoryAbi, functionName: "getPool", args: [stock, USDC.address, 10] });
+    const from = await client.readContract({
+      address: AERO_FACTORY,
+      abi: aeroFactoryAbi,
+      functionName: "getPool",
+      args: [stock, USDC.address, 10],
+    });
     await test.impersonateAccount({ address: from });
     await test.setBalance({ address: from, value: parseEther("1") });
     const pool = createWalletClient({ chain: base, transport: http(RPC), account: from });
@@ -166,19 +208,32 @@ async function main() {
     const quote = (await quoteBuy(client, stock, BigInt(usd * 1e6)))!;
     // The swap's deadline counts from an hour ahead: a fork can take minutes to mine a first swap.
     const nowSec = Number((await client.getBlock()).timestamp) + 3_600;
-    return payFromCash(who, quote.amountIn, await readCash(client, who), buildBuyCalls({ user: who, stock, quote, nowSec }));
+    return payFromCash(
+      who,
+      quote.amountIn,
+      await readCash(client, who),
+      buildBuyCalls({ user: who, stock, quote, nowSec }),
+    );
   };
-  const addContacts = async (who: Address, contacts: Address[]) => addContactsCalls(who, contacts, await fetchFollowing(client, who));
+  const addContacts = async (who: Address, contacts: Address[]) =>
+    addContactsCalls(who, contacts, await fetchFollowing(client, who));
   const firstMove = async (who: Address, what: string, move: { to: Address; data: Hex; value: bigint }[]) => {
     const batch = await withBoardJoin(client, who, move);
-    ok(batch.length === move.length + 1 && batch.at(-1)!.to === board, `${short(who)}'s first move: ${what}, then join() (${batch.length} calls)`);
+    ok(
+      batch.length === move.length + 1 && batch.at(-1)!.to === board,
+      `${short(who)}'s first move: ${what}, then join() (${batch.length} calls)`,
+    );
     return userOp(who, batch);
   };
   await firstMove(sam, "add Kit and Ana to contacts", await addContacts(sam, [kit, ana]));
   await firstMove(kit, "add Sam to contacts", await addContacts(kit, [sam]));
   await firstMove(leo, "add Sam to contacts", await addContacts(leo, [sam]));
   await firstMove(ana, "add Kit and Sam to contacts", await addContacts(ana, [kit, sam]));
-  const listed = await Promise.all([sam, kit, leo, ana].map((a) => client.readContract({ address: board, abi: gooseBoardAbi, functionName: "listed", args: [a] })));
+  const listed = await Promise.all(
+    [sam, kit, leo, ana].map((a) =>
+      client.readContract({ address: board, abi: gooseBoardAbi, functionName: "listed", args: [a] }),
+    ),
+  );
   ok(listed.every(Boolean), "all four are on the board, each from its first move");
 
   // Later moves don't join again: adding to the list Sam has now, and Remove's EFP op.
@@ -188,16 +243,35 @@ async function main() {
   await userOp(sam, await withBoardJoin(client, sam, removeContactCalls(sam, ana, await fetchFollowing(client, sam))));
   const samFollows = await fetchFollowing(client, sam);
   ok(
-    samFollows.addresses.length === 2 && samFollows.addresses.includes(kit.toLowerCase() as Address) && samFollows.addresses.includes(leo.toLowerCase() as Address),
+    samFollows.addresses.length === 2 &&
+      samFollows.addresses.includes(kit.toLowerCase() as Address) &&
+      samFollows.addresses.includes(leo.toLowerCase() as Address),
     "Sam's contacts on Base: Kit and Leo (Ana removed on-chain)",
   );
 
   // What Sam and Kit hold at the end of their join blocks, read directly, for the expected percentages.
   const atJoin = async (who: Address, stock: (typeof EQUITIES)[number]) => {
-    const blockNumber = await client.readContract({ address: board, abi: gooseBoardAbi, functionName: "joinedAt", args: [who] });
+    const blockNumber = await client.readContract({
+      address: board,
+      abi: gooseBoardAbi,
+      functionName: "joinedAt",
+      args: [who],
+    });
     const [usdc, shares] = await Promise.all([
-      client.readContract({ address: USDC.address, abi: erc20Abi, functionName: "balanceOf", args: [who], blockNumber }),
-      client.readContract({ address: stock.address, abi: erc20Abi, functionName: "balanceOf", args: [who], blockNumber }),
+      client.readContract({
+        address: USDC.address,
+        abi: erc20Abi,
+        functionName: "balanceOf",
+        args: [who],
+        blockNumber,
+      }),
+      client.readContract({
+        address: stock.address,
+        abi: erc20Abi,
+        functionName: "balanceOf",
+        args: [who],
+        blockNumber,
+      }),
     ]);
     const stockUsd = (Number(shares) / 1e8) * (Number(prices[stock.reserveId]) / 1e8);
     return { worth: Number(usdc) / 1e6 + stockUsd, stockUsd };
@@ -206,8 +280,17 @@ async function main() {
 
   // 4. after joining: Ana deposits, Sam pays Kit, Sam saves, prices move
   await deposit(ana, 500);
-  await userOp(sam, [{ to: USDC.address, data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [kit, 100_000_000n] }), value: 0n }]);
-  await userOp(sam, buildAddSavingsCalls(sam, 200_000_000n).map((c) => ({ ...c, value: 0n })));
+  await userOp(sam, [
+    {
+      to: USDC.address,
+      data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [kit, 100_000_000n] }),
+      value: 0n,
+    },
+  ]);
+  await userOp(
+    sam,
+    buildAddSavingsCalls(sam, 200_000_000n).map((c) => ({ ...c, value: 0n })),
+  );
   await setPrice(NVDA.reserveId, (prices[NVDA.reserveId] * 108n) / 100n);
   await setPrice(TSLA.reserveId, (prices[TSLA.reserveId] * 95n) / 100n);
   await test.mine({ blocks: 3 });
@@ -215,11 +298,20 @@ async function main() {
   // 5. the board, read the way the app reads it
   const { rows } = await readBoard({ state: client, logs: client, board });
   const byAccount = (a: Address) => rows.find((r) => r.account.toLowerCase() === a.toLowerCase())!;
-  for (const r of rows) console.log(`  ${r.rank ?? "–"}  ${short(r.account)}  ${r.pct === null ? "Not ranked yet" : `${(r.pct * 100).toFixed(2)}%`}`);
+  for (const r of rows)
+    console.log(
+      `  ${r.rank ?? "–"}  ${short(r.account)}  ${r.pct === null ? "Not ranked yet" : `${(r.pct * 100).toFixed(2)}%`}`,
+    );
   const samPct = (0.08 * sam0.stockUsd) / sam0.worth;
   const kitPct = (-0.05 * kit0.stockUsd) / (kit0.worth + 100); // Sam's $100 is money Kit put in
-  ok(Math.abs(byAccount(sam).pct! - samPct) < 1e-4, `Sam +${(samPct * 100).toFixed(2)}%: NVIDIA +8% on his shares; the payment to Kit and his savings don't count`);
-  ok(Math.abs(byAccount(kit).pct! - kitPct) < 1e-4, `Kit ${(kitPct * 100).toFixed(2)}%: Tesla −5%; Sam's payment isn't a gain`);
+  ok(
+    Math.abs(byAccount(sam).pct! - samPct) < 1e-4,
+    `Sam +${(samPct * 100).toFixed(2)}%: NVIDIA +8% on his shares; the payment to Kit and his savings don't count`,
+  );
+  ok(
+    Math.abs(byAccount(kit).pct! - kitPct) < 1e-4,
+    `Kit ${(kitPct * 100).toFixed(2)}%: Tesla −5%; Sam's payment isn't a gain`,
+  );
   ok(Math.abs(byAccount(ana).pct!) < 1e-6, "Ana 0.00%: a deposit after joining isn't a gain");
   ok(byAccount(leo).pct === null && byAccount(leo).rank === null, "Leo isn't ranked yet: $10 put in");
   ok(byAccount(sam).rank === 1 && byAccount(ana).rank === 2 && byAccount(kit).rank === 3, "ranked Sam, Ana, Kit");
@@ -233,7 +325,12 @@ async function main() {
   await deposit(ALT, 5_000);
   const { UNISWAP } = await import("@/lib/swap/venues");
   await client.waitForTransactionReceipt({
-    hash: await alt.writeContract({ address: USDC.address, abi: erc20Abi, functionName: "transfer", args: [UNISWAP.SWAP_ROUTER_02, 5_000_000_000n] }),
+    hash: await alt.writeContract({
+      address: USDC.address,
+      abi: erc20Abi,
+      functionName: "transfer",
+      args: [UNISWAP.SWAP_ROUTER_02, 5_000_000_000n],
+    }),
     timeout: RECEIPT_TIMEOUT,
   });
   const sweep = await client.waitForTransactionReceipt({
@@ -247,22 +344,46 @@ async function main() {
   });
   ok(sweep.status === "success", "someone else sweeps $5,000 to Sam through Uniswap's router");
   await test.mine({ blocks: 2 });
-  const swept = (await readBoard({ state: client, logs: client, board })).rows.find((r) => r.account.toLowerCase() === sam.toLowerCase())!;
+  const swept = (await readBoard({ state: client, logs: client, board })).rows.find(
+    (r) => r.account.toLowerCase() === sam.toLowerCase(),
+  )!;
   const sweptPct = samGain / (sam0.worth + 5_000);
-  ok(Math.abs(swept.pct! - sweptPct) < 1e-4, `Sam ${(swept.pct! * 100).toFixed(2)}%: the $5,000 is money he put in, the gain is still NVIDIA's (${(sweptPct * 100).toFixed(2)}%)`);
+  ok(
+    Math.abs(swept.pct! - sweptPct) < 1e-4,
+    `Sam ${(swept.pct! * 100).toFixed(2)}%: the $5,000 is money he put in, the gain is still NVIDIA's (${(sweptPct * 100).toFixed(2)}%)`,
+  );
 
   const { GUARDIAN } = await import("@/lib/guardian/config");
-  const v3Pool = parseAbi(["function borrow(address asset, uint256 amount, uint256 interestRateMode, uint16 referralCode, address onBehalfOf)"]);
-  await userOp(sam, [{ to: GUARDIAN.AAVE_V3_POOL, data: encodeFunctionData({ abi: v3Pool, functionName: "borrow", args: [USDC.address, 100_000_000n, 2n, 0, sam] }), value: 0n }]);
+  const v3Pool = parseAbi([
+    "function borrow(address asset, uint256 amount, uint256 interestRateMode, uint16 referralCode, address onBehalfOf)",
+  ]);
+  await userOp(sam, [
+    {
+      to: GUARDIAN.AAVE_V3_POOL,
+      data: encodeFunctionData({ abi: v3Pool, functionName: "borrow", args: [USDC.address, 100_000_000n, 2n, 0, sam] }),
+      value: 0n,
+    },
+  ]);
   await test.mine({ blocks: 2 });
-  const drawn = (await readBoard({ state: client, logs: client, board })).rows.find((r) => r.account.toLowerCase() === sam.toLowerCase())!;
+  const drawn = (await readBoard({ state: client, logs: client, board })).rows.find(
+    (r) => r.account.toLowerCase() === sam.toLowerCase(),
+  )!;
   const drawnPct = samGain / (sam0.worth + 5_000 + 100);
-  ok(drawn.pct! <= swept.pct! && Math.abs(drawn.pct! - drawnPct) < 1e-4, `Sam ${(drawn.pct! * 100).toFixed(2)}% after drawing $100 on Aave V3 against his savings: credit spreads the gain, never lifts it`);
+  ok(
+    drawn.pct! <= swept.pct! && Math.abs(drawn.pct! - drawnPct) < 1e-4,
+    `Sam ${(drawn.pct! * 100).toFixed(2)}% after drawing $100 on Aave V3 against his savings: credit spreads the gain, never lifts it`,
+  );
 
   // 7. a first buy, simulated (last: see the top of this file)
   const [newcomer] = await (async () => {
     const owners = [pad(privateKeyToAccount(keccak256(toHex("new"))).address), pad(MANAGER)];
-    const { result, request } = await client.simulateContract({ account: DEPLOYER, address: JAW_FACTORY, abi: factoryAbi, functionName: "createAccount", args: [owners, 0n] });
+    const { result, request } = await client.simulateContract({
+      account: DEPLOYER,
+      address: JAW_FACTORY,
+      abi: factoryAbi,
+      functionName: "createAccount",
+      args: [owners, 0n],
+    });
     await client.waitForTransactionReceipt({ hash: await deployer.writeContract(request), timeout: RECEIPT_TIMEOUT });
     await deposit(result, 1_000);
     return [result];
@@ -274,7 +395,9 @@ async function main() {
     `a first buy ($500 of NVIDIA) carries join() at the end and simulates (${buyBatch.length} calls)`,
   );
 
-  console.log(`\nBoard e2e: ALL PASSED\n\nNEXT_PUBLIC_BASE_RPC_URL=${RPC}\nNEXT_PUBLIC_GOOSE_BOARD=${board}\npreview: /leaderboard?as=${sam}`);
+  console.log(
+    `\nBoard e2e: ALL PASSED\n\nNEXT_PUBLIC_BASE_RPC_URL=${RPC}\nNEXT_PUBLIC_GOOSE_BOARD=${board}\npreview: /leaderboard?as=${sam}`,
+  );
 }
 
 const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;

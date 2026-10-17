@@ -29,6 +29,8 @@ for (const line of readFileSync(ENV_FILE, "utf8").split("\n")) {
 env.NEXT_PUBLIC_REHEARSAL_ACCOUNT = state.accounts[as].address;
 env.NEXT_PUBLIC_REHEARSAL_SIGNER = state.accounts[as].signer;
 const port = process.env.REHEARSAL_APP_PORT ?? "3100";
-console.log(`Rehearsal: the app on http://localhost:${port}, signing in as ${as} (${state.accounts[as].address}) on ${state.rpc}`);
+console.log(
+  `Rehearsal: the app on http://localhost:${port}, signing in as ${as} (${state.accounts[as].address}) on ${state.rpc}`,
+);
 const child = spawn("npx", ["next", "dev", "--port", port], { cwd: ROOT, env, stdio: "inherit" });
 child.on("exit", (code) => process.exit(code ?? 0));

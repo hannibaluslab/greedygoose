@@ -30,12 +30,16 @@ describe("an agent change, one JAW screen a step", () => {
 
 describe("runError: what a change that stopped says, under its button or as a toast", () => {
   it("says nothing changed when the first JAW sheet didn't go through, and whether it was cancelled", () => {
-    expect(runError(0, 2, new Error("User rejected the request"))).toBe("You cancelled on JAW’s screen. Nothing changed.");
+    expect(runError(0, 2, new Error("User rejected the request"))).toBe(
+      "You cancelled on JAW’s screen. Nothing changed.",
+    );
     expect(runError(0, 1, new Error("RPC down"))).toBe("We couldn’t do that right now. Nothing changed. Try again.");
   });
 
   it("counts what went through before it stopped", () => {
-    expect(runError(1, 3, new Error("denied"))).toBe("1 of 3 went through, then you cancelled on JAW’s screen. Try again for the rest.");
+    expect(runError(1, 3, new Error("denied"))).toBe(
+      "1 of 3 went through, then you cancelled on JAW’s screen. Try again for the rest.",
+    );
     expect(runError(2, 3, "boom")).toBe("2 of 3 went through, then the next one didn’t. Try again for the rest.");
   });
 });

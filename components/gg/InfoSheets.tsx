@@ -11,8 +11,18 @@ const STOCKS_DOT = "#76b900";
 
 /** Design board "2b · Total balance info" (HomeInfo.dc.html): what the total adds up, and what's left after credit. */
 export function TotalBalanceSheet({
-  open, onClose, cashUsd, stocksUsd, debtUsd,
-}: { open: boolean; onClose: () => void; cashUsd: number; stocksUsd: number; debtUsd: number }) {
+  open,
+  onClose,
+  cashUsd,
+  stocksUsd,
+  debtUsd,
+}: {
+  open: boolean;
+  onClose: () => void;
+  cashUsd: number;
+  stocksUsd: number;
+  debtUsd: number;
+}) {
   const total = cashUsd + stocksUsd;
   return (
     <SheetShell
@@ -37,7 +47,9 @@ export function TotalBalanceSheet({
             <Total label="After credit" value={<span className="text-brand">{formatUsd(total - debtUsd)}</span>} />
           </div>
         )}
-        <Button variant="dark" size="lg" onClick={onClose}>Got it</Button>
+        <Button variant="dark" size="lg" onClick={onClose}>
+          Got it
+        </Button>
       </SheetSteps>
     </SheetShell>
   );
@@ -50,8 +62,20 @@ export function TotalBalanceSheet({
  * money that just arrived starts earning soon; before it's set up, it isn't earning yet.
  */
 export function YieldSheet({
-  open, onClose, cashUsd, savingsUsd, apy, earning,
-}: { open: boolean; onClose: () => void; cashUsd: number; savingsUsd: number; apy: number; earning: boolean }) {
+  open,
+  onClose,
+  cashUsd,
+  savingsUsd,
+  apy,
+  earning,
+}: {
+  open: boolean;
+  onClose: () => void;
+  cashUsd: number;
+  savingsUsd: number;
+  apy: number;
+  earning: boolean;
+}) {
   const rate = `${(apy * 100).toFixed(1)}%`;
   const value = formatUsdTrim(Math.round(cashUsd));
   const earns = Math.round(savingsUsd * apy);
@@ -84,16 +108,23 @@ export function YieldSheet({
         </div>
         <div className="flex flex-col gap-3">
           <div className="rounded-[22px] bg-ink px-4 py-1 text-on-ink">
-            <Total label="Earns in a year" value={<span className="text-brand">{earns > 0 ? `about ${formatUsdTrim(earns)}` : "Nothing yet"}</span>} />
+            <Total
+              label="Earns in a year"
+              value={<span className="text-brand">{earns > 0 ? `about ${formatUsdTrim(earns)}` : "Nothing yet"}</span>}
+            />
           </div>
           <p className="m-0 px-0.5 text-[12.5px] leading-[1.45] text-subtle">
             At today’s rate, which moves with the market.
             {wallet > CASH.keepBackUsd &&
-              (earning ? ` ${formatUsd(wallet)} arrived recently and starts earning soon.` : ` ${formatUsd(wallet)} of your cash isn’t earning yet.`)}
-            {" "}What credit costs isn’t taken off; you see it on your Credit card.
+              (earning
+                ? ` ${formatUsd(wallet)} arrived recently and starts earning soon.`
+                : ` ${formatUsd(wallet)} of your cash isn’t earning yet.`)}{" "}
+            What credit costs isn’t taken off; you see it on your Credit card.
           </p>
         </div>
-        <Button variant="dark" size="lg" onClick={onClose}>Got it</Button>
+        <Button variant="dark" size="lg" onClick={onClose}>
+          Got it
+        </Button>
       </SheetSteps>
     </SheetShell>
   );

@@ -36,7 +36,16 @@ const ORDER: Step[] = ["stock", "sell"];
  * come back here (StockSheets). For a stock you don't own: Buy and Credit Buy only.
  */
 export function StockSheet({
-  open, user, data, stock, holding, onClose, onBack, onBuy, onCreditBuy, onFreeUp,
+  open,
+  user,
+  data,
+  stock,
+  holding,
+  onClose,
+  onBack,
+  onBuy,
+  onCreditBuy,
+  onFreeUp,
 }: {
   open: boolean;
   user: `0x${string}`;
@@ -82,8 +91,15 @@ export function StockSheet({
   else if (sharesRaw > 0n && quote.isSuccess && q === null) blocker = `There’s no market for ${stock.name} right now.`;
   else if (plan?.block) blocker = SELL_BLOCKED[plan.block];
   const warning =
-    blocker ?? (plan?.warn ? `You’d get ${(plan.discount * 100).toFixed(1)}% under Aave’s price — the market for ${stock.name} is small.` : null);
-  const note = warning ?? (plan?.priceMayMove ? "Stock markets are closed. You can still sell, but the price can jump when they reopen." : null);
+    blocker ??
+    (plan?.warn
+      ? `You’d get ${(plan.discount * 100).toFixed(1)}% under Aave’s price — the market for ${stock.name} is small.`
+      : null);
+  const note =
+    warning ??
+    (plan?.priceMayMove
+      ? "Stock markets are closed. You can still sell, but the price can jump when they reopen."
+      : null);
   const ready = sharesRaw > 0n && !!plan && q?.amountIn === sharesRaw && !blocker && !quote.isFetching;
   const feeBlocked = isConnected && fee.state === "unsupported";
   // What Sell would sign now, prepared while the step is idle so the tap opens JAW's sheet at once.
@@ -131,7 +147,14 @@ export function StockSheet({
             {owned && <StockPosition holding={holding} />}
             <StockChart holding={holding} name={stock.name} />
             <div className="grid grid-cols-2 gap-2.5">
-              <StatCard label="Of your portfolio" value={owned ? `${((portfolioShare(holding.freeUsd + holding.lockedUsd, data.stocksUsd) ?? 0) * 100).toFixed(1)}%` : "0%"} />
+              <StatCard
+                label="Of your portfolio"
+                value={
+                  owned
+                    ? `${((portfolioShare(holding.freeUsd + holding.lockedUsd, data.stocksUsd) ?? 0) * 100).toFixed(1)}%`
+                    : "0%"
+                }
+              />
               <StatCard label="Aave’s price" value={formatUsd(holding.priceUsd)} />
             </div>
             <Actions
@@ -145,12 +168,15 @@ export function StockSheet({
               onFreeUp={onFreeUp}
             />
             {owned && holding.freeRaw === 0n && (
-              <p className="m-0 px-0.5 text-[13px] leading-snug text-ink-mid">All of it backs credit. Free up shares to sell them.</p>
+              <p className="m-0 px-0.5 text-[13px] leading-snug text-ink-mid">
+                All of it backs credit. Free up shares to sell them.
+              </p>
             )}
             <StockActivity user={user} holding={holding} name={stock.name} owned={owned} />
             <p className="m-0 px-1 text-xs leading-snug text-subtle">
-              Values use the price your credit is measured at. The price at the top and the chart are market prices, for information only.
-              Tokenized stocks track the share price; they are not company shares and carry no voting rights.
+              Values use the price your credit is measured at. The price at the top and the chart are market prices, for
+              information only. Tokenized stocks track the share price; they are not company shares and carry no voting
+              rights.
             </p>
           </>
         ) : (
@@ -171,14 +197,24 @@ export function StockSheet({
               autoFocus
             />
             <AmountArrow />
-            <YouGetCash usd={quote.isFetching && sharesRaw > 0n ? null : econ ? econ.usd : 0} priceUsd={econ ? econ.price : holding.priceUsd} />
+            <YouGetCash
+              usd={quote.isFetching && sharesRaw > 0n ? null : econ ? econ.usd : 0}
+              priceUsd={econ ? econ.price : holding.priceUsd}
+            />
             <Summary
               rows={[
-                { label: "Lowest price", value: plan && !quote.isFetching ? `${formatUsd(floorPriceUsd(plan, stock))} a share` : "…" },
+                {
+                  label: "Lowest price",
+                  value: plan && !quote.isFetching ? `${formatUsd(floorPriceUsd(plan, stock))} a share` : "…",
+                },
                 NETWORK_FEE_ROW,
               ]}
             />
-            {note && <p role="status" className={`m-0 text-[13px] leading-snug ${blocker ? "text-act" : "text-watch-text"}`}>{note}</p>}
+            {note && (
+              <p role="status" className={`m-0 text-[13px] leading-snug ${blocker ? "text-act" : "text-watch-text"}`}>
+                {note}
+              </p>
+            )}
             {ready && plan && q && <SellSmallPrint stock={stock} holding={holding} quote={q} plan={plan} />}
             {feeBlocked && (
               <p role="alert" className="m-0 text-[13px] text-act">
@@ -215,7 +251,14 @@ export function StockSheet({
  * between the account's own pockets, and a transfer to someone else can't be pinned to the user.
  */
 function Actions({
-  owned, canSell, backs, paused, onBuy, onSell, onCreditBuy, onFreeUp,
+  owned,
+  canSell,
+  backs,
+  paused,
+  onBuy,
+  onSell,
+  onCreditBuy,
+  onFreeUp,
 }: {
   owned: boolean;
   canSell: boolean;
@@ -227,24 +270,38 @@ function Actions({
   onFreeUp: () => void;
 }) {
   const creditBuy = (
-    <Button icon={<CreditIcon size={18} strokeWidth={1.8} />} onClick={onCreditBuy} className={owned && !backs ? "col-span-2" : ""}>
+    <Button
+      icon={<CreditIcon size={18} strokeWidth={1.8} />}
+      onClick={onCreditBuy}
+      className={owned && !backs ? "col-span-2" : ""}
+    >
       Credit Buy
     </Button>
   );
   if (!owned) {
     return (
       <div className="grid grid-cols-2 gap-2.5">
-        <Button variant="white" onClick={onBuy}>Buy</Button>
+        <Button variant="white" onClick={onBuy}>
+          Buy
+        </Button>
         {creditBuy}
       </div>
     );
   }
   return (
     <div className="grid grid-cols-2 gap-2.5">
-      <Button variant="white" onClick={onBuy}>Buy</Button>
-      <Button variant="white" onClick={onSell} disabled={!canSell}>Sell</Button>
+      <Button variant="white" onClick={onBuy}>
+        Buy
+      </Button>
+      <Button variant="white" onClick={onSell} disabled={!canSell}>
+        Sell
+      </Button>
       {creditBuy}
-      {backs && <Button variant="soft" onClick={onFreeUp} disabled={paused}>Free up shares</Button>}
+      {backs && (
+        <Button variant="soft" onClick={onFreeUp} disabled={paused}>
+          Free up shares
+        </Button>
+      )}
     </div>
   );
 }
@@ -253,7 +310,17 @@ function Actions({
  * The Sell step's small print (and the Trade sheet's stock → cash): every move in the batch (D7), the lowest price the
  * swap accepts and what the stock is.
  */
-export function SellSmallPrint({ stock, holding, quote, plan }: { stock: ReserveAsset; holding: Holding; quote: SellQuote; plan: SellPlan }) {
+export function SellSmallPrint({
+  stock,
+  holding,
+  quote,
+  plan,
+}: {
+  stock: ReserveAsset;
+  holding: Holding;
+  quote: SellQuote;
+  plan: SellPlan;
+}) {
   const ticker = tickerOf(stock.symbol);
   const shares = formatShares(rawToShares(plan.sharesRaw, holding.multiplier, stock.decimals));
   const floor = formatUsd(floorPriceUsd(plan, stock));
@@ -261,9 +328,10 @@ export function SellSmallPrint({ stock, holding, quote, plan }: { stock: Reserve
   return (
     <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">
       In one go: exactly {shares} {ticker} is approved for the {venue} router and swapped, and at least{" "}
-      {formatUsd(toUsd(plan.minOutRaw))} lands in your cash. If the price falls under {floor} a share, the sale is cancelled,
-      so it never sells for more than {SELL_LIMITS.floorBps / 100}% under Aave’s price ({formatUsd(holding.priceUsd)}).{" "}
-      {stock.name} here is a tokenized stock. It tracks the share price; it is not company shares or voting rights.
+      {formatUsd(toUsd(plan.minOutRaw))} lands in your cash. If the price falls under {floor} a share, the sale is
+      cancelled, so it never sells for more than {SELL_LIMITS.floorBps / 100}% under Aave’s price (
+      {formatUsd(holding.priceUsd)}). {stock.name} here is a tokenized stock. It tracks the share price; it is not
+      company shares or voting rights.
     </p>
   );
 }

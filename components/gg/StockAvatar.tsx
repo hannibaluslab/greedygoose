@@ -1,5 +1,11 @@
 const COLORS: Record<string, string> = {
-  NVDA: "#76b900", AAPL: "#2c2a25", AMZN: "#ff9900", GOOGL: "#4285f4", META: "#0866ff", MSFT: "#00a4ef", TSLA: "#e31937",
+  NVDA: "#76b900",
+  AAPL: "#2c2a25",
+  AMZN: "#ff9900",
+  GOOGL: "#4285f4",
+  META: "#0866ff",
+  MSFT: "#00a4ef",
+  TSLA: "#e31937",
 };
 
 /** The company logos (public/stocks, 128px, from CoinGecko's listing of each Coinbase stock token). */
@@ -11,7 +17,17 @@ const LOGOS = new Set(["AAPL", "AMZN", "GOOGL", "META", "MSFT", "NVDA", "TSLA"])
  * Meta) off the cream ground. For the ticker fallback, five-letter tickers step down to fit, and `font` and `weight`
  * set the boards that draw it otherwise (F2-3's 40px list at 9.5px 800, F2-4's 36px at 10.5px 800).
  */
-export function StockAvatar({ symbol, size = 30, font: fontPx, weight }: { symbol: string; size?: number; font?: number; weight?: number }) {
+export function StockAvatar({
+  symbol,
+  size = 30,
+  font: fontPx,
+  weight,
+}: {
+  symbol: string;
+  size?: number;
+  font?: number;
+  weight?: number;
+}) {
   const ticker = symbol.replace(/c$/, "");
   if (LOGOS.has(ticker)) {
     return (
@@ -28,8 +44,12 @@ export function StockAvatar({ symbol, size = 30, font: fontPx, weight }: { symbo
       aria-hidden
       className="flex shrink-0 items-center justify-center rounded-full text-white"
       style={{
-        width: size, height: size, background: COLORS[ticker] ?? "#2c2a25",
-        fontSize: font, fontWeight: weight ?? (size >= 40 ? 700 : 800), letterSpacing: "0.02em",
+        width: size,
+        height: size,
+        background: COLORS[ticker] ?? "#2c2a25",
+        fontSize: font,
+        fontWeight: weight ?? (size >= 40 ? 700 : 800),
+        letterSpacing: "0.02em",
       }}
     >
       {ticker}

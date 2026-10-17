@@ -25,7 +25,16 @@ import { ENTRY_COINS } from "@/lib/tokens/stables";
  * history JAW lists. Nothing here reads the chain or signs.
  */
 
-export const SHEET_VIEWS = ["sheet", "sheet-owed", "sheet-start", "sheet-costs-more", "earn", "earn-watch", "sheet-activity", "sheet-error"] as const;
+export const SHEET_VIEWS = [
+  "sheet",
+  "sheet-owed",
+  "sheet-start",
+  "sheet-costs-more",
+  "earn",
+  "earn-watch",
+  "sheet-activity",
+  "sheet-error",
+] as const;
 export type SheetView = (typeof SHEET_VIEWS)[number];
 
 const usdc = (x: number) => BigInt(Math.round(x * 1e6));
@@ -65,7 +74,11 @@ function holding(symbol: string, price: number, free: number, locked: number): H
 /** Sam: $2,400 of cash, 3.7 Tesla free and 5 NVIDIA backing credit; `owed` on credit. */
 function position(p: { owed: number; saveOn: boolean; creditApr?: number }): PositionData {
   const holdings = EQUITIES.map((e) =>
-    e.symbol === "TSLAc" ? holding("TSLAc", 378.38, 3.7, 0) : e.symbol === "NVDAc" ? holding("NVDAc", 180, 0, 5) : holding(e.symbol, 100, 0, 0),
+    e.symbol === "TSLAc"
+      ? holding("TSLAc", 378.38, 3.7, 0)
+      : e.symbol === "NVDAc"
+        ? holding("NVDAc", 180, 0, 5)
+        : holding(e.symbol, 100, 0, 0),
   );
   const cash: Cash = { walletRaw: usdc(1), savingsRaw: usdc(2_399), saveOn: p.saveOn };
   const collateralUsd = 900;
@@ -77,7 +90,14 @@ function position(p: { owed: number; saveOn: boolean; creditApr?: number }): Pos
     collateralUsd,
     debtUsd: p.owed,
     // As usePosition: the credit left at the one cap (Act is the line), not Aave's own limit.
-    availableUsd: creditWith({ collateralUsd, avgCf: CF, debtUsd: p.owed, healthFactor, usdcLiquidity: 2_770_000, borrowPaused: false }),
+    availableUsd: creditWith({
+      collateralUsd,
+      avgCf: CF,
+      debtUsd: p.owed,
+      healthFactor,
+      usdcLiquidity: 2_770_000,
+      borrowPaused: false,
+    }),
     healthFactor,
     avgCf: CF,
     status: statusFor(healthFactor),
@@ -102,24 +122,53 @@ const CFS = Object.fromEntries(EQUITIES.map((e) => [e.symbol, CF]));
 function activity(nowMs: number) {
   const at = (daysBack: number, h: number, m: number) => new Date(nowMs).setHours(h, m, 0, 0) - daysBack * 86_400_000;
   const own: OwnMove[] = [
-    { key: "earn", time: at(0, 11, 5), status: "pending", items: [{ kind: "earn", symbol: "USDC", amount: 500 }, { kind: "supply", symbol: "TSLAc", amount: 1.32 }] },
+    {
+      key: "earn",
+      time: at(0, 11, 5),
+      status: "pending",
+      items: [
+        { kind: "earn", symbol: "USDC", amount: 500 },
+        { kind: "supply", symbol: "TSLAc", amount: 1.32 },
+      ],
+    },
     {
       key: "credit-buy-cash",
       time: at(1, 15, 20),
       status: "done",
       hash: tx(2),
-      items: [{ kind: "borrow", symbol: "USDC", amount: 300 }, { kind: "buy", symbol: "NVDAc", amount: 2.21, paidUsd: 400 }],
+      items: [
+        { kind: "borrow", symbol: "USDC", amount: 300 },
+        { kind: "buy", symbol: "NVDAc", amount: 2.21, paidUsd: 400 },
+      ],
     },
     // A pure Credit Buy moves no cash, and a failed batch moves nothing: neither is a row.
-    { key: "credit-buy", time: at(1, 9, 0), status: "done", hash: tx(3), items: [{ kind: "borrow", symbol: "USDC", amount: 200 }, { kind: "buy", symbol: "NVDAc", amount: 1.1, paidUsd: 200 }] },
+    {
+      key: "credit-buy",
+      time: at(1, 9, 0),
+      status: "done",
+      hash: tx(3),
+      items: [
+        { kind: "borrow", symbol: "USDC", amount: 200 },
+        { kind: "buy", symbol: "NVDAc", amount: 1.1, paidUsd: 200 },
+      ],
+    },
     { key: "failed", time: at(2, 9, 0), status: "failed", hash: tx(4), items: [] },
-    { key: "sent", time: at(2, 18, 40), status: "done", hash: tx(5), items: [{ kind: "send", symbol: "USDC", amount: 20 }] },
+    {
+      key: "sent",
+      time: at(2, 18, 40),
+      status: "done",
+      hash: tx(5),
+      items: [{ kind: "send", symbol: "USDC", amount: 20 }],
+    },
     {
       key: "repaid",
       time: at(3, 10, 12),
       status: "done",
       hash: tx(6),
-      items: [{ kind: "repay", symbol: "USDC", amount: 60 }, { kind: "withdraw", symbol: "NVDAc", amount: 0.4 }],
+      items: [
+        { kind: "repay", symbol: "USDC", amount: 60 },
+        { kind: "withdraw", symbol: "NVDAc", amount: 0.4 },
+      ],
     },
   ];
   const executor = (key: string, time: number, e: AgentEvent, ctx: MoveContext = {}): ExecutorMove => ({
@@ -131,12 +180,24 @@ function activity(nowMs: number) {
     details: describeAgentEvent(e, time / 1000, ctx)!.details,
   });
   const moves: ExecutorMove[] = [
-    executor("protect", at(0, 9, 30), { kind: "repaid", amountRaw: usdc(40), hfBefore: hf(1.05), hfAfter: hf(1.2), reason: "act" }, { owedRaw: [usdc(340), usdc(300)], used: { spentRaw: usdc(40), capRaw: usdc(100) } }),
+    executor(
+      "protect",
+      at(0, 9, 30),
+      { kind: "repaid", amountRaw: usdc(40), hfBefore: hf(1.05), hfAfter: hf(1.2), reason: "act" },
+      { owedRaw: [usdc(340), usdc(300)], used: { spentRaw: usdc(40), capRaw: usdc(100) } },
+    ),
     // Earning moves nothing in the one pot (D20): no row.
     executor("save", at(0, 9, 40), { kind: "saved", amountRaw: usdc(250) }),
-    executor("convert", at(1, 18, 5), { kind: "converted", coin: ENTRY_COINS[0].address, amountInRaw: usdc(120), usdcOutRaw: usdc(119.83) }),
+    executor("convert", at(1, 18, 5), {
+      kind: "converted",
+      coin: ENTRY_COINS[0].address,
+      amountInRaw: usdc(120),
+      usdcOutRaw: usdc(119.83),
+    }),
   ];
-  const arrivals: Arrival[] = [{ hash: tx(9), time: at(0, 8, 50), items: [{ kind: "receive", symbol: "USDC", amount: 250 }] }];
+  const arrivals: Arrival[] = [
+    { hash: tx(9), time: at(0, 8, 50), items: [{ kind: "receive", symbol: "USDC", amount: 250 }] },
+  ];
   return { own, executor: moves, arrivals };
 }
 
@@ -180,7 +241,13 @@ export function CashSheetDemo({ view, nowSec }: { view: SheetView; nowSec: numbe
     );
   }
   return (
-    <SheetShell open onOpenChange={() => {}} look="info" title="Cash" description={cashLead(save, aprToApy(data.savingsApr))}>
+    <SheetShell
+      open
+      onOpenChange={() => {}}
+      look="info"
+      title="Cash"
+      description={cashLead(save, aprToApy(data.savingsApr))}
+    >
       <SheetSteps stepKey="cash" className="num flex flex-col gap-4 leading-[normal]">
         <CashStep
           data={data}

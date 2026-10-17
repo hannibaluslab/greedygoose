@@ -37,8 +37,11 @@ export async function runSteps(
 export function runError(done: number, of: number, error: unknown): string {
   if (isPopupBlocked(error)) return done > 0 ? `${done} of ${of} went through. ${TAP_AGAIN}` : TAP_AGAIN;
   const cancelled = error instanceof Error && CANCELLED.test(error.message);
-  if (done > 0) return `${done} of ${of} went through, then ${cancelled ? "you cancelled on JAW’s screen" : "the next one didn’t"}. Try again for the rest.`;
-  return cancelled ? "You cancelled on JAW’s screen. Nothing changed." : "We couldn’t do that right now. Nothing changed. Try again.";
+  if (done > 0)
+    return `${done} of ${of} went through, then ${cancelled ? "you cancelled on JAW’s screen" : "the next one didn’t"}. Try again for the rest.`;
+  return cancelled
+    ? "You cancelled on JAW’s screen. Nothing changed."
+    : "We couldn’t do that right now. Nothing changed. Try again.";
 }
 
 /**
@@ -52,7 +55,13 @@ export function runError(done: number, of: number, error: unknown): string {
  */
 export function useAgentRun(agents: ReturnType<typeof useAgents>) {
   const [running, setRunning] = useState<string | null>(null);
-  const [failed, setFailed] = useState<{ key: string; done: number; of: number; rest: readonly AgentStep[]; message: string } | null>(null);
+  const [failed, setFailed] = useState<{
+    key: string;
+    done: number;
+    of: number;
+    rest: readonly AgentStep[];
+    message: string;
+  } | null>(null);
 
   async function run(key: string, steps: readonly AgentStep[], onDone: () => void, prior = 0): Promise<string | null> {
     const retry = failed?.key === key ? failed : null;

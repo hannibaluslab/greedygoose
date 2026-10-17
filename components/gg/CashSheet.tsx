@@ -40,7 +40,9 @@ function CashAmount({ data, arrived }: { data: PositionData; arrived: ArrivedVie
     <div className="flex flex-col gap-2 rounded-[22px] bg-card p-4 shadow-card-elev">
       <div className="flex items-center justify-between">
         <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">Cash</span>
-        <span className="flex h-[22px] items-center rounded-[6px] bg-pill px-[7px] font-mono text-[10px] font-medium tracking-[0.04em] text-ink-mid">USDC</span>
+        <span className="flex h-[22px] items-center rounded-[6px] bg-pill px-[7px] font-mono text-[10px] font-medium tracking-[0.04em] text-ink-mid">
+          USDC
+        </span>
       </div>
       <Money value={data.cashUsd} size={38} />
       <span className="text-[13px] text-ink-mid">
@@ -71,16 +73,34 @@ function CashFooter({ owes, onLeave }: { owes: boolean; onLeave?: () => void }) 
   };
   return (
     <div className={`grid gap-2.5 ${owes ? "grid-cols-2" : "grid-cols-1"}`}>
-      <Button variant="soft" onClick={hop(money.topUp)}>Top up</Button>
-      {owes && <Button variant="soft" onClick={hop(money.repay)}>Repay</Button>}
+      <Button variant="soft" onClick={hop(money.topUp)}>
+        Top up
+      </Button>
+      {owes && (
+        <Button variant="soft" onClick={hop(money.repay)}>
+          Repay
+        </Button>
+      )}
     </div>
   );
 }
 
 /** The Cash step's body, plain values in, so the dev gallery draws it with fixtures. */
 export function CashStep({
-  data, arrived, offer, onEarn, activity, onLeave,
-}: { data: PositionData; arrived: ArrivedView; offer: EarnOffer; onEarn: () => void; activity: ReactNode; onLeave?: () => void }) {
+  data,
+  arrived,
+  offer,
+  onEarn,
+  activity,
+  onLeave,
+}: {
+  data: PositionData;
+  arrived: ArrivedView;
+  offer: EarnOffer;
+  onEarn: () => void;
+  activity: ReactNode;
+  onLeave?: () => void;
+}) {
   return (
     <>
       <CashAmount data={data} arrived={arrived} />
@@ -98,7 +118,13 @@ export function CashStep({
  * and Earn with stocks, whose one button opens JAW's sheet. Its write lives here, so it survives going back a step.
  */
 export function CashSheet({
-  open, onClose, account, data, apy, arrived, save,
+  open,
+  onClose,
+  account,
+  data,
+  apy,
+  arrived,
+  save,
 }: {
   open: boolean;
   onClose: () => void;
@@ -154,7 +180,8 @@ export function CashSheet({
   const offer: EarnOpen | null = earn.offer.kind === "offer" ? earn.offer : tx.busy ? signedOn : null;
 
   const preview = !signer || !isAddressEqual(signer, account);
-  const feeBlocked = !!signer && fee.state === "unsupported" ? "Your account can’t pay network fees in USDC on Base right now." : null;
+  const feeBlocked =
+    !!signer && fee.state === "unsupported" ? "Your account can’t pay network fees in USDC on Base right now." : null;
   const earning = step === "earn" && offer !== null;
 
   return (
@@ -166,7 +193,11 @@ export function CashSheet({
       description={earning ? undefined : cashLead(save, apy)}
       onBack={earning ? () => !tx.busy && go("cash") : undefined}
     >
-      <SheetSteps stepKey={earning ? "earn" : "cash"} direction={direction} className="num flex flex-col gap-4 leading-[normal]">
+      <SheetSteps
+        stepKey={earning ? "earn" : "cash"}
+        direction={direction}
+        className="num flex flex-col gap-4 leading-[normal]"
+      >
         {earning ? (
           <EarnStep
             user={account}

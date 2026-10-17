@@ -2,12 +2,29 @@ import { describe, expect, it } from "vitest";
 import { fromCoinRow, type CoinRow } from "@/lib/prices/coingecko";
 import { jawMarketData } from "@/lib/prices/jaw";
 import {
-  PRICE_TOLERANCE, RANGES, afterFirstDay, agreesWithAave, checked, checkedLine, dayChange, downsample, isRange, moveUsd, pickMarketData,
-  priceTolerance, weekValue, yearLineStart, type MarketData,
+  PRICE_TOLERANCE,
+  RANGES,
+  afterFirstDay,
+  agreesWithAave,
+  checked,
+  checkedLine,
+  dayChange,
+  downsample,
+  isRange,
+  moveUsd,
+  pickMarketData,
+  priceTolerance,
+  weekValue,
+  yearLineStart,
+  type MarketData,
 } from "@/lib/prices/market";
-const line = (from: number, to: number, n = 24) => Array.from({ length: n }, (_, i) => from + ((to - from) * i) / (n - 1));
+const line = (from: number, to: number, n = 24) =>
+  Array.from({ length: n }, (_, i) => from + ((to - from) * i) / (n - 1));
 const data = (price: number, change = 0.01, week = line(price * 0.95, price, 169)): MarketData => ({
-  price, change, day: line(price / (1 + change), price), week,
+  price,
+  change,
+  day: line(price / (1 + change), price),
+  week,
 });
 
 // Aave's oracle on Base, 2026-10-14 (getReservePrice, 8 decimals), and what JAW's /markets answered the same hour.
@@ -205,7 +222,12 @@ describe("weekValue", () => {
 describe("the CoinGecko fallback (fromCoinRow)", () => {
   // The shape /coins/markets answered for METAc on 2026-10-14: 168 hourly points, the last one up to an hour old.
   const hourly = line(737, 768.65, 168);
-  const row: CoinRow = { id: "meta-coinbase-tokenized-stock", current_price: 766.42, price_change_percentage_24h: 4.02241, sparkline_in_7d: { price: hourly } };
+  const row: CoinRow = {
+    id: "meta-coinbase-tokenized-stock",
+    current_price: 766.42,
+    price_change_percentage_24h: 4.02241,
+    sparkline_in_7d: { price: hourly },
+  };
 
   it("takes the price and the 24-hour change CoinGecko reports, as a fraction", () => {
     const out = fromCoinRow(row)!;

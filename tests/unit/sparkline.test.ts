@@ -10,7 +10,10 @@ const DOT = 4.25;
 const hero = (points: number[]) => {
   const min = Math.min(...points);
   const range = Math.max(...points) - min;
-  return points.map((p, i) => ({ x: 2 + (i / (points.length - 1)) * (W - 12), y: 7 + (1 - (p - min) / range) * (H - 14) }));
+  return points.map((p, i) => ({
+    x: 2 + (i / (points.length - 1)) * (W - 12),
+    y: 7 + (1 - (p - min) / range) * (H - 14),
+  }));
 };
 const corner = (points: number[]) => captionCorner(hero(points), W, H, CAPTION, DOT);
 
@@ -31,19 +34,48 @@ describe("captionCorner (the caption inside the hero line)", () => {
   it("counts the line between points, where it crosses the caption's edge", () => {
     // Its only point under the caption is at y 18, 6px below a top corner; but the line climbs to y 1.2 by the
     // caption's right edge, so the top left is taken and the bottom left (4px clear of y 18) is free.
-    expect(captionCorner([{ x: 2, y: 18 }, { x: 160, y: 0 }, { x: 340, y: 18 }], W, H, CAPTION, 0)).toBe("bottom-left");
+    expect(
+      captionCorner(
+        [
+          { x: 2, y: 18 },
+          { x: 160, y: 0 },
+          { x: 340, y: 18 },
+        ],
+        W,
+        H,
+        CAPTION,
+        0,
+      ),
+    ).toBe("bottom-left");
   });
 
   it("keeps the dot's room on the right", () => {
     // The left is filled, then the line is flat at y 16: the top right has 4px without the dot. With it, no corner is
     // clear, and the bottom right has the most room (1.75px).
-    const xy = [{ x: 2, y: 7 }, { x: 60, y: 27 }, { x: 120, y: 7 }, { x: 180, y: 16 }, { x: 340, y: 16 }];
+    const xy = [
+      { x: 2, y: 7 },
+      { x: 60, y: 27 },
+      { x: 120, y: 7 },
+      { x: 180, y: 16 },
+      { x: 340, y: 16 },
+    ];
     expect(captionCorner(xy, W, H, CAPTION, 0)).toBe("top-right");
     expect(captionCorner(xy, W, H, CAPTION, DOT)).toBe("bottom-right");
   });
 
   it("takes the corner with the most room when none is clear", () => {
     // A flat line at y 11 in a 24px box: a top corner has −1px, a bottom one 1px.
-    expect(captionCorner([{ x: 2, y: 11 }, { x: 340, y: 11 }], W, 24, CAPTION, 0)).toBe("bottom-left");
+    expect(
+      captionCorner(
+        [
+          { x: 2, y: 11 },
+          { x: 340, y: 11 },
+        ],
+        W,
+        24,
+        CAPTION,
+        0,
+      ),
+    ).toBe("bottom-left");
   });
 });

@@ -64,7 +64,14 @@ describe("agentGrant (what the app sends to JAW's useGrantPermissions)", () => {
   });
 
   it("lands on-chain with checker 0 and Day × 1, in the same order (JAW's apiPermissionsToPermission)", () => {
-    const p = agentPermission("protect", { account, spender: executor, start: 1, end: 2, salt: 7n, capRaw: 5_000_000n });
+    const p = agentPermission("protect", {
+      account,
+      spender: executor,
+      start: 1,
+      end: 2,
+      salt: 7n,
+      capRaw: 5_000_000n,
+    });
     expect(p.calls.map((c) => [c.target, c.selector, c.checker])).toEqual(
       agentGrant("protect", 5_000_000n).calls!.map((c) => [c.target, c.selector, zeroAddress]),
     );
@@ -102,19 +109,39 @@ describe("sellGrant (Protect · sell, its own JAW grant)", () => {
 
   it("uses the selectors the deployed spoke and router expose", () => {
     expect(toFunctionSelector("withdraw(uint256,uint256,address)")).toBe(SEL.spokeWithdraw);
-    expect(toFunctionSelector("exactInputSingle((address,address,int24,address,uint256,uint256,uint256,uint160))")).toBe(SEL.aeroSwap);
+    expect(
+      toFunctionSelector("exactInputSingle((address,address,int24,address,uint256,uint256,uint256,uint160))"),
+    ).toBe(SEL.aeroSwap);
   });
 
   it("lands on-chain with checker 0 and Day × 1, and packs the limits for the executor's register", () => {
-    const p = sellPermission({ account, spender: executor, start: 1, end: 2, salt: 7n, capRaw: 5_000_000n, limitsRaw: limits });
+    const p = sellPermission({
+      account,
+      spender: executor,
+      start: 1,
+      end: 2,
+      salt: 7n,
+      capRaw: 5_000_000n,
+      limitsRaw: limits,
+    });
     expect(p.calls.every((c) => c.checker === zeroAddress)).toBe(true);
     expect(p.spends.map((s) => [s.unit, s.multiplier])).toEqual(p.spends.map(() => [PERIOD.Day, 1]));
     expect(stockTerms(limits)).toBe((25_000n << 160n) | (10_000n << 192n));
   });
 
   it("refuses a grant that sells nothing, or limits that aren't whole units of 1e-4 share", () => {
-    expect(() => sellGrant(5_000_000n, limits.map(() => 0n))).toThrow(/at least one/);
-    expect(() => sellGrant(5_000_000n, limits.map((l) => (l ? l + 1n : 0n)))).toThrow(/whole units/);
+    expect(() =>
+      sellGrant(
+        5_000_000n,
+        limits.map(() => 0n),
+      ),
+    ).toThrow(/at least one/);
+    expect(() =>
+      sellGrant(
+        5_000_000n,
+        limits.map((l) => (l ? l + 1n : 0n)),
+      ),
+    ).toThrow(/whole units/);
     expect(() => sellGrant(0n, limits)).toThrow(/positive/);
   });
 });
@@ -142,14 +169,27 @@ describe("rebalanceGrant (the Rebalancer, its own JAW grant)", () => {
   });
 
   it("lands on-chain with checker 0 and Week × 1, and packs the limits like Protect · sell's", () => {
-    const p = rebalancePermission({ account, spender: executor, start: 1, end: 2, salt: 7n, capRaw: 500_000_000n, limitsRaw: limits });
+    const p = rebalancePermission({
+      account,
+      spender: executor,
+      start: 1,
+      end: 2,
+      salt: 7n,
+      capRaw: 500_000_000n,
+      limitsRaw: limits,
+    });
     expect(p.calls.every((c) => c.checker === zeroAddress)).toBe(true);
     expect(p.spends.map((s) => [s.unit, s.multiplier])).toEqual(p.spends.map(() => [PERIOD.Week, 1]));
     expect(stockTerms(limits)).toBe((25_000n << 160n) | (10_000n << 192n));
   });
 
   it("refuses a grant that may sell nothing, or a zero limit", () => {
-    expect(() => rebalanceGrant(500_000_000n, limits.map(() => 0n))).toThrow(/Rebalancer needs at least one/);
+    expect(() =>
+      rebalanceGrant(
+        500_000_000n,
+        limits.map(() => 0n),
+      ),
+    ).toThrow(/Rebalancer needs at least one/);
     expect(() => rebalanceGrant(0n, limits)).toThrow(/positive/);
   });
 });
@@ -173,7 +213,9 @@ describe("entryGrant (the Entry agent on Base, its own JAW grant)", () => {
   });
 
   it("uses the selectors the deployed venues expose, and lands on-chain with checker 0 and Day × 1", () => {
-    expect(toFunctionSelector("exactInputSingle((address,address,uint24,address,uint256,uint256,uint160))")).toBe(SEL.uniSwap);
+    expect(toFunctionSelector("exactInputSingle((address,address,uint24,address,uint256,uint256,uint160))")).toBe(
+      SEL.uniSwap,
+    );
     expect(toFunctionSelector("swapExactIn(address,address,uint256,uint256,address,uint256)")).toBe(SEL.psmSwap);
     const p = entryPermission({ account, spender: executor, start: 1, end: 2, salt: 7n, capRaw: 1_000_000_000n });
     expect(p.calls.every((c) => c.checker === zeroAddress)).toBe(true);
@@ -191,12 +233,20 @@ describe("readAgentGrant (JAW's usePermissions listing)", () => {
     end: 200,
     salt: toHex(12345n),
     calls: grant.calls!.map((c) => ({ target: c.target.toLowerCase(), selector: c.selector!, checker: zeroAddress })),
-    spends: grant.spends!.map((s) => ({ token: s.token.toLowerCase(), allowance: toHex(BigInt(s.allowance)), unit: s.unit, multiplier: 1 })),
+    spends: grant.spends!.map((s) => ({
+      token: s.token.toLowerCase(),
+      allowance: toHex(BigInt(s.allowance)),
+      unit: s.unit,
+      multiplier: 1,
+    })),
     ...over,
   });
-  const listed = (job: "save" | "protect", over: Partial<ListedPermission> = {}) => listing(agentGrant(job, 5_000_000n), over);
+  const listed = (job: "save" | "protect", over: Partial<ListedPermission> = {}) =>
+    listing(agentGrant(job, 5_000_000n), over);
   // Protect may sell NVIDIA and Tesla; the Rebalancer may sell Apple.
-  const sellLimits = EQUITIES.map((e) => (e.symbol === "NVDAc" ? 250_000_000n : e.symbol === "TSLAc" ? 100_000_000n : 0n));
+  const sellLimits = EQUITIES.map((e) =>
+    e.symbol === "NVDAc" ? 250_000_000n : e.symbol === "TSLAc" ? 100_000_000n : 0n,
+  );
   const rebalanceLimits = EQUITIES.map((e) => (e.symbol === "AAPLc" ? 50_000_000n : 0n));
 
   it("reads our grants: job, limit, window and salt", () => {
@@ -215,8 +265,12 @@ describe("readAgentGrant (JAW's usePermissions listing)", () => {
     expect(readAgentGrant(listed("save", { spender: account }), executor)).toBeNull();
     const p = listed("protect");
     expect(readAgentGrant({ ...p, calls: p.calls.slice(0, 2) }, executor)).toBeNull();
-    expect(readAgentGrant({ ...p, calls: p.calls.map((c, i) => (i === 2 ? { ...c, checker: account } : c)) }, executor)).toBeNull();
-    expect(readAgentGrant({ ...p, spends: [p.spends[0], { ...p.spends[1], allowance: toHex(4_000_000n) }] }, executor)).toBeNull();
+    expect(
+      readAgentGrant({ ...p, calls: p.calls.map((c, i) => (i === 2 ? { ...c, checker: account } : c)) }, executor),
+    ).toBeNull();
+    expect(
+      readAgentGrant({ ...p, spends: [p.spends[0], { ...p.spends[1], allowance: toHex(4_000_000n) }] }, executor),
+    ).toBeNull();
     expect(readAgentGrant({ ...p, spends: p.spends.map((s) => ({ ...s, unit: "week" })) }, executor)).toBeNull();
     expect(readAgentGrant({ ...p, spends: [p.spends[0]] }, executor)).toBeNull();
     // A sale whose stock limit has no approve, or a stock approved twice.
@@ -238,7 +292,12 @@ describe("readAgentGrant for the jobs that sell stock and for Entry", () => {
     end: 200,
     salt: toHex(7n),
     calls: grant.calls!.map((c) => ({ target: c.target, selector: c.selector!, checker: zeroAddress })),
-    spends: grant.spends!.map((s) => ({ token: s.token, allowance: toHex(BigInt(s.allowance)), unit: s.unit, multiplier: 1 })),
+    spends: grant.spends!.map((s) => ({
+      token: s.token,
+      allowance: toHex(BigInt(s.allowance)),
+      unit: s.unit,
+      multiplier: 1,
+    })),
     ...over,
   });
   // Apple and Tesla may be sold; the rest are never sold.
@@ -261,13 +320,21 @@ describe("readAgentGrant for the jobs that sell stock and for Entry", () => {
   });
 
   it("reads Entry, its limit in USDC units", () => {
-    expect(readAgentGrant(listedOf(entryGrant(1_000_000_000n)), executor)).toMatchObject({ job: "entry", capRaw: 1_000_000_000n });
+    expect(readAgentGrant(listedOf(entryGrant(1_000_000_000n)), executor)).toMatchObject({
+      job: "entry",
+      capRaw: 1_000_000_000n,
+    });
   });
 
   it("refuses a sale grant that doesn't match its own stocks: an approve without a limit, a limit off the unit", () => {
     const p = listedOf(sellGrant(300_000_000n, limits));
     expect(readAgentGrant({ ...p, spends: p.spends.slice(0, -1) }, executor)).toBeNull();
-    expect(readAgentGrant({ ...p, spends: p.spends.map((x, i) => (i === 2 ? { ...x, allowance: toHex(30_001n) } : x)) }, executor)).toBeNull();
+    expect(
+      readAgentGrant(
+        { ...p, spends: p.spends.map((x, i) => (i === 2 ? { ...x, allowance: toHex(30_001n) } : x)) },
+        executor,
+      ),
+    ).toBeNull();
     expect(readAgentGrant({ ...p, spends: p.spends.map((x) => ({ ...x, unit: "week" })) }, executor)).toBeNull();
   });
 });
@@ -290,7 +357,14 @@ describe("stockLimitsRaw (a grant's limit per stock, from its dollar limit)", ()
   it("is shares worth twice the dollar limit, in whole units of 1e-4 share", () => {
     const l = stockLimitsRaw(300_000_000n, 10n ** 12n, prices, all);
     expect(l.every((x) => x === 300_000_000n)).toBe(true); // $600 / $200 = 3 shares
-    expect(stockLimitsRaw(1_000_000n, 10n ** 12n, EQUITIES.map(() => 30_000_000_000n), all)[0]).toBe(660_000n); // $2 / $300 = 0.00667 share, rounded down to 0.0066
+    expect(
+      stockLimitsRaw(
+        1_000_000n,
+        10n ** 12n,
+        EQUITIES.map(() => 30_000_000_000n),
+        all,
+      )[0],
+    ).toBe(660_000n); // $2 / $300 = 0.00667 share, rounded down to 0.0066
   });
 
   it("stays 1% under the executor's bound of twice CAP_MAX, so registration takes it", () => {
@@ -300,13 +374,23 @@ describe("stockLimitsRaw (a grant's limit per stock, from its dollar limit)", ()
   });
 
   it("gives a stock it may not sell 0, so the grant has no approve for it", () => {
-    const l = stockLimitsRaw(300_000_000n, 10n ** 12n, prices, EQUITIES.map((e) => e.symbol !== "AAPLc"));
+    const l = stockLimitsRaw(
+      300_000_000n,
+      10n ** 12n,
+      prices,
+      EQUITIES.map((e) => e.symbol !== "AAPLc"),
+    );
     expect(l[0]).toBe(0n);
     expect(sellGrant(300_000_000n, l).calls!.some((c) => c.target === EQUITIES[0].address)).toBe(false);
   });
 
   it("reads back from a grant's spends (readStockLimits)", () => {
-    const l = stockLimitsRaw(300_000_000n, 10n ** 12n, prices, EQUITIES.map((e) => e.symbol !== "METAc"));
+    const l = stockLimitsRaw(
+      300_000_000n,
+      10n ** 12n,
+      prices,
+      EQUITIES.map((e) => e.symbol !== "METAc"),
+    );
     expect(readStockLimits("sell", sellGrant(300_000_000n, l).spends!)).toEqual(l);
     expect(readStockLimits("rebalance", rebalanceGrant(300_000_000n, l).spends!)).toEqual(l);
     expect(readStockLimits("rebalance", sellGrant(300_000_000n, l).spends!)).toBeNull(); // aUSDC isn't a stock
@@ -316,7 +400,9 @@ describe("stockLimitsRaw (a grant's limit per stock, from its dollar limit)", ()
 describe("contracts/test/vectors", () => {
   it("are what scripts/agent-vectors.ts exports today (run npm run contracts:vectors after changing a rule)", () => {
     for (const [name, data] of Object.entries(agentVectors())) {
-      const committed = JSON.parse(readFileSync(new URL(`../../contracts/test/vectors/${name}`, import.meta.url), "utf8"));
+      const committed = JSON.parse(
+        readFileSync(new URL(`../../contracts/test/vectors/${name}`, import.meta.url), "utf8"),
+      );
       expect(committed, name).toEqual(JSON.parse(JSON.stringify(data)));
     }
     // Building every vector takes about 5 s, close to vitest's default limit when the suite runs in parallel.
@@ -326,7 +412,14 @@ describe("contracts/test/vectors", () => {
 describe("jobStatus", () => {
   const stored = { start: 100, end: 1_000, cap: 5_000_000n };
   const empty = { start: 0, end: 0, cap: 0n };
-  const grant = { job: "save" as const, permissionId: "0x01" as const, capRaw: 5_000_000n, start: 100, end: 1_000, salt: 1n };
+  const grant = {
+    job: "save" as const,
+    permissionId: "0x01" as const,
+    capRaw: 5_000_000n,
+    start: 100,
+    end: 1_000,
+    salt: 1n,
+  };
 
   it("is on while the executor runs the grant JAW still lists", () => {
     expect(jobStatus("save", 1, stored, [grant], 500, false)).toBe("on");
@@ -363,7 +456,8 @@ describe("limitRaw (the limit a switch turns a job on with)", () => {
   });
 
   it("offers Protect, selling and the Rebalancer $25, $50, $100 and $200, then Custom", () => {
-    for (const job of ["protect", "sell", "rebalance"] as const) expect(LIMIT_USD[job].options).toEqual([25, 50, 100, 200]);
+    for (const job of ["protect", "sell", "rebalance"] as const)
+      expect(LIMIT_USD[job].options).toEqual([25, 50, 100, 200]);
   });
 
   it("never asks for more than the executor's CAP_MAX, so a $5 test deploy registers the grant", () => {

@@ -101,7 +101,8 @@ function revealField(field: HTMLElement) {
   if (!scroller) return;
   const box = scroller.getBoundingClientRect();
   const f = field.getBoundingClientRect();
-  const by = f.bottom > box.bottom - 16 ? f.bottom - (box.bottom - 16) : f.top < box.top + 16 ? -(box.top + 16 - f.top) : 0;
+  const by =
+    f.bottom > box.bottom - 16 ? f.bottom - (box.bottom - 16) : f.top < box.top + 16 ? -(box.top + 16 - f.top) : 0;
   if (!by) return;
   if (!revealedFrom.has(scroller)) revealedFrom.set(scroller, scroller.scrollTop);
   scroller.scrollTop += by;
@@ -144,10 +145,7 @@ export function useKeyboardLift(active: boolean) {
       const editing =
         !!ae &&
         el.contains(ae) &&
-        (ae.tagName === "INPUT" ||
-          ae.tagName === "TEXTAREA" ||
-          ae.tagName === "SELECT" ||
-          ae.isContentEditable);
+        (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.tagName === "SELECT" || ae.isContentEditable);
       // iOS 26 still pans the page to reveal the focused field, body lock or
       // not (measured on Repay's amount, iPhone 17 Pro: scrollY and
       // visualViewport.offsetTop both 263 with the keypad up). The overlap
@@ -164,9 +162,7 @@ export function useKeyboardLift(active: boolean) {
         window.scrollTo(0, 0);
         pan = 0;
       }
-      const overlap = editing
-        ? Math.max(0, window.innerHeight - vv.height - pan)
-        : 0;
+      const overlap = editing ? Math.max(0, window.innerHeight - vv.height - pan) : 0;
       // <60px is keyboard-animation noise / accessory-bar shuffle, not an
       // open keyboard — treat as closed so the sheet rests at bottom: 0.
       if (overlap > 60) {

@@ -27,7 +27,17 @@ const PILL: Record<AgentStatus, { text: string; tone: "on" | "neutral" }> = {
 const Label = ({ children }: { children: ReactNode }) => <h3 className="label m-0 px-1">{children}</h3>;
 
 export function AgentSheet({
-  open, onClose, item, live, busy, error, offSteps, stops, settings, activity, onAction,
+  open,
+  onClose,
+  item,
+  live,
+  busy,
+  error,
+  offSteps,
+  stops,
+  settings,
+  activity,
+  onAction,
 }: {
   open: boolean;
   onClose: () => void;
@@ -69,7 +79,12 @@ export function AgentSheet({
             <p className="m-0 flex items-center gap-1.5 border-t border-hairline pt-2.5 text-[13px] text-ink-mid">
               Stops on {stops}
               <span aria-hidden>·</span>
-              <button type="button" disabled={!live || busy} onClick={() => onAction("renew")} className="font-semibold text-ink underline-offset-2 hover:underline disabled:opacity-45">
+              <button
+                type="button"
+                disabled={!live || busy}
+                onClick={() => onAction("renew")}
+                className="font-semibold text-ink underline-offset-2 hover:underline disabled:opacity-45"
+              >
                 Renew
               </button>
             </p>

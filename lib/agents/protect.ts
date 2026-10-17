@@ -50,8 +50,18 @@ const sameSet = (a: readonly number[], b: readonly number[]) => a.length === b.l
  * The sell grant for a never-sell set: every stock but those, each at shares worth twice the limit at Aave's price
  * (`stockLimitsRaw`), so a stock bought and used as backing later is covered without a new grant.
  */
-export function sellLimitsFor(capRaw: bigint, capMaxRaw: bigint, pricesRaw: readonly bigint[], never: readonly number[]): StockLimits {
-  return stockLimitsRaw(capRaw, capMaxRaw, pricesRaw, EQUITIES.map((e) => !never.includes(e.reserveId)));
+export function sellLimitsFor(
+  capRaw: bigint,
+  capMaxRaw: bigint,
+  pricesRaw: readonly bigint[],
+  never: readonly number[],
+): StockLimits {
+  return stockLimitsRaw(
+    capRaw,
+    capMaxRaw,
+    pricesRaw,
+    EQUITIES.map((e) => !never.includes(e.reserveId)),
+  );
 }
 
 /**
@@ -72,11 +82,17 @@ export function protectSteps(
   if (choice.sellOn && choice.never.length >= EQUITIES.length) {
     return { steps, blocked: "Leave at least one stock Protect may sell." };
   }
-  if (choice.sellOn && saved.keepMix !== null && choice.keepMix !== saved.keepMix) steps.push({ kind: "keepMix", on: choice.keepMix });
+  if (choice.sellOn && saved.keepMix !== null && choice.keepMix !== saved.keepMix)
+    steps.push({ kind: "keepMix", on: choice.keepMix });
   // Repaying from cash always comes first: while it's off, any save switches it on at the limit on screen.
   if (limitChanged || saved.repayCapRaw === null) steps.push({ kind: "grant", job: "protect", capRaw });
   if (choice.sellOn && (!saved.sell || limitChanged || !sameSet(choice.never, start.never))) {
-    steps.push({ kind: "grant", job: "sell", capRaw, limitsRaw: sellLimitsFor(capRaw, ctx.capMaxRaw, ctx.pricesRaw, choice.never) });
+    steps.push({
+      kind: "grant",
+      job: "sell",
+      capRaw,
+      limitsRaw: sellLimitsFor(capRaw, ctx.capMaxRaw, ctx.pricesRaw, choice.never),
+    });
   }
   if (!choice.sellOn && saved.sell) steps.push({ kind: "revoke", job: "sell" });
   return { steps, blocked: null };

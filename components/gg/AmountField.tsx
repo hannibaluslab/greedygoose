@@ -22,7 +22,16 @@ export function amountFontSize(value: string): number {
  * the number instead of the "$" before it (the stock sheet's sell step).
  */
 export function AmountField({
-  label, source, badge, unit, value, onValue, decimals, onMax, hint, ...rest
+  label,
+  source,
+  badge,
+  unit,
+  value,
+  onValue,
+  decimals,
+  onMax,
+  hint,
+  ...rest
 }: {
   label?: string;
   /** Where the money comes from, top right: an `AmountSource` pill ("Cash", "Against NVIDIA"). */
@@ -53,7 +62,11 @@ export function AmountField({
         {badge}
         <div className="num flex min-w-0 flex-1 items-center font-semibold">
           {!unit && (
-            <span aria-hidden className="mr-0.5 text-subtle transition-[font-size] duration-150 ease-out" style={{ fontSize: Math.round(size * 0.72) }}>
+            <span
+              aria-hidden
+              className="mr-0.5 text-subtle transition-[font-size] duration-150 ease-out"
+              style={{ fontSize: Math.round(size * 0.72) }}
+            >
               $
             </span>
           )}
@@ -105,7 +118,10 @@ export function AmountBadge({ kind }: { kind: "cash" | "credit" }) {
   return kind === "cash" ? (
     <CashMark size={30} />
   ) : (
-    <span aria-hidden className="flex size-[30px] shrink-0 items-center justify-center rounded-[15px] bg-brand text-ink">
+    <span
+      aria-hidden
+      className="flex size-[30px] shrink-0 items-center justify-center rounded-[15px] bg-brand text-ink"
+    >
       <CreditIcon size={16} strokeWidth={1.8} />
     </span>
   );
@@ -137,7 +153,18 @@ export function AmountArrow({ onFlip, disabled }: { onFlip?: () => void; disable
   return (
     <span aria-hidden className="relative z-[1] -my-2.5 flex justify-center">
       <span className={circle}>
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M6 13l6 6 6-6" /></svg>
+        <svg
+          width="15"
+          height="15"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M12 5v14M6 13l6 6 6-6" />
+        </svg>
       </span>
     </span>
   );
@@ -147,17 +174,59 @@ export function AmountArrow({ onFlip, disabled }: { onFlip?: () => void; disable
  * What arrives (F1-4, F2-5): "You get (estimated)", the stock's badge, its shares to 4 places and the price. `shares`
  * null while quoting. `source`, top right: the Trade sheet's To picker.
  */
-export function YouGet({ symbol, shares, priceUsd, source }: { symbol: string; shares: number | null; priceUsd: number; source?: ReactNode }) {
-  return <Arrives mark={<StockAvatar symbol={symbol} />} amount={shares === null ? null : shares.toFixed(4)} unit={tickerOf(symbol)} priceUsd={priceUsd} source={source} />;
+export function YouGet({
+  symbol,
+  shares,
+  priceUsd,
+  source,
+}: {
+  symbol: string;
+  shares: number | null;
+  priceUsd: number;
+  source?: ReactNode;
+}) {
+  return (
+    <Arrives
+      mark={<StockAvatar symbol={symbol} />}
+      amount={shares === null ? null : shares.toFixed(4)}
+      unit={tickerOf(symbol)}
+      priceUsd={priceUsd}
+      source={source}
+    />
+  );
 }
 
 /** What a sale pays, in YouGet's card: the cash badge, dollars and the price a share. `usd` null while quoting. */
 export function YouGetCash({ usd, priceUsd, source }: { usd: number | null; priceUsd: number; source?: ReactNode }) {
-  return <Arrives mark={<AmountBadge kind="cash" />} amount={usd === null ? null : formatUsd(usd)} unit="Cash" priceUsd={priceUsd} source={source} />;
+  return (
+    <Arrives
+      mark={<AmountBadge kind="cash" />}
+      amount={usd === null ? null : formatUsd(usd)}
+      unit="Cash"
+      priceUsd={priceUsd}
+      source={source}
+    />
+  );
 }
 
-function Arrives({ mark, amount, unit, priceUsd, source }: { mark: ReactNode; amount: string | null; unit: string; priceUsd: number; source?: ReactNode }) {
-  const label = <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">You get (estimated)</span>;
+function Arrives({
+  mark,
+  amount,
+  unit,
+  priceUsd,
+  source,
+}: {
+  mark: ReactNode;
+  amount: string | null;
+  unit: string;
+  priceUsd: number;
+  source?: ReactNode;
+}) {
+  const label = (
+    <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">
+      You get (estimated)
+    </span>
+  );
   return (
     <div className="flex flex-col gap-2 rounded-[16px] border border-line-field bg-card p-3.5 leading-[normal]">
       {source ? (

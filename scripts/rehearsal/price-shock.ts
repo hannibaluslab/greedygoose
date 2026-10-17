@@ -25,14 +25,27 @@ async function main() {
   const [symbol, change] = process.argv.slice(2);
   const stock = EQUITIES.find((e) => e.symbol.toLowerCase() === symbol?.toLowerCase());
   if (!stock || !change) {
-    console.error(`usage: npm run rehearsal:shock -- <${EQUITIES.map((e) => e.symbol).join("|")}> <-25% | +10% | 150 | reset>`);
+    console.error(
+      `usage: npm run rehearsal:shock -- <${EQUITIES.map((e) => e.symbol).join("|")}> <-25% | +10% | 150 | reset>`,
+    );
     process.exit(2);
   }
   const state = readState();
   const fork = await connectFork(state.rpc);
   const r = BigInt(stock.reserveId);
-  const price = () => fork.pub.readContract({ address: AAVE.SPOKE_ORACLE, abi: aaveOracleAbi, functionName: "getReservePrice", args: [r] });
-  const source = (await fork.pub.readContract({ address: AAVE.SPOKE_ORACLE, abi: aaveOracleAbi, functionName: "getReserveSource", args: [r] })) as Address;
+  const price = () =>
+    fork.pub.readContract({
+      address: AAVE.SPOKE_ORACLE,
+      abi: aaveOracleAbi,
+      functionName: "getReservePrice",
+      args: [r],
+    });
+  const source = (await fork.pub.readContract({
+    address: AAVE.SPOKE_ORACLE,
+    abi: aaveOracleAbi,
+    functionName: "getReserveSource",
+    args: [r],
+  })) as Address;
   const before = await price();
   const healthBefore = await healths(fork, state);
 
@@ -46,8 +59,11 @@ async function main() {
     if (!state.feeds[stock.symbol]) {
       const code = (await fork.pub.getCode({ address: source })) ?? "0x";
       state.feeds[stock.symbol] = { source, code };
-      const feed = (JSON.parse(readFileSync(join(ROOT, "contracts/out/RehearsalFeed.sol/RehearsalFeed.json"), "utf8")) as { deployedBytecode: { object: Hex } })
-        .deployedBytecode.object;
+      const feed = (
+        JSON.parse(readFileSync(join(ROOT, "contracts/out/RehearsalFeed.sol/RehearsalFeed.json"), "utf8")) as {
+          deployedBytecode: { object: Hex };
+        }
+      ).deployedBytecode.object;
       await fork.test.setCode({ address: source, bytecode: feed });
     }
     await fork.test.setStorageAt({ address: source, index: ANSWER_SLOT, value: pad(toHex(next), { size: 32 }) });
@@ -79,7 +95,12 @@ function target(now: bigint, change: string): bigint {
 async function healths(fork: Fork, state: State): Promise<Record<string, bigint | null>> {
   const out: Record<string, bigint | null> = {};
   for (const [name, a] of Object.entries(state.accounts)) {
-    const d = await fork.pub.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserAccountData", args: [a.address] });
+    const d = await fork.pub.readContract({
+      address: AAVE.SPOKE,
+      abi: spokeAbi,
+      functionName: "getUserAccountData",
+      args: [a.address],
+    });
     out[name] = d.totalDebtValueRay > 0n ? d.healthFactor : null;
   }
   return out;

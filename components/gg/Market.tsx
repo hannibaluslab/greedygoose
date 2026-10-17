@@ -14,8 +14,18 @@ export function MarketList({ children }: { children: ReactNode }) {
  * per share and a chevron. Stocks earn no yield (D19), so the boards' APY chip is left out.
  */
 export function MarketRow({
-  symbol, name, priceUsd, ownedUsd, onClick,
-}: { symbol: string; name: string; priceUsd: number; /** What you hold, valued at Aave's price; 0 when you hold none. */ ownedUsd: number; onClick: () => void }) {
+  symbol,
+  name,
+  priceUsd,
+  ownedUsd,
+  onClick,
+}: {
+  symbol: string;
+  name: string;
+  priceUsd: number;
+  /** What you hold, valued at Aave's price; 0 when you hold none. */ ownedUsd: number;
+  onClick: () => void;
+}) {
   const price = formatUsd(priceUsd);
   const owned = ownedUsd > 0;
   return (
@@ -32,7 +42,9 @@ export function MarketRow({
           <span className="truncate text-[15px] font-semibold leading-[18px]">{name}</span>
           {owned && (
             <span className="flex h-[22px] items-center whitespace-nowrap text-[13px] font-medium leading-[18px] text-ink-mid">
-              <span>You own <b className="font-semibold text-ink">{formatUsdShort(ownedUsd)}</b></span>
+              <span>
+                You own <b className="font-semibold text-ink">{formatUsdShort(ownedUsd)}</b>
+              </span>
             </span>
           )}
         </span>

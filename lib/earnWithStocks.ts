@@ -6,7 +6,16 @@ import { buildLoanCalls, type Call } from "@/lib/aave/tx";
 import type { ActivityItem } from "@/lib/activity/decode";
 import type { AgentStatus } from "@/lib/agents/status";
 import { cashRaw, feeBufferRaw, payFromCash, toUsd, type Cash } from "@/lib/cash";
-import { CREDIT_BLOCKED, planCredit, shortNames, type Backing, type BackingOption, type CreditBlock, type CreditPlan, type CreditPosition } from "@/lib/creditBuy";
+import {
+  CREDIT_BLOCKED,
+  planCredit,
+  shortNames,
+  type Backing,
+  type BackingOption,
+  type CreditBlock,
+  type CreditPlan,
+  type CreditPosition,
+} from "@/lib/creditBuy";
 import { formatShares, formatUsdTrim, inWords } from "@/lib/formatting";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { aaveV3PoolAbi } from "@/lib/guardian/abis";
@@ -95,7 +104,12 @@ export type EarnInput = {
   now?: Date;
 };
 
-const closed = (why: EarnClosed, rates?: EarnRates): EarnOffer => ({ kind: "closed", why, text: EARN_CLOSED[why], ...(rates ? { rates } : {}) });
+const closed = (why: EarnClosed, rates?: EarnRates): EarnOffer => ({
+  kind: "closed",
+  why,
+  text: EARN_CLOSED[why],
+  ...(rates ? { rates } : {}),
+});
 
 /**
  * Whether the Cash sheet offers Earn with stocks, and up to how much. It needs no agent: the batch puts the credit
@@ -159,10 +173,19 @@ export function earnQuote(p: {
   creditApyAfter: number | null;
   now?: Date;
 }): EarnQuote {
-  const plan = planCredit({ position: p.position, options: p.options, creditRaw: p.creditRaw, cash: p.cash, now: p.now });
+  const plan = planCredit({
+    position: p.position,
+    options: p.options,
+    creditRaw: p.creditRaw,
+    cash: p.cash,
+    now: p.now,
+  });
   const amountUsd = toUsd(p.creditRaw);
-  if (p.creditApyAfter === null || amountUsd <= 0) return { plan, amountUsd, cost: null, left: null, leftUsdYear: null };
-  const cost = costTenths(marginalApy({ debtUsd: p.position.debtUsd, amountUsd, apyNow: p.creditApyNow, apyAfter: p.creditApyAfter }));
+  if (p.creditApyAfter === null || amountUsd <= 0)
+    return { plan, amountUsd, cost: null, left: null, leftUsdYear: null };
+  const cost = costTenths(
+    marginalApy({ debtUsd: p.position.debtUsd, amountUsd, apyNow: p.creditApyNow, apyAfter: p.creditApyAfter }),
+  );
   const left = p.offer.rates.earn - cost;
   return { plan, amountUsd, cost, left, leftUsdYear: Math.max(0, Math.floor((left / 1000) * amountUsd)) };
 }
@@ -197,7 +220,8 @@ export function earnStop(q: EarnQuote, o: EarnOpen, confirmedRisk: boolean): str
   const block = earnBlock(q, o);
   if (block) return block;
   if (q.left === null) return "One moment…";
-  if (q.plan.extraConfirm && !confirmedRisk) return `Confirm you understand this puts your credit in ${STATUS_LABEL[q.plan.after]} first.`;
+  if (q.plan.extraConfirm && !confirmedRisk)
+    return `Confirm you understand this puts your credit in ${STATUS_LABEL[q.plan.after]} first.`;
   return null;
 }
 
@@ -288,26 +312,38 @@ const savingsCall = (c: Call | undefined) => {
  * to the user; then an approve of exactly that credit to Aave V3's pool and its supply into savings for the user,
  * referral code 0, last. Nothing else: no swap, no transfer, no other savings call.
  */
-export function assertEarn(user: Address, calls: Call[], review: { creditRaw: bigint; backing: readonly Backing[] }): Call[] {
+export function assertEarn(
+  user: Address,
+  calls: Call[],
+  review: { creditRaw: bigint; backing: readonly Backing[] },
+): Call[] {
   if (review.creditRaw <= 0n) throw new Error("Blocked: Earn with stocks takes credit");
   if (calls.some((c) => c.value !== 0n)) throw new Error("Blocked: unexpected value");
   const w = savingsCall(calls[0]);
   const lead = w?.functionName === "withdraw" ? 1 : 0;
-  if (lead && (!isAddressEqual(w!.args[0], USDC.address) || !isAddressEqual(w!.args[2], user))) throw new Error("Blocked: unexpected savings withdrawal");
-  if (calls.length !== lead + review.backing.length * 3 + 3) throw new Error("Blocked: the batch differs from the screen");
+  if (lead && (!isAddressEqual(w!.args[0], USDC.address) || !isAddressEqual(w!.args[2], user)))
+    throw new Error("Blocked: unexpected savings withdrawal");
+  if (calls.length !== lead + review.backing.length * 3 + 3)
+    throw new Error("Blocked: the batch differs from the screen");
   review.backing.forEach((b, k) => {
     const stock = EQUITIES.find((e) => isAddressEqual(e.address, b.stock.address));
     if (!stock || b.raw <= 0n) throw new Error("Blocked: unexpected backing");
     const id = BigInt(stock.reserveId);
     const [approve, supply, use] = calls.slice(lead + k * 3, lead + k * 3 + 3);
     const a = isAddressEqual(approve.to, stock.address) ? approveOf(approve) : null;
-    if (!a || !isAddressEqual(a[0], AAVE.SPOKE) || a[1] !== b.raw) throw new Error("Blocked: the approval differs from the screen");
+    if (!a || !isAddressEqual(a[0], AAVE.SPOKE) || a[1] !== b.raw)
+      throw new Error("Blocked: the approval differs from the screen");
     const s = spokeCall(supply);
     if (s?.functionName !== "supply" || s.args[0] !== id || s.args[1] !== b.raw || !isAddressEqual(s.args[2], user)) {
       throw new Error("Blocked: the backing differs from the screen");
     }
     const u = spokeCall(use);
-    if (u?.functionName !== "setUsingAsCollateral" || u.args[0] !== id || u.args[1] !== true || !isAddressEqual(u.args[2], user)) {
+    if (
+      u?.functionName !== "setUsingAsCollateral" ||
+      u.args[0] !== id ||
+      u.args[1] !== true ||
+      !isAddressEqual(u.args[2], user)
+    ) {
       throw new Error("Blocked: the backing differs from the screen");
     }
   });
@@ -322,7 +358,8 @@ export function assertEarn(user: Address, calls: Call[], review: { creditRaw: bi
     throw new Error("Blocked: the credit differs from the screen");
   }
   const a = isAddressEqual(approveSave.to, USDC.address) ? approveOf(approveSave) : null;
-  if (!a || !isAddressEqual(a[0], GUARDIAN.AAVE_V3_POOL) || a[1] !== review.creditRaw) throw new Error("Blocked: the approval differs from the credit");
+  if (!a || !isAddressEqual(a[0], GUARDIAN.AAVE_V3_POOL) || a[1] !== review.creditRaw)
+    throw new Error("Blocked: the approval differs from the credit");
   const s = savingsCall(save);
   if (
     s?.functionName !== "supply" ||
@@ -342,9 +379,16 @@ export function assertEarn(user: Address, calls: Call[], review: { creditRaw: bi
  * network fee, from savings first when the wallet can't (payFromCash). The allowlist runs with the savings declared
  * (`saveTo`), and the whole batch is checked against the screen (assertEarn).
  */
-export function buildEarnCalls(p: { user: Address; backing: readonly Backing[]; creditRaw: bigint; cash: Cash }): Call[] {
+export function buildEarnCalls(p: {
+  user: Address;
+  backing: readonly Backing[];
+  creditRaw: bigint;
+  cash: Cash;
+}): Call[] {
   const loan = buildLoanCalls({ user: p.user, locks: [...p.backing], borrowRaw: p.creditRaw });
-  const calls = payFromCash(p.user, 0n, p.cash, [...loan, ...buildAddSavingsCalls(p.user, p.creditRaw)], { saveTo: p.user });
+  const calls = payFromCash(p.user, 0n, p.cash, [...loan, ...buildAddSavingsCalls(p.user, p.creditRaw)], {
+    saveTo: p.user,
+  });
   return assertEarn(p.user, calls, { creditRaw: p.creditRaw, backing: p.backing });
 }
 
@@ -355,6 +399,10 @@ export function buildEarnCalls(p: { user: Address; backing: readonly Backing[]; 
 export function earnActivity(plan: CreditPlan): ActivityItem[] {
   return [
     { kind: "earn", symbol: USDC.symbol, amount: toUsd(plan.creditRaw) },
-    ...plan.backing.map((b) => ({ kind: "supply" as const, symbol: b.stock.symbol, amount: Number(b.raw) / 10 ** b.stock.decimals })),
+    ...plan.backing.map((b) => ({
+      kind: "supply" as const,
+      symbol: b.stock.symbol,
+      amount: Number(b.raw) / 10 ** b.stock.decimals,
+    })),
   ];
 }

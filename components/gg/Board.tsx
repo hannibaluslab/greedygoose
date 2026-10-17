@@ -10,7 +10,15 @@ import { TabBar } from "./TabBar";
 import { TxButton, TxError } from "./TxUi";
 import { BoardIcon, CloseIcon, PlusIcon } from "./icons";
 import type { TxPhase } from "@/hooks/useTx";
-import { boardPct, boardSections, othersLine, personLabel, type BoardFilter, type BoardPerson, type OffBoard } from "@/lib/board/view";
+import {
+  boardPct,
+  boardSections,
+  othersLine,
+  personLabel,
+  type BoardFilter,
+  type BoardPerson,
+  type OffBoard,
+} from "@/lib/board/view";
 import { shortAddress } from "@/lib/formatting";
 
 /*
@@ -55,7 +63,8 @@ const FILTERS: { value: BoardFilter; label: string }[] = [
 ];
 
 /** Green up, red down, as Holdings colour a day's change; grey when it shows as 0.0%. */
-const tone = (pct: number) => (Number(Math.abs(pct * 100).toFixed(1)) === 0 ? "text-ink-mid" : pct < 0 ? "text-neg" : "text-pos");
+const tone = (pct: number) =>
+  Number(Math.abs(pct * 100).toFixed(1)) === 0 ? "text-ink-mid" : pct < 0 ? "text-neg" : "text-pos";
 
 function Tick({ on }: { on: boolean }) {
   return (
@@ -63,7 +72,16 @@ function Tick({ on }: { on: boolean }) {
       aria-hidden
       className={`grid size-[22px] shrink-0 place-items-center rounded-[7px] border transition ${on ? "border-ink bg-ink text-brand" : "border-line-strong bg-card text-transparent"}`}
     >
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        width="13"
+        height="13"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <path d="M5 12l5 5 9-10" />
       </svg>
     </span>
@@ -75,7 +93,12 @@ function Tick({ on }: { on: boolean }) {
  * anyone who can be added; you and your contacts can't be ticked.
  */
 function BoardRowItem({
-  person, picking = false, picked = false, onOpen, onPick, showContact = true,
+  person,
+  picking = false,
+  picked = false,
+  onOpen,
+  onPick,
+  showContact = true,
 }: {
   person: BoardPerson;
   picking?: boolean;
@@ -148,11 +171,25 @@ const List = ({ label, children }: { label: string; children: ReactNode }) => (
   </WhiteCard>
 );
 
-function Note({ icon, title, line, children }: { icon?: ReactNode; title: string; line: string; children?: ReactNode }) {
+function Note({
+  icon,
+  title,
+  line,
+  children,
+}: {
+  icon?: ReactNode;
+  title: string;
+  line: string;
+  children?: ReactNode;
+}) {
   return (
     <WhiteCard className="flex flex-col gap-3 p-[18px]">
       <div className="flex items-center gap-3">
-        {icon && <span aria-hidden className="grid size-[42px] shrink-0 place-items-center rounded-[21px] bg-chip text-ink">{icon}</span>}
+        {icon && (
+          <span aria-hidden className="grid size-[42px] shrink-0 place-items-center rounded-[21px] bg-chip text-ink">
+            {icon}
+          </span>
+        )}
         <span className="flex min-w-0 flex-col gap-0.5">
           <span className="text-[17px] font-semibold leading-[1.25]">{title}</span>
           <span className="text-[14px] leading-snug text-ink-mid">{line}</span>
@@ -166,7 +203,9 @@ function Note({ icon, title, line, children }: { icon?: ReactNode; title: string
 function Skeleton() {
   return (
     <WhiteCard className="flex flex-col gap-1 p-1.5">
-      <span className="sr-only" role="status">Loading the board…</span>
+      <span className="sr-only" role="status">
+        Loading the board…
+      </span>
       {Array.from({ length: 6 }, (_, i) => (
         <div key={i} aria-hidden className="flex h-[56px] items-center gap-3 px-3.5">
           <div className="h-3 w-4 animate-pulse rounded bg-chip" />
@@ -181,7 +220,18 @@ function Skeleton() {
 
 /** The tab: header, the All | Contacts filter, then the board in its state. `pickBar` floats over the tab bar. */
 export function BoardView({
-  filter, onFilter, state, onRetry, picking, picked, onPickToggle, onPickStart, onPickStop, onOpen, onAddByName, pickBar,
+  filter,
+  onFilter,
+  state,
+  onRetry,
+  picking,
+  picked,
+  onPickToggle,
+  onPickStart,
+  onPickStop,
+  onOpen,
+  onAddByName,
+  pickBar,
 }: {
   filter: BoardFilter;
   onFilter: (f: BoardFilter) => void;
@@ -200,7 +250,9 @@ export function BoardView({
   const s = ready ? boardSections(ready.people, ready.offBoard, filter) : null;
   // Only the rows on screen can be ticked.
   const addable = s
-    ? [...s.ranked.flatMap((l) => (l.kind === "row" ? [l.person] : [])), ...s.unranked].filter((p) => !p.you && !p.contact).length
+    ? [...s.ranked.flatMap((l) => (l.kind === "row" ? [l.person] : [])), ...s.unranked].filter(
+        (p) => !p.you && !p.contact,
+      ).length
     : 0;
   const isPicked = (a: string) => picked.has(a.toLowerCase());
   const row = (p: BoardPerson) => (
@@ -221,7 +273,10 @@ export function BoardView({
   else if (state.kind === "error") {
     const contacts = state.what === "contacts";
     body = (
-      <Note title={contacts ? BOARD_COPY.contactsError : BOARD_COPY.error} line={contacts ? BOARD_COPY.contactsErrorLine : BOARD_COPY.errorLine}>
+      <Note
+        title={contacts ? BOARD_COPY.contactsError : BOARD_COPY.error}
+        line={contacts ? BOARD_COPY.contactsErrorLine : BOARD_COPY.errorLine}
+      >
         <button type="button" onClick={onRetry} className={buttonClass("dark", "md")}>
           Try again
         </button>
@@ -250,7 +305,9 @@ export function BoardView({
         {(s.unranked.length > 0 || s.unrankedOthers > 0) && !(noContacts && s.unranked.every((p) => p.you)) && (
           <Section title={BOARD_COPY.notRanked} line={BOARD_COPY.notRankedLine}>
             {s.unranked.length > 0 && <List label={BOARD_COPY.notRanked}>{s.unranked.map(row)}</List>}
-            {s.unrankedOthers > 0 && <p className="m-0 px-1 text-[13px] text-ink-mid">{othersLine(s.unrankedOthers, s.unranked.length > 0)}</p>}
+            {s.unrankedOthers > 0 && (
+              <p className="m-0 px-1 text-[13px] text-ink-mid">{othersLine(s.unrankedOthers, s.unranked.length > 0)}</p>
+            )}
           </Section>
         )}
         {s.offBoard.length > 0 && (
@@ -258,8 +315,14 @@ export function BoardView({
             <List label={BOARD_COPY.offBoard}>
               {s.offBoard.map((o) => (
                 <li key={o.account}>
-                  <button type="button" onClick={() => onOpen(o)} className="flex min-h-[56px] w-full items-center gap-3 px-3.5 py-2 text-left">
-                    <span aria-hidden className="w-[22px] shrink-0 text-right font-mono text-[12px] text-ink-mid">–</span>
+                  <button
+                    type="button"
+                    onClick={() => onOpen(o)}
+                    className="flex min-h-[56px] w-full items-center gap-3 px-3.5 py-2 text-left"
+                  >
+                    <span aria-hidden className="w-[22px] shrink-0 text-right font-mono text-[12px] text-ink-mid">
+                      –
+                    </span>
                     <Initial person={o} />
                     <span className="min-w-0 grow truncate text-[15px] font-semibold">{personLabel(o)}</span>
                   </button>
@@ -287,7 +350,9 @@ export function BoardView({
       <SegmentedControl label="Show" options={FILTERS} value={filter} onChange={onFilter} />
       {ready && filter === "all" && addable > 0 && (
         <div className="-mb-1 flex items-center justify-between px-1">
-          <span className="text-[13px] text-ink-mid">{picking ? "Tick the people to add" : "Return since joining"}</span>
+          <span className="text-[13px] text-ink-mid">
+            {picking ? "Tick the people to add" : "Return since joining"}
+          </span>
           <button
             type="button"
             onClick={picking ? onPickStop : onPickStart}
@@ -312,7 +377,11 @@ export function BoardView({
 
 /** "Add several": the count and one Add, floating over the tab bar while the list scrolls. One JAW sheet for all. */
 export function PickBar({
-  count, phase, checking = false, disabled, onAdd,
+  count,
+  phase,
+  checking = false,
+  disabled,
+  onAdd,
 }: {
   count: number;
   phase: TxPhase;
@@ -348,7 +417,17 @@ export function PickBar({
  * them. Each opens JAW's own sheet straight away.
  */
 export function PersonSheet({
-  open, onClose, person, phase, checking = false, blocked = false, error, note, preview, onAdd, onRemove,
+  open,
+  onClose,
+  person,
+  phase,
+  checking = false,
+  blocked = false,
+  error,
+  note,
+  preview,
+  onAdd,
+  onRemove,
 }: {
   open: boolean;
   onClose: () => void;
@@ -386,11 +465,15 @@ export function PersonSheet({
           ) : person.pct === null ? (
             <>
               <span className="text-[17px] font-semibold">{BOARD_COPY.notRanked}</span>
-              <span className="text-[13px] leading-[1.4] text-ink-mid">{person.you ? BOARD_COPY.notRankedYou : BOARD_COPY.notRankedLine}</span>
+              <span className="text-[13px] leading-[1.4] text-ink-mid">
+                {person.you ? BOARD_COPY.notRankedYou : BOARD_COPY.notRankedLine}
+              </span>
             </>
           ) : (
             <>
-              <span className={`num text-[32px] font-semibold leading-[1.15] tracking-[-0.02em] ${tone(person.pct)}`}>{boardPct(person.pct)}</span>
+              <span className={`num text-[32px] font-semibold leading-[1.15] tracking-[-0.02em] ${tone(person.pct)}`}>
+                {boardPct(person.pct)}
+              </span>
               <span className="text-[13px] text-ink-mid">Rank {person.rank} on the board</span>
             </>
           )}
@@ -406,7 +489,11 @@ export function PersonSheet({
               onClick={onRemove}
               className={buttonClass("soft", "md")}
             >
-              {phase === "simulating" || (checking && !busy) ? "Checking…" : phase === "pending" ? "Confirming on Base…" : "Remove from contacts"}
+              {phase === "simulating" || (checking && !busy)
+                ? "Checking…"
+                : phase === "pending"
+                  ? "Confirming on Base…"
+                  : "Remove from contacts"}
             </button>
             {preview ? (
               <p className="m-0 text-center text-xs text-subtle">Preview mode — sign in to do this.</p>
@@ -415,7 +502,16 @@ export function PersonSheet({
             )}
           </div>
         ) : (
-          <TxButton label="Add to contacts" size="md" phase={phase} checking={checking} disabled={blocked} note={note} preview={preview} onClick={onAdd} />
+          <TxButton
+            label="Add to contacts"
+            size="md"
+            phase={phase}
+            checking={checking}
+            disabled={blocked}
+            note={note}
+            preview={preview}
+            onClick={onAdd}
+          />
         )}
         <TxError error={error} />
         {!person.you && <p className="m-0 px-1 text-xs leading-[1.45] text-subtle">{BOARD_COPY.contactsFoot}</p>}
@@ -429,11 +525,29 @@ export type NameLookup =
   | { kind: "looking" }
   | { kind: "none"; name: string }
   /** `onBase` false: the name gave only an Ethereum address, which may not be the same account on Base. */
-  | { kind: "found"; name: string | null; account: `0x${string}`; you: boolean; contact: boolean; onBoard: boolean; onBase?: boolean };
+  | {
+      kind: "found";
+      name: string | null;
+      account: `0x${string}`;
+      you: boolean;
+      contact: boolean;
+      onBoard: boolean;
+      onBase?: boolean;
+    };
 
 /** Add a contact by name: type it, see who it is, then Add. "sam" means sam.justan.id. */
 export function AddByNameSheet({
-  open, onClose, lookup, onLookup, phase, checking = false, blocked = false, error, note, preview, onAdd,
+  open,
+  onClose,
+  lookup,
+  onLookup,
+  phase,
+  checking = false,
+  blocked = false,
+  error,
+  note,
+  preview,
+  onAdd,
 }: {
   open: boolean;
   onClose: () => void;
@@ -456,9 +570,17 @@ export function AddByNameSheet({
   };
   const found = lookup.kind === "found" ? lookup : null;
   return (
-    <SheetShell open={open} onOpenChange={(next) => !next && onClose()} title="Add by name" description="Their name, or their address.">
+    <SheetShell
+      open={open}
+      onOpenChange={(next) => !next && onClose()}
+      title="Add by name"
+      description="Their name, or their address."
+    >
       <SheetSteps stepKey="by-name" className="flex flex-col gap-3.5">
-        <form onSubmit={submit} className="flex items-center gap-2 rounded-[18px] border border-line-field bg-card px-4 focus-within:border-ink">
+        <form
+          onSubmit={submit}
+          className="flex items-center gap-2 rounded-[18px] border border-line-field bg-card px-4 focus-within:border-ink"
+        >
           <input
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -471,15 +593,26 @@ export function AddByNameSheet({
             className="h-14 min-w-0 grow bg-transparent text-base text-ink placeholder:text-ink-faint focus:outline-none"
           />
           {text && (
-            <button type="button" aria-label="Clear" onClick={() => setText("")} className="-mx-1.5 grid size-11 shrink-0 place-items-center rounded-full text-ink-mid">
+            <button
+              type="button"
+              aria-label="Clear"
+              onClick={() => setText("")}
+              className="-mx-1.5 grid size-11 shrink-0 place-items-center rounded-full text-ink-mid"
+            >
               <CloseIcon size={14} />
             </button>
           )}
-          <button type="submit" disabled={!text.trim() || lookup.kind === "looking"} className="-mr-2 h-11 shrink-0 rounded-[16px] bg-ink px-4 text-sm font-semibold text-on-ink disabled:opacity-45">
+          <button
+            type="submit"
+            disabled={!text.trim() || lookup.kind === "looking"}
+            className="-mr-2 h-11 shrink-0 rounded-[16px] bg-ink px-4 text-sm font-semibold text-on-ink disabled:opacity-45"
+          >
             {lookup.kind === "looking" ? "Looking…" : "Find"}
           </button>
         </form>
-        {lookup.kind === "none" && <p className="m-0 px-1 text-[14px] text-ink-mid">No account goes by {lookup.name}.</p>}
+        {lookup.kind === "none" && (
+          <p className="m-0 px-1 text-[14px] text-ink-mid">No account goes by {lookup.name}.</p>
+        )}
         {found && (
           <WhiteCard className="flex items-center gap-3 px-3.5 py-3">
             <Initial person={{ account: found.account, name: found.name }} />
@@ -491,11 +624,24 @@ export function AddByNameSheet({
             </span>
           </WhiteCard>
         )}
-        {found && found.onBase === false && !found.you && !found.contact && <p className="m-0 px-1 text-[13px] leading-[1.4] text-ink-mid">{BOARD_COPY.notOnBase}</p>}
+        {found && found.onBase === false && !found.you && !found.contact && (
+          <p className="m-0 px-1 text-[13px] leading-[1.4] text-ink-mid">{BOARD_COPY.notOnBase}</p>
+        )}
         {found && found.you && <p className="m-0 px-1 text-[14px] text-ink-mid">That’s you.</p>}
-        {found && !found.you && found.contact && <p className="m-0 px-1 text-[14px] text-ink-mid">Already in your contacts.</p>}
+        {found && !found.you && found.contact && (
+          <p className="m-0 px-1 text-[14px] text-ink-mid">Already in your contacts.</p>
+        )}
         {found && !found.you && !found.contact && (
-          <TxButton label="Add to contacts" size="md" phase={phase} checking={checking} disabled={blocked} note={note} preview={preview} onClick={onAdd} />
+          <TxButton
+            label="Add to contacts"
+            size="md"
+            phase={phase}
+            checking={checking}
+            disabled={blocked}
+            note={note}
+            preview={preview}
+            onClick={onAdd}
+          />
         )}
         <TxError error={error} />
         <p className="m-0 px-1 text-xs leading-[1.45] text-subtle">{BOARD_COPY.contactsFoot}</p>

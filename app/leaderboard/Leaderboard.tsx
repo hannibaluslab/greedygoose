@@ -6,7 +6,14 @@ import { isAddressEqual, type Address } from "viem";
 import { useAccount } from "wagmi";
 import { toast } from "sonner";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
-import { AddByNameSheet, BoardView, PersonSheet, PickBar, type BoardState, type NameLookup } from "@/components/gg/Board";
+import {
+  AddByNameSheet,
+  BoardView,
+  PersonSheet,
+  PickBar,
+  type BoardState,
+  type NameLookup,
+} from "@/components/gg/Board";
 import { useBoard } from "@/hooks/useBoard";
 import { useContactsTx, useFollowing, useNames, type ContactsChange } from "@/hooks/useContacts";
 import { TAP_AGAIN } from "@/hooks/useTx";
@@ -35,7 +42,9 @@ function Board({ address }: { address: Address }) {
   const board = useBoard();
   const following = useFollowing(address);
 
-  const [filter, setFilter] = useState<BoardFilter>(useSearchParams().get("filter") === "contacts" ? "contacts" : "all");
+  const [filter, setFilter] = useState<BoardFilter>(
+    useSearchParams().get("filter") === "contacts" ? "contacts" : "all",
+  );
   const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   // The open sheet keeps its person while it slides away.
@@ -69,7 +78,9 @@ function Board({ address }: { address: Address }) {
     you: isAddressEqual(r.account, address),
     contact: contactSet.has(lower(r.account)),
   }));
-  const offBoard: OffBoard[] = contacts.filter((c) => !memberSet.has(lower(c))).map((c) => ({ account: c, name: nameOf(c) }));
+  const offBoard: OffBoard[] = contacts
+    .filter((c) => !memberSet.has(lower(c)))
+    .map((c) => ({ account: c, name: nameOf(c) }));
 
   const state: BoardState = !GOOSE_BOARD
     ? { kind: "soon" }
@@ -83,7 +94,9 @@ function Board({ address }: { address: Address }) {
 
   const sheetPerson = person
     ? (people.find((p) => isAddressEqual(p.account, person)) ??
-      (contactSet.has(lower(person)) ? { account: person, name: nameOf(person), contact: true as const, you: false as const } : null))
+      (contactSet.has(lower(person))
+        ? { account: person, name: nameOf(person), contact: true as const, you: false as const }
+        : null))
     : null;
 
   // The change each place would sign now. The one in front (a person's sheet, then the name sheet, then the bar) is
@@ -95,7 +108,8 @@ function Board({ address }: { address: Address }) {
   const found = lookup.kind === "found" ? lookup : null;
   const nameChange: ContactsChange | null =
     byName && found && !found.you && !found.contact ? { verb: "add", user: address, targets: [found.account] } : null;
-  const pickChange: ContactsChange | null = picking && picked.size > 0 ? { verb: "add", user: address, targets: [...picked] as Address[] } : null;
+  const pickChange: ContactsChange | null =
+    picking && picked.size > 0 ? { verb: "add", user: address, targets: [...picked] as Address[] } : null;
   const front = note ? null : (personChange ?? nameChange ?? pickChange);
   const tx = useContactsTx(front);
   const checkingFor = (c: ContactsChange | null) => tx.checking && !!c && c === front;
@@ -204,7 +218,9 @@ function Board({ address }: { address: Address }) {
               phase={from === "pick" ? tx.phase : "idle"}
               checking={checkingFor(pickChange)}
               // In the dev preview the tap says why nothing can be signed.
-              disabled={!!note || (tx.busy && from !== "pick") || (pickChange !== null && pickChange === front && tx.blocked)}
+              disabled={
+                !!note || (tx.busy && from !== "pick") || (pickChange !== null && pickChange === front && tx.blocked)
+              }
               onAdd={() => {
                 if (preview) return void toast("Preview mode — sign in to do this.");
                 if (!pickChange) return;

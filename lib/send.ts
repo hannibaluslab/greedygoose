@@ -76,7 +76,8 @@ export const SEND_COPY = {
   self: "That’s your own account. Send to someone else.",
   zero: "That address can’t hold money. Check it and try again.",
   contract: "That address is one of the contracts the app uses, not someone’s account. Money sent there would be lost.",
-  notAccount: "That address is a contract that holds or trades money, not someone’s account. Money sent there would be lost.",
+  notAccount:
+    "That address is a contract that holds or trades money, not someone’s account. Money sent there would be lost.",
   unused: "This address hasn’t been used on Base yet. Check it’s right.",
   unchecked: "We couldn’t check this address on Base right now. Check it’s right.",
   typo: "This address has a typo in it. Copy it again from where you found it.",
@@ -85,7 +86,8 @@ export const SEND_COPY = {
   noName: (name: string) => `No account goes by ${name}.`,
   lookupFailed: "We couldn’t look that up right now. Try again.",
   ethOnly: "This name only gives an Ethereum address. Send only if it’s the same account on Base.",
-  ethOnlyContract: (name: string) => `${name} is a wallet on Ethereum that isn’t on Base. Ask them for their Base address.`,
+  ethOnlyContract: (name: string) =>
+    `${name} is a wallet on Ethereum that isn’t on Base. Ask them for their Base address.`,
   ethUnchecked: "We couldn’t check where this name’s address is right now. Try again in a moment.",
   // How much.
   overCash: (usd: number) => `That’s more than your cash (${formatUsd(usd)}).`,
@@ -143,7 +145,12 @@ export function sendOptions(data: SendData): SendOption[] {
     (h): SendOption => ({
       asset: h.symbol,
       name: h.name,
-      sub: h.freeRaw === 0n ? SEND_COPY.subAllBacks : h.lockedRaw > 0n ? SEND_COPY.subBacks(h.lockedUsd) : SEND_COPY.subShares(h.freeShares),
+      sub:
+        h.freeRaw === 0n
+          ? SEND_COPY.subAllBacks
+          : h.lockedRaw > 0n
+            ? SEND_COPY.subBacks(h.lockedUsd)
+            : SEND_COPY.subShares(h.freeShares),
       right: formatUsd(maxUsdOf(h.symbol, data)),
       rightSub: SEND_COPY.free,
       disabled: h.freeRaw === 0n,
@@ -268,8 +275,14 @@ const answers = (p: Promise<unknown>) =>
  * addresses are worked out from the factories rather than kept.
  */
 async function isTokenOrPool(client: Client, address: Address): Promise<boolean> {
-  const ask = (functionName: "decimals" | "totalSupply" | "token0" | "token1") => answers(readContract(client, { address, abi: tokenOrPoolAbi, functionName }));
-  const [decimals, supply, token0, token1] = await Promise.all([ask("decimals"), ask("totalSupply"), ask("token0"), ask("token1")]);
+  const ask = (functionName: "decimals" | "totalSupply" | "token0" | "token1") =>
+    answers(readContract(client, { address, abi: tokenOrPoolAbi, functionName }));
+  const [decimals, supply, token0, token1] = await Promise.all([
+    ask("decimals"),
+    ask("totalSupply"),
+    ask("token0"),
+    ask("token1"),
+  ]);
   return (decimals && supply) || (token0 && token1);
 }
 
@@ -282,10 +295,18 @@ export async function readRecipient(client: Client, address: Address): Promise<B
     readContract(client, { address: USDC.address, abi: erc20Abi, functionName: "balanceOf", args: [address] }),
   ]);
   const hasCode = !!code && code !== "0x";
-  return { code: hasCode, used: hasCode || nonce > 0 || eth > 0n || usdc > 0n, notAccount: hasCode && (await isTokenOrPool(client, address)) };
+  return {
+    code: hasCode,
+    used: hasCode || nonce > 0 || eth > 0n || usdc > 0n,
+    notAccount: hasCode && (await isTokenOrPool(client, address)),
+  };
 }
 
-const BLOCK_TEXT: Record<RecipientBlock, string> = { self: SEND_COPY.self, zero: SEND_COPY.zero, contract: SEND_COPY.contract };
+const BLOCK_TEXT: Record<RecipientBlock, string> = {
+  self: SEND_COPY.self,
+  zero: SEND_COPY.zero,
+  contract: SEND_COPY.contract,
+};
 
 /**
  * The recipient's guards, refused before warned. Refused: the account itself, the zero address and the app's or its
@@ -295,11 +316,16 @@ const BLOCK_TEXT: Record<RecipientBlock, string> = { self: SEND_COPY.self, zero:
  * exchange's deposit address is a plain key too); an address Base has never seen used; an address Base couldn't be
  * asked about. `waiting` until Base has answered, so a warning never lands after the tap.
  */
-export function recipientNote(r: Recipient, user: Address, checks: RecipientChecks): { block: string | null; warn: string | null; waiting: boolean } {
+export function recipientNote(
+  r: Recipient,
+  user: Address,
+  checks: RecipientChecks,
+): { block: string | null; warn: string | null; waiting: boolean } {
   const note = (block: string | null, warn: string | null = null) => ({ block, warn, waiting: false });
   const blocked = recipientBlock(r.address, user);
   if (blocked) return note(BLOCK_TEXT[blocked]);
-  if (checks.base === undefined || (!r.onBase && checks.ethCode === undefined)) return { block: null, warn: null, waiting: true };
+  if (checks.base === undefined || (!r.onBase && checks.ethCode === undefined))
+    return { block: null, warn: null, waiting: true };
   if (checks.base?.notAccount) return note(SEND_COPY.notAccount);
   if (!r.onBase) {
     if (checks.ethCode === null || checks.base === null) return note(SEND_COPY.ethUnchecked);
@@ -339,12 +365,17 @@ export function toLookups(set: (s: ToState) => void, lookup: NameLookup) {
       const parsed = parseTo(text);
       if (parsed.kind === "empty") return put({ kind: "idle" });
       if (parsed.kind === "invalid") return put({ kind: "none", text: parsed.text });
-      if (parsed.kind === "address") return put({ kind: "found", recipient: { address: parsed.address, name: null, onBase: true } });
+      if (parsed.kind === "address")
+        return put({ kind: "found", recipient: { address: parsed.address, name: null, onBase: true } });
       put({ kind: "looking", name: parsed.name });
       try {
         const r = await lookup(parsed.name);
         if (id !== seq) return;
-        put(r ? { kind: "found", recipient: { address: r.address, name: r.name ?? parsed.name, onBase: r.onBase } } : { kind: "none", text: SEND_COPY.noName(parsed.name) });
+        put(
+          r
+            ? { kind: "found", recipient: { address: r.address, name: r.name ?? parsed.name, onBase: r.onBase } }
+            : { kind: "none", text: SEND_COPY.noName(parsed.name) },
+        );
       } catch {
         if (id === seq) put({ kind: "none", text: SEND_COPY.lookupFailed });
       }
@@ -366,7 +397,10 @@ export function toLookups(set: (s: ToState) => void, lookup: NameLookup) {
 }
 
 /** The people sent to from this device, newest first, once each, for the quick picks: from Activity's own records. */
-export function recentRecipients(local: readonly LocalActivity[], limit = 4): { address: Address; name: string | null }[] {
+export function recentRecipients(
+  local: readonly LocalActivity[],
+  limit = 4,
+): { address: Address; name: string | null }[] {
   const out: { address: Address; name: string | null }[] = [];
   for (const entry of [...local].sort((a, b) => b.time - a.time)) {
     if (entry.status === "failed") continue;
@@ -388,7 +422,8 @@ export class SendStop extends Error {}
 /** The asset a Send moves: USDC for Cash, or a registry stock; never from a string alone. */
 const sendTokenOf = (asset: SendAsset): ReserveAsset | undefined => (asset === "cash" ? USDC : stockOf(asset));
 
-const isRegistryToken = (t: ReserveAsset) => isAddressEqual(t.address, USDC.address) || EQUITIES.some((e) => isAddressEqual(e.address, t.address));
+const isRegistryToken = (t: ReserveAsset) =>
+  isAddressEqual(t.address, USDC.address) || EQUITIES.some((e) => isAddressEqual(e.address, t.address));
 
 /**
  * A Send in one batch: transfer(to, amount) of USDC or the stock, and nothing else of the user's leaves. Cash is the one
@@ -397,7 +432,13 @@ const isRegistryToken = (t: ReserveAsset) => isAddressEqual(t.address, USDC.addr
  * protocols' contracts, and any amount of 0. Every call passes the allowlist with the recipient declared (`sendTo`), so
  * the transfer can go to that address only.
  */
-export function buildSendCalls(p: { user: Address; token: ReserveAsset; to: Address; amountRaw: bigint; cash: Cash }): Call[] {
+export function buildSendCalls(p: {
+  user: Address;
+  token: ReserveAsset;
+  to: Address;
+  amountRaw: bigint;
+  cash: Cash;
+}): Call[] {
   if (!isRegistryToken(p.token)) throw new SendStop(SEND_COPY.fallback);
   if (p.amountRaw <= 0n) throw new SendStop(SEND_COPY.fallback);
   const blocked = recipientBlock(p.to, p.user);
@@ -413,7 +454,15 @@ export function buildSendCalls(p: { user: Address; token: ReserveAsset; to: Addr
 
 /** What Activity shows while a Send confirms: the move, and who it went to (the name too, for this device's quick picks). */
 export function sendActivity(token: ReserveAsset, amountRaw: bigint, to: Recipient): ActivityItem[] {
-  return [{ kind: "send", symbol: token.symbol, amount: Number(amountRaw) / 10 ** token.decimals, to: to.address, ...(to.name ? { toName: to.name } : {}) }];
+  return [
+    {
+      kind: "send",
+      symbol: token.symbol,
+      amount: Number(amountRaw) / 10 ** token.decimals,
+      to: to.address,
+      ...(to.name ? { toName: to.name } : {}),
+    },
+  ];
 }
 
 // ─── The screen ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -442,7 +491,8 @@ export function planSend(p: {
   // MAX sends every free share, to the last unit, while the dollars still say all of it; typed dollars become shares at
   // Aave's price, rounded down.
   const sellAll = p.all && maxUsd > 0 && amountUsd >= maxUsd;
-  const sharesRaw = stock && holding ? (sellAll ? holding.freeRaw : sharesForUsdRaw(usdRaw, holding.priceRaw, stock.decimals)) : 0n;
+  const sharesRaw =
+    stock && holding ? (sellAll ? holding.freeRaw : sharesForUsdRaw(usdRaw, holding.priceRaw, stock.decimals)) : 0n;
   const amountRaw = p.asset === "cash" ? usdRaw : sharesRaw;
   const shares = stock && holding ? rawToShares(sharesRaw, holding.multiplier, stock.decimals) : 0;
   const ticker = stock ? tickerOf(stock.symbol) : "";
@@ -450,7 +500,8 @@ export function planSend(p: {
 
   // Why the amount can't go: first what the asset allows at any amount, then the amount.
   let amountBlock: string | null = null;
-  if (p.asset === "cash" && amountUsd > maxUsd) amountBlock = amountUsd > data.cashUsd ? SEND_COPY.overCash(data.cashUsd) : SEND_COPY.feeBuffer;
+  if (p.asset === "cash" && amountUsd > maxUsd)
+    amountBlock = amountUsd > data.cashUsd ? SEND_COPY.overCash(data.cashUsd) : SEND_COPY.feeBuffer;
   else if (stock && noFee) amountBlock = SEND_COPY.noFee;
   else if (stock && holding && holding.freeRaw === 0n) amountBlock = SEND_COPY.allBacks(holding.name);
   else if (stock && holding && sharesRaw > holding.freeRaw) amountBlock = SEND_COPY.notFree;
@@ -472,15 +523,29 @@ export function planSend(p: {
   const shown = amountRaw > 0n && !amountBlock;
   // A stock's dollars are what the shares sent are worth at Aave's price, not the dollars typed: on MAX, a refresh
   // that leaves fewer free shares sends fewer, and the summary says what they're worth.
-  const sharesUsdRaw = stock && holding ? (sharesRaw * holding.priceRaw) / 10n ** BigInt(stock.decimals + ORACLE_DECIMALS - USDC.decimals) : 0n;
-  const theyGet = !shown ? "—" : p.asset === "cash" ? formatUsd(amountUsd) : `${formatShares(shares)} ${ticker} · ${SEND_COPY.about(toUsd(sharesUsdRaw))}`;
+  const sharesUsdRaw =
+    stock && holding
+      ? (sharesRaw * holding.priceRaw) / 10n ** BigInt(stock.decimals + ORACLE_DECIMALS - USDC.decimals)
+      : 0n;
+  const theyGet = !shown
+    ? "—"
+    : p.asset === "cash"
+      ? formatUsd(amountUsd)
+      : `${formatShares(shares)} ${ticker} · ${SEND_COPY.about(toUsd(sharesUsdRaw))}`;
   const rows = [
     { label: SEND_COPY.to, value: who ?? "—" },
     { label: SEND_COPY.theyGet, value: theyGet },
   ];
 
   const ready = !!token && amountRaw > 0n && !amountBlock && !!p.recipient && !!to && !to.block && !to.waiting;
-  const button = p.asset === "cash" ? (amountUsd > 0 && !amountBlock ? SEND_COPY.sendUsd(amountUsd) : SEND_COPY.button) : holding ? SEND_COPY.sendStock(holding.name) : SEND_COPY.button;
+  const button =
+    p.asset === "cash"
+      ? amountUsd > 0 && !amountBlock
+        ? SEND_COPY.sendUsd(amountUsd)
+        : SEND_COPY.button
+      : holding
+        ? SEND_COPY.sendStock(holding.name)
+        : SEND_COPY.button;
   // The done line names the stock ("Sent 0.0072 Amazon"), as the Trade sheet's "Sold 0.0029 Alphabet" does.
   const what = p.asset === "cash" ? formatUsd(amountUsd) : `${formatShares(shares)} ${holding?.name ?? ticker}`;
 
@@ -494,11 +559,23 @@ export function planSend(p: {
     sharesRaw,
     hint,
     amountNote: amountBlock,
-    toNote: to?.block ? { text: to.block, tone: "act" as const } : to?.warn ? { text: to.warn, tone: "watch" as const } : null,
+    toNote: to?.block
+      ? { text: to.block, tone: "act" as const }
+      : to?.warn
+        ? { text: to.warn, tone: "watch" as const }
+        : null,
     waiting: !!to?.waiting,
     rows,
     smallPrint:
-      ready && token && p.recipient ? sendSmallPrint({ token, amountRaw, multiplier: holding?.multiplier, to: p.recipient.address, name: holding?.name }) : null,
+      ready && token && p.recipient
+        ? sendSmallPrint({
+            token,
+            amountRaw,
+            multiplier: holding?.multiplier,
+            to: p.recipient.address,
+            name: holding?.name,
+          })
+        : null,
     button,
     ready,
     /** "$20.00" or "0.043 NVIDIA", and to whom, for the done state. */
@@ -516,7 +593,13 @@ const exact = (raw: bigint, decimals: number) => {
  * A Send's small print (D7): the one move, to the last decimal, with the full address, and what a stock is. It may name
  * the token, as the Buy and Sell steps' small print does. A stock's amount is in shares (raw × uiMultiplier).
  */
-export function sendSmallPrint(p: { token: ReserveAsset; amountRaw: bigint; multiplier?: bigint; to: Address; name?: string }): string {
+export function sendSmallPrint(p: {
+  token: ReserveAsset;
+  amountRaw: bigint;
+  multiplier?: bigint;
+  to: Address;
+  name?: string;
+}): string {
   const isCash = isAddressEqual(p.token.address, USDC.address);
   const what = isCash
     ? `exactly ${exact(p.amountRaw, USDC.decimals)} USDC`

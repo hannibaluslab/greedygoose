@@ -82,8 +82,12 @@ export function EarnCard({ offer, onOpen }: { offer: EarnOffer; onOpen: () => vo
       {offer.kind === "offer" ? (
         <>
           <Rates rates={offer.rates} left />
-          <p className="m-0 -mt-1 text-[12.5px] leading-[1.4] text-subtle">A year, at today’s rates. Both are variable.</p>
-          <Button variant="soft" onClick={onOpen}>Earn with stocks</Button>
+          <p className="m-0 -mt-1 text-[12.5px] leading-[1.4] text-subtle">
+            A year, at today’s rates. Both are variable.
+          </p>
+          <Button variant="soft" onClick={onOpen}>
+            Earn with stocks
+          </Button>
         </>
       ) : (
         offer.rates && <Rates rates={offer.rates} left={false} />
@@ -99,7 +103,21 @@ export function EarnCard({ offer, onOpen }: { offer: EarnOffer; onOpen: () => vo
  * earns, so it earns at once.
  */
 export function EarnStep({
-  user, data, offer, options, protect, sell, phase, error, preview, feeBlocked, prep, planFor, onEarn, initialAmount = "", fixedApyAfter,
+  user,
+  data,
+  offer,
+  options,
+  protect,
+  sell,
+  phase,
+  error,
+  preview,
+  feeBlocked,
+  prep,
+  planFor,
+  onEarn,
+  initialAmount = "",
+  fixedApyAfter,
 }: {
   user: `0x${string}`;
   data: PositionData;
@@ -127,17 +145,44 @@ export function EarnStep({
   const apyNow = aprToApy(data.apr);
 
   // The plan first, for the batch the rate after it is read from.
-  const draft = earnQuote({ offer, position: data, options, cash: data.cash, creditRaw, creditApyNow: apyNow, creditApyAfter: null });
-  const read = useEarnRates({ user, backing: draft.plan.backing, creditRaw, cash: data.cash, apyNow, enabled: fixedApyAfter === undefined });
+  const draft = earnQuote({
+    offer,
+    position: data,
+    options,
+    cash: data.cash,
+    creditRaw,
+    creditApyNow: apyNow,
+    creditApyAfter: null,
+  });
+  const read = useEarnRates({
+    user,
+    backing: draft.plan.backing,
+    creditRaw,
+    cash: data.cash,
+    apyNow,
+    enabled: fixedApyAfter === undefined,
+  });
   const apyAfter = fixedApyAfter ?? read.apyAfter;
-  const quote = apyAfter === null ? draft : earnQuote({ offer, position: data, options, cash: data.cash, creditRaw, creditApyNow: apyNow, creditApyAfter: apyAfter });
+  const quote =
+    apyAfter === null
+      ? draft
+      : earnQuote({
+          offer,
+          position: data,
+          options,
+          cash: data.cash,
+          creditRaw,
+          creditApyNow: apyNow,
+          creditApyAfter: apyAfter,
+        });
   const { plan } = quote;
 
   const block = amount > 0 ? earnBlock(quote, offer) : null;
   const ready = amount > 0 && !block && quote.left !== null;
   const tick = ready && plan.extraConfirm;
   // What the button would sign now, prepared while the step is idle so the tap opens JAW's sheet at once.
-  const signable = ready && !(tick && !ack) && !feeBlocked && planFor ? planFor({ user, quote, offer, confirmedRisk: ack }) : null;
+  const signable =
+    ready && !(tick && !ack) && !feeBlocked && planFor ? planFor({ user, quote, offer, confirmedRisk: ack }) : null;
   const prepared = usePrepare(prep, signable);
 
   // D2's tick is for the status it names: a price refresh that moves the result (Watch to Act) asks again.
@@ -149,7 +194,11 @@ export function EarnStep({
 
   // What backs it: what the plan puts in use and what's in use already, the stock picked first.
   const lead = plan.backing[0]?.stock.symbol ?? [...options].sort((a, b) => b.cf - a.cf)[0]?.stock.symbol;
-  const adding = plan.backing.length ? plan.backing.map((b) => b.stock.symbol) : data.collateralUsd > 0 || !lead ? [] : [lead];
+  const adding = plan.backing.length
+    ? plan.backing.map((b) => b.stock.symbol)
+    : data.collateralUsd > 0 || !lead
+      ? []
+      : [lead];
   const backedBy = backers(data.holdings, adding, lead);
 
   const hint = earnHint(offer);
@@ -202,7 +251,9 @@ export function EarnStep({
           NETWORK_FEE_ROW,
         ]}
       />
-      <p className="m-0 px-0.5 text-[12.5px] leading-[1.45] text-subtle">Both rates are variable. It starts earning right away.</p>
+      <p className="m-0 px-0.5 text-[12.5px] leading-[1.45] text-subtle">
+        Both rates are variable. It starts earning right away.
+      </p>
       {(block || plan.priceMayMove) && (
         <p role="status" className={`m-0 text-[13px] leading-snug ${block ? "text-act" : "text-watch-text"}`}>
           {block ?? "Stock markets are closed. You can still do this, but prices can jump when they reopen."}
@@ -221,11 +272,20 @@ export function EarnStep({
       )}
       {tick && (
         <label className="flex items-start gap-2.5 rounded-2xl bg-act-bg px-4 py-3 text-[13px] leading-snug text-act">
-          <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-px size-[18px] shrink-0 accent-[#8e2a1d]" />
+          <input
+            type="checkbox"
+            checked={ack}
+            onChange={(e) => setAck(e.target.checked)}
+            className="mt-px size-[18px] shrink-0 accent-[#8e2a1d]"
+          />
           {earnTick(plan.after)}
         </label>
       )}
-      {feeBlocked && <p role="alert" className="m-0 text-[13px] text-act">{feeBlocked}</p>}
+      {feeBlocked && (
+        <p role="alert" className="m-0 text-[13px] text-act">
+          {feeBlocked}
+        </p>
+      )}
       <TxError error={error ?? prepared.error} />
       <div className="mt-1">
         <TxButton

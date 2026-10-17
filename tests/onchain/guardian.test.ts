@@ -17,7 +17,14 @@ const user = "0x14087c532332dE6E971Eb2F60a252cbf511F59eA" as const;
 
 describe("Guardian on mainnet (simulated)", () => {
   it("the manager is already an owner of this JAW account", async () => {
-    expect(await client.readContract({ address: user, abi: justanAccountAbi, functionName: "isOwnerAddress", args: [GUARDIAN.PERMISSION_MANAGER] })).toBe(true);
+    expect(
+      await client.readContract({
+        address: user,
+        abi: justanAccountAbi,
+        functionName: "isOwnerAddress",
+        args: [GUARDIAN.PERMISSION_MANAGER],
+      }),
+    ).toBe(true);
   });
 
   it("approve then revoke a Guardian permission from the account", async () => {

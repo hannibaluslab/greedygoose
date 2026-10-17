@@ -63,7 +63,10 @@ const sourceMark = (s: RepaySource, size: number) => assetMark(s.kind === "cash"
  * repay closes the sheet with its toast. All the money maths is lib/repay.ts.
  */
 export function RepaySheet({
-  open, address, onClose, onTopUp,
+  open,
+  address,
+  onClose,
+  onTopUp,
 }: {
   open: boolean;
   address: `0x${string}`;
@@ -98,7 +101,8 @@ export function RepaySheet({
 
   const feeBlocked = isConnected && fee.state === "unsupported";
   // What Repay would sign now, prepared while the sheet is open and idle so the tap opens JAW's sheet at once.
-  const sign = open && !freeing && tab === "repay" && data && view && !feeBlocked ? repaySign(view, address, data.debtRaw) : null;
+  const sign =
+    open && !freeing && tab === "repay" && data && view && !feeBlocked ? repaySign(view, address, data.debtRaw) : null;
   const tx = useRepayWith(sign);
 
   useEffect(() => {
@@ -133,12 +137,25 @@ export function RepaySheet({
   const freeStock = freeing ? EQUITIES.find((e) => e.symbol === freeing) : undefined;
   if (freeing && data && freeHolding && freeStock) {
     return (
-      <SheetShell open={open} onOpenChange={onOpenChange} title={`Free up ${freeStock.name}`} onBack={() => {
-        setCameBack(true);
-        setFreeing(null);
-      }}>
+      <SheetShell
+        open={open}
+        onOpenChange={onOpenChange}
+        title={`Free up ${freeStock.name}`}
+        onBack={() => {
+          setCameBack(true);
+          setFreeing(null);
+        }}
+      >
         <SheetSteps stepKey={`free:${freeing}`} className="flex flex-col gap-4">
-          <UnlockSheet open={open} user={address} stock={freeStock} holding={freeHolding} data={data} cf={cfRead.cfs?.[freeing]} onClose={onClose} />
+          <UnlockSheet
+            open={open}
+            user={address}
+            stock={freeStock}
+            holding={freeHolding}
+            data={data}
+            cf={cfRead.cfs?.[freeing]}
+            onClose={onClose}
+          />
         </SheetSteps>
       </SheetShell>
     );
@@ -150,11 +167,15 @@ export function RepaySheet({
   // Under "You owe", which both tabs share and which never moves (Adrian, 2026-10-16).
   const toggle = backing && (
     <SegmentedControl
-      options={[{ value: "repay", label: REPAY_COPY.title }, { value: "free", label: REPAY_COPY.freeUpTab }]}
+      options={[
+        { value: "repay", label: REPAY_COPY.title },
+        { value: "free", label: REPAY_COPY.freeUpTab },
+      ]}
       value={tab}
       onChange={(next) => {
         setMenu(false);
-        if (next === "free") setFreeHeight(document.querySelector<HTMLElement>("[data-vaul-drawer] [data-sheet-scroll]")?.clientHeight);
+        if (next === "free")
+          setFreeHeight(document.querySelector<HTMLElement>("[data-vaul-drawer] [data-sheet-scroll]")?.clientHeight);
         setTab(next);
       }}
       label={REPAY_COPY.tabsLabel}
@@ -188,7 +209,9 @@ export function RepaySheet({
             {toggle}
             <div className="flex flex-col gap-3">
               <p className="m-0 px-1 text-[15px] leading-snug text-ink-mid">{noSourceLine(data)}</p>
-              <Button variant="dark" onClick={onTopUp} className="w-full">{REPAY_COPY.addMoney}</Button>
+              <Button variant="dark" onClick={onTopUp} className="w-full">
+                {REPAY_COPY.addMoney}
+              </Button>
             </div>
           </>
         ) : (
@@ -217,11 +240,18 @@ export function RepaySheet({
               ]}
             />
             {view.note && (
-              <p role="status" className={`m-0 text-[13px] leading-snug ${view.note.tone === "act" ? "text-act" : "text-watch-text"}`}>
+              <p
+                role="status"
+                className={`m-0 text-[13px] leading-snug ${view.note.tone === "act" ? "text-act" : "text-watch-text"}`}
+              >
                 {view.note.text}
               </p>
             )}
-            {feeBlocked && <p role="alert" className="m-0 text-[13px] text-act">{REPAY_COPY.feeUnsupported}</p>}
+            {feeBlocked && (
+              <p role="alert" className="m-0 text-[13px] text-act">
+                {REPAY_COPY.feeUnsupported}
+              </p>
+            )}
             <TxError error={tx.error} />
             <TxButton
               label={REPAY_COPY.button}
@@ -238,7 +268,9 @@ export function RepaySheet({
               }}
             />
             {/* A stock sale's small print (D7) sits under the button, so the sheet's one idea fits one screen. */}
-            {view.ready && repaySmallPrint(view) && <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">{repaySmallPrint(view)}</p>}
+            {view.ready && repaySmallPrint(view) && (
+              <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">{repaySmallPrint(view)}</p>
+            )}
           </>
         )}
       </SheetSteps>
@@ -257,12 +289,18 @@ function Owed({ data }: { data: PositionData }) {
         <span className="text-[14px] font-medium text-ink-mid">{REPAY_COPY.owe}</span>
         <StatusPill status={data.status} size="sm" />
       </div>
-      <span className={`num -mt-1 ${data.debtUsd >= 100_000 ? "text-[34px]" : "text-[40px]"} font-semibold leading-none tracking-[-0.04em]`}>{owed(data.debtUsd)}</span>
+      <span
+        className={`num -mt-1 ${data.debtUsd >= 100_000 ? "text-[34px]" : "text-[40px]"} font-semibold leading-none tracking-[-0.04em]`}
+      >
+        {owed(data.debtUsd)}
+      </span>
       {data.debtUsd > 0 && <StatusBar status={data.status} healthFactor={data.healthFactor} slim />}
       <div className="num grid grid-cols-2 border-t border-line-field pt-2.5 text-[12.5px]">
         <span className="flex min-w-0 flex-col gap-0.5">
           <span className="text-subtle">Cost</span>
-          <span className="truncate font-semibold">{(data.apr * 100).toFixed(1)}% · {monthlyCostText(data.monthlyCostUsd)}</span>
+          <span className="truncate font-semibold">
+            {(data.apr * 100).toFixed(1)}% · {monthlyCostText(data.monthlyCostUsd)}
+          </span>
         </span>
         <span className="flex min-w-0 flex-col gap-0.5 border-l border-line-field pl-3">
           <span className="text-subtle">Credit available</span>
@@ -282,7 +320,9 @@ function Backing({ data, onPick }: { data: PositionData; onPick: (symbol: string
   if (rows.length === 0) return null;
   return (
     <div className="flex flex-col gap-2">
-      <span className="pl-1 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">Backing your credit</span>
+      <span className="pl-1 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">
+        Backing your credit
+      </span>
       <WhiteCard className="flex flex-col px-4 py-0.5 leading-[normal]">
         {rows.map((h) => (
           <button
@@ -323,7 +363,14 @@ function Backing({ data, onPick }: { data: PositionData; onPick: (symbol: string
  * on it. The row sits at the content's edges, so the list is as wide as the content.
  */
 function PayWith({
-  data, sources, view, open, disabled, onToggle, onClose, onPick,
+  data,
+  sources,
+  view,
+  open,
+  disabled,
+  onToggle,
+  onClose,
+  onPick,
 }: {
   data: PositionData;
   sources: RepaySource[];
@@ -352,11 +399,17 @@ function PayWith({
   });
   return (
     <div className="flex min-h-[44px] items-center justify-between gap-3 pl-1">
-      <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">{REPAY_COPY.payWith}</span>
+      <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">
+        {REPAY_COPY.payWith}
+      </span>
       <AssetPicker
         label={REPAY_COPY.payWithLabel(source.name, source.sub)}
         title={REPAY_COPY.payWith}
-        titleAside={<span aria-hidden className="pr-[34px]">{REPAY_COPY.after}</span>}
+        titleAside={
+          <span aria-hidden className="pr-[34px]">
+            {REPAY_COPY.after}
+          </span>
+        }
         name={source.name}
         mark={sourceMark(source, 18)}
         rows={rows}
@@ -366,7 +419,11 @@ function PayWith({
         onClose={onClose}
         onPick={onPick}
         disabled={disabled}
-        footer={sources.some((s) => s.kind === "backing") ? <p className="m-0 text-[12px] leading-snug text-subtle">{REPAY_COPY.safest}</p> : undefined}
+        footer={
+          sources.some((s) => s.kind === "backing") ? (
+            <p className="m-0 text-[12px] leading-snug text-subtle">{REPAY_COPY.safest}</p>
+          ) : undefined
+        }
         wide
         peek
       />
@@ -379,7 +436,17 @@ function PayWith({
  * under it; the quick picks $25 · $50 · All, which fill it. More than the row can pay or than is owed snaps back to the
  * most, with one plain line under the picks.
  */
-function Amount({ view, form, disabled, dispatch }: { view: RepayView; form: RepayForm; disabled: boolean; dispatch: (a: RepayAction) => void }) {
+function Amount({
+  view,
+  form,
+  disabled,
+  dispatch,
+}: {
+  view: RepayView;
+  form: RepayForm;
+  disabled: boolean;
+  dispatch: (a: RepayAction) => void;
+}) {
   const picks = quickPicks(view.max);
   const { source } = view;
   const id = useId();
@@ -394,7 +461,11 @@ function Amount({ view, form, disabled, dispatch }: { view: RepayView; form: Rep
           {/* Always dollars, with the coin's own mark before it: USDC for cash, the stock's logo for a stock (Adrian). */}
           <span className="flex min-w-0 items-center gap-2">
             {source.kind === "cash" ? (
-              <span aria-hidden className="block size-6 shrink-0 rounded-full bg-cover bg-center" style={{ backgroundImage: "url(/tokens/USDC.png)" }} />
+              <span
+                aria-hidden
+                className="block size-6 shrink-0 rounded-full bg-cover bg-center"
+                style={{ backgroundImage: "url(/tokens/USDC.png)" }}
+              />
             ) : (
               <StockAvatar symbol={source.stock!.symbol} size={24} />
             )}
@@ -407,7 +478,9 @@ function Amount({ view, form, disabled, dispatch }: { view: RepayView; form: Rep
         <label htmlFor={id} className="flex min-w-0 cursor-text flex-col gap-1 p-3.5">
           <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">Repay</span>
           <span className="num flex h-10 min-w-0 items-center rounded-[12px] border-[1.5px] border-line-strong bg-ground px-2.5 font-semibold transition-colors focus-within:border-ink focus-within:bg-card">
-            <span aria-hidden className="mr-0.5 text-[16px] text-subtle">$</span>
+            <span aria-hidden className="mr-0.5 text-[16px] text-subtle">
+              $
+            </span>
             <AmountInput
               id={id}
               value={view.fieldText}
@@ -420,20 +493,46 @@ function Amount({ view, form, disabled, dispatch }: { view: RepayView; form: Rep
           {view.sharesLine && <span className="truncate text-[12px] text-ink-mid">{view.sharesLine}</span>}
         </label>
       </div>
-      <div role="radiogroup" aria-label="Amount to repay" className="grid gap-2" style={{ gridTemplateColumns: `repeat(${picks.length + 1}, minmax(0, 1fr))` }}>
+      <div
+        role="radiogroup"
+        aria-label="Amount to repay"
+        className="grid gap-2"
+        style={{ gridTemplateColumns: `repeat(${picks.length + 1}, minmax(0, 1fr))` }}
+      >
         {picks.map((p) => (
-          <Chip key={p.share} selected={!form.all && Number(form.amount) === p.usd} disabled={disabled} onClick={() => dispatch({ type: "chip", usd: p.usd, max: view.max })}>
+          <Chip
+            key={p.share}
+            selected={!form.all && Number(form.amount) === p.usd}
+            disabled={disabled}
+            onClick={() => dispatch({ type: "chip", usd: p.usd, max: view.max })}
+          >
             {Math.round(p.share * 100)}%
           </Chip>
         ))}
-        <Chip selected={view.all} disabled={disabled} onClick={() => dispatch({ type: "all" })}>Max</Chip>
+        <Chip selected={view.all} disabled={disabled} onClick={() => dispatch({ type: "all" })}>
+          Max
+        </Chip>
       </div>
-      {view.snapLine && <p role="status" className="m-0 px-1 text-[13px] leading-snug text-ink-mid">{view.snapLine}</p>}
+      {view.snapLine && (
+        <p role="status" className="m-0 px-1 text-[13px] leading-snug text-ink-mid">
+          {view.snapLine}
+        </p>
+      )}
     </div>
   );
 }
 
-export function Chip({ selected, disabled, onClick, children }: { selected: boolean; disabled?: boolean; onClick: () => void; children: ReactNode }) {
+export function Chip({
+  selected,
+  disabled,
+  onClick,
+  children,
+}: {
+  selected: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
   return (
     <button
       type="button"
@@ -451,7 +550,17 @@ export function Chip({ selected, disabled, onClick, children }: { selected: bool
 /** A small pencil: the amount can be edited. */
 export function PencilIcon(props: SVGProps<SVGSVGElement>) {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
       <path d="M12 20h9" />
       <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
     </svg>

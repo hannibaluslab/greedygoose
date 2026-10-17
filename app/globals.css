@@ -229,7 +229,11 @@ body {
   background-image: radial-gradient(rgba(14, 13, 11, 0.09) 1px, transparent 1.4px);
   background-size: 18px 18px;
   color: var(--ink);
-  font-family: var(--font-geist-sans), -apple-system, system-ui, sans-serif;
+  font-family:
+    var(--font-geist-sans),
+    -apple-system,
+    system-ui,
+    sans-serif;
   letter-spacing: -0.005em;
 }
 
@@ -295,9 +299,18 @@ select {
 }
 
 /* Motion — short, calm, and off for reduced-motion users (rule above). */
-@keyframes gg-fade-in { from { opacity: 0 } to { opacity: 1 } }
+@keyframes gg-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
 /* Opacity only: a transform here would re-anchor the fixed tab bar / bottom bar mid-animation. */
-.gg-page { animation: gg-fade-in 200ms ease-out both; }
+.gg-page {
+  animation: gg-fade-in 200ms ease-out both;
+}
 
 /* Sheet keyboard gap. When the keyboard opens, SheetShell lifts the drawer to sit flush above
    it; vaul's own `::after` (background: inherit) would then paint the strip below the drawer,
@@ -316,19 +329,40 @@ select {
 /* Sheet step push / pop (SheetSteps in components/sheets/SheetShell.tsx). The header stays put,
    so the body only has to say "this replaced that": 14px and 200ms. */
 @keyframes sheet-step-fwd {
-  from { opacity: 0; transform: translate3d(14px, 0, 0); }
-  to { opacity: 1; transform: none; }
+  from {
+    opacity: 0;
+    transform: translate3d(14px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 @keyframes sheet-step-back {
-  from { opacity: 0; transform: translate3d(-14px, 0, 0); }
-  to { opacity: 1; transform: none; }
+  from {
+    opacity: 0;
+    transform: translate3d(-14px, 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
-.sheet-step-fwd { animation: sheet-step-fwd 200ms cubic-bezier(0.32, 0.72, 0, 1) both; }
-.sheet-step-back { animation: sheet-step-back 200ms cubic-bezier(0.32, 0.72, 0, 1) both; }
+.sheet-step-fwd {
+  animation: sheet-step-fwd 200ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.sheet-step-back {
+  animation: sheet-step-back 200ms cubic-bezier(0.32, 0.72, 0, 1) both;
+}
 
 /* Range sliders in the ink colour with a bigger thumb for thumbs. */
-input[type="range"] { accent-color: var(--ink); }
-input[type="range"]::-webkit-slider-thumb { width: 22px; height: 22px; }
+input[type="range"] {
+  accent-color: var(--ink);
+}
+input[type="range"]::-webkit-slider-thumb {
+  width: 22px;
+  height: 22px;
+}
 
 /* Welcome (app/(marketing)/Welcome.tsx). The page is ink edge to edge, overscroll and the desktop margins
    included, so the body takes the colour while it's on screen. A class the Welcome sets, not body:has([data-welcome]):
@@ -353,12 +387,26 @@ body.gg-welcome {
   transform-origin: 50% 100%;
 }
 @keyframes gg-egg-rock {
-  0%, 62% { transform: rotate(0deg); }
-  67% { transform: rotate(-7deg); }
-  73% { transform: rotate(1.5deg); }
-  79% { transform: rotate(-3.5deg); }
-  85% { transform: rotate(0.5deg); }
-  90%, 100% { transform: rotate(0deg); }
+  0%,
+  62% {
+    transform: rotate(0deg);
+  }
+  67% {
+    transform: rotate(-7deg);
+  }
+  73% {
+    transform: rotate(1.5deg);
+  }
+  79% {
+    transform: rotate(-3.5deg);
+  }
+  85% {
+    transform: rotate(0.5deg);
+  }
+  90%,
+  100% {
+    transform: rotate(0deg);
+  }
 }
 @media (prefers-reduced-motion: no-preference) {
   [data-welcome] .gg-egg {

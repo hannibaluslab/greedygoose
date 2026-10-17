@@ -36,11 +36,23 @@ const IDLE_USD6 = 1_000_000n;
 
 /** Everyone on the board now, in the order they first joined, as of `blockNumber`. */
 async function readMembers(client: Client, board: Address, blockNumber: bigint): Promise<Member[]> {
-  const count = await stateLimit(() => readContract(client, { address: board, abi: gooseBoardAbi, functionName: "memberCount", blockNumber }));
+  const count = await stateLimit(() =>
+    readContract(client, { address: board, abi: gooseBoardAbi, functionName: "memberCount", blockNumber }),
+  );
   const starts: bigint[] = [];
   for (let start = 0n; start < count; start += PAGE) starts.push(start);
   const pages = await Promise.all(
-    starts.map((start) => stateLimit(() => readContract(client, { address: board, abi: gooseBoardAbi, functionName: "page", args: [start, PAGE], blockNumber }))),
+    starts.map((start) =>
+      stateLimit(() =>
+        readContract(client, {
+          address: board,
+          abi: gooseBoardAbi,
+          functionName: "page",
+          args: [start, PAGE],
+          blockNumber,
+        }),
+      ),
+    ),
   );
   const out: Member[] = [];
   for (const [accounts, onBoard, joinedAt] of pages) {
@@ -65,7 +77,10 @@ function load<T>(key: string, decode: (raw: unknown) => T): T | undefined {
 }
 function save(key: string, value: unknown) {
   try {
-    globalThis.localStorage?.setItem(STORE + key, JSON.stringify(value, (_k, v) => (typeof v === "bigint" ? v.toString() : v)));
+    globalThis.localStorage?.setItem(
+      STORE + key,
+      JSON.stringify(value, (_k, v) => (typeof v === "bigint" ? v.toString() : v)),
+    );
   } catch {
     /* storage full or blocked: memory still has it */
   }
@@ -112,7 +127,12 @@ async function holdingsAtJoin(c: Ctx, members: readonly Member[]): Promise<Map<s
     else missing.set(m.joinedAt, [...(missing.get(m.joinedAt) ?? []), m]);
   }
   for (const [block, group] of missing) {
-    const read = readHoldings(c.state, group.map((m) => m.account), block, stateLimit);
+    const read = readHoldings(
+      c.state,
+      group.map((m) => m.account),
+      block,
+      stateLimit,
+    );
     group.forEach((m, i) => {
       const key = holdKey(c, m);
       const one = read.then((h) => {
@@ -137,7 +157,10 @@ const dollars = (usd6: bigint) => Number(usd6) / 10 ** USDC.decimals;
  * screen says it couldn't load the board rather than showing rows that might be wrong.
  */
 export async function readBoard(p: { state: Client; logs: Client; board: Address }): Promise<Board> {
-  const [stateHead, logsHead] = await Promise.all([getBlockNumber(p.state, { cacheTime: 0 }), getBlockNumber(p.logs, { cacheTime: 0 })]);
+  const [stateHead, logsHead] = await Promise.all([
+    getBlockNumber(p.state, { cacheTime: 0 }),
+    getBlockNumber(p.logs, { cacheTime: 0 }),
+  ]);
   const head = stateHead < logsHead ? stateHead : logsHead;
   const c: Ctx = { state: p.state, board: p.board, head };
   // A member whose join block is past what both nodes have shows up on the next read.
@@ -151,7 +174,12 @@ export async function readBoard(p: { state: Client; logs: Client; board: Address
   const [venues, records, now, pricesNow] = await Promise.all([
     venuesOnce,
     readBoardRecords(p.logs, p.board, members, head),
-    readHoldings(p.state, members.map((m) => m.account), head, stateLimit),
+    readHoldings(
+      p.state,
+      members.map((m) => m.account),
+      head,
+      stateLimit,
+    ),
     prices(c, head),
   ]);
   const rules: FlowRules = {
@@ -166,7 +194,10 @@ export async function readBoard(p: { state: Client; logs: Client; board: Address
   const worthNow = now.map((h) => worth6(h, pricesNow));
   const scored = members.map((_, i) => !(quiet(flows[i]) && worthNow[i] < IDLE_USD6));
 
-  const atJoin = await holdingsAtJoin(c, members.filter((_, i) => scored[i]));
+  const atJoin = await holdingsAtJoin(
+    c,
+    members.filter((_, i) => scored[i]),
+  );
   // Join blocks need their prices, and so do the blocks where a stock moved in or out.
   const blocks = new Set<bigint>();
   members.forEach((m, i) => {
@@ -174,8 +205,11 @@ export async function readBoard(p: { state: Client; logs: Client; board: Address
     blocks.add(m.joinedAt);
     for (const b of priceBlocks(flows[i])) blocks.add(b);
   });
-  const priceByBlock = new Map<bigint, Prices>(await Promise.all([...blocks].map(async (b) => [b, await prices(c, b)] as const)));
-  const value = (a: Amount, block: bigint) => ("usd6" in a ? a.usd6 : stockUsd6(a.stock.raw, priceByBlock.get(block)![a.stock.reserveId]));
+  const priceByBlock = new Map<bigint, Prices>(
+    await Promise.all([...blocks].map(async (b) => [b, await prices(c, b)] as const)),
+  );
+  const value = (a: Amount, block: bigint) =>
+    "usd6" in a ? a.usd6 : stockUsd6(a.stock.raw, priceByBlock.get(block)![a.stock.reserveId]);
 
   const rows = members.map((m, i) => {
     if (!scored[i]) return { ...m, pct: null };

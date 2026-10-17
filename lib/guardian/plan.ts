@@ -60,7 +60,14 @@ export function planGuardian(i: GuardianInput): GuardianDecision {
   }
   if (amount < o.minRepayUsd) return { action: "none", reason: "too-small", hf };
   const left = i.debtUsd - amount;
-  return { action: "repay", amountUsd: amount, reason: "act", hf, hfAfter: left > 0 ? power / left : Infinity, limitedBy };
+  return {
+    action: "repay",
+    amountUsd: amount,
+    reason: "act",
+    hf,
+    hfAfter: left > 0 ? power / left : Infinity,
+    limitedBy,
+  };
 }
 
 /**
@@ -144,7 +151,12 @@ function strip<T extends object>(o: T): Partial<T> {
  * with no holiday (contracts/test/NyCalendar.t.sol). Nothing moves in it (Act is the line, 2026-10-15).
  */
 export function inWeekendWindow(now: Date = new Date()): boolean {
-  const f = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short", hour: "numeric", hourCycle: "h23" });
+  const f = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    hour: "numeric",
+    hourCycle: "h23",
+  });
   const parts = Object.fromEntries(f.formatToParts(now).map((p) => [p.type, p.value]));
   const hour = Number(parts.hour);
   return parts.weekday === "Fri" && hour >= 14 && hour < 20;

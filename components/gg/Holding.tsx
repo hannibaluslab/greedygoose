@@ -31,13 +31,19 @@ function BacksChip({ backs, compact = false }: { backs: number; compact?: boolea
   const words = backs > 0 ? `${wholePct(backs)}% backs Credit Buy` : "Not backing credit";
   if (compact) {
     return backs > 0 ? (
-      <span title={words} className="num inline-flex h-4 items-center gap-[3px] whitespace-nowrap rounded-[8px] bg-ground pl-1.5 pr-[5px] text-[9.5px] font-semibold text-ink-2">
+      <span
+        title={words}
+        className="num inline-flex h-4 items-center gap-[3px] whitespace-nowrap rounded-[8px] bg-ground pl-1.5 pr-[5px] text-[9.5px] font-semibold text-ink-2"
+      >
         <span aria-hidden>{wholePct(backs)}%</span>
         <BacksIcon />
         <span className="sr-only">{words}</span>
       </span>
     ) : (
-      <span title={words} className="inline-flex h-4 w-5 items-center justify-center rounded-[8px] border border-dashed border-[rgba(14,13,11,0.22)] text-subtle">
+      <span
+        title={words}
+        className="inline-flex h-4 w-5 items-center justify-center rounded-[8px] border border-dashed border-[rgba(14,13,11,0.22)] text-subtle"
+      >
         <FreeIcon />
         <span className="sr-only">{words}</span>
       </span>
@@ -58,7 +64,18 @@ function BacksChip({ backs, compact = false }: { backs: number; compact?: boolea
 const toneOf = (today: number) => (formatSignedPct(today).startsWith("−") ? "neg" : "pos");
 
 /** A holding on the Home rail (HomeUpliftRail): badge, name, value, today's move and its line. */
-export function HoldingCard({ symbol, name, valueUsd, backs, today, spark, pending, shares, href, onClick }: HoldingProps & {
+export function HoldingCard({
+  symbol,
+  name,
+  valueUsd,
+  backs,
+  today,
+  spark,
+  pending,
+  shares,
+  href,
+  onClick,
+}: HoldingProps & {
   /** Market prices are loading: a pulse holds the place of today's move and its line. */
   pending?: boolean;
   /** The rail's last line, where the boards had the APY (D19): "● 11.2 shares". */
@@ -76,18 +93,35 @@ export function HoldingCard({ symbol, name, valueUsd, backs, today, spark, pendi
         <BacksChip backs={backs} compact />
       </span>
       <span className="mt-2 text-[12.5px] font-semibold">{name}</span>
-      <span className="mt-px flex"><MoneyCompact value={valueUsd} /></span>
+      <span className="mt-px flex">
+        <MoneyCompact value={valueUsd} />
+      </span>
       {/* Inline in a block, as on the board: the line keeps the card's 16px line box. */}
       {today != null && (
         <span className="mt-px block">
-          <span className={`whitespace-nowrap font-mono text-[10px] ${tone === "neg" ? "text-neg" : "text-pos"}`}>{formatSignedPct(today)} today</span>
+          <span className={`whitespace-nowrap font-mono text-[10px] ${tone === "neg" ? "text-neg" : "text-pos"}`}>
+            {formatSignedPct(today)} today
+          </span>
         </span>
       )}
-      {spark && spark.length > 1 && <Sparkline points={downsample(spark, LINE_POINTS.card)} tone={tone} width={85} height={22} className="mt-[7px]" />}
-      {pending && today == null && <span aria-hidden className="mt-[3px] block h-[42px] w-[85px] animate-pulse rounded-lg bg-chip" />}
+      {spark && spark.length > 1 && (
+        <Sparkline
+          points={downsample(spark, LINE_POINTS.card)}
+          tone={tone}
+          width={85}
+          height={22}
+          className="mt-[7px]"
+        />
+      )}
+      {pending && today == null && (
+        <span aria-hidden className="mt-[3px] block h-[42px] w-[85px] animate-pulse rounded-lg bg-chip" />
+      )}
       {shares != null && (
         <span className="mt-2 flex items-center gap-[5px] whitespace-nowrap text-[11px]">
-          <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-brand shadow-[0_0_0_1px_rgba(14,13,11,0.18)]" />
+          <span
+            aria-hidden
+            className="size-1.5 shrink-0 rounded-full bg-brand shadow-[0_0_0_1px_rgba(14,13,11,0.18)]"
+          />
           <b className="num font-semibold">{formatShares(shares)}</b>
           <span className="text-subtle">shares</span>
         </span>
@@ -112,7 +146,19 @@ export function AddStockCard({ href }: { href: string }) {
 }
 
 /** A holding in the Invest list (PortfolioPage): name and shares, its line, value and today's move, then what it backs. */
-export function HoldingRow({ symbol, name, valueUsd, backs, today, spark, shares, priceUsd, note, href, onClick }: HoldingProps & {
+export function HoldingRow({
+  symbol,
+  name,
+  valueUsd,
+  backs,
+  today,
+  spark,
+  shares,
+  priceUsd,
+  note,
+  href,
+  onClick,
+}: HoldingProps & {
   shares: number;
   /** The price a share the value uses (Aave's), on the chip line's left (Adrian, 2026-10-15). */
   priceUsd?: number;
@@ -121,18 +167,37 @@ export function HoldingRow({ symbol, name, valueUsd, backs, today, spark, shares
 }) {
   const tone = today != null ? toneOf(today) : undefined;
   return (
-    <Tap href={href} onClick={onClick} className="block w-full border-b border-card-bone px-0.5 py-3.5 text-left leading-[normal] text-ink last:border-b-0">
+    <Tap
+      href={href}
+      onClick={onClick}
+      className="block w-full border-b border-card-bone px-0.5 py-3.5 text-left leading-[normal] text-ink last:border-b-0"
+    >
       <span className="flex items-center gap-2.5">
         <StockAvatar symbol={symbol} size={40} />
         <span className="min-w-0 flex-1">
           <span className="block whitespace-nowrap text-[15px] font-semibold leading-[1.25]">{name}</span>
-          <span className="mt-0.5 block whitespace-nowrap text-[13px] font-medium leading-[1.35] text-ink-mid">{formatShares(shares)} shares</span>
+          <span className="mt-0.5 block whitespace-nowrap text-[13px] font-medium leading-[1.35] text-ink-mid">
+            {formatShares(shares)} shares
+          </span>
         </span>
-        {spark && spark.length > 1 && <Sparkline points={downsample(spark, LINE_POINTS.row)} tone={tone} variant="row" width={46} height={24} className="shrink-0" />}
+        {spark && spark.length > 1 && (
+          <Sparkline
+            points={downsample(spark, LINE_POINTS.row)}
+            tone={tone}
+            variant="row"
+            width={46}
+            height={24}
+            className="shrink-0"
+          />
+        )}
         <span className="min-w-[84px] text-right">
-          <span className="num block whitespace-nowrap text-[15px] font-semibold leading-[1.25]">{formatUsd(valueUsd)}</span>
+          <span className="num block whitespace-nowrap text-[15px] font-semibold leading-[1.25]">
+            {formatUsd(valueUsd)}
+          </span>
           {today != null && (
-            <span className={`mt-0.5 block whitespace-nowrap font-mono text-[12px] leading-[1.35] ${tone === "neg" ? "text-neg" : "text-pos"}`}>
+            <span
+              className={`mt-0.5 block whitespace-nowrap font-mono text-[12px] leading-[1.35] ${tone === "neg" ? "text-neg" : "text-pos"}`}
+            >
               {formatSignedPct(today)} today
             </span>
           )}

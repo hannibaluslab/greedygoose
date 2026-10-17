@@ -17,7 +17,16 @@ import { useManageSave } from "@/hooks/useManageSave";
 import { usePosition } from "@/hooks/usePosition";
 import { usePrepare, type TxPhase, type TxPlan, type TxPrep } from "@/hooks/useTx";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
-import { MIX_WHOLE, mixWeights, nowPercents, previewTrades, rebalanceOptions, startingMix, type MixHolding, type MixRow } from "@/lib/agents/mix";
+import {
+  MIX_WHOLE,
+  mixWeights,
+  nowPercents,
+  previewTrades,
+  rebalanceOptions,
+  startingMix,
+  type MixHolding,
+  type MixRow,
+} from "@/lib/agents/mix";
 import { limitRaw, LIMIT_USD, stockLimitsRaw, testCapNote } from "@/lib/agents/permissions";
 import { rebalanceSave, tradeLines, type RebalanceTerms, type SavePlan } from "@/lib/agents/rebalanceSettings";
 import { toUsd } from "@/lib/cash";
@@ -75,7 +84,12 @@ export function RebalanceSettings({ account, onDone }: { account: `0x${string}`;
             ? {
                 job: "rebalance",
                 capRaw,
-                limitsRaw: stockLimitsRaw(capRaw, agents.capMaxRaw!, EQUITIES.map((e) => holdings[e.reserveId].priceRaw), weights.map((w) => w > 0)),
+                limitsRaw: stockLimitsRaw(
+                  capRaw,
+                  agents.capMaxRaw!,
+                  EQUITIES.map((e) => holdings[e.reserveId].priceRaw),
+                  weights.map((w) => w > 0),
+                ),
               }
             : null,
         })
@@ -102,7 +116,24 @@ type SaveRequest = { weights: number[]; capRaw: bigint; plan: SavePlan };
 
 /** The settings drawn from plain values, so the dev gallery can show each state. */
 export function RebalanceSettingsView({
-  holdings, saved, options, terms, capMaxRaw, configured, connected, preview = !connected, running, feeBlocked, feeLoading, busy, phase, error, prep, settingPlan, onSave, draft,
+  holdings,
+  saved,
+  options,
+  terms,
+  capMaxRaw,
+  configured,
+  connected,
+  preview = !connected,
+  running,
+  feeBlocked,
+  feeLoading,
+  busy,
+  phase,
+  error,
+  prep,
+  settingPlan,
+  onSave,
+  draft,
 }: {
   holdings: readonly SettingsHolding[];
   /** The registry's mix, BPS by reserve id (all 0 before one is saved); null before it is read. */
@@ -145,7 +176,19 @@ export function RebalanceSettingsView({
   const lines = tradeLines(trades, holdings);
   const now = nowPercents(holdings, rows);
   const backingUsd = holdings.reduce((a, h) => a + h.lockedUsd, 0);
-  const plan = rebalanceSave({ configured, connected, saved, weights, terms, capRaw, capMaxRaw, running, feeBlocked, feeLoading, busy });
+  const plan = rebalanceSave({
+    configured,
+    connected,
+    saved,
+    weights,
+    terms,
+    capRaw,
+    capMaxRaw,
+    running,
+    feeBlocked,
+    feeLoading,
+    busy,
+  });
   // Save's first JAW sheet is the mix when it changed: its batch is prepared while the body is idle, so the tap opens it.
   const prepared = usePrepare(
     prep,
@@ -157,7 +200,8 @@ export function RebalanceSettingsView({
     setEdited([...rows, { reserveId, bps: 0 }]);
     setAdding(false);
   };
-  const setBps = (reserveId: number, bps: number) => setEdited(rows.map((r) => (r.reserveId === reserveId ? { ...r, bps } : r)));
+  const setBps = (reserveId: number, bps: number) =>
+    setEdited(rows.map((r) => (r.reserveId === reserveId ? { ...r, bps } : r)));
 
   return (
     <div className="flex flex-col gap-2.5 leading-[normal]">
@@ -182,7 +226,9 @@ export function RebalanceSettingsView({
                 <span className="num text-[11px] text-subtle">{now[i] === null ? "none now" : `now ${now[i]}%`}</span>
               </div>
               <MixSlider name={e.name} bps={r.bps} onChange={(bps) => setBps(r.reserveId, bps)} />
-              <span className="num w-[38px] shrink-0 text-right text-[15px] font-semibold">{Math.round(r.bps / 100)}%</span>
+              <span className="num w-[38px] shrink-0 text-right text-[15px] font-semibold">
+                {Math.round(r.bps / 100)}%
+              </span>
             </div>
           );
         })}
@@ -220,14 +266,24 @@ export function RebalanceSettingsView({
             {rows.length === 0 ? "None until your mix has a stock." : "Make your mix add up to 100% to see its trades."}
           </p>
         ) : lines.length === 0 ? (
-          <p className="m-0 text-[13px] leading-[1.4] text-ink-mid">Nothing to trade. Every stock is close to its target.</p>
+          <p className="m-0 text-[13px] leading-[1.4] text-ink-mid">
+            Nothing to trade. Every stock is close to its target.
+          </p>
         ) : (
           <ul className="m-0 flex list-none flex-col p-0">
             {lines.map((l, i) => (
-              <li key={`${l.buy}-${l.reserveId}`} className={`flex items-center gap-2.5 py-2 ${i > 0 ? "border-t border-hairline" : ""}`}>
-                <StockAvatar symbol={EQUITIES[l.reserveId].symbol} size={26} font={tickerOf(EQUITIES[l.reserveId].symbol).length > 4 ? 6 : 7.5} />
+              <li
+                key={`${l.buy}-${l.reserveId}`}
+                className={`flex items-center gap-2.5 py-2 ${i > 0 ? "border-t border-hairline" : ""}`}
+              >
+                <StockAvatar
+                  symbol={EQUITIES[l.reserveId].symbol}
+                  size={26}
+                  font={tickerOf(EQUITIES[l.reserveId].symbol).length > 4 ? 6 : 7.5}
+                />
                 <span className="grow text-sm">
-                  <span className="text-ink-mid">{l.buy ? "Buys" : "Sells"}</span> <span className="font-semibold">{l.name}</span>
+                  <span className="text-ink-mid">{l.buy ? "Buys" : "Sells"}</span>{" "}
+                  <span className="font-semibold">{l.name}</span>
                 </span>
                 <span className="num text-[15px] font-semibold">{formatUsdTrim(l.usd)}</span>
               </li>
@@ -254,7 +310,9 @@ export function RebalanceSettingsView({
           size="sm"
           custom
         />
-        {limitTyped && testCapNote(limitUsd, capMaxRaw) && <span className="text-xs leading-[1.4] text-subtle">{testCapNote(limitUsd, capMaxRaw)}</span>}
+        {limitTyped && testCapNote(limitUsd, capMaxRaw) && (
+          <span className="text-xs leading-[1.4] text-subtle">{testCapNote(limitUsd, capMaxRaw)}</span>
+        )}
       </ManageCard>
 
       <ManageCard>

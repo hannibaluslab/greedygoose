@@ -19,13 +19,19 @@ function Send({ address }: { address: `0x${string}` }) {
       {isError ? (
         <div className="flex flex-col items-start gap-2 pt-1">
           <p className="m-0 text-[15px] text-ink-mid">We couldn’t read your account from Base.</p>
-          <button type="button" onClick={() => void refetch()} className="h-11 rounded-[22px] bg-chip px-4 text-sm font-semibold">
+          <button
+            type="button"
+            onClick={() => void refetch()}
+            className="h-11 rounded-[22px] bg-chip px-4 text-sm font-semibold"
+          >
             Try again
           </button>
         </div>
       ) : (
         <div aria-busy className="flex flex-col gap-3">
-          <span className="sr-only" role="status">Loading…</span>
+          <span className="sr-only" role="status">
+            Loading…
+          </span>
           <div className="h-[118px] animate-pulse rounded-[16px] bg-chip" />
           <div className="h-[92px] animate-pulse rounded-[16px] bg-chip" />
           <div className="h-[84px] animate-pulse rounded-[12px] bg-chip" />

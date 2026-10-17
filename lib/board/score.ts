@@ -58,7 +58,12 @@ type RankInput = { account: `0x${string}`; joinedAt: bigint; pct: number | null 
 export function rankRows<T extends RankInput>(rows: readonly T[]): (T & { rank: number | null })[] {
   const ranked = rows
     .filter((r) => r.pct !== null)
-    .sort((a, b) => b.pct! - a.pct! || cmpBig(a.joinedAt, b.joinedAt) || a.account.toLowerCase().localeCompare(b.account.toLowerCase()))
+    .sort(
+      (a, b) =>
+        b.pct! - a.pct! ||
+        cmpBig(a.joinedAt, b.joinedAt) ||
+        a.account.toLowerCase().localeCompare(b.account.toLowerCase()),
+    )
     .map((r, i) => ({ ...r, rank: i + 1 }));
   const rest = rows
     .filter((r) => r.pct === null)

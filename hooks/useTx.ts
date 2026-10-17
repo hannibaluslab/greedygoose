@@ -34,12 +34,17 @@ type Client = NonNullable<ReturnType<typeof usePublicClient>>;
 /** How a batch is checked, at the tap and in the background alike: join() when due, then eth_simulateV1 from the user. */
 const checkDeps = (client: Client | undefined): CheckDeps => ({
   join: (user, batch) => withBoardJoin(client!, user, batch),
-  simulate: async (user, batch) => (await client!.simulateCalls({ account: user, calls: batch.map(({ to, data }) => ({ to, data })) })).results,
+  simulate: async (user, batch) =>
+    (await client!.simulateCalls({ account: user, calls: batch.map(({ to, data }) => ({ to, data })) })).results,
   explain: explainRevert,
 });
 
 /** wagmi's sendCalls (EIP-5792 wallet_sendCalls to JAW), as useSendCalls' `mutateAsync` takes it. */
-type SendCalls = (p: { chainId: typeof CHAIN_ID; calls: { to: `0x${string}`; data: `0x${string}` }[]; forceAtomic: boolean }) => Promise<{ id: string }>;
+type SendCalls = (p: {
+  chainId: typeof CHAIN_ID;
+  calls: { to: `0x${string}`; data: `0x${string}` }[];
+  forceAtomic: boolean;
+}) => Promise<{ id: string }>;
 
 /**
  * The tap's dependencies (signPlan): JAW is wagmi's sendCalls on Base with the batch's targets and data, and
@@ -62,7 +67,8 @@ export function tapDeps(p: {
     now: Date.now,
     check: p.check,
     atomic: (n) => atomicSend(p.chainCaps, n),
-    send: (batch, atomic) => p.sendCalls({ chainId: CHAIN_ID, calls: batch.map(({ to, data }) => ({ to, data })), ...atomic }),
+    send: (batch, atomic) =>
+      p.sendCalls({ chainId: CHAIN_ID, calls: batch.map(({ to, data }) => ({ to, data })), ...atomic }),
     setPhase: p.setPhase,
     setError: p.setError,
     onSent: p.onSent,
@@ -148,7 +154,10 @@ export function usePrepare(prep: TxPrep | null | undefined, plan: TxPlan | null)
  * account's first move also puts it on the leaderboard: GooseBoard.join() rides at the end of that batch, whatever the
  * move is (lib/board/join.ts).
  */
-export function useTx(failedOnChain = "This didn’t go through on Base. Nothing moved except any network fee.", plan?: TxPlan | null) {
+export function useTx(
+  failedOnChain = "This didn’t go through on Base. Nothing moved except any network fee.",
+  plan?: TxPlan | null,
+) {
   const client = usePublicClient({ chainId: CHAIN_ID });
   const { address } = useAccount();
   const caps = useCapabilities({ account: address, query: { enabled: !!address } });
@@ -164,7 +173,11 @@ export function useTx(failedOnChain = "This didn’t go through on Base. Nothing
 
   const callsStatus = status.data?.status;
   const effective: TxPhase =
-    phase === "pending" && callsStatus === "success" ? "done" : phase === "pending" && callsStatus === "failure" ? "failed" : phase;
+    phase === "pending" && callsStatus === "success"
+      ? "done"
+      : phase === "pending" && callsStatus === "failure"
+        ? "failed"
+        : phase;
   const busy = effective === "simulating" || effective === "signing" || effective === "pending";
   const prep: TxPrep = { store, client, paused: busy || effective === "done" };
   const own = usePrepareLoop(prep, plan ?? null, plan !== undefined);
@@ -172,7 +185,8 @@ export function useTx(failedOnChain = "This didn’t go through on Base. Nothing
   const screenKey = plan !== undefined ? (plan?.key ?? null) : onScreen;
 
   const tapError = error && !(error.text === TAP_AGAIN && error.key !== screenKey) ? error.text : null;
-  const shownError = effective === "failed" && phase === "pending" ? failedOnChain : (tapError ?? (busy ? null : own.error));
+  const shownError =
+    effective === "failed" && phase === "pending" ? failedOnChain : (tapError ?? (busy ? null : own.error));
 
   const txHash = status.data?.receipts?.at(-1)?.transactionHash;
   // A batch landed or failed on Base: every store on the page prepares again (a batch from before may be stale).

@@ -34,12 +34,23 @@ export function buildSupplyCalls(p: { user: `0x${string}`; stock: ReserveAsset; 
  * Withdraw (unlock) a stock back to the user's account. Aave re-checks health on-chain.
  * `all` sends max uint, which the Spoke treats as "withdraw everything supplied".
  */
-export function buildWithdrawCalls(p: { user: `0x${string}`; stock: ReserveAsset; amountRaw: bigint; all: boolean }): Call[] {
+export function buildWithdrawCalls(p: {
+  user: `0x${string}`;
+  stock: ReserveAsset;
+  amountRaw: bigint;
+  all: boolean;
+}): Call[] {
   if (p.stock.kind !== "equity") throw new Error("Not a supported stock");
   if (!p.all && p.amountRaw <= 0n) throw new Error("Amount must be positive");
   const amount = p.all ? maxUint256 : p.amountRaw;
   return assertAllowed(p.user, [
-    spoke(encodeFunctionData({ abi: spokeAbi, functionName: "withdraw", args: [BigInt(p.stock.reserveId), amount, p.user] })),
+    spoke(
+      encodeFunctionData({
+        abi: spokeAbi,
+        functionName: "withdraw",
+        args: [BigInt(p.stock.reserveId), amount, p.user],
+      }),
+    ),
   ]);
 }
 
@@ -47,8 +58,14 @@ export function buildWithdrawCalls(p: { user: `0x${string}`; stock: ReserveAsset
  * Get a loan in one signature: (optionally) lock collateral, then borrow.
  * D7: allowed because the confirm screen lists both steps.
  */
-export function buildLoanCalls(p: { user: `0x${string}`; locks: { stock: ReserveAsset; raw: bigint }[]; borrowRaw: bigint }): Call[] {
-  const lock = p.locks.filter((l) => l.raw > 0n).flatMap((l) => buildSupplyCalls({ user: p.user, stock: l.stock, amountRaw: l.raw }));
+export function buildLoanCalls(p: {
+  user: `0x${string}`;
+  locks: { stock: ReserveAsset; raw: bigint }[];
+  borrowRaw: bigint;
+}): Call[] {
+  const lock = p.locks
+    .filter((l) => l.raw > 0n)
+    .flatMap((l) => buildSupplyCalls({ user: p.user, stock: l.stock, amountRaw: l.raw }));
   const borrow = p.borrowRaw > 0n ? buildBorrowCalls({ user: p.user, amountRaw: p.borrowRaw }) : [];
   if (lock.length + borrow.length === 0) throw new Error("Nothing to do");
   return assertAllowed(p.user, [...lock, ...borrow]);
@@ -66,7 +83,13 @@ export const accountDataRead = (user: `0x${string}`): Call =>
 export function buildBorrowCalls(p: { user: `0x${string}`; amountRaw: bigint }): Call[] {
   if (p.amountRaw <= 0n) throw new Error("Amount must be positive");
   return assertAllowed(p.user, [
-    spoke(encodeFunctionData({ abi: spokeAbi, functionName: "borrow", args: [BigInt(USDC.reserveId), p.amountRaw, p.user] })),
+    spoke(
+      encodeFunctionData({
+        abi: spokeAbi,
+        functionName: "borrow",
+        args: [BigInt(USDC.reserveId), p.amountRaw, p.user],
+      }),
+    ),
   ]);
 }
 
@@ -78,7 +101,9 @@ export function buildRepayCalls(p: { user: `0x${string}`; amountRaw: bigint; all
   if (p.amountRaw <= 0n) throw new Error("Amount must be positive");
   const calls = [
     approve(USDC.address, p.amountRaw),
-    spoke(encodeFunctionData({ abi: spokeAbi, functionName: "repay", args: [BigInt(USDC.reserveId), p.amountRaw, p.user] })),
+    spoke(
+      encodeFunctionData({ abi: spokeAbi, functionName: "repay", args: [BigInt(USDC.reserveId), p.amountRaw, p.user] }),
+    ),
   ];
   if (p.all) calls.push(approve(USDC.address, 0n));
   return assertAllowed(p.user, calls);

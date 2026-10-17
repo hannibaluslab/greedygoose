@@ -33,7 +33,13 @@ export function useHeadsUp(
   const pending = sale && headsUpAt !== 0 && sale.sentAt === headsUpAt ? sale : null;
   const reads = useReadContracts({
     contracts: [
-      { address: GOOSE_EXECUTOR ?? zeroAddress, abi: gooseExecutorAbi, functionName: "frozen", args: [BigInt((pending?.sellAfter ?? 1) - 1)], chainId: CHAIN_ID },
+      {
+        address: GOOSE_EXECUTOR ?? zeroAddress,
+        abi: gooseExecutorAbi,
+        functionName: "frozen",
+        args: [BigInt((pending?.sellAfter ?? 1) - 1)],
+        chainId: CHAIN_ID,
+      },
       { address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserAccountData", args: [account], chainId: CHAIN_ID },
     ],
     allowFailure: false,
@@ -46,6 +52,7 @@ export function useHeadsUp(
   if (statusFor(hf) !== "act" || hf === null || hf >= settings.sellHeadsUpHf) return null;
   const addUsd = Math.ceil(credit.debtUsd - (credit.collateralUsd * credit.avgCf) / settings.sellTargetHf);
   if (addUsd <= 0) return null;
-  const when = pending.sellAfter <= nowSec ? "now" : reopens ? "when prices reopen" : `at ${timeText(pending.sellAfter)}`;
+  const when =
+    pending.sellAfter <= nowSec ? "now" : reopens ? "when prices reopen" : `at ${timeText(pending.sellAfter)}`;
   return { addUsd, sellUsd: toUsd(pending.sellValueRaw), when };
 }

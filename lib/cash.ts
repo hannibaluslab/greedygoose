@@ -40,7 +40,9 @@ export async function readCash(client: PublicClient<Transport, typeof CHAIN>, us
         { address: GUARDIAN.AUSDC, abi: erc20Abi, functionName: "balanceOf", args: [user] },
       ],
     }),
-    GOOSE_EXECUTOR ? client.readContract({ address: GOOSE_EXECUTOR, abi: gooseExecutorAbi, functionName: "accounts", args: [user] }) : undefined,
+    GOOSE_EXECUTOR
+      ? client.readContract({ address: GOOSE_EXECUTOR, abi: gooseExecutorAbi, functionName: "accounts", args: [user] })
+      : undefined,
   ]);
   return { walletRaw, savingsRaw, saveOn: saveRuns(account?.[0] ?? 0) };
 }
@@ -88,7 +90,13 @@ export function cashShort(amountRaw: bigint, c: Cash): string | null {
  * `amountRaw` can be 0 (a Credit Buy spends only credit, a stock send only shares): cash still pays the network fee.
  * `own` goes to the allowlist with the batch (a Send declares who it pays).
  */
-export function payFromCash(user: `0x${string}`, amountRaw: bigint, c: Cash, spend: Call[], own?: AllowContext): Call[] {
+export function payFromCash(
+  user: `0x${string}`,
+  amountRaw: bigint,
+  c: Cash,
+  spend: Call[],
+  own?: AllowContext,
+): Call[] {
   if (amountRaw + feeBufferRaw > cashRaw(c)) throw new Error("More than your cash");
   const w = savingsWithdrawal(amountRaw, c);
   return assertAllowed(user, w ? [...buildWithdrawSavingsCalls(user, w.raw, w.all), ...spend] : spend, own);

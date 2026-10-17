@@ -184,7 +184,12 @@ export function SheetShell({
           // The cap is a class reading a variable, not an inline max-height: useKeyboardLift clears the drawer's
           // inline max-height whenever no keyboard is up, which left a sheet taller than the screen running off its top.
           className="max-h-(--sheet-max-h)"
-          style={{ "--sheet-max-h": `${maxHeightVh}dvh`, minHeight: topPx ? `calc(100dvh - ${topPx}px)` : undefined } as CSSProperties}
+          style={
+            {
+              "--sheet-max-h": `${maxHeightVh}dvh`,
+              minHeight: topPx ? `calc(100dvh - ${topPx}px)` : undefined,
+            } as CSSProperties
+          }
           // dismissible={false} also makes vaul ignore Escape, so close here.
           onEscapeKeyDown={() => onOpenChange(false)}
         >
@@ -192,43 +197,55 @@ export function SheetShell({
               (dismissible={false}): it fought the keyboard lift, so the drag is ours and limited to this bar, never
               the scroll area or the fields. */}
           <div {...dragToClose} className="touch-none select-none">
-          <div aria-hidden className="mx-auto mt-2.5 h-[5px] w-10 shrink-0 rounded-[3px] bg-line-strong" />
-          {/* A flow header is top-aligned on a 32px title row, so Back and Close stay level with the title when a description sits under it. */}
-          <div className={`flex gap-1.5 px-5 ${!info ? "items-start pb-3 pt-4" : description ? "items-center py-[18px]" : "items-center py-4"}`}>
-            {onBack && (
-              <button
-                type="button"
-                aria-label="Back"
-                onClick={onBack}
-                className="-ml-1.5 grid size-8 shrink-0 place-items-center rounded-full text-ink transition hover:bg-pill touch:active:scale-95"
-              >
-                <ArrowLeftIcon />
-              </button>
-            )}
-            <div className="min-w-0 flex-1">
-              <div className={`flex min-w-0 items-center gap-2 ${info ? "" : "min-h-8"}`}>
-                <DrawerTitle className={`m-0 shrink-0 font-semibold tracking-tight-2 text-ink ${info ? "text-[24px] leading-[normal]" : "text-[20px]"}`}>{title}</DrawerTitle>
-                {titleAccessory}
+            <div aria-hidden className="mx-auto mt-2.5 h-[5px] w-10 shrink-0 rounded-[3px] bg-line-strong" />
+            {/* A flow header is top-aligned on a 32px title row, so Back and Close stay level with the title when a description sits under it. */}
+            <div
+              className={`flex gap-1.5 px-5 ${!info ? "items-start pb-3 pt-4" : description ? "items-center py-[18px]" : "items-center py-4"}`}
+            >
+              {onBack && (
+                <button
+                  type="button"
+                  aria-label="Back"
+                  onClick={onBack}
+                  className="-ml-1.5 grid size-8 shrink-0 place-items-center rounded-full text-ink transition hover:bg-pill touch:active:scale-95"
+                >
+                  <ArrowLeftIcon />
+                </button>
+              )}
+              <div className="min-w-0 flex-1">
+                <div className={`flex min-w-0 items-center gap-2 ${info ? "" : "min-h-8"}`}>
+                  <DrawerTitle
+                    className={`m-0 shrink-0 font-semibold tracking-tight-2 text-ink ${info ? "text-[24px] leading-[normal]" : "text-[20px]"}`}
+                  >
+                    {title}
+                  </DrawerTitle>
+                  {titleAccessory}
+                </div>
+                {description && (
+                  // Flow, F1-3: 8px under the title, 16px above the content (the header's 12px plus 4).
+                  <DrawerDescription
+                    className={
+                      info
+                        ? "m-0 mt-2 text-[15px] leading-body text-ink-2"
+                        : "mb-1 mt-2 text-body-xs leading-[1.4] text-ink-mid"
+                    }
+                  >
+                    {description}
+                  </DrawerDescription>
+                )}
               </div>
-              {description && (
-                // Flow, F1-3: 8px under the title, 16px above the content (the header's 12px plus 4).
-                <DrawerDescription className={info ? "m-0 mt-2 text-[15px] leading-body text-ink-2" : "mb-1 mt-2 text-body-xs leading-[1.4] text-ink-mid"}>
-                  {description}
-                </DrawerDescription>
+              {headerRight}
+              {!hideClose && !info && (
+                <button
+                  type="button"
+                  aria-label="Close"
+                  onClick={() => onOpenChange(false)}
+                  className="ml-1 grid size-8 shrink-0 place-items-center rounded-full bg-[rgba(15,14,11,0.06)] text-ink transition hover:bg-pill-strong touch:active:scale-95"
+                >
+                  <CloseIcon />
+                </button>
               )}
             </div>
-            {headerRight}
-            {!hideClose && !info && (
-              <button
-                type="button"
-                aria-label="Close"
-                onClick={() => onOpenChange(false)}
-                className="ml-1 grid size-8 shrink-0 place-items-center rounded-full bg-[rgba(15,14,11,0.06)] text-ink transition hover:bg-pill-strong touch:active:scale-95"
-              >
-                <CloseIcon />
-              </button>
-            )}
-          </div>
           </div>
           <div
             data-sheet-scroll
@@ -251,16 +268,21 @@ export function SheetShell({
  * itself (vaul's [data-vaul-drawer]) with an inline transform, cleared once it settles.
  */
 function useDragToClose(close: () => void) {
-  const drag = useRef<{ id: number; y0: number; t0: number; el: HTMLElement; dy: number; moving: boolean } | null>(null);
+  const drag = useRef<{ id: number; y0: number; t0: number; el: HTMLElement; dy: number; moving: boolean } | null>(
+    null,
+  );
   const settle = (el: HTMLElement, to: string, then?: () => void) => {
     el.style.transition = "transform 220ms cubic-bezier(0.32, 0.72, 0, 1)";
     el.style.transform = to;
     window.setTimeout(() => {
       then?.();
-      window.setTimeout(() => {
-        el.style.transition = "";
-        el.style.transform = "";
-      }, then ? 400 : 0);
+      window.setTimeout(
+        () => {
+          el.style.transition = "";
+          el.style.transform = "";
+        },
+        then ? 400 : 0,
+      );
     }, 220);
   };
   return {

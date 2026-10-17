@@ -7,7 +7,13 @@ import type { CSSProperties, ReactNode } from "react";
  * Children should be phrasing content (spans), since a button may not hold divs.
  */
 export function Tap({
-  href, onClick, disabled, className = "", style, label, children,
+  href,
+  onClick,
+  disabled,
+  className = "",
+  style,
+  label,
+  children,
 }: {
   href?: string;
   onClick?: () => void;
@@ -19,14 +25,29 @@ export function Tap({
   children: ReactNode;
 }) {
   if (href && !disabled) {
-    return <Link href={href} aria-label={label} className={`no-underline ${className}`} style={style}>{children}</Link>;
+    return (
+      <Link href={href} aria-label={label} className={`no-underline ${className}`} style={style}>
+        {children}
+      </Link>
+    );
   }
   if (onClick || disabled) {
     return (
-      <button type="button" onClick={onClick} disabled={disabled} aria-label={label} className={className} style={style}>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        aria-label={label}
+        className={className}
+        style={style}
+      >
         {children}
       </button>
     );
   }
-  return <span className={className} style={style}>{children}</span>;
+  return (
+    <span className={className} style={style}>
+      {children}
+    </span>
+  );
 }

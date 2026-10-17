@@ -31,9 +31,19 @@ export function useCashSetup(account: `0x${string}`) {
   const blocked = feeBlocked ?? (capMax === null ? "One moment…" : null);
   // The dev preview (`?as=`) reads another account: nothing can be signed for it.
   const preview = !signer || !isAddressEqual(signer, account);
-  const view = (run: ReturnType<typeof useAgentRun>): GrantView => ({ busy: run.running, error: run.errorFor(""), blocked, preview });
+  const view = (run: ReturnType<typeof useAgentRun>): GrantView => ({
+    busy: run.running,
+    error: run.errorFor(""),
+    blocked,
+    preview,
+  });
   /** `prior`: JAW sheets of the same tap that went through before this grant (Start earning's batch). */
-  const grant = (run: ReturnType<typeof useAgentRun>, job: "save" | "entry", onDone: () => void, prior = 0): Promise<string | null> => {
+  const grant = (
+    run: ReturnType<typeof useAgentRun>,
+    job: "save" | "entry",
+    onDone: () => void,
+    prior = 0,
+  ): Promise<string | null> => {
     if (capMax === null) return Promise.resolve("One moment…");
     return run.run(job, [{ grant: { job, capRaw: limitRaw(LIMIT_USD[job].start, capMax) } }], onDone, prior);
   };

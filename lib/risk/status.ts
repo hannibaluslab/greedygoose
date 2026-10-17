@@ -32,4 +32,3 @@ export const STATUS_LABEL: Record<Status, string> = {
   watch: "Watch",
   act: "Act",
 };
-

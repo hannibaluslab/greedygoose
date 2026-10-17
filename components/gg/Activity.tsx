@@ -24,7 +24,11 @@ export function describeActivity(i: ActivityItem): { title: string; amount: stri
     case "sell":
       return { title: `Sold ${name}`, amount: `${shares} · ${formatUsd(i.receivedUsd ?? 0)}`, sign: "" };
     case "supply":
-      return { title: `Backed credit with ${name}`, amount: r?.kind === "equity" ? shares : formatUsd(i.amount), sign: "" };
+      return {
+        title: `Backed credit with ${name}`,
+        amount: r?.kind === "equity" ? shares : formatUsd(i.amount),
+        sign: "",
+      };
     case "withdraw":
       return { title: `Freed up ${name}`, amount: r?.kind === "equity" ? shares : formatUsd(i.amount), sign: "" };
     case "borrow":
@@ -42,13 +46,18 @@ export function describeActivity(i: ActivityItem): { title: string; amount: stri
     case "send":
       return { title: `Sent ${name}`, amount: r?.kind === "equity" ? shares : formatUsd(i.amount), sign: "−" };
     case "convert":
-      return { title: `Turned ${i.symbol} into cash`, amount: `${formatCoin(i.amount)} ${i.symbol} · ${formatUsd(i.receivedUsd ?? 0)}`, sign: "" };
+      return {
+        title: `Turned ${i.symbol} into cash`,
+        amount: `${formatCoin(i.amount)} ${i.symbol} · ${formatUsd(i.receivedUsd ?? 0)}`,
+        sign: "",
+      };
   }
 }
 
 /** The round mark beside a move: the stock's badge, or a green $ for USDC and the other dollars that become cash. */
 export function ActivityAvatar({ symbol, size }: { symbol: string; size: number }) {
-  if (symbol !== USDC.symbol && !ENTRY_COINS.some((c) => c.symbol === symbol)) return <StockAvatar symbol={symbol} size={size} />;
+  if (symbol !== USDC.symbol && !ENTRY_COINS.some((c) => c.symbol === symbol))
+    return <StockAvatar symbol={symbol} size={size} />;
   return (
     <span
       aria-hidden
@@ -75,7 +84,11 @@ export function AgentMark({ agent, size }: { agent: MoveBy; size: 32 | 38 }) {
   if (agent === "Cash") return <ActivityAvatar symbol={USDC.symbol} size={size} />;
   const { Icon, bg } = MARK[agent];
   return (
-    <span aria-hidden className={`flex shrink-0 items-center justify-center rounded-full text-ink ${bg}`} style={{ width: size, height: size }}>
+    <span
+      aria-hidden
+      className={`flex shrink-0 items-center justify-center rounded-full text-ink ${bg}`}
+      style={{ width: size, height: size }}
+    >
       <Icon size={size === 38 ? 19 : 16} strokeWidth={size === 38 ? 1.9 : 2} />
     </span>
   );
@@ -94,7 +107,14 @@ function WordsText({ words }: { words: Words }) {
         {STATUS_LABEL[w.status]}
       </span>
     ) : (
-      w.split("→").map((part, j) => [j > 0 && <span key={`${i}.${j}`} className="font-[system-ui]">→</span>, part])
+      w.split("→").map((part, j) => [
+        j > 0 && (
+          <span key={`${i}.${j}`} className="font-[system-ui]">
+            →
+          </span>
+        ),
+        part,
+      ])
     ),
   );
 }
@@ -135,8 +155,16 @@ export function FeedDays({ rows, nowMs }: { rows: readonly FeedRow[]; nowMs: num
       <h3 className="m-0 font-mono text-[11px] font-medium uppercase tracking-[0.1em] text-subtle">{day.label}</h3>
       <ol className="m-0 list-none p-0">
         {day.rows.map((row, i) => {
-          const props = { last: i === day.rows.length - 1, open: open === row.key, onToggle: () => setOpen(open === row.key ? null : row.key) };
-          return isAgentRow(row) ? <AgentMove key={row.key} row={row} {...props} /> : <Move key={row.key} row={row} {...props} />;
+          const props = {
+            last: i === day.rows.length - 1,
+            open: open === row.key,
+            onToggle: () => setOpen(open === row.key ? null : row.key),
+          };
+          return isAgentRow(row) ? (
+            <AgentMove key={row.key} row={row} {...props} />
+          ) : (
+            <Move key={row.key} row={row} {...props} />
+          );
         })}
       </ol>
     </div>
@@ -150,17 +178,26 @@ function Move({ row, last, open, onToggle }: { row: ActivityRow; last: boolean; 
   const status = row.status === "pending" ? "Confirming" : row.status === "failed" ? "Failed" : null;
   // Earn with stocks reads as one move: the backing it put in use is in its details, not "1 more".
   const more = main?.kind !== "earn" && row.items.length > 1;
-  const line = [d && `${d.sign}${d.amount}`, more && `${row.items.length - 1} more`, status].filter(Boolean).join(" · ");
+  const line = [d && `${d.sign}${d.amount}`, more && `${row.items.length - 1} more`, status]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <li className={`py-2 ${last ? "" : "border-b border-hairline"}`}>
-      <button type="button" aria-expanded={open} onClick={onToggle} className="flex w-full items-start gap-2.5 text-left">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={onToggle}
+        className="flex w-full items-start gap-2.5 text-left"
+      >
         <ActivityAvatar symbol={main?.symbol ?? "USDC"} size={32} />
         <span className="flex min-w-0 grow flex-col gap-0.5">
           <span className="text-sm font-semibold leading-[1.3]">
             {d?.title ?? "Transaction"} <span className="font-normal text-subtle">· {TIME.format(row.time)}</span>
           </span>
-          <span className={`num text-[13px] leading-[1.3] ${row.status === "failed" ? "text-act" : "text-ink-2"}`}>{line}</span>
+          <span className={`num text-[13px] leading-[1.3] ${row.status === "failed" ? "text-act" : "text-ink-2"}`}>
+            {line}
+          </span>
         </span>
         <ChevronDown className={`mt-0.5 shrink-0 text-subtle ${open ? "rotate-180" : ""}`} />
       </button>
@@ -171,12 +208,15 @@ function Move({ row, last, open, onToggle }: { row: ActivityRow; last: boolean; 
               const x = describeActivity(item);
               return (
                 <Detail key={i} label={i === 0 ? "What" : ""}>
-                  {x.title}, {x.sign}{x.amount}
+                  {x.title}, {x.sign}
+                  {x.amount}
                 </Detail>
               );
             })}
             {main?.kind === "send" && main.to && (
-              <Detail label="To">{main.toName ? `${main.toName} · ${shortAddress(main.to)}` : shortAddress(main.to)}</Detail>
+              <Detail label="To">
+                {main.toName ? `${main.toName} · ${shortAddress(main.to)}` : shortAddress(main.to)}
+              </Detail>
             )}
             <Detail label="When">{WHEN.format(row.time)}</Detail>
             {status && <Detail label="Status">{status}</Detail>}
@@ -203,10 +243,25 @@ function Move({ row, last, open, onToggle }: { row: ActivityRow; last: boolean; 
  * One executor move: the agent (or "Cash" for a cash event) · time, what changed, and on tap why and the details, then
  * the transaction on Base.
  */
-function AgentMove({ row, last, open, onToggle }: { row: AgentRow; last: boolean; open: boolean; onToggle: () => void }) {
+function AgentMove({
+  row,
+  last,
+  open,
+  onToggle,
+}: {
+  row: AgentRow;
+  last: boolean;
+  open: boolean;
+  onToggle: () => void;
+}) {
   return (
     <li className={`py-2 ${last ? "" : "border-b border-hairline"}`}>
-      <button type="button" aria-expanded={open} onClick={onToggle} className="flex w-full items-start gap-2.5 text-left">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={onToggle}
+        className="flex w-full items-start gap-2.5 text-left"
+      >
         <AgentMark agent={row.by} size={32} />
         <span className="flex min-w-0 grow flex-col gap-0.5">
           <span className="text-sm font-semibold leading-[1.3]">
@@ -249,7 +304,16 @@ function AgentMove({ row, last, open, onToggle }: { row: AgentRow; last: boolean
  * draws its rows with it.
  */
 export function FeedItem({
-  mark, title, time, line, details, hash, status = "done", last, open, onToggle,
+  mark,
+  title,
+  time,
+  line,
+  details,
+  hash,
+  status = "done",
+  last,
+  open,
+  onToggle,
 }: {
   mark: ReactNode;
   title: string;
@@ -265,13 +329,20 @@ export function FeedItem({
 }) {
   return (
     <li className={`py-2 ${last ? "" : "border-b border-hairline"}`}>
-      <button type="button" aria-expanded={open} onClick={onToggle} className="flex w-full items-start gap-2.5 text-left">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={onToggle}
+        className="flex w-full items-start gap-2.5 text-left"
+      >
         {mark}
         <span className="flex min-w-0 grow flex-col gap-0.5">
           <span className="text-sm font-semibold leading-[1.3]">
             {title} <span className="font-normal text-subtle">· {TIME.format(time)}</span>
           </span>
-          <span className={`num text-[13px] leading-[1.3] ${status === "failed" ? "text-act" : "text-ink-2"}`}>{line}</span>
+          <span className={`num text-[13px] leading-[1.3] ${status === "failed" ? "text-act" : "text-ink-2"}`}>
+            {line}
+          </span>
         </span>
         <ChevronDown className={`mt-0.5 shrink-0 text-subtle ${open ? "rotate-180" : ""}`} />
       </button>

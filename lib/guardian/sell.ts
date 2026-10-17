@@ -142,7 +142,11 @@ export function sellAmounts(book: SellBook, o: SellOptions): bigint[] {
  * at Aave's price, and each repays exactly its minimum output. Stops at `maxSlices`, or when Aave's floor leaves no
  * room: the rest waits for the next run.
  */
-export function sellSlices(book: SellBook, take: readonly bigint[], o: { floorBps: bigint; maxSliceRaw: bigint }): SellSlice[] {
+export function sellSlices(
+  book: SellBook,
+  take: readonly bigint[],
+  o: { floorBps: bigint; maxSliceRaw: bigint },
+): SellSlice[] {
   const slices: SellSlice[] = [];
   let power = sellPower(book.stocks);
   let debt = book.debtValue;
@@ -152,7 +156,8 @@ export function sellSlices(book: SellBook, take: readonly bigint[], o: { floorBp
     let left = take[i];
     while (left > 0n) {
       if (slices.length === SELL_RULE.maxSlices) return slices;
-      const room = power * 10n ** 14n > floor * debt ? (power * 10n ** 14n - floor * debt) / (s.cfBps * s.price * 10n ** 24n) : 0n;
+      const room =
+        power * 10n ** 14n > floor * debt ? (power * 10n ** 14n - floor * debt) / (s.cfBps * s.price * 10n ** 24n) : 0n;
       const shares = min(left, room, (o.maxSliceRaw * 10n ** 10n) / s.price);
       const minOut = (shares * s.price * (BPS - o.floorBps)) / 10n ** 14n;
       if (minOut === 0n) return slices;
@@ -167,7 +172,10 @@ export function sellSlices(book: SellBook, take: readonly bigint[], o: { floorBp
 }
 
 /** The sale for one run: its slices and what they repay in total, in USDC units. */
-export function planSell(book: SellBook, o: SellOptions & { maxSliceRaw: bigint }): { slices: SellSlice[]; repayRaw: bigint } {
+export function planSell(
+  book: SellBook,
+  o: SellOptions & { maxSliceRaw: bigint },
+): { slices: SellSlice[]; repayRaw: bigint } {
   const slices = sellSlices(book, sellAmounts(book, o), o);
   return { slices, repayRaw: slices.reduce((t, s) => t + s.minOutRaw, 0n) };
 }

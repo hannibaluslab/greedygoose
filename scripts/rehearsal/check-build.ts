@@ -35,7 +35,8 @@ function main() {
   if (!marker || !signer.includes("signer: REHEARSAL_SIGNER_MARKER")) {
     throw new Error("The signer no longer uses its marker at runtime: the check would prove nothing");
   }
-  if (!readFileSync(join(ROOT, "lib/rehearsal/Badge.tsx"), "utf8").includes(BADGE)) throw new Error("The badge's words changed");
+  if (!readFileSync(join(ROOT, "lib/rehearsal/Badge.tsx"), "utf8").includes(BADGE))
+    throw new Error("The badge's words changed");
 
   const build = spawnSync("npx", ["next", "build"], {
     cwd: ROOT,
@@ -58,14 +59,17 @@ function main() {
     if (text.includes(BADGE)) found.push(`${relative(ROOT, path)}: the badge`);
     if (path.endsWith(".map")) {
       const sources = (JSON.parse(text) as { sources?: string[] }).sources ?? [];
-      for (const s of sources.filter((s) => s.includes("lib/rehearsal/"))) found.push(`${relative(ROOT, path)}: compiled from ${s}`);
+      for (const s of sources.filter((s) => s.includes("lib/rehearsal/")))
+        found.push(`${relative(ROOT, path)}: compiled from ${s}`);
     }
   }
   if (found.length) {
     console.error(`\nThe production build carries the fork signer:\n  ${found.join("\n  ")}`);
     process.exit(1);
   }
-  console.log(`\nOK: ${all.length} files of the production build searched, built with NEXT_PUBLIC_REHEARSAL_RPC set; no fork signer, no badge, nothing compiled from lib/rehearsal/.`);
+  console.log(
+    `\nOK: ${all.length} files of the production build searched, built with NEXT_PUBLIC_REHEARSAL_RPC set; no fork signer, no badge, nothing compiled from lib/rehearsal/.`,
+  );
 }
 
 main();

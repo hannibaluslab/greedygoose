@@ -21,7 +21,10 @@ export const keepMixPlan = (account: `0x${string}`, on: boolean): TxPlan => ({
  * Each grant or revoke in order, on JAW's own screen; the first that fails stops the rest. Each request is built as
  * it's sent, so the first one is called straight from the tap that asked for it.
  */
-async function runGrants(agents: ReturnType<typeof useAgents>, steps: readonly ProtectStep[]): Promise<{ rest: ProtectStep[]; error: unknown }> {
+async function runGrants(
+  agents: ReturnType<typeof useAgents>,
+  steps: readonly ProtectStep[],
+): Promise<{ rest: ProtectStep[]; error: unknown }> {
   for (let i = 0; i < steps.length; i++) {
     const s = steps[i];
     try {
@@ -93,7 +96,9 @@ export function useProtectSave(account: `0x${string}`, agents: ReturnType<typeof
           onSaved();
         } else
           setPending(
-            isPopupBlocked(r.error) ? { asked: ask, rest: r.rest, done: count.done + steps.length - r.rest.length, of: count.of } : null,
+            isPopupBlocked(r.error)
+              ? { asked: ask, rest: r.rest, done: count.done + steps.length - r.rest.length, of: count.of }
+              : null,
           );
       })
       .finally(() => setStep("idle"));
@@ -123,7 +128,11 @@ export function useProtectSave(account: `0x${string}`, agents: ReturnType<typeof
   }
 
   const phase: TxPhase =
-    step === "granting" || (step === "setting" && tx.phase === "done") ? "signing" : step === "setting" ? tx.phase : "idle";
+    step === "granting" || (step === "setting" && tx.phase === "done")
+      ? "signing"
+      : step === "setting"
+        ? tx.phase
+        : "idle";
   const grantError = agents.error
     ? isPopupBlocked(agents.error)
       ? pending && pending.done > 0

@@ -54,7 +54,8 @@ const valueOf = (h: TradeHolding) => h.freeUsd + h.lockedUsd;
 const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
 
 /** A stock from the registry, never from a string alone; undefined for cash or anything else. */
-export const stockOf = (a: TradeAsset): ReserveAsset | undefined => (a === "cash" ? undefined : EQUITIES.find((e) => e.symbol === a));
+export const stockOf = (a: TradeAsset): ReserveAsset | undefined =>
+  a === "cash" ? undefined : EQUITIES.find((e) => e.symbol === a);
 
 /** cash → stock is a buy, stock → cash a sale, stock → stock a swap; the same asset on both sides is no trade. */
 export function routeOf(from: TradeAsset, to: TradeAsset): TradeRoute | null {
@@ -73,7 +74,8 @@ export function sharesForUsdRaw(usdRaw: bigint, priceRaw: bigint, decimals: numb
 }
 
 /** Cents a stock's free shares are worth at Aave's price, rounded down: what MAX shows. */
-const freeCents = (h: TradeHolding, stock: ReserveAsset) => (h.freeRaw * h.priceRaw) / 10n ** BigInt(stock.decimals + ORACLE_DECIMALS - 2);
+const freeCents = (h: TradeHolding, stock: ReserveAsset) =>
+  (h.freeRaw * h.priceRaw) / 10n ** BigInt(stock.decimals + ORACLE_DECIMALS - 2);
 
 /** The cash can't keep the network-fee buffer, so a stock → stock sale pays its own fee. */
 export const feeFromSale = (cash: Cash) => cash.walletRaw + cash.savingsRaw < feeBufferRaw;
@@ -116,7 +118,8 @@ export function buildTradeCalls(p: {
   oraclePriceUsd: number;
   nowSec?: number;
 }): Call[] {
-  if (p.from.kind !== "equity" || p.to.kind !== "equity" || p.from.address === p.to.address) throw new Error("Not a supported trade");
+  if (p.from.kind !== "equity" || p.to.kind !== "equity" || p.from.address === p.to.address)
+    throw new Error("Not a supported trade");
   const floor = sellMinOut(p.sellQuote, p.from, p.oraclePriceUsd);
   if (p.buyQuote.amountIn > floor) throw new Error("Blocked: the buy spends more than the sale is sure to bring");
   const nowSec = p.nowSec ?? Math.floor(Date.now() / 1000);
@@ -157,9 +160,11 @@ export const TRADE_COPY = {
   tradeButton: "Trade",
   closed: "Stock markets are closed. You can still trade, but the price can jump when they reopen.",
   warnBuy: (pct: string, name: string) => `You’d pay ${pct}% over the stock’s price — the market for ${name} is small.`,
-  warnSale: (pct: string, name: string) => `You’d get ${pct}% under the stock’s price — the market for ${name} is small.`,
+  warnSale: (pct: string, name: string) =>
+    `You’d get ${pct}% under the stock’s price — the market for ${name} is small.`,
   noMarket: (name: string) => `There’s no market for ${name} right now.`,
-  buyPrice: (pct: string) => `Too big for the market right now: you’d pay ${pct}% over the stock’s price. Try a smaller amount.`,
+  buyPrice: (pct: string) =>
+    `Too big for the market right now: you’d pay ${pct}% over the stock’s price. Try a smaller amount.`,
   salePrice: `Too big for the market right now: you’d get more than ${SELL_LIMITS.floorBps / 100}% under the stock’s price. Try a smaller amount.`,
   minBuy: `Minimum buy is ${formatUsd(BUY_LIMITS.minUsd)}.`,
   minSale: `The smallest sale is ${formatUsd(SELL_LIMITS.minUsd).replace(/\.00$/, "")}.`,
@@ -171,7 +176,8 @@ export const TRADE_COPY = {
   feeBuffer: `Leave ${formatUsd(CASH.feeBufferUsd)} for the network fee.`,
   notFree: "That’s more than your free shares.",
   feeUnsupported: "Your account can’t pay network fees in USDC on Base right now, so this trade can’t go through.",
-  swapFallback: "This trade would fail right now — a price may have moved or a stock may be paused. Try again in a moment.",
+  swapFallback:
+    "This trade would fail right now — a price may have moved or a stock may be paused. Try again in a moment.",
   failedOnChain: "The trade didn’t go through on Base. Nothing moved except any network fee.",
   sold: (shares: string, name: string) => `Sold ${shares} ${name}`,
   soldBody: "What the sale paid is in your cash.",
@@ -213,7 +219,8 @@ export function fromOptions(data: Pick<TradeData, "holdings" | "cash" | "cashUsd
     why: cashOk ? undefined : "no-cash",
   };
   const stocks = data.holdings.filter(held).map((h): FromOption => {
-    const why = h.freeRaw === 0n ? ("all-backs" as const) : h.freeUsd < SELL_LIMITS.minUsd ? ("too-small" as const) : undefined;
+    const why =
+      h.freeRaw === 0n ? ("all-backs" as const) : h.freeUsd < SELL_LIMITS.minUsd ? ("too-small" as const) : undefined;
     const sub =
       why === "all-backs"
         ? TRADE_COPY.subAllBacks
@@ -242,7 +249,13 @@ export function fromOptions(data: Pick<TradeData, "holdings" | "cash" | "cashUsd
 
 /** "Trade to": Cash, then the stocks held by value, then the others A to Z, each with Aave's price a share. */
 export function toOptions(data: Pick<TradeData, "holdings" | "cashUsd">): ToOption[] {
-  const cash: ToOption = { asset: "cash", name: TRADE_COPY.cashName, right: formatUsd(data.cashUsd), ownedUsd: data.cashUsd, disabled: false };
+  const cash: ToOption = {
+    asset: "cash",
+    name: TRADE_COPY.cashName,
+    right: formatUsd(data.cashUsd),
+    ownedUsd: data.cashUsd,
+    disabled: false,
+  };
   const row = (h: TradeHolding): ToOption => ({
     asset: h.symbol,
     name: h.name,
@@ -271,7 +284,8 @@ export function defaultLegs(
   const from = seed.from && pickable.some((o) => o.asset === seed.from) ? seed.from : pickable[0].asset;
   if (seed.to && routeOf(from, seed.to)) return { from, to: seed.to };
   if (from !== "cash") return { from, to: "cash" };
-  const biggest = data.holdings.filter(held).sort((a, b) => valueOf(b) - valueOf(a))[0] ?? [...data.holdings].sort(byName)[0];
+  const biggest =
+    data.holdings.filter(held).sort((a, b) => valueOf(b) - valueOf(a))[0] ?? [...data.holdings].sort(byName)[0];
   const to = biggest?.symbol ?? [...EQUITIES].sort(byName)[0].symbol;
   return { from, to };
 }
@@ -293,7 +307,11 @@ export function maxUsdOf(from: TradeAsset, data: Pick<TradeData, "holdings" | "c
  * stock's amount at exactly that most (its free value to the cent) sells every free share too, so no dust under a cent
  * is left that could never trade. Nothing changes when there's nothing to take.
  */
-export function clampAmount(from: TradeAsset, data: Pick<TradeData, "holdings" | "cash">, amount: string): { amount: string; all: boolean } {
+export function clampAmount(
+  from: TradeAsset,
+  data: Pick<TradeData, "holdings" | "cash">,
+  amount: string,
+): { amount: string; all: boolean } {
   const max = maxUsdOf(from, data);
   const n = Number(amount) || 0;
   if (max > 0 && n > max) return { amount: String(max), all: from !== "cash" };
@@ -316,7 +334,11 @@ export type TradeAction =
  * whatever To becomes while that stock stays the From. New legs keep the dollars, clamped to what the new From takes.
  * Picking the other leg's asset flips the legs; a pick that makes no trade (cash to cash) changes nothing.
  */
-export function tradeForm(state: TradeForm, action: TradeAction, data: Pick<TradeData, "holdings" | "cash">): TradeForm {
+export function tradeForm(
+  state: TradeForm,
+  action: TradeAction,
+  data: Pick<TradeData, "holdings" | "cash">,
+): TradeForm {
   const { legs } = state;
   if (!legs) return action.type === "amount" ? { ...state, amount: action.value, all: false } : state;
   if (action.type === "amount") return { legs, ...clampAmount(legs.from, data, action.value) };
@@ -340,7 +362,13 @@ const usdRawOf = (amount: string): bigint => {
 };
 
 /** What the From card's amount means for each route: the dollars, and the shares a sale sells. */
-export function tradeAmount(p: { from: TradeAsset; to: TradeAsset; amount: string; all: boolean; data: Pick<TradeData, "holdings" | "cash"> }) {
+export function tradeAmount(p: {
+  from: TradeAsset;
+  to: TradeAsset;
+  amount: string;
+  all: boolean;
+  data: Pick<TradeData, "holdings" | "cash">;
+}) {
   const route = routeOf(p.from, p.to);
   const fromStock = stockOf(p.from);
   const toStock = stockOf(p.to);
@@ -352,7 +380,11 @@ export function tradeAmount(p: { from: TradeAsset; to: TradeAsset; amount: strin
   // aren't sold unseen); typed dollars become shares at Aave's price, rounded down.
   const sellAll = p.all && maxUsd > 0 && toUsd(usdRaw) >= maxUsd;
   const sharesRaw =
-    fromStock && fromHolding ? (sellAll ? fromHolding.freeRaw : sharesForUsdRaw(usdRaw, fromHolding.priceRaw, fromStock.decimals)) : 0n;
+    fromStock && fromHolding
+      ? sellAll
+        ? fromHolding.freeRaw
+        : sharesForUsdRaw(usdRaw, fromHolding.priceRaw, fromStock.decimals)
+      : 0n;
   return {
     route,
     fromStock,
@@ -369,7 +401,11 @@ export function tradeAmount(p: { from: TradeAsset; to: TradeAsset; amount: strin
 /** A quote as the sheet's queries hold it: `data` null when no pool can fill it. */
 export type QuoteState<Q> = { data?: Q | null; isFetching: boolean; isSuccess: boolean };
 
-export type Leg<Q> = { state: "idle" } | { state: "quoting" } | { state: "none" } | { state: "ready"; quote: Q; fetching: boolean };
+export type Leg<Q> =
+  | { state: "idle" }
+  | { state: "quoting" }
+  | { state: "none" }
+  | { state: "ready"; quote: Q; fetching: boolean };
 /** One leg's quote for `amountIn`: none to read, waiting, no pool can fill it, or this amount's quote. */
 export function legOf<Q extends BuyQuote>(q: QuoteState<Q> | undefined, amountIn: bigint): Leg<Q> {
   if (amountIn <= 0n || !q) return { state: amountIn <= 0n ? "idle" : "quoting" };
@@ -420,14 +456,24 @@ export function planTrade(p: {
   const sellQuote = sellLeg.state === "ready" ? sellLeg.quote : null;
   const sellPlan =
     sellQuote && fromStock && fromHolding
-      ? planSell({ from: "free", stock: fromStock, holding: fromHolding, cf: 0, position: data, quote: sellQuote, now: p.now })
+      ? planSell({
+          from: "free",
+          stock: fromStock,
+          holding: fromHolding,
+          cf: 0,
+          position: data,
+          quote: sellQuote,
+          now: p.now,
+        })
       : null;
-  const buyInRaw = route === "buy" ? usdRaw : route === "swap" && sellPlan ? swapBuyInRaw(sellPlan.minOutRaw, data.cash) : 0n;
+  const buyInRaw =
+    route === "buy" ? usdRaw : route === "swap" && sellPlan ? swapBuyInRaw(sellPlan.minOutRaw, data.cash) : 0n;
   const buyLeg = buying ? legOf(p.buy, buyInRaw) : ({ state: "idle" } as const);
   const buyQuote = buyLeg.state === "ready" ? buyLeg.quote : null;
   const toPrice = toHolding?.priceUsd ?? 0;
   const buyEcon = buyQuote && toStock ? quoteEconomics(buyQuote, toStock, toPrice) : null;
-  const sellEcon = sellQuote && fromStock && fromHolding ? sellEconomics(sellQuote, fromStock, fromHolding.priceUsd) : null;
+  const sellEcon =
+    sellQuote && fromStock && fromHolding ? sellEconomics(sellQuote, fromStock, fromHolding.priceUsd) : null;
   const minTradeUsd = swapMinUsd(sellPlan ? 1 - sellPlan.discount : 1, fromSale);
 
   // Why it can't go ahead: first what the From asset allows, at any amount, then the amount, then the markets.
@@ -436,7 +482,8 @@ export function planTrade(p: {
   else if (selling && fromHolding && !held(fromHolding)) blocker = TRADE_COPY.notHeld(fromHolding.name);
   else if (selling && fromHolding && fromHolding.freeRaw === 0n) blocker = TRADE_COPY.allBacks(fromHolding.name);
   else if (amountUsd > 0 && route) {
-    if (route === "buy" && amountUsd > maxUsd) blocker = amountUsd > data.cashUsd ? TRADE_COPY.overCash(data.cashUsd) : TRADE_COPY.feeBuffer;
+    if (route === "buy" && amountUsd > maxUsd)
+      blocker = amountUsd > data.cashUsd ? TRADE_COPY.overCash(data.cashUsd) : TRADE_COPY.feeBuffer;
     else if (selling && fromHolding && sharesRaw > fromHolding.freeRaw) blocker = TRADE_COPY.notFree;
     else if (route === "buy" && amountUsd < BUY_LIMITS.minUsd) blocker = TRADE_COPY.minBuy;
     else if (route === "sell" && amountUsd < SELL_LIMITS.minUsd) blocker = TRADE_COPY.minSale;
@@ -448,7 +495,8 @@ export function planTrade(p: {
     else if (buyEcon && buyEcon.premium > BUY_LIMITS.blockPremium) blocker = TRADE_COPY.buyPrice(pct(buyEcon.premium));
   }
   // Waiting on a quote: a swap reads the sale's first, then the buy's for the sale's floor.
-  const quoting = !blocker && amountUsd > 0 && ((selling && sellLeg.state === "quoting") || (buying && buyLeg.state === "quoting"));
+  const quoting =
+    !blocker && amountUsd > 0 && ((selling && sellLeg.state === "quoting") || (buying && buyLeg.state === "quoting"));
   const warn =
     blocker || amountUsd <= 0
       ? null
@@ -477,19 +525,23 @@ export function planTrade(p: {
   const ready = !!route && amountUsd > 0 && !blocker && legsReady;
 
   // What you get: shares of the To stock from the buy's quote, or the sale's dollars; "…" while quoting.
-  const youGet: YouGet =
-    toStock
-      ? {
-          kind: "stock",
-          symbol: toStock.symbol,
-          shares: buyQuote ? Number(buyQuote.amountOut) / 10 ** toStock.decimals : quoting ? null : 0,
-          priceUsd: buyEcon ? buyEcon.price : toPrice,
-        }
-      : { kind: "cash", usd: sellEcon ? sellEcon.usd : quoting ? null : 0, priceUsd: sellEcon ? sellEcon.price : fromHolding?.priceUsd ?? 0 };
+  const youGet: YouGet = toStock
+    ? {
+        kind: "stock",
+        symbol: toStock.symbol,
+        shares: buyQuote ? Number(buyQuote.amountOut) / 10 ** toStock.decimals : quoting ? null : 0,
+        priceUsd: buyEcon ? buyEcon.price : toPrice,
+      }
+    : {
+        kind: "cash",
+        usd: sellEcon ? sellEcon.usd : quoting ? null : 0,
+        priceUsd: sellEcon ? sellEcon.price : (fromHolding?.priceUsd ?? 0),
+      };
 
   const shown = amountUsd > 0 && !blocker;
   const val = (v: () => string) => (!shown ? "—" : quoting ? "…" : v());
-  const minShares = () => `${(Number(minOut(buyQuote!.amountOut)) / 10 ** toStock!.decimals).toFixed(4)} ${tickerOf(toStock!.symbol)}`;
+  const minShares = () =>
+    `${(Number(minOut(buyQuote!.amountOut)) / 10 ** toStock!.decimals).toFixed(4)} ${tickerOf(toStock!.symbol)}`;
   const rows: { label: string; value: string }[] =
     route === "buy"
       ? [{ label: TRADE_COPY.atLeast, value: val(() => (buyQuote ? minShares() : "—")) }]
@@ -500,7 +552,9 @@ export function planTrade(p: {
               { label: TRADE_COPY.atLeast, value: val(() => (buyQuote ? minShares() : "—")) },
               {
                 label: TRADE_COPY.toCash,
-                value: val(() => (sellQuote && buyQuote ? TRADE_COPY.about(toUsd(sellQuote.amountOut - buyQuote.amountIn)) : "—")),
+                value: val(() =>
+                  sellQuote && buyQuote ? TRADE_COPY.about(toUsd(sellQuote.amountOut - buyQuote.amountIn)) : "—",
+                ),
               },
             ]
           : [];
@@ -508,7 +562,10 @@ export function planTrade(p: {
   const fromCash = p.from === "cash";
   const hint = fromCash
     ? [TRADE_COPY.cashHint(data.cashUsd)]
-    : [TRADE_COPY.freeHint(maxUsd), ...(fromHolding && fromHolding.lockedRaw > 0n ? [TRADE_COPY.backsHint(fromHolding.lockedUsd)] : [])];
+    : [
+        TRADE_COPY.freeHint(maxUsd),
+        ...(fromHolding && fromHolding.lockedRaw > 0n ? [TRADE_COPY.backsHint(fromHolding.lockedUsd)] : []),
+      ];
 
   return {
     route,
@@ -534,16 +591,36 @@ export function planTrade(p: {
     warn,
     closed,
     note,
-    button: route === "buy" ? TRADE_COPY.buyButton(toStock!.name) : route === "sell" ? TRADE_COPY.sellButton(fromStock!.name) : TRADE_COPY.tradeButton,
+    button:
+      route === "buy"
+        ? TRADE_COPY.buyButton(toStock!.name)
+        : route === "sell"
+          ? TRADE_COPY.sellButton(fromStock!.name)
+          : TRADE_COPY.tradeButton,
     ready,
   };
 }
 
 /** What Activity shows while a stock → stock trade confirms, in the order the receipt reads (the buy, then the sale). */
-export function tradeActivity(p: { from: ReserveAsset; to: ReserveAsset; plan: SellPlan; buyQuote: BuyQuote }): ActivityItem[] {
+export function tradeActivity(p: {
+  from: ReserveAsset;
+  to: ReserveAsset;
+  plan: SellPlan;
+  buyQuote: BuyQuote;
+}): ActivityItem[] {
   return [
-    { kind: "buy", symbol: p.to.symbol, amount: Number(p.buyQuote.amountOut) / 10 ** p.to.decimals, paidUsd: toUsd(p.buyQuote.amountIn) },
-    { kind: "sell", symbol: p.from.symbol, amount: Number(p.plan.sharesRaw) / 10 ** p.from.decimals, receivedUsd: p.plan.usd },
+    {
+      kind: "buy",
+      symbol: p.to.symbol,
+      amount: Number(p.buyQuote.amountOut) / 10 ** p.to.decimals,
+      paidUsd: toUsd(p.buyQuote.amountIn),
+    },
+    {
+      kind: "sell",
+      symbol: p.from.symbol,
+      amount: Number(p.plan.sharesRaw) / 10 ** p.from.decimals,
+      receivedUsd: p.plan.usd,
+    },
   ];
 }
 

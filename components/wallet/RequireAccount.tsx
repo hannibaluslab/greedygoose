@@ -37,7 +37,11 @@ function devPreviewAddress(): `0x${string}` | null {
 export function RequireAccount({ children }: { children: (address: `0x${string}`) => ReactNode }) {
   const preview = useSyncExternalStore(noopSubscribe, devPreviewAddress, () => null);
   // Wallet state only exists in the browser; render nothing until hydrated so server and client match.
-  const hydrated = useSyncExternalStore(noopSubscribe, () => true, () => false);
+  const hydrated = useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false,
+  );
   const { address, status, chainId } = useAccount();
   const { switchChain, isPending } = useSwitchChain();
   const router = useRouter();
@@ -83,7 +87,9 @@ function SignedIn({ address, children }: { address: `0x${string}`; children: (ad
 function ShellSkeleton({ label = "Loading…" }: { label?: string }) {
   return (
     <div aria-busy className="flex flex-col gap-4 px-5 pt-[calc(env(safe-area-inset-top)+8px)]">
-      <span className="sr-only" role="status">{label}</span>
+      <span className="sr-only" role="status">
+        {label}
+      </span>
       <div className="flex items-center gap-2.5">
         <div className="size-9 animate-pulse rounded-full bg-chip" />
         <div className="h-4 w-28 animate-pulse rounded bg-chip" />

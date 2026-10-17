@@ -25,9 +25,24 @@ export type SellFrom = "free" | "backing" | "repay";
 export type SellHolding = { priceUsd: number; freeRaw: bigint; lockedRaw: bigint; lockedUsd: number; paused: boolean };
 
 /** The position's fields the plan reads (usePosition's data has them all). */
-export type SellPosition = { collateralUsd: number; avgCf: number; debtUsd: number; debtRaw: bigint; healthFactor: number | null };
+export type SellPosition = {
+  collateralUsd: number;
+  avgCf: number;
+  debtUsd: number;
+  debtRaw: bigint;
+  healthFactor: number | null;
+};
 
-export type SellBlock = "paused" | "not-free" | "not-backing" | "nothing-owed" | "past-safe" | "near-limit" | "too-small" | "act" | "price";
+export type SellBlock =
+  | "paused"
+  | "not-free"
+  | "not-backing"
+  | "nothing-owed"
+  | "past-safe"
+  | "near-limit"
+  | "too-small"
+  | "act"
+  | "price";
 
 export const SELL_BLOCKED: Record<SellBlock, string> = {
   paused: "Aave has paused this stock for now, so it can’t come out of backing. Try again later.",
@@ -35,7 +50,8 @@ export const SELL_BLOCKED: Record<SellBlock, string> = {
   "not-backing": "That’s more than backs your credit.",
   "nothing-owed": "You don’t owe anything, so there’s nothing to repay.",
   "past-safe": "That would take your credit out of Safe. Sell less, or repay with this sale instead.",
-  "near-limit": "Your credit is too close to Aave’s limit to take these shares out before they repay it. Sell fewer, or repay from cash.",
+  "near-limit":
+    "Your credit is too close to Aave’s limit to take these shares out before they repay it. Sell fewer, or repay from cash.",
   "too-small": `The smallest sale is ${formatUsdTrim(SELL_LIMITS.minUsd)}.`,
   act: "That would put your credit in Act. Sell more, or repay from cash.",
   price: `Too big for the market right now: you’d get more than ${SELL_LIMITS.floorBps / 100}% under Aave’s price. Try a smaller amount.`,
@@ -82,14 +98,19 @@ export function saleRepayRaw(minOutRaw: bigint, debtRaw: bigint): bigint {
 }
 
 /** `raw × f`, rounded down; all of it at f ≥ 1. */
-const part = (raw: bigint, f: number) => (f >= 1 ? raw : f > 0 ? (raw * BigInt(Math.floor(f * 1_000_000))) / 1_000_000n : 0n);
+const part = (raw: bigint, f: number) =>
+  f >= 1 ? raw : f > 0 ? (raw * BigInt(Math.floor(f * 1_000_000))) / 1_000_000n : 0n;
 
 /**
  * The most backing shares a repay by selling can take out (planSell's `maxRaw` for "repay"): the shares come out before
  * the repay lands, so the loan must stay within Aave's limit, with LIMIT_HEADROOM, in between. All of them when
  * nothing is owed. Repay's "Pay with" offers a backing stock up to this.
  */
-export function repaySaleMaxRaw(h: Pick<SellHolding, "lockedRaw" | "lockedUsd">, cf: number, pos: Pick<SellPosition, "collateralUsd" | "avgCf" | "debtUsd">): bigint {
+export function repaySaleMaxRaw(
+  h: Pick<SellHolding, "lockedRaw" | "lockedUsd">,
+  cf: number,
+  pos: Pick<SellPosition, "collateralUsd" | "avgCf" | "debtUsd">,
+): bigint {
   const loan = { collateralUsd: pos.collateralUsd, avgCf: pos.avgCf, debtUsd: pos.debtUsd, cf, lockedUsd: h.lockedUsd };
   return part(h.lockedRaw, h.lockedUsd > 0 ? (maxWithdrawUsd(loan) * LIMIT_HEADROOM) / h.lockedUsd : 0);
 }
@@ -115,7 +136,13 @@ export function planSell(p: {
   const econ = sellEconomics(quote, stock, h.priceUsd);
   const minOutRaw = sellMinOut(quote, stock, h.priceUsd);
   const valueUsd = (Number(sharesRaw) / 10 ** stock.decimals) * h.priceUsd;
-  const loan = { collateralUsd: pos.collateralUsd, avgCf: pos.avgCf, debtUsd: pos.debtUsd, cf: p.cf, lockedUsd: h.lockedUsd };
+  const loan = {
+    collateralUsd: pos.collateralUsd,
+    avgCf: pos.avgCf,
+    debtUsd: pos.debtUsd,
+    cf: p.cf,
+    lockedUsd: h.lockedUsd,
+  };
   const backingShare = (usd: number) => part(h.lockedRaw, h.lockedUsd > 0 ? usd / h.lockedUsd : 0);
 
   const repayRaw = from === "repay" ? saleRepayRaw(minOutRaw, pos.debtRaw) : 0n;
@@ -138,7 +165,13 @@ export function planSell(p: {
   else if (from === "backing" && sharesRaw > maxRaw) block = "past-safe";
   else if (from === "repay" && sharesRaw > maxRaw) block = "near-limit";
   else if (econ.usd < SELL_LIMITS.minUsd || (from === "repay" && repayRaw === 0n)) block = "too-small";
-  else if (from === "repay" && hfAfter !== null && endsInAct(statusFor(hfAfter)) && hfAfter < (pos.healthFactor ?? Infinity)) block = "act";
+  else if (
+    from === "repay" &&
+    hfAfter !== null &&
+    endsInAct(statusFor(hfAfter)) &&
+    hfAfter < (pos.healthFactor ?? Infinity)
+  )
+    block = "act";
   else if (quote.amountOut < aaveFloorRaw(sharesRaw, stock, h.priceUsd)) block = "price";
 
   return {
@@ -175,10 +208,16 @@ export function buildSaleCalls(p: {
 }): Call[] {
   const sell = buildSellCalls(p);
   if (p.from === "free") return sell;
-  const sale = [...buildWithdrawCalls({ user: p.user, stock: p.stock, amountRaw: p.quote.amountIn, all: false }), ...sell];
+  const sale = [
+    ...buildWithdrawCalls({ user: p.user, stock: p.stock, amountRaw: p.quote.amountIn, all: false }),
+    ...sell,
+  ];
   if (p.from === "backing") return assertAllowed(p.user, sale);
   const repayRaw = saleRepayRaw(sellMinOut(p.quote, p.stock, p.oraclePriceUsd), p.debtRaw);
-  return assertAllowed(p.user, [...sale, ...buildRepayCalls({ user: p.user, amountRaw: repayRaw, all: repayRaw > p.debtRaw })]);
+  return assertAllowed(p.user, [
+    ...sale,
+    ...buildRepayCalls({ user: p.user, amountRaw: repayRaw, all: repayRaw > p.debtRaw }),
+  ]);
 }
 
 /**
@@ -210,8 +249,11 @@ const repayOf = (c: Call): bigint | null => {
  */
 export function assertSaleCoversRepay(user: Address, calls: Call[], feeFromSale: boolean): Call[] {
   const swaps = calls.map((c, i) => ({ i, swap: swapOf(c) })).filter((x) => x.swap !== null);
-  const repays = calls.map((c, i) => ({ i, raw: repayOf(c) })).filter((x): x is { i: number; raw: bigint } => x.raw !== null);
-  if (swaps.length !== 1 || repays.length !== 1) throw new Error("Blocked: a repay by selling is one sale and one repay");
+  const repays = calls
+    .map((c, i) => ({ i, raw: repayOf(c) }))
+    .filter((x): x is { i: number; raw: bigint } => x.raw !== null);
+  if (swaps.length !== 1 || repays.length !== 1)
+    throw new Error("Blocked: a repay by selling is one sale and one repay");
   const [{ i: at, swap }] = swaps;
   const [{ i: repayAt, raw: repayRaw }] = repays;
   const sale = swap!.params;
@@ -219,11 +261,17 @@ export function assertSaleCoversRepay(user: Address, calls: Call[], feeFromSale:
     throw new Error("Blocked: the repay must come after a sale into USDC for the user");
   }
   const covered = sale.amountOutMinimum - (feeFromSale ? feeBufferRaw : 0n);
-  if (repayRaw <= 0n || repayRaw > covered) throw new Error("Blocked: the repay is more than the sale is sure to bring");
+  if (repayRaw <= 0n || repayRaw > covered)
+    throw new Error("Blocked: the repay is more than the sale is sure to bring");
   for (const c of calls) {
     if (!isAddressEqual(c.to, USDC.address)) continue;
     const call = decodeFunctionData({ abi: erc20Abi, data: c.data });
-    if (call.functionName === "approve" && isAddressEqual(call.args[0], AAVE.SPOKE) && call.args[1] !== repayRaw && call.args[1] !== 0n) {
+    if (
+      call.functionName === "approve" &&
+      isAddressEqual(call.args[0], AAVE.SPOKE) &&
+      call.args[1] !== repayRaw &&
+      call.args[1] !== 0n
+    ) {
       throw new Error("Blocked: the repay's approval is not exact");
     }
   }
@@ -250,20 +298,35 @@ export function buildFreeRepayCalls(p: {
 }): Call[] {
   if (p.debtRaw <= 0n) throw new Error("Nothing owed");
   const repayRaw = freeRepayRaw(sellMinOut(p.quote, p.stock, p.oraclePriceUsd), p.debtRaw, p.feeFromSale);
-  const calls = [...buildSellCalls(p), ...buildRepayCalls({ user: p.user, amountRaw: repayRaw, all: repayRaw > p.debtRaw })];
+  const calls = [
+    ...buildSellCalls(p),
+    ...buildRepayCalls({ user: p.user, amountRaw: repayRaw, all: repayRaw > p.debtRaw }),
+  ];
   return assertAllowed(p.user, assertSaleCoversRepay(p.user, calls, p.feeFromSale));
 }
 
 /** What Activity shows while a repay with free shares confirms: the sale and the repay. */
-export function freeRepayActivity(stock: ReserveAsset, plan: Pick<SellPlan, "sharesRaw" | "usd">, repayRaw: bigint): ActivityItem[] {
+export function freeRepayActivity(
+  stock: ReserveAsset,
+  plan: Pick<SellPlan, "sharesRaw" | "usd">,
+  repayRaw: bigint,
+): ActivityItem[] {
   return [
-    { kind: "sell", symbol: stock.symbol, amount: Number(plan.sharesRaw) / 10 ** stock.decimals, receivedUsd: plan.usd },
+    {
+      kind: "sell",
+      symbol: stock.symbol,
+      amount: Number(plan.sharesRaw) / 10 ** stock.decimals,
+      receivedUsd: plan.usd,
+    },
     { kind: "repay", symbol: USDC.symbol, amount: toUsd(repayRaw) },
   ];
 }
 
 /** The lowest price a share sells at in this plan: what the sale pays at least (the swap's floor), per share sold. */
-export function floorPriceUsd(plan: Pick<SellPlan, "minOutRaw" | "sharesRaw">, stock: Pick<ReserveAsset, "decimals">): number {
+export function floorPriceUsd(
+  plan: Pick<SellPlan, "minOutRaw" | "sharesRaw">,
+  stock: Pick<ReserveAsset, "decimals">,
+): number {
   const shares = Number(plan.sharesRaw) / 10 ** stock.decimals;
   return shares > 0 ? toUsd(plan.minOutRaw) / shares : 0;
 }

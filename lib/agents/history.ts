@@ -38,7 +38,14 @@ export async function readAgentLogs(
 ): Promise<Log[]> {
   const logs = (await client.request({
     method: "eth_getLogs",
-    params: [{ address: q.executor, topics: [null, pad(q.account.toLowerCase() as Address)], fromBlock: toHex(q.from), toBlock: toHex(q.to) }],
+    params: [
+      {
+        address: q.executor,
+        topics: [null, pad(q.account.toLowerCase() as Address)],
+        fromBlock: toHex(q.from),
+        toBlock: toHex(q.to),
+      },
+    ],
   })) as RpcLog[];
   return logs.map((l) => formatLog(l));
 }
@@ -58,14 +65,24 @@ export async function readMoveContext(
   const block = await getBlock(client, { blockNumber: e.blockNumber });
   const limit = limitOf(e);
   const money = movesMoney(e);
-  const traded = e.kind === "sold" ? held(e.sharesRaw) : e.kind === "rebalanced" ? [...new Set([...held(e.soldRaw), ...held(e.boughtRaw)])] : [];
+  const traded =
+    e.kind === "sold"
+      ? held(e.sharesRaw)
+      : e.kind === "rebalanced"
+        ? [...new Set([...held(e.soldRaw), ...held(e.boughtRaw)])]
+        : [];
 
   const balances = (blockNumber: bigint) =>
     multicall(client, {
       blockNumber,
       allowFailure: false,
       contracts: [
-        { address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserTotalDebt", args: [BigInt(USDC.reserveId), q.account] },
+        {
+          address: AAVE.SPOKE,
+          abi: spokeAbi,
+          functionName: "getUserTotalDebt",
+          args: [BigInt(USDC.reserveId), q.account],
+        },
         { address: USDC.address, abi: erc20Abi, functionName: "balanceOf", args: [q.account] },
         { address: GUARDIAN.AUSDC, abi: erc20Abi, functionName: "balanceOf", args: [q.account] },
       ],
@@ -77,7 +94,15 @@ export async function readMoveContext(
       ? multicall(client, {
           blockNumber: e.blockNumber,
           allowFailure: false,
-          contracts: traded.map((r) => ({ address: AAVE.SPOKE_ORACLE, abi: aaveOracleAbi, functionName: "getReservePrice", args: [BigInt(r)] }) as const),
+          contracts: traded.map(
+            (r) =>
+              ({
+                address: AAVE.SPOKE_ORACLE,
+                abi: aaveOracleAbi,
+                functionName: "getReservePrice",
+                args: [BigInt(r)],
+              }) as const,
+          ),
         }).catch(() => undefined)
       : undefined,
     limit

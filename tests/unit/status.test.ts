@@ -24,7 +24,11 @@ describe("statusFor", () => {
     // Act is the line (Adrian, 2026-10-15): ending in Act is blocked, never confirmed.
     expect(needsExtraConfirm("act")).toBe(false);
     expect(endsInAct("act")).toBe(true);
-    expect(["none", "safe", "watch"].map((s) => endsInAct(s as "none" | "safe" | "watch"))).toEqual([false, false, false]);
+    expect(["none", "safe", "watch"].map((s) => endsInAct(s as "none" | "safe" | "watch"))).toEqual([
+      false,
+      false,
+      false,
+    ]);
   });
 });
 

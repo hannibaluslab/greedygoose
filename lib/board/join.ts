@@ -25,7 +25,12 @@ export async function withBoardJoin(client: Client, user: Address, batch: Call[]
   if (joined.has(key)) return batch;
   let joinedAt: bigint;
   try {
-    joinedAt = await readContract(client, { address: board, abi: gooseBoardAbi, functionName: "joinedAt", args: [user] });
+    joinedAt = await readContract(client, {
+      address: board,
+      abi: gooseBoardAbi,
+      functionName: "joinedAt",
+      args: [user],
+    });
   } catch {
     return batch;
   }

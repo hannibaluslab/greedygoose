@@ -101,7 +101,9 @@ export function usePosition(user: `0x${string}` | undefined) {
       { address: GUARDIAN.AUSDC, abi: erc20Abi, functionName: "balanceOf", args: [who] },
       { address: GUARDIAN.AAVE_V3_POOL, abi: v3ReserveAbi, functionName: "getReserveData", args: [USDC.address] },
       // The Cash Agent's switches, once the executor is deployed: whether Save runs decides the keep-back.
-      ...(GOOSE_EXECUTOR ? [{ address: GOOSE_EXECUTOR, abi: gooseExecutorAbi, functionName: "accounts", args: [who] } as const] : []),
+      ...(GOOSE_EXECUTOR
+        ? [{ address: GOOSE_EXECUTOR, abi: gooseExecutorAbi, functionName: "accounts", args: [who] } as const]
+        : []),
     ] as const;
   }, [user]);
 
@@ -116,7 +118,13 @@ export function usePosition(user: `0x${string}` | undefined) {
     if (!r) return undefined;
     const holdings: Holding[] = EQUITIES.map((e, i) => {
       const [bal, supplied, price, mult, cfg, userStatus, reserve] = r.slice(i * PER, i * PER + PER) as [
-        bigint, bigint, bigint, bigint, { paused: boolean; frozen: boolean }, readonly [boolean, boolean], { dynamicConfigKey: number },
+        bigint,
+        bigint,
+        bigint,
+        bigint,
+        { paused: boolean; frozen: boolean },
+        readonly [boolean, boolean],
+        { dynamicConfigKey: number },
       ];
       const toShares = (raw: bigint) => Number((raw * mult) / 10n ** 18n) / 10 ** e.decimals;
       const priceUsd = priceToUsd(price);
@@ -142,10 +150,19 @@ export function usePosition(user: `0x${string}` | undefined) {
       };
     });
     const o = EQUITIES.length * PER;
-    const [account, debtRaw, riskPremium, drawnRate, liquidity, usdcBal, usdcCfg, savingsRaw, v3Reserve, agents] = r.slice(o) as [
-      AccountData, bigint, bigint, bigint, bigint, bigint, { paused: boolean; frozen: boolean; borrowable: boolean }, bigint, { currentLiquidityRate: bigint },
-      readonly [jobs: number, ...rest: unknown[]] | undefined,
-    ];
+    const [account, debtRaw, riskPremium, drawnRate, liquidity, usdcBal, usdcCfg, savingsRaw, v3Reserve, agents] =
+      r.slice(o) as [
+        AccountData,
+        bigint,
+        bigint,
+        bigint,
+        bigint,
+        bigint,
+        { paused: boolean; frozen: boolean; borrowable: boolean },
+        bigint,
+        { currentLiquidityRate: bigint },
+        readonly [jobs: number, ...rest: unknown[]] | undefined,
+      ];
     const s = summarize(account);
     const apr = borrowApr(drawnRate, riskPremium);
     const debtUsd = Number(debtRaw) / 10 ** USDC.decimals;
@@ -158,7 +175,14 @@ export function usePosition(user: `0x${string}` | undefined) {
       collateralUsd: s.collateralUsd,
       debtUsd,
       // The credit left on what already backs it, at the one cap (Act is the line): never more than any flow lets you take.
-      availableUsd: creditWith({ collateralUsd: s.collateralUsd, avgCf: s.avgCf, debtUsd, healthFactor: s.healthFactor, usdcLiquidity, borrowPaused }),
+      availableUsd: creditWith({
+        collateralUsd: s.collateralUsd,
+        avgCf: s.avgCf,
+        debtUsd,
+        healthFactor: s.healthFactor,
+        usdcLiquidity,
+        borrowPaused,
+      }),
       healthFactor: s.healthFactor,
       avgCf: s.avgCf,
       status: statusFor(s.healthFactor),

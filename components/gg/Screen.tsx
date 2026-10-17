@@ -13,18 +13,41 @@ import { STATUS_LABEL, type Status } from "@/lib/risk/status";
  * which Manage's boards leave out (`menu={false}`).
  */
 export function TabHeader({
-  title, back, action, status, statusHref, onStatus, menu = true,
-}: { title: string; back?: string; action?: ReactNode; status?: Status; statusHref?: string; onStatus?: () => void; menu?: boolean }) {
+  title,
+  back,
+  action,
+  status,
+  statusHref,
+  onStatus,
+  menu = true,
+}: {
+  title: string;
+  back?: string;
+  action?: ReactNode;
+  status?: Status;
+  statusHref?: string;
+  onStatus?: () => void;
+  menu?: boolean;
+}) {
   return (
     <div className="flex items-center justify-between leading-[normal]">
       <div className="flex items-center">
-        {back && <Link href={back} aria-label="Back" className="-ml-3 -mr-1 flex size-11 items-center justify-center text-ink"><BackIcon /></Link>}
+        {back && (
+          <Link href={back} aria-label="Back" className="-ml-3 -mr-1 flex size-11 items-center justify-center text-ink">
+            <BackIcon />
+          </Link>
+        )}
         <h1 className="m-0 text-[30px] font-semibold leading-[1.1] tracking-[-0.03em]">{title}</h1>
       </div>
       <div className="flex items-center gap-2">
         {action}
         {status && (
-          <Tap href={statusHref} onClick={onStatus} label={`Credit status: ${STATUS_LABEL[status]}`} className="flex h-8 items-center">
+          <Tap
+            href={statusHref}
+            onClick={onStatus}
+            label={`Credit status: ${STATUS_LABEL[status]}`}
+            className="flex h-8 items-center"
+          >
             <StatusPill status={status} size="header" />
           </Tap>
         )}
@@ -40,7 +63,9 @@ export function WhiteCard({ children, className = "" }: { children: ReactNode; c
 
 export function Line({ label, value, first = false }: { label: ReactNode; value: ReactNode; first?: boolean }) {
   return (
-    <div className={`num flex items-center justify-between py-[13px] text-[15px] ${first ? "" : "border-t border-hairline"}`}>
+    <div
+      className={`num flex items-center justify-between py-[13px] text-[15px] ${first ? "" : "border-t border-hairline"}`}
+    >
       <span className="text-ink-mid">{label}</span>
       <span className="font-semibold">{value}</span>
     </div>

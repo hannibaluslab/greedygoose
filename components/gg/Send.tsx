@@ -44,13 +44,25 @@ const grouped = (a: string) => `0x${a.slice(2).match(/.{4}/g)!.join(" ")}`;
 const CONTACT_PICKS = 8;
 
 const pickerRows = (data: PositionData): PickerRow[] =>
-  sendOptions(data).map((o) => ({ id: o.asset, name: o.name, mark: assetMark(o.asset, 32), sub: o.sub, right: o.right, rightSub: o.rightSub, disabled: o.disabled }));
+  sendOptions(data).map((o) => ({
+    id: o.asset,
+    name: o.name,
+    mark: assetMark(o.asset, 32),
+    sub: o.sub,
+    right: o.right,
+    rightSub: o.rightSub,
+    disabled: o.disabled,
+  }));
 
 const EMPTY = "[]";
 
 /** This device's own records of what it sent, for the Recent quick picks (lib/activity/local.ts). */
 function useLocalActivity(user: Address): LocalActivity[] {
-  const snap = useSyncExternalStore(subscribeLocal, () => JSON.stringify(readLocal(user)), () => EMPTY);
+  const snap = useSyncExternalStore(
+    subscribeLocal,
+    () => JSON.stringify(readLocal(user)),
+    () => EMPTY,
+  );
   return useMemo(() => (snap === EMPTY ? [] : (JSON.parse(snap) as LocalActivity[])), [snap]);
 }
 
@@ -73,11 +85,21 @@ export function SendScreen({ user, data }: { user: Address; data: PositionData }
   const [text, setText] = useState("");
   const [sentTitle, setSentTitle] = useState<string | null>(null);
 
-  const view = planSend({ asset, amount: form.amount, all: form.all, data, user, recipient: to.recipient, checks: to.checks });
+  const view = planSend({
+    asset,
+    amount: form.amount,
+    all: form.all,
+    data,
+    user,
+    recipient: to.recipient,
+    checks: to.checks,
+  });
   const feeBlocked = isConnected && fee.state === "unsupported";
   // What Send would sign now, prepared while the screen is idle (useSend), so the tap opens JAW's sheet straight away.
   const input =
-    view.ready && view.token && to.recipient && !feeBlocked ? { user, token: view.token, recipient: to.recipient, amountRaw: view.amountRaw } : null;
+    view.ready && view.token && to.recipient && !feeBlocked
+      ? { user, token: view.token, recipient: to.recipient, amountRaw: view.amountRaw }
+      : null;
   const tx = useSend(input);
   const { phase, error, reset, busy, txHash } = tx;
 
@@ -143,7 +165,8 @@ export function SendScreen({ user, data }: { user: Address; data: PositionData }
     change();
   };
 
-  const nameOf = (a: SendAsset) => (a === "cash" ? SEND_COPY.cashName : (data.holdings.find((h) => h.symbol === a)?.name ?? a));
+  const nameOf = (a: SendAsset) =>
+    a === "cash" ? SEND_COPY.cashName : (data.holdings.find((h) => h.symbol === a)?.name ?? a);
 
   return (
     <div className="relative flex min-h-dvh flex-col gap-3 px-5 pt-[calc(env(safe-area-inset-top)+8px)] leading-[normal]">
@@ -155,7 +178,9 @@ export function SendScreen({ user, data }: { user: Address; data: PositionData }
         <div className="flex flex-col items-start gap-3 pt-1">
           <h2 className="m-0 text-[17px] font-semibold tracking-[-0.01em]">{SEND_COPY.emptyTitle}</h2>
           <p className="m-0 text-[14px] leading-[1.4] text-ink-mid">{SEND_COPY.emptyLine}</p>
-          <Button variant="dark" onClick={money.topUp} className="mt-1 w-full">{SEND_COPY.topUp}</Button>
+          <Button variant="dark" onClick={money.topUp} className="mt-1 w-full">
+            {SEND_COPY.topUp}
+          </Button>
         </div>
       ) : (
         <>
@@ -185,10 +210,16 @@ export function SendScreen({ user, data }: { user: Address; data: PositionData }
             onMax={view.maxUsd > 0 ? () => dispatch({ type: "max" }) : undefined}
             disabled={busy}
             hint={view.hint.map((line) => (
-              <span key={line} className="block">{line}</span>
+              <span key={line} className="block">
+                {line}
+              </span>
             ))}
           />
-          {view.amountNote && <p role="alert" className="m-0 px-0.5 text-[13px] leading-snug text-act">{view.amountNote}</p>}
+          {view.amountNote && (
+            <p role="alert" className="m-0 px-0.5 text-[13px] leading-snug text-act">
+              {view.amountNote}
+            </p>
+          )}
 
           <ToCard
             state={to.state}
@@ -204,14 +235,24 @@ export function SendScreen({ user, data }: { user: Address; data: PositionData }
 
           {!to.recipient && (recent.length > 0 || contacts.length > 0) && (
             <div className="flex flex-col gap-3">
-              {recent.length > 0 && <QuickPicks label={SEND_COPY.recent} people={recent} onPick={pick} disabled={busy} />}
-              {contacts.length > 0 && <QuickPicks label={SEND_COPY.contacts} people={contacts} onPick={pick} disabled={busy} />}
+              {recent.length > 0 && (
+                <QuickPicks label={SEND_COPY.recent} people={recent} onPick={pick} disabled={busy} />
+              )}
+              {contacts.length > 0 && (
+                <QuickPicks label={SEND_COPY.contacts} people={contacts} onPick={pick} disabled={busy} />
+              )}
             </div>
           )}
 
           <Summary rows={[...view.rows, NETWORK_FEE_ROW]} />
-          {view.smallPrint && <p className="m-0 break-words px-0.5 text-[11.5px] leading-[1.45] text-subtle">{view.smallPrint}</p>}
-          {feeBlocked && <p role="alert" className="m-0 text-[13px] text-act">{SEND_COPY.feeUnsupported}</p>}
+          {view.smallPrint && (
+            <p className="m-0 break-words px-0.5 text-[11.5px] leading-[1.45] text-subtle">{view.smallPrint}</p>
+          )}
+          {feeBlocked && (
+            <p role="alert" className="m-0 text-[13px] text-act">
+              {SEND_COPY.feeUnsupported}
+            </p>
+          )}
           <TxError error={error} />
           <div className="mt-1">
             <TxButton
@@ -264,7 +305,15 @@ export function SendDone({ title, txHash, onDone }: { title: string; txHash?: `0
  * (a typo, a name that points nowhere) or the recipient's guard.
  */
 function ToCard({
-  state, recipient, text, onText, onFind, onChange, disabled, note, waiting,
+  state,
+  recipient,
+  text,
+  onText,
+  onFind,
+  onChange,
+  disabled,
+  note,
+  waiting,
 }: {
   state: ToState;
   recipient: Recipient | null;
@@ -300,7 +349,9 @@ function ToCard({
         className="flex flex-col gap-2 rounded-[16px] border border-line-field bg-card p-3.5 leading-[normal] outline-none focus-within:border-ink focus:border-ink"
       >
         {recipient ? (
-          <span id="send-to-label" className={labelClass}>{SEND_COPY.to}</span>
+          <span id="send-to-label" className={labelClass}>
+            {SEND_COPY.to}
+          </span>
         ) : (
           <label id="send-to-label" htmlFor="send-to" className={labelClass}>
             {SEND_COPY.to}
@@ -311,8 +362,12 @@ function ToCard({
             <Initial person={{ account: recipient.address, name: recipient.name }} size={36} />
             {/* A name over its address, shortened; an address without one in full, in fours. */}
             <span className="num flex min-w-0 grow flex-col gap-0.5">
-              <span className="truncate text-[16px] font-semibold tracking-[-0.01em]">{recipient.name ?? shortAddress(recipient.address)}</span>
-              <span className={`text-[12px] text-ink-mid ${recipient.name ? "truncate" : "break-words leading-[1.35]"}`}>
+              <span className="truncate text-[16px] font-semibold tracking-[-0.01em]">
+                {recipient.name ?? shortAddress(recipient.address)}
+              </span>
+              <span
+                className={`text-[12px] text-ink-mid ${recipient.name ? "truncate" : "break-words leading-[1.35]"}`}
+              >
                 {recipient.name ? shortAddress(recipient.address) : grouped(recipient.address)}
               </span>
             </span>
@@ -379,7 +434,10 @@ function ToCard({
 /** A refusal is an alert; a warning is a status. */
 function Note({ tone, children }: { tone: "act" | "watch"; children: ReactNode }) {
   return (
-    <p role={tone === "act" ? "alert" : "status"} className={`m-0 px-0.5 text-[13px] leading-snug ${tone === "act" ? "text-act" : "text-watch-text"}`}>
+    <p
+      role={tone === "act" ? "alert" : "status"}
+      className={`m-0 px-0.5 text-[13px] leading-snug ${tone === "act" ? "text-act" : "text-watch-text"}`}
+    >
       {children}
     </p>
   );
@@ -387,7 +445,10 @@ function Note({ tone, children }: { tone: "act" | "watch"; children: ReactNode }
 
 /** NYM's Recents row: a mono label, then round marks with the name's first label (or the short address), one swipe wide. */
 function QuickPicks({
-  label, people, onPick, disabled,
+  label,
+  people,
+  onPick,
+  disabled,
 }: {
   label: string;
   people: { address: Address; name: string | null }[];
@@ -408,7 +469,9 @@ function QuickPicks({
             className="flex w-[72px] shrink-0 flex-col items-center gap-1.5 rounded-[14px] py-1 transition active:scale-95 disabled:opacity-45"
           >
             <Initial person={{ account: p.address, name: p.name }} size={44} />
-            <span className="w-full truncate text-center text-[12px] text-ink-mid">{p.name ? p.name.split(".")[0] : `${p.address.slice(0, 4)}…${p.address.slice(-4)}`}</span>
+            <span className="w-full truncate text-center text-[12px] text-ink-mid">
+              {p.name ? p.name.split(".")[0] : `${p.address.slice(0, 4)}…${p.address.slice(-4)}`}
+            </span>
           </button>
         ))}
       </div>

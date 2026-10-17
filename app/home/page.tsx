@@ -57,7 +57,13 @@ function Home({ address }: { address: `0x${string}` }) {
   const apy = data ? aprToApy(data.savingsApr) : 0;
   const setup = useCashSetup(address);
   const arrived = arrivedView(arrivedCoins(useEntryBalances(address)), setup.entry);
-  const earn = useStartEarning({ account: address, cash: data?.cash, savingsUsd: data?.savingsUsd ?? 0, setup, rate: data ? rateText(apy) : null });
+  const earn = useStartEarning({
+    account: address,
+    cash: data?.cash,
+    savingsUsd: data?.savingsUsd ?? 0,
+    setup,
+    rate: data ? rateText(apy) : null,
+  });
 
   return (
     <div className="relative flex min-h-dvh flex-col">
@@ -65,7 +71,9 @@ function Home({ address }: { address: `0x${string}` }) {
 
       {isError && !data && (
         <div className="mx-5 mt-4 rounded-[22px] bg-card p-4 shadow-card-elev">
-          <p role="alert" className="m-0 text-[15px]">We couldn’t load your account from Base.</p>
+          <p role="alert" className="m-0 text-[15px]">
+            We couldn’t load your account from Base.
+          </p>
           <button type="button" onClick={() => refetch()} className="mt-3 h-11 rounded-full bg-chip px-4 font-semibold">
             Try again
           </button>
@@ -109,9 +117,30 @@ function Home({ address }: { address: `0x${string}` }) {
       <TabBar />
       {data && (
         <>
-          <TotalBalanceSheet open={sheet === "total"} onClose={close} cashUsd={data.cashUsd} stocksUsd={data.stocksUsd} debtUsd={data.debtUsd} />
-          <YieldSheet open={sheet === "yield"} onClose={close} cashUsd={data.cashUsd} savingsUsd={data.savingsUsd} apy={apy} earning={data.cash.saveOn} />
-          <CashSheet open={sheet === "cash"} onClose={close} account={address} data={data} apy={apy} arrived={arrived} save={setup.save} />
+          <TotalBalanceSheet
+            open={sheet === "total"}
+            onClose={close}
+            cashUsd={data.cashUsd}
+            stocksUsd={data.stocksUsd}
+            debtUsd={data.debtUsd}
+          />
+          <YieldSheet
+            open={sheet === "yield"}
+            onClose={close}
+            cashUsd={data.cashUsd}
+            savingsUsd={data.savingsUsd}
+            apy={apy}
+            earning={data.cash.saveOn}
+          />
+          <CashSheet
+            open={sheet === "cash"}
+            onClose={close}
+            account={address}
+            data={data}
+            apy={apy}
+            arrived={arrived}
+            save={setup.save}
+          />
           <StockSheets sheets={stocks} user={address} data={data} />
         </>
       )}
@@ -120,7 +149,15 @@ function Home({ address }: { address: `0x${string}` }) {
 }
 
 function Loaded({
-  data, apy, open, openStock, openCreditBuy, openTrade, arrived, cards, dim,
+  data,
+  apy,
+  open,
+  openStock,
+  openCreditBuy,
+  openTrade,
+  arrived,
+  cards,
+  dim,
 }: {
   data: PositionData;
   apy: number;
@@ -151,7 +188,13 @@ function Loaded({
           value={data.stocksUsd + data.cashUsd}
           // Board 2f: today's change is always there; with no stocks nothing moves, so it reads $0.00 · 0.00% today.
           sub={
-            today ? <TodayChange usd={today.usd} pct={today.pct} /> : market.loading ? <TodayPending /> : held.length === 0 ? <TodayChange usd={0} pct={0} /> : undefined
+            today ? (
+              <TodayChange usd={today.usd} pct={today.pct} />
+            ) : market.loading ? (
+              <TodayPending />
+            ) : held.length === 0 ? (
+              <TodayChange usd={0} pct={0} />
+            ) : undefined
           }
           // Board 2f: what you have on the left, what you owe on the right. Owed is rounded up, never shown as less.
           side={{
@@ -171,13 +214,20 @@ function Loaded({
               <span className="inline-flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1">
                 <StatusPill status={homeStatus(data.status)} size="sm" />
                 <span className="whitespace-nowrap">
-                  {monthlyCostText(data.monthlyCostUsd).replace(" / month", "")} /<span className="text-[11px]">month</span>
+                  {monthlyCostText(data.monthlyCostUsd).replace(" / month", "")} /
+                  <span className="text-[11px]">month</span>
                 </span>
               </span>
             ),
           }}
         />
-        <BalanceLine held={held.length > 0} stockWeek={weekValue(priced)} cashUsd={data.cashUsd} loading={market.loading} onRetry={market.retry} />
+        <BalanceLine
+          held={held.length > 0}
+          stockWeek={weekValue(priced)}
+          cashUsd={data.cashUsd}
+          loading={market.loading}
+          onRetry={market.retry}
+        />
         <MarketBanner />
       </section>
 
@@ -208,14 +258,19 @@ function Loaded({
             <span className="text-lg font-semibold tracking-[-0.015em]">Portfolio</span>
             <span className="num text-sm text-subtle">{formatUsdTrim(Math.round(data.stocksUsd))}</span>
           </Link>
-          <Link href="/portfolio" className="-my-[5px] -mr-1 flex h-8 items-center gap-0.5 px-1 text-[13px] font-medium text-ink-mid no-underline">
+          <Link
+            href="/portfolio"
+            className="-my-[5px] -mr-1 flex h-8 items-center gap-0.5 px-1 text-[13px] font-medium text-ink-mid no-underline"
+          >
             See all <ChevronRight />
           </Link>
         </div>
         {held.length === 0 ? (
           <EmptyPortfolio />
         ) : (
-          <div className={`relative -mx-5 flex ${held.length < 2 ? "justify-start" : "justify-between"} gap-2 overflow-x-auto px-5 pb-4 pt-0.5 [scrollbar-width:none]`}>
+          <div
+            className={`relative -mx-5 flex ${held.length < 2 ? "justify-start" : "justify-between"} gap-2 overflow-x-auto px-5 pb-4 pt-0.5 [scrollbar-width:none]`}
+          >
             {held.map((h) => {
               const valueUsd = h.freeUsd + h.lockedUsd;
               const m = market.bySymbol[h.symbol];
@@ -246,8 +301,15 @@ function Skeleton() {
   return (
     <div aria-busy className="flex flex-col gap-4 px-5 pt-[18px]">
       <div className="h-[92px] animate-pulse rounded-[22px] bg-chip" />
-      <div className="grid grid-cols-4 gap-2">{[0, 1, 2, 3].map((i) => <div key={i} className="mx-auto size-12 animate-pulse rounded-3xl bg-chip" />)}</div>
-      <div className="grid grid-cols-2 gap-2.5"><div className="h-[108px] animate-pulse rounded-[22px] bg-chip" /><div className="h-[108px] animate-pulse rounded-[22px] bg-chip" /></div>
+      <div className="grid grid-cols-4 gap-2">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="mx-auto size-12 animate-pulse rounded-3xl bg-chip" />
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-2.5">
+        <div className="h-[108px] animate-pulse rounded-[22px] bg-chip" />
+        <div className="h-[108px] animate-pulse rounded-[22px] bg-chip" />
+      </div>
       <div className="h-[170px] animate-pulse rounded-[22px] bg-chip" />
     </div>
   );
@@ -278,8 +340,18 @@ function EmptyPortfolio() {
  * green nor red.
  */
 function BalanceLine({
-  held, stockWeek, cashUsd, loading, onRetry,
-}: { held: boolean; stockWeek: number[] | null; cashUsd: number; loading: boolean; onRetry: () => void }) {
+  held,
+  stockWeek,
+  cashUsd,
+  loading,
+  onRetry,
+}: {
+  held: boolean;
+  stockWeek: number[] | null;
+  cashUsd: number;
+  loading: boolean;
+  onRetry: () => void;
+}) {
   const points = held ? (stockWeek ? stockWeek.map((v) => v + cashUsd) : null) : [cashUsd, cashUsd];
   const flat = !!points && points[0] === points[points.length - 1];
   return (

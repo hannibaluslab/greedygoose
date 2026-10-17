@@ -48,7 +48,8 @@ export default function AgentsPage() {
   return <RequireAccount>{(address) => <Agents address={address} />}</RequireAccount>;
 }
 
-const byJob = <T,>(f: (job: AgentJob) => T) => Object.fromEntries(JOBS.map((job) => [job, f(job)])) as Record<AgentJob, T>;
+const byJob = <T,>(f: (job: AgentJob) => T) =>
+  Object.fromEntries(JOBS.map((job) => [job, f(job)])) as Record<AgentJob, T>;
 const LOADING = Object.fromEntries(AGENTS.map((a) => [a, { idle: "…" }])) as Record<Agent, Next>;
 
 const PREVIEW = "Preview mode — sign in to do this.";
@@ -110,7 +111,14 @@ function Agents({ address }: { address: `0x${string}` }) {
   const protectRuns = ["on", "starting"].includes(agentStatus("protect", agents.status));
   const weekend =
     position && protectRuns
-      ? weekendCard({ nowSec, freezeAt, collateralUsd: position.collateralUsd, avgCf: position.avgCf, debtUsd: position.debtUsd, numbers })
+      ? weekendCard({
+          nowSec,
+          freezeAt,
+          collateralUsd: position.collateralUsd,
+          avgCf: position.avgCf,
+          debtUsd: position.debtUsd,
+          numbers,
+        })
       : null;
 
   const cards = agentCards({
@@ -145,14 +153,18 @@ function Agents({ address }: { address: `0x${string}` }) {
   };
 
   /** What renewing a job keeps: the limit of the grant it runs with, or last ran with. */
-  const renewCapRaw = (job: AgentJob) => agents.terms[job]?.capRaw ?? agents.lastTerms[job]?.capRaw ?? capOf(LIMIT_USD[job].start);
+  const renewCapRaw = (job: AgentJob) =>
+    agents.terms[job]?.capRaw ?? agents.lastTerms[job]?.capRaw ?? capOf(LIMIT_USD[job].start);
 
   /** The JAW sheets a change takes. */
   const stepsFor = (agent: Agent, action: SheetAction, jobs?: AgentJob[]): AgentStep[] => {
     const main = AGENT_JOBS[agent][0];
     if (action === "off") return AGENT_JOBS[agent].filter((j) => agents.faceIdsOff([j]) > 0).map((j) => ({ off: j }));
     if (!position || capMax === null) return [];
-    if (action === "renew") return (jobs ?? AGENT_JOBS[agent].filter((j) => agents.terms[j])).map((j) => ({ grant: grantFor(j, renewCapRaw(j), position) }));
+    if (action === "renew")
+      return (jobs ?? AGENT_JOBS[agent].filter((j) => agents.terms[j])).map((j) => ({
+        grant: grantFor(j, renewCapRaw(j), position),
+      }));
     return [{ grant: grantFor(main, capOf(limitUsd(agent)), position) }];
   };
 
@@ -184,7 +196,11 @@ function Agents({ address }: { address: `0x${string}` }) {
 
   const act = (agent: Agent, action: SheetAction, jobs?: AgentJob[]) => {
     const name = AGENT_NAME[agent];
-    const message = { on: `${name} is on`, off: `${name} is off`, renew: `${name} runs until ${longDateText(nowSec + GRANT_SECONDS)}` }[action];
+    const message = {
+      on: `${name} is on`,
+      off: `${name} is off`,
+      renew: `${name} runs until ${longDateText(nowSec + GRANT_SECONDS)}`,
+    }[action];
     start(`${agent}:${action}`, agent, stepsFor(agent, action, jobs), message);
   };
 
@@ -218,7 +234,9 @@ function Agents({ address }: { address: `0x${string}` }) {
         activity={
           <FeedCard>
             {feed.isLoading ? (
-              <div aria-busy className="py-3.5"><div className="h-10 animate-pulse rounded-[16px] bg-chip" /></div>
+              <div aria-busy className="py-3.5">
+                <div className="h-10 animate-pulse rounded-[16px] bg-chip" />
+              </div>
             ) : activity.length ? (
               <FeedDays rows={activity} nowMs={nowSec * 1000} />
             ) : (
@@ -240,7 +258,12 @@ function Agents({ address }: { address: `0x${string}` }) {
       <AgentsView
         live={live}
         cards={cards.map((c) => (
-          <AttentionCard key={c.key} card={c} disabled={runner.running} onRenew={(agent, jobs) => act(agent, "renew", jobs)} />
+          <AttentionCard
+            key={c.key}
+            card={c}
+            disabled={runner.running}
+            onRenew={(agent, jobs) => act(agent, "renew", jobs)}
+          />
         ))}
         rows={items.map((item: AgentItem) => (
           <AgentRow

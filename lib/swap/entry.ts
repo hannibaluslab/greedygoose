@@ -39,7 +39,12 @@ export const MIN_CONVERT_RAW = BigInt(Math.round(ENTRY.minEntryUsd * 10 ** USDC.
 export async function quoteConvert(client: Client, coin: EntryCoinAsset, amountIn: bigint): Promise<bigint> {
   const v = coin.venue;
   if (v.kind === "psm3") {
-    return client.readContract({ address: v.psm, abi: psm3Abi, functionName: "previewSwapExactIn", args: [coin.address, USDC.address, amountIn] });
+    return client.readContract({
+      address: v.psm,
+      abi: psm3Abi,
+      functionName: "previewSwapExactIn",
+      args: [coin.address, USDC.address, amountIn],
+    });
   }
   const { result } =
     v.kind === "aerodrome"
@@ -47,7 +52,15 @@ export async function quoteConvert(client: Client, coin: EntryCoinAsset, amountI
           address: AERODROME_V1.QUOTER,
           abi: aeroQuoterAbi,
           functionName: "quoteExactInputSingle",
-          args: [{ tokenIn: coin.address, tokenOut: USDC.address, amountIn, tickSpacing: v.tickSpacing, sqrtPriceLimitX96: 0n }],
+          args: [
+            {
+              tokenIn: coin.address,
+              tokenOut: USDC.address,
+              amountIn,
+              tickSpacing: v.tickSpacing,
+              sqrtPriceLimitX96: 0n,
+            },
+          ],
         })
       : await client.simulateContract({
           address: UNISWAP.QUOTER_V2,
@@ -65,7 +78,11 @@ export type Conversion = { coin: EntryCoinAsset; amountIn: bigint; minOut: bigin
  * The batch for `conversions`: for each coin an exact approve to its venue, then its swap paying the user at least its
  * `minOut`. Uniswap and Aerodrome carry a deadline, PSM3 swaps at its fixed rate. Every call passes the allowlist.
  */
-export function buildConvertCalls(p: { user: `0x${string}`; conversions: readonly Conversion[]; nowSec?: number }): Call[] {
+export function buildConvertCalls(p: {
+  user: `0x${string}`;
+  conversions: readonly Conversion[];
+  nowSec?: number;
+}): Call[] {
   const deadline = swapDeadline(p.nowSec);
   const calls = p.conversions.flatMap(({ coin, amountIn, minOut }): Call[] => {
     if (amountIn <= 0n) throw new Error("Nothing to convert");
@@ -76,7 +93,11 @@ export function buildConvertCalls(p: { user: `0x${string}`; conversions: readonl
         approveCall(coin.address, v.psm, amountIn),
         {
           to: v.psm,
-          data: encodeFunctionData({ abi: psm3Abi, functionName: "swapExactIn", args: [coin.address, USDC.address, amountIn, minOut, p.user, 0n] }),
+          data: encodeFunctionData({
+            abi: psm3Abi,
+            functionName: "swapExactIn",
+            args: [coin.address, USDC.address, amountIn, minOut, p.user, 0n],
+          }),
           value: 0n,
         },
       ];

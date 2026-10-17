@@ -1,0 +1,11 @@
+# Generated or vendored
+.next/
+node_modules/
+package-lock.json
+next-env.d.ts
+contracts/
+public/
+.rehearsal/
+
+# Records stay as written
+*.md

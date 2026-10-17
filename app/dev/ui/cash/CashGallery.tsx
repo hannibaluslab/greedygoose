@@ -56,15 +56,34 @@ const usdc = (x: number) => BigInt(Math.round(x * 1e6));
 const [USDT, USDE] = ENTRY_COINS;
 /** 120 USDT in the wallet, and nothing else: what the Entry coins' balances would read. */
 const BALANCES = [usdc(120), 0n, 0n, 0n];
-const QUOTES: ConvertQuote[] = [{ coin: USDT, amountIn: usdc(120), minOut: convertFloorRaw(USDT, usdc(120)), outRaw: usdc(119.83), fair: true }];
+const QUOTES: ConvertQuote[] = [
+  { coin: USDT, amountIn: usdc(120), minOut: convertFloorRaw(USDT, usdc(120)), outRaw: usdc(119.83), fair: true },
+];
 /** 50 USDe its venue pays under 99.5% for right now. */
-const UNFAIR: ConvertQuote = { coin: USDE, amountIn: 50n * 10n ** 18n, minOut: convertFloorRaw(USDE, 50n * 10n ** 18n), outRaw: usdc(49.1), fair: false };
+const UNFAIR: ConvertQuote = {
+  coin: USDE,
+  amountIn: 50n * 10n ** 18n,
+  minOut: convertFloorRaw(USDE, 50n * 10n ** 18n),
+  outRaw: usdc(49.1),
+  fair: false,
+};
 const GRANT: GrantView = { busy: false, error: null, blocked: null, preview: false };
 const ZERO_TX = `0x${"0".repeat(64)}` as const;
 const noop = () => toast("Dev gallery: nothing is signed");
 
 type View = "home" | "start" | "arriving" | "convert" | "auto" | "done" | "pay" | "pay-setup" | "activity" | SheetView;
-const VIEWS: View[] = ["home", "start", "arriving", "convert", "auto", "done", "pay", "pay-setup", "activity", ...SHEET_VIEWS];
+const VIEWS: View[] = [
+  "home",
+  "start",
+  "arriving",
+  "convert",
+  "auto",
+  "done",
+  "pay",
+  "pay-setup",
+  "activity",
+  ...SHEET_VIEWS,
+];
 const ARRIVED = startEarningText({ walletUsd: 100, savingsUsd: 0, rate: RATE });
 const IDLE = startEarningText({ walletUsd: 40, savingsUsd: 1_200, rate: RATE });
 const isSheetView = (v: View): v is SheetView => (SHEET_VIEWS as readonly string[]).includes(v);
@@ -79,7 +98,16 @@ export function CashGallery() {
     return (
       <HomeFixture
         cards={null}
-        sheet={<TopUpSheetView open onClose={noop} address={ADDRESS} name="sam.justan.id" rate={view === "pay" ? RATE : null} onCopy={noop} />}
+        sheet={
+          <TopUpSheetView
+            open
+            onClose={noop}
+            address={ADDRESS}
+            name="sam.justan.id"
+            rate={view === "pay" ? RATE : null}
+            onCopy={noop}
+          />
+        }
       />
     );
   }
@@ -91,7 +119,14 @@ export function CashGallery() {
           <>
             <StartEarningCard {...IDLE} phase="idle" steps={2} error={null} preview={false} onStart={noop} />
             <StartEarningCard {...ARRIVED} phase="pending" error={null} preview={false} onStart={noop} />
-            <StartEarningCard {...IDLE} phase="idle" steps={2} error={`1 of 2 went through. ${TAP_AGAIN}`} preview={false} onStart={noop} />
+            <StartEarningCard
+              {...IDLE}
+              phase="idle"
+              steps={2}
+              error={`1 of 2 went through. ${TAP_AGAIN}`}
+              preview={false}
+              onStart={noop}
+            />
           </>
         }
         sheet={null}
@@ -129,7 +164,9 @@ export function CashGallery() {
                 onConvert={noop}
               />
             )}
-            {view === "home" && <StartEarningCard {...ARRIVED} phase="idle" error={null} preview={false} onStart={noop} />}
+            {view === "home" && (
+              <StartEarningCard {...ARRIVED} phase="idle" error={null} preview={false} onStart={noop} />
+            )}
           </>
         )
       }
@@ -154,13 +191,20 @@ function HomeFixture({ note, cards, sheet }: { note?: string; cards: ReactNode; 
     <div className="relative min-h-dvh">
       <header className="flex items-center justify-between px-5 pt-[calc(env(safe-area-inset-top)+8px)]">
         <div className="flex items-center gap-2.5">
-          <span aria-hidden className="flex size-9 items-center justify-center rounded-[18px] bg-ink text-sm font-semibold text-on-ink">S</span>
+          <span
+            aria-hidden
+            className="flex size-9 items-center justify-center rounded-[18px] bg-ink text-sm font-semibold text-on-ink"
+          >
+            S
+          </span>
           <div className="flex flex-col leading-[1.3]">
             <span className="text-[15px] font-medium">Hi, Sam</span>
             <span className="num text-xs text-subtle">sam.justan.id</span>
           </div>
         </div>
-        <span className="-mr-2 flex size-10 items-center justify-center"><MenuIcon /></span>
+        <span className="-mr-2 flex size-10 items-center justify-center">
+          <MenuIcon />
+        </span>
       </header>
       <section className="flex flex-col gap-2.5 px-5 pt-[18px]">
         <BalanceHero
@@ -190,7 +234,8 @@ function HomeFixture({ note, cards, sheet }: { note?: string; cards: ReactNode; 
 /** Activity as the app draws it: the cash's own events among the user's and Protect's moves. */
 function ActivityFixture({ nowSec }: { nowSec: number }) {
   const nowMs = nowSec * 1000;
-  const at = (daysBack: number, h: number, m: number) => new Date(nowMs).setHours(h, m, 0, 0) / 1000 - daysBack * 86_400;
+  const at = (daysBack: number, h: number, m: number) =>
+    new Date(nowMs).setHours(h, m, 0, 0) / 1000 - daysBack * 86_400;
   const hf = (x: number) => (BigInt(Math.round(x * 1000)) * 10n ** 18n) / 1000n;
   const tesla = Array.from({ length: 7 }, (_, i) => (i === 6 ? BigInt(Math.round((180 / 378.38) * 1e8)) : 0n));
   const executor: [string, number, AgentEvent, MoveContext][] = [
@@ -199,23 +244,61 @@ function ActivityFixture({ nowSec }: { nowSec: number }) {
       "sale",
       at(0, 3, 12),
       { kind: "sold", sharesRaw: tesla, repaidRaw: usdc(178.2), hfBefore: hf(1.24), hfAfter: hf(1.52), atOnce: false },
-      { owedRaw: [usdc(780), usdc(600)], cashRaw: [usdc(400), usdc(401.8)], pricesRaw: [0n, 0n, 0n, 0n, 0n, 0n, 37_838_000_000n] },
+      {
+        owedRaw: [usdc(780), usdc(600)],
+        cashRaw: [usdc(400), usdc(401.8)],
+        pricesRaw: [0n, 0n, 0n, 0n, 0n, 0n, 37_838_000_000n],
+      },
     ],
-    ["arrived", at(1, 18, 5), { kind: "converted", coin: USDT.address, amountInRaw: usdc(120), usdcOutRaw: usdc(119.83) }, {}],
+    [
+      "arrived",
+      at(1, 18, 5),
+      { kind: "converted", coin: USDT.address, amountInRaw: usdc(120), usdcOutRaw: usdc(119.83) },
+      {},
+    ],
     ["save-3", at(3, 11, 2), { kind: "saved", amountRaw: usdc(500) }, {}],
   ];
   const yours: ActivityRow[] = [
-    { key: "turned", time: at(2, 14, 30) * 1000, status: "done", hash: ZERO_TX, items: [{ kind: "convert", symbol: USDE.symbol, amount: 50, receivedUsd: 49.97 }] },
-    { key: "buy", time: at(2, 10, 20) * 1000, status: "done", hash: ZERO_TX, items: [{ kind: "buy", symbol: "NVDAc", amount: 0.112, paidUsd: 20 }] },
+    {
+      key: "turned",
+      time: at(2, 14, 30) * 1000,
+      status: "done",
+      hash: ZERO_TX,
+      items: [{ kind: "convert", symbol: USDE.symbol, amount: 50, receivedUsd: 49.97 }],
+    },
+    {
+      key: "buy",
+      time: at(2, 10, 20) * 1000,
+      status: "done",
+      hash: ZERO_TX,
+      items: [{ kind: "buy", symbol: "NVDAc", amount: 0.112, paidUsd: 20 }],
+    },
   ];
   const rows: FeedRow[] = [
-    ...executor.map(([key, time, e, ctx]) => ({ ...describeAgentEvent(e, time, ctx)!, key, time: time * 1000, hash: ZERO_TX, event: e, ctx })),
+    ...executor.map(([key, time, e, ctx]) => ({
+      ...describeAgentEvent(e, time, ctx)!,
+      key,
+      time: time * 1000,
+      hash: ZERO_TX,
+      event: e,
+      ctx,
+    })),
     ...yours,
   ].sort((a, b) => b.time - a.time);
   return (
     <div className="relative flex min-h-dvh flex-col gap-4 px-5 pt-[calc(env(safe-area-inset-top)+8px)]">
       <TabHeader title="Activity" />
-      <AgentsFeed title={null} empty="" rows={rows} nowMs={nowMs} loading={false} error={null} onRetry={() => {}} more={false} onShowEarlier={() => {}} />
+      <AgentsFeed
+        title={null}
+        empty=""
+        rows={rows}
+        nowMs={nowMs}
+        loading={false}
+        error={null}
+        onRetry={() => {}}
+        more={false}
+        onShowEarlier={() => {}}
+      />
       <TabBar />
     </div>
   );

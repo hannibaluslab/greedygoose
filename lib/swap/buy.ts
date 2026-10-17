@@ -28,7 +28,9 @@ export type BuyQuote = { venue: Venue; pool: number; amountIn: bigint; amountOut
 export type Side = "buy" | "sell";
 
 const pair = (stock: ReserveAsset, side: Side) =>
-  side === "buy" ? { tokenIn: USDC.address, tokenOut: stock.address } : { tokenIn: stock.address, tokenOut: USDC.address };
+  side === "buy"
+    ? { tokenIn: USDC.address, tokenOut: stock.address }
+    : { tokenIn: stock.address, tokenOut: USDC.address };
 
 /** Effective $/share paid, and its premium over Aave's oracle price. */
 export function quoteEconomics(q: BuyQuote, stock: Pick<ReserveAsset, "decimals">, oraclePriceUsd: number) {
@@ -43,7 +45,9 @@ export const minOut = (amountOut: bigint, slippageBps: number = BUY_LIMITS.slipp
   (amountOut * BigInt(10_000 - slippageBps)) / 10_000n;
 
 export const bestQuote = (quotes: BuyQuote[]): BuyQuote | null =>
-  quotes.filter((q) => q.amountOut > 0n).reduce<BuyQuote | null>((b, q) => (!b || q.amountOut > b.amountOut ? q : b), null);
+  quotes
+    .filter((q) => q.amountOut > 0n)
+    .reduce<BuyQuote | null>((b, q) => (!b || q.amountOut > b.amountOut ? q : b), null);
 
 type Client = PublicClient<Transport, typeof CHAIN>;
 
@@ -77,7 +81,12 @@ export async function quotePool(
 }
 
 /** Best quote across Aerodrome tick spacings and Uniswap v3 fee tiers, either way. `null` = no pool can fill it. */
-export async function quoteSwap(client: Client, stock: ReserveAsset, amountIn: bigint, side: Side): Promise<BuyQuote | null> {
+export async function quoteSwap(
+  client: Client,
+  stock: ReserveAsset,
+  amountIn: bigint,
+  side: Side,
+): Promise<BuyQuote | null> {
   const settled = await Promise.allSettled([
     ...AERODROME.TICK_SPACINGS.map((pool) => quotePool(client, stock, "aerodrome", pool, amountIn, side)),
     ...UNISWAP.FEE_TIERS.map((pool) => quotePool(client, stock, "uniswap", pool, amountIn, side)),
@@ -85,7 +94,8 @@ export async function quoteSwap(client: Client, stock: ReserveAsset, amountIn: b
   return bestQuote(settled.flatMap((r) => (r.status === "fulfilled" ? [r.value] : [])));
 }
 
-export const quoteBuy = (client: Client, stock: ReserveAsset, amountIn: bigint) => quoteSwap(client, stock, amountIn, "buy");
+export const quoteBuy = (client: Client, stock: ReserveAsset, amountIn: bigint) =>
+  quoteSwap(client, stock, amountIn, "buy");
 
 /** A quote's part of a write's key (useTx): a new quote is a new batch, since its floor (`minOut`) comes from amountOut. */
 export const quoteKey = (q: BuyQuote) => [q.venue, q.pool, q.amountIn, q.amountOut];
@@ -139,7 +149,18 @@ export function exactInputCall(p: {
       ? encodeFunctionData({
           abi: aeroRouterAbi,
           functionName: "exactInputSingle",
-          args: [{ tokenIn, tokenOut, tickSpacing: p.pool, recipient, deadline: p.deadline, amountIn, amountOutMinimum, sqrtPriceLimitX96: 0n }],
+          args: [
+            {
+              tokenIn,
+              tokenOut,
+              tickSpacing: p.pool,
+              recipient,
+              deadline: p.deadline,
+              amountIn,
+              amountOutMinimum,
+              sqrtPriceLimitX96: 0n,
+            },
+          ],
         })
       : encodeFunctionData({
           abi: swapRouter02Abi,
@@ -150,7 +171,9 @@ export function exactInputCall(p: {
               encodeFunctionData({
                 abi: swapRouter02Abi,
                 functionName: "exactInputSingle",
-                args: [{ tokenIn, tokenOut, fee: p.pool, recipient, amountIn, amountOutMinimum, sqrtPriceLimitX96: 0n }],
+                args: [
+                  { tokenIn, tokenOut, fee: p.pool, recipient, amountIn, amountOutMinimum, sqrtPriceLimitX96: 0n },
+                ],
               }),
             ],
           ],
@@ -159,7 +182,8 @@ export function exactInputCall(p: {
 }
 
 /** A swap's deadline, BUY_LIMITS.deadlineSec from now (or from `nowSec`). */
-export const swapDeadline = (nowSec?: number) => BigInt((nowSec ?? Math.floor(Date.now() / 1000)) + BUY_LIMITS.deadlineSec);
+export const swapDeadline = (nowSec?: number) =>
+  BigInt((nowSec ?? Math.floor(Date.now() / 1000)) + BUY_LIMITS.deadlineSec);
 
 /**
  * Exact-amount approve to the chosen router + exactInputSingle, recipient = the user, with the
@@ -196,5 +220,9 @@ export function buildSwapCalls(p: {
 }
 
 /** Buy `stock` with USDC: at least the quote less BUY_LIMITS' slippage. */
-export const buildBuyCalls = (p: { user: `0x${string}`; stock: ReserveAsset; quote: BuyQuote; nowSec?: number }): Call[] =>
-  buildSwapCalls({ ...p, side: "buy", amountOutMinimum: minOut(p.quote.amountOut) });
+export const buildBuyCalls = (p: {
+  user: `0x${string}`;
+  stock: ReserveAsset;
+  quote: BuyQuote;
+  nowSec?: number;
+}): Call[] => buildSwapCalls({ ...p, side: "buy", amountOutMinimum: minOut(p.quote.amountOut) });

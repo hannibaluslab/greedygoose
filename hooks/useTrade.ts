@@ -17,7 +17,15 @@ type Address = `0x${string}`;
 /** What the Trade sheet signs, per route, with the quotes and the plan its screen shows. */
 export type TradeSign =
   | { route: "buy"; user: Address; stock: ReserveAsset; quote: BuyQuote }
-  | { route: "sell"; user: Address; stock: ReserveAsset; quote: SellQuote; plan: SellPlan; oraclePriceUsd: number; debtRaw: bigint }
+  | {
+      route: "sell";
+      user: Address;
+      stock: ReserveAsset;
+      quote: SellQuote;
+      plan: SellPlan;
+      oraclePriceUsd: number;
+      debtRaw: bigint;
+    }
   | {
       route: "swap";
       user: Address;
@@ -49,9 +57,19 @@ export type SwapReads = {
  */
 export async function swapBatch(p: Extract<TradeSign, { route: "swap" }>, reads: SwapReads): Promise<Call[]> {
   if (p.plan.block) throw new TxStop(saleBlockText(p.plan.block, true, swapMinUsd(1 - p.plan.discount, p.feeFromSale)));
-  const [sellQuote, buyQuote] = await Promise.all([reads.quoteToSign(p.from, p.sellQuote, "sell"), reads.quoteToSign(p.to, p.buyQuote, "buy")]);
+  const [sellQuote, buyQuote] = await Promise.all([
+    reads.quoteToSign(p.from, p.sellQuote, "sell"),
+    reads.quoteToSign(p.to, p.buyQuote, "buy"),
+  ]);
   if (buyQuote.amountIn > sellMinOut(sellQuote, p.from, p.oraclePriceUsd)) throw new TxStop(QUOTE_MOVED);
-  const calls = buildTradeCalls({ user: p.user, from: p.from, to: p.to, sellQuote, buyQuote, oraclePriceUsd: p.oraclePriceUsd });
+  const calls = buildTradeCalls({
+    user: p.user,
+    from: p.from,
+    to: p.to,
+    sellQuote,
+    buyQuote,
+    oraclePriceUsd: p.oraclePriceUsd,
+  });
   return p.feeFromSale ? calls : payFromCash(p.user, 0n, await reads.cashToSign(p.user, 0n), calls);
 }
 

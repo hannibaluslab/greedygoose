@@ -13,8 +13,20 @@ const CARD = "flex flex-col gap-2 rounded-[22px] px-4 py-3.5 leading-[normal]";
  * place. `dim`: board 2g, money is in but earning isn't on yet, so the card sits at 60% with no shadow.
  */
 export function CashCard({
-  cashUsd, earning, note, dim = false, href, onClick,
-}: { cashUsd: number; /** The line under the amount: "Always earning", "$25 earning" or "Not earning yet". */ earning: string; note?: string; dim?: boolean; href?: string; onClick?: () => void }) {
+  cashUsd,
+  earning,
+  note,
+  dim = false,
+  href,
+  onClick,
+}: {
+  cashUsd: number;
+  /** The line under the amount: "Always earning", "$25 earning" or "Not earning yet". */ earning: string;
+  note?: string;
+  dim?: boolean;
+  href?: string;
+  onClick?: () => void;
+}) {
   return (
     <Tap
       href={href}
@@ -40,9 +52,23 @@ export function CashCard({
  * The white Yield card next to Cash (board 2f): the cash rate (D19: stocks earn no yield, so it's the one rate) with a
  * VARIABLE chip. "Earned so far" joins it once it's read from the chain; never estimated from the rate.
  */
-export function YieldCard({ apy, dim = false, href, onClick }: { apy: number | null; dim?: boolean; href?: string; onClick?: () => void }) {
+export function YieldCard({
+  apy,
+  dim = false,
+  href,
+  onClick,
+}: {
+  apy: number | null;
+  dim?: boolean;
+  href?: string;
+  onClick?: () => void;
+}) {
   return (
-    <Tap href={href} onClick={onClick} className={`${CARD} bg-card text-left text-ink shadow-card-elev ${dim ? "opacity-60" : ""}`}>
+    <Tap
+      href={href}
+      onClick={onClick}
+      className={`${CARD} bg-card text-left text-ink shadow-card-elev ${dim ? "opacity-60" : ""}`}
+    >
       <span className="flex items-center justify-between">
         <span className="text-[14px] font-semibold">Yield</span>
         <span className="flex h-[22px] items-center rounded-[6px] bg-pill px-[7px] font-mono text-[10px] font-medium tracking-[0.04em] text-ink-mid">
@@ -50,7 +76,9 @@ export function YieldCard({ apy, dim = false, href, onClick }: { apy: number | n
         </span>
       </span>
       <span className="flex items-baseline gap-1.5">
-        <span className="num text-[26px] font-semibold tracking-[-0.03em]">{apy == null ? "–" : `${(apy * 100).toFixed(1)}%`}</span>
+        <span className="num text-[26px] font-semibold tracking-[-0.03em]">
+          {apy == null ? "–" : `${(apy * 100).toFixed(1)}%`}
+        </span>
         <span className="text-[13px] text-subtle">APY</span>
       </span>
     </Tap>
@@ -62,8 +90,20 @@ export function YieldCard({ apy, dim = false, href, onClick }: { apy: number | n
  * owed, the credit available takes the cost's place (F2-1), rounded down so it's never shown as more than it is.
  */
 export function CreditCard({
-  debtUsd, status, monthlyCostUsd, availableUsd, href, onClick,
-}: { debtUsd: number; status: Status; monthlyCostUsd: number; availableUsd: number; href?: string; onClick?: () => void }) {
+  debtUsd,
+  status,
+  monthlyCostUsd,
+  availableUsd,
+  href,
+  onClick,
+}: {
+  debtUsd: number;
+  status: Status;
+  monthlyCostUsd: number;
+  availableUsd: number;
+  href?: string;
+  onClick?: () => void;
+}) {
   const owes = debtUsd > 0;
   return (
     <Tap href={href} onClick={onClick} className={`${CARD} bg-card text-left text-ink shadow-card-elev`}>
@@ -78,7 +118,9 @@ export function CreditCard({
       </span>
       <span className="mt-auto flex w-full items-baseline justify-between text-[12px]">
         <span className="text-subtle">{owes ? "Cost" : "Available"}</span>
-        <span className="num font-semibold">{owes ? monthlyCostText(monthlyCostUsd) : formatUsdTrim(Math.floor(availableUsd))}</span>
+        <span className="num font-semibold">
+          {owes ? monthlyCostText(monthlyCostUsd) : formatUsdTrim(Math.floor(availableUsd))}
+        </span>
       </span>
     </Tap>
   );

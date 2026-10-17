@@ -34,7 +34,10 @@ describe("GET /api/prices (the CoinGecko fallback)", () => {
   });
 
   it("resolves stocks through the registry only", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => Response.json(ROWS)));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json(ROWS)),
+    );
     const body = await (await ask("?s=NVDAc,NVDA,bitcoin,0xb20000000000000000000078ee7ce2fE4908108C")).json();
     expect(Object.keys(body)).toEqual(["NVDAc"]);
   });
@@ -48,13 +51,19 @@ describe("GET /api/prices (the CoinGecko fallback)", () => {
   });
 
   it("answers 502 when CoinGecko turns it away", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ status: { error_code: 429 } }, { status: 429 })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ status: { error_code: 429 } }, { status: 429 })),
+    );
     expect((await ask("?s=METAc")).status).toBe(502);
   });
 
   it("leaves out a stock CoinGecko has no price for", async () => {
     const rows = ROWS.map((r) => (r.id === "meta-coinbase-tokenized-stock" ? { ...r, current_price: null } : r));
-    vi.stubGlobal("fetch", vi.fn(async () => Response.json(rows)));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json(rows)),
+    );
     const body = await (await ask("?s=METAc,NVDAc")).json();
     expect(Object.keys(body)).toEqual(["NVDAc"]);
   });

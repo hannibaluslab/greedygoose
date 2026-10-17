@@ -24,7 +24,12 @@ async function main() {
   await fork.test.increaseTime({ seconds });
   await fork.test.mine({ blocks: 1 });
   const after = (await fork.pub.getBlock()).timestamp;
-  const frozen = await fork.pub.readContract({ address: state.executor, abi: gooseExecutorAbi, functionName: "frozen", args: [after] });
+  const frozen = await fork.pub.readContract({
+    address: state.executor,
+    abi: gooseExecutorAbi,
+    functionName: "frozen",
+    args: [after],
+  });
   console.log(`Fork time: ${nyTime(before)} → ${nyTime(after)} (+${Number(after - before).toLocaleString("en-US")} s)`);
   console.log(`Stock prices are ${frozen ? "held (markets closed): Protect won't sell" : "live"}`);
 }

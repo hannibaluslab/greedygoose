@@ -110,7 +110,13 @@ export async function connectFork(rpc = RPC) {
   /** A transaction from one of anvil's unlocked dev accounts; throws if it reverts. `gas` fixes its gas limit. */
   async function send(from: Address, to: Address, data: Hex, what: string, gas?: bigint): Promise<TransactionReceipt> {
     if (!dev.some((d) => isAddressEqual(d, from))) throw new Error(`${from} isn't an unlocked anvil dev account`);
-    const hash = await wallet.sendTransaction({ account: from, to, data, chain: base, gas: gas ?? (await gasFor(pub, { from, to, data })) });
+    const hash = await wallet.sendTransaction({
+      account: from,
+      to,
+      data,
+      chain: base,
+      gas: gas ?? (await gasFor(pub, { from, to, data })),
+    });
     const receipt = await pub.waitForTransactionReceipt({ hash });
     if (receipt.status !== "success") throw new Error(`${what} reverted (${hash})`);
     return receipt;
@@ -118,7 +124,12 @@ export async function connectFork(rpc = RPC) {
 
   /** A batch as the JAW account's own executeBatch, sent by its owner: what a JAW user operation runs. */
   function batch(signer: Address, account: Address, calls: Call[], what: string) {
-    return send(signer, account, encodeFunctionData({ abi: executeBatchAbi, functionName: "executeBatch", args: [calls] }), what);
+    return send(
+      signer,
+      account,
+      encodeFunctionData({ abi: executeBatchAbi, functionName: "executeBatch", args: [calls] }),
+      what,
+    );
   }
 
   return { rpc, pub, test, wallet, dev, send, batch };
@@ -147,11 +158,23 @@ export const health = (wad: bigint) => {
   return `${hf(wad)} (${STATUS_LABEL[statusFor(n)]})`;
 };
 export const nyTime = (sec: number | bigint) =>
-  new Date(Number(sec) * 1000).toLocaleString("en-US", { timeZone: "America/New_York", weekday: "short", hour: "2-digit", minute: "2-digit", month: "short", day: "numeric" }) + " New York";
+  new Date(Number(sec) * 1000).toLocaleString("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "short",
+    day: "numeric",
+  }) + " New York";
 
 /** The agents' names on screen (JUSTALAB-DECISIONS, "Four agents, one name each"), by GooseExecutor's Job. */
 const JOB_NAMES = ["Save", "Protect", "Protect · sell", "Rebalance", "Receive"] as const;
-const OFF_REASONS = ["revoked", "expired", "the manager no longer owns the account", "stuck after failed runs"] as const;
+const OFF_REASONS = [
+  "revoked",
+  "expired",
+  "the manager no longer owns the account",
+  "stuck after failed runs",
+] as const;
 /** CashRules.sol `ProtectCase`; a repay is only ever Watch or WeekendShield. */
 const PROTECT_CASES = ["NoDebt", "Healthy", "NoSavings", "NoCap", "TooSmall", "Watch", "Weekend Shield"] as const;
 
@@ -173,7 +196,9 @@ export function describeExecutorLogs(logs: readonly Log[], executor: Address, wh
     const name = typeof a.account === "string" ? who(a.account as Address) : "";
     switch (e.eventName) {
       case "JobOn":
-        out.push(`${name}: ${JOB_NAMES[Number(a.job)]} is on, limit ${usd(a.cap as bigint)}, until ${new Date(Number(a.end) * 1000).toISOString().slice(0, 10)}`);
+        out.push(
+          `${name}: ${JOB_NAMES[Number(a.job)]} is on, limit ${usd(a.cap as bigint)}, until ${new Date(Number(a.end) * 1000).toISOString().slice(0, 10)}`,
+        );
         break;
       case "JobOff":
         out.push(`${name}: ${JOB_NAMES[Number(a.job)]} is off (${OFF_REASONS[Number(a.reason)]})`);
@@ -187,7 +212,9 @@ export function describeExecutorLogs(logs: readonly Log[], executor: Address, wh
         );
         break;
       case "SellHeadsUp":
-        out.push(`${name}: heads-up at health ${health(a.hf as bigint)}: Protect sells ${usd(a.sellValue as bigint)} at ${nyTime(a.sellAfter as number)} unless the health is back above 1.25`);
+        out.push(
+          `${name}: heads-up at health ${health(a.hf as bigint)}: Protect sells ${usd(a.sellValue as bigint)} at ${nyTime(a.sellAfter as number)} unless the health is back above 1.25`,
+        );
         break;
       case "SellHeadsUpCleared":
         out.push(`${name}: heads-up cleared, health ${health(a.hf as bigint)}`);
@@ -198,19 +225,25 @@ export function describeExecutorLogs(logs: readonly Log[], executor: Address, wh
         );
         break;
       case "Rebalanced":
-        out.push(`${name}: Rebalance sold ${stockList(a.sold as bigint[])} and bought ${stockList(a.bought as bigint[])}`);
+        out.push(
+          `${name}: Rebalance sold ${stockList(a.sold as bigint[])} and bought ${stockList(a.bought as bigint[])}`,
+        );
         break;
       case "RebalanceSkipped":
         out.push(`${name}: Rebalance couldn't meet its floors today; nothing moved`);
         break;
       case "EntryConverted": {
         const coin = ENTRY_COINS.find((c) => isAddressEqual(c.address, a.coin as Address));
-        out.push(`${name}: Receive converted ${usd(a.amountIn as bigint, coin?.decimals ?? 6)} of ${coin?.symbol ?? a.coin} into ${usd(a.usdcOut as bigint)} of USDC`);
+        out.push(
+          `${name}: Receive converted ${usd(a.amountIn as bigint, coin?.decimals ?? 6)} of ${coin?.symbol ?? a.coin} into ${usd(a.usdcOut as bigint)} of USDC`,
+        );
         break;
       }
       case "EntryWaiting": {
         const coin = ENTRY_COINS.find((c) => isAddressEqual(c.address, a.coin as Address));
-        out.push(`${name}: Receive is waiting for a fair price on ${coin?.symbol ?? a.coin}, tries again at ${nyTime(a.retryAt as number)}`);
+        out.push(
+          `${name}: Receive is waiting for a fair price on ${coin?.symbol ?? a.coin}, tries again at ${nyTime(a.retryAt as number)}`,
+        );
         break;
       }
       case "RunFailed":

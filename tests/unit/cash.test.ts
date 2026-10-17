@@ -15,16 +15,25 @@ const keepBack = usd(CASH.keepBackUsd);
 
 describe("savingsWithdrawal while Save is on (amount + fee buffer − min(wallet, keep-back))", () => {
   it("with a $0 wallet, takes the amount plus the fee buffer", () => {
-    expect(savingsWithdrawal(usd(1), { walletRaw: 0n, savingsRaw: usd(100), saveOn: true })).toEqual({ raw: usd(1) + fee, all: false });
+    expect(savingsWithdrawal(usd(1), { walletRaw: 0n, savingsRaw: usd(100), saveOn: true })).toEqual({
+      raw: usd(1) + fee,
+      all: false,
+    });
   });
 
   it("counts wallet USDC up to the keep-back", () => {
     const walletRaw = keepBack / 2n;
-    expect(savingsWithdrawal(usd(10), { walletRaw, savingsRaw: usd(100), saveOn: true })).toEqual({ raw: usd(10) + fee - walletRaw, all: false });
+    expect(savingsWithdrawal(usd(10), { walletRaw, savingsRaw: usd(100), saveOn: true })).toEqual({
+      raw: usd(10) + fee - walletRaw,
+      all: false,
+    });
   });
 
   it("never counts wallet USDC above the keep-back, which Save may sweep", () => {
-    expect(savingsWithdrawal(usd(10), { walletRaw: usd(500), savingsRaw: usd(100), saveOn: true })).toEqual({ raw: usd(10) + fee - keepBack, all: false });
+    expect(savingsWithdrawal(usd(10), { walletRaw: usd(500), savingsRaw: usd(100), saveOn: true })).toEqual({
+      raw: usd(10) + fee - keepBack,
+      all: false,
+    });
   });
 
   it("takes nothing when the kept-back wallet USDC covers the spend and the fee", () => {
@@ -34,7 +43,10 @@ describe("savingsWithdrawal while Save is on (amount + fee buffer − min(wallet
   });
 
   it("takes all of savings when they fall short, and nothing when there are none", () => {
-    expect(savingsWithdrawal(usd(10), { walletRaw: usd(50), savingsRaw: usd(3), saveOn: true })).toEqual({ raw: usd(3), all: true });
+    expect(savingsWithdrawal(usd(10), { walletRaw: usd(50), savingsRaw: usd(3), saveOn: true })).toEqual({
+      raw: usd(3),
+      all: true,
+    });
     expect(savingsWithdrawal(usd(10), { walletRaw: usd(50), savingsRaw: 0n, saveOn: true })).toBeNull();
   });
 });
@@ -42,17 +54,24 @@ describe("savingsWithdrawal while Save is on (amount + fee buffer − min(wallet
 describe("savingsWithdrawal while Save is off (wallet USDC first, then savings)", () => {
   it("counts the whole wallet, since nothing will sweep it", () => {
     expect(savingsWithdrawal(usd(10), { walletRaw: usd(500), savingsRaw: usd(100), saveOn: false })).toBeNull();
-    expect(savingsWithdrawal(usd(10), { walletRaw: usd(4), savingsRaw: usd(100), saveOn: false })).toEqual({ raw: usd(10) + fee - usd(4), all: false });
+    expect(savingsWithdrawal(usd(10), { walletRaw: usd(4), savingsRaw: usd(100), saveOn: false })).toEqual({
+      raw: usd(10) + fee - usd(4),
+      all: false,
+    });
   });
 
   it("takes everything from savings with a $0 wallet, the same as with Save on", () => {
     const c = { walletRaw: 0n, savingsRaw: usd(100) };
-    expect(savingsWithdrawal(usd(1), { ...c, saveOn: false })).toEqual(savingsWithdrawal(usd(1), { ...c, saveOn: true }));
+    expect(savingsWithdrawal(usd(1), { ...c, saveOn: false })).toEqual(
+      savingsWithdrawal(usd(1), { ...c, saveOn: true }),
+    );
   });
 
   it("leaves a batch alone when the wallet covers it", () => {
     const repay = buildRepayCalls({ user, amountRaw: usd(10), all: false });
-    expect(payFromCash(user, usd(10), { walletRaw: usd(20), savingsRaw: usd(100), saveOn: false }, repay)).toEqual(repay);
+    expect(payFromCash(user, usd(10), { walletRaw: usd(20), savingsRaw: usd(100), saveOn: false }, repay)).toEqual(
+      repay,
+    );
   });
 });
 
@@ -77,15 +96,23 @@ describe("payFromCash", () => {
 
   it("withdraws everything (max uint) when savings are the last of the cash", () => {
     const calls = payFromCash(user, usd(1), { walletRaw: 0n, savingsRaw: usd(1) + fee, saveOn: true }, repay);
-    expect(decodeFunctionData({ abi: aaveV3PoolAbi, data: calls[0].data }).args).toEqual([USDC.address, maxUint256, user]);
+    expect(decodeFunctionData({ abi: aaveV3PoolAbi, data: calls[0].data }).args).toEqual([
+      USDC.address,
+      maxUint256,
+      user,
+    ]);
   });
 
   it("leaves the batch alone when the wallet covers it", () => {
-    expect(payFromCash(user, usd(1), { walletRaw: keepBack + usd(1), savingsRaw: 0n, saveOn: true }, repay)).toEqual(repay);
+    expect(payFromCash(user, usd(1), { walletRaw: keepBack + usd(1), savingsRaw: 0n, saveOn: true }, repay)).toEqual(
+      repay,
+    );
   });
 
   it("refuses more than the cash can pay", () => {
-    expect(() => payFromCash(user, usd(10), { walletRaw: usd(4), savingsRaw: usd(6), saveOn: true }, repay)).toThrow(/More than your cash/);
+    expect(() => payFromCash(user, usd(10), { walletRaw: usd(4), savingsRaw: usd(6), saveOn: true }, repay)).toThrow(
+      /More than your cash/,
+    );
   });
 });
 
@@ -98,8 +125,12 @@ describe("cashShort (the cash read again right before Face ID)", () => {
   });
 
   it("stops a spend the cash no longer covers, saying what's there now", () => {
-    expect(cashShort(usd(10) - fee + 1n, c)).toBe("Your cash moved since you started. You have $10.00 now: check the amount and try again.");
-    expect(cashShort(usd(300), { walletRaw: 0n, savingsRaw: usd(120.5), saveOn: false })).toMatch(/You have \$120\.50 now/);
+    expect(cashShort(usd(10) - fee + 1n, c)).toBe(
+      "Your cash moved since you started. You have $10.00 now: check the amount and try again.",
+    );
+    expect(cashShort(usd(300), { walletRaw: 0n, savingsRaw: usd(120.5), saveOn: false })).toMatch(
+      /You have \$120\.50 now/,
+    );
   });
 
   it("counts savings and wallet alike (D15)", () => {
@@ -121,7 +152,10 @@ describe("cantRepay (the Repay screen with no amount to offer)", () => {
   });
 
   it("never says USDC or wallet", () => {
-    for (const c of [{ walletRaw: 0n, savingsRaw: 0n, saveOn: false }, { walletRaw: fee, savingsRaw: 0n, saveOn: false }]) {
+    for (const c of [
+      { walletRaw: 0n, savingsRaw: 0n, saveOn: false },
+      { walletRaw: fee, savingsRaw: 0n, saveOn: false },
+    ]) {
       expect(cantRepay(c)).not.toMatch(/USDC|wallet|account/i);
     }
   });

@@ -73,8 +73,20 @@ export const revokeGuardianCall = (p: GuardianPermission): Call => ({
 export function buildAddSavingsCalls(user: `0x${string}`, amountRaw: bigint): Call[] {
   if (amountRaw <= 0n) throw new Error("Amount must be positive");
   return [
-    { to: USDC.address, data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [GUARDIAN.AAVE_V3_POOL, amountRaw] }), value: 0n },
-    { to: GUARDIAN.AAVE_V3_POOL, data: encodeFunctionData({ abi: aaveV3PoolAbi, functionName: "supply", args: [USDC.address, amountRaw, user, 0] }), value: 0n },
+    {
+      to: USDC.address,
+      data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [GUARDIAN.AAVE_V3_POOL, amountRaw] }),
+      value: 0n,
+    },
+    {
+      to: GUARDIAN.AAVE_V3_POOL,
+      data: encodeFunctionData({
+        abi: aaveV3PoolAbi,
+        functionName: "supply",
+        args: [USDC.address, amountRaw, user, 0],
+      }),
+      value: 0n,
+    },
   ];
 }
 
@@ -83,7 +95,11 @@ export function buildWithdrawSavingsCalls(user: `0x${string}`, amountRaw: bigint
   return [
     {
       to: GUARDIAN.AAVE_V3_POOL,
-      data: encodeFunctionData({ abi: aaveV3PoolAbi, functionName: "withdraw", args: [USDC.address, all ? maxUint256 : amountRaw, user] }),
+      data: encodeFunctionData({
+        abi: aaveV3PoolAbi,
+        functionName: "withdraw",
+        args: [USDC.address, all ? maxUint256 : amountRaw, user],
+      }),
       value: 0n,
     },
   ];
@@ -96,8 +112,24 @@ export function buildWithdrawSavingsCalls(user: `0x${string}`, amountRaw: bigint
 export function buildRescueCalls(user: `0x${string}`, amountRaw: bigint) {
   if (amountRaw <= 0n) throw new Error("Amount must be positive");
   return [
-    { target: GUARDIAN.AAVE_V3_POOL, value: 0n, data: encodeFunctionData({ abi: aaveV3PoolAbi, functionName: "withdraw", args: [USDC.address, amountRaw, user] }) },
-    { target: USDC.address, value: 0n, data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [AAVE.SPOKE, amountRaw] }) },
-    { target: AAVE.SPOKE, value: 0n, data: encodeFunctionData({ abi: spokeAbi, functionName: "repay", args: [BigInt(USDC.reserveId), amountRaw, user] }) },
+    {
+      target: GUARDIAN.AAVE_V3_POOL,
+      value: 0n,
+      data: encodeFunctionData({ abi: aaveV3PoolAbi, functionName: "withdraw", args: [USDC.address, amountRaw, user] }),
+    },
+    {
+      target: USDC.address,
+      value: 0n,
+      data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [AAVE.SPOKE, amountRaw] }),
+    },
+    {
+      target: AAVE.SPOKE,
+      value: 0n,
+      data: encodeFunctionData({
+        abi: spokeAbi,
+        functionName: "repay",
+        args: [BigInt(USDC.reserveId), amountRaw, user],
+      }),
+    },
   ];
 }

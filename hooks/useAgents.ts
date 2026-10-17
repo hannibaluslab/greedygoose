@@ -28,7 +28,8 @@ export const GRANT_SECONDS = 365 * 86_400;
 /** What a job runs with: its limit, and for Protect · sell and the Rebalancer each stock's. */
 type JobTerms = { capRaw: bigint; limitsRaw?: StockLimits };
 
-const byJob = <T,>(f: (job: AgentJob) => T) => Object.fromEntries(JOBS.map((job) => [job, f(job)])) as Record<AgentJob, T>;
+const byJob = <T>(f: (job: AgentJob) => T) =>
+  Object.fromEntries(JOBS.map((job) => [job, f(job)])) as Record<AgentJob, T>;
 
 /**
  * Grants revoked this session (JAW permission ids), shared by every screen's useAgents until JAW's list shows them
@@ -47,7 +48,13 @@ export function useAgents(account: `0x${string}`) {
   const listed = usePermissions({ address: account, chainId: CHAIN_ID, query: { enabled: !!executor } });
   const at = executor ?? zeroAddress; // the reads stay off until the executor is configured
   const permissionOf = (id: number) =>
-    ({ address: at, abi: gooseExecutorAbi, functionName: "permissionOf", args: [account, id], chainId: CHAIN_ID }) as const;
+    ({
+      address: at,
+      abi: gooseExecutorAbi,
+      functionName: "permissionOf",
+      args: [account, id],
+      chainId: CHAIN_ID,
+    }) as const;
   const registry = useReadContracts({
     contracts: [
       { address: at, abi: gooseExecutorAbi, functionName: "jobsOf", args: [account], chainId: CHAIN_ID },
@@ -84,7 +91,8 @@ export function useAgents(account: `0x${string}`) {
     const [[jobs, , , fails, cooldownUntil], ...permissions] = registry.data;
     const grants = byJob((job): Stored & { limitsRaw?: StockLimits } => {
       const p = permissions[JOBS.indexOf(job)];
-      const limitsRaw = job === "sell" || job === "rebalance" ? (readStockLimits(job, p.spends) ?? undefined) : undefined;
+      const limitsRaw =
+        job === "sell" || job === "rebalance" ? (readStockLimits(job, p.spends) ?? undefined) : undefined;
       return { start: p.start, end: p.end, cap: p.spends[0]?.allowance ?? 0n, limitsRaw };
     });
     return { jobs, fails, cooldownUntil: Number(cooldownUntil), grants, permissions };
@@ -92,18 +100,20 @@ export function useAgents(account: `0x${string}`) {
 
   /** Our grants in JAW's list. */
   const granted = useMemo(
-    () => (executor ? (listed.data ?? []).map((p) => readAgentGrant(p, executor)).filter((g): g is AgentGrant => !!g) : []),
+    () =>
+      executor ? (listed.data ?? []).map((p) => readAgentGrant(p, executor)).filter((g): g is AgentGrant => !!g) : [],
     [executor, listed.data],
   );
 
   const status = useMemo(
     () =>
-      byJob((job): AgentStatus =>
-        !executor
-          ? "unconfigured"
-          : registry.isLoading || listed.isLoading || !stored
-            ? "loading"
-            : jobStatus(job, stored.jobs, stored.grants[job], granted, nowSec, listed.isError),
+      byJob(
+        (job): AgentStatus =>
+          !executor
+            ? "unconfigured"
+            : registry.isLoading || listed.isLoading || !stored
+              ? "loading"
+              : jobStatus(job, stored.jobs, stored.grants[job], granted, nowSec, listed.isError),
       ),
     [executor, registry.isLoading, stored, listed.isLoading, listed.isError, granted, nowSec],
   );
@@ -244,7 +254,8 @@ export function useAgents(account: `0x${string}`) {
     /** What's left of the running jobs' limits couldn't be read (`left` stays null until it is). */
     leftUnreadable: periods.isError && !periods.data,
     /** JAW sheets it takes to turn `jobs` off: one per grant JAW lists for them that hasn't ended. */
-    faceIdsOff: (jobs: readonly AgentJob[]) => jobs.reduce((n, job) => n + live[job].filter((g) => !revoked.has(g.permissionId)).length, 0),
+    faceIdsOff: (jobs: readonly AgentJob[]) =>
+      jobs.reduce((n, job) => n + live[job].filter((g) => !revoked.has(g.permissionId)).length, 0),
     /** The most any limit may be on this executor, once read. */
     capMaxRaw: capMax.data ?? null,
     /** The registry couldn't be read (every status stays "loading" until it is). */

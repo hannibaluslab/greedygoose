@@ -32,7 +32,11 @@ import { EQUITIES } from "@/lib/tokens/registry";
 
 /** "Sells first": GooseExecutor's `keepMix` for Protect · sell. */
 const ORDER = [
-  { keepMix: false, label: "Most safety per dollar", sub: "Sells the least it takes to bring your credit back to Watch." },
+  {
+    keepMix: false,
+    label: "Most safety per dollar",
+    sub: "Sells the least it takes to bring your credit back to Watch.",
+  },
   { keepMix: true, label: "Keep my mix", sub: "Sells the same share of each stock that backs your credit." },
 ] as const;
 
@@ -60,7 +64,14 @@ export function ProtectSettings({ account, onDone }: { account: `0x${string}`; o
     onDone?.();
   });
 
-  if (!data || (live && (agents.status.protect === "loading" || agents.status.sell === "loading" || !settings || agents.capMaxRaw === null))) {
+  if (
+    !data ||
+    (live &&
+      (agents.status.protect === "loading" ||
+        agents.status.sell === "loading" ||
+        !settings ||
+        agents.capMaxRaw === null))
+  ) {
     return <ProtectSettingsSkeleton />;
   }
   const { protect, sell } = agents.terms;
@@ -75,7 +86,9 @@ export function ProtectSettings({ account, onDone }: { account: `0x${string}`; o
       live={live}
       preview={!address || !isAddressEqual(address, account)}
       saved={saved}
-      backsUsd={EQUITIES.map((e) => (data.holdings[e.reserveId].lockedRaw > 0n ? data.holdings[e.reserveId].lockedUsd : 0))}
+      backsUsd={EQUITIES.map((e) =>
+        data.holdings[e.reserveId].lockedRaw > 0n ? data.holdings[e.reserveId].lockedUsd : 0,
+      )}
       pricesRaw={EQUITIES.map((e) => data.holdings[e.reserveId].priceRaw)}
       capMaxRaw={agents.capMaxRaw}
       // Turning selling off revokes each sell grant JAW lists that hasn’t ended (useAgents.turnOff): one JAW sheet each.
@@ -128,7 +141,21 @@ export type ProtectSettingsViewProps = {
 
 /** The settings drawn from plain values, so the dev gallery can show each state. */
 export function ProtectSettingsView({
-  live, preview, saved, backsUsd, pricesRaw, capMaxRaw, sellGrants, feeBlocked, waiting = false, phase, error, busy, prep, settingPlan, onSave,
+  live,
+  preview,
+  saved,
+  backsUsd,
+  pricesRaw,
+  capMaxRaw,
+  sellGrants,
+  feeBlocked,
+  waiting = false,
+  phase,
+  error,
+  busy,
+  prep,
+  settingPlan,
+  onSave,
 }: ProtectSettingsViewProps) {
   const [chosen, setChosen] = useState<Partial<ProtectChoice>>({});
   // A Custom limit that isn't a number of dollars yet: nothing to save until it is.
@@ -144,12 +171,21 @@ export function ProtectSettingsView({
   const limitUsd = toUsd(limitRaw(choice.limitUsd, capMax));
   // Selling's own limit while untouched (a grant from before can differ), Protect's otherwise.
   const sellUsd = saved.sell && chosen.limitUsd === undefined ? toUsd(saved.sell.capRaw) : limitUsd;
-  const names = (ids: readonly number[]) => inWords(EQUITIES.filter((e) => ids.includes(e.reserveId)).map((e) => e.name));
+  const names = (ids: readonly number[]) =>
+    inWords(EQUITIES.filter((e) => ids.includes(e.reserveId)).map((e) => e.name));
 
   // While repaying from cash is off, saving switches Protect on (protectSteps).
   const off = saved.repayCapRaw === null;
   const canSave =
-    live && limitTyped && !preview && !feeBlocked && !waiting && !busy && !plan.blocked && steps.length > 0 && capMaxRaw !== null;
+    live &&
+    limitTyped &&
+    !preview &&
+    !feeBlocked &&
+    !waiting &&
+    !busy &&
+    !plan.blocked &&
+    steps.length > 0 &&
+    capMaxRaw !== null;
   const note = !live
     ? "Not live yet"
     : feeBlocked
@@ -165,7 +201,8 @@ export function ProtectSettingsView({
     if (s.kind === "revoke") return ["Selling: off"];
     const upTo = `up to ${formatUsdTrim(toUsd(s.capRaw))} a day`;
     if (s.job === "protect") return [`Repay from your cash: ${saved.repayCapRaw === null ? "on, " : ""}${upTo}`];
-    const never = !saved.sell || neverChanged ? [`Never sell: ${choice.never.length > 0 ? names(choice.never) : "none"}`] : [];
+    const never =
+      !saved.sell || neverChanged ? [`Never sell: ${choice.never.length > 0 ? names(choice.never) : "none"}`] : [];
     return [`Selling: ${saved.sell ? "" : "on, "}${upTo}`, ...never];
   });
 
@@ -192,20 +229,33 @@ export function ProtectSettingsView({
         {limitTyped && testCapNote(choice.limitUsd, capMaxRaw) && (
           <span className="text-xs leading-[1.4] text-subtle">{testCapNote(choice.limitUsd, capMaxRaw)}</span>
         )}
-        {live && off && <span className="text-xs leading-[1.4] text-subtle">Off now. It starts on this limit when you switch it on.</span>}
+        {live && off && (
+          <span className="text-xs leading-[1.4] text-subtle">
+            Off now. It starts on this limit when you switch it on.
+          </span>
+        )}
       </ManageCard>
 
       <ManageCard className="flex flex-col px-4 py-0.5">
         <div className="flex flex-col gap-0.5 py-[13px]">
           <span className="text-[15px] font-semibold">Repay from your cash</span>
-          <span className="text-xs leading-[1.35] text-subtle">Only in Act, and always first. Your cash pays before any stock is sold.</span>
+          <span className="text-xs leading-[1.35] text-subtle">
+            Only in Act, and always first. Your cash pays before any stock is sold.
+          </span>
         </div>
         <div className="flex items-center gap-3 border-t border-hairline py-[13px]">
           <div className="flex grow flex-col gap-0.5">
             <span className="text-[15px] font-semibold">Sell stock if cash isn’t enough</span>
-            <span className="text-xs leading-[1.35] text-subtle">Only stock that backs your credit, up to {formatUsdTrim(sellUsd)} a day</span>
+            <span className="text-xs leading-[1.35] text-subtle">
+              Only stock that backs your credit, up to {formatUsdTrim(sellUsd)} a day
+            </span>
           </div>
-          <Switch label="Sell stock if cash isn’t enough" checked={choice.sellOn} onChange={(on) => set({ sellOn: on })} disabled={!live} />
+          <Switch
+            label="Sell stock if cash isn’t enough"
+            checked={choice.sellOn}
+            onChange={(on) => set({ sellOn: on })}
+            disabled={!live}
+          />
         </div>
 
         {choice.sellOn && (
@@ -224,9 +274,21 @@ export function ProtectSettingsView({
                       onClick={() => set({ keepMix: o.keepMix })}
                       className="flex min-h-11 w-full items-center gap-3 py-1.5 text-left text-ink"
                     >
-                      <span aria-hidden className={`flex size-[22px] shrink-0 items-center justify-center rounded-full ${on ? "bg-ink text-on-ink" : "border-[1.5px] border-line-strong"}`}>
+                      <span
+                        aria-hidden
+                        className={`flex size-[22px] shrink-0 items-center justify-center rounded-full ${on ? "bg-ink text-on-ink" : "border-[1.5px] border-line-strong"}`}
+                      >
                         {on && (
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
+                          <svg
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.8"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
                             <path d="M5 12l5 5 9-10" />
                           </svg>
                         )}
@@ -255,10 +317,16 @@ export function ProtectSettingsView({
                     <span className="flex grow flex-col gap-[3px]">
                       <span className="text-sm font-semibold">{e.name}</span>
                       <span className="num text-xs text-subtle">
-                        {backsUsd[e.reserveId] > 0 ? `Backs ${formatUsdShort(backsUsd[e.reserveId])}` : "Backs nothing now"}
+                        {backsUsd[e.reserveId] > 0
+                          ? `Backs ${formatUsdShort(backsUsd[e.reserveId])}`
+                          : "Backs nothing now"}
                       </span>
                     </span>
-                    <Switch label={`Never sell ${e.name}`} checked={choice.never.includes(e.reserveId)} onChange={(on) => toggleNever(e.reserveId, on)} />
+                    <Switch
+                      label={`Never sell ${e.name}`}
+                      checked={choice.never.includes(e.reserveId)}
+                      onChange={(on) => toggleNever(e.reserveId, on)}
+                    />
                   </div>
                 ))
               )}

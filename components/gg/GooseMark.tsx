@@ -5,11 +5,26 @@ import { useId } from "react";
  * it stays crisp at any size. The egg is its own path (`.gg-egg`), so the welcome can rock it. `glow` adds a soft
  * lime light behind the egg and a faint ground line under the feet.
  */
-export function GooseMark({ className, glow = false, title = "GreedyGoose" }: { className?: string; glow?: boolean; title?: string }) {
+export function GooseMark({
+  className,
+  glow = false,
+  title = "GreedyGoose",
+}: {
+  className?: string;
+  glow?: boolean;
+  title?: string;
+}) {
   // useId's characters aren't all safe inside url(#…); the gradients only need it unique.
   const id = `gg${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
   return (
-    <svg viewBox="16 6 224 244" overflow="visible" className={className} role="img" aria-label={title} xmlns="http://www.w3.org/2000/svg">
+    <svg
+      viewBox="16 6 224 244"
+      overflow="visible"
+      className={className}
+      role="img"
+      aria-label={title}
+      xmlns="http://www.w3.org/2000/svg"
+    >
       {glow && (
         <>
           <defs>
@@ -38,7 +53,10 @@ export function GooseMark({ className, glow = false, title = "GreedyGoose" }: { 
         d="M45.53 208.77 C45.53 188.28 57.32 171.68 71.88 171.68 C86.43 171.68 98.23 188.28 98.23 208.77 C98.23 224.4 86.43 237.07 71.88 237.07 C57.32 237.07 45.53 224.4 45.53 208.77 Z"
       />
       <path fill="#d4ff3c" d="M134.83 27.22 L169.48 16.98 C174.85 15.51 178.27 21.37 174.85 24.3 L138.25 50.65 Z" />
-      <path fill="#0e0d0b" d="M104.09 35.03 C108.48 26.74 117.75 22.83 128 24.78 C124.58 34.06 114.82 39.42 104.09 35.03 Z" />
+      <path
+        fill="#0e0d0b"
+        d="M104.09 35.03 C108.48 26.74 117.75 22.83 128 24.78 C124.58 34.06 114.82 39.42 104.09 35.03 Z"
+      />
     </svg>
   );
 }

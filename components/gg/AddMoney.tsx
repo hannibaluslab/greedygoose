@@ -42,10 +42,17 @@ function AddMoneyBody({ address, name, rate, arrived, onCopy }: AddMoneyProps) {
         <span className="font-mono text-xs uppercase tracking-[0.08em] text-ink-mid">Send dollars to your name</span>
         <div className="flex items-center justify-between gap-3">
           <span className="num flex min-w-0 flex-col gap-0.5">
-            <span className="select-all truncate text-2xl font-semibold tracking-[-0.02em]">{name ?? shortAddress(address)}</span>
+            <span className="select-all truncate text-2xl font-semibold tracking-[-0.02em]">
+              {name ?? shortAddress(address)}
+            </span>
             {name && <span className="select-all text-xs text-subtle">{shortAddress(address)}</span>}
           </span>
-          <button type="button" onClick={onCopy} aria-label="Copy address" className="flex size-11 shrink-0 items-center justify-center rounded-[22px] bg-chip text-ink">
+          <button
+            type="button"
+            onClick={onCopy}
+            aria-label="Copy address"
+            className="flex size-11 shrink-0 items-center justify-center rounded-[22px] bg-chip text-ink"
+          >
             <CopyIcon />
           </button>
         </div>

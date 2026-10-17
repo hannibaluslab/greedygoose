@@ -27,7 +27,10 @@ describe("Aave V4 Equities Hub registry", () => {
 
   it.each(ALL_RESERVES.map((r) => [r.symbol, r] as const))("%s: reserve, symbol, decimals", async (_, r) => {
     const reserve = await client.readContract({
-      address: AAVE.SPOKE, abi: spokeAbi, functionName: "getReserve", args: [BigInt(r.reserveId)],
+      address: AAVE.SPOKE,
+      abi: spokeAbi,
+      functionName: "getReserve",
+      args: [BigInt(r.reserveId)],
     });
     expect(reserve.underlying.toLowerCase()).toBe(r.address.toLowerCase());
     expect(reserve.hub.toLowerCase()).toBe(AAVE.HUB.toLowerCase());

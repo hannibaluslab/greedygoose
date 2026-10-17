@@ -39,12 +39,21 @@ type BoardSections = {
  * and everyone else as a count. Contacts: the same board filtered to the people you added, and you, with their ranks on
  * the whole board; then your contacts who aren't on it yet.
  */
-export function boardSections(people: readonly BoardPerson[], offBoard: readonly OffBoard[], filter: BoardFilter): BoardSections {
+export function boardSections(
+  people: readonly BoardPerson[],
+  offBoard: readonly OffBoard[],
+  filter: BoardFilter,
+): BoardSections {
   const shown = filter === "contacts" ? people.filter((p) => p.contact || p.you) : people;
   const ranked = shown.filter((p) => p.rank !== null).sort((a, b) => a.rank! - b.rank!);
   const unranked = shown.filter((p) => p.rank === null);
   if (filter === "contacts") {
-    return { ranked: ranked.map((person) => ({ kind: "row", person })), unranked, unrankedOthers: 0, offBoard: [...offBoard] };
+    return {
+      ranked: ranked.map((person) => ({ kind: "row", person })),
+      unranked,
+      unrankedOthers: 0,
+      offBoard: [...offBoard],
+    };
   }
   const top = ranked.slice(0, BOARD_PAGE);
   const lines: BoardLine[] = top.map((person) => ({ kind: "row", person }));

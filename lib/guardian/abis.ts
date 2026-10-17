@@ -33,11 +33,35 @@ const permissionTuple = {
 } as const;
 
 export const permissionManagerAbi = [
-  { type: "function", name: "approve", stateMutability: "nonpayable", inputs: [permissionTuple], outputs: [{ type: "bool" }] },
+  {
+    type: "function",
+    name: "approve",
+    stateMutability: "nonpayable",
+    inputs: [permissionTuple],
+    outputs: [{ type: "bool" }],
+  },
   { type: "function", name: "revoke", stateMutability: "nonpayable", inputs: [permissionTuple], outputs: [] },
-  { type: "function", name: "isApproved", stateMutability: "view", inputs: [permissionTuple], outputs: [{ type: "bool" }] },
-  { type: "function", name: "isRevoked", stateMutability: "view", inputs: [permissionTuple], outputs: [{ type: "bool" }] },
-  { type: "function", name: "getHash", stateMutability: "view", inputs: [permissionTuple], outputs: [{ type: "bytes32" }] },
+  {
+    type: "function",
+    name: "isApproved",
+    stateMutability: "view",
+    inputs: [permissionTuple],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "isRevoked",
+    stateMutability: "view",
+    inputs: [permissionTuple],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "getHash",
+    stateMutability: "view",
+    inputs: [permissionTuple],
+    outputs: [{ type: "bytes32" }],
+  },
   {
     type: "function",
     name: "executeBatch",
@@ -61,9 +85,25 @@ export const permissionManagerAbi = [
     name: "getCurrentPeriod",
     stateMutability: "view",
     inputs: [permissionTuple, { ...spendLimit, type: "tuple", name: "spendLimit" }],
-    outputs: [{ type: "tuple", components: [{ name: "start", type: "uint48" }, { name: "end", type: "uint48" }, { name: "spend", type: "uint160" }] }],
+    outputs: [
+      {
+        type: "tuple",
+        components: [
+          { name: "start", type: "uint48" },
+          { name: "end", type: "uint48" },
+          { name: "spend", type: "uint160" },
+        ],
+      },
+    ],
   },
-  { type: "event", name: "PermissionApproved", inputs: [{ name: "permissionHash", type: "bytes32", indexed: true }, { ...permissionTuple, indexed: false }] },
+  {
+    type: "event",
+    name: "PermissionApproved",
+    inputs: [
+      { name: "permissionHash", type: "bytes32", indexed: true },
+      { ...permissionTuple, indexed: false },
+    ],
+  },
   { type: "event", name: "PermissionRevoked", inputs: [{ name: "permissionHash", type: "bytes32", indexed: true }] },
 ] as const;
 
@@ -94,6 +134,18 @@ export const aaveV3PoolAbi = [
 ] as const;
 
 export const justanAccountAbi = [
-  { type: "function", name: "isOwnerAddress", stateMutability: "view", inputs: [{ name: "owner", type: "address" }], outputs: [{ type: "bool" }] },
-  { type: "function", name: "addOwnerAddress", stateMutability: "nonpayable", inputs: [{ name: "owner", type: "address" }], outputs: [] },
+  {
+    type: "function",
+    name: "isOwnerAddress",
+    stateMutability: "view",
+    inputs: [{ name: "owner", type: "address" }],
+    outputs: [{ type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "addOwnerAddress",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "owner", type: "address" }],
+    outputs: [],
+  },
 ] as const;

@@ -38,7 +38,11 @@ describe("buildBuyCalls", () => {
     expect(inner).toHaveLength(1);
     const s = decodeFunctionData({ abi: swapRouter02Abi, data: inner[0] });
     expect(s.functionName).toBe("exactInputSingle");
-    const params = (s.args as readonly [{ tokenIn: string; tokenOut: string; fee: number; recipient: string; amountOutMinimum: bigint }])[0];
+    const params = (
+      s.args as readonly [
+        { tokenIn: string; tokenOut: string; fee: number; recipient: string; amountOutMinimum: bigint },
+      ]
+    )[0];
     expect(params.tokenIn).toBe(USDC.address);
     expect(params.tokenOut).toBe(aapl.address);
     expect(params.fee).toBe(3000);
@@ -79,7 +83,7 @@ describe("signingQuote (the pool read again right before Face ID)", () => {
     expect(signingQuote(shown, fresh(134_000_000n))).toBe(shown);
     expect(signingQuote(shown, fresh(minOut(shown.amountOut)))).toBe(shown);
   });
-  it("stops when the fresh quote is under the review's \"at least\"", () => {
+  it('stops when the fresh quote is under the review\'s "at least"', () => {
     expect(signingQuote(shown, fresh(minOut(shown.amountOut) - 1n))).toBeNull();
   });
   it("only compares the same pool and amount", () => {

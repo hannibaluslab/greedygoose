@@ -11,7 +11,12 @@ import { formatUsdTrim } from "@/lib/formatting";
  * amount field for any whole number of dollars; `onChange` gets null while what's typed isn't a limit yet.
  */
 export function LimitChips({
-  label, options, value, onChange, size, custom = false,
+  label,
+  options,
+  value,
+  onChange,
+  size,
+  custom = false,
 }: {
   label: string;
   options: readonly number[];
@@ -39,7 +44,12 @@ export function LimitChips({
   const count = options.length + (custom ? 1 : 0);
   return (
     <div className="flex flex-col gap-2.5">
-      <div role="radiogroup" aria-label={label} className={`num grid ${sm ? "gap-1.5" : "gap-2"}`} style={{ gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))` }}>
+      <div
+        role="radiogroup"
+        aria-label={label}
+        className={`num grid ${sm ? "gap-1.5" : "gap-2"}`}
+        style={{ gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))` }}
+      >
         {options.map((usd) =>
           chip(String(usd), !typing && usd === value, formatUsdTrim(usd), () => {
             setTyping(false);

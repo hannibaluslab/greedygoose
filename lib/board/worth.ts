@@ -22,7 +22,8 @@ const PER_ACCOUNT = 2 + ENTRY_COINS.length + EQUITIES.length * 2 + 3;
 /** Accounts per multicall: about 1,100 calls, well inside a node's eth_call gas cap. */
 const ACCOUNTS_PER_CALL = 50;
 
-const toUsd6 = (value: bigint, decimals: number) => (decimals >= 6 ? value / 10n ** BigInt(decimals - 6) : value * 10n ** BigInt(6 - decimals));
+const toUsd6 = (value: bigint, decimals: number) =>
+  decimals >= 6 ? value / 10n ** BigInt(decimals - 6) : value * 10n ** BigInt(6 - decimals);
 
 function holdingsCalls(a: Address) {
   return [
@@ -31,7 +32,12 @@ function holdingsCalls(a: Address) {
     ...ENTRY_COINS.map((c) => ({ address: c.address, abi: erc20Abi, functionName: "balanceOf", args: [a] }) as const),
     ...EQUITIES.flatMap((e) => [
       { address: e.address, abi: erc20Abi, functionName: "balanceOf", args: [a] } as const,
-      { address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserSuppliedAssets", args: [BigInt(e.reserveId), a] } as const,
+      {
+        address: AAVE.SPOKE,
+        abi: spokeAbi,
+        functionName: "getUserSuppliedAssets",
+        args: [BigInt(e.reserveId), a],
+      } as const,
     ]),
     { address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserSuppliedAssets", args: [BigInt(USDC_RESERVE_ID), a] },
     { address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserTotalDebt", args: [BigInt(USDC_RESERVE_ID), a] },
@@ -47,12 +53,25 @@ const now: Limit = (job) => job();
  * Each account's holdings at `blockNumber` (an archive read for a past block), 50 accounts a multicall, each through
  * `limit`. Throws if any read fails.
  */
-export async function readHoldings(client: Client, accounts: readonly Address[], blockNumber: bigint, limit: Limit = now): Promise<Holdings[]> {
+export async function readHoldings(
+  client: Client,
+  accounts: readonly Address[],
+  blockNumber: bigint,
+  limit: Limit = now,
+): Promise<Holdings[]> {
   const groups: Address[][] = [];
   for (let i = 0; i < accounts.length; i += ACCOUNTS_PER_CALL) groups.push(accounts.slice(i, i + ACCOUNTS_PER_CALL));
   const reads = await Promise.all(
     groups.map((group) =>
-      limit(async () => (await multicall(client, { blockNumber, allowFailure: false, batchSize: 0, contracts: group.flatMap(holdingsCalls) })) as bigint[]),
+      limit(
+        async () =>
+          (await multicall(client, {
+            blockNumber,
+            allowFailure: false,
+            batchSize: 0,
+            contracts: group.flatMap(holdingsCalls),
+          })) as bigint[],
+      ),
     ),
   );
   return groups.flatMap((group, g) =>
@@ -75,7 +94,15 @@ export async function readPrices(client: Client, blockNumber: bigint, limit: Lim
       (await multicall(client, {
         blockNumber,
         allowFailure: false,
-        contracts: EQUITIES.map((e) => ({ address: AAVE.SPOKE_ORACLE, abi: aaveOracleAbi, functionName: "getReservePrice", args: [BigInt(e.reserveId)] }) as const),
+        contracts: EQUITIES.map(
+          (e) =>
+            ({
+              address: AAVE.SPOKE_ORACLE,
+              abi: aaveOracleAbi,
+              functionName: "getReservePrice",
+              args: [BigInt(e.reserveId)],
+            }) as const,
+        ),
       })) as bigint[],
   );
 }

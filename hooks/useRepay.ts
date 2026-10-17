@@ -46,10 +46,20 @@ export function useRepayBatch() {
   return async (p: RepayInput): Promise<Call[]> => {
     if (!p.all || !p.coversAll) {
       const cash = await cashToSign(p.user, p.amountRaw);
-      return payFromCash(p.user, p.amountRaw, cash, buildRepayCalls({ user: p.user, amountRaw: p.amountRaw, all: p.all }));
+      return payFromCash(
+        p.user,
+        p.amountRaw,
+        cash,
+        buildRepayCalls({ user: p.user, amountRaw: p.amountRaw, all: p.all }),
+      );
     }
     const [debtRaw, cash] = await Promise.all([
-      client!.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserTotalDebt", args: [BigInt(USDC.reserveId), p.user] }),
+      client!.readContract({
+        address: AAVE.SPOKE,
+        abi: spokeAbi,
+        functionName: "getUserTotalDebt",
+        args: [BigInt(USDC.reserveId), p.user],
+      }),
       readCash(client!, p.user),
     ]);
     // The screen said "Repaid all your credit": cash that no longer covers it would repay less. Stop, and re-read.
@@ -70,7 +80,9 @@ export function useRepayBatch() {
  * cash is never signed.
  */
 export const repayPlan = (p: RepayInput, batch: ReturnType<typeof useRepayBatch>): TxPlan => ({
-  key: p.all ? txKey("repay", p.user, "all", p.coversAll ? "full" : Math.round(p.amount * 100)) : txKey("repay", p.user, p.amountRaw),
+  key: p.all
+    ? txKey("repay", p.user, "all", p.coversAll ? "full" : Math.round(p.amount * 100))
+    : txKey("repay", p.user, p.amountRaw),
   user: p.user,
   calls: () => batch(p),
   activity: [{ kind: "repay", symbol: "USDC", amount: p.amount }],
@@ -92,7 +104,8 @@ export type FreeRepayInput = {
   feeFromSale: boolean;
 };
 
-const FREE_REPAY_FALLBACK = "This repay would fail right now — the price may have moved or the stock may be paused. Try again in a moment.";
+const FREE_REPAY_FALLBACK =
+  "This repay would fail right now — the price may have moved or the stock may be paused. Try again in a moment.";
 
 /**
  * A repay with free shares, built from fresh reads before JAW's sheet: the screen's stop still holds, the quote is read
@@ -107,7 +120,14 @@ export function useFreeRepayBatch() {
   return async (p: FreeRepayInput): Promise<Call[]> => {
     if (p.plan.block) throw new TxStop(FREE_REPAY_FALLBACK);
     await quoteToSign(p.stock, p.quote, "sell");
-    const calls = buildFreeRepayCalls({ user: p.user, stock: p.stock, quote: p.quote, oraclePriceUsd: p.oraclePriceUsd, debtRaw: p.debtRaw, feeFromSale: p.feeFromSale });
+    const calls = buildFreeRepayCalls({
+      user: p.user,
+      stock: p.stock,
+      quote: p.quote,
+      oraclePriceUsd: p.oraclePriceUsd,
+      debtRaw: p.debtRaw,
+      feeFromSale: p.feeFromSale,
+    });
     return p.feeFromSale ? calls : payFromCash(p.user, 0n, await cashToSign(p.user, 0n), calls);
   };
 }
@@ -121,7 +141,16 @@ export const freeRepayPlan = (p: FreeRepayInput, batch: ReturnType<typeof useFre
   const floor = sellMinOut(p.quote, p.stock, p.oraclePriceUsd);
   const repayRaw = freeRepayRaw(floor, p.debtRaw, p.feeFromSale);
   return {
-    key: txKey("repay-free", p.user, p.stock.symbol, quoteKey(p.quote), floor, p.feeFromSale, p.plan.block ?? null, repayRaw > p.debtRaw ? "full" : "part"),
+    key: txKey(
+      "repay-free",
+      p.user,
+      p.stock.symbol,
+      quoteKey(p.quote),
+      floor,
+      p.feeFromSale,
+      p.plan.block ?? null,
+      repayRaw > p.debtRaw ? "full" : "part",
+    ),
     user: p.user,
     calls: () => batch(p),
     fallback: FREE_REPAY_FALLBACK,
@@ -130,18 +159,26 @@ export const freeRepayPlan = (p: FreeRepayInput, batch: ReturnType<typeof useFre
 };
 
 /** What the Repay sheet signs, per "Pay with" row. */
-type RepaySign = { via: "cash"; input: RepayInput } | { via: "free"; input: FreeRepayInput } | { via: "backing"; input: SellInput };
+type RepaySign =
+  | { via: "cash"; input: RepayInput }
+  | { via: "free"; input: FreeRepayInput }
+  | { via: "backing"; input: SellInput };
 
 /** What the Repay sheet would sign for the row and amount on screen, once it's ready (null while it isn't). */
 export function repaySign(view: RepayView, user: `0x${string}`, debtRaw: bigint): RepaySign | null {
   if (!view.ready) return null;
   const { source, sellPlan, quote } = view;
   if (source.kind === "cash") {
-    return { via: "cash", input: { user, all: view.all, coversAll: view.coversAll, amount: view.repayUsd, amountRaw: view.repayRaw } };
+    return {
+      via: "cash",
+      input: { user, all: view.all, coversAll: view.coversAll, amount: view.repayUsd, amountRaw: view.repayRaw },
+    };
   }
   if (!source.stock || !source.holding || !sellPlan || !quote) return null;
   const sale = { user, stock: source.stock, quote, plan: sellPlan, oraclePriceUsd: source.holding.priceUsd, debtRaw };
-  return source.kind === "free" ? { via: "free", input: { ...sale, feeFromSale: source.feeFromSale } } : { via: "backing", input: sale };
+  return source.kind === "free"
+    ? { via: "free", input: { ...sale, feeFromSale: source.feeFromSale } }
+    : { via: "backing", input: sale };
 }
 
 /**

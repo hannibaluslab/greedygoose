@@ -66,7 +66,15 @@ const stock = (symbol: string) => EQUITIES.find((e) => e.symbol === symbol)!;
 const nvda = stock("NVDAc");
 const amzn = stock("AMZNc");
 
-const PRICE: Record<string, number> = { AAPLc: 250, AMZNc: 225, GOOGLc: 240, METAc: 700, MSFTc: 500, NVDAc: 200, TSLAc: 400 };
+const PRICE: Record<string, number> = {
+  AAPLc: 250,
+  AMZNc: 225,
+  GOOGLc: 240,
+  METAc: 700,
+  MSFTc: 500,
+  NVDAc: 200,
+  TSLAc: 400,
+};
 
 /** A holding as usePosition reads it, from dollars free and backing at Aave's price. */
 function holding(symbol: string, freeUsd = 0, lockedUsd = 0): TradeHolding {
@@ -99,7 +107,10 @@ function account(cash: Cash, held: Record<string, [number, number]>): SendData {
 }
 
 /** Shaped like the dev preview's backer: cash mostly in savings, $1.80 of free Amazon beside backing, NVIDIA all backing. */
-const backer = account({ walletRaw: usd(20), savingsRaw: usd(1_919.18), saveOn: false }, { AMZNc: [1.8, 1_721.43], NVDAc: [0, 1_341.83], TSLAc: [40, 0] });
+const backer = account(
+  { walletRaw: usd(20), savingsRaw: usd(1_919.18), saveOn: false },
+  { AMZNc: [1.8, 1_721.43], NVDAc: [0, 1_341.83], TSLAc: [40, 0] },
+);
 const empty = account({ walletRaw: 0n, savingsRaw: 0n, saveOn: false }, {});
 /** What MAX takes from the backer's cash: all of it less the fee buffer, to the cent. */
 const BACKER_MAX = Math.floor((1_939.18 - B) * 100 + 1e-6) / 100;
@@ -150,7 +161,10 @@ describe("buildSendCalls (Send's one batch)", () => {
 
   it("refuses the account itself, the zero address, the app's contracts, 0 and other tokens", () => {
     const cash: Cash = { walletRaw: usd(100), savingsRaw: 0n, saveOn: false };
-    const send = (to: Address, amountRaw = usd(1), token = USDC) => () => buildSendCalls({ user, token, to, amountRaw, cash });
+    const send =
+      (to: Address, amountRaw = usd(1), token = USDC) =>
+      () =>
+        buildSendCalls({ user, token, to, amountRaw, cash });
     expect(send(user)).toThrow(SendStop);
     expect(send(user)).toThrow(SEND_COPY.self);
     expect(send(zeroAddress)).toThrow(SEND_COPY.zero);
@@ -164,10 +178,20 @@ describe("buildSendCalls (Send's one batch)", () => {
 
   it("never spends cash that isn't there: the amount and the fee buffer must fit", () => {
     const cash: Cash = { walletRaw: usd(10), savingsRaw: 0n, saveOn: false };
-    expect(() => buildSendCalls({ user, token: USDC, to: sam, amountRaw: usd(10) - feeBufferRaw + 1n, cash })).toThrow(/More than your cash/);
+    expect(() => buildSendCalls({ user, token: USDC, to: sam, amountRaw: usd(10) - feeBufferRaw + 1n, cash })).toThrow(
+      /More than your cash/,
+    );
     expect(buildSendCalls({ user, token: USDC, to: sam, amountRaw: usd(10) - feeBufferRaw, cash })).toHaveLength(1);
     // A stock send with no cash for the fee.
-    expect(() => buildSendCalls({ user, token: nvda, to: sam, amountRaw: 1n, cash: { walletRaw: feeBufferRaw - 1n, savingsRaw: 0n, saveOn: false } })).toThrow(/More than your cash/);
+    expect(() =>
+      buildSendCalls({
+        user,
+        token: nvda,
+        to: sam,
+        amountRaw: 1n,
+        cash: { walletRaw: feeBufferRaw - 1n, savingsRaw: 0n, saveOn: false },
+      }),
+    ).toThrow(/More than your cash/);
   });
 });
 
@@ -191,15 +215,28 @@ describe("assertAllowed: the transfer rule (Send only)", () => {
   });
 
   it("blocks a transfer to the user, even when declared", () => {
-    expect(() => assertAllowed(user, [transfer(USDC.address, user, 1n)], { sendTo: user })).toThrow(/unexpected recipient/);
+    expect(() => assertAllowed(user, [transfer(USDC.address, user, 1n)], { sendTo: user })).toThrow(
+      /unexpected recipient/,
+    );
   });
 
   it("blocks a transfer to the zero address or any app or protocol contract, even when declared", () => {
     for (const to of [zeroAddress, ...APP_CONTRACTS]) {
-      expect(() => assertAllowed(user, [transfer(USDC.address, to, 1n)], { sendTo: to })).toThrow(/unexpected recipient/);
+      expect(() => assertAllowed(user, [transfer(USDC.address, to, 1n)], { sendTo: to })).toThrow(
+        /unexpected recipient/,
+      );
     }
     // The ones that matter most, by name.
-    for (const to of [AAVE.SPOKE, AAVE.HUB, GUARDIAN.AAVE_V3_POOL, GUARDIAN.AUSDC, AERODROME.ROUTER, UNISWAP.SWAP_ROUTER_02, USDC.address, nvda.address]) {
+    for (const to of [
+      AAVE.SPOKE,
+      AAVE.HUB,
+      GUARDIAN.AAVE_V3_POOL,
+      GUARDIAN.AUSDC,
+      AERODROME.ROUTER,
+      UNISWAP.SWAP_ROUTER_02,
+      USDC.address,
+      nvda.address,
+    ]) {
       expect(isAppContract(to)).toBe(true);
     }
   });
@@ -209,13 +246,19 @@ describe("assertAllowed: the transfer rule (Send only)", () => {
     expect(() => assertAllowed(user, [transfer(ENTRY_COINS[0].address, sam, 1n)], ok)).toThrow(/unexpected call/);
     // Savings' own token, and an unknown token.
     expect(() => assertAllowed(user, [transfer(GUARDIAN.AUSDC, sam, 1n)], ok)).toThrow(/unexpected target/);
-    expect(() => assertAllowed(user, [transfer("0x00000000000000000000000000000000000000a1", sam, 1n)], ok)).toThrow(/unexpected target/);
+    expect(() => assertAllowed(user, [transfer("0x00000000000000000000000000000000000000a1", sam, 1n)], ok)).toThrow(
+      /unexpected target/,
+    );
   });
 
   it("blocks a transfer with value, of 0, or more than one in a batch", () => {
-    expect(() => assertAllowed(user, [{ ...transfer(USDC.address, sam, 1n), value: 1n }], ok)).toThrow(/unexpected value/);
+    expect(() => assertAllowed(user, [{ ...transfer(USDC.address, sam, 1n), value: 1n }], ok)).toThrow(
+      /unexpected value/,
+    );
     expect(() => assertAllowed(user, [transfer(USDC.address, sam, 0n)], ok)).toThrow(/unexpected recipient/);
-    expect(() => assertAllowed(user, [transfer(USDC.address, sam, 1n), transfer(nvda.address, sam, 1n)], ok)).toThrow(/more than one transfer/);
+    expect(() => assertAllowed(user, [transfer(USDC.address, sam, 1n), transfer(nvda.address, sam, 1n)], ok)).toThrow(
+      /more than one transfer/,
+    );
   });
 
   it("gives transferFrom nothing", () => {
@@ -228,7 +271,11 @@ describe("assertAllowed: the transfer rule (Send only)", () => {
   });
 
   it("a declared recipient doesn't loosen anything else: approvals still go only to the spoke or a router", () => {
-    const approve = { to: USDC.address, data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [sam, 1n] }), value: 0n };
+    const approve = {
+      to: USDC.address,
+      data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [sam, 1n] }),
+      value: 0n,
+    };
     expect(() => assertAllowed(user, [approve], ok)).toThrow(/unexpected spender/);
   });
 });
@@ -291,7 +338,12 @@ describe("parseTo (what was typed in To)", () => {
 });
 
 describe("recipientNote (the guards)", () => {
-  const r = (address: Address, extra: Partial<Recipient> = {}): Recipient => ({ address, name: null, onBase: true, ...extra });
+  const r = (address: Address, extra: Partial<Recipient> = {}): Recipient => ({
+    address,
+    name: null,
+    onBase: true,
+    ...extra,
+  });
   const used: RecipientChecks = { base: { code: true, used: true, notAccount: false } };
 
   it("refuses the account itself, the zero address and the app's contracts, before Base answers", () => {
@@ -307,42 +359,90 @@ describe("recipientNote (the guards)", () => {
   });
 
   it("says so when Base couldn't be asked, rather than letting the send go as if it had been checked", () => {
-    expect(recipientNote(r(sam), user, { base: null })).toEqual({ block: null, warn: SEND_COPY.unchecked, waiting: false });
+    expect(recipientNote(r(sam), user, { base: null })).toEqual({
+      block: null,
+      warn: SEND_COPY.unchecked,
+      waiting: false,
+    });
   });
 
   it("refuses any other token or trading pool, which Base says isn't an account", () => {
-    expect(recipientNote(r(kit), user, { base: { code: true, used: true, notAccount: true } })).toEqual({ block: SEND_COPY.notAccount, warn: null, waiting: false });
-    expect(recipientNote(r(kit, { name: "pool.eth", onBase: false }), user, { base: { code: true, used: true, notAccount: true }, ethCode: false }).block).toBe(SEND_COPY.notAccount);
+    expect(recipientNote(r(kit), user, { base: { code: true, used: true, notAccount: true } })).toEqual({
+      block: SEND_COPY.notAccount,
+      warn: null,
+      waiting: false,
+    });
+    expect(
+      recipientNote(r(kit, { name: "pool.eth", onBase: false }), user, {
+        base: { code: true, used: true, notAccount: true },
+        ethCode: false,
+      }).block,
+    ).toBe(SEND_COPY.notAccount);
   });
 
   it("warns, without blocking, on an address Base has never seen used", () => {
-    expect(recipientNote(r(sam), user, { base: { code: false, used: false, notAccount: false } })).toEqual({ block: null, warn: SEND_COPY.unused, waiting: false });
+    expect(recipientNote(r(sam), user, { base: { code: false, used: false, notAccount: false } })).toEqual({
+      block: null,
+      warn: SEND_COPY.unused,
+      waiting: false,
+    });
   });
 
   it("a name with only an Ethereum address: refused when it's a contract there with nothing on Base, else always warned", () => {
     const eth = r(sam, { name: "rae.eth", onBase: false });
     expect(recipientNote(eth, user, { base: { code: false, used: false, notAccount: false } }).waiting).toBe(true);
-    expect(recipientNote(eth, user, { base: { code: false, used: false, notAccount: false }, ethCode: true }).block).toBe(SEND_COPY.ethOnlyContract("rae.eth"));
-    expect(recipientNote(eth, user, { base: { code: true, used: true, notAccount: false }, ethCode: true })).toEqual({ block: null, warn: SEND_COPY.ethOnly, waiting: false });
+    expect(
+      recipientNote(eth, user, { base: { code: false, used: false, notAccount: false }, ethCode: true }).block,
+    ).toBe(SEND_COPY.ethOnlyContract("rae.eth"));
+    expect(recipientNote(eth, user, { base: { code: true, used: true, notAccount: false }, ethCode: true })).toEqual({
+      block: null,
+      warn: SEND_COPY.ethOnly,
+      waiting: false,
+    });
     // A plain key is warned too: an exchange's deposit address is one, and may not take money on Base.
-    expect(recipientNote(eth, user, { base: { code: false, used: true, notAccount: false }, ethCode: false })).toEqual({ block: null, warn: SEND_COPY.ethOnly, waiting: false });
+    expect(recipientNote(eth, user, { base: { code: false, used: true, notAccount: false }, ethCode: false })).toEqual({
+      block: null,
+      warn: SEND_COPY.ethOnly,
+      waiting: false,
+    });
   });
 
   it("a name with only an Ethereum address that couldn't be checked on Ethereum or Base is refused, since a lost send can't be told apart", () => {
     const eth = r(sam, { name: "rae.eth", onBase: false });
-    expect(recipientNote(eth, user, { base: { code: false, used: true, notAccount: false }, ethCode: null })).toEqual({ block: SEND_COPY.ethUnchecked, warn: null, waiting: false });
-    expect(recipientNote(eth, user, { base: null, ethCode: true })).toEqual({ block: SEND_COPY.ethUnchecked, warn: null, waiting: false });
+    expect(recipientNote(eth, user, { base: { code: false, used: true, notAccount: false }, ethCode: null })).toEqual({
+      block: SEND_COPY.ethUnchecked,
+      warn: null,
+      waiting: false,
+    });
+    expect(recipientNote(eth, user, { base: null, ethCode: true })).toEqual({
+      block: SEND_COPY.ethUnchecked,
+      warn: null,
+      waiting: false,
+    });
     // A JAW name is the same account everywhere: its Ethereum address is its Base one, so nothing of this applies.
-    expect(recipientNote(r(sam, { name: "sam.justan.id" }), user, used)).toEqual({ block: null, warn: null, waiting: false });
+    expect(recipientNote(r(sam, { name: "sam.justan.id" }), user, used)).toEqual({
+      block: null,
+      warn: null,
+      waiting: false,
+    });
   });
 });
 
 describe("toLookups (To's lookups, in order)", () => {
   /** A lookup whose answers the test hands out, one per name, whenever it likes. */
   function names() {
-    const waiting = new Map<string, { ok: (v: Awaited<ReturnType<Parameters<typeof toLookups>[1]>>) => void; fail: (e: unknown) => void }>();
-    const lookup = (name: string) => new Promise<Awaited<ReturnType<Parameters<typeof toLookups>[1]>>>((ok, fail) => waiting.set(name, { ok, fail }));
-    return { lookup, answer: (name: string, address: Address | null) => waiting.get(name)!.ok(address ? { name, address, onBase: true } : null), fail: (name: string) => waiting.get(name)!.fail(new Error("rpc down")) };
+    const waiting = new Map<
+      string,
+      { ok: (v: Awaited<ReturnType<Parameters<typeof toLookups>[1]>>) => void; fail: (e: unknown) => void }
+    >();
+    const lookup = (name: string) =>
+      new Promise<Awaited<ReturnType<Parameters<typeof toLookups>[1]>>>((ok, fail) => waiting.set(name, { ok, fail }));
+    return {
+      lookup,
+      answer: (name: string, address: Address | null) =>
+        waiting.get(name)!.ok(address ? { name, address, onBase: true } : null),
+      fail: (name: string) => waiting.get(name)!.fail(new Error("rpc down")),
+    };
   }
   function setup() {
     const n = names();
@@ -466,7 +566,8 @@ describe("Send's options and amount", () => {
   });
 
   it("says why the amount can't go", () => {
-    const at = (asset: string, amount: string, data = backer) => planSend({ asset, amount, all: false, data, user, recipient: null, checks: {} }).amountNote;
+    const at = (asset: string, amount: string, data = backer) =>
+      planSend({ asset, amount, all: false, data, user, recipient: null, checks: {} }).amountNote;
     // Under the fee buffer: any cash amount is more than the cash, or leaves less than the buffer.
     const thinUsd = B * 0.6;
     const thin = account({ walletRaw: usd(thinUsd), savingsRaw: 0n, saveOn: false }, { TSLAc: [40, 0] });
@@ -501,7 +602,15 @@ describe("Send's options and amount", () => {
   });
 
   it("a stock's summary and small print give the shares, to the last decimal", () => {
-    const v = planSend({ asset: "TSLAc", amount: "10", all: false, data: backer, user, recipient: { address: sam, name: null, onBase: true }, checks: { base: { code: true, used: true, notAccount: false } } });
+    const v = planSend({
+      asset: "TSLAc",
+      amount: "10",
+      all: false,
+      data: backer,
+      user,
+      recipient: { address: sam, name: null, onBase: true },
+      checks: { base: { code: true, used: true, notAccount: false } },
+    });
     expect(v.button).toBe("Send Tesla");
     expect(v.sentTitle).toBe("Sent 0.025 Tesla to 0x6478…2952");
     expect(v.rows[0]).toEqual({ label: "To", value: "0x6478…2952" });
@@ -509,13 +618,23 @@ describe("Send's options and amount", () => {
     // MAX after a refresh left fewer free shares: the fewer are sent, and "about" is what they're worth, not the dollars typed.
     const before = sendForm({ asset: "TSLAc", amount: "", all: false }, { type: "max" }, backer);
     const after = account(backer.cash, { AMZNc: [1.8, 1_721.43], NVDAc: [0, 1_341.83], TSLAc: [30, 0] });
-    const moved = planSend({ ...before, data: after, user, recipient: { address: sam, name: null, onBase: true }, checks: { base: { code: true, used: true, notAccount: false } } });
+    const moved = planSend({
+      ...before,
+      data: after,
+      user,
+      recipient: { address: sam, name: null, onBase: true },
+      checks: { base: { code: true, used: true, notAccount: false } },
+    });
     expect(moved.amountRaw).toBe(after.holdings.find((h) => h.symbol === "TSLAc")!.freeRaw);
     expect(moved.rows[1].value).toBe("0.075 TSLA · about $30.00");
     expect(v.smallPrint).toContain("exactly 0.025 TSLA goes");
-    expect(sendSmallPrint({ token: amzn, amountRaw: 723_456n, multiplier: 10n ** 18n, to: sam })).toContain("exactly 0.00723456 AMZN");
+    expect(sendSmallPrint({ token: amzn, amountRaw: 723_456n, multiplier: 10n ** 18n, to: sam })).toContain(
+      "exactly 0.00723456 AMZN",
+    );
     // A split: shares shown are raw × uiMultiplier.
-    expect(sendSmallPrint({ token: amzn, amountRaw: 723_456n, multiplier: 2n * 10n ** 18n, to: sam })).toContain("exactly 0.01446912 AMZN");
+    expect(sendSmallPrint({ token: amzn, amountRaw: 723_456n, multiplier: 2n * 10n ** 18n, to: sam })).toContain(
+      "exactly 0.01446912 AMZN",
+    );
   });
 });
 
@@ -524,7 +643,9 @@ describe("Activity and the quick picks", () => {
     expect(sendActivity(USDC, usd(25), { address: sam, name: "sam.justan.id", onBase: true })).toEqual([
       { kind: "send", symbol: "USDC", amount: 25, to: sam, toName: "sam.justan.id" },
     ]);
-    expect(sendActivity(nvda, 1_234_567n, { address: sam, name: null, onBase: true })).toEqual([{ kind: "send", symbol: "NVDAc", amount: 0.01234567, to: sam }]);
+    expect(sendActivity(nvda, 1_234_567n, { address: sam, name: null, onBase: true })).toEqual([
+      { kind: "send", symbol: "NVDAc", amount: 0.01234567, to: sam },
+    ]);
   });
 
   it("Recent: the people this device sent to, newest first, once each, skipping failures", () => {
@@ -539,7 +660,12 @@ describe("Activity and the quick picks", () => {
       send("b", 3, sam, "done", "sam.justan.id"),
       send("c", 2, sam),
       send("d", 4, user, "failed"),
-      { id: "e", time: 5, status: "done" as const, items: [{ kind: "buy" as const, symbol: "NVDAc", amount: 1, paidUsd: 1 }] },
+      {
+        id: "e",
+        time: 5,
+        status: "done" as const,
+        items: [{ kind: "buy" as const, symbol: "NVDAc", amount: 1, paidUsd: 1 }],
+      },
     ];
     expect(recentRecipients(local)).toEqual([
       { address: sam, name: "sam.justan.id" },
@@ -563,19 +689,32 @@ describe("who a send went to, read back from the chain", () => {
     }) as unknown as Log;
 
   it("a cash send from savings decodes as one send to the recipient, the savings leg left out", () => {
-    const logs = [log(USDC.address, GUARDIAN.AUSDC, user, usd(80) + feeBufferRaw), log(USDC.address, user, sam, usd(100))];
+    const logs = [
+      log(USDC.address, GUARDIAN.AUSDC, user, usd(80) + feeBufferRaw),
+      log(USDC.address, user, sam, usd(100)),
+    ];
     expect(decodeActivity(logs, user)).toEqual([{ kind: "send", symbol: "USDC", amount: 100, to: sam }]);
   });
 
   it("a stock send names its recipient; USDC to two people names no one", () => {
-    expect(decodeActivity([log(nvda.address, user, sam, 1_000_000n)], user)).toEqual([{ kind: "send", symbol: "NVDAc", amount: 0.01, to: sam }]);
-    expect(decodeActivity([log(USDC.address, user, sam, usd(1)), log(USDC.address, user, kit, usd(2))], user)).toEqual([{ kind: "send", symbol: "USDC", amount: 3 }]);
+    expect(decodeActivity([log(nvda.address, user, sam, 1_000_000n)], user)).toEqual([
+      { kind: "send", symbol: "NVDAc", amount: 0.01, to: sam },
+    ]);
+    expect(decodeActivity([log(USDC.address, user, sam, usd(1)), log(USDC.address, user, kit, usd(2))], user)).toEqual([
+      { kind: "send", symbol: "USDC", amount: 3 },
+    ]);
   });
 
   it("the Cash sheet's row says who, by name on this device, else the short address", () => {
-    const row = (items: Parameters<typeof ownCashRow>[0]["items"]) => ownCashRow({ key: "k", time: 0, status: "done", items });
-    expect(row([{ kind: "send", symbol: "USDC", amount: 20, to: sam, toName: "sam.justan.id" }])!.details).toContainEqual({ label: "To", value: ["sam.justan.id"] });
-    expect(row([{ kind: "send", symbol: "USDC", amount: 20, to: sam }])!.details).toContainEqual({ label: "To", value: ["0x6478…2952"] });
+    const row = (items: Parameters<typeof ownCashRow>[0]["items"]) =>
+      ownCashRow({ key: "k", time: 0, status: "done", items });
+    expect(
+      row([{ kind: "send", symbol: "USDC", amount: 20, to: sam, toName: "sam.justan.id" }])!.details,
+    ).toContainEqual({ label: "To", value: ["sam.justan.id"] });
+    expect(row([{ kind: "send", symbol: "USDC", amount: 20, to: sam }])!.details).toContainEqual({
+      label: "To",
+      value: ["0x6478…2952"],
+    });
     expect(row([{ kind: "send", symbol: "USDC", amount: 20 }])!.details.some((d) => d.label === "To")).toBe(false);
   });
 });

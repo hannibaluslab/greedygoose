@@ -4,7 +4,15 @@ import { fullRepayAmount } from "@/lib/aave/tx";
 import { cashRaw, feeBufferRaw, maxSpendRaw, toUsd, type Cash } from "@/lib/cash";
 import { formatShares, formatUsd, formatUsdTrim } from "@/lib/formatting";
 import { homeStatus, statusFor, type Status } from "@/lib/risk/status";
-import { freeRepayRaw, planSell, repaySaleMaxRaw, saleRepayRaw, type SellBlock, type SellPlan, type SellPosition } from "@/lib/sell";
+import {
+  freeRepayRaw,
+  planSell,
+  repaySaleMaxRaw,
+  saleRepayRaw,
+  type SellBlock,
+  type SellPlan,
+  type SellPosition,
+} from "@/lib/sell";
 import { BUY_LIMITS } from "@/lib/swap/buy";
 import { SELL_LIMITS, sellMinOut, type SellQuote } from "@/lib/swap/sell";
 import { VENUE_LABEL } from "@/lib/swap/venues";
@@ -95,7 +103,8 @@ export const REPAY_COPY = {
   snappedStock: (name: string) => `That’s the most ${name} can repay right now.`,
   addMoney: "Add money",
   noCash: "Add money to your cash to repay.",
-  tooLittle: (usd: number) => `You need ${formatUsd(usd)} in your cash to repay: ${formatUsd(CASH.feeBufferUsd)} of it stays for the network fee.`,
+  tooLittle: (usd: number) =>
+    `You need ${formatUsd(usd)} in your cash to repay: ${formatUsd(CASH.feeBufferUsd)} of it stays for the network fee.`,
   minRepay: (usd: number) => `The smallest repay is ${formatUsd(usd).replace(/\.00$/, "")}.`,
   noMarket: (name: string) => `There’s no market for ${name} right now.`,
   price: `Too big for the market right now: the sale would get more than ${SELL_LIMITS.floorBps / 100}% under the stock’s price. Repay less.`,
@@ -205,7 +214,8 @@ export function repaySources(data: RepayData, cfs: Record<string, number> | unde
 }
 
 /** The row on screen: the one picked while it's still listed, else the first (the cash when it can repay $1). */
-export const pickedSource = (sources: RepaySource[], id: string | null) => sources.find((s) => s.id === id) ?? sources[0] ?? null;
+export const pickedSource = (sources: RepaySource[], id: string | null) =>
+  sources.find((s) => s.id === id) ?? sources[0] ?? null;
 
 /** Why nothing can repay (no row listed while something is owed): no money at all, or not enough cash. */
 export function noSourceLine(data: Pick<RepayData, "cash" | "debtUsd" | "holdings">): string {
@@ -222,16 +232,31 @@ type RepayMax = { usd: number; raw: bigint; coversAll: boolean; quoting: boolean
  * buffer) when it covers it. A stock, from the quote for all its shares (`maxQuote`): what that sale is sure to bring,
  * as its batch would repay it (`freeRepayRaw`, or `saleRepayRaw` from backing). Before that quote, the row's estimate.
  */
-export function repayMax(source: RepaySource, data: Pick<RepayData, "cash" | "debtRaw" | "debtUsd">, maxQuote?: SellQuote | null): RepayMax {
+export function repayMax(
+  source: RepaySource,
+  data: Pick<RepayData, "cash" | "debtRaw" | "debtUsd">,
+  maxQuote?: SellQuote | null,
+): RepayMax {
   if (source.kind === "cash") {
     const spend = maxSpendRaw(data.cash);
-    return { usd: Math.min(toUsd(spend), data.debtUsd), raw: fullRepayAmount(data.debtRaw, spend), coversAll: spend >= data.debtRaw, quoting: false };
+    return {
+      usd: Math.min(toUsd(spend), data.debtUsd),
+      raw: fullRepayAmount(data.debtRaw, spend),
+      coversAll: spend >= data.debtRaw,
+      quoting: false,
+    };
   }
   if (!maxQuote || !source.stock || !source.holding) {
-    return { usd: source.estUsd, raw: usdcRaw(source.estUsd), coversAll: source.estUsd >= data.debtUsd, quoting: !maxQuote && maxQuote !== null };
+    return {
+      usd: source.estUsd,
+      raw: usdcRaw(source.estUsd),
+      coversAll: source.estUsd >= data.debtUsd,
+      quoting: !maxQuote && maxQuote !== null,
+    };
   }
   const floor = sellMinOut(maxQuote, source.stock, source.holding.priceUsd);
-  const raw = source.kind === "free" ? freeRepayRaw(floor, data.debtRaw, source.feeFromSale) : saleRepayRaw(floor, data.debtRaw);
+  const raw =
+    source.kind === "free" ? freeRepayRaw(floor, data.debtRaw, source.feeFromSale) : saleRepayRaw(floor, data.debtRaw);
   return { usd: Math.min(toUsd(raw), data.debtUsd), raw, coversAll: raw > data.debtRaw, quoting: false };
 }
 
@@ -265,7 +290,11 @@ export function sharesForRepay(p: {
 }
 
 /** The status a repay of `usd` from `source` would land in, as Home shows it (nothing owed reads Safe). */
-export function statusAfter(source: RepaySource, usd: number, data: Pick<RepayData, "collateralUsd" | "avgCf" | "debtUsd" | "status">): Exclude<Status, "none"> {
+export function statusAfter(
+  source: RepaySource,
+  usd: number,
+  data: Pick<RepayData, "collateralUsd" | "avgCf" | "debtUsd" | "status">,
+): Exclude<Status, "none"> {
   const r = Math.min(usd, source.estUsd);
   if (r <= 0) return homeStatus(data.status);
   if (r >= data.debtUsd - 0.005) return "safe";
@@ -301,7 +330,9 @@ export function repayForm(state: RepayForm, action: RepayAction): RepayForm {
   const most = toCents(max.usd, max.coversAll);
   // Keys typed after a snap land on the most again (the field shows it): the line stays until the amount goes under it.
   if (!max.quoting && max.usd > 0 && n >= most) {
-    return n > most || (state.snapped && state.all) ? { source: state.source, amount: "", all: true, snapped: true } : { source: state.source, amount: "", all: true };
+    return n > most || (state.snapped && state.all)
+      ? { source: state.source, amount: "", all: true, snapped: true }
+      : { source: state.source, amount: "", all: true };
   }
   return { source: state.source, amount: value, all: false };
 }
@@ -312,7 +343,9 @@ export function repayForm(state: RepayForm, action: RepayAction): RepayForm {
  */
 const QUICK_PICKS = [0.25, 0.5, 0.75] as const;
 export const quickPicks = (max: RepayMax, minUsd = 1) =>
-  QUICK_PICKS.map((share) => ({ share, usd: Math.floor(max.usd * share * 100) / 100 })).filter((p) => p.usd >= minUsd && p.usd < max.usd);
+  QUICK_PICKS.map((share) => ({ share, usd: Math.floor(max.usd * share * 100) / 100 })).filter(
+    (p) => p.usd >= minUsd && p.usd < max.usd,
+  );
 
 const pct = (f: number) => (f * 100).toFixed(1);
 
@@ -380,8 +413,17 @@ export function planRepay(p: {
           });
     leg = legOf(p.quote, sharesRaw);
     if (leg.state === "ready") {
-      sellPlan = planSell({ from: source.kind === "free" ? "free" : "repay", stock: stock!, holding: h!, cf: source.cf, position: data, quote: leg.quote, now: p.now });
-      repayRaw = source.kind === "free" ? freeRepayRaw(sellPlan.minOutRaw, data.debtRaw, source.feeFromSale) : sellPlan.repayRaw;
+      sellPlan = planSell({
+        from: source.kind === "free" ? "free" : "repay",
+        stock: stock!,
+        holding: h!,
+        cf: source.cf,
+        position: data,
+        quote: leg.quote,
+        now: p.now,
+      });
+      repayRaw =
+        source.kind === "free" ? freeRepayRaw(sellPlan.minOutRaw, data.debtRaw, source.feeFromSale) : sellPlan.repayRaw;
     }
   }
   const coversAll = source.kind === "cash" ? all && max.coversAll : repayRaw > data.debtRaw;
@@ -391,14 +433,19 @@ export function planRepay(p: {
   // Why it can't go ahead: the amount, then the markets, then the sale's own stops.
   let blocker: string | null = null;
   if (tooSmall) blocker = REPAY_COPY.minRepay(min);
-  else if (isStock && amountUsd > 0 && (maxLeg.state === "none" || leg.state === "none")) blocker = REPAY_COPY.noMarket(source.name);
+  else if (isStock && amountUsd > 0 && (maxLeg.state === "none" || leg.state === "none"))
+    blocker = REPAY_COPY.noMarket(source.name);
   else if (sellPlan?.block) blocker = blockText(sellPlan.block, source, min);
   else if (isStock && sellPlan && repayRaw <= 0n) blocker = REPAY_COPY.minRepay(min);
   const warn = !blocker && sellPlan?.warn ? REPAY_COPY.warn(pct(sellPlan.discount), source.name) : null;
   const closed = !blocker && !warn && !!sellPlan?.priceMayMove;
   // Typed more than the most: it snapped back to All, and one plain line says what that most is.
   const snapped = !!form.snapped && all && !blocker && amountUsd > 0;
-  const snapText = max.coversAll ? REPAY_COPY.snappedAll : source.kind === "cash" ? REPAY_COPY.snappedCash : REPAY_COPY.snappedStock(source.name);
+  const snapText = max.coversAll
+    ? REPAY_COPY.snappedAll
+    : source.kind === "cash"
+      ? REPAY_COPY.snappedCash
+      : REPAY_COPY.snappedStock(source.name);
   const note = blocker
     ? { text: blocker, tone: "act" as const }
     : warn
@@ -425,7 +472,8 @@ export function planRepay(p: {
     !blocker &&
     (source.kind === "cash" ? repayRaw > 0n : leg.state === "ready" && !leg.fetching && !!sellPlan && repayRaw > 0n);
 
-  const shares = isStock && sharesRaw > 0n ? formatShares(rawToShares(sharesRaw, h!.multiplier, stock!.decimals)) : null;
+  const shares =
+    isStock && sharesRaw > 0n ? formatShares(rawToShares(sharesRaw, h!.multiplier, stock!.decimals)) : null;
   return {
     source,
     max,
@@ -433,7 +481,12 @@ export function planRepay(p: {
     fieldText,
     amountUsd,
     /** "Sells 0.0108 MSFT" under a stock's amount; "Sells …" while quoting. */
-    sharesLine: isStock && amountUsd > 0 && !tooSmall ? (shares ? REPAY_COPY.sells(shares, tickerOf(stock!.symbol)) : REPAY_COPY.sellsQuoting) : null,
+    sharesLine:
+      isStock && amountUsd > 0 && !tooSmall
+        ? shares
+          ? REPAY_COPY.sells(shares, tickerOf(stock!.symbol))
+          : REPAY_COPY.sellsQuoting
+        : null,
     sharesRaw,
     quote: leg.state === "ready" ? leg.quote : null,
     sellPlan,
@@ -458,7 +511,9 @@ export function planRepay(p: {
  * A repay by selling's small print (D7): every move in the batch, the floor, the repay and what the stock is. It may
  * name the venue and Aave's price, as the Sell step's small print does.
  */
-export function repaySmallPrint(v: Pick<RepayView, "source" | "sharesRaw" | "quote" | "sellPlan" | "repayRaw" | "coversAll">): string | null {
+export function repaySmallPrint(
+  v: Pick<RepayView, "source" | "sharesRaw" | "quote" | "sellPlan" | "repayRaw" | "coversAll">,
+): string | null {
   const { source, quote, sellPlan } = v;
   if (source.kind === "cash" || !source.stock || !source.holding || !quote || !sellPlan) return null;
   const ticker = tickerOf(source.stock.symbol);
@@ -466,7 +521,9 @@ export function repaySmallPrint(v: Pick<RepayView, "source" | "sharesRaw" | "quo
   const floor = formatUsd(toUsd(sellPlan.minOutRaw));
   const repay = formatUsd(toUsd(v.repayRaw));
   const out = source.kind === "backing" ? `${shares} ${ticker} comes out of backing, ` : `${shares} ${ticker} `;
-  const repaid = v.coversAll ? `everything you owe is repaid (exactly ${repay} is approved for it)` : `exactly ${repay} of it is approved and repaid`;
+  const repaid = v.coversAll
+    ? `everything you owe is repaid (exactly ${repay} is approved for it)`
+    : `exactly ${repay} of it is approved and repaid`;
   return (
     `In one go: exactly ${out}is approved for the ${VENUE_LABEL[quote.venue]} router and sold for at least ${floor}, then ${repaid}. ` +
     `What the sale brings above that stays in your cash${source.feeFromSale ? `, ${formatUsd(CASH.feeBufferUsd)} of it for the network fee` : ""}. ` +

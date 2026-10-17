@@ -1,2486 +1,2486 @@
 export const hubAbi = [
   {
-    "type": "function",
-    "name": "MAX_ALLOWED_SPOKE_CAP",
-    "inputs": [],
-    "outputs": [
+    type: "function",
+    name: "MAX_ALLOWED_SPOKE_CAP",
+    inputs: [],
+    outputs: [
       {
-        "name": "",
-        "type": "uint40",
-        "internalType": "uint40"
-      }
+        name: "",
+        type: "uint40",
+        internalType: "uint40",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "MAX_ALLOWED_UNDERLYING_DECIMALS",
-    "inputs": [],
-    "outputs": [
+    type: "function",
+    name: "MAX_ALLOWED_UNDERLYING_DECIMALS",
+    inputs: [],
+    outputs: [
       {
-        "name": "",
-        "type": "uint8",
-        "internalType": "uint8"
-      }
+        name: "",
+        type: "uint8",
+        internalType: "uint8",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "MAX_RISK_PREMIUM_THRESHOLD",
-    "inputs": [],
-    "outputs": [
+    type: "function",
+    name: "MAX_RISK_PREMIUM_THRESHOLD",
+    inputs: [],
+    outputs: [
       {
-        "name": "",
-        "type": "uint24",
-        "internalType": "uint24"
-      }
+        name: "",
+        type: "uint24",
+        internalType: "uint24",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "MIN_ALLOWED_UNDERLYING_DECIMALS",
-    "inputs": [],
-    "outputs": [
+    type: "function",
+    name: "MIN_ALLOWED_UNDERLYING_DECIMALS",
+    inputs: [],
+    outputs: [
       {
-        "name": "",
-        "type": "uint8",
-        "internalType": "uint8"
-      }
+        name: "",
+        type: "uint8",
+        internalType: "uint8",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "add",
-    "inputs": [
+    type: "function",
+    name: "add",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "amount",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "amount",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "nonpayable"
+    stateMutability: "nonpayable",
   },
   {
-    "type": "function",
-    "name": "addAsset",
-    "inputs": [
+    type: "function",
+    name: "addAsset",
+    inputs: [
       {
-        "name": "underlying",
-        "type": "address",
-        "internalType": "address"
+        name: "underlying",
+        type: "address",
+        internalType: "address",
       },
       {
-        "name": "decimals",
-        "type": "uint8",
-        "internalType": "uint8"
+        name: "decimals",
+        type: "uint8",
+        internalType: "uint8",
       },
       {
-        "name": "feeReceiver",
-        "type": "address",
-        "internalType": "address"
+        name: "feeReceiver",
+        type: "address",
+        internalType: "address",
       },
       {
-        "name": "irStrategy",
-        "type": "address",
-        "internalType": "address"
+        name: "irStrategy",
+        type: "address",
+        internalType: "address",
       },
       {
-        "name": "irData",
-        "type": "bytes",
-        "internalType": "bytes"
-      }
+        name: "irData",
+        type: "bytes",
+        internalType: "bytes",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "nonpayable"
+    stateMutability: "nonpayable",
   },
   {
-    "type": "function",
-    "name": "addSpoke",
-    "inputs": [
+    type: "function",
+    name: "addSpoke",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "spoke",
-        "type": "address",
-        "internalType": "address"
+        name: "spoke",
+        type: "address",
+        internalType: "address",
       },
       {
-        "name": "params",
-        "type": "tuple",
-        "internalType": "struct IHub.SpokeConfig",
-        "components": [
+        name: "params",
+        type: "tuple",
+        internalType: "struct IHub.SpokeConfig",
+        components: [
           {
-            "name": "addCap",
-            "type": "uint40",
-            "internalType": "uint40"
+            name: "addCap",
+            type: "uint40",
+            internalType: "uint40",
           },
           {
-            "name": "drawCap",
-            "type": "uint40",
-            "internalType": "uint40"
+            name: "drawCap",
+            type: "uint40",
+            internalType: "uint40",
           },
           {
-            "name": "riskPremiumThreshold",
-            "type": "uint24",
-            "internalType": "uint24"
+            name: "riskPremiumThreshold",
+            type: "uint24",
+            internalType: "uint24",
           },
           {
-            "name": "active",
-            "type": "bool",
-            "internalType": "bool"
+            name: "active",
+            type: "bool",
+            internalType: "bool",
           },
           {
-            "name": "halted",
-            "type": "bool",
-            "internalType": "bool"
-          }
-        ]
-      }
+            name: "halted",
+            type: "bool",
+            internalType: "bool",
+          },
+        ],
+      },
     ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
+    outputs: [],
+    stateMutability: "nonpayable",
   },
   {
-    "type": "function",
-    "name": "authority",
-    "inputs": [],
-    "outputs": [
+    type: "function",
+    name: "authority",
+    inputs: [],
+    outputs: [
       {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: "",
+        type: "address",
+        internalType: "address",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "draw",
-    "inputs": [
+    type: "function",
+    name: "draw",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "amount",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "amount",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "to",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: "to",
+        type: "address",
+        internalType: "address",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "nonpayable"
+    stateMutability: "nonpayable",
   },
   {
-    "type": "function",
-    "name": "eliminateDeficit",
-    "inputs": [
+    type: "function",
+    name: "eliminateDeficit",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "amount",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "amount",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "spoke",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: "spoke",
+        type: "address",
+        internalType: "address",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "nonpayable"
+    stateMutability: "nonpayable",
   },
   {
-    "type": "function",
-    "name": "getAddedAssets",
-    "inputs": [
+    type: "function",
+    name: "getAddedAssets",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getAddedShares",
-    "inputs": [
+    type: "function",
+    name: "getAddedShares",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getAsset",
-    "inputs": [
+    type: "function",
+    name: "getAsset",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "tuple",
-        "internalType": "struct IHub.Asset",
-        "components": [
+        name: "",
+        type: "tuple",
+        internalType: "struct IHub.Asset",
+        components: [
           {
-            "name": "liquidity",
-            "type": "uint120",
-            "internalType": "uint120"
+            name: "liquidity",
+            type: "uint120",
+            internalType: "uint120",
           },
           {
-            "name": "realizedFees",
-            "type": "uint120",
-            "internalType": "uint120"
+            name: "realizedFees",
+            type: "uint120",
+            internalType: "uint120",
           },
           {
-            "name": "decimals",
-            "type": "uint8",
-            "internalType": "uint8"
+            name: "decimals",
+            type: "uint8",
+            internalType: "uint8",
           },
           {
-            "name": "addedShares",
-            "type": "uint120",
-            "internalType": "uint120"
+            name: "addedShares",
+            type: "uint120",
+            internalType: "uint120",
           },
           {
-            "name": "swept",
-            "type": "uint120",
-            "internalType": "uint120"
+            name: "swept",
+            type: "uint120",
+            internalType: "uint120",
           },
           {
-            "name": "premiumOffsetRay",
-            "type": "int200",
-            "internalType": "int200"
+            name: "premiumOffsetRay",
+            type: "int200",
+            internalType: "int200",
           },
           {
-            "name": "drawnShares",
-            "type": "uint120",
-            "internalType": "uint120"
+            name: "drawnShares",
+            type: "uint120",
+            internalType: "uint120",
           },
           {
-            "name": "premiumShares",
-            "type": "uint120",
-            "internalType": "uint120"
+            name: "premiumShares",
+            type: "uint120",
+            internalType: "uint120",
           },
           {
-            "name": "liquidityFee",
-            "type": "uint16",
-            "internalType": "uint16"
+            name: "liquidityFee",
+            type: "uint16",
+            internalType: "uint16",
           },
           {
-            "name": "drawnIndex",
-            "type": "uint120",
-            "internalType": "uint120"
+            name: "drawnIndex",
+            type: "uint120",
+            internalType: "uint120",
           },
           {
-            "name": "drawnRate",
-            "type": "uint96",
-            "internalType": "uint96"
+            name: "drawnRate",
+            type: "uint96",
+            internalType: "uint96",
           },
           {
-            "name": "lastUpdateTimestamp",
-            "type": "uint40",
-            "internalType": "uint40"
+            name: "lastUpdateTimestamp",
+            type: "uint40",
+            internalType: "uint40",
           },
           {
-            "name": "underlying",
-            "type": "address",
-            "internalType": "address"
+            name: "underlying",
+            type: "address",
+            internalType: "address",
           },
           {
-            "name": "irStrategy",
-            "type": "address",
-            "internalType": "address"
+            name: "irStrategy",
+            type: "address",
+            internalType: "address",
           },
           {
-            "name": "reinvestmentController",
-            "type": "address",
-            "internalType": "address"
+            name: "reinvestmentController",
+            type: "address",
+            internalType: "address",
           },
           {
-            "name": "feeReceiver",
-            "type": "address",
-            "internalType": "address"
+            name: "feeReceiver",
+            type: "address",
+            internalType: "address",
           },
           {
-            "name": "deficitRay",
-            "type": "uint200",
-            "internalType": "uint200"
-          }
-        ]
-      }
+            name: "deficitRay",
+            type: "uint200",
+            internalType: "uint200",
+          },
+        ],
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getAssetAccruedFees",
-    "inputs": [
+    type: "function",
+    name: "getAssetAccruedFees",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getAssetConfig",
-    "inputs": [
+    type: "function",
+    name: "getAssetConfig",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "tuple",
-        "internalType": "struct IHub.AssetConfig",
-        "components": [
+        name: "",
+        type: "tuple",
+        internalType: "struct IHub.AssetConfig",
+        components: [
           {
-            "name": "feeReceiver",
-            "type": "address",
-            "internalType": "address"
+            name: "feeReceiver",
+            type: "address",
+            internalType: "address",
           },
           {
-            "name": "liquidityFee",
-            "type": "uint16",
-            "internalType": "uint16"
+            name: "liquidityFee",
+            type: "uint16",
+            internalType: "uint16",
           },
           {
-            "name": "irStrategy",
-            "type": "address",
-            "internalType": "address"
+            name: "irStrategy",
+            type: "address",
+            internalType: "address",
           },
           {
-            "name": "reinvestmentController",
-            "type": "address",
-            "internalType": "address"
-          }
-        ]
-      }
+            name: "reinvestmentController",
+            type: "address",
+            internalType: "address",
+          },
+        ],
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getAssetCount",
-    "inputs": [],
-    "outputs": [
+    type: "function",
+    name: "getAssetCount",
+    inputs: [],
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getAssetDeficitRay",
-    "inputs": [
+    type: "function",
+    name: "getAssetDeficitRay",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getAssetDrawnIndex",
-    "inputs": [
+    type: "function",
+    name: "getAssetDrawnIndex",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getAssetDrawnRate",
-    "inputs": [
+    type: "function",
+    name: "getAssetDrawnRate",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getAssetDrawnShares",
-    "inputs": [
+    type: "function",
+    name: "getAssetDrawnShares",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getAssetId",
-    "inputs": [
+    type: "function",
+    name: "getAssetId",
+    inputs: [
       {
-        "name": "underlying",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: "underlying",
+        type: "address",
+        internalType: "address",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getAssetLiquidity",
-    "inputs": [
+    type: "function",
+    name: "getAssetLiquidity",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getAssetOwed",
-    "inputs": [
+    type: "function",
+    name: "getAssetOwed",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getAssetPremiumData",
-    "inputs": [
+    type: "function",
+    name: "getAssetPremiumData",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "",
-        "type": "int256",
-        "internalType": "int256"
-      }
+        name: "",
+        type: "int256",
+        internalType: "int256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getAssetPremiumRay",
-    "inputs": [
+    type: "function",
+    name: "getAssetPremiumRay",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getAssetSwept",
-    "inputs": [
+    type: "function",
+    name: "getAssetSwept",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getAssetTotalOwed",
-    "inputs": [
+    type: "function",
+    name: "getAssetTotalOwed",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getAssetUnderlyingAndDecimals",
-    "inputs": [
+    type: "function",
+    name: "getAssetUnderlyingAndDecimals",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
+        name: "",
+        type: "address",
+        internalType: "address",
       },
       {
-        "name": "",
-        "type": "uint8",
-        "internalType": "uint8"
-      }
+        name: "",
+        type: "uint8",
+        internalType: "uint8",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getSpoke",
-    "inputs": [
+    type: "function",
+    name: "getSpoke",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "spoke",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: "spoke",
+        type: "address",
+        internalType: "address",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "tuple",
-        "internalType": "struct IHub.SpokeData",
-        "components": [
+        name: "",
+        type: "tuple",
+        internalType: "struct IHub.SpokeData",
+        components: [
           {
-            "name": "drawnShares",
-            "type": "uint120",
-            "internalType": "uint120"
+            name: "drawnShares",
+            type: "uint120",
+            internalType: "uint120",
           },
           {
-            "name": "premiumShares",
-            "type": "uint120",
-            "internalType": "uint120"
+            name: "premiumShares",
+            type: "uint120",
+            internalType: "uint120",
           },
           {
-            "name": "premiumOffsetRay",
-            "type": "int200",
-            "internalType": "int200"
+            name: "premiumOffsetRay",
+            type: "int200",
+            internalType: "int200",
           },
           {
-            "name": "addedShares",
-            "type": "uint120",
-            "internalType": "uint120"
+            name: "addedShares",
+            type: "uint120",
+            internalType: "uint120",
           },
           {
-            "name": "addCap",
-            "type": "uint40",
-            "internalType": "uint40"
+            name: "addCap",
+            type: "uint40",
+            internalType: "uint40",
           },
           {
-            "name": "drawCap",
-            "type": "uint40",
-            "internalType": "uint40"
+            name: "drawCap",
+            type: "uint40",
+            internalType: "uint40",
           },
           {
-            "name": "riskPremiumThreshold",
-            "type": "uint24",
-            "internalType": "uint24"
+            name: "riskPremiumThreshold",
+            type: "uint24",
+            internalType: "uint24",
           },
           {
-            "name": "active",
-            "type": "bool",
-            "internalType": "bool"
+            name: "active",
+            type: "bool",
+            internalType: "bool",
           },
           {
-            "name": "halted",
-            "type": "bool",
-            "internalType": "bool"
+            name: "halted",
+            type: "bool",
+            internalType: "bool",
           },
           {
-            "name": "deficitRay",
-            "type": "uint200",
-            "internalType": "uint200"
-          }
-        ]
-      }
+            name: "deficitRay",
+            type: "uint200",
+            internalType: "uint200",
+          },
+        ],
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getSpokeAddedAssets",
-    "inputs": [
+    type: "function",
+    name: "getSpokeAddedAssets",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "spoke",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: "spoke",
+        type: "address",
+        internalType: "address",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getSpokeAddedShares",
-    "inputs": [
+    type: "function",
+    name: "getSpokeAddedShares",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "spoke",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: "spoke",
+        type: "address",
+        internalType: "address",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getSpokeAddress",
-    "inputs": [
+    type: "function",
+    name: "getSpokeAddress",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "index",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "index",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: "",
+        type: "address",
+        internalType: "address",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getSpokeConfig",
-    "inputs": [
+    type: "function",
+    name: "getSpokeConfig",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "spoke",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: "spoke",
+        type: "address",
+        internalType: "address",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "tuple",
-        "internalType": "struct IHub.SpokeConfig",
-        "components": [
+        name: "",
+        type: "tuple",
+        internalType: "struct IHub.SpokeConfig",
+        components: [
           {
-            "name": "addCap",
-            "type": "uint40",
-            "internalType": "uint40"
+            name: "addCap",
+            type: "uint40",
+            internalType: "uint40",
           },
           {
-            "name": "drawCap",
-            "type": "uint40",
-            "internalType": "uint40"
+            name: "drawCap",
+            type: "uint40",
+            internalType: "uint40",
           },
           {
-            "name": "riskPremiumThreshold",
-            "type": "uint24",
-            "internalType": "uint24"
+            name: "riskPremiumThreshold",
+            type: "uint24",
+            internalType: "uint24",
           },
           {
-            "name": "active",
-            "type": "bool",
-            "internalType": "bool"
+            name: "active",
+            type: "bool",
+            internalType: "bool",
           },
           {
-            "name": "halted",
-            "type": "bool",
-            "internalType": "bool"
-          }
-        ]
-      }
+            name: "halted",
+            type: "bool",
+            internalType: "bool",
+          },
+        ],
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getSpokeCount",
-    "inputs": [
+    type: "function",
+    name: "getSpokeCount",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getSpokeDeficitRay",
-    "inputs": [
+    type: "function",
+    name: "getSpokeDeficitRay",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "spoke",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: "spoke",
+        type: "address",
+        internalType: "address",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getSpokeDrawnShares",
-    "inputs": [
+    type: "function",
+    name: "getSpokeDrawnShares",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "spoke",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: "spoke",
+        type: "address",
+        internalType: "address",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getSpokeOwed",
-    "inputs": [
+    type: "function",
+    name: "getSpokeOwed",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "spoke",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: "spoke",
+        type: "address",
+        internalType: "address",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getSpokePremiumData",
-    "inputs": [
+    type: "function",
+    name: "getSpokePremiumData",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "spoke",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: "spoke",
+        type: "address",
+        internalType: "address",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "",
-        "type": "int256",
-        "internalType": "int256"
-      }
+        name: "",
+        type: "int256",
+        internalType: "int256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getSpokePremiumRay",
-    "inputs": [
+    type: "function",
+    name: "getSpokePremiumRay",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "spoke",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: "spoke",
+        type: "address",
+        internalType: "address",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getSpokeTotalOwed",
-    "inputs": [
+    type: "function",
+    name: "getSpokeTotalOwed",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "spoke",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: "spoke",
+        type: "address",
+        internalType: "address",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "isConsumingScheduledOp",
-    "inputs": [],
-    "outputs": [
+    type: "function",
+    name: "isConsumingScheduledOp",
+    inputs: [],
+    outputs: [
       {
-        "name": "",
-        "type": "bytes4",
-        "internalType": "bytes4"
-      }
+        name: "",
+        type: "bytes4",
+        internalType: "bytes4",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "isSpokeListed",
-    "inputs": [
+    type: "function",
+    name: "isSpokeListed",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "spoke",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: "spoke",
+        type: "address",
+        internalType: "address",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
+        name: "",
+        type: "bool",
+        internalType: "bool",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "isUnderlyingListed",
-    "inputs": [
+    type: "function",
+    name: "isUnderlyingListed",
+    inputs: [
       {
-        "name": "underlying",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: "underlying",
+        type: "address",
+        internalType: "address",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
+        name: "",
+        type: "bool",
+        internalType: "bool",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "mintFeeShares",
-    "inputs": [
+    type: "function",
+    name: "mintFeeShares",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "nonpayable"
+    stateMutability: "nonpayable",
   },
   {
-    "type": "function",
-    "name": "payFeeShares",
-    "inputs": [
+    type: "function",
+    name: "payFeeShares",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "shares",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "shares",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
+    outputs: [],
+    stateMutability: "nonpayable",
   },
   {
-    "type": "function",
-    "name": "previewAddByAssets",
-    "inputs": [
+    type: "function",
+    name: "previewAddByAssets",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "assets",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "assets",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "previewAddByShares",
-    "inputs": [
+    type: "function",
+    name: "previewAddByShares",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "shares",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "shares",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "previewDrawByAssets",
-    "inputs": [
+    type: "function",
+    name: "previewDrawByAssets",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "assets",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "assets",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "previewDrawByShares",
-    "inputs": [
+    type: "function",
+    name: "previewDrawByShares",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "shares",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "shares",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "previewRemoveByAssets",
-    "inputs": [
+    type: "function",
+    name: "previewRemoveByAssets",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "assets",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "assets",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "previewRemoveByShares",
-    "inputs": [
+    type: "function",
+    name: "previewRemoveByShares",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "shares",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "shares",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "previewRestoreByAssets",
-    "inputs": [
+    type: "function",
+    name: "previewRestoreByAssets",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "assets",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "assets",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "previewRestoreByShares",
-    "inputs": [
+    type: "function",
+    name: "previewRestoreByShares",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "shares",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "shares",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "reclaim",
-    "inputs": [
+    type: "function",
+    name: "reclaim",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "amount",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "amount",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
+    outputs: [],
+    stateMutability: "nonpayable",
   },
   {
-    "type": "function",
-    "name": "refreshPremium",
-    "inputs": [
+    type: "function",
+    name: "refreshPremium",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "premiumDelta",
-        "type": "tuple",
-        "internalType": "struct IHubBase.PremiumDelta",
-        "components": [
+        name: "premiumDelta",
+        type: "tuple",
+        internalType: "struct IHubBase.PremiumDelta",
+        components: [
           {
-            "name": "sharesDelta",
-            "type": "int256",
-            "internalType": "int256"
+            name: "sharesDelta",
+            type: "int256",
+            internalType: "int256",
           },
           {
-            "name": "offsetRayDelta",
-            "type": "int256",
-            "internalType": "int256"
+            name: "offsetRayDelta",
+            type: "int256",
+            internalType: "int256",
           },
           {
-            "name": "restoredPremiumRay",
-            "type": "uint256",
-            "internalType": "uint256"
-          }
-        ]
-      }
+            name: "restoredPremiumRay",
+            type: "uint256",
+            internalType: "uint256",
+          },
+        ],
+      },
     ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
+    outputs: [],
+    stateMutability: "nonpayable",
   },
   {
-    "type": "function",
-    "name": "remove",
-    "inputs": [
+    type: "function",
+    name: "remove",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "amount",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "amount",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "to",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: "to",
+        type: "address",
+        internalType: "address",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "nonpayable"
+    stateMutability: "nonpayable",
   },
   {
-    "type": "function",
-    "name": "reportDeficit",
-    "inputs": [
+    type: "function",
+    name: "reportDeficit",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "drawnAmount",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "drawnAmount",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "premiumDelta",
-        "type": "tuple",
-        "internalType": "struct IHubBase.PremiumDelta",
-        "components": [
+        name: "premiumDelta",
+        type: "tuple",
+        internalType: "struct IHubBase.PremiumDelta",
+        components: [
           {
-            "name": "sharesDelta",
-            "type": "int256",
-            "internalType": "int256"
+            name: "sharesDelta",
+            type: "int256",
+            internalType: "int256",
           },
           {
-            "name": "offsetRayDelta",
-            "type": "int256",
-            "internalType": "int256"
+            name: "offsetRayDelta",
+            type: "int256",
+            internalType: "int256",
           },
           {
-            "name": "restoredPremiumRay",
-            "type": "uint256",
-            "internalType": "uint256"
-          }
-        ]
-      }
+            name: "restoredPremiumRay",
+            type: "uint256",
+            internalType: "uint256",
+          },
+        ],
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "nonpayable"
+    stateMutability: "nonpayable",
   },
   {
-    "type": "function",
-    "name": "restore",
-    "inputs": [
+    type: "function",
+    name: "restore",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "drawnAmount",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "drawnAmount",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "premiumDelta",
-        "type": "tuple",
-        "internalType": "struct IHubBase.PremiumDelta",
-        "components": [
+        name: "premiumDelta",
+        type: "tuple",
+        internalType: "struct IHubBase.PremiumDelta",
+        components: [
           {
-            "name": "sharesDelta",
-            "type": "int256",
-            "internalType": "int256"
+            name: "sharesDelta",
+            type: "int256",
+            internalType: "int256",
           },
           {
-            "name": "offsetRayDelta",
-            "type": "int256",
-            "internalType": "int256"
+            name: "offsetRayDelta",
+            type: "int256",
+            internalType: "int256",
           },
           {
-            "name": "restoredPremiumRay",
-            "type": "uint256",
-            "internalType": "uint256"
-          }
-        ]
-      }
+            name: "restoredPremiumRay",
+            type: "uint256",
+            internalType: "uint256",
+          },
+        ],
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "nonpayable"
+    stateMutability: "nonpayable",
   },
   {
-    "type": "function",
-    "name": "setAuthority",
-    "inputs": [
+    type: "function",
+    name: "setAuthority",
+    inputs: [
       {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: "",
+        type: "address",
+        internalType: "address",
+      },
     ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
+    outputs: [],
+    stateMutability: "nonpayable",
   },
   {
-    "type": "function",
-    "name": "setInterestRateData",
-    "inputs": [
+    type: "function",
+    name: "setInterestRateData",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "irData",
-        "type": "bytes",
-        "internalType": "bytes"
-      }
+        name: "irData",
+        type: "bytes",
+        internalType: "bytes",
+      },
     ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
+    outputs: [],
+    stateMutability: "nonpayable",
   },
   {
-    "type": "function",
-    "name": "sweep",
-    "inputs": [
+    type: "function",
+    name: "sweep",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "amount",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "amount",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
+    outputs: [],
+    stateMutability: "nonpayable",
   },
   {
-    "type": "function",
-    "name": "transferShares",
-    "inputs": [
+    type: "function",
+    name: "transferShares",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "shares",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "shares",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "toSpoke",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: "toSpoke",
+        type: "address",
+        internalType: "address",
+      },
     ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
+    outputs: [],
+    stateMutability: "nonpayable",
   },
   {
-    "type": "function",
-    "name": "updateAssetConfig",
-    "inputs": [
+    type: "function",
+    name: "updateAssetConfig",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "config",
-        "type": "tuple",
-        "internalType": "struct IHub.AssetConfig",
-        "components": [
+        name: "config",
+        type: "tuple",
+        internalType: "struct IHub.AssetConfig",
+        components: [
           {
-            "name": "feeReceiver",
-            "type": "address",
-            "internalType": "address"
+            name: "feeReceiver",
+            type: "address",
+            internalType: "address",
           },
           {
-            "name": "liquidityFee",
-            "type": "uint16",
-            "internalType": "uint16"
+            name: "liquidityFee",
+            type: "uint16",
+            internalType: "uint16",
           },
           {
-            "name": "irStrategy",
-            "type": "address",
-            "internalType": "address"
+            name: "irStrategy",
+            type: "address",
+            internalType: "address",
           },
           {
-            "name": "reinvestmentController",
-            "type": "address",
-            "internalType": "address"
-          }
-        ]
+            name: "reinvestmentController",
+            type: "address",
+            internalType: "address",
+          },
+        ],
       },
       {
-        "name": "irData",
-        "type": "bytes",
-        "internalType": "bytes"
-      }
+        name: "irData",
+        type: "bytes",
+        internalType: "bytes",
+      },
     ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
+    outputs: [],
+    stateMutability: "nonpayable",
   },
   {
-    "type": "function",
-    "name": "updateSpokeConfig",
-    "inputs": [
+    type: "function",
+    name: "updateSpokeConfig",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "spoke",
-        "type": "address",
-        "internalType": "address"
+        name: "spoke",
+        type: "address",
+        internalType: "address",
       },
       {
-        "name": "config",
-        "type": "tuple",
-        "internalType": "struct IHub.SpokeConfig",
-        "components": [
+        name: "config",
+        type: "tuple",
+        internalType: "struct IHub.SpokeConfig",
+        components: [
           {
-            "name": "addCap",
-            "type": "uint40",
-            "internalType": "uint40"
+            name: "addCap",
+            type: "uint40",
+            internalType: "uint40",
           },
           {
-            "name": "drawCap",
-            "type": "uint40",
-            "internalType": "uint40"
+            name: "drawCap",
+            type: "uint40",
+            internalType: "uint40",
           },
           {
-            "name": "riskPremiumThreshold",
-            "type": "uint24",
-            "internalType": "uint24"
+            name: "riskPremiumThreshold",
+            type: "uint24",
+            internalType: "uint24",
           },
           {
-            "name": "active",
-            "type": "bool",
-            "internalType": "bool"
+            name: "active",
+            type: "bool",
+            internalType: "bool",
           },
           {
-            "name": "halted",
-            "type": "bool",
-            "internalType": "bool"
-          }
-        ]
-      }
+            name: "halted",
+            type: "bool",
+            internalType: "bool",
+          },
+        ],
+      },
     ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
+    outputs: [],
+    stateMutability: "nonpayable",
   },
   {
-    "type": "event",
-    "name": "Add",
-    "inputs": [
+    type: "event",
+    name: "Add",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        indexed: true,
+        internalType: "uint256",
       },
       {
-        "name": "spoke",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
+        name: "spoke",
+        type: "address",
+        indexed: true,
+        internalType: "address",
       },
       {
-        "name": "shares",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
+        name: "shares",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
       },
       {
-        "name": "amount",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
+        name: "amount",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
     ],
-    "anonymous": false
+    anonymous: false,
   },
   {
-    "type": "event",
-    "name": "AddAsset",
-    "inputs": [
+    type: "event",
+    name: "AddAsset",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        indexed: true,
+        internalType: "uint256",
       },
       {
-        "name": "underlying",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
+        name: "underlying",
+        type: "address",
+        indexed: true,
+        internalType: "address",
       },
       {
-        "name": "decimals",
-        "type": "uint8",
-        "indexed": false,
-        "internalType": "uint8"
-      }
+        name: "decimals",
+        type: "uint8",
+        indexed: false,
+        internalType: "uint8",
+      },
     ],
-    "anonymous": false
+    anonymous: false,
   },
   {
-    "type": "event",
-    "name": "AddSpoke",
-    "inputs": [
+    type: "event",
+    name: "AddSpoke",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        indexed: true,
+        internalType: "uint256",
       },
       {
-        "name": "spoke",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      }
+        name: "spoke",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
     ],
-    "anonymous": false
+    anonymous: false,
   },
   {
-    "type": "event",
-    "name": "AuthorityUpdated",
-    "inputs": [
+    type: "event",
+    name: "AuthorityUpdated",
+    inputs: [
       {
-        "name": "authority",
-        "type": "address",
-        "indexed": false,
-        "internalType": "address"
-      }
+        name: "authority",
+        type: "address",
+        indexed: false,
+        internalType: "address",
+      },
     ],
-    "anonymous": false
+    anonymous: false,
   },
   {
-    "type": "event",
-    "name": "Draw",
-    "inputs": [
+    type: "event",
+    name: "Draw",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        indexed: true,
+        internalType: "uint256",
       },
       {
-        "name": "spoke",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
+        name: "spoke",
+        type: "address",
+        indexed: true,
+        internalType: "address",
       },
       {
-        "name": "drawnShares",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
+        name: "drawnShares",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
       },
       {
-        "name": "drawnAmount",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
+        name: "drawnAmount",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
     ],
-    "anonymous": false
+    anonymous: false,
   },
   {
-    "type": "event",
-    "name": "EliminateDeficit",
-    "inputs": [
+    type: "event",
+    name: "EliminateDeficit",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        indexed: true,
+        internalType: "uint256",
       },
       {
-        "name": "callerSpoke",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
+        name: "callerSpoke",
+        type: "address",
+        indexed: true,
+        internalType: "address",
       },
       {
-        "name": "coveredSpoke",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
+        name: "coveredSpoke",
+        type: "address",
+        indexed: true,
+        internalType: "address",
       },
       {
-        "name": "shares",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
+        name: "shares",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
       },
       {
-        "name": "deficitAmountRay",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
+        name: "deficitAmountRay",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
     ],
-    "anonymous": false
+    anonymous: false,
   },
   {
-    "type": "event",
-    "name": "MintFeeShares",
-    "inputs": [
+    type: "event",
+    name: "MintFeeShares",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        indexed: true,
+        internalType: "uint256",
       },
       {
-        "name": "feeReceiver",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
+        name: "feeReceiver",
+        type: "address",
+        indexed: true,
+        internalType: "address",
       },
       {
-        "name": "shares",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
+        name: "shares",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
       },
       {
-        "name": "assets",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
+        name: "assets",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
     ],
-    "anonymous": false
+    anonymous: false,
   },
   {
-    "type": "event",
-    "name": "Reclaim",
-    "inputs": [
+    type: "event",
+    name: "Reclaim",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        indexed: true,
+        internalType: "uint256",
       },
       {
-        "name": "reinvestmentController",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
+        name: "reinvestmentController",
+        type: "address",
+        indexed: true,
+        internalType: "address",
       },
       {
-        "name": "amount",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
+        name: "amount",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
     ],
-    "anonymous": false
+    anonymous: false,
   },
   {
-    "type": "event",
-    "name": "RefreshPremium",
-    "inputs": [
+    type: "event",
+    name: "RefreshPremium",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        indexed: true,
+        internalType: "uint256",
       },
       {
-        "name": "spoke",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
+        name: "spoke",
+        type: "address",
+        indexed: true,
+        internalType: "address",
       },
       {
-        "name": "premiumDelta",
-        "type": "tuple",
-        "indexed": false,
-        "internalType": "struct IHubBase.PremiumDelta",
-        "components": [
+        name: "premiumDelta",
+        type: "tuple",
+        indexed: false,
+        internalType: "struct IHubBase.PremiumDelta",
+        components: [
           {
-            "name": "sharesDelta",
-            "type": "int256",
-            "internalType": "int256"
+            name: "sharesDelta",
+            type: "int256",
+            internalType: "int256",
           },
           {
-            "name": "offsetRayDelta",
-            "type": "int256",
-            "internalType": "int256"
+            name: "offsetRayDelta",
+            type: "int256",
+            internalType: "int256",
           },
           {
-            "name": "restoredPremiumRay",
-            "type": "uint256",
-            "internalType": "uint256"
-          }
-        ]
-      }
+            name: "restoredPremiumRay",
+            type: "uint256",
+            internalType: "uint256",
+          },
+        ],
+      },
     ],
-    "anonymous": false
+    anonymous: false,
   },
   {
-    "type": "event",
-    "name": "Remove",
-    "inputs": [
+    type: "event",
+    name: "Remove",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        indexed: true,
+        internalType: "uint256",
       },
       {
-        "name": "spoke",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
+        name: "spoke",
+        type: "address",
+        indexed: true,
+        internalType: "address",
       },
       {
-        "name": "shares",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
+        name: "shares",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
       },
       {
-        "name": "amount",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
+        name: "amount",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
     ],
-    "anonymous": false
+    anonymous: false,
   },
   {
-    "type": "event",
-    "name": "ReportDeficit",
-    "inputs": [
+    type: "event",
+    name: "ReportDeficit",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        indexed: true,
+        internalType: "uint256",
       },
       {
-        "name": "spoke",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
+        name: "spoke",
+        type: "address",
+        indexed: true,
+        internalType: "address",
       },
       {
-        "name": "drawnShares",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
+        name: "drawnShares",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
       },
       {
-        "name": "premiumDelta",
-        "type": "tuple",
-        "indexed": false,
-        "internalType": "struct IHubBase.PremiumDelta",
-        "components": [
+        name: "premiumDelta",
+        type: "tuple",
+        indexed: false,
+        internalType: "struct IHubBase.PremiumDelta",
+        components: [
           {
-            "name": "sharesDelta",
-            "type": "int256",
-            "internalType": "int256"
+            name: "sharesDelta",
+            type: "int256",
+            internalType: "int256",
           },
           {
-            "name": "offsetRayDelta",
-            "type": "int256",
-            "internalType": "int256"
+            name: "offsetRayDelta",
+            type: "int256",
+            internalType: "int256",
           },
           {
-            "name": "restoredPremiumRay",
-            "type": "uint256",
-            "internalType": "uint256"
-          }
-        ]
+            name: "restoredPremiumRay",
+            type: "uint256",
+            internalType: "uint256",
+          },
+        ],
       },
       {
-        "name": "deficitAmountRay",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
+        name: "deficitAmountRay",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
     ],
-    "anonymous": false
+    anonymous: false,
   },
   {
-    "type": "event",
-    "name": "Restore",
-    "inputs": [
+    type: "event",
+    name: "Restore",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        indexed: true,
+        internalType: "uint256",
       },
       {
-        "name": "spoke",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
+        name: "spoke",
+        type: "address",
+        indexed: true,
+        internalType: "address",
       },
       {
-        "name": "drawnShares",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
+        name: "drawnShares",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
       },
       {
-        "name": "premiumDelta",
-        "type": "tuple",
-        "indexed": false,
-        "internalType": "struct IHubBase.PremiumDelta",
-        "components": [
+        name: "premiumDelta",
+        type: "tuple",
+        indexed: false,
+        internalType: "struct IHubBase.PremiumDelta",
+        components: [
           {
-            "name": "sharesDelta",
-            "type": "int256",
-            "internalType": "int256"
+            name: "sharesDelta",
+            type: "int256",
+            internalType: "int256",
           },
           {
-            "name": "offsetRayDelta",
-            "type": "int256",
-            "internalType": "int256"
+            name: "offsetRayDelta",
+            type: "int256",
+            internalType: "int256",
           },
           {
-            "name": "restoredPremiumRay",
-            "type": "uint256",
-            "internalType": "uint256"
-          }
-        ]
+            name: "restoredPremiumRay",
+            type: "uint256",
+            internalType: "uint256",
+          },
+        ],
       },
       {
-        "name": "drawnAmount",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
+        name: "drawnAmount",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
       },
       {
-        "name": "premiumAmount",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
+        name: "premiumAmount",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
     ],
-    "anonymous": false
+    anonymous: false,
   },
   {
-    "type": "event",
-    "name": "Sweep",
-    "inputs": [
+    type: "event",
+    name: "Sweep",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        indexed: true,
+        internalType: "uint256",
       },
       {
-        "name": "reinvestmentController",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
+        name: "reinvestmentController",
+        type: "address",
+        indexed: true,
+        internalType: "address",
       },
       {
-        "name": "amount",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
+        name: "amount",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
     ],
-    "anonymous": false
+    anonymous: false,
   },
   {
-    "type": "event",
-    "name": "TransferShares",
-    "inputs": [
+    type: "event",
+    name: "TransferShares",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        indexed: true,
+        internalType: "uint256",
       },
       {
-        "name": "sender",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
+        name: "sender",
+        type: "address",
+        indexed: true,
+        internalType: "address",
       },
       {
-        "name": "receiver",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
+        name: "receiver",
+        type: "address",
+        indexed: true,
+        internalType: "address",
       },
       {
-        "name": "shares",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
+        name: "shares",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
     ],
-    "anonymous": false
+    anonymous: false,
   },
   {
-    "type": "event",
-    "name": "UpdateAsset",
-    "inputs": [
+    type: "event",
+    name: "UpdateAsset",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        indexed: true,
+        internalType: "uint256",
       },
       {
-        "name": "drawnIndex",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
+        name: "drawnIndex",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
       },
       {
-        "name": "drawnRate",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
+        name: "drawnRate",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
       },
       {
-        "name": "accruedFees",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
+        name: "accruedFees",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
     ],
-    "anonymous": false
+    anonymous: false,
   },
   {
-    "type": "event",
-    "name": "UpdateAssetConfig",
-    "inputs": [
+    type: "event",
+    name: "UpdateAssetConfig",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        indexed: true,
+        internalType: "uint256",
       },
       {
-        "name": "config",
-        "type": "tuple",
-        "indexed": false,
-        "internalType": "struct IHub.AssetConfig",
-        "components": [
+        name: "config",
+        type: "tuple",
+        indexed: false,
+        internalType: "struct IHub.AssetConfig",
+        components: [
           {
-            "name": "feeReceiver",
-            "type": "address",
-            "internalType": "address"
+            name: "feeReceiver",
+            type: "address",
+            internalType: "address",
           },
           {
-            "name": "liquidityFee",
-            "type": "uint16",
-            "internalType": "uint16"
+            name: "liquidityFee",
+            type: "uint16",
+            internalType: "uint16",
           },
           {
-            "name": "irStrategy",
-            "type": "address",
-            "internalType": "address"
+            name: "irStrategy",
+            type: "address",
+            internalType: "address",
           },
           {
-            "name": "reinvestmentController",
-            "type": "address",
-            "internalType": "address"
-          }
-        ]
-      }
+            name: "reinvestmentController",
+            type: "address",
+            internalType: "address",
+          },
+        ],
+      },
     ],
-    "anonymous": false
+    anonymous: false,
   },
   {
-    "type": "event",
-    "name": "UpdateSpokeConfig",
-    "inputs": [
+    type: "event",
+    name: "UpdateSpokeConfig",
+    inputs: [
       {
-        "name": "assetId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
+        name: "assetId",
+        type: "uint256",
+        indexed: true,
+        internalType: "uint256",
       },
       {
-        "name": "spoke",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
+        name: "spoke",
+        type: "address",
+        indexed: true,
+        internalType: "address",
       },
       {
-        "name": "config",
-        "type": "tuple",
-        "indexed": false,
-        "internalType": "struct IHub.SpokeConfig",
-        "components": [
+        name: "config",
+        type: "tuple",
+        indexed: false,
+        internalType: "struct IHub.SpokeConfig",
+        components: [
           {
-            "name": "addCap",
-            "type": "uint40",
-            "internalType": "uint40"
+            name: "addCap",
+            type: "uint40",
+            internalType: "uint40",
           },
           {
-            "name": "drawCap",
-            "type": "uint40",
-            "internalType": "uint40"
+            name: "drawCap",
+            type: "uint40",
+            internalType: "uint40",
           },
           {
-            "name": "riskPremiumThreshold",
-            "type": "uint24",
-            "internalType": "uint24"
+            name: "riskPremiumThreshold",
+            type: "uint24",
+            internalType: "uint24",
           },
           {
-            "name": "active",
-            "type": "bool",
-            "internalType": "bool"
+            name: "active",
+            type: "bool",
+            internalType: "bool",
           },
           {
-            "name": "halted",
-            "type": "bool",
-            "internalType": "bool"
-          }
-        ]
-      }
+            name: "halted",
+            type: "bool",
+            internalType: "bool",
+          },
+        ],
+      },
     ],
-    "anonymous": false
+    anonymous: false,
   },
   {
-    "type": "error",
-    "name": "AccessManagedInvalidAuthority",
-    "inputs": [
+    type: "error",
+    name: "AccessManagedInvalidAuthority",
+    inputs: [
       {
-        "name": "authority",
-        "type": "address",
-        "internalType": "address"
-      }
-    ]
+        name: "authority",
+        type: "address",
+        internalType: "address",
+      },
+    ],
   },
   {
-    "type": "error",
-    "name": "AccessManagedRequiredDelay",
-    "inputs": [
+    type: "error",
+    name: "AccessManagedRequiredDelay",
+    inputs: [
       {
-        "name": "caller",
-        "type": "address",
-        "internalType": "address"
+        name: "caller",
+        type: "address",
+        internalType: "address",
       },
       {
-        "name": "delay",
-        "type": "uint32",
-        "internalType": "uint32"
-      }
-    ]
+        name: "delay",
+        type: "uint32",
+        internalType: "uint32",
+      },
+    ],
   },
   {
-    "type": "error",
-    "name": "AccessManagedUnauthorized",
-    "inputs": [
+    type: "error",
+    name: "AccessManagedUnauthorized",
+    inputs: [
       {
-        "name": "caller",
-        "type": "address",
-        "internalType": "address"
-      }
-    ]
+        name: "caller",
+        type: "address",
+        internalType: "address",
+      },
+    ],
   },
   {
-    "type": "error",
-    "name": "AddCapExceeded",
-    "inputs": [
+    type: "error",
+    name: "AddCapExceeded",
+    inputs: [
       {
-        "name": "addCap",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ]
+        name: "addCap",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
   },
   {
-    "type": "error",
-    "name": "AssetNotListed",
-    "inputs": []
+    type: "error",
+    name: "AssetNotListed",
+    inputs: [],
   },
   {
-    "type": "error",
-    "name": "DrawCapExceeded",
-    "inputs": [
+    type: "error",
+    name: "DrawCapExceeded",
+    inputs: [
       {
-        "name": "drawCap",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ]
+        name: "drawCap",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
   },
   {
-    "type": "error",
-    "name": "InsufficientLiquidity",
-    "inputs": [
+    type: "error",
+    name: "InsufficientLiquidity",
+    inputs: [
       {
-        "name": "liquidity",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ]
+        name: "liquidity",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
   },
   {
-    "type": "error",
-    "name": "InsufficientTransferred",
-    "inputs": [
+    type: "error",
+    name: "InsufficientTransferred",
+    inputs: [
       {
-        "name": "liquidityNeeded",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ]
+        name: "liquidityNeeded",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
   },
   {
-    "type": "error",
-    "name": "InvalidAddress",
-    "inputs": []
+    type: "error",
+    name: "InvalidAddress",
+    inputs: [],
   },
   {
-    "type": "error",
-    "name": "InvalidAmount",
-    "inputs": []
+    type: "error",
+    name: "InvalidAmount",
+    inputs: [],
   },
   {
-    "type": "error",
-    "name": "InvalidAssetDecimals",
-    "inputs": []
+    type: "error",
+    name: "InvalidAssetDecimals",
+    inputs: [],
   },
   {
-    "type": "error",
-    "name": "InvalidInterestRateStrategy",
-    "inputs": []
+    type: "error",
+    name: "InvalidInterestRateStrategy",
+    inputs: [],
   },
   {
-    "type": "error",
-    "name": "InvalidLiquidityFee",
-    "inputs": []
+    type: "error",
+    name: "InvalidLiquidityFee",
+    inputs: [],
   },
   {
-    "type": "error",
-    "name": "InvalidPremiumChange",
-    "inputs": []
+    type: "error",
+    name: "InvalidPremiumChange",
+    inputs: [],
   },
   {
-    "type": "error",
-    "name": "InvalidReinvestmentController",
-    "inputs": []
+    type: "error",
+    name: "InvalidReinvestmentController",
+    inputs: [],
   },
   {
-    "type": "error",
-    "name": "InvalidShares",
-    "inputs": []
+    type: "error",
+    name: "InvalidShares",
+    inputs: [],
   },
   {
-    "type": "error",
-    "name": "OnlyReinvestmentController",
-    "inputs": []
+    type: "error",
+    name: "OnlyReinvestmentController",
+    inputs: [],
   },
   {
-    "type": "error",
-    "name": "SpokeAlreadyListed",
-    "inputs": []
+    type: "error",
+    name: "SpokeAlreadyListed",
+    inputs: [],
   },
   {
-    "type": "error",
-    "name": "SpokeHalted",
-    "inputs": []
+    type: "error",
+    name: "SpokeHalted",
+    inputs: [],
   },
   {
-    "type": "error",
-    "name": "SpokeNotActive",
-    "inputs": []
+    type: "error",
+    name: "SpokeNotActive",
+    inputs: [],
   },
   {
-    "type": "error",
-    "name": "SpokeNotListed",
-    "inputs": []
+    type: "error",
+    name: "SpokeNotListed",
+    inputs: [],
   },
   {
-    "type": "error",
-    "name": "SurplusDrawnDeficitReported",
-    "inputs": [
+    type: "error",
+    name: "SurplusDrawnDeficitReported",
+    inputs: [
       {
-        "name": "maxAllowedDeficit",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ]
+        name: "maxAllowedDeficit",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
   },
   {
-    "type": "error",
-    "name": "SurplusDrawnRestored",
-    "inputs": [
+    type: "error",
+    name: "SurplusDrawnRestored",
+    inputs: [
       {
-        "name": "maxAllowedRestore",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ]
+        name: "maxAllowedRestore",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
   },
   {
-    "type": "error",
-    "name": "SurplusPremiumRayDeficitReported",
-    "inputs": [
+    type: "error",
+    name: "SurplusPremiumRayDeficitReported",
+    inputs: [
       {
-        "name": "maxAllowedDeficitRay",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ]
+        name: "maxAllowedDeficitRay",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
   },
   {
-    "type": "error",
-    "name": "SurplusPremiumRayRestored",
-    "inputs": [
+    type: "error",
+    name: "SurplusPremiumRayRestored",
+    inputs: [
       {
-        "name": "maxAllowedRestoreRay",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ]
+        name: "maxAllowedRestoreRay",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
   },
   {
-    "type": "error",
-    "name": "UnderlyingAlreadyListed",
-    "inputs": []
-  }
+    type: "error",
+    name: "UnderlyingAlreadyListed",
+    inputs: [],
+  },
 ] as const;

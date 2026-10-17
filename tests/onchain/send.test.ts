@@ -4,7 +4,17 @@
  * way useSigningCash reads it, and the account is read around it in the same simulated block.
  */
 import { describe, expect, it } from "vitest";
-import { createPublicClient, decodeFunctionResult, encodeFunctionData, erc20Abi, http, parseAbi, parseUnits, zeroAddress, type Log } from "viem";
+import {
+  createPublicClient,
+  decodeFunctionResult,
+  encodeFunctionData,
+  erc20Abi,
+  http,
+  parseAbi,
+  parseUnits,
+  zeroAddress,
+  type Log,
+} from "viem";
 import { CHAIN } from "@/lib/chain";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
@@ -18,7 +28,11 @@ import { AERODROME, UNISWAP } from "@/lib/swap/venues";
 import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
 
 type Address = `0x${string}`;
-const client = createPublicClient({ chain: CHAIN, transport: http(process.env.NEXT_PUBLIC_BASE_RPC_URL), batch: { multicall: true } });
+const client = createPublicClient({
+  chain: CHAIN,
+  transport: http(process.env.NEXT_PUBLIC_BASE_RPC_URL),
+  batch: { multicall: true },
+});
 /** The dev preview's account: cash (mostly in savings), five stocks backing credit, a little free Amazon. */
 const backer: Address = "0x2b8ce2c87c166d8e24e186e7e4253c11fc805427";
 /** Someone else: an address with no history, so the B20 policy treats it as any fresh account. */
@@ -27,10 +41,18 @@ const amzn = EQUITIES.find((e) => e.symbol === "AMZNc")!;
 
 const plain = (calls: { to: Address; data: Address }[]) => calls.map(({ to, data }) => ({ to, data }));
 const read = (to: Address, data: Address) => ({ to, data });
-const balanceRead = (token: Address, who: Address) => read(token, encodeFunctionData({ abi: erc20Abi, functionName: "balanceOf", args: [who] }));
+const balanceRead = (token: Address, who: Address) =>
+  read(token, encodeFunctionData({ abi: erc20Abi, functionName: "balanceOf", args: [who] }));
 const suppliedRead = (stock: ReserveAsset, who: Address) =>
-  read(AAVE.SPOKE, encodeFunctionData({ abi: spokeAbi, functionName: "getUserSuppliedAssets", args: [BigInt(stock.reserveId), who] }));
-const debtRead = (who: Address) => read(AAVE.SPOKE, encodeFunctionData({ abi: spokeAbi, functionName: "getUserTotalDebt", args: [BigInt(USDC.reserveId), who] }));
+  read(
+    AAVE.SPOKE,
+    encodeFunctionData({ abi: spokeAbi, functionName: "getUserSuppliedAssets", args: [BigInt(stock.reserveId), who] }),
+  );
+const debtRead = (who: Address) =>
+  read(
+    AAVE.SPOKE,
+    encodeFunctionData({ abi: spokeAbi, functionName: "getUserTotalDebt", args: [BigInt(USDC.reserveId), who] }),
+  );
 const uint = (x: { data: Address }) => decodeFunctionResult({ abi: erc20Abi, functionName: "balanceOf", data: x.data });
 
 /** Simulates the batch between two sets of reads: the token for the user and the friend, the user's cash, backing and debt. */
@@ -120,8 +142,18 @@ describe("Send on Base (the Send tab)", () => {
   }, 60_000);
 
   it("a stock: every free Amazon share goes, what backs credit and what's owed don't move", async () => {
-    const freeRaw = await client.readContract({ address: amzn.address, abi: erc20Abi, functionName: "balanceOf", args: [backer] });
-    const backing = await client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserSuppliedAssets", args: [BigInt(amzn.reserveId), backer] });
+    const freeRaw = await client.readContract({
+      address: amzn.address,
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      args: [backer],
+    });
+    const backing = await client.readContract({
+      address: AAVE.SPOKE,
+      abi: spokeAbi,
+      functionName: "getUserSuppliedAssets",
+      args: [BigInt(amzn.reserveId), backer],
+    });
     expect(freeRaw).toBeGreaterThan(0n);
     expect(backing).toBeGreaterThan(0n);
     const cash = await readCash(client, backer);
@@ -134,11 +166,18 @@ describe("Send on Base (the Send tab)", () => {
     expect(r.friendDelta).toBe(freeRaw);
     expect(r.backingDelta).toBe(0n);
     expect(r.debtDelta).toBeLessThan(parseUnits("0.01", 6));
-    expect(decodeActivity(r.logs, backer)).toEqual([{ kind: "send", symbol: "AMZNc", amount: Number(freeRaw) / 1e8, to: friend }]);
+    expect(decodeActivity(r.logs, backer)).toEqual([
+      { kind: "send", symbol: "AMZNc", amount: Number(freeRaw) / 1e8, to: friend },
+    ]);
   }, 60_000);
 
   it("shares that back credit can't be sent: one unit over the free shares reverts on Base", async () => {
-    const freeRaw = await client.readContract({ address: amzn.address, abi: erc20Abi, functionName: "balanceOf", args: [backer] });
+    const freeRaw = await client.readContract({
+      address: amzn.address,
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      args: [backer],
+    });
     const cash = await readCash(client, backer);
     const calls = buildSendCalls({ user: backer, token: amzn, to: friend, amountRaw: freeRaw + 1n, cash });
     const r = await client.simulateCalls({ account: backer, calls: plain(calls) });
@@ -148,9 +187,15 @@ describe("Send on Base (the Send tab)", () => {
   it("the builder and the allowlist refuse the account itself and the app's contracts before Base is asked", async () => {
     const cash = await readCash(client, backer);
     for (const to of [backer, AAVE.SPOKE, USDC.address, GUARDIAN.AAVE_V3_POOL]) {
-      expect(() => buildSendCalls({ user: backer, token: USDC, to: to as Address, amountRaw: 1n, cash })).toThrow(SendStop);
+      expect(() => buildSendCalls({ user: backer, token: USDC, to: to as Address, amountRaw: 1n, cash })).toThrow(
+        SendStop,
+      );
     }
-    const raw = { to: USDC.address, data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [AAVE.SPOKE, 1n] }), value: 0n };
+    const raw = {
+      to: USDC.address,
+      data: encodeFunctionData({ abi: erc20Abi, functionName: "transfer", args: [AAVE.SPOKE, 1n] }),
+      value: 0n,
+    };
     expect(() => assertAllowed(backer, [raw], { sendTo: AAVE.SPOKE })).toThrow(/unexpected recipient/);
   }, 60_000);
 });

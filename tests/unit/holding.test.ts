@@ -29,7 +29,14 @@ describe("holdingSplit", () => {
   });
 
   it("adds up to 100 whatever the rounding", () => {
-    for (const [locked, free] of [[1, 2], [2, 1], [0.005, 9.995], [9.995, 0.005], [1, 7], [5, 5]]) {
+    for (const [locked, free] of [
+      [1, 2],
+      [2, 1],
+      [0.005, 9.995],
+      [9.995, 0.005],
+      [1, 7],
+      [5, 5],
+    ]) {
       const s = holdingSplit({ lockedRaw: shares(locked), freeRaw: shares(free) });
       expect(s.backsPct + s.freePct).toBe(100);
       expect(s.backsPct).toBeGreaterThan(0);

@@ -94,13 +94,29 @@ describe("wholePercents and nowPercents", () => {
 
 describe("previewTrades (the Rebalancer's rule on today's free stock)", () => {
   it("is the rule itself, with the stock limits a grant at that limit carries", () => {
-    const trades = previewTrades({ holdings: board, rows: boardMix, capRaw: 500_000_000n, capMaxRaw: 10n ** 12n, options });
+    const trades = previewTrades({
+      holdings: board,
+      rows: boardMix,
+      capRaw: 500_000_000n,
+      capMaxRaw: 10n ** 12n,
+      options,
+    });
     const prices = EQUITIES.map((e) => board.find((h) => h.reserveId === e.reserveId)?.priceRaw ?? 0n);
-    const limits = stockLimitsRaw(500_000_000n, 10n ** 12n, prices, mixWeights(boardMix).map((w) => w > 0));
+    const limits = stockLimitsRaw(
+      500_000_000n,
+      10n ** 12n,
+      prices,
+      mixWeights(boardMix).map((w) => w > 0),
+    );
     const book = {
       stocks: EQUITIES.map((e) => {
         const h = board.find((x) => x.reserveId === e.reserveId);
-        return { sharesRaw: h?.freeRaw ?? 0n, price: prices[e.reserveId], weightBps: BigInt(mixWeights(boardMix)[e.reserveId]), sellLeftRaw: limits[e.reserveId] };
+        return {
+          sharesRaw: h?.freeRaw ?? 0n,
+          price: prices[e.reserveId],
+          weightBps: BigInt(mixWeights(boardMix)[e.reserveId]),
+          sellLeftRaw: limits[e.reserveId],
+        };
       }),
       usdcLeftRaw: 500_000_000n,
     };
@@ -111,13 +127,21 @@ describe("previewTrades (the Rebalancer's rule on today's free stock)", () => {
   it("stays within the weekly limit, and trades nothing for a mix that doesn't add up", () => {
     const small = previewTrades({ holdings: board, rows: boardMix, capRaw: 100_000_000n, capMaxRaw: null, options });
     expect(small.filter((t) => t.buy).reduce((a, t) => a + t.amountIn, 0n)).toBeLessThanOrEqual(100_000_000n);
-    expect(previewTrades({ holdings: board, rows: boardMix.slice(1), capRaw: 500_000_000n, capMaxRaw: null, options })).toEqual([]);
+    expect(
+      previewTrades({ holdings: board, rows: boardMix.slice(1), capRaw: 500_000_000n, capMaxRaw: null, options }),
+    ).toEqual([]);
   });
 });
 
 describe("rebalanceOptions", () => {
   it("mirrors config/risk.ts before the executor is read, and takes its live numbers after", () => {
-    expect(rebalanceOptions()).toEqual({ bandBps: 2_000n, bandMaxBps: 500n, floorBps: 50n, minTradeRaw: 20_000_000n, maxSliceRaw: 25_000_000_000n });
+    expect(rebalanceOptions()).toEqual({
+      bandBps: 2_000n,
+      bandMaxBps: 500n,
+      floorBps: 50n,
+      minTradeRaw: 20_000_000n,
+      maxSliceRaw: 25_000_000_000n,
+    });
     expect(rebalanceOptions({ bandBps: 1_500, bandMaxBps: 400, floorBps: 40, minTrade: 1n, maxSlice: 2n })).toEqual({
       bandBps: 1_500n,
       bandMaxBps: 400n,
@@ -134,7 +158,9 @@ describe("the settings writes (one Face ID each, through useTx)", () => {
     expect(call.to).toBe(EXECUTOR);
     expect(call.value).toBe(0n);
     expect(call.data.slice(0, 10)).toBe(toFunctionSelector("setMix(uint16[7])"));
-    expect(decodeFunctionData({ abi: gooseExecutorAbi, data: call.data }).args).toEqual([[2_500, 0, 0, 0, 0, 5_000, 2_500]]);
+    expect(decodeFunctionData({ abi: gooseExecutorAbi, data: call.data }).args).toEqual([
+      [2_500, 0, 0, 0, 0, 5_000, 2_500],
+    ]);
   });
 
   it("refuses a mix that doesn't add up to 100%", () => {
@@ -145,12 +171,19 @@ describe("the settings writes (one Face ID each, through useTx)", () => {
   it("setKeepMix goes to the executor with the switch", () => {
     const [call] = buildSetKeepMixCalls(user, true);
     expect(call.to).toBe(EXECUTOR);
-    expect(decodeFunctionData({ abi: gooseExecutorAbi, data: call.data })).toMatchObject({ functionName: "setKeepMix", args: [true] });
+    expect(decodeFunctionData({ abi: gooseExecutorAbi, data: call.data })).toMatchObject({
+      functionName: "setKeepMix",
+      args: [true],
+    });
   });
 
   it("the allowlist lets through only the executor's settings, with a mix that adds up", () => {
     const send = (data: `0x${string}`) => assertAllowed(user, [{ to: EXECUTOR, data, value: 0n }]);
-    const bad = encodeFunctionData({ abi: gooseExecutorAbi, functionName: "setMix", args: [[5_000, 0, 0, 0, 0, 0, 0]] });
+    const bad = encodeFunctionData({
+      abi: gooseExecutorAbi,
+      functionName: "setMix",
+      args: [[5_000, 0, 0, 0, 0, 0, 0]],
+    });
     expect(() => send(bad)).toThrow(/Blocked: unexpected arguments to setMix/);
     const prune = encodeFunctionData({ abi: gooseExecutorAbi, functionName: "prune", args: [user, 0] });
     expect(() => send(prune)).toThrow(/Blocked: unexpected call/);

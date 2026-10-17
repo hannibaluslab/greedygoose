@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { planRebalance, poolInLine, rebalanceTrades, type RebalanceBook, type RebalanceHolding } from "@/lib/guardian/rebalance";
+import {
+  planRebalance,
+  poolInLine,
+  rebalanceTrades,
+  type RebalanceBook,
+  type RebalanceHolding,
+} from "@/lib/guardian/rebalance";
 
 const usd = (n: number) => BigInt(Math.round(n * 1e6));
 const price = (n: number) => BigInt(n) * 10n ** 8n;
@@ -40,7 +46,10 @@ describe("rebalanceTrades (the Rebalancer, plan item 9)", () => {
 
   it("gives a small target a band of a fifth of it: 17.1% ± 3.42, 11.4% ± 2.28", () => {
     const at = (nvda: number, aapl: number, tsla: number) =>
-      rebalanceTrades(book({ 5: holding(nvda, 200, 17.1), 0: holding(aapl, 250, 11.4), 6: holding(tsla, 250, 71.5) }), opts);
+      rebalanceTrades(
+        book({ 5: holding(nvda, 200, 17.1), 0: holding(aapl, 250, 11.4), 6: holding(tsla, 250, 71.5) }),
+        opts,
+      );
     expect(at(2_052, 1_140, 6_808)).toEqual([]);
     expect(valueOf(at(2_100, 1_140, 6_760)[0].amountIn, 200)).toBeCloseTo(219, 0); // back to 18.81%
     const t = at(1_710, 900, 7_390);
@@ -49,7 +58,10 @@ describe("rebalanceTrades (the Rebalancer, plan item 9)", () => {
 
   it("trades only the stock that broke out, the other side from the one furthest off its target", () => {
     // The Manage board's 50/25/25 at 43/27/30: NVIDIA broke out; Tesla, 5 points over, pays; Apple stays put.
-    const t = rebalanceTrades(book({ 5: holding(4_300, 200, 50), 0: holding(2_700, 250, 25), 6: holding(3_000, 300, 25) }), opts);
+    const t = rebalanceTrades(
+      book({ 5: holding(4_300, 200, 50), 0: holding(2_700, 250, 25), 6: holding(3_000, 300, 25) }),
+      opts,
+    );
     expect(t.map((x) => [x.reserveId, x.buy])).toEqual([
       [6, false],
       [5, true],
@@ -65,7 +77,10 @@ describe("rebalanceTrades (the Rebalancer, plan item 9)", () => {
   });
 
   it("makes at most a $25k swap a day, and ignores free stock outside the mix", () => {
-    const t = rebalanceTrades(book({ 5: holding(1_400_000, 200, 50), 0: holding(600_000, 250, 50), 6: holding(50_000, 300, 0) }), opts);
+    const t = rebalanceTrades(
+      book({ 5: holding(1_400_000, 200, 50), 0: holding(600_000, 250, 50), 6: holding(50_000, 300, 0) }),
+      opts,
+    );
     expect(t).toHaveLength(2);
     expect(valueOf(t[0].amountIn, 200)).toBe(25_000);
   });

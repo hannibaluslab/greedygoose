@@ -43,7 +43,14 @@ type SpokeRec = Base & {
  * An Aave V3 savings event. Supply: `by` is who paid (msg.sender), `for` whose savings grew (onBehalfOf). Withdraw:
  * `by` whose savings shrank, `for` who got the USDC (to).
  */
-type SavingsRec = Base & { kind: "savings"; event: "Supply" | "Withdraw"; reserve: Address; by: Address; for: Address; amount: bigint };
+type SavingsRec = Base & {
+  kind: "savings";
+  event: "Supply" | "Withdraw";
+  reserve: Address;
+  by: Address;
+  for: Address;
+  amount: bigint;
+};
 /**
  * Aave V3 credit, which a JAW account can draw against its savings in another app. `reserve` is the debt asset and
  * `debtor` the account whose debt changed. Borrow: `by` got the money (user). Repay: `by` paid (repayer). LiquidationCall:
@@ -92,14 +99,20 @@ export type FlowRules = {
 
 const eq = (a: Address, b: Address) => isAddressEqual(a, b);
 const order = (a: Base, b: Base) => (a.block === b.block ? a.logIndex - b.logIndex : a.block < b.block ? -1 : 1);
-const toUsd6 = (value: bigint, decimals: number) => (decimals >= 6 ? value / 10n ** BigInt(decimals - 6) : value * 10n ** BigInt(6 - decimals));
+const toUsd6 = (value: bigint, decimals: number) =>
+  decimals >= 6 ? value / 10n ** BigInt(decimals - 6) : value * 10n ** BigInt(6 - decimals);
 
 /** A reserve's amount: USDC (reserve 7) in dollars, a stock by its reserve. */
 const reserveAmount = (reserveId: number, raw: bigint): Amount =>
   reserveId === USDC_RESERVE_ID ? { usd6: raw } : { stock: { reserveId, raw } };
 
 /** The moves in and out of `account` after its join block, its swaps and its credit steps, from `records` (any order). */
-export function memberFlows(account: Address, joinedAt: bigint, records: readonly BoardRecord[], r: FlowRules): MemberFlows {
+export function memberFlows(
+  account: Address,
+  joinedAt: bigint,
+  records: readonly BoardRecord[],
+  r: FlowRules,
+): MemberFlows {
   // A log can come back from two queries (a transfer from one member to another is both "out" and "in").
   const seen = new Set<string>();
   const byTx = new Map<string, BoardRecord[]>();
@@ -147,7 +160,16 @@ function txFlows(me: Address, recs: readonly BoardRecord[], r: FlowRules, out: M
       // Savings minted and burned by the pool: the account's own supply and withdrawal, and the interest it earns.
       if (eq(other, zeroAddress)) return true;
       // Savings a liquidator of the account took: the liquidation's cost, not money taken out.
-      if (paid) return credit.some((c) => c.event === "LiquidationCall" && eq(c.debtor, me) && eq(c.by, other) && c.collateral !== undefined && eq(c.collateral, r.usdc) && !!c.aTokens);
+      if (paid)
+        return credit.some(
+          (c) =>
+            c.event === "LiquidationCall" &&
+            eq(c.debtor, me) &&
+            eq(c.by, other) &&
+            c.collateral !== undefined &&
+            eq(c.collateral, r.usdc) &&
+            !!c.aTokens,
+        );
     }
     return false;
   }
@@ -162,7 +184,10 @@ function txFlows(me: Address, recs: readonly BoardRecord[], r: FlowRules, out: M
     const isOut = eq(x.from, me);
     if (isOut === eq(x.to, me)) continue; // not the member's, or to itself
     const other = isOut ? x.to : x.from;
-    const amount: Amount = info.kind === "usd" ? { usd6: toUsd6(x.value, info.decimals) } : { stock: { reserveId: info.reserveId, raw: x.value } };
+    const amount: Amount =
+      info.kind === "usd"
+        ? { usd6: toUsd6(x.value, info.decimals) }
+        : { stock: { reserveId: info.reserveId, raw: x.value } };
     const venue = r.venue(other);
     if (venue !== undefined) {
       const legs = venues.get(venue) ?? { got: [], paid: [] };
@@ -181,8 +206,11 @@ function txFlows(me: Address, recs: readonly BoardRecord[], r: FlowRules, out: M
     out.moves.push({ block: x.block, dir: isOut ? "out" : "in", ...amount });
   }
   for (const [venue, { got, paid }] of venues) {
-    if (got.length && paid.length) out.swaps.push({ block: got[0].block, venue, got: got.map((l) => l.amount), paid: paid.map((l) => l.amount) });
-    else for (const l of [...got, ...paid]) out.moves.push({ block: l.block, dir: got.length ? "in" : "out", ...l.amount });
+    if (got.length && paid.length)
+      out.swaps.push({ block: got[0].block, venue, got: got.map((l) => l.amount), paid: paid.map((l) => l.amount) });
+    else
+      for (const l of [...got, ...paid])
+        out.moves.push({ block: l.block, dir: got.length ? "in" : "out", ...l.amount });
   }
 
   for (const x of spoke) {
@@ -223,7 +251,10 @@ function txFlows(me: Address, recs: readonly BoardRecord[], r: FlowRules, out: M
  * Money put in and taken out, in USDC units: each move valued by `value` at its block (a stock at Aave's price then).
  * Trades aren't in it: what one costs (the pool's fee, its price against Aave's) shows in net worth.
  */
-export function flowTotals(f: MemberFlows, value: (a: Amount, block: bigint) => bigint): { putIn: bigint; takenOut: bigint } {
+export function flowTotals(
+  f: MemberFlows,
+  value: (a: Amount, block: bigint) => bigint,
+): { putIn: bigint; takenOut: bigint } {
   let putIn = 0n;
   let takenOut = 0n;
   for (const m of f.moves) {
@@ -245,7 +276,9 @@ export const quiet = (f: MemberFlows) => !f.moves.length && !f.swaps.length && !
 export function peakCredit(atJoin: bigint, steps: readonly CreditStep[], now: bigint): bigint {
   let debt = atJoin;
   let peak = atJoin > now ? atJoin : now;
-  for (const s of [...steps].sort((a, b) => (a.block === b.block ? a.logIndex - b.logIndex : a.block < b.block ? -1 : 1))) {
+  for (const s of [...steps].sort((a, b) =>
+    a.block === b.block ? a.logIndex - b.logIndex : a.block < b.block ? -1 : 1,
+  )) {
     debt += s.delta;
     if (debt < 0n) debt = 0n;
     if (debt > peak) peak = debt;

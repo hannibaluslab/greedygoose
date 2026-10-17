@@ -43,14 +43,25 @@ describe("buildSellCalls (free shares)", () => {
     expect(decodeFunctionData({ abi: erc20Abi, data: approve.data }).args).toEqual([AERODROME.ROUTER, shares(0.4)]);
     expect(swap.to).toBe(AERODROME.ROUTER);
     const { params } = swapOf(swap)!;
-    expect(params).toMatchObject({ tokenIn: nvda.address, tokenOut: USDC.address, recipient: user, amountIn: shares(0.4) });
-    expect(params as unknown as { amountOutMinimum: bigint; deadline: bigint }).toMatchObject({ amountOutMinimum: minOut(usd(99.5)), deadline: 1_600n });
+    expect(params).toMatchObject({
+      tokenIn: nvda.address,
+      tokenOut: USDC.address,
+      recipient: user,
+      amountIn: shares(0.4),
+    });
+    expect(params as unknown as { amountOutMinimum: bigint; deadline: bigint }).toMatchObject({
+      amountOutMinimum: minOut(usd(99.5)),
+      deadline: 1_600n,
+    });
   });
 
   it("goes through Uniswap's multicall with its deadline, Aave's floor included", () => {
     const uni: SellQuote = { venue: "uniswap", pool: 3000, amountIn: shares(0.4), amountOut: usd(90.5) };
     const [approve, swap] = buildSellCalls({ user, stock: nvda, quote: uni, oraclePriceUsd: price, nowSec: 1_000 });
-    expect(decodeFunctionData({ abi: erc20Abi, data: approve.data }).args).toEqual([UNISWAP.SWAP_ROUTER_02, shares(0.4)]);
+    expect(decodeFunctionData({ abi: erc20Abi, data: approve.data }).args).toEqual([
+      UNISWAP.SWAP_ROUTER_02,
+      shares(0.4),
+    ]);
     const m = decodeFunctionData({ abi: swapRouter02Abi, data: swap.data });
     expect(m.args[0]).toBe(1_600n);
     expect((swapOf(swap)!.params as unknown as { amountOutMinimum: bigint }).amountOutMinimum).toBe(usd(90));

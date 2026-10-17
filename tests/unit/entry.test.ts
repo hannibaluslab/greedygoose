@@ -4,7 +4,13 @@ import { ENTRY_COINS } from "@/lib/tokens/stables";
 
 /** USDT, USDe, USDbC, USDS (lib/tokens/stables.ts), empty, with limits that never bind. */
 const coins = (over: Partial<Record<number, Partial<EntryCoin>>> = {}): EntryCoin[] =>
-  ENTRY_COINS.map((c, i) => ({ balanceRaw: 0n, decimals: c.decimals, limitLeftRaw: 10n ** 30n, waiting: false, ...over[i] }));
+  ENTRY_COINS.map((c, i) => ({
+    balanceRaw: 0n,
+    decimals: c.decimals,
+    limitLeftRaw: 10n ** 30n,
+    waiting: false,
+    ...over[i],
+  }));
 /** config/risk.ts ENTRY. */
 const opts = { floorBps: 50n, minEntryRaw: 1_000_000n, maxSwapRaw: 10_000_000_000n };
 
@@ -22,12 +28,17 @@ describe("planEntry (the Entry agent, plan item 2)", () => {
 
   it("splits a large balance into capped swaps, and keeps to the day's limit", () => {
     expect(planEntry(coins({ 0: { balanceRaw: 30_000_000_000n } }), opts)?.amountIn).toBe(10_000_000_000n);
-    expect(planEntry(coins({ 0: { balanceRaw: 30_000_000_000n, limitLeftRaw: 4_000_000_000n } }), opts)?.amountIn).toBe(4_000_000_000n);
+    expect(planEntry(coins({ 0: { balanceRaw: 30_000_000_000n, limitLeftRaw: 4_000_000_000n } }), opts)?.amountIn).toBe(
+      4_000_000_000n,
+    );
     expect(planEntry(coins({ 0: { balanceRaw: 30_000_000_000n, limitLeftRaw: 500_000n } }), opts)).toBeNull();
   });
 
   it("skips a waiting coin for the next, and dust under the minimum", () => {
-    expect(planEntry(coins({ 0: { balanceRaw: 500_000_000n, waiting: true }, 2: { balanceRaw: 200_000_000n } }), opts)?.index).toBe(2);
+    expect(
+      planEntry(coins({ 0: { balanceRaw: 500_000_000n, waiting: true }, 2: { balanceRaw: 200_000_000n } }), opts)
+        ?.index,
+    ).toBe(2);
     expect(planEntry(coins({ 0: { balanceRaw: 999_999n } }), opts)).toBeNull();
   });
 });

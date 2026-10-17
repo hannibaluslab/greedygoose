@@ -48,12 +48,17 @@ const hf = (x: number) => (BigInt(Math.round(x * 1000)) * WAD) / 1000n;
 const ZERO_TX = `0x${"0".repeat(64)}` as const;
 const shares = (usd: number, price: number) => BigInt(Math.round((usd / price) * 1e8));
 const priceRaw = (usd: number) => BigInt(Math.round(usd * 1e8));
-const byJob = <T,>(f: (job: AgentJob) => T) => Object.fromEntries(JOBS.map((job) => [job, f(job)])) as Record<AgentJob, T>;
+const byJob = <T,>(f: (job: AgentJob) => T) =>
+  Object.fromEntries(JOBS.map((job) => [job, f(job)])) as Record<AgentJob, T>;
 
 /** Free shares at Aave's price: NVIDIA, Apple and Tesla at 50/25/25 of $10,000, the mix they're kept at. */
 const PRICES = [222.22, 0, 0, 0, 0, 178.57, 378.38];
 const FREE_USD = [2_500, 0, 0, 0, 0, 5_000, 2_500];
-const HOLDINGS = PRICES.map((p, reserveId) => ({ reserveId, priceRaw: priceRaw(p), freeRaw: p ? shares(FREE_USD[reserveId], p) : 0n }));
+const HOLDINGS = PRICES.map((p, reserveId) => ({
+  reserveId,
+  priceRaw: priceRaw(p),
+  freeRaw: p ? shares(FREE_USD[reserveId], p) : 0n,
+}));
 const MIX = [2_500, 0, 0, 0, 0, 5_000, 2_500];
 
 /** $400 of cash earning, $600 owed against $2,000 of backing: Safe. */
@@ -81,7 +86,8 @@ const caps = byJob((job) => usdc(LIMIT_USD[job].start));
 
 /** What the agents did, and the cash events: today $40 arriving and a sale after a heads-up, two days back a rebalance and 120 USDT arriving. */
 function feedRows(nowMs: number): FeedAgentRow[] {
-  const at = (daysBack: number, h: number, m: number) => new Date(nowMs).setHours(h, m, 0, 0) / 1000 - daysBack * 86_400;
+  const at = (daysBack: number, h: number, m: number) =>
+    new Date(nowMs).setHours(h, m, 0, 0) / 1000 - daysBack * 86_400;
   const prices = PRICES.map(priceRaw);
   const seven = (r: number, raw: bigint) => Array.from({ length: 7 }, (_, i) => (i === r ? raw : 0n));
   const moves: [string, number, AgentEvent, MoveContext][] = [
@@ -89,10 +95,27 @@ function feedRows(nowMs: number): FeedAgentRow[] {
     [
       "sale",
       at(0, 3, 12),
-      { kind: "sold", sharesRaw: seven(6, shares(180, 378.38)), repaidRaw: usdc(178.2), hfBefore: hf(1.08), hfAfter: hf(1.2), atOnce: false },
-      { owedRaw: [usdc(780), usdc(600)], cashRaw: [usdc(400), usdc(401.8)], used: { spentRaw: usdc(180), capRaw: usdc(300) }, pricesRaw: prices },
+      {
+        kind: "sold",
+        sharesRaw: seven(6, shares(180, 378.38)),
+        repaidRaw: usdc(178.2),
+        hfBefore: hf(1.08),
+        hfAfter: hf(1.2),
+        atOnce: false,
+      },
+      {
+        owedRaw: [usdc(780), usdc(600)],
+        cashRaw: [usdc(400), usdc(401.8)],
+        used: { spentRaw: usdc(180), capRaw: usdc(300) },
+        pricesRaw: prices,
+      },
     ],
-    ["heads-up", at(0, 2, 41), { kind: "heads-up", hf: hf(1.08), sellValueRaw: usdc(180), sellAfter: at(0, 3, 11) }, {}],
+    [
+      "heads-up",
+      at(0, 2, 41),
+      { kind: "heads-up", hf: hf(1.08), sellValueRaw: usdc(180), sellAfter: at(0, 3, 11) },
+      {},
+    ],
     [
       "rebalance",
       at(2, 10, 5),
@@ -106,7 +129,14 @@ function feedRows(nowMs: number): FeedAgentRow[] {
       {},
     ],
   ];
-  return moves.map(([key, time, e, ctx]) => ({ ...describeAgentEvent(e, time, ctx)!, key, time: time * 1000, hash: ZERO_TX, event: e, ctx }));
+  return moves.map(([key, time, e, ctx]) => ({
+    ...describeAgentEvent(e, time, ctx)!,
+    key,
+    time: time * 1000,
+    hash: ZERO_TX,
+    event: e,
+    ctx,
+  }));
 }
 
 type View = "live" | "cards" | "rows" | "notlive";
@@ -135,7 +165,11 @@ export function AgentsGallery() {
       : all("on");
   // Without an executor there's no registry, so no mix.
   const input = nextInput(nowSec, { mixBps: live ? MIX : null });
-  const items = agentItems({ status, capRaw: live ? byJob((job) => (status[job] === "off" ? null : caps[job])) : byJob(() => null), next: agentNexts(input) });
+  const items = agentItems({
+    status,
+    capRaw: live ? byJob((job) => (status[job] === "off" ? null : caps[job])) : byJob(() => null),
+    next: agentNexts(input),
+  });
 
   const cards = cardsView
     ? agentCards({
@@ -143,7 +177,13 @@ export function AgentsGallery() {
         headsUp: { addUsd: 120, sellUsd: 180, when: `at ${timeText(nowSec + 30 * 60)}` },
         weekend: { addUsd: 40, dropPct: 15, when: "at 8:00 PM" },
         status,
-        ends: byJob((job) => (job === "protect" || job === "sell" ? nowSec + 5 * 86_400 : status[job] === "off" ? null : nowSec + 200 * 86_400)),
+        ends: byJob((job) =>
+          job === "protect" || job === "sell"
+            ? nowSec + 5 * 86_400
+            : status[job] === "off"
+              ? null
+              : nowSec + 200 * 86_400,
+        ),
         stopped: byJob((job) => (job === "rebalance" ? nowSec - 2 * 86_400 : null)),
         fails: 3,
         cooldownUntil: nowSec + 20 * 60,
@@ -170,7 +210,13 @@ export function AgentsGallery() {
         cards={cards.map((c) => (
           <AttentionCard key={c.key} card={c} onRenew={NOTHING_SIGNED} />
         ))}
-        rows={view === "rows" ? <RowStates nowSec={nowSec} row={(item) => row(item, false)} /> : items.map((item) => row(item))}
+        rows={
+          view === "rows" ? (
+            <RowStates nowSec={nowSec} row={(item) => row(item, false)} />
+          ) : (
+            items.map((item) => row(item))
+          )
+        }
         feed={
           <AgentsFeed
             empty="Nothing yet. Your buys, credit and repayments show up here, and so will what your agents do."
@@ -223,7 +269,12 @@ function RowStates({ nowSec, row }: { nowSec: number; row: (item: AgentItem) => 
 }
 
 function GallerySheet({
-  agent, item, live, nowSec, rows, onClose,
+  agent,
+  item,
+  live,
+  nowSec,
+  rows,
+  onClose,
 }: {
   agent: Agent;
   item: AgentItem;
@@ -254,7 +305,11 @@ function GallerySheet({
       }
       activity={
         <FeedCard>
-          {live && activity.length ? <FeedDays rows={activity} nowMs={nowSec * 1000} /> : <p className="m-0 py-3.5 text-sm text-ink-mid">Nothing yet.</p>}
+          {live && activity.length ? (
+            <FeedDays rows={activity} nowMs={nowSec * 1000} />
+          ) : (
+            <p className="m-0 py-3.5 text-sm text-ink-mid">Nothing yet.</p>
+          )}
         </FeedCard>
       }
       onAction={NOTHING_SIGNED}

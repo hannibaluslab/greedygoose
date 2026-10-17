@@ -7,7 +7,18 @@ import { ENTRY_COINS } from "@/lib/tokens/stables";
 import { GUARDIAN } from "@/lib/guardian/config";
 import { savingsEventsAbi } from "@/lib/board/logs";
 
-type ActivityKind = "supply" | "withdraw" | "borrow" | "repay" | "buy" | "sell" | "receive" | "send" | "convert" | "earn" | "save";
+type ActivityKind =
+  | "supply"
+  | "withdraw"
+  | "borrow"
+  | "repay"
+  | "buy"
+  | "sell"
+  | "receive"
+  | "send"
+  | "convert"
+  | "earn"
+  | "save";
 
 export type ActivityItem = {
   kind: ActivityKind;
@@ -64,7 +75,13 @@ function feeTransfers(logs: readonly Log[], user: `0x${string}`): Set<Log> {
     const [sponsored] = parseEventLogs({ abi: sponsoredAbi, logs: [log], strict: false });
     const a = sponsored?.args;
     if (!a || a.userOpHash !== op.args.userOpHash || !a.user || !isAddressEqual(a.user, user)) return;
-    if (a.paymasterMode !== ERC20_MODE || !a.token || !isAddressEqual(a.token, USDC.address) || a.tokenAmountPaid === undefined) return;
+    if (
+      a.paymasterMode !== ERC20_MODE ||
+      !a.token ||
+      !isAddressEqual(a.token, USDC.address) ||
+      a.tokenAmountPaid === undefined
+    )
+      return;
     for (let j = i - 1; j >= 0; j--) {
       const l = logs[j];
       if (fees.has(l) || !isAddressEqual(l.address, USDC.address)) continue;
@@ -102,12 +119,27 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
     strict: false,
   });
   for (const ev of spokeLogs) {
-    const a = ev.args as { reserveId?: bigint; user?: `0x${string}`; suppliedAmount?: bigint; withdrawnAmount?: bigint; drawnAmount?: bigint; totalAmountRepaid?: bigint };
+    const a = ev.args as {
+      reserveId?: bigint;
+      user?: `0x${string}`;
+      suppliedAmount?: bigint;
+      withdrawnAmount?: bigint;
+      drawnAmount?: bigint;
+      totalAmountRepaid?: bigint;
+    };
     if (!a.user || !isAddressEqual(a.user, user) || a.reserveId === undefined) continue;
     const r = byReserveId(a.reserveId);
     if (!r) continue;
-    const raw = firstBigint(ev.args as Record<string, unknown>, ["suppliedAmount", "withdrawnAmount", "drawnAmount", "totalAmountRepaid", "amount"]);
-    const kind = ({ Supply: "supply", Withdraw: "withdraw", Borrow: "borrow", Repay: "repay" } as const)[ev.eventName as "Supply" | "Withdraw" | "Borrow" | "Repay"];
+    const raw = firstBigint(ev.args as Record<string, unknown>, [
+      "suppliedAmount",
+      "withdrawnAmount",
+      "drawnAmount",
+      "totalAmountRepaid",
+      "amount",
+    ]);
+    const kind = ({ Supply: "supply", Withdraw: "withdraw", Borrow: "borrow", Repay: "repay" } as const)[
+      ev.eventName as "Supply" | "Withdraw" | "Borrow" | "Repay"
+    ];
     if (kind === "borrow" && r.symbol === USDC.symbol) creditRaw += raw;
     items.push({ kind, symbol: r.symbol, amount: units(raw, r.decimals) });
   }
@@ -134,7 +166,8 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
     eventName: "Transfer",
     strict: false,
   });
-  const touchesAave = (addr?: `0x${string}`) => !!addr && (isAddressEqual(addr, AAVE.HUB) || isAddressEqual(addr, AAVE.SPOKE));
+  const touchesAave = (addr?: `0x${string}`) =>
+    !!addr && (isAddressEqual(addr, AAVE.HUB) || isAddressEqual(addr, AAVE.SPOKE));
   let usdcOut = 0n;
   const usdcOutTo = new Map<string, `0x${string}`>();
   const usdcIn: bigint[] = [];
@@ -148,14 +181,18 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
     // Aave V4 moves are already covered by Spoke events.
     if (touchesAave(from) || touchesAave(to)) continue;
     // Aave V3 savings: USDC into or out of the aToken contract, within the user's own cash.
-    if (token.kind === "debt" && from && to && isAddressEqual(from, user) && isAddressEqual(to, GUARDIAN.AUSDC)) continue;
-    if (token.kind === "debt" && from && to && isAddressEqual(from, GUARDIAN.AUSDC) && isAddressEqual(to, user)) continue;
+    if (token.kind === "debt" && from && to && isAddressEqual(from, user) && isAddressEqual(to, GUARDIAN.AUSDC))
+      continue;
+    if (token.kind === "debt" && from && to && isAddressEqual(from, GUARDIAN.AUSDC) && isAddressEqual(to, user))
+      continue;
     if (token.kind === "debt" && from && isAddressEqual(from, user)) {
       usdcOut += value;
       if (to) usdcOutTo.set(to.toLowerCase(), to);
     }
-    if (token.kind === "equity" && to && isAddressEqual(to, user)) stockIn.push({ symbol: token.symbol, raw: value, decimals: token.decimals });
-    if (token.kind === "equity" && from && isAddressEqual(from, user)) stockOut.push({ symbol: token.symbol, raw: value, decimals: token.decimals, to });
+    if (token.kind === "equity" && to && isAddressEqual(to, user))
+      stockIn.push({ symbol: token.symbol, raw: value, decimals: token.decimals });
+    if (token.kind === "equity" && from && isAddressEqual(from, user))
+      stockOut.push({ symbol: token.symbol, raw: value, decimals: token.decimals, to });
     if (token.kind === "debt" && to && isAddressEqual(to, user)) usdcIn.push(value);
   }
   for (const s of stockIn) {
@@ -170,7 +207,12 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
   for (const s of stockOut) {
     items.push(
       receivedRaw > 0n
-        ? { kind: "sell", symbol: s.symbol, amount: units(s.raw, s.decimals), receivedUsd: units(receivedRaw, USDC.decimals) }
+        ? {
+            kind: "sell",
+            symbol: s.symbol,
+            amount: units(s.raw, s.decimals),
+            receivedUsd: units(receivedRaw, USDC.decimals),
+          }
         : { kind: "send", symbol: s.symbol, amount: units(s.raw, s.decimals), ...(s.to ? { to: s.to } : {}) },
     );
   }
@@ -188,14 +230,25 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
   });
   const converted = usdcIn.length >= coinsOut.length ? coinsOut : [];
   converted.forEach(({ coin, value }, i) =>
-    items.push({ kind: "convert", symbol: coin.symbol, amount: units(value, coin.decimals), receivedUsd: units(usdcIn[i], USDC.decimals) }),
+    items.push({
+      kind: "convert",
+      symbol: coin.symbol,
+      amount: units(value, coin.decimals),
+      receivedUsd: units(usdcIn[i], USDC.decimals),
+    }),
   );
   if (stockIn.length === 0 && usdcOut > 0n) {
     const [to] = [...usdcOutTo.values()];
-    items.push({ kind: "send", symbol: USDC.symbol, amount: units(usdcOut, USDC.decimals), ...(usdcOutTo.size === 1 ? { to } : {}) });
+    items.push({
+      kind: "send",
+      symbol: USDC.symbol,
+      amount: units(usdcOut, USDC.decimals),
+      ...(usdcOutTo.size === 1 ? { to } : {}),
+    });
   }
   if (stockOut.length === 0) {
-    for (const v of usdcIn.slice(converted.length)) items.push({ kind: "receive", symbol: USDC.symbol, amount: units(v, USDC.decimals) });
+    for (const v of usdcIn.slice(converted.length))
+      items.push({ kind: "receive", symbol: USDC.symbol, amount: units(v, USDC.decimals) });
   }
   return items;
 }
@@ -212,7 +265,13 @@ function savedByUser(logs: readonly Log[], user: `0x${string}`): bigint {
     strict: false,
   }).reduce((sum, e) => {
     const a = e.args as { reserve?: `0x${string}`; user?: `0x${string}`; onBehalfOf?: `0x${string}`; amount?: bigint };
-    const mine = a.reserve && isAddressEqual(a.reserve, USDC.address) && a.user && isAddressEqual(a.user, user) && a.onBehalfOf && isAddressEqual(a.onBehalfOf, user);
+    const mine =
+      a.reserve &&
+      isAddressEqual(a.reserve, USDC.address) &&
+      a.user &&
+      isAddressEqual(a.user, user) &&
+      a.onBehalfOf &&
+      isAddressEqual(a.onBehalfOf, user);
     return mine && a.amount !== undefined ? sum + a.amount : sum;
   }, 0n);
 }

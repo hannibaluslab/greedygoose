@@ -68,7 +68,8 @@ export function useCashActivity(account: Address) {
         });
       const chunks = logChunks(from!, to);
       const out: Log[] = [];
-      for (let i = 0; i < chunks.length; i += PARALLEL) out.push(...(await Promise.all(chunks.slice(i, i + PARALLEL).map(read))).flat());
+      for (let i = 0; i < chunks.length; i += PARALLEL)
+        out.push(...(await Promise.all(chunks.slice(i, i + PARALLEL).map(read))).flat());
       return arrivalTxs(out);
     },
   });
@@ -78,7 +79,10 @@ export function useCashActivity(account: Address) {
     () => new Set([...own.rows, ...feed.rows].flatMap((r) => (r.hash ? [r.hash.toLowerCase()] : []))),
     [own.rows, feed.rows],
   );
-  const txs = useMemo(() => (own.isLoading ? [] : (logs.data ?? []).filter((t) => !known.has(t.hash.toLowerCase()))), [logs.data, known, own.isLoading]);
+  const txs = useMemo(
+    () => (own.isLoading ? [] : (logs.data ?? []).filter((t) => !known.has(t.hash.toLowerCase()))),
+    [logs.data, known, own.isLoading],
+  );
   const receipts = useQueries({
     queries: txs.map((t) => ({
       queryKey: ["receipt", t.hash],
@@ -101,7 +105,9 @@ export function useCashActivity(account: Address) {
       txs.flatMap((t, i) => {
         const r = receipts[i]?.data;
         const time = times[i]?.data;
-        return r && time !== undefined && r.status === "success" ? [{ hash: t.hash, time, items: arrivalsOf(r.logs, account) }] : [];
+        return r && time !== undefined && r.status === "success"
+          ? [{ hash: t.hash, time, items: arrivalsOf(r.logs, account) }]
+          : [];
       }),
     [txs, receipts, times, account],
   );
@@ -113,9 +119,14 @@ export function useCashActivity(account: Address) {
     [own.rows, feed.rows, arrivals, since],
   );
 
-  const arrivalsFailed = head.isError || logs.isError || receipts.some((q) => q.isError) || times.some((q) => q.isError);
+  const arrivalsFailed =
+    head.isError || logs.isError || receipts.some((q) => q.isError) || times.some((q) => q.isError);
   const failed = [own.isError, !!GOOSE_EXECUTOR && feed.isError, arrivalsFailed];
-  const live: CashFeedError = failed.every((f, i) => f || (i === 1 && !GOOSE_EXECUTOR)) ? "all" : failed.some(Boolean) ? "some" : null;
+  const live: CashFeedError = failed.every((f, i) => f || (i === 1 && !GOOSE_EXECUTOR))
+    ? "all"
+    : failed.some(Boolean)
+      ? "some"
+      : null;
   const reading =
     own.isLoading ||
     feed.isLoading ||

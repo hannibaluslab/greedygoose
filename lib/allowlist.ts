@@ -32,7 +32,14 @@ type Address = `0x${string}`;
  * and whether the batch saves for the user (`saveTo`, declared by the Earn with stocks and Start earning builders alone)
  * with the amount of its one savings supply (`saveRaw`, read from the batch; null when it has none).
  */
-type BatchContext = { listSlots: readonly bigint[]; to: Address; data: Hex; sendTo: Address | null; saveTo: Address | null; saveRaw: bigint | null };
+type BatchContext = {
+  listSlots: readonly bigint[];
+  to: Address;
+  data: Hex;
+  sendTo: Address | null;
+  saveTo: Address | null;
+  saveRaw: bigint | null;
+};
 /** True when a call's arguments keep the money with `user`. */
 type ArgsCheck = (args: readonly unknown[], user: Address, ctx: BatchContext) => boolean;
 type Rule = { targets: readonly Address[]; abi: Abi; functions: Record<string, ArgsCheck> };
@@ -45,7 +52,8 @@ const SPENDERS: readonly Address[] = [AAVE.SPOKE, ...ROUTERS];
 
 /** Where each Entry coin is converted (lib/tokens/stables.ts), and the coins converted at a kind of venue. */
 const venueOf = (v: EntryVenue): Address => (v.kind === "psm3" ? v.psm : v.router);
-const ENTRY_AT = (kind: EntryVenue["kind"]): readonly Address[] => ENTRY_COINS.filter((c) => c.venue.kind === kind).map((c) => c.address);
+const ENTRY_AT = (kind: EntryVenue["kind"]): readonly Address[] =>
+  ENTRY_COINS.filter((c) => c.venue.kind === kind).map((c) => c.address);
 
 /** Aave V4 spoke calls: the third argument (onBehalfOf) is the position, and it must be the user's. */
 const forUser: ArgsCheck = (args, user) => is(args[2], user);
@@ -58,7 +66,10 @@ const swapToUser =
   (args, user) => {
     const p = args[0] as { tokenIn: unknown; tokenOut: unknown; recipient: unknown };
     if (!is(p.recipient, user)) return false;
-    return (oneOf(p.tokenIn, TOKENS) && oneOf(p.tokenOut, TOKENS)) || (oneOf(p.tokenIn, entry) && is(p.tokenOut, USDC.address));
+    return (
+      (oneOf(p.tokenIn, TOKENS) && oneOf(p.tokenOut, TOKENS)) ||
+      (oneOf(p.tokenIn, entry) && is(p.tokenOut, USDC.address))
+    );
   };
 /** An Entry coin into USDC for the user, and nothing else (Aerodrome's first deployment, PSM3). */
 const convertToUser =
@@ -96,7 +107,12 @@ const mintsBaseList: ArgsCheck = (args) => baseListSlot(args[0]) !== null;
  */
 const ownListOps: ArgsCheck = (args, _user, ctx) => {
   const [slot, ops] = args as [bigint, readonly Hex[]];
-  return ctx.listSlots.includes(slot) && ops.length > 0 && ops.length <= MAX_LIST_OPS && ops.every((op) => decodeListOp(op) !== null);
+  return (
+    ctx.listSlots.includes(slot) &&
+    ops.length > 0 &&
+    ops.length <= MAX_LIST_OPS &&
+    ops.every((op) => decodeListOp(op) !== null)
+  );
 };
 /**
  * Send (Adrian, 2026-10-15: "let user send their assets out"), the one way money leaves the user's pockets:
@@ -134,7 +150,12 @@ const saveForUser: ArgsCheck = (args, user, ctx) => {
 };
 /** The USDC approve for that supply: to Aave V3's pool, for exactly what the batch's one savings supply puts in. */
 const savingsApprove: ArgsCheck = (args, user, ctx) =>
-  !!ctx.saveTo && is(ctx.saveTo, user) && ctx.saveRaw !== null && is(ctx.to, USDC.address) && is(args[0], GUARDIAN.AAVE_V3_POOL) && args[1] === ctx.saveRaw;
+  !!ctx.saveTo &&
+  is(ctx.saveTo, user) &&
+  ctx.saveRaw !== null &&
+  is(ctx.to, USDC.address) &&
+  is(args[0], GUARDIAN.AAVE_V3_POOL) &&
+  args[1] === ctx.saveRaw;
 
 /** GooseBoard.join(): exactly its selector, nothing after it. */
 const JOIN = toFunctionSelector("join()");
@@ -156,9 +177,16 @@ const RULES: readonly Rule[] = [
   {
     targets: TOKENS,
     abi: erc20Abi,
-    functions: { approve: (args, user, ctx) => oneOf(args[0], SPENDERS) || savingsApprove(args, user, ctx), transfer: transferOut },
+    functions: {
+      approve: (args, user, ctx) => oneOf(args[0], SPENDERS) || savingsApprove(args, user, ctx),
+      transfer: transferOut,
+    },
   },
-  ...ENTRY_COINS.map((c) => ({ targets: [c.address], abi: erc20Abi, functions: { approve: (args: readonly unknown[]) => is(args[0], venueOf(c.venue)) } })),
+  ...ENTRY_COINS.map((c) => ({
+    targets: [c.address],
+    abi: erc20Abi,
+    functions: { approve: (args: readonly unknown[]) => is(args[0], venueOf(c.venue)) },
+  })),
   {
     targets: [AAVE.SPOKE],
     abi: spokeAbi,
@@ -170,14 +198,19 @@ const RULES: readonly Rule[] = [
     functions: { withdraw: (args, user) => is(args[0], USDC.address) && is(args[2], user), supply: saveForUser },
   },
   { targets: [AERODROME.ROUTER], abi: aeroRouterAbi, functions: { exactInputSingle: swapToUser() } },
-  { targets: [AERODROME_V1.ROUTER], abi: aeroRouterAbi, functions: { exactInputSingle: convertToUser(ENTRY_AT("aerodrome")) } },
+  {
+    targets: [AERODROME_V1.ROUTER],
+    abi: aeroRouterAbi,
+    functions: { exactInputSingle: convertToUser(ENTRY_AT("aerodrome")) },
+  },
   { targets: [UNISWAP.SWAP_ROUTER_02], abi: swapRouter02Abi, functions: { multicall: swapWithDeadline } },
   {
     targets: [SPARK_PSM3.PSM3],
     abi: psm3Abi,
     functions: {
       // swapExactIn(assetIn, assetOut, amountIn, minAmountOut, receiver, referralCode)
-      swapExactIn: (args, user, ctx) => convertToUser(ENTRY_AT("psm3"))([{ tokenIn: args[0], tokenOut: args[1], recipient: args[4] }], user, ctx),
+      swapExactIn: (args, user, ctx) =>
+        convertToUser(ENTRY_AT("psm3"))([{ tokenIn: args[0], tokenOut: args[1], recipient: args[4] }], user, ctx),
     },
   },
   { targets: [EFP_LIST_MINTER], abi: efpListMinterAbi, functions: { easyMint: mintsBaseList } },
@@ -188,7 +221,10 @@ const RULES: readonly Rule[] = [
         {
           targets: [GOOSE_EXECUTOR],
           abi: gooseExecutorAbi,
-          functions: { setMix: (args: readonly unknown[]) => isMix(args[0] as readonly number[]), setKeepMix: () => true },
+          functions: {
+            setMix: (args: readonly unknown[]) => isMix(args[0] as readonly number[]),
+            setKeepMix: () => true,
+          },
         },
       ]
     : []),
@@ -201,7 +237,8 @@ const RULES: readonly Rule[] = [
  */
 export type AllowContext = { listSlot?: bigint | null; sendTo?: Address; saveTo?: Address };
 
-const isSavingsSupply = (to: Address, functionName: string) => isAddressEqual(to, GUARDIAN.AAVE_V3_POOL) && functionName === "supply";
+const isSavingsSupply = (to: Address, functionName: string) =>
+  isAddressEqual(to, GUARDIAN.AAVE_V3_POOL) && functionName === "supply";
 
 /** The amount of the batch's one savings supply (null when it has none); more than one is refused. */
 function savingsSupplyRaw(calls: readonly { to: Address; data: Hex }[]): bigint | null {
@@ -227,7 +264,11 @@ function savingsSupplyRaw(calls: readonly { to: Address; data: Hex }[]): bigint 
  * `own.sendTo` lets the batch carry one transfer, to that address (`transferOut`). `own.saveTo` (the user, no one else)
  * lets it carry one USDC savings supply for the user and its exact approve (`saveForUser`, `savingsApprove`).
  */
-export function assertAllowed<C extends { to: Address; data: Hex; value: bigint }>(user: Address, calls: C[], own?: AllowContext): C[] {
+export function assertAllowed<C extends { to: Address; data: Hex; value: bigint }>(
+  user: Address,
+  calls: C[],
+  own?: AllowContext,
+): C[] {
   const listSlots: bigint[] = own?.listSlot != null ? [own.listSlot] : [];
   const sendTo = own?.sendTo ?? null;
   const saveTo = own?.saveTo ?? null;
@@ -258,7 +299,11 @@ export function assertAllowed<C extends { to: Address; data: Hex; value: bigint 
     const check = Object.hasOwn(rule.functions, call.functionName) ? rule.functions[call.functionName] : undefined;
     // Outside a Send (no recipient declared), transfer is no function of any target at all; outside Earn with stocks and
     // Start earning (no saveTo declared), neither is a savings supply.
-    if (!check || (call.functionName === "transfer" && !sendTo) || (isSavingsSupply(c.to, call.functionName) && !saveTo)) {
+    if (
+      !check ||
+      (call.functionName === "transfer" && !sendTo) ||
+      (isSavingsSupply(c.to, call.functionName) && !saveTo)
+    ) {
       throw new Error(`Blocked: unexpected call to ${c.to}`);
     }
     if (call.functionName === "transfer" && ++transfers > 1) throw new Error("Blocked: more than one transfer");
@@ -278,7 +323,13 @@ export function assertAllowed<C extends { to: Address; data: Hex; value: bigint 
   return calls;
 }
 
-type SwapParams = { tokenIn: Address; tokenOut: Address; recipient: Address; amountIn: bigint; amountOutMinimum: bigint };
+type SwapParams = {
+  tokenIn: Address;
+  tokenOut: Address;
+  recipient: Address;
+  amountIn: bigint;
+  amountOutMinimum: bigint;
+};
 
 /** The swap a router call makes (Uniswap's inside its multicall), or null when the call isn't a swap. */
 export function swapOf(c: { to: Address; data: Hex }): { router: Address; params: SwapParams } | null {

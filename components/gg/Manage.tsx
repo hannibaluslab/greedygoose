@@ -9,7 +9,13 @@ import type { TxPhase } from "@/hooks/useTx";
  */
 
 /** A settings card: white, 22px corners, the boards' 14px × 16px padding unless told otherwise. */
-export function ManageCard({ className = "px-4 py-3.5 flex flex-col gap-2", children }: { className?: string; children: ReactNode }) {
+export function ManageCard({
+  className = "px-4 py-3.5 flex flex-col gap-2",
+  children,
+}: {
+  className?: string;
+  children: ReactNode;
+}) {
   return <WhiteCard className={`leading-[normal] ${className}`}>{children}</WhiteCard>;
 }
 
@@ -52,7 +58,15 @@ export function MixSlider({ name, bps, onChange }: { name: string; bps: number; 
 
 /** The foot of a settings body: its button to JAW's sheet, its error, and why it can't save or how many steps it takes. */
 export function SaveFooter({
-  phase, checking = false, disabled, preview, onSave, error, note, steps, label = "Save",
+  phase,
+  checking = false,
+  disabled,
+  preview,
+  onSave,
+  error,
+  note,
+  steps,
+  label = "Save",
 }: {
   phase: TxPhase;
   /** Its first batch is still being prepared (useTx): "Checking…" until it's ready. */
@@ -71,7 +85,16 @@ export function SaveFooter({
   return (
     <div className="mt-auto flex flex-col gap-2 pt-2">
       <TxError error={error} />
-      <TxButton label={label} phase={phase} checking={checking} steps={steps} note={note} disabled={disabled} preview={preview} onClick={onSave} />
+      <TxButton
+        label={label}
+        phase={phase}
+        checking={checking}
+        steps={steps}
+        note={note}
+        disabled={disabled}
+        preview={preview}
+        onClick={onSave}
+      />
     </div>
   );
 }

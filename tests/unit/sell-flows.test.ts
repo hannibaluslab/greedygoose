@@ -4,7 +4,16 @@ import { CASH } from "@/config/risk";
 import { assertAllowed, swapOf } from "@/lib/allowlist";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
-import { SELL_BLOCKED, buildSaleCalls, floorPriceUsd, planSell, saleActivity, saleRepayRaw, type SellHolding, type SellPosition } from "@/lib/sell";
+import {
+  SELL_BLOCKED,
+  buildSaleCalls,
+  floorPriceUsd,
+  planSell,
+  saleActivity,
+  saleRepayRaw,
+  type SellHolding,
+  type SellPosition,
+} from "@/lib/sell";
 import { minOut } from "@/lib/swap/buy";
 import type { SellQuote } from "@/lib/swap/sell";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
@@ -20,10 +29,17 @@ const price = 250;
 /** 0.4 NVDA ($100 at Aave's price) sells for $99.50. */
 const quote: SellQuote = { venue: "aerodrome", pool: 10, amountIn: shares(0.4), amountOut: usd(99.5) };
 const fn = (data: `0x${string}`) => decodeFunctionData({ abi: [...erc20Abi, ...spokeAbi], data }).functionName;
-const steps = (calls: { data: `0x${string}`; to: `0x${string}` }[]) => calls.map((c) => (swapOf(c) ? "swap" : fn(c.data)));
+const steps = (calls: { data: `0x${string}`; to: `0x${string}` }[]) =>
+  calls.map((c) => (swapOf(c) ? "swap" : fn(c.data)));
 
 /** $1,000 of NVDA backs the credit (CF 70%); 0.1 NVDA is free. */
-const holding: SellHolding = { priceUsd: price, freeRaw: shares(0.1), lockedRaw: shares(4), lockedUsd: 1_000, paused: false };
+const holding: SellHolding = {
+  priceUsd: price,
+  freeRaw: shares(0.1),
+  lockedRaw: shares(4),
+  lockedUsd: 1_000,
+  paused: false,
+};
 const owing = (debtUsd: number): SellPosition => ({
   collateralUsd: 1_000,
   avgCf: 0.7,
@@ -43,7 +59,11 @@ describe("buildSaleCalls", () => {
     const calls = sale("backing");
     expect(steps(calls)).toEqual(["withdraw", "approve", "swap"]);
     expect(calls[0].to).toBe(AAVE.SPOKE);
-    expect(decodeFunctionData({ abi: spokeAbi, data: calls[0].data }).args).toEqual([BigInt(nvda.reserveId), shares(0.4), user]);
+    expect(decodeFunctionData({ abi: spokeAbi, data: calls[0].data }).args).toEqual([
+      BigInt(nvda.reserveId),
+      shares(0.4),
+      user,
+    ]);
     expect(swapOf(calls[2])!.params.amountIn).toBe(shares(0.4));
   });
 
@@ -52,7 +72,11 @@ describe("buildSaleCalls", () => {
     expect(steps(calls)).toEqual(["withdraw", "approve", "swap", "approve", "repay"]);
     const repayRaw = minOut(usd(99.5)) - fee;
     expect(decodeFunctionData({ abi: erc20Abi, data: calls[3].data }).args).toEqual([AAVE.SPOKE, repayRaw]);
-    expect(decodeFunctionData({ abi: spokeAbi, data: calls[4].data }).args).toEqual([BigInt(USDC.reserveId), repayRaw, user]);
+    expect(decodeFunctionData({ abi: spokeAbi, data: calls[4].data }).args).toEqual([
+      BigInt(USDC.reserveId),
+      repayRaw,
+      user,
+    ]);
   });
 
   it("repay by selling more than is owed: a full repay, then the leftover allowance goes back to 0", () => {
@@ -72,7 +96,9 @@ describe("buildSaleCalls", () => {
 
   it("refuses a repay the sale can't pay for", () => {
     // Half the fee buffer's worth of NVIDIA: its floor (the quote less 1%, or Aave's price less 10%) is under the buffer.
-    expect(() => sale("repay", usd(300), { ...quote, amountIn: shares(B / 2 / price), amountOut: usd(B / 2) })).toThrow(/positive/);
+    expect(() => sale("repay", usd(300), { ...quote, amountIn: shares(B / 2 / price), amountOut: usd(B / 2) })).toThrow(
+      /positive/,
+    );
   });
 });
 
@@ -107,7 +133,15 @@ describe("planSell: free shares", () => {
     expect(plan("free", { ...quote, amountIn: shares(0.1), amountOut: usd(24) }).warn).toBe(true);
     expect(plan("free", { ...quote, amountIn: shares(0.1), amountOut: usd(24.9) }).warn).toBe(false);
     expect(plan("free", quote).priceMayMove).toBe(false);
-    const saturday = planSell({ from: "free", stock: nvda, holding, cf: 0.7, position: owing(300), quote, now: new Date("2026-10-17T15:00:00Z") });
+    const saturday = planSell({
+      from: "free",
+      stock: nvda,
+      holding,
+      cf: 0.7,
+      position: owing(300),
+      quote,
+      now: new Date("2026-10-17T15:00:00Z"),
+    });
     expect(saturday.priceMayMove).toBe(true);
   });
 });
@@ -183,9 +217,22 @@ describe("planSell: repay by selling a holding (step 9)", () => {
     });
     try {
       const at50 = await import("@/lib/sell");
-      const thin: SellPosition = { collateralUsd: 15.75, avgCf: 0.7, debtUsd: 10, debtRaw: usd(10), healthFactor: 1.1025 };
-      const h: SellHolding = { priceUsd: price, freeRaw: 0n, lockedRaw: shares(0.063), lockedUsd: 15.75, paused: false };
-      const planAt50 = (q: SellQuote) => at50.planSell({ from: "repay", stock: nvda, holding: h, cf: 0.7, position: thin, quote: q, now: tuesday });
+      const thin: SellPosition = {
+        collateralUsd: 15.75,
+        avgCf: 0.7,
+        debtUsd: 10,
+        debtRaw: usd(10),
+        healthFactor: 1.1025,
+      };
+      const h: SellHolding = {
+        priceUsd: price,
+        freeRaw: 0n,
+        lockedRaw: shares(0.063),
+        lockedUsd: 15.75,
+        paused: false,
+      };
+      const planAt50 = (q: SellQuote) =>
+        at50.planSell({ from: "repay", stock: nvda, holding: h, cf: 0.7, position: thin, quote: q, now: tuesday });
       const p = planAt50({ ...quote, amountIn: shares(0.0048), amountOut: usd(1.194) });
       expect(p.before).toBe("watch");
       expect(p.after).toBe("act");
@@ -205,7 +252,13 @@ describe("planSell: repay by selling a holding (step 9)", () => {
   it("at today's fee buffer the same $1.20 sale stays in Watch: the fee no longer outweighs the backing it frees", () => {
     // From Watch, a sale of v dollars ends in Act only if v < 1.1 × buffer ÷ (1.1 × 0.98 − collateral factor): under
     // $0.30 at 70% and a $0.10 buffer, so under the $1 smallest sale. The rule above stays for a larger buffer.
-    const thin: SellPosition = { collateralUsd: 15.75, avgCf: 0.7, debtUsd: 10, debtRaw: usd(10), healthFactor: 1.1025 };
+    const thin: SellPosition = {
+      collateralUsd: 15.75,
+      avgCf: 0.7,
+      debtUsd: 10,
+      debtRaw: usd(10),
+      healthFactor: 1.1025,
+    };
     const h: SellHolding = { priceUsd: price, freeRaw: 0n, lockedRaw: shares(0.063), lockedUsd: 15.75, paused: false };
     const p = plan("repay", { ...quote, amountIn: shares(0.0048), amountOut: usd(1.194) }, thin, h);
     expect(p.repayRaw).toBe(minOut(usd(1.194)) - fee);
@@ -233,10 +286,12 @@ describe("saleActivity", () => {
       { kind: "sell", symbol: "NVDAc", amount: 0.1, receivedUsd: 24.9 },
     ]);
     expect(saleActivity(nvda, plan("repay", quote)).map((i) => i.kind)).toEqual(["withdraw", "sell", "repay"]);
-    expect(saleActivity(nvda, plan("repay", quote)).at(-1)!.amount).toBeCloseTo(Number(minOut(usd(99.5)) - fee) / 1e6, 6);
+    expect(saleActivity(nvda, plan("repay", quote)).at(-1)!.amount).toBeCloseTo(
+      Number(minOut(usd(99.5)) - fee) / 1e6,
+      6,
+    );
   });
 });
-
 
 describe("floorPriceUsd (the review's lowest price)", () => {
   it("is what the sale pays at least, per share: the quote less 1% when that's over Aave's floor", () => {

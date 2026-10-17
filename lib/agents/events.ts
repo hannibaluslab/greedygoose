@@ -1,4 +1,12 @@
-import { isAddressEqual, parseEventLogs, type Address, type ContractEventName, type Hex, type Log, type ParseEventLogsReturnType } from "viem";
+import {
+  isAddressEqual,
+  parseEventLogs,
+  type Address,
+  type ContractEventName,
+  type Hex,
+  type Log,
+  type ParseEventLogsReturnType,
+} from "viem";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import { JOBS, type AgentJob } from "@/lib/agents/permissions";
 
@@ -20,7 +28,14 @@ export type AgentEvent =
   | { kind: "repaid"; amountRaw: bigint; hfBefore: bigint; hfAfter: bigint; reason: "act" | "weekend" }
   | { kind: "heads-up"; hf: bigint; sellValueRaw: bigint; sellAfter: number }
   | { kind: "heads-up-cleared"; hf: bigint }
-  | { kind: "sold"; sharesRaw: readonly bigint[]; repaidRaw: bigint; hfBefore: bigint; hfAfter: bigint; atOnce: boolean }
+  | {
+      kind: "sold";
+      sharesRaw: readonly bigint[];
+      repaidRaw: bigint;
+      hfBefore: bigint;
+      hfAfter: bigint;
+      atOnce: boolean;
+    }
   | { kind: "keep-mix"; on: boolean }
   | { kind: "mix"; weightsBps: readonly number[] }
   | { kind: "rebalanced"; soldRaw: readonly bigint[]; boughtRaw: readonly bigint[] }
@@ -34,7 +49,10 @@ export type AgentEvent =
 export type AgentLog = AgentEvent & { key: string; blockNumber: bigint; logIndex: number; txHash: Hex };
 
 type EventName = ContractEventName<typeof gooseExecutorAbi>;
-type Args<N extends EventName> = Extract<ParseEventLogsReturnType<typeof gooseExecutorAbi, N, true>[number], { eventName: N }>["args"];
+type Args<N extends EventName> = Extract<
+  ParseEventLogsReturnType<typeof gooseExecutorAbi, N, true>[number],
+  { eventName: N }
+>["args"];
 
 const job = (id: number): AgentJob | null => JOBS[id] ?? null;
 
@@ -63,7 +81,14 @@ const DECODE: { [N in EventName]: (a: Args<N>) => AgentEvent | null } = {
   }),
   SellHeadsUp: (a) => ({ kind: "heads-up", hf: a.hf, sellValueRaw: a.sellValue, sellAfter: a.sellAfter }),
   SellHeadsUpCleared: (a) => ({ kind: "heads-up-cleared", hf: a.hf }),
-  ProtectSold: (a) => ({ kind: "sold", sharesRaw: a.shares, repaidRaw: a.repaid, hfBefore: a.hfBefore, hfAfter: a.hfAfter, atOnce: a.atOnce }),
+  ProtectSold: (a) => ({
+    kind: "sold",
+    sharesRaw: a.shares,
+    repaidRaw: a.repaid,
+    hfBefore: a.hfBefore,
+    hfAfter: a.hfAfter,
+    atOnce: a.atOnce,
+  }),
   KeepMixSet: (a) => ({ kind: "keep-mix", on: a.on }),
   MixSet: (a) => ({ kind: "mix", weightsBps: a.weights }),
   Rebalanced: (a) => ({ kind: "rebalanced", soldRaw: a.sold, boughtRaw: a.bought }),
@@ -95,6 +120,14 @@ export function decodeAgentLogs(logs: readonly Log[], executor: Address, account
     if (typeof args.account !== "string" || !isAddressEqual(args.account as Address, account)) return [];
     const event = (DECODE[l.eventName] as (a: unknown) => AgentEvent | null)(l.args);
     if (!event || l.blockNumber === null || l.logIndex === null || l.transactionHash === null) return [];
-    return [{ ...event, key: `${l.transactionHash}:${l.logIndex}`, blockNumber: l.blockNumber, logIndex: l.logIndex, txHash: l.transactionHash }];
+    return [
+      {
+        ...event,
+        key: `${l.transactionHash}:${l.logIndex}`,
+        blockNumber: l.blockNumber,
+        logIndex: l.logIndex,
+        txHash: l.transactionHash,
+      },
+    ];
   });
 }

@@ -15,7 +15,15 @@ import { aprToApy, borrowApr } from "@/lib/aave/math";
 import type { Cash } from "@/lib/cash";
 import { CHAIN_ID } from "@/lib/chain";
 import { backingOptions, type Backing } from "@/lib/creditBuy";
-import { EARN_FLOOR, buildEarnCalls, earnActivity, earnOffer, earnStop, type EarnOpen, type EarnQuote } from "@/lib/earnWithStocks";
+import {
+  EARN_FLOOR,
+  buildEarnCalls,
+  earnActivity,
+  earnOffer,
+  earnStop,
+  type EarnOpen,
+  type EarnQuote,
+} from "@/lib/earnWithStocks";
 import { USDC } from "@/lib/tokens/registry";
 
 /**
@@ -44,7 +52,14 @@ export function useEarnOffer(account: `0x${string}`, data: PositionData, open: b
  * `apyAfter` is null while it's read; if the read fails it's today's rate (the batch is simulated again before JAW's
  * sheet).
  */
-export function useEarnRates(p: { user: `0x${string}`; backing: readonly Backing[]; creditRaw: bigint; cash: Cash; apyNow: number; enabled?: boolean }) {
+export function useEarnRates(p: {
+  user: `0x${string}`;
+  backing: readonly Backing[];
+  creditRaw: bigint;
+  cash: Cash;
+  apyNow: number;
+  enabled?: boolean;
+}) {
   const client = usePublicClient({ chainId: CHAIN_ID });
   const key = `${p.creditRaw}|${p.backing.map((b) => `${b.stock.symbol}:${b.raw}`).join(",")}`;
   const settled = useDebounced(key, 400);
@@ -73,7 +88,8 @@ export function useEarnRates(p: { user: `0x${string}`; backing: readonly Backing
 }
 
 const EARN_FAILED = "Earn with stocks didn’t go through on Base. Nothing moved except any network fee.";
-const EARN_REVERT = "This would fail right now. Stock prices may be paused or have moved. Try a smaller amount in a moment.";
+const EARN_REVERT =
+  "This would fail right now. Stock prices may be paused or have moved. Try a smaller amount in a moment.";
 
 /** What the earn step would sign: the quote and offer on screen, and the risk tick. */
 export type EarnInput = { user: `0x${string}`; quote: EarnQuote; offer: EarnOpen; confirmedRisk: boolean };

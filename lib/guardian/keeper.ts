@@ -1,4 +1,12 @@
-import { isAddressEqual, parseAbiItem, type Account, type Address, type PublicClient, type Transport, type WalletClient } from "viem";
+import {
+  isAddressEqual,
+  parseAbiItem,
+  type Account,
+  type Address,
+  type PublicClient,
+  type Transport,
+  type WalletClient,
+} from "viem";
 import type { base } from "viem/chains";
 
 /** Clients are Base clients (OP-stack formatters), matching lib/chain.ts. */
@@ -32,7 +40,12 @@ export async function discoverPermissions(
   const found: GuardianPermission[] = [];
   for (let from = p.fromBlock; from <= p.toBlock; from += chunk) {
     const to = from + chunk - 1n > p.toBlock ? p.toBlock : from + chunk - 1n;
-    const logs = await client.getLogs({ address: GUARDIAN.PERMISSION_MANAGER, event: approvedEvent, fromBlock: from, toBlock: to });
+    const logs = await client.getLogs({
+      address: GUARDIAN.PERMISSION_MANAGER,
+      event: approvedEvent,
+      fromBlock: from,
+      toBlock: to,
+    });
     for (const l of logs) {
       const perm = l.args.permission;
       if (!perm || !isAddressEqual(perm.spender, p.keeper)) continue;
@@ -44,7 +57,12 @@ export async function discoverPermissions(
         end: Number(perm.end),
         salt: perm.salt,
         calls: perm.calls.map((c) => ({ target: c.target, selector: c.selector, checker: c.checker })),
-        spends: perm.spends.map((s) => ({ token: s.token, allowance: s.allowance, unit: Number(s.unit), multiplier: Number(s.multiplier) })),
+        spends: perm.spends.map((s) => ({
+          token: s.token,
+          allowance: s.allowance,
+          unit: Number(s.unit),
+          multiplier: Number(s.multiplier),
+        })),
       });
     }
   }
@@ -71,16 +89,44 @@ export async function checkAccount(
     const tuple = toTuple(perm);
     // isApproved stays true after a revoke; revocation is tracked separately, so check both.
     const [approved, revoked] = await Promise.all([
-      client.readContract({ address: GUARDIAN.PERMISSION_MANAGER, abi: permissionManagerAbi, functionName: "isApproved", args: [tuple] }),
-      client.readContract({ address: GUARDIAN.PERMISSION_MANAGER, abi: permissionManagerAbi, functionName: "isRevoked", args: [tuple] }),
+      client.readContract({
+        address: GUARDIAN.PERMISSION_MANAGER,
+        abi: permissionManagerAbi,
+        functionName: "isApproved",
+        args: [tuple],
+      }),
+      client.readContract({
+        address: GUARDIAN.PERMISSION_MANAGER,
+        abi: permissionManagerAbi,
+        functionName: "isRevoked",
+        args: [tuple],
+      }),
     ]);
     if (!approved || revoked) return { account, status: "skipped", why: "revoked-or-unapproved" };
     if (Math.floor(now.getTime() / 1000) >= perm.end) return { account, status: "skipped", why: "expired" };
 
     const [accountData, savingsRaw, period] = await Promise.all([
       client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserAccountData", args: [account] }),
-      client.readContract({ address: GUARDIAN.AUSDC, abi: [{ type: "function", name: "balanceOf", stateMutability: "view", inputs: [{ type: "address" }], outputs: [{ type: "uint256" }] }] as const, functionName: "balanceOf", args: [account] }),
-      client.readContract({ address: GUARDIAN.PERMISSION_MANAGER, abi: permissionManagerAbi, functionName: "getCurrentPeriod", args: [tuple, tuple.spends[0]] }),
+      client.readContract({
+        address: GUARDIAN.AUSDC,
+        abi: [
+          {
+            type: "function",
+            name: "balanceOf",
+            stateMutability: "view",
+            inputs: [{ type: "address" }],
+            outputs: [{ type: "uint256" }],
+          },
+        ] as const,
+        functionName: "balanceOf",
+        args: [account],
+      }),
+      client.readContract({
+        address: GUARDIAN.PERMISSION_MANAGER,
+        abi: permissionManagerAbi,
+        functionName: "getCurrentPeriod",
+        args: [tuple, tuple.spends[0]],
+      }),
     ]);
     const s = summarize(accountData as AccountData);
     const cap = perm.spends[0].allowance;

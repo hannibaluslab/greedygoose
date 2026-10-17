@@ -47,7 +47,15 @@ type Signed = { route: TradeRoute; from: TradeAsset; to: TradeAsset; sharesRaw: 
 const MENU_TAP_MS = 500;
 
 const pickerRows = (options: AssetOption[]): PickerRow[] =>
-  options.map((o) => ({ id: o.asset, name: o.name, mark: assetMark(o.asset, 32), sub: o.sub, right: o.right, rightSub: o.rightSub, disabled: o.disabled }));
+  options.map((o) => ({
+    id: o.asset,
+    name: o.name,
+    mark: assetMark(o.asset, 32),
+    sub: o.sub,
+    right: o.right,
+    rightSub: o.rightSub,
+    disabled: o.disabled,
+  }));
 
 /**
  * Trade (Adrian, 2026-10-15): "the same as nym where you can swap between any assets you have". NYM's MoveSheet in
@@ -58,7 +66,12 @@ const pickerRows = (options: AssetOption[]): PickerRow[] =>
  * legs. A buy or a trade lands on Home with its toast (useBoughtHome); a sale says so here.
  */
 export function TradeSheet({
-  open, user, data, from: seedFrom, to: seedTo, onClose,
+  open,
+  user,
+  data,
+  from: seedFrom,
+  to: seedTo,
+  onClose,
 }: {
   open: boolean;
   user: `0x${string}`;
@@ -70,7 +83,11 @@ export function TradeSheet({
   const { isConnected } = useAccount();
   const fee = useFeeSupport();
   const money = useMoneySheets();
-  const [form, setForm] = useState<TradeForm>(() => ({ legs: defaultLegs(data, { from: seedFrom, to: seedTo }), amount: "", all: false }));
+  const [form, setForm] = useState<TradeForm>(() => ({
+    legs: defaultLegs(data, { from: seedFrom, to: seedTo }),
+    amount: "",
+    all: false,
+  }));
   // Opened with nothing to trade: the legs appear once there is something (money arrives while it's open).
   const legs = form.legs ?? defaultLegs(data, { from: seedFrom, to: seedTo });
   const { amount, all } = form;
@@ -88,7 +105,10 @@ export function TradeSheet({
   const sellQuote = useSellQuote(legs && selling ? a.fromStock : undefined, a.sharesRaw);
   const swapIn = planTrade({ ...input, sell: sellQuote }).buyInRaw;
   const cashBuyQuote = useBuyQuote(legs && a.route === "buy" ? a.toStock : undefined, a.amountUsd);
-  const swapBuyQuote = useBuyQuoteRaw(legs && a.route === "swap" ? a.toStock : undefined, a.route === "swap" ? swapIn : 0n);
+  const swapBuyQuote = useBuyQuoteRaw(
+    legs && a.route === "swap" ? a.toStock : undefined,
+    a.route === "swap" ? swapIn : 0n,
+  );
   const view = planTrade({ ...input, sell: sellQuote, buy: a.route === "buy" ? cashBuyQuote : swapBuyQuote });
   const feeBlocked = isConnected && fee.state === "unsupported";
   // What the button would sign now, per route, prepared while the sheet is idle so the tap opens JAW's sheet at once.
@@ -144,7 +164,8 @@ export function TradeSheet({
     void signTrade();
   };
 
-  const nameOf = (asset: TradeAsset) => (asset === "cash" ? TRADE_COPY.cashName : (data.holdings.find((h) => h.symbol === asset)?.name ?? asset));
+  const nameOf = (asset: TradeAsset) =>
+    asset === "cash" ? TRADE_COPY.cashName : (data.holdings.find((h) => h.symbol === asset)?.name ?? asset);
   const fromHolding = data.holdings.find((h) => h.symbol === from);
   const toHolding = data.holdings.find((h) => h.symbol === to);
   const soldHolding = data.holdings.find((h) => h.symbol === signed?.from);
@@ -173,7 +194,9 @@ export function TradeSheet({
         {doneSale && signed ? (
           <TxDone
             title={TRADE_COPY.sold(
-              formatShares(rawToShares(signed.sharesRaw, soldHolding?.multiplier ?? 10n ** 18n, view.fromStock?.decimals ?? 8)),
+              formatShares(
+                rawToShares(signed.sharesRaw, soldHolding?.multiplier ?? 10n ** 18n, view.fromStock?.decimals ?? 8),
+              ),
               EQUITIES.find((e) => e.symbol === signed.from)?.name ?? tickerOf(signed.from),
             )}
             body={TRADE_COPY.soldBody}
@@ -208,20 +231,30 @@ export function TradeSheet({
               hint={
                 <>
                   {view.hint.map((line) => (
-                    <span key={line} className="block">{line}</span>
+                    <span key={line} className="block">
+                      {line}
+                    </span>
                   ))}
                 </>
               }
             />
             <AmountArrow onFlip={flip} disabled={busy} />
             {view.youGet.kind === "stock" ? (
-              <YouGet symbol={view.youGet.symbol} shares={view.youGet.shares} priceUsd={view.youGet.priceUsd} source={picker("to")} />
+              <YouGet
+                symbol={view.youGet.symbol}
+                shares={view.youGet.shares}
+                priceUsd={view.youGet.priceUsd}
+                source={picker("to")}
+              />
             ) : (
               <YouGetCash usd={view.youGet.usd} priceUsd={view.youGet.priceUsd} source={picker("to")} />
             )}
             <Summary rows={[...view.rows, NETWORK_FEE_ROW]} />
             {view.note && (
-              <p role="status" className={`m-0 text-[13px] leading-snug ${view.note.tone === "act" ? "text-act" : "text-watch-text"}`}>
+              <p
+                role="status"
+                className={`m-0 text-[13px] leading-snug ${view.note.tone === "act" ? "text-act" : "text-watch-text"}`}
+              >
                 {view.note.text}
               </p>
             )}
@@ -235,22 +268,43 @@ export function TradeSheet({
                 credit={null}
               />
             )}
-            {view.ready && view.route === "sell" && view.fromStock && fromHolding && view.sellQuote && view.sellPlan && (
-              <SellSmallPrint stock={view.fromStock} holding={fromHolding} quote={view.sellQuote} plan={view.sellPlan} />
-            )}
-            {view.ready && view.route === "swap" && view.fromStock && view.toStock && fromHolding && view.sellQuote && view.sellPlan && view.buyQuote && (
-              <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">
-                {swapSmallPrint({
-                  from: view.fromStock,
-                  to: view.toStock,
-                  fromHolding,
-                  sellQuote: view.sellQuote,
-                  plan: view.sellPlan,
-                  buyQuote: view.buyQuote,
-                })}
+            {view.ready &&
+              view.route === "sell" &&
+              view.fromStock &&
+              fromHolding &&
+              view.sellQuote &&
+              view.sellPlan && (
+                <SellSmallPrint
+                  stock={view.fromStock}
+                  holding={fromHolding}
+                  quote={view.sellQuote}
+                  plan={view.sellPlan}
+                />
+              )}
+            {view.ready &&
+              view.route === "swap" &&
+              view.fromStock &&
+              view.toStock &&
+              fromHolding &&
+              view.sellQuote &&
+              view.sellPlan &&
+              view.buyQuote && (
+                <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">
+                  {swapSmallPrint({
+                    from: view.fromStock,
+                    to: view.toStock,
+                    fromHolding,
+                    sellQuote: view.sellQuote,
+                    plan: view.sellPlan,
+                    buyQuote: view.buyQuote,
+                  })}
+                </p>
+              )}
+            {feeBlocked && (
+              <p role="alert" className="m-0 text-[13px] text-act">
+                {TRADE_COPY.feeUnsupported}
               </p>
             )}
-            {feeBlocked && <p role="alert" className="m-0 text-[13px] text-act">{TRADE_COPY.feeUnsupported}</p>}
             <TxError error={error} />
             <div className="mt-1">
               <TxButton

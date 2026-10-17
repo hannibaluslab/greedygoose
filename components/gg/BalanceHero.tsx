@@ -11,11 +11,22 @@ type Column = { label: string; info?: Info; sub?: ReactNode };
  * "$5,000.00" on the left, a second figure on the right of a hairline, a line under each.
  */
 export function BalanceHero({
-  label, info, value, sub, side, even = false,
-}: Column & { value: number; side: Column & { value: ReactNode; unit?: string }; /** Two equal columns, not the figure's own width (Invest). */ even?: boolean }) {
+  label,
+  info,
+  value,
+  sub,
+  side,
+  even = false,
+}: Column & {
+  value: number;
+  side: Column & { value: ReactNode; unit?: string };
+  /** Two equal columns, not the figure's own width (Invest). */ even?: boolean;
+}) {
   const k = fit(value);
   return (
-    <div className={`num grid ${even ? "grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" : "grid-cols-[auto_1fr]"} items-baseline px-[16.75px] leading-[normal]`}>
+    <div
+      className={`num grid ${even ? "grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" : "grid-cols-[auto_1fr]"} items-baseline px-[16.75px] leading-[normal]`}
+    >
       {/* The left column keeps its own width, the hero's proportion (Adrian); a long right line wraps instead. */}
       <div className="flex items-center gap-1.5 whitespace-nowrap pb-1">
         <span className="label">{label}</span>
@@ -40,7 +51,9 @@ export function BalanceHero({
         <>
           <div className="whitespace-nowrap pt-[5px] text-[13px] text-ink-mid">{sub}</div>
           {/* Stretched when empty, so the hairline still runs down beside the line under the big figure. */}
-          <Divided className={`min-w-0 pt-[5px] text-[13px] text-ink-mid ${side.sub ? "" : "self-stretch"}`}>{side.sub}</Divided>
+          <Divided className={`min-w-0 pt-[5px] text-[13px] text-ink-mid ${side.sub ? "" : "self-stretch"}`}>
+            {side.sub}
+          </Divided>
         </>
       )}
     </div>
@@ -68,14 +81,17 @@ export function TodayChange({ usd, pct }: { usd: number; pct: number }) {
   const tone = still ? "" : money.startsWith("−") ? "text-neg" : "text-pos";
   return (
     <>
-      <span className={`font-semibold ${tone}`}>{money}</span> · <span className={`font-semibold ${tone}`}>{still ? "0.00%" : formatSignedPct(pct)}</span> today
+      <span className={`font-semibold ${tone}`}>{money}</span> ·{" "}
+      <span className={`font-semibold ${tone}`}>{still ? "0.00%" : formatSignedPct(pct)}</span> today
     </>
   );
 }
 
 /** TodayChange's place while market prices load. */
 export function TodayPending() {
-  return <span aria-hidden className="inline-block h-[13px] w-[150px] animate-pulse rounded-full bg-chip align-[-2px]" />;
+  return (
+    <span aria-hidden className="inline-block h-[13px] w-[150px] animate-pulse rounded-full bg-chip align-[-2px]" />
+  );
 }
 
 function Divided({ children, className = "" }: { children: ReactNode; className?: string }) {
@@ -84,7 +100,12 @@ function Divided({ children, className = "" }: { children: ReactNode; className?
 
 function InfoButton({ label, onClick }: Info) {
   return (
-    <button type="button" aria-label={label} onClick={onClick} className="-m-1 flex size-6 items-center justify-center text-subtle">
+    <button
+      type="button"
+      aria-label={label}
+      onClick={onClick}
+      className="-m-1 flex size-6 items-center justify-center text-subtle"
+    >
       <InfoIcon />
     </button>
   );

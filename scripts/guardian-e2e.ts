@@ -13,7 +13,16 @@
  */
 import { spawn, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { createPublicClient, createTestClient, createWalletClient, encodeFunctionData, erc20Abi, http, parseEther, type Address } from "viem";
+import {
+  createPublicClient,
+  createTestClient,
+  createWalletClient,
+  encodeFunctionData,
+  erc20Abi,
+  http,
+  parseEther,
+  type Address,
+} from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { base } from "viem/chains";
 import { AAVE } from "@/lib/aave/addresses";
@@ -44,7 +53,22 @@ async function main() {
   const anvilArgs = ["--fork-url", FORK_RPC, "--port", String(PORT), "--host", "127.0.0.1", "--silent"];
   const anvil = native
     ? spawn("anvil", anvilArgs, { stdio: "inherit" })
-    : spawn("podman", ["run", "--rm", "--name", "gg-anvil", "--network", "host", "--entrypoint", "anvil", "ghcr.io/foundry-rs/foundry:latest", ...anvilArgs], { stdio: "inherit" });
+    : spawn(
+        "podman",
+        [
+          "run",
+          "--rm",
+          "--name",
+          "gg-anvil",
+          "--network",
+          "host",
+          "--entrypoint",
+          "anvil",
+          "ghcr.io/foundry-rs/foundry:latest",
+          ...anvilArgs,
+        ],
+        { stdio: "inherit" },
+      );
   console.log(`anvil: ${native ? "local" : "container"}`);
   try {
     const client = createPublicClient({ chain: base, transport: http(RPC) });
@@ -82,31 +106,69 @@ async function main() {
       const r = await client.waitForTransactionReceipt({ hash: h });
       if (r.status !== "success") throw new Error(`user tx reverted: ${to}`);
     };
-    const usdcBal = await client.readContract({ address: USDC.address, abi: erc20Abi, functionName: "balanceOf", args: [USER] });
+    const usdcBal = await client.readContract({
+      address: USDC.address,
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      args: [USER],
+    });
     const savings = usdcBal > 3_000_000n ? 3_000_000n : (usdcBal * 9n) / 10n;
     ok(savings > 0n, `user has USDC to save (${Number(savings) / 1e6})`);
     for (const c of buildAddSavingsCalls(USER, savings)) await send(c.to, c.data);
 
-    const read = async () => summarize((await client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserAccountData", args: [USER] })) as AccountData);
+    const read = async () =>
+      summarize(
+        (await client.readContract({
+          address: AAVE.SPOKE,
+          abi: spokeAbi,
+          functionName: "getUserAccountData",
+          args: [USER],
+        })) as AccountData,
+      );
     const before = await read();
     const power = before.collateralUsd * before.avgCf;
     const borrowTo = async (hf: number) => {
       const now = await read();
       const borrowUsd = Math.max(0, power / hf - now.debtUsd);
-      await send(AAVE.SPOKE, encodeFunctionData({ abi: spokeAbi, functionName: "borrow", args: [7n, BigInt(Math.floor(borrowUsd * 1e6)), USER] }));
+      await send(
+        AAVE.SPOKE,
+        encodeFunctionData({
+          abi: spokeAbi,
+          functionName: "borrow",
+          args: [7n, BigInt(Math.floor(borrowUsd * 1e6)), USER],
+        }),
+      );
       return read();
     };
     const watch = await borrowTo(1.3); // HF 1.3 → Watch
-    ok(watch.healthFactor !== null && watch.healthFactor < 1.5 && watch.healthFactor >= 1.1, `loan is in Watch (HF ${watch.healthFactor?.toFixed(3)})`);
+    ok(
+      watch.healthFactor !== null && watch.healthFactor < 1.5 && watch.healthFactor >= 1.1,
+      `loan is in Watch (HF ${watch.healthFactor?.toFixed(3)})`,
+    );
 
     // 3. approve the Guardian permission (same calldata the app sends)
     const now = Number((await client.getBlock()).timestamp);
-    const perm = buildGuardianPermission({ account: USER, spender: KEEPER.address, checker, dailyCapRaw: 2_000_000n, start: now, end: now + 365 * 86400 });
-    await send(GUARDIAN.PERMISSION_MANAGER, encodeFunctionData({ abi: permissionManagerAbi, functionName: "approve", args: [toTuple(perm)] }));
+    const perm = buildGuardianPermission({
+      account: USER,
+      spender: KEEPER.address,
+      checker,
+      dailyCapRaw: 2_000_000n,
+      start: now,
+      end: now + 365 * 86400,
+    });
+    await send(
+      GUARDIAN.PERMISSION_MANAGER,
+      encodeFunctionData({ abi: permissionManagerAbi, functionName: "approve", args: [toTuple(perm)] }),
+    );
 
     // 4. the real keeper code
     const head = await client.getBlockNumber();
-    const found = await discoverPermissions(client, { keeper: KEEPER.address, checker, fromBlock: forkBlock + 1n, toBlock: head });
+    const found = await discoverPermissions(client, {
+      keeper: KEEPER.address,
+      checker,
+      fromBlock: forkBlock + 1n,
+      toBlock: head,
+    });
     ok(found.length === 1 && found[0].account === USER, "keeper discovered the permission from on-chain events");
 
     const inWatch = await checkAccount(client, null, found[0], { dryRun: true });
@@ -117,26 +179,60 @@ async function main() {
     const dry = await checkAccount(client, null, found[0], { dryRun: true });
     ok(dry.status === "would-repay", `dry run plans a repay (${JSON.stringify(dry.status)})`);
 
-    const savingsBefore = await client.readContract({ address: GUARDIAN.AUSDC, abi: erc20Abi, functionName: "balanceOf", args: [USER] });
-    const cashBefore = await client.readContract({ address: USDC.address, abi: erc20Abi, functionName: "balanceOf", args: [USER] });
+    const savingsBefore = await client.readContract({
+      address: GUARDIAN.AUSDC,
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      args: [USER],
+    });
+    const cashBefore = await client.readContract({
+      address: USDC.address,
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      args: [USER],
+    });
     const res = await checkAccount(client, keeperWallet, found[0]);
-    ok(res.status === "repaid", `keeper repaid (${res.status === "repaid" ? Number(res.amountRaw) / 1e6 : JSON.stringify(res)} USDC)`);
+    ok(
+      res.status === "repaid",
+      `keeper repaid (${res.status === "repaid" ? Number(res.amountRaw) / 1e6 : JSON.stringify(res)} USDC)`,
+    );
 
     // 5. outcome
     const after = await read();
-    const savingsAfter = await client.readContract({ address: GUARDIAN.AUSDC, abi: erc20Abi, functionName: "balanceOf", args: [USER] });
-    const cashAfter = await client.readContract({ address: USDC.address, abi: erc20Abi, functionName: "balanceOf", args: [USER] });
-    ok(after.healthFactor !== null && after.healthFactor >= 1.19 && after.healthFactor < 1.5, `loan back in Watch, not Safe (HF ${after.healthFactor?.toFixed(3) ?? "no debt"})`);
+    const savingsAfter = await client.readContract({
+      address: GUARDIAN.AUSDC,
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      args: [USER],
+    });
+    const cashAfter = await client.readContract({
+      address: USDC.address,
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      args: [USER],
+    });
+    ok(
+      after.healthFactor !== null && after.healthFactor >= 1.19 && after.healthFactor < 1.5,
+      `loan back in Watch, not Safe (HF ${after.healthFactor?.toFixed(3) ?? "no debt"})`,
+    );
     ok(savingsAfter < savingsBefore, `paid from savings (${Number(savingsBefore - savingsAfter) / 1e6} USDC)`);
     ok(cashAfter === cashBefore, "the user's cash balance didn't move");
-    const allowance = await client.readContract({ address: USDC.address, abi: erc20Abi, functionName: "allowance", args: [USER, AAVE.SPOKE] });
+    const allowance = await client.readContract({
+      address: USDC.address,
+      abi: erc20Abi,
+      functionName: "allowance",
+      args: [USER, AAVE.SPOKE],
+    });
     ok(allowance === 0n, "no leftover approval");
 
     const again = await checkAccount(client, keeperWallet, found[0]);
     ok(again.status === "checked", "next tick does nothing (in Watch)");
 
     // revoke → keeper skips
-    await send(GUARDIAN.PERMISSION_MANAGER, encodeFunctionData({ abi: permissionManagerAbi, functionName: "revoke", args: [toTuple(perm)] }));
+    await send(
+      GUARDIAN.PERMISSION_MANAGER,
+      encodeFunctionData({ abi: permissionManagerAbi, functionName: "revoke", args: [toTuple(perm)] }),
+    );
     const revoked = await checkAccount(client, keeperWallet, found[0]);
     ok(revoked.status === "skipped", "after revoke the keeper can't act");
     console.log("\nGuardian e2e: ALL PASSED");

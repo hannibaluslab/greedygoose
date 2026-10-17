@@ -1,206 +1,206 @@
 export const aaveOracleAbi = [
   {
-    "type": "function",
-    "name": "decimals",
-    "inputs": [],
-    "outputs": [
+    type: "function",
+    name: "decimals",
+    inputs: [],
+    outputs: [
       {
-        "name": "",
-        "type": "uint8",
-        "internalType": "uint8"
-      }
+        name: "",
+        type: "uint8",
+        internalType: "uint8",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getReservePrice",
-    "inputs": [
+    type: "function",
+    name: "getReservePrice",
+    inputs: [
       {
-        "name": "reserveId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "reserveId",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getReserveSource",
-    "inputs": [
+    type: "function",
+    name: "getReserveSource",
+    inputs: [
       {
-        "name": "reserveId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "reserveId",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: "",
+        type: "address",
+        internalType: "address",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "getReservesPrices",
-    "inputs": [
+    type: "function",
+    name: "getReservesPrices",
+    inputs: [
       {
-        "name": "reserveIds",
-        "type": "uint256[]",
-        "internalType": "uint256[]"
-      }
+        name: "reserveIds",
+        type: "uint256[]",
+        internalType: "uint256[]",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256[]",
-        "internalType": "uint256[]"
-      }
+        name: "",
+        type: "uint256[]",
+        internalType: "uint256[]",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "setReserveSource",
-    "inputs": [
+    type: "function",
+    name: "setReserveSource",
+    inputs: [
       {
-        "name": "reserveId",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "reserveId",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "source",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: "source",
+        type: "address",
+        internalType: "address",
+      },
     ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
+    outputs: [],
+    stateMutability: "nonpayable",
   },
   {
-    "type": "function",
-    "name": "setSpoke",
-    "inputs": [
+    type: "function",
+    name: "setSpoke",
+    inputs: [
       {
-        "name": "spoke",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: "spoke",
+        type: "address",
+        internalType: "address",
+      },
     ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
+    outputs: [],
+    stateMutability: "nonpayable",
   },
   {
-    "type": "function",
-    "name": "spoke",
-    "inputs": [],
-    "outputs": [
+    type: "function",
+    name: "spoke",
+    inputs: [],
+    outputs: [
       {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: "",
+        type: "address",
+        internalType: "address",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "event",
-    "name": "SetSpoke",
-    "inputs": [
+    type: "event",
+    name: "SetSpoke",
+    inputs: [
       {
-        "name": "spoke",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      }
+        name: "spoke",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
     ],
-    "anonymous": false
+    anonymous: false,
   },
   {
-    "type": "event",
-    "name": "UpdateReserveSource",
-    "inputs": [
+    type: "event",
+    name: "UpdateReserveSource",
+    inputs: [
       {
-        "name": "reserveId",
-        "type": "uint256",
-        "indexed": true,
-        "internalType": "uint256"
+        name: "reserveId",
+        type: "uint256",
+        indexed: true,
+        internalType: "uint256",
       },
       {
-        "name": "source",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      }
+        name: "source",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
     ],
-    "anonymous": false
+    anonymous: false,
   },
   {
-    "type": "error",
-    "name": "InvalidAddress",
-    "inputs": []
+    type: "error",
+    name: "InvalidAddress",
+    inputs: [],
   },
   {
-    "type": "error",
-    "name": "InvalidPrice",
-    "inputs": [
+    type: "error",
+    name: "InvalidPrice",
+    inputs: [
       {
-        "name": "reserveId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ]
+        name: "reserveId",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
   },
   {
-    "type": "error",
-    "name": "InvalidSource",
-    "inputs": [
+    type: "error",
+    name: "InvalidSource",
+    inputs: [
       {
-        "name": "reserveId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ]
+        name: "reserveId",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
   },
   {
-    "type": "error",
-    "name": "InvalidSourceDecimals",
-    "inputs": [
+    type: "error",
+    name: "InvalidSourceDecimals",
+    inputs: [
       {
-        "name": "reserveId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ]
+        name: "reserveId",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
   },
   {
-    "type": "error",
-    "name": "OnlyDeployer",
-    "inputs": []
+    type: "error",
+    name: "OnlyDeployer",
+    inputs: [],
   },
   {
-    "type": "error",
-    "name": "OnlySpoke",
-    "inputs": []
+    type: "error",
+    name: "OnlySpoke",
+    inputs: [],
   },
   {
-    "type": "error",
-    "name": "OracleMismatch",
-    "inputs": []
+    type: "error",
+    name: "OracleMismatch",
+    inputs: [],
   },
   {
-    "type": "error",
-    "name": "SpokeAlreadySet",
-    "inputs": []
-  }
+    type: "error",
+    name: "SpokeAlreadySet",
+    inputs: [],
+  },
 ] as const;

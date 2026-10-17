@@ -71,7 +71,14 @@ export function captionCorner(
 }
 
 export function Sparkline({
-  points, height, width, variant = "card", tone, label, caption, className = "",
+  points,
+  height,
+  width,
+  variant = "card",
+  tone,
+  label,
+  caption,
+  className = "",
 }: {
   points: number[];
   height: number;
@@ -98,7 +105,8 @@ export function Sparkline({
   }));
   const line = xy.map(({ x, y }, i) => `${i ? "L" : "M"}${x.toFixed(2)} ${y.toFixed(2)}`).join(" ");
   const last = xy[xy.length - 1];
-  const corner = caption && captionCorner(xy, w, height, { width: caption.length * CAPTION.char, height: CAPTION.h }, dotR);
+  const corner =
+    caption && captionCorner(xy, w, height, { width: caption.length * CAPTION.char, height: CAPTION.h }, dotR);
 
   return (
     <span className={`relative block ${className}`} style={{ width: width ?? "100%", height }}>
@@ -123,7 +131,15 @@ export function Sparkline({
           fill={variant === "hero" ? `url(#${gradientId})` : color}
           fillOpacity={variant === "hero" ? undefined : area}
         />
-        <path d={line} fill="none" stroke={color} strokeWidth={stroke} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+        <path
+          d={line}
+          fill="none"
+          stroke={color}
+          strokeWidth={stroke}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          vectorEffect="non-scaling-stroke"
+        />
       </svg>
       {variant !== "card" && (
         <span
@@ -139,7 +155,10 @@ export function Sparkline({
         />
       )}
       {corner && (
-        <span aria-hidden className={`absolute whitespace-nowrap font-mono text-[10px] uppercase leading-3 tracking-[0.08em] text-subtle ${CORNER_CLASS[corner]}`}>
+        <span
+          aria-hidden
+          className={`absolute whitespace-nowrap font-mono text-[10px] uppercase leading-3 tracking-[0.08em] text-subtle ${CORNER_CLASS[corner]}`}
+        >
           {caption}
         </span>
       )}

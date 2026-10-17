@@ -14,7 +14,8 @@ export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const stock = EQUITIES.find((e) => e.symbol === params.get("s"));
   const range = params.get("r");
-  if (!stock || !isRange(range)) return Response.json({ error: "Ask for a supported stock and range, as ?s=NVDAc&r=1M" }, { status: 400 });
+  if (!stock || !isRange(range))
+    return Response.json({ error: "Ask for a supported stock and range, as ?s=NVDAc&r=1M" }, { status: 400 });
 
   const points = await chart(stock.coingeckoId, RANGES[range]).catch(() => null);
   if (!points || points.length < 2) return Response.json({ error: "CoinGecko didn't answer" }, { status: 502 });

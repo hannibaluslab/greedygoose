@@ -14,7 +14,11 @@ const TESLA = 6;
 
 const SAVED: Record<"off" | "on" | "repay", ProtectSaved> = {
   off: { repayCapRaw: null, sell: null, keepMix: null },
-  on: { repayCapRaw: usdc(100), sell: { capRaw: usdc(100), limitsRaw: sellLimitsFor(usdc(100), CAP_MAX, PRICES, [TESLA]) }, keepMix: false },
+  on: {
+    repayCapRaw: usdc(100),
+    sell: { capRaw: usdc(100), limitsRaw: sellLimitsFor(usdc(100), CAP_MAX, PRICES, [TESLA]) },
+    keepMix: false,
+  },
   repay: { repayCapRaw: usdc(100), sell: null, keepMix: false },
 };
 

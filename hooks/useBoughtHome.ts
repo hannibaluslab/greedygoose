@@ -36,7 +36,11 @@ export function useBoughtHome(p: {
     router.push("/home");
     const arrived = async () => {
       if (!txHash || !client) return null;
-      const r = await queryClient.fetchQuery({ queryKey: ["receipt", txHash], queryFn: () => client.getTransactionReceipt({ hash: txHash }), staleTime: Infinity });
+      const r = await queryClient.fetchQuery({
+        queryKey: ["receipt", txHash],
+        queryFn: () => client.getTransactionReceipt({ hash: txHash }),
+        staleTime: Infinity,
+      });
       return boughtAmount(r.logs, user, symbol);
     };
     void arrived()

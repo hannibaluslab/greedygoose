@@ -7,7 +7,14 @@ export type LockLine = { key: string; usd: number; cf: number; freeUsd: number }
  * Combined loan: lock several stocks (any amounts) and borrow, in one go.
  * Power = what Aave lets you borrow = existing weighted collateral + Σ lock × cf.
  */
-export function combinedLoan(p: { collateralUsd: number; avgCf: number; debtUsd: number; locks: LockLine[]; borrowUsd: number; liquidityUsd: number }) {
+export function combinedLoan(p: {
+  collateralUsd: number;
+  avgCf: number;
+  debtUsd: number;
+  locks: LockLine[];
+  borrowUsd: number;
+  liquidityUsd: number;
+}) {
   const power = p.collateralUsd * p.avgCf + p.locks.reduce((a, l) => a + l.usd * l.cf, 0);
   const debtAfter = p.debtUsd + p.borrowUsd;
   const hfAfter = debtAfter > 0 ? power / debtAfter : Infinity;
@@ -63,7 +70,8 @@ export function autoFill(p: {
 }): Record<string, number> {
   const target = Math.max(1, p.targetHf ?? RISK.safeMin);
   const out: Record<string, number> = Object.fromEntries(p.lines.map((l) => [l.key, l.usd]));
-  let need = target * (p.debtUsd + p.borrowUsd) - p.collateralUsd * p.avgCf - p.lines.reduce((a, l) => a + l.usd * l.cf, 0);
+  let need =
+    target * (p.debtUsd + p.borrowUsd) - p.collateralUsd * p.avgCf - p.lines.reduce((a, l) => a + l.usd * l.cf, 0);
   for (const l of [...p.lines].sort((a, b) => b.cf - a.cf)) {
     if (need <= 0) break;
     if (l.cf <= 0) continue;
@@ -74,4 +82,3 @@ export function autoFill(p: {
   }
   return out;
 }
-

@@ -19,7 +19,14 @@ export function useAccountFeed(address: `0x${string}`, feed: ReturnType<typeof u
     () => [...feed.rows, ...yours.rows.filter((r) => r.time >= feed.since)].sort((a, b) => b.time - a.time),
     [feed.rows, feed.since, yours.rows],
   );
-  const error: FeedError = yours.isError && (feed.isError || !GOOSE_EXECUTOR) ? "all" : feed.isError ? "agents" : yours.isError ? "yours" : null;
+  const error: FeedError =
+    yours.isError && (feed.isError || !GOOSE_EXECUTOR)
+      ? "all"
+      : feed.isError
+        ? "agents"
+        : yours.isError
+          ? "yours"
+          : null;
   return {
     rows,
     loading: yours.isLoading || feed.isLoading,

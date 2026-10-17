@@ -43,11 +43,20 @@ export async function fetchFollowing(client: Client, address: Address): Promise<
   if (tokenId === null) return NONE;
 
   const location = decodeListStorageLocation(
-    (await readContract(client, { address: EFP_LIST_REGISTRY, abi: efpListRegistryAbi, functionName: "getListStorageLocation", args: [tokenId] })) as Hex,
+    (await readContract(client, {
+      address: EFP_LIST_REGISTRY,
+      abi: efpListRegistryAbi,
+      functionName: "getListStorageLocation",
+      args: [tokenId],
+    })) as Hex,
   );
   // A list can point anywhere (another chain, another records contract). One that doesn't live in the records
   // contract we read is not a list we can show or write, and guessing would be worse than saying nothing.
-  if (!location || location.chainId !== BigInt(EFP_CHAIN_ID) || location.records.toLowerCase() !== EFP_LIST_RECORDS.toLowerCase()) {
+  if (
+    !location ||
+    location.chainId !== BigInt(EFP_CHAIN_ID) ||
+    location.records.toLowerCase() !== EFP_LIST_RECORDS.toLowerCase()
+  ) {
     return { addresses: [], hasList: true, slot: null };
   }
 
@@ -62,11 +71,23 @@ export async function fetchFollowing(client: Client, address: Address): Promise<
   const user = userBytes.replace(/^0x/, "").toLowerCase();
   if (user.length > 0 && user !== address.slice(2).toLowerCase()) return NONE;
 
-  const count = await readContract(client, { address: EFP_LIST_RECORDS, abi: efpListRecordsAbi, functionName: "getListOpCount", args: [location.slot] });
+  const count = await readContract(client, {
+    address: EFP_LIST_RECORDS,
+    abi: efpListRecordsAbi,
+    functionName: "getListOpCount",
+    args: [location.slot],
+  });
 
   let ops: Hex[] = [];
   if (count <= PAGE) {
-    ops = [...(await readContract(client, { address: EFP_LIST_RECORDS, abi: efpListRecordsAbi, functionName: "getAllListOps", args: [location.slot] }))];
+    ops = [
+      ...(await readContract(client, {
+        address: EFP_LIST_RECORDS,
+        abi: efpListRecordsAbi,
+        functionName: "getAllListOps",
+        args: [location.slot],
+      })),
+    ];
   } else {
     // `end` is exclusive, verified against the deployed contract.
     for (let start = 0n; start < count; start += PAGE) {

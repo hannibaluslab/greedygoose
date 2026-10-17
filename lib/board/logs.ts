@@ -1,4 +1,19 @@
-import { erc20Abi, formatLog, getAbiItem, isAddressEqual, pad, parseAbi, parseEventLogs, toEventSelector, toHex, type Address, type Client, type Hex, type Log, type RpcLog } from "viem";
+import {
+  erc20Abi,
+  formatLog,
+  getAbiItem,
+  isAddressEqual,
+  pad,
+  parseAbi,
+  parseEventLogs,
+  toEventSelector,
+  toHex,
+  type Address,
+  type Client,
+  type Hex,
+  type Log,
+  type RpcLog,
+} from "viem";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { GUARDIAN } from "@/lib/guardian/config";
@@ -69,7 +84,12 @@ function boardChunks(from: bigint, to: bigint, size = BOARD_LOG_CHUNK): Chunk[] 
   return out;
 }
 
-async function getLogs(client: Client, address: Address | Address[], topics: (Hex | Hex[] | null)[], c: Chunk): Promise<Log[]> {
+async function getLogs(
+  client: Client,
+  address: Address | Address[],
+  topics: (Hex | Hex[] | null)[],
+  c: Chunk,
+): Promise<Log[]> {
   const logs = (await client.request({
     method: "eth_getLogs",
     params: [{ address, topics, fromBlock: toHex(c.from), toBlock: toHex(c.to) }],
@@ -86,7 +106,15 @@ export function decodeRecords(logs: readonly Log[]): BoardRecord[] {
     const t0 = l.topics[0];
     if (t0 === TRANSFER && TOKEN_ADDRESSES.some((a) => isAddressEqual(a, l.address))) {
       const [e] = parseEventLogs({ abi: erc20Abi, logs: [l], eventName: "Transfer", strict: true });
-      if (e) out.push({ kind: "transfer", ...base(l), token: l.address, from: e.args.from, to: e.args.to, value: e.args.value });
+      if (e)
+        out.push({
+          kind: "transfer",
+          ...base(l),
+          token: l.address,
+          from: e.args.from,
+          to: e.args.to,
+          value: e.args.value,
+        });
     } else if (isAddressEqual(l.address, AAVE.SPOKE)) {
       const [e] = parseEventLogs({ abi: spokeAbi, logs: [l], eventName: [...SPOKE_EVENT_NAMES], strict: true });
       if (!e) continue;
@@ -103,17 +131,61 @@ export function decodeRecords(logs: readonly Log[]): BoardRecord[] {
         });
       } else {
         const amount = (a.suppliedAmount ?? a.withdrawnAmount ?? a.drawnAmount ?? a.totalAmountRepaid) as bigint;
-        out.push({ kind: "spoke", ...base(l), event: e.eventName, reserveId: Number(a.reserveId as bigint), caller: a.caller as Address, user: a.user as Address, amount });
+        out.push({
+          kind: "spoke",
+          ...base(l),
+          event: e.eventName,
+          reserveId: Number(a.reserveId as bigint),
+          caller: a.caller as Address,
+          user: a.user as Address,
+          amount,
+        });
       }
     } else if (isAddressEqual(l.address, GUARDIAN.AAVE_V3_POOL) && t0 && SAVINGS_EVENTS.includes(t0)) {
       const [e] = parseEventLogs({ abi: savingsEventsAbi, logs: [l], strict: true });
       if (!e) continue;
       const b = base(l);
-      if (e.eventName === "Supply") out.push({ kind: "savings", ...b, event: "Supply", reserve: e.args.reserve, by: e.args.user, for: e.args.onBehalfOf, amount: e.args.amount });
-      else if (e.eventName === "Withdraw") out.push({ kind: "savings", ...b, event: "Withdraw", reserve: e.args.reserve, by: e.args.user, for: e.args.to, amount: e.args.amount });
-      else if (e.eventName === "Borrow") out.push({ kind: "savingsCredit", ...b, event: "Borrow", reserve: e.args.reserve, debtor: e.args.onBehalfOf, by: e.args.user, amount: e.args.amount });
+      if (e.eventName === "Supply")
+        out.push({
+          kind: "savings",
+          ...b,
+          event: "Supply",
+          reserve: e.args.reserve,
+          by: e.args.user,
+          for: e.args.onBehalfOf,
+          amount: e.args.amount,
+        });
+      else if (e.eventName === "Withdraw")
+        out.push({
+          kind: "savings",
+          ...b,
+          event: "Withdraw",
+          reserve: e.args.reserve,
+          by: e.args.user,
+          for: e.args.to,
+          amount: e.args.amount,
+        });
+      else if (e.eventName === "Borrow")
+        out.push({
+          kind: "savingsCredit",
+          ...b,
+          event: "Borrow",
+          reserve: e.args.reserve,
+          debtor: e.args.onBehalfOf,
+          by: e.args.user,
+          amount: e.args.amount,
+        });
       else if (e.eventName === "Repay") {
-        out.push({ kind: "savingsCredit", ...b, event: "Repay", reserve: e.args.reserve, debtor: e.args.user, by: e.args.repayer, amount: e.args.amount, aTokens: e.args.useATokens });
+        out.push({
+          kind: "savingsCredit",
+          ...b,
+          event: "Repay",
+          reserve: e.args.reserve,
+          debtor: e.args.user,
+          by: e.args.repayer,
+          amount: e.args.amount,
+          aTokens: e.args.useATokens,
+        });
       } else {
         out.push({
           kind: "savingsCredit",
@@ -129,7 +201,8 @@ export function decodeRecords(logs: readonly Log[]): BoardRecord[] {
       }
     } else if (isAddressEqual(l.address, JAW_PAYMASTER) && t0 === SPONSORED) {
       const [e] = parseEventLogs({ abi: paymasterEventsAbi, logs: [l], strict: true });
-      if (e && e.args.paymasterMode === 1) out.push({ kind: "fee", ...base(l), user: e.args.user, token: e.args.token, amount: e.args.tokenAmountPaid });
+      if (e && e.args.paymasterMode === 1)
+        out.push({ kind: "fee", ...base(l), user: e.args.user, token: e.args.token, amount: e.args.tokenAmountPaid });
     }
   }
   return out;
@@ -142,9 +215,19 @@ async function readChunkLogs(client: Client, accounts: readonly Address[], c: Ch
     getLogs(client, [...TOKEN_ADDRESSES], [TRANSFER, topics], c),
     getLogs(client, [...TOKEN_ADDRESSES], [TRANSFER, null, topics], c),
     // topic 3: the spoke's user; V3 Withdraw's `to`; V3 LiquidationCall's user
-    getLogs(client, [AAVE.SPOKE, GUARDIAN.AAVE_V3_POOL], [[...SPOKE_EVENTS, SAVINGS_WITHDRAW, SAVINGS_LIQUIDATION], null, null, topics], c),
+    getLogs(
+      client,
+      [AAVE.SPOKE, GUARDIAN.AAVE_V3_POOL],
+      [[...SPOKE_EVENTS, SAVINGS_WITHDRAW, SAVINGS_LIQUIDATION], null, null, topics],
+      c,
+    ),
     // topic 2: V3 Supply's and Borrow's onBehalfOf; V3 Withdraw's and Repay's user; the paymaster's user
-    getLogs(client, [GUARDIAN.AAVE_V3_POOL, JAW_PAYMASTER], [[SAVINGS_SUPPLY, SAVINGS_WITHDRAW, SAVINGS_BORROW, SAVINGS_REPAY, SPONSORED], null, topics], c),
+    getLogs(
+      client,
+      [GUARDIAN.AAVE_V3_POOL, JAW_PAYMASTER],
+      [[SAVINGS_SUPPLY, SAVINGS_WITHDRAW, SAVINGS_BORROW, SAVINGS_REPAY, SPONSORED], null, topics],
+      c,
+    ),
   ]);
   return parts.flat();
 }
@@ -158,7 +241,10 @@ const STORAGE_PREFIX = "gg.board.v2:";
 
 // Records hold bigints; storage holds JSON.
 const toJson = (r: BoardRecord) => JSON.parse(JSON.stringify(r, (_k, v) => (typeof v === "bigint" ? `${v}n` : v)));
-const fromJson = (r: unknown) => JSON.parse(JSON.stringify(r), (_k, v) => (typeof v === "string" && /^-?\d+n$/.test(v) ? BigInt(v.slice(0, -1)) : v)) as BoardRecord;
+const fromJson = (r: unknown) =>
+  JSON.parse(JSON.stringify(r), (_k, v) =>
+    typeof v === "string" && /^-?\d+n$/.test(v) ? BigInt(v.slice(0, -1)) : v,
+  ) as BoardRecord;
 
 function hash(s: string): string {
   let h = 2166136261;
@@ -167,7 +253,12 @@ function hash(s: string): string {
 }
 
 function cacheKey(board: Address, accounts: readonly Address[], c: Chunk) {
-  return `${board.toLowerCase()}:${c.from}-${c.to}:${hash(accounts.map((a) => a.toLowerCase()).sort().join(","))}`;
+  return `${board.toLowerCase()}:${c.from}-${c.to}:${hash(
+    accounts
+      .map((a) => a.toLowerCase())
+      .sort()
+      .join(","),
+  )}`;
 }
 
 function cached(key: string): BoardRecord[] | undefined {
@@ -189,7 +280,10 @@ function cached(key: string): BoardRecord[] | undefined {
 function keep(key: string, records: BoardRecord[]) {
   memory.set(key, records);
   try {
-    globalThis.localStorage?.setItem(STORAGE_PREFIX + key, JSON.stringify({ v: 2, records: records.map(toJson) } satisfies Stored));
+    globalThis.localStorage?.setItem(
+      STORAGE_PREFIX + key,
+      JSON.stringify({ v: 2, records: records.map(toJson) } satisfies Stored),
+    );
   } catch {
     /* storage full or blocked: memory still has it */
   }

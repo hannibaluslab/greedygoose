@@ -45,6 +45,12 @@ export function sellEconomics(q: SellQuote, stock: Pick<ReserveAsset, "decimals"
  * Sell free shares (plan item 7 step 2): exact-amount approve of the stock to the chosen router, then
  * exactInputSingle stock → USDC to the user, floored by sellMinOut. Leo's venues, deadline and allowlist.
  */
-export function buildSellCalls(p: { user: `0x${string}`; stock: ReserveAsset; quote: SellQuote; oraclePriceUsd: number; nowSec?: number }): Call[] {
+export function buildSellCalls(p: {
+  user: `0x${string}`;
+  stock: ReserveAsset;
+  quote: SellQuote;
+  oraclePriceUsd: number;
+  nowSec?: number;
+}): Call[] {
   return buildSwapCalls({ ...p, side: "sell", amountOutMinimum: sellMinOut(p.quote, p.stock, p.oraclePriceUsd) });
 }

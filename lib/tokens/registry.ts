@@ -19,14 +19,63 @@ export type ReserveAsset = {
  * the market-price fallback only.
  */
 export const EQUITIES = [
-  { symbol: "AAPLc", name: "Apple", address: "0xb200000000000000000000C2e324d24d7eEcd1fb", reserveId: 0, coingeckoId: "apple-coinbase-tokenized-stock" },
-  { symbol: "AMZNc", name: "Amazon", address: "0xb200000000000000000000d9192b6B456483C2E8", reserveId: 1, coingeckoId: "amazon-coinbase-tokenized-stock" },
-  { symbol: "GOOGLc", name: "Alphabet", address: "0xb2000000000000000000002D0BA3164cc74f58B7", reserveId: 2, coingeckoId: "alphabet-coinbase-tokenized-stock" },
-  { symbol: "METAc", name: "Meta", address: "0xb2000000000000000000008bC8786B856E61707C", reserveId: 3, coingeckoId: "meta-coinbase-tokenized-stock" },
-  { symbol: "MSFTc", name: "Microsoft", address: "0xB200000000000000000000Ab99cFa739E253872B", reserveId: 4, coingeckoId: "microsoft-coinbase-tokenized-stock" },
-  { symbol: "NVDAc", name: "NVIDIA", address: "0xb20000000000000000000078ee7ce2fE4908108C", reserveId: 5, coingeckoId: "nvidia-coinbase-tokenized-stock" },
-  { symbol: "TSLAc", name: "Tesla", address: "0xb2000000000000000000001e800a7f5189430cD0", reserveId: 6, coingeckoId: "tesla-coinbase-tokenized-stocks" },
-].map((a) => ({ ...a, address: a.address as `0x${string}`, decimals: 8, chainId: CHAIN_ID, kind: "equity", enabled: true })) satisfies ReserveAsset[];
+  {
+    symbol: "AAPLc",
+    name: "Apple",
+    address: "0xb200000000000000000000C2e324d24d7eEcd1fb",
+    reserveId: 0,
+    coingeckoId: "apple-coinbase-tokenized-stock",
+  },
+  {
+    symbol: "AMZNc",
+    name: "Amazon",
+    address: "0xb200000000000000000000d9192b6B456483C2E8",
+    reserveId: 1,
+    coingeckoId: "amazon-coinbase-tokenized-stock",
+  },
+  {
+    symbol: "GOOGLc",
+    name: "Alphabet",
+    address: "0xb2000000000000000000002D0BA3164cc74f58B7",
+    reserveId: 2,
+    coingeckoId: "alphabet-coinbase-tokenized-stock",
+  },
+  {
+    symbol: "METAc",
+    name: "Meta",
+    address: "0xb2000000000000000000008bC8786B856E61707C",
+    reserveId: 3,
+    coingeckoId: "meta-coinbase-tokenized-stock",
+  },
+  {
+    symbol: "MSFTc",
+    name: "Microsoft",
+    address: "0xB200000000000000000000Ab99cFa739E253872B",
+    reserveId: 4,
+    coingeckoId: "microsoft-coinbase-tokenized-stock",
+  },
+  {
+    symbol: "NVDAc",
+    name: "NVIDIA",
+    address: "0xb20000000000000000000078ee7ce2fE4908108C",
+    reserveId: 5,
+    coingeckoId: "nvidia-coinbase-tokenized-stock",
+  },
+  {
+    symbol: "TSLAc",
+    name: "Tesla",
+    address: "0xb2000000000000000000001e800a7f5189430cD0",
+    reserveId: 6,
+    coingeckoId: "tesla-coinbase-tokenized-stocks",
+  },
+].map((a) => ({
+  ...a,
+  address: a.address as `0x${string}`,
+  decimals: 8,
+  chainId: CHAIN_ID,
+  kind: "equity",
+  enabled: true,
+})) satisfies ReserveAsset[];
 
 export const USDC: ReserveAsset = {
   symbol: "USDC",

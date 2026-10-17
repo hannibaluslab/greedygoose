@@ -22,9 +22,12 @@ export type CoinRow = {
 };
 
 export async function fetchCoinMarkets(ids: readonly string[]): Promise<CoinRow[]> {
-  const res = await fetch(`${API}/coins/markets?vs_currency=usd&ids=${ids.map(encodeURIComponent).join(",")}&sparkline=true`, {
-    headers: { accept: "application/json" },
-  });
+  const res = await fetch(
+    `${API}/coins/markets?vs_currency=usd&ids=${ids.map(encodeURIComponent).join(",")}&sparkline=true`,
+    {
+      headers: { accept: "application/json" },
+    },
+  );
   if (!res.ok) throw new Error(`CoinGecko request failed (${res.status})`);
   const rows: unknown = await res.json();
   if (!Array.isArray(rows)) throw new Error("CoinGecko answered without a list");
@@ -39,7 +42,9 @@ export function fromCoinRow(row: CoinRow): MarketData | null {
   const price = row.current_price;
   const change = row.price_change_percentage_24h;
   if (typeof price !== "number" || typeof change !== "number") return null;
-  const hourly = (row.sparkline_in_7d?.price ?? []).filter((p): p is number => typeof p === "number" && Number.isFinite(p) && p > 0);
+  const hourly = (row.sparkline_in_7d?.price ?? []).filter(
+    (p): p is number => typeof p === "number" && Number.isFinite(p) && p > 0,
+  );
   const week = [...hourly, price];
   return { price, change: change / 100, day: week.slice(-25), week };
 }

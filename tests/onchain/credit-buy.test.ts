@@ -5,7 +5,15 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  createPublicClient, decodeFunctionResult, encodeAbiParameters, encodeFunctionData, erc20Abi, http, keccak256, parseUnits, zeroHash,
+  createPublicClient,
+  decodeFunctionResult,
+  encodeAbiParameters,
+  encodeFunctionData,
+  erc20Abi,
+  http,
+  keccak256,
+  parseUnits,
+  zeroHash,
   type StateOverride,
 } from "viem";
 import { CHAIN } from "@/lib/chain";
@@ -20,7 +28,16 @@ import { buildLoanCalls } from "@/lib/aave/tx";
 import { swapOf } from "@/lib/allowlist";
 import type { Cash } from "@/lib/cash";
 import {
-  CREDIT_BLOCKED, backingOptions, backingRaw, buildCreditBuyCalls, freeShownUsd, isAllFree, planCredit, splitCash, type BackingOption, type CreditPlan,
+  CREDIT_BLOCKED,
+  backingOptions,
+  backingRaw,
+  buildCreditBuyCalls,
+  freeShownUsd,
+  isAllFree,
+  planCredit,
+  splitCash,
+  type BackingOption,
+  type CreditPlan,
   type CreditPosition,
 } from "@/lib/creditBuy";
 import { creditBuyPlan } from "@/hooks/useCreditBuy";
@@ -31,7 +48,11 @@ import { buildBuyCalls, minOut, quoteBuy, quotePool, signingQuote, type BuyQuote
 import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
 
 type Address = `0x${string}`;
-const client = createPublicClient({ chain: CHAIN, transport: http(process.env.NEXT_PUBLIC_BASE_RPC_URL), batch: { multicall: true } });
+const client = createPublicClient({
+  chain: CHAIN,
+  transport: http(process.env.NEXT_PUBLIC_BASE_RPC_URL),
+  batch: { multicall: true },
+});
 /** Already backs credit: a real Equities Hub borrower with stock collateral and savings (as in flows.test.ts). */
 const backer: Address = "0x2b8ce2c87c166d8e24e186e7e4253c11fc805427";
 /** Holds all 7 stocks and USDC but backs no credit (found via NVIDIA's Transfer logs, 2026-10-15; 0xcd15…266b, the one before, sold all its stock that day). */
@@ -44,8 +65,18 @@ const usd = (n: number) => parseUnits(n.toFixed(6), 6);
 async function live(user: Address) {
   const [account, liquidity, usdcCfg, walletRaw, savingsRaw] = await Promise.all([
     client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserAccountData", args: [user] }),
-    client.readContract({ address: AAVE.HUB, abi: hubAbi, functionName: "getAssetLiquidity", args: [BigInt(USDC.reserveId)] }),
-    client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getReserveConfig", args: [BigInt(USDC.reserveId)] }),
+    client.readContract({
+      address: AAVE.HUB,
+      abi: hubAbi,
+      functionName: "getAssetLiquidity",
+      args: [BigInt(USDC.reserveId)],
+    }),
+    client.readContract({
+      address: AAVE.SPOKE,
+      abi: spokeAbi,
+      functionName: "getReserveConfig",
+      args: [BigInt(USDC.reserveId)],
+    }),
     client.readContract({ address: USDC.address, abi: erc20Abi, functionName: "balanceOf", args: [user] }),
     client.readContract({ address: GUARDIAN.AUSDC, abi: erc20Abi, functionName: "balanceOf", args: [user] }),
   ]);
@@ -60,13 +91,30 @@ async function live(user: Address) {
       const id = BigInt(e.reserveId);
       const [freeRaw, price, cfg, reserve] = await Promise.all([
         client.readContract({ address: e.address, abi: erc20Abi, functionName: "balanceOf", args: [user] }),
-        client.readContract({ address: AAVE.SPOKE_ORACLE, abi: aaveOracleAbi, functionName: "getReservePrice", args: [id] }),
+        client.readContract({
+          address: AAVE.SPOKE_ORACLE,
+          abi: aaveOracleAbi,
+          functionName: "getReservePrice",
+          args: [id],
+        }),
         client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getReserveConfig", args: [id] }),
         client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getReserve", args: [id] }),
       ]);
-      const dyn = await client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getDynamicReserveConfig", args: [id, reserve.dynamicConfigKey] });
+      const dyn = await client.readContract({
+        address: AAVE.SPOKE,
+        abi: spokeAbi,
+        functionName: "getDynamicReserveConfig",
+        args: [id, reserve.dynamicConfigKey],
+      });
       const freeUsd = (Number(freeRaw) / 10 ** e.decimals) * priceToUsd(price);
-      return { symbol: e.symbol, freeRaw, freeUsd, paused: cfg.paused, frozen: cfg.frozen, cf: dyn.collateralFactor / 10_000 };
+      return {
+        symbol: e.symbol,
+        freeRaw,
+        freeUsd,
+        paused: cfg.paused,
+        frozen: cfg.frozen,
+        cf: dyn.collateralFactor / 10_000,
+      };
     }),
   );
   const cfs = Object.fromEntries(holdings.map((h) => [h.symbol, h.cf]));
@@ -85,25 +133,46 @@ async function quoteToSign(stock: ReserveAsset, amountIn: bigint): Promise<BuyQu
 }
 
 const read = (to: Address, data: Address) => ({ to, data });
-const balanceRead = (token: Address, user: Address) => read(token, encodeFunctionData({ abi: erc20Abi, functionName: "balanceOf", args: [user] }));
+const balanceRead = (token: Address, user: Address) =>
+  read(token, encodeFunctionData({ abi: erc20Abi, functionName: "balanceOf", args: [user] }));
 const debtRead = (user: Address) =>
-  read(AAVE.SPOKE, encodeFunctionData({ abi: spokeAbi, functionName: "getUserTotalDebt", args: [BigInt(USDC.reserveId), user] }));
-const accountRead = (user: Address) => read(AAVE.SPOKE, encodeFunctionData({ abi: spokeAbi, functionName: "getUserAccountData", args: [user] }));
+  read(
+    AAVE.SPOKE,
+    encodeFunctionData({ abi: spokeAbi, functionName: "getUserTotalDebt", args: [BigInt(USDC.reserveId), user] }),
+  );
+const accountRead = (user: Address) =>
+  read(AAVE.SPOKE, encodeFunctionData({ abi: spokeAbi, functionName: "getUserAccountData", args: [user] }));
 
 /** FiatTokenV2_2 keeps balances in the mapping at slot 9 (checked in flows.test.ts): this empties the wallet. */
 const emptyWallet = (user: Address): StateOverride => [
-  { address: USDC.address, stateDiff: [{ slot: keccak256(encodeAbiParameters([{ type: "address" }, { type: "uint256" }], [user, 9n])), value: zeroHash }] },
+  {
+    address: USDC.address,
+    stateDiff: [
+      { slot: keccak256(encodeAbiParameters([{ type: "address" }, { type: "uint256" }], [user, 9n])), value: zeroHash },
+    ],
+  },
 ];
 
 /** Simulates the batch, then reads the stock bought, the debt, the wallet's USDC and the account's health after it. */
-async function simulateCreditBuy(user: Address, stock: ReserveAsset, calls: { to: Address; data: Address }[], stateOverrides?: StateOverride) {
+async function simulateCreditBuy(
+  user: Address,
+  stock: ReserveAsset,
+  calls: { to: Address; data: Address }[],
+  stateOverrides?: StateOverride,
+) {
   const reads = [balanceRead(stock.address, user), debtRead(user), balanceRead(USDC.address, user), accountRead(user)];
   const before = await client.simulateCalls({ account: user, calls: reads, stateOverrides });
-  const r = await client.simulateCalls({ account: user, calls: [...calls, ...reads].map(({ to, data }) => ({ to, data })), stateOverrides });
+  const r = await client.simulateCalls({
+    account: user,
+    calls: [...calls, ...reads].map(({ to, data }) => ({ to, data })),
+    stateOverrides,
+  });
   const after = r.results.slice(calls.length);
-  const uint = (x: { data: Address }) => decodeFunctionResult({ abi: erc20Abi, functionName: "balanceOf", data: x.data });
+  const uint = (x: { data: Address }) =>
+    decodeFunctionResult({ abi: erc20Abi, functionName: "balanceOf", data: x.data });
   const hf = (x: { data: Address }) =>
-    summarize(decodeFunctionResult({ abi: spokeAbi, functionName: "getUserAccountData", data: x.data }) as AccountData).healthFactor;
+    summarize(decodeFunctionResult({ abi: spokeAbi, functionName: "getUserAccountData", data: x.data }) as AccountData)
+      .healthFactor;
   return {
     statuses: r.results.slice(0, calls.length).map((x) => x.status),
     results: r.results,
@@ -129,10 +198,20 @@ describe("Credit Buy batches simulate on mainnet", () => {
     expect(plan.backing.length).toBeGreaterThan(0);
 
     const quote = await quoteToSign(aapl, creditRaw);
-    const calls = buildCreditBuyCalls({ user: newcomer, stock: aapl, quote, creditRaw: plan.creditRaw, backing: plan.backing, limit: plan.limit, cash });
+    const calls = buildCreditBuyCalls({
+      user: newcomer,
+      stock: aapl,
+      quote,
+      creditRaw: plan.creditRaw,
+      backing: plan.backing,
+      limit: plan.limit,
+      cash,
+    });
     expect(calls).toHaveLength(plan.backing.length * 3 + 3);
     const r = await simulateCreditBuy(newcomer, aapl, calls);
-    console.log(`first-time: backing ${plan.backing.map((b) => `${b.stock.symbol} $${b.usd.toFixed(2)}`).join(", ")}; HF after ${r.hfAfter?.toFixed(3)} (planned ${plan.hfAfter.toFixed(3)})`);
+    console.log(
+      `first-time: backing ${plan.backing.map((b) => `${b.stock.symbol} $${b.usd.toFixed(2)}`).join(", ")}; HF after ${r.hfAfter?.toFixed(3)} (planned ${plan.hfAfter.toFixed(3)})`,
+    );
     expect(r.statuses.every((s) => s === "success")).toBe(true);
     expect(r.debtAdded).toBeGreaterThanOrEqual(creditRaw);
     expect(r.debtAdded).toBeLessThan(creditRaw + 10n);
@@ -153,7 +232,15 @@ describe("Credit Buy batches simulate on mainnet", () => {
     expect(plan.backing.map((b) => b.stock.symbol)).toEqual([picked.stock.symbol]);
 
     const quote = await quoteToSign(aapl, creditRaw);
-    const calls = buildCreditBuyCalls({ user: newcomer, stock: aapl, quote, creditRaw: plan.creditRaw, backing: plan.backing, limit: plan.limit, cash });
+    const calls = buildCreditBuyCalls({
+      user: newcomer,
+      stock: aapl,
+      quote,
+      creditRaw: plan.creditRaw,
+      backing: plan.backing,
+      limit: plan.limit,
+      cash,
+    });
     const r = await simulateCreditBuy(newcomer, aapl, calls);
     expect(r.statuses.every((s) => s === "success")).toBe(true);
     expect(r.debtAdded).toBeGreaterThanOrEqual(creditRaw);
@@ -177,16 +264,37 @@ describe("Credit Buy batches simulate on mainnet", () => {
     expect(plan.block).toBeUndefined();
     // Step 2's "You can use up to" is step 4's "Up to", and it grew with the backing.
     expect(plan.maxUsd).toBe(room.maxUsd);
-    expect(room.maxUsd).toBeGreaterThan(planCredit({ position, backing: { option: null, raw: 0n }, creditRaw: 0n, cash }).maxUsd);
+    expect(room.maxUsd).toBeGreaterThan(
+      planCredit({ position, backing: { option: null, raw: 0n }, creditRaw: 0n, cash }).maxUsd,
+    );
     expect(plan.backing).toEqual([{ stock: option.stock, raw, usd: expect.any(Number) }]);
 
     const quote = await quoteToSign(aapl, creditRaw);
-    const calls = buildCreditBuyCalls({ user: backer, stock: aapl, quote, creditRaw, backing: plan.backing, limit: plan.limit, cash });
-    const freeBefore = await client.readContract({ address: option.stock.address, abi: erc20Abi, functionName: "balanceOf", args: [backer] });
+    const calls = buildCreditBuyCalls({
+      user: backer,
+      stock: aapl,
+      quote,
+      creditRaw,
+      backing: plan.backing,
+      limit: plan.limit,
+      cash,
+    });
+    const freeBefore = await client.readContract({
+      address: option.stock.address,
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      args: [backer],
+    });
     const r = await simulateCreditBuy(backer, aapl, [...calls, balanceRead(option.stock.address, backer)]);
     expect(r.statuses.every((x) => x === "success")).toBe(true);
-    const freeAfter = decodeFunctionResult({ abi: erc20Abi, functionName: "balanceOf", data: r.results[calls.length].data });
-    console.log(`backing first: ${option.stock.symbol} $${typedUsd} in use (${raw} raw), up to $${room.maxUsd}; HF after ${r.hfAfter?.toFixed(3)} (planned ${plan.hfAfter.toFixed(3)})`);
+    const freeAfter = decodeFunctionResult({
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      data: r.results[calls.length].data,
+    });
+    console.log(
+      `backing first: ${option.stock.symbol} $${typedUsd} in use (${raw} raw), up to $${room.maxUsd}; HF after ${r.hfAfter?.toFixed(3)} (planned ${plan.hfAfter.toFixed(3)})`,
+    );
     // Exactly the typed backing left the wallet: not the planner's auto amount.
     expect(freeBefore - freeAfter).toBe(raw);
     expect(r.debtAdded).toBeGreaterThanOrEqual(creditRaw);
@@ -204,38 +312,66 @@ describe("Credit Buy batches simulate on mainnet", () => {
     // $20 of NVIDIA at its collateral factor, over the cap's line (1.12): nothing else backs this account's credit.
     expect(room.maxUsd).toBeLessThanOrEqual((20 * option.cf) / CREDIT_CAP.minHf);
     expect(room.maxUsd).toBeGreaterThan((20 * option.cf) / CREDIT_CAP.minHf - 0.02);
-    expect(planCredit({ position, backing: { option, raw }, creditRaw: usd(room.maxUsd + 0.01), cash }).block).toBe("too-much");
+    expect(planCredit({ position, backing: { option, raw }, creditRaw: usd(room.maxUsd + 0.01), cash }).block).toBe(
+      "too-much",
+    );
 
     const creditRaw = usd(5);
     const plan = planCredit({ position, backing: { option, raw }, creditRaw, cash });
     expect(plan.block).toBeUndefined();
     expect(plan.after).toBe("safe");
     const quote = await quoteToSign(aapl, creditRaw);
-    const calls = buildCreditBuyCalls({ user: newcomer, stock: aapl, quote, creditRaw, backing: plan.backing, limit: plan.limit, cash });
+    const calls = buildCreditBuyCalls({
+      user: newcomer,
+      stock: aapl,
+      quote,
+      creditRaw,
+      backing: plan.backing,
+      limit: plan.limit,
+      cash,
+    });
     const r = await simulateCreditBuy(newcomer, aapl, [...calls, balanceRead(option.stock.address, newcomer)]);
     expect(r.statuses.every((x) => x === "success")).toBe(true);
-    const freeAfter = decodeFunctionResult({ abi: erc20Abi, functionName: "balanceOf", data: r.results[calls.length].data });
+    const freeAfter = decodeFunctionResult({
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      data: r.results[calls.length].data,
+    });
     expect(option.freeRaw - freeAfter).toBe(raw);
     expect(r.hfAfter!).toBeCloseTo(plan.hfAfter, 1);
   });
 
   it("backing first with MAX: all the free shares go in use, and none are left behind", async () => {
     const { position, options, cash } = await live(backer);
-    const option: BackingOption = [...options].filter((o) => o.stock.symbol !== aapl.symbol).sort((a, b) => b.freeUsd - a.freeUsd)[0];
+    const option: BackingOption = [...options]
+      .filter((o) => o.stock.symbol !== aapl.symbol)
+      .sort((a, b) => b.freeUsd - a.freeUsd)[0];
     expect(option).toBeDefined();
     const creditRaw = usd(5);
     const plan = planCredit({ position, backing: { option, raw: option.freeRaw }, creditRaw, cash });
     expect(plan.block).toBeUndefined();
     const quote = await quoteToSign(aapl, creditRaw);
-    const calls = buildCreditBuyCalls({ user: backer, stock: aapl, quote, creditRaw, backing: plan.backing, limit: plan.limit, cash });
+    const calls = buildCreditBuyCalls({
+      user: backer,
+      stock: aapl,
+      quote,
+      creditRaw,
+      backing: plan.backing,
+      limit: plan.limit,
+      cash,
+    });
     const r = await simulateCreditBuy(backer, aapl, [...calls, balanceRead(option.stock.address, backer)]);
     expect(r.statuses.every((x) => x === "success")).toBe(true);
-    expect(decodeFunctionResult({ abi: erc20Abi, functionName: "balanceOf", data: r.results[calls.length].data })).toBe(0n);
+    expect(decodeFunctionResult({ abi: erc20Abi, functionName: "balanceOf", data: r.results[calls.length].data })).toBe(
+      0n,
+    );
   });
 
   it("backing first with the free value typed by hand (MAX's figure): it's all of it, and none are left behind", async () => {
     const { position, options, cash } = await live(backer);
-    const option: BackingOption = [...options].filter((o) => o.stock.symbol !== aapl.symbol).sort((a, b) => b.freeUsd - a.freeUsd)[0];
+    const option: BackingOption = [...options]
+      .filter((o) => o.stock.symbol !== aapl.symbol)
+      .sort((a, b) => b.freeUsd - a.freeUsd)[0];
     expect(option).toBeDefined();
     const typedUsd = freeShownUsd(option);
     expect(isAllFree(option, typedUsd)).toBe(true);
@@ -245,10 +381,20 @@ describe("Credit Buy batches simulate on mainnet", () => {
     const plan = planCredit({ position, backing: { option, raw }, creditRaw, cash });
     expect(plan.block).toBeUndefined();
     const quote = await quoteToSign(aapl, creditRaw);
-    const calls = buildCreditBuyCalls({ user: backer, stock: aapl, quote, creditRaw, backing: plan.backing, limit: plan.limit, cash });
+    const calls = buildCreditBuyCalls({
+      user: backer,
+      stock: aapl,
+      quote,
+      creditRaw,
+      backing: plan.backing,
+      limit: plan.limit,
+      cash,
+    });
     const r = await simulateCreditBuy(backer, aapl, [...calls, balanceRead(option.stock.address, backer)]);
     expect(r.statuses.every((x) => x === "success")).toBe(true);
-    expect(decodeFunctionResult({ abi: erc20Abi, functionName: "balanceOf", data: r.results[calls.length].data })).toBe(0n);
+    expect(decodeFunctionResult({ abi: erc20Abi, functionName: "balanceOf", data: r.results[calls.length].data })).toBe(
+      0n,
+    );
   });
 
   it("backing first with nothing new: only what already backs credit, take credit → approve → swap", async () => {
@@ -257,7 +403,15 @@ describe("Credit Buy batches simulate on mainnet", () => {
     expect(plan.block).toBeUndefined();
     expect(plan.backing).toEqual([]);
     const quote = await quoteToSign(aapl, usd(5));
-    const calls = buildCreditBuyCalls({ user: backer, stock: aapl, quote, creditRaw: usd(5), backing: plan.backing, limit: plan.limit, cash });
+    const calls = buildCreditBuyCalls({
+      user: backer,
+      stock: aapl,
+      quote,
+      creditRaw: usd(5),
+      backing: plan.backing,
+      limit: plan.limit,
+      cash,
+    });
     expect(calls.map((c) => c.to)).toEqual([AAVE.SPOKE, USDC.address, swapOf(calls[2])!.router]);
     const r = await simulateCreditBuy(backer, aapl, calls);
     expect(r.statuses).toEqual(["success", "success", "success"]);
@@ -272,7 +426,15 @@ describe("Credit Buy batches simulate on mainnet", () => {
     expect(plan.backing).toEqual([]);
 
     const quote = await quoteToSign(aapl, creditRaw);
-    const calls = buildCreditBuyCalls({ user: backer, stock: aapl, quote, creditRaw, backing: plan.backing, limit: plan.limit, cash });
+    const calls = buildCreditBuyCalls({
+      user: backer,
+      stock: aapl,
+      quote,
+      creditRaw,
+      backing: plan.backing,
+      limit: plan.limit,
+      cash,
+    });
     expect(calls.map((c) => c.to)).toEqual([AAVE.SPOKE, USDC.address, swapOf(calls[2])!.router]);
     const r = await simulateCreditBuy(backer, aapl, calls);
     expect(r.statuses).toEqual(["success", "success", "success"]);
@@ -288,7 +450,15 @@ describe("Credit Buy batches simulate on mainnet", () => {
     const creditRaw = usd(5);
     const plan = planCredit({ position, options, creditRaw, cash });
     const quote = await quoteToSign(aapl, creditRaw);
-    const calls = buildCreditBuyCalls({ user: backer, stock: aapl, quote, creditRaw, backing: plan.backing, limit: plan.limit, cash });
+    const calls = buildCreditBuyCalls({
+      user: backer,
+      stock: aapl,
+      quote,
+      creditRaw,
+      backing: plan.backing,
+      limit: plan.limit,
+      cash,
+    });
     expect(calls.map((c) => c.to)).toEqual([GUARDIAN.AAVE_V3_POOL, AAVE.SPOKE, USDC.address, swapOf(calls[3])!.router]);
     const r = await simulateCreditBuy(backer, aapl, calls, emptyWallet(backer));
     expect(r.statuses).toEqual(["success", "success", "success", "success"]);
@@ -306,7 +476,15 @@ describe("Credit Buy batches simulate on mainnet", () => {
     expect(plan.block).toBeUndefined();
 
     const quote = await quoteToSign(aapl, amountIn);
-    const calls = buildCreditBuyCalls({ user: backer, stock: aapl, quote, creditRaw, backing: plan.backing, limit: plan.limit, cash });
+    const calls = buildCreditBuyCalls({
+      user: backer,
+      stock: aapl,
+      quote,
+      creditRaw,
+      backing: plan.backing,
+      limit: plan.limit,
+      cash,
+    });
     expect(calls.map((c) => c.to)).toEqual([GUARDIAN.AAVE_V3_POOL, AAVE.SPOKE, USDC.address, swapOf(calls[3])!.router]);
     expect(swapAmountIn(calls)).toBe(cashRaw + creditRaw);
     const r = await simulateCreditBuy(backer, aapl, calls, emptyWallet(backer));
@@ -326,10 +504,23 @@ describe("Credit Buy batches simulate on mainnet", () => {
     const plan = planCredit({ position, options, creditRaw, cash });
     expect(plan.backing.length).toBeGreaterThan(0);
     const quote = await quoteToSign(aapl, amountIn);
-    const calls = buildCreditBuyCalls({ user: newcomer, stock: aapl, quote, creditRaw, backing: plan.backing, limit: plan.limit, cash });
+    const calls = buildCreditBuyCalls({
+      user: newcomer,
+      stock: aapl,
+      quote,
+      creditRaw,
+      backing: plan.backing,
+      limit: plan.limit,
+      cash,
+    });
     expect(swapAmountIn(calls)).toBe(cashRaw + creditRaw);
     const walletSlot = keccak256(encodeAbiParameters([{ type: "address" }, { type: "uint256" }], [newcomer, 9n]));
-    const threeDollars = [{ address: USDC.address, stateDiff: [{ slot: walletSlot, value: encodeAbiParameters([{ type: "uint256" }], [usd(3)]) }] }];
+    const threeDollars = [
+      {
+        address: USDC.address,
+        stateDiff: [{ slot: walletSlot, value: encodeAbiParameters([{ type: "uint256" }], [usd(3)]) }],
+      },
+    ];
     const r = await simulateCreditBuy(newcomer, aapl, calls, threeDollars);
     expect(r.statuses.every((s) => s === "success")).toBe(true);
     expect(r.walletAfter).toBe(feeBuffer);
@@ -342,7 +533,10 @@ describe("the swap leg on Base", () => {
     const amountIn = usd(1);
     const nvda = EQUITIES.find((e) => e.symbol === "NVDAc")!;
     const quote = await quotePool(client, nvda, "uniswap", 3000, amountIn);
-    const r = await client.simulateCalls({ account: backer, calls: buildBuyCalls({ user: backer, stock: nvda, quote }).map(({ to, data }) => ({ to, data })) });
+    const r = await client.simulateCalls({
+      account: backer,
+      calls: buildBuyCalls({ user: backer, stock: nvda, quote }).map(({ to, data }) => ({ to, data })),
+    });
     expect(r.results.map((x) => x.status)).toEqual(["success", "success"]);
   });
 
@@ -350,14 +544,22 @@ describe("the swap leg on Base", () => {
     const amountIn = usd(1);
     const nvda = EQUITIES.find((e) => e.symbol === "NVDAc")!;
     const uni = await quotePool(client, nvda, "uniswap", 3000, amountIn);
-    const late = buildBuyCalls({ user: backer, stock: nvda, quote: uni, nowSec: Math.floor(Date.now() / 1000) - 3_600 });
-    const tooLate = (await client.simulateCalls({ account: backer, calls: late.map(({ to, data }) => ({ to, data })) })).results[1];
+    const late = buildBuyCalls({
+      user: backer,
+      stock: nvda,
+      quote: uni,
+      nowSec: Math.floor(Date.now() / 1000) - 3_600,
+    });
+    const tooLate = (await client.simulateCalls({ account: backer, calls: late.map(({ to, data }) => ({ to, data })) }))
+      .results[1];
     expect(tooLate.status).toBe("failure");
     expect(explainRevert(tooLate.data, "fallback", late[1])).toMatch(/took too long/);
 
     const aero = await quotePool(client, nvda, "aerodrome", 10, amountIn);
     const greedy = buildBuyCalls({ user: backer, stock: nvda, quote: { ...aero, amountOut: aero.amountOut * 2n } });
-    const tooLittle = (await client.simulateCalls({ account: backer, calls: greedy.map(({ to, data }) => ({ to, data })) })).results[1];
+    const tooLittle = (
+      await client.simulateCalls({ account: backer, calls: greedy.map(({ to, data }) => ({ to, data })) })
+    ).results[1];
     expect(tooLittle.status).toBe("failure");
     expect(explainRevert(tooLittle.data, "fallback", greedy[1])).toMatch(/price moved more than 1%/);
   });
@@ -382,14 +584,20 @@ describe("Act is the line on Base (Adrian, 2026-10-15)", () => {
     expect(planCredit({ position, backing: pick, creditRaw: usd(oldMax), cash }).block).toBe("act");
 
     const healthWith = async (creditUsd: number) => {
-      const calls = buildLoanCalls({ user: newcomer, locks: [{ stock: option.stock, raw }], borrowRaw: usd(creditUsd) });
+      const calls = buildLoanCalls({
+        user: newcomer,
+        locks: [{ stock: option.stock, raw }],
+        borrowRaw: usd(creditUsd),
+      });
       const r = await client.simulateCalls({ account: newcomer, calls: [...calls, accountRead(newcomer)] });
       expect(r.results.map((x) => x.status).every((x) => x === "success")).toBe(true);
       return positionAfter(r.results[calls.length].data, position).healthFactor!;
     };
     const old = await healthWith(oldMax);
     const capped = await healthWith(cap);
-    console.log(`$20 of NVIDIA: old MAX $${oldMax} → health ${old.toFixed(4)}; cap $${cap} → health ${capped.toFixed(4)}`);
+    console.log(
+      `$20 of NVIDIA: old MAX $${oldMax} → health ${old.toFixed(4)}; cap $${cap} → health ${capped.toFixed(4)}`,
+    );
     expect(statusFor(old)).toBe("act");
     expect(statusFor(capped)).toBe("watch");
     expect(capped).toBeGreaterThanOrEqual(CREDIT_CAP.minHf - 0.002);
@@ -406,15 +614,32 @@ describe("Act is the line on Base (Adrian, 2026-10-15)", () => {
     // As useTx checks a batch: eth_simulateV1 from the account, with Aave's health read after it.
     const deps: CheckDeps = {
       join: async (_u, batch) => batch,
-      simulate: async (u, batch) => (await client.simulateCalls({ account: u, calls: batch.map(({ to, data }) => ({ to, data })) })).results,
+      simulate: async (u, batch) =>
+        (await client.simulateCalls({ account: u, calls: batch.map(({ to, data }) => ({ to, data })) })).results,
       explain: explainRevert,
     };
     // A Credit Buy planned on a stale reading (its screen thought the old MAX ended in Watch): Aave's health stops it.
     const shown = planCredit({ position, backing: pick, creditRaw: usd(oldMax), cash });
-    const stale: CreditPlan = { ...shown, block: undefined, after: "watch", extraConfirm: true, limit: { ...shown.limit, maxCreditRaw: usd(oldMax) } };
+    const stale: CreditPlan = {
+      ...shown,
+      block: undefined,
+      after: "watch",
+      extraConfirm: true,
+      limit: { ...shown.limit, maxCreditRaw: usd(oldMax) },
+    };
     const quote = await quoteToSign(option.stock, stale.creditRaw);
-    const buy = creditBuyPlan({ user: newcomer, stock: option.stock, quote, plan: stale, confirmedRisk: true }, async (p) =>
-      buildCreditBuyCalls({ user: p.user, stock: p.stock, quote: p.quote, creditRaw: p.plan.creditRaw, backing: p.plan.backing, limit: p.plan.limit, cash }),
+    const buy = creditBuyPlan(
+      { user: newcomer, stock: option.stock, quote, plan: stale, confirmedRisk: true },
+      async (p) =>
+        buildCreditBuyCalls({
+          user: p.user,
+          stock: p.stock,
+          quote: p.quote,
+          creditRaw: p.plan.creditRaw,
+          backing: p.plan.backing,
+          limit: p.plan.limit,
+          cash,
+        }),
     );
     expect(await checkPlan(buy, deps)).toEqual({ ok: false, error: CREDIT_BLOCKED.act, blocks: true });
   });
@@ -431,7 +656,15 @@ describe("Act is the line on Base (Adrian, 2026-10-15)", () => {
     const plan1 = planCredit({ position, backing: pick1, creditRaw: usd(max1), cash });
     expect(plan1).toMatchObject({ after: "watch", block: undefined, extraConfirm: true });
     const quote1 = await quoteToSign(nvda, plan1.creditRaw);
-    const calls1 = buildCreditBuyCalls({ user: newcomer, stock: nvda, quote: quote1, creditRaw: plan1.creditRaw, backing: plan1.backing, limit: plan1.limit, cash });
+    const calls1 = buildCreditBuyCalls({
+      user: newcomer,
+      stock: nvda,
+      quote: quote1,
+      creditRaw: plan1.creditRaw,
+      backing: plan1.backing,
+      limit: plan1.limit,
+      cash,
+    });
     const r1 = await simulateCreditBuy(newcomer, nvda, calls1);
     expect(r1.statuses.every((x) => x === "success")).toBe(true);
     expect(statusFor(r1.hfAfter)).toBe("watch");
@@ -442,16 +675,31 @@ describe("Act is the line on Base (Adrian, 2026-10-15)", () => {
     // The wallet's NVIDIA moved by what was bought less what went in use (the same stock).
     const boughtRaw = r1.stockIn + pick1.raw;
     expect(boughtRaw).toBeGreaterThanOrEqual(minOut(quote1.amountOut));
-    const bought: BackingOption = { stock: nvda, freeRaw: boughtRaw, freeUsd: Number(boughtRaw) * usdPerRaw, cf: option.cf };
+    const bought: BackingOption = {
+      stock: nvda,
+      freeRaw: boughtRaw,
+      freeUsd: Number(boughtRaw) * usdPerRaw,
+      cf: option.cf,
+    };
     const pick2 = { option: bought, raw: bought.freeRaw };
     const max2 = planCredit({ position: after1, backing: pick2, creditRaw: 0n, cash }).maxUsd;
     expect(max2).toBeLessThan(max1); // each round is about cf ÷ 1.12 of the last
     expect(max2).toBeGreaterThanOrEqual(1);
     const plan2 = planCredit({ position: after1, backing: pick2, creditRaw: usd(max2), cash });
     expect(plan2).toMatchObject({ after: "watch", block: undefined });
-    expect(planCredit({ position: after1, backing: pick2, creditRaw: usd(max2 * 1.05), cash }).block).toMatch(/too-much|act/);
+    expect(planCredit({ position: after1, backing: pick2, creditRaw: usd(max2 * 1.05), cash }).block).toMatch(
+      /too-much|act/,
+    );
     const quote2 = await quoteToSign(nvda, plan2.creditRaw);
-    const calls2 = buildCreditBuyCalls({ user: newcomer, stock: nvda, quote: quote2, creditRaw: plan2.creditRaw, backing: plan2.backing, limit: plan2.limit, cash });
+    const calls2 = buildCreditBuyCalls({
+      user: newcomer,
+      stock: nvda,
+      quote: quote2,
+      creditRaw: plan2.creditRaw,
+      backing: plan2.backing,
+      limit: plan2.limit,
+      cash,
+    });
     const r2 = await simulateCreditBuy(newcomer, nvda, [...calls1, ...calls2]);
     console.log(`leverage loop: $${max1} then $${max2}; health ${r1.hfAfter?.toFixed(4)} → ${r2.hfAfter?.toFixed(4)}`);
     expect(r2.statuses.every((x) => x === "success")).toBe(true);

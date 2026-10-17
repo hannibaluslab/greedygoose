@@ -17,7 +17,13 @@ import {
 import { JOBS, type AgentJob } from "@/lib/agents/permissions";
 import type { AgentStatus } from "@/lib/agents/status";
 
-const jobs = (s: AgentStatus): Record<AgentJob, AgentStatus> => ({ save: s, protect: s, sell: s, rebalance: s, entry: s });
+const jobs = (s: AgentStatus): Record<AgentJob, AgentStatus> => ({
+  save: s,
+  protect: s,
+  sell: s,
+  rebalance: s,
+  entry: s,
+});
 const none = Object.fromEntries(JOBS.map((j) => [j, null])) as Record<AgentJob, null>;
 const idle = (idle: string): Next => ({ idle });
 const repays: Next = { will: "repays $40 from your cash", would: "Would repay $40 from your cash" };
@@ -49,9 +55,15 @@ describe("the two agents", () => {
   });
 
   it("starts each on its limit, reading as a limit, and shows the grant's once it has one", () => {
-    expect(agentItems({ status: jobs("off"), capRaw: none, next: nexts }).map((i) => i.limit)).toEqual(["Limit $100 a day", "Limit $100 a week"]);
+    expect(agentItems({ status: jobs("off"), capRaw: none, next: nexts }).map((i) => i.limit)).toEqual([
+      "Limit $100 a day",
+      "Limit $100 a week",
+    ]);
     const capRaw = { ...none, protect: 25_000_000n, rebalance: 1_234_000_000n };
-    expect(agentItems({ status: jobs("on"), capRaw, next: nexts }).map((i) => i.limit)).toEqual(["Limit $25 a day", "Limit $1,234 a week"]);
+    expect(agentItems({ status: jobs("on"), capRaw, next: nexts }).map((i) => i.limit)).toEqual([
+      "Limit $25 a day",
+      "Limit $1,234 a week",
+    ]);
   });
 
   it("leaves earning and converting other dollars off the tab: no agent runs them, and turning all off spares them (D20)", () => {
@@ -90,7 +102,13 @@ describe("agentCards: only when something needs the user", () => {
     headsUp: null,
     weekend: null,
     status: jobs("on"),
-    ends: { save: NOW + 200 * DAY, protect: NOW + 200 * DAY, sell: NOW + 200 * DAY, rebalance: NOW + 200 * DAY, entry: NOW + 200 * DAY },
+    ends: {
+      save: NOW + 200 * DAY,
+      protect: NOW + 200 * DAY,
+      sell: NOW + 200 * DAY,
+      rebalance: NOW + 200 * DAY,
+      entry: NOW + 200 * DAY,
+    },
     stopped: none,
     fails: 0,
     cooldownUntil: 0,
@@ -102,7 +120,11 @@ describe("agentCards: only when something needs the user", () => {
 
   it("says the heads-up in one sentence, with Add cash and Repay: it only comes in Act", () => {
     const [c] = agentCards({ ...calm, headsUp: { addUsd: 120, sellUsd: 180, when: "at 3:42 PM" } });
-    expect(c).toMatchObject({ tone: "act", agent: "Protect", text: "Your credit hit Act. Add $120, or Protect sells $180 at 3:42 PM." });
+    expect(c).toMatchObject({
+      tone: "act",
+      agent: "Protect",
+      text: "Your credit hit Act. Add $120, or Protect sells $180 at 3:42 PM.",
+    });
     expect(c.actions).toEqual([
       { kind: "sheet", label: "Add cash", sheet: "top-up" },
       { kind: "sheet", label: "Repay", sheet: "repay" },
@@ -128,7 +150,11 @@ describe("agentCards: only when something needs the user", () => {
   });
 
   it("offers Renew for an agent that stopped on its own, and not once it's back on", () => {
-    const stopped = { ...calm, status: { ...jobs("on"), rebalance: "off" as const }, stopped: { ...none, rebalance: NOW - 2 * DAY } };
+    const stopped = {
+      ...calm,
+      status: { ...jobs("on"), rebalance: "off" as const },
+      stopped: { ...none, rebalance: NOW - 2 * DAY },
+    };
     const [c] = agentCards(stopped);
     expect(c.text).toMatch(/^Rebalance stopped on \w{3} \d{1,2}\. Switch it back on\?$/);
     expect(c.actions).toEqual([{ kind: "renew", agent: "rebalance", jobs: ["rebalance"] }]);
@@ -136,7 +162,11 @@ describe("agentCards: only when something needs the user", () => {
   });
 
   it("has no card for earning or other dollars: those grants are asked on Home (D20)", () => {
-    const quiet = { ...calm, status: { ...jobs("on"), save: "off" as const, entry: "off" as const }, stopped: { ...none, save: NOW - DAY, entry: NOW - DAY } };
+    const quiet = {
+      ...calm,
+      status: { ...jobs("on"), save: "off" as const, entry: "off" as const },
+      stopped: { ...none, save: NOW - DAY, entry: NOW - DAY },
+    };
     expect(agentCards({ ...quiet, ends: { ...calm.ends, save: NOW + DAY, entry: NOW + DAY } })).toEqual([]);
   });
 
@@ -152,11 +182,17 @@ describe("agentCards: only when something needs the user", () => {
     expect(agentCards({ ...calm, fails: 2 })).toEqual([]);
     const [c] = agentCards({ ...calm, fails: 3, cooldownUntil: NOW + 1200 });
     expect(c.text).toBe("Your agents’ last 3 runs didn’t go through. Nothing moved.");
-    expect(c.sub).toMatch(/^They try again at \d{1,2}:\d{2} [AP]M\. At 8 in a row they stop, and you can switch them back on here\.$/);
+    expect(c.sub).toMatch(
+      /^They try again at \d{1,2}:\d{2} [AP]M\. At 8 in a row they stop, and you can switch them back on here\.$/,
+    );
   });
 
   it("says nothing of failed runs while neither agent runs: they were earning's or converting's (D20)", () => {
-    const cashOnly = { ...calm, status: { ...jobs("off"), save: "on" as const, entry: "on" as const }, ends: { ...calm.ends, protect: null, sell: null, rebalance: null } };
+    const cashOnly = {
+      ...calm,
+      status: { ...jobs("off"), save: "on" as const, entry: "on" as const },
+      ends: { ...calm.ends, protect: null, sell: null, rebalance: null },
+    };
     expect(agentCards({ ...cashOnly, fails: 5 })).toEqual([]);
   });
 
@@ -170,7 +206,13 @@ describe("agentCards: only when something needs the user", () => {
       stopped: { ...none, rebalance: NOW - DAY },
       fails: 4,
     };
-    expect(agentCards(everything).map((c) => c.key)).toEqual(["heads-up", "weekend", "fails", "stopped-rebalance", "expiring-protect"]);
+    expect(agentCards(everything).map((c) => c.key)).toEqual([
+      "heads-up",
+      "weekend",
+      "fails",
+      "stopped-rebalance",
+      "expiring-protect",
+    ]);
     for (const c of agentCards(everything)) expect(`${c.text} ${c.sub ?? ""}`).not.toMatch(ON_SCREEN);
   });
 });
@@ -178,6 +220,15 @@ describe("agentCards: only when something needs the user", () => {
 describe("agentParam (/agents?agent=…)", () => {
   it("names one of the two agents, and nothing else: Save's and Receive's old links open the tab", () => {
     expect(AGENTS.map(agentParam)).toEqual([...AGENTS]);
-    expect([null, "", "Protect", "sell", "entry", "manage", "save", "receive"].map(agentParam)).toEqual([null, null, null, null, null, null, null, null]);
+    expect([null, "", "Protect", "sell", "entry", "manage", "save", "receive"].map(agentParam)).toEqual([
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+    ]);
   });
 });

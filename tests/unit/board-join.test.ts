@@ -61,8 +61,12 @@ describe("the allowlist's GooseBoard rule", () => {
 
   it("lets through join() with no arguments and no value, and nothing else", () => {
     expect(() => assertAllowed(user, [joinCall(BOARD)])).not.toThrow();
-    expect(() => assertAllowed(user, [call(`${toFunctionSelector("join()")}00`)])).toThrow(/unexpected arguments to join/);
+    expect(() => assertAllowed(user, [call(`${toFunctionSelector("join()")}00`)])).toThrow(
+      /unexpected arguments to join/,
+    );
     expect(() => assertAllowed(user, [call(toFunctionSelector("join()"), 1n)])).toThrow(/unexpected value/);
-    expect(() => assertAllowed(user, [call(encodeFunctionData({ abi: gooseBoardAbi, functionName: "leave" }))])).toThrow(/unexpected call/);
+    expect(() =>
+      assertAllowed(user, [call(encodeFunctionData({ abi: gooseBoardAbi, functionName: "leave" }))]),
+    ).toThrow(/unexpected call/);
   });
 });

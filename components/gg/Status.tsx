@@ -39,7 +39,8 @@ export function StatusPill({ status, size = "md" }: { status: Status; size?: Sta
 export function StatusChange({ from, to }: { from: Status; to: Status }) {
   return (
     <span className="whitespace-nowrap">
-      <StatusPill status={from} size="row" /> <span className="font-[system-ui] font-medium text-subtle">→</span> <StatusPill status={to} size="row" />
+      <StatusPill status={from} size="row" /> <span className="font-[system-ui] font-medium text-subtle">→</span>{" "}
+      <StatusPill status={to} size="row" />
     </span>
   );
 }
@@ -62,7 +63,15 @@ export function barPosition(healthFactor: number): number {
 }
 
 /** Three-segment Safe / Watch / Act bar with marker. Labels always shown. */
-export function StatusBar({ status, healthFactor, slim = false }: { status: Status; healthFactor: number | null; /** A thin bar with no labels (Repay's card, where the pill names the status). */ slim?: boolean }) {
+export function StatusBar({
+  status,
+  healthFactor,
+  slim = false,
+}: {
+  status: Status;
+  healthFactor: number | null;
+  /** A thin bar with no labels (Repay's card, where the pill names the status). */ slim?: boolean;
+}) {
   const pos = healthFactor === null ? 0 : barPosition(healthFactor);
   return (
     <div className="flex flex-col gap-2" role="img" aria-label={`Your credit is ${STATUS_LABEL[status]}`}>
@@ -79,11 +88,17 @@ export function StatusBar({ status, healthFactor, slim = false }: { status: Stat
         )}
       </div>
       {!slim && (
-      <div className="flex text-xs font-semibold">
-        <span className="text-safe" style={{ flex: BAR.safe }}>Safe</span>
-        <span className="text-watch-text" style={{ flex: BAR.watch }}>Watch</span>
-        <span className="text-act" style={{ flex: BAR.act }}>Act</span>
-      </div>
+        <div className="flex text-xs font-semibold">
+          <span className="text-safe" style={{ flex: BAR.safe }}>
+            Safe
+          </span>
+          <span className="text-watch-text" style={{ flex: BAR.watch }}>
+            Watch
+          </span>
+          <span className="text-act" style={{ flex: BAR.act }}>
+            Act
+          </span>
+        </div>
       )}
     </div>
   );

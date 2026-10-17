@@ -34,7 +34,8 @@ const quote: BuyQuote = { venue: "aerodrome", pool: 10, amountIn: 20_000_000n, a
 const noBatch = vi.fn(async () => []);
 
 describe("a cash buy's key", () => {
-  const key = (p: Partial<Parameters<typeof cashBuyPlan>[0]> = {}) => cashBuyPlan({ user: SAM, stock: nvda, quote, ...p }, noBatch).key;
+  const key = (p: Partial<Parameters<typeof cashBuyPlan>[0]> = {}) =>
+    cashBuyPlan({ user: SAM, stock: nvda, quote, ...p }, noBatch).key;
 
   it("is the same for the same account, stock and quote", () => {
     expect(key()).toBe(key({ quote: { ...quote } }));
@@ -96,7 +97,10 @@ describe("a Credit Buy's key", () => {
   it("is checked on Aave's own health after it: in Act, it stops (Act is the line)", () => {
     const p = creditBuyPlan({ user: SAM, stock: nvda, quote, plan, confirmedRisk: true }, noBatch);
     expect(p.healthFloor).toBe(CREDIT_FLOOR);
-    expect(CREDIT_FLOOR).toEqual({ minHf: RISK.watchMin, stop: "That would put your credit in Act. Try a smaller amount." });
+    expect(CREDIT_FLOOR).toEqual({
+      minHf: RISK.watchMin,
+      stop: "That would put your credit in Act. Try a smaller amount.",
+    });
   });
 });
 
@@ -132,7 +136,20 @@ describe("a stock → stock trade's key", () => {
   const sell = { ...quote, amountIn: 5_000_000n, amountOut: 3_000_000n };
   const plan = { from: "free", sharesRaw: sell.amountIn } as SellPlan;
   const key = (feeFromSale = false, buy = quote) =>
-    swapPlan({ route: "swap", user: SAM, from: nvda, to: aapl, sellQuote: sell, plan, buyQuote: buy, oraclePriceUsd: 0.2, feeFromSale }, reads).key;
+    swapPlan(
+      {
+        route: "swap",
+        user: SAM,
+        from: nvda,
+        to: aapl,
+        sellQuote: sell,
+        plan,
+        buyQuote: buy,
+        oraclePriceUsd: 0.2,
+        feeFromSale,
+      },
+      reads,
+    ).key;
 
   it("changes with who pays the fee and with the buy's quote", () => {
     expect(key(true)).not.toBe(key());
@@ -143,7 +160,14 @@ describe("a stock → stock trade's key", () => {
 
 describe("Turn into cash's key", () => {
   const coin = ENTRY_COINS[0];
-  const q = (p: Partial<ConvertQuote> = {}): ConvertQuote => ({ coin, amountIn: 120_000_000n, minOut: 119_400_000n, outRaw: 119_830_000n, fair: true, ...p });
+  const q = (p: Partial<ConvertQuote> = {}): ConvertQuote => ({
+    coin,
+    amountIn: 120_000_000n,
+    minOut: 119_400_000n,
+    outRaw: 119_830_000n,
+    fair: true,
+    ...p,
+  });
   const plan = (quotes: ConvertQuote[]) => convertPlan(SAM, quotes, undefined, { invalidateQueries: vi.fn() } as never);
 
   it("is the coins, their amounts and floors: what a venue pays now only changes the words", () => {
@@ -159,7 +183,9 @@ describe("Turn into cash's key", () => {
 
 describe("the settings' and contacts' keys", () => {
   it("setMix by its weights, setKeepMix by its switch", () => {
-    expect(setMixPlan(SAM, [5_000, 0, 0, 0, 0, 5_000, 0]).key).not.toBe(setMixPlan(SAM, [5_000, 0, 0, 0, 0, 4_900, 100]).key);
+    expect(setMixPlan(SAM, [5_000, 0, 0, 0, 0, 5_000, 0]).key).not.toBe(
+      setMixPlan(SAM, [5_000, 0, 0, 0, 0, 4_900, 100]).key,
+    );
     expect(keepMixPlan(SAM, true).key).not.toBe(keepMixPlan(SAM, false).key);
   });
 
@@ -173,7 +199,12 @@ describe("the settings' and contacts' keys", () => {
 
 describe("a Send's key", () => {
   const BOB = "0x00000000000000000000000000000000000000bb" as Address;
-  const input: SendInput = { user: SAM, token: USDC, recipient: { address: ANN, name: "ann.justan.id", onBase: true }, amountRaw: 25_000_000n };
+  const input: SendInput = {
+    user: SAM,
+    token: USDC,
+    recipient: { address: ANN, name: "ann.justan.id", onBase: true },
+    amountRaw: 25_000_000n,
+  };
   const key = (p: Partial<SendInput> = {}) => sendPlan({ ...input, ...p }, noBatch).key;
 
   it("changes when the recipient's address changes (a name that resolved late can't take its place)", () => {
@@ -181,7 +212,8 @@ describe("a Send's key", () => {
   });
 
   it("changes with the account, the token and the amount", () => {
-    for (const other of [key({ user: BOB }), key({ token: nvda }), key({ amountRaw: 25_000_001n })]) expect(other).not.toBe(key());
+    for (const other of [key({ user: BOB }), key({ token: nvda }), key({ amountRaw: 25_000_001n })])
+      expect(other).not.toBe(key());
   });
 
   it("is the address whatever its capitals, and not the name, which only labels Activity", () => {
@@ -207,15 +239,21 @@ describe("Repay's key", () => {
 
   it("All that covers what's owed: one batch whatever the interest added since", () => {
     const all = { all: true, coversAll: true };
-    expect(key({ ...all, amount: 64.01, amountRaw: 64_010_000n })).toBe(key({ ...all, amount: 64.02, amountRaw: 64_020_000n }));
+    expect(key({ ...all, amount: 64.01, amountRaw: 64_010_000n })).toBe(
+      key({ ...all, amount: 64.02, amountRaw: 64_020_000n }),
+    );
     expect(key(all)).not.toBe(key());
   });
 
   it("All the cash, short of what's owed: by the dollars on screen to the cent, so other cash is another batch", () => {
     const cash = { all: true, coversAll: false };
-    expect(key({ ...cash, amount: 40.5, amountRaw: 40_500_000n })).not.toBe(key({ ...cash, amount: 41.5, amountRaw: 41_500_000n }));
+    expect(key({ ...cash, amount: 40.5, amountRaw: 40_500_000n })).not.toBe(
+      key({ ...cash, amount: 41.5, amountRaw: 41_500_000n }),
+    );
     // Savings interest under a cent leaves it.
-    expect(key({ ...cash, amount: 40.500001, amountRaw: 40_500_001n })).toBe(key({ ...cash, amount: 40.5, amountRaw: 40_500_000n }));
+    expect(key({ ...cash, amount: 40.500001, amountRaw: 40_500_001n })).toBe(
+      key({ ...cash, amount: 40.5, amountRaw: 40_500_000n }),
+    );
     expect(key({ ...cash, amount: 40.5 })).not.toBe(key({ all: true, coversAll: true, amount: 40.5 }));
   });
 
@@ -228,13 +266,18 @@ describe("Repay's key", () => {
 
 describe("Free up's key", () => {
   it("Free up by the stock, the shares and All", () => {
-    const k = (p: Partial<Parameters<typeof withdrawPlan>[0]> = {}) => withdrawPlan({ user: SAM, stock: nvda, amountRaw: 5n, all: false, ...p }).key;
-    for (const other of [k({ stock: aapl }), k({ amountRaw: 6n }), k({ all: true }), k({ user: ANN })]) expect(other).not.toBe(k());
+    const k = (p: Partial<Parameters<typeof withdrawPlan>[0]> = {}) =>
+      withdrawPlan({ user: SAM, stock: nvda, amountRaw: 5n, all: false, ...p }).key;
+    for (const other of [k({ stock: aapl }), k({ amountRaw: 6n }), k({ all: true }), k({ user: ANN })])
+      expect(other).not.toBe(k());
   });
 
   it("shares freed up are checked on Aave's own health after them", () => {
     expect(withdrawPlan({ user: SAM, stock: nvda, amountRaw: 5n, all: false }).healthFloor).toBe(FREE_UP_FLOOR);
-    expect(FREE_UP_FLOOR).toEqual({ minHf: RISK.watchMin, stop: "That would put your credit in Act. Free up less, or repay some first." });
+    expect(FREE_UP_FLOOR).toEqual({
+      minHf: RISK.watchMin,
+      stop: "That would put your credit in Act. Free up less, or repay some first.",
+    });
   });
 });
 
@@ -252,7 +295,13 @@ describe("Earn with stocks' key", () => {
     priceMayMove: false,
   } as CreditPlan;
   const quote = { plan, amountUsd: 100, cost: 50, left: 10, leftUsdYear: 1 } as EarnInput["quote"];
-  const offer = { kind: "offer", minUsd: 1, maxUsd: 1_000, maxSafeUsd: 500, limitedBy: "credit" } as unknown as EarnInput["offer"];
+  const offer = {
+    kind: "offer",
+    minUsd: 1,
+    maxUsd: 1_000,
+    maxSafeUsd: 500,
+    limitedBy: "credit",
+  } as unknown as EarnInput["offer"];
   const key = (p: Partial<CreditPlan> = {}, confirmedRisk = false, q: Partial<EarnInput["quote"]> = {}) =>
     earnPlan({ user: SAM, quote: { ...quote, ...q, plan: { ...plan, ...p } }, offer, confirmedRisk }, vi.fn()).key;
 
@@ -273,6 +322,9 @@ describe("Earn with stocks' key", () => {
 
   it("is checked on Aave's own health after it: in Act, it stops", () => {
     expect(earnPlan({ user: SAM, quote, offer, confirmedRisk: false }, vi.fn()).healthFloor).toBe(EARN_FLOOR);
-    expect(EARN_FLOOR).toEqual({ minHf: RISK.watchMin, stop: "That would put your credit in Act. Try a smaller amount." });
+    expect(EARN_FLOOR).toEqual({
+      minHf: RISK.watchMin,
+      stop: "That would put your credit in Act. Try a smaller amount.",
+    });
   });
 });

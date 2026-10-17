@@ -5,7 +5,9 @@ import { AERODROME, AERODROME_V1, SPARK_PSM3, UNISWAP } from "@/lib/swap/venues"
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 
-const aeroFactoryAbi = parseAbi(["function getPool(address tokenA, address tokenB, int24 tickSpacing) view returns (address)"]);
+const aeroFactoryAbi = parseAbi([
+  "function getPool(address tokenA, address tokenB, int24 tickSpacing) view returns (address)",
+]);
 const uniFactoryAbi = parseAbi(["function getPool(address tokenA, address tokenB, uint24 fee) view returns (address)"]);
 const psmAbi = parseAbi(["function pocket() view returns (address)"]);
 
@@ -28,11 +30,24 @@ export const AAVE_V4_PLACES: readonly Address[] = [AAVE.HUB, AAVE.SPOKE];
  */
 export async function readVenues(client: Client): Promise<Map<string, string>> {
   const aero = (factory: Address, token: Address, tickSpacing: number) =>
-    ({ address: factory, abi: aeroFactoryAbi, functionName: "getPool", args: [token, USDC.address, tickSpacing] }) as const;
-  const uni = (token: Address, fee: number) => ({ address: UNISWAP.FACTORY as Address, abi: uniFactoryAbi, functionName: "getPool", args: [token, USDC.address, fee] }) as const;
+    ({
+      address: factory,
+      abi: aeroFactoryAbi,
+      functionName: "getPool",
+      args: [token, USDC.address, tickSpacing],
+    }) as const;
+  const uni = (token: Address, fee: number) =>
+    ({
+      address: UNISWAP.FACTORY as Address,
+      abi: uniFactoryAbi,
+      functionName: "getPool",
+      args: [token, USDC.address, fee],
+    }) as const;
   const aeroCalls = [
     ...EQUITIES.flatMap((e) => AERODROME.TICK_SPACINGS.map((t) => aero(AERODROME.FACTORY, e.address, t))),
-    ...ENTRY_COINS.flatMap((c) => (c.venue.kind === "aerodrome" ? [aero(AERODROME_V1.FACTORY, c.address, c.venue.tickSpacing)] : [])),
+    ...ENTRY_COINS.flatMap((c) =>
+      c.venue.kind === "aerodrome" ? [aero(AERODROME_V1.FACTORY, c.address, c.venue.tickSpacing)] : [],
+    ),
   ];
   const uniCalls = [
     ...EQUITIES.flatMap((e) => UNISWAP.FEE_TIERS.map((f) => uni(e.address, f))),
@@ -41,7 +56,10 @@ export async function readVenues(client: Client): Promise<Map<string, string>> {
   const [aeroPools, uniPools, pocket] = await Promise.all([
     multicall(client, { contracts: aeroCalls, allowFailure: false }),
     multicall(client, { contracts: uniCalls, allowFailure: false }),
-    multicall(client, { contracts: [{ address: SPARK_PSM3.PSM3, abi: psmAbi, functionName: "pocket" }], allowFailure: false }),
+    multicall(client, {
+      contracts: [{ address: SPARK_PSM3.PSM3, abi: psmAbi, functionName: "pocket" }],
+      allowFailure: false,
+    }),
   ]);
   const venues = new Map<string, string>();
   for (const p of [...aeroPools, ...uniPools]) if (p !== zeroAddress) venues.set(p.toLowerCase(), p.toLowerCase());

@@ -8,8 +8,17 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  createPublicClient, decodeFunctionResult, encodeAbiParameters, encodeFunctionData, erc20Abi, http, keccak256, parseUnits, zeroHash,
-  type Log, type StateOverride,
+  createPublicClient,
+  decodeFunctionResult,
+  encodeAbiParameters,
+  encodeFunctionData,
+  erc20Abi,
+  http,
+  keccak256,
+  parseUnits,
+  zeroHash,
+  type Log,
+  type StateOverride,
 } from "viem";
 import { decodeActivity } from "@/lib/activity/decode";
 import { CASH } from "@/config/risk";
@@ -27,7 +36,11 @@ import { aaveV3PoolAbi } from "@/lib/guardian/abis";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
 type Address = `0x${string}`;
-const client = createPublicClient({ chain: CHAIN, transport: http(process.env.NEXT_PUBLIC_BASE_RPC_URL), batch: { multicall: true } });
+const client = createPublicClient({
+  chain: CHAIN,
+  transport: http(process.env.NEXT_PUBLIC_BASE_RPC_URL),
+  batch: { multicall: true },
+});
 /** The dev preview's account: already backs credit (Amazon and more), with savings and wallet USDC. */
 const preview: Address = "0x2b8ce2c87c166d8e24e186e7e4253c11fc805427";
 /** Holds all 7 stocks and USDC but backs no credit (found via NVIDIA's Transfer logs, 2026-10-15; 0xcd15…266b, the one before, sold all its stock that day). */
@@ -39,8 +52,18 @@ const usd = (n: number) => parseUnits(n.toFixed(6), 6);
 async function live(user: Address) {
   const [account, liquidity, usdcCfg, walletRaw, savingsRaw] = await Promise.all([
     client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getUserAccountData", args: [user] }),
-    client.readContract({ address: AAVE.HUB, abi: hubAbi, functionName: "getAssetLiquidity", args: [BigInt(USDC.reserveId)] }),
-    client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getReserveConfig", args: [BigInt(USDC.reserveId)] }),
+    client.readContract({
+      address: AAVE.HUB,
+      abi: hubAbi,
+      functionName: "getAssetLiquidity",
+      args: [BigInt(USDC.reserveId)],
+    }),
+    client.readContract({
+      address: AAVE.SPOKE,
+      abi: spokeAbi,
+      functionName: "getReserveConfig",
+      args: [BigInt(USDC.reserveId)],
+    }),
     client.readContract({ address: USDC.address, abi: erc20Abi, functionName: "balanceOf", args: [user] }),
     client.readContract({ address: GUARDIAN.AUSDC, abi: erc20Abi, functionName: "balanceOf", args: [user] }),
   ]);
@@ -54,13 +77,30 @@ async function live(user: Address) {
       const id = BigInt(e.reserveId);
       const [freeRaw, price, cfg, reserve] = await Promise.all([
         client.readContract({ address: e.address, abi: erc20Abi, functionName: "balanceOf", args: [user] }),
-        client.readContract({ address: AAVE.SPOKE_ORACLE, abi: aaveOracleAbi, functionName: "getReservePrice", args: [id] }),
+        client.readContract({
+          address: AAVE.SPOKE_ORACLE,
+          abi: aaveOracleAbi,
+          functionName: "getReservePrice",
+          args: [id],
+        }),
         client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getReserveConfig", args: [id] }),
         client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getReserve", args: [id] }),
       ]);
-      const dyn = await client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getDynamicReserveConfig", args: [id, reserve.dynamicConfigKey] });
+      const dyn = await client.readContract({
+        address: AAVE.SPOKE,
+        abi: spokeAbi,
+        functionName: "getDynamicReserveConfig",
+        args: [id, reserve.dynamicConfigKey],
+      });
       const freeUsd = (Number(freeRaw) / 10 ** e.decimals) * priceToUsd(price);
-      return { symbol: e.symbol, freeRaw, freeUsd, paused: cfg.paused, frozen: cfg.frozen, cf: dyn.collateralFactor / 10_000 };
+      return {
+        symbol: e.symbol,
+        freeRaw,
+        freeUsd,
+        paused: cfg.paused,
+        frozen: cfg.frozen,
+        cf: dyn.collateralFactor / 10_000,
+      };
     }),
   );
   const cfs = Object.fromEntries(holdings.map((h) => [h.symbol, h.cf]));
@@ -69,14 +109,23 @@ async function live(user: Address) {
 }
 
 const read = (to: Address, data: Address) => ({ to, data });
-const balanceRead = (token: Address, user: Address) => read(token, encodeFunctionData({ abi: erc20Abi, functionName: "balanceOf", args: [user] }));
+const balanceRead = (token: Address, user: Address) =>
+  read(token, encodeFunctionData({ abi: erc20Abi, functionName: "balanceOf", args: [user] }));
 const debtRead = (user: Address) =>
-  read(AAVE.SPOKE, encodeFunctionData({ abi: spokeAbi, functionName: "getUserTotalDebt", args: [BigInt(USDC.reserveId), user] }));
+  read(
+    AAVE.SPOKE,
+    encodeFunctionData({ abi: spokeAbi, functionName: "getUserTotalDebt", args: [BigInt(USDC.reserveId), user] }),
+  );
 const uint = (x: { data: Address }) => decodeFunctionResult({ abi: erc20Abi, functionName: "balanceOf", data: x.data });
 
 /** FiatTokenV2_2 keeps balances in the mapping at slot 9 (checked in flows.test.ts): this empties the wallet. */
 const emptyWallet = (user: Address): StateOverride => [
-  { address: USDC.address, stateDiff: [{ slot: keccak256(encodeAbiParameters([{ type: "address" }, { type: "uint256" }], [user, 9n])), value: zeroHash }] },
+  {
+    address: USDC.address,
+    stateDiff: [
+      { slot: keccak256(encodeAbiParameters([{ type: "address" }, { type: "uint256" }], [user, 9n])), value: zeroHash },
+    ],
+  },
 ];
 
 /**
@@ -84,8 +133,17 @@ const emptyWallet = (user: Address): StateOverride => [
  * deltas): savings (aUSDC), the wallet's USDC, the debt, and each stock's free shares, before and after.
  */
 async function simulateEarn(user: Address, calls: { to: Address; data: Address }[], stateOverrides?: StateOverride) {
-  const reads = [balanceRead(GUARDIAN.AUSDC, user), balanceRead(USDC.address, user), debtRead(user), ...EQUITIES.map((e) => balanceRead(e.address, user))];
-  const r = await client.simulateCalls({ account: user, calls: [...reads, ...calls, ...reads].map(({ to, data }) => ({ to, data })), stateOverrides });
+  const reads = [
+    balanceRead(GUARDIAN.AUSDC, user),
+    balanceRead(USDC.address, user),
+    debtRead(user),
+    ...EQUITIES.map((e) => balanceRead(e.address, user)),
+  ];
+  const r = await client.simulateCalls({
+    account: user,
+    calls: [...reads, ...calls, ...reads].map(({ to, data }) => ({ to, data })),
+    stateOverrides,
+  });
   const before = r.results.slice(0, reads.length);
   const batch = r.results.slice(reads.length, reads.length + calls.length);
   const after = r.results.slice(reads.length + calls.length);
@@ -142,7 +200,9 @@ describe("Earn with stocks simulates on mainnet: the credit lands in savings, th
     const calls = buildEarnCalls({ user: newcomer, backing: plan.backing, creditRaw, cash });
     expect(calls).toHaveLength(plan.backing.length * 3 + 3);
     const r = await simulateEarn(newcomer, calls);
-    console.log(`newcomer: backing ${plan.backing.map((b) => `${b.stock.symbol} ${b.raw}`).join(", ")}; savings +${r.savingsAdded}, wallet ${r.walletDelta}, debt +${r.debtAdded}`);
+    console.log(
+      `newcomer: backing ${plan.backing.map((b) => `${b.stock.symbol} ${b.raw}`).join(", ")}; savings +${r.savingsAdded}, wallet ${r.walletDelta}, debt +${r.debtAdded}`,
+    );
     expect(r.statuses.every((s) => s === "success")).toBe(true);
     expect(closeTo(r.savingsAdded, creditRaw)).toBe(true);
     expect(r.walletDelta).toBe(0n);
@@ -172,9 +232,23 @@ describe("Earn with stocks simulates on mainnet: the credit lands in savings, th
   it("the pool takes a supply for anyone: the allowlist's onBehalfOf == user pin is what keeps the money with the user", async () => {
     // Why saveForUser pins onBehalfOf (lib/allowlist.ts): Aave V3's pool on Base accepts supply(USDC, amount, X, 0) for
     // any X, so a batch could otherwise pay the user's USDC into someone else's savings.
-    const supply = encodeFunctionData({ abi: aaveV3PoolAbi, functionName: "supply", args: [USDC.address, 1_000n, newcomer, 0] });
-    const approve = encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [GUARDIAN.AAVE_V3_POOL, 1_000n] });
-    const r = await client.simulateCalls({ account: preview, calls: [{ to: USDC.address, data: approve }, { to: GUARDIAN.AAVE_V3_POOL, data: supply }] });
+    const supply = encodeFunctionData({
+      abi: aaveV3PoolAbi,
+      functionName: "supply",
+      args: [USDC.address, 1_000n, newcomer, 0],
+    });
+    const approve = encodeFunctionData({
+      abi: erc20Abi,
+      functionName: "approve",
+      args: [GUARDIAN.AAVE_V3_POOL, 1_000n],
+    });
+    const r = await client.simulateCalls({
+      account: preview,
+      calls: [
+        { to: USDC.address, data: approve },
+        { to: GUARDIAN.AAVE_V3_POOL, data: supply },
+      ],
+    });
     expect(r.results.map((x) => x.status)).toEqual(["success", "success"]);
   });
 });

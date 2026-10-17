@@ -45,7 +45,14 @@ const nvda = EQUITIES.find((e) => e.symbol === "NVDAc")!;
 const aapl = EQUITIES.find((e) => e.symbol === "AAPLc")!;
 const tuesday = new Date("2026-10-13T15:00:00Z");
 
-const holding = (symbol: string, name: string, priceUsd: number, free: number, locked: number, paused = false): RepayHolding => ({
+const holding = (
+  symbol: string,
+  name: string,
+  priceUsd: number,
+  free: number,
+  locked: number,
+  paused = false,
+): RepayHolding => ({
   symbol,
   name,
   priceUsd,
@@ -101,7 +108,12 @@ describe("Pay with: the rows, their order and who's listed", () => {
     const s = repaySources(data(), cfs);
     expect(ids(s)).toEqual(["cash", "free:AAPLc", "free:NVDAc", "backing:NVDAc"]);
     expect(s.map((x) => x.kind)).toEqual(["cash", "free", "free", "backing"]);
-    expect(s.map((x) => x.sub)).toEqual(["$100.00 in your cash", "$100.00 free", "$25.00 free", "$1,000.00 backs your credit"]);
+    expect(s.map((x) => x.sub)).toEqual([
+      "$100.00 in your cash",
+      "$100.00 free",
+      "$25.00 free",
+      "$1,000.00 backs your credit",
+    ]);
     // Cash less the fee buffer; a free stock at Aave's price less the swap's 1%; a backing stock capped at what's owed.
     expect(s[0].estUsd).toBeCloseTo(100 - B, 6);
     expect(s[1].estUsd).toBeCloseTo(99, 6);
@@ -217,18 +229,41 @@ describe("Amount: All by default, quick picks, never more than owed or than the 
     expect(f(REPAY_FORM, { type: "amount", value: "40", max })).toEqual({ source: null, amount: "40", all: false });
     expect(f(REPAY_FORM, { type: "amount", value: "99.5", max })).toEqual({ source: null, amount: "", all: true });
     // More than the most snaps back to it, and says so.
-    expect(f(REPAY_FORM, { type: "amount", value: "5000", max })).toEqual({ source: null, amount: "", all: true, snapped: true });
+    expect(f(REPAY_FORM, { type: "amount", value: "5000", max })).toEqual({
+      source: null,
+      amount: "",
+      all: true,
+      snapped: true,
+    });
     expect(f(REPAY_FORM, { type: "chip", usd: 25, max })).toEqual({ source: null, amount: "25", all: false });
-    expect(f({ source: "cash", amount: "40", all: false }, { type: "all" })).toEqual({ source: "cash", amount: "", all: true });
+    expect(f({ source: "cash", amount: "40", all: false }, { type: "all" })).toEqual({
+      source: "cash",
+      amount: "",
+      all: true,
+    });
     // A new row starts on All again.
-    expect(f({ source: "cash", amount: "40", all: false }, { type: "source", id: "free:AAPLc" })).toEqual({ source: "free:AAPLc", amount: "", all: true });
+    expect(f({ source: "cash", amount: "40", all: false }, { type: "source", id: "free:AAPLc" })).toEqual({
+      source: "free:AAPLc",
+      amount: "",
+      all: true,
+    });
     // While the most is only an estimate (its quote is still coming), typing isn't snapped to it.
     expect(f(REPAY_FORM, { type: "amount", value: "5000", max: { ...max, quoting: true } }).all).toBe(false);
     // A key typed after the snap lands on the most again: the line stays.
-    expect(f({ source: "cash", amount: "", all: true, snapped: true }, { type: "amount", value: "99.50", max })).toEqual({ source: "cash", amount: "", all: true, snapped: true });
+    expect(
+      f({ source: "cash", amount: "", all: true, snapped: true }, { type: "amount", value: "99.50", max }),
+    ).toEqual({ source: "cash", amount: "", all: true, snapped: true });
     // Going under the most, or a pick, clears it.
-    expect(f({ source: "cash", amount: "", all: true, snapped: true }, { type: "amount", value: "4", max })).toEqual({ source: "cash", amount: "4", all: false });
-    expect(f({ source: "cash", amount: "", all: true, snapped: true }, { type: "all" })).toEqual({ source: "cash", amount: "", all: true });
+    expect(f({ source: "cash", amount: "", all: true, snapped: true }, { type: "amount", value: "4", max })).toEqual({
+      source: "cash",
+      amount: "4",
+      all: false,
+    });
+    expect(f({ source: "cash", amount: "", all: true, snapped: true }, { type: "all" })).toEqual({
+      source: "cash",
+      amount: "",
+      all: true,
+    });
   });
 
   it("snapping says in one plain line what the most is: all that's owed, the cash's most, or the stock's", () => {
@@ -240,12 +275,22 @@ describe("Amount: All by default, quick picks, never more than owed or than the 
     expect(v.snapLine).toBe("That’s the most your cash can repay.");
     expect(v.note).toBeNull();
     const rich = data({ debt: 64, wallet: 500 });
-    const all = planRepay({ data: rich, source: cashOf(rich), form: repayForm(REPAY_FORM, { type: "amount", value: "70", max: repayMax(cashOf(rich), rich) }) });
+    const all = planRepay({
+      data: rich,
+      source: cashOf(rich),
+      form: repayForm(REPAY_FORM, { type: "amount", value: "70", max: repayMax(cashOf(rich), rich) }),
+    });
     expect(all.snapLine).toBe("That’s everything you owe.");
     expect(all.fieldText).toBe("64.00");
     // All picked, or the exact most typed, says nothing.
     expect(planRepay({ data: d, source: cash, form: REPAY_FORM }).snapLine).toBeNull();
-    expect(planRepay({ data: d, source: cash, form: repayForm(REPAY_FORM, { type: "amount", value: (100 - B).toFixed(2), max: repayMax(cash, d) }) }).snapLine).toBeNull();
+    expect(
+      planRepay({
+        data: d,
+        source: cash,
+        form: repayForm(REPAY_FORM, { type: "amount", value: (100 - B).toFixed(2), max: repayMax(cash, d) }),
+      }).snapLine,
+    ).toBeNull();
   });
 
   it("a cash amount repays exactly what's typed; under $1 says the smallest repay", () => {
@@ -314,7 +359,9 @@ describe("sharesForRepay", () => {
 
   it("plus the fee buffer when the sale pays it, a margin on a full repay, at least a $1 sale, never more than it has", () => {
     const plain = sharesForRepay({ ...base, targetRaw: usd(25) });
-    expect(sellMinOut(quoteAt(sharesForRepay({ ...base, targetRaw: usd(25), feeFromSale: true }), 199), aapl, 200)).toBeGreaterThanOrEqual(usd(25 + B));
+    expect(
+      sellMinOut(quoteAt(sharesForRepay({ ...base, targetRaw: usd(25), feeFromSale: true }), 199), aapl, 200),
+    ).toBeGreaterThanOrEqual(usd(25 + B));
     expect(sharesForRepay({ ...base, targetRaw: usd(25), full: true })).toBeGreaterThan(plain);
     expect(quoteAt(sharesForRepay({ ...base, targetRaw: usd(0.1) }), 199).amountOut).toBeGreaterThanOrEqual(usd(1));
     expect(sharesForRepay({ ...base, targetRaw: usd(5_000) })).toBe(maxShares);
@@ -327,7 +374,14 @@ describe("Pay with a stock held free: the plan", () => {
   const maxQ = quoteAt(apple.maxSharesRaw, 199);
   const plan = (form: RepayForm, q?: (s: bigint) => SellQuote, dd = d, src = apple) => {
     const sized = planRepay({ data: dd, source: src, form, maxQuote: ready(maxQ), now: tuesday });
-    return planRepay({ data: dd, source: src, form, maxQuote: ready(maxQ), quote: q ? ready(q(sized.sharesRaw)) : undefined, now: tuesday });
+    return planRepay({
+      data: dd,
+      source: src,
+      form,
+      maxQuote: ready(maxQ),
+      quote: q ? ready(q(sized.sharesRaw)) : undefined,
+      now: tuesday,
+    });
   };
 
   it("All is what selling every free share is sure to bring", () => {
@@ -350,7 +404,9 @@ describe("Pay with a stock held free: the plan", () => {
     expect(v.after).toBe("safe");
     expect(v.fee).toBe(REPAY_COPY.feeFromCash);
     expect(v.sharesLine).toMatch(/^Sells 0\.12\d+ AAPL$/);
-    expect(repaySmallPrint(v)).toMatch(/exactly 0\.12\d+ AAPL is approved for the Aerodrome router and sold for at least \$25\.00, then exactly \$25\.00 of it is approved and repaid/);
+    expect(repaySmallPrint(v)).toMatch(
+      /exactly 0\.12\d+ AAPL is approved for the Aerodrome router and sold for at least \$25\.00, then exactly \$25\.00 of it is approved and repaid/,
+    );
   });
 
   it("with no cash for the fee, the sale pays it: the repay is its floor less the fee buffer", () => {
@@ -378,7 +434,13 @@ describe("Pay with a stock held free: the plan", () => {
   it("All quoted under $1 (a row listed on its estimate) says the smallest repay and can't go ahead", () => {
     const one = data({ holdings: [holding("AAPLc", "Apple", 200, 0.0052, 0)] });
     const src = repaySources(one, cfs).find((x) => x.id === "free:AAPLc")!;
-    const v = planRepay({ data: one, source: src, form: REPAY_FORM, maxQuote: ready(quoteAt(src.maxSharesRaw, 190)), now: tuesday });
+    const v = planRepay({
+      data: one,
+      source: src,
+      form: REPAY_FORM,
+      maxQuote: ready(quoteAt(src.maxSharesRaw, 190)),
+      now: tuesday,
+    });
     expect(v.max.usd).toBeLessThan(1);
     expect(v.note?.text).toBe("The smallest repay is $1.");
     expect(v.ready).toBe(false);
@@ -389,7 +451,13 @@ describe("Pay with a stock held free: the plan", () => {
     expect(quoting.ready).toBe(false);
     expect(quoting.quoting).toBe(true);
     expect(quoting.sharesLine).toBe(REPAY_COPY.sellsQuoting);
-    const none = planRepay({ data: d, source: apple, form: REPAY_FORM, maxQuote: { data: null, isFetching: false, isSuccess: true }, now: tuesday });
+    const none = planRepay({
+      data: d,
+      source: apple,
+      form: REPAY_FORM,
+      maxQuote: { data: null, isFetching: false, isSuccess: true },
+      now: tuesday,
+    });
     expect(none.note?.text).toBe("There’s no market for Apple right now.");
     const thin = plan({ source: apple.id, amount: "25", all: false }, (s) => quoteAt(s, 194));
     expect(thin.note?.text).toMatch(/^You’d get 3\.0% under the stock’s price/);
@@ -400,7 +468,14 @@ describe("Pay with a stock held free: the plan", () => {
     const v = plan({ source: apple.id, amount: "25", all: false }, (s) => quoteAt(s, 199));
     const sign = repaySign(v, user, d.debtRaw)!;
     expect(sign.via).toBe("free");
-    expect(sign.input).toMatchObject({ user, stock: aapl, quote: v.quote, oraclePriceUsd: 200, debtRaw: d.debtRaw, feeFromSale: false });
+    expect(sign.input).toMatchObject({
+      user,
+      stock: aapl,
+      quote: v.quote,
+      oraclePriceUsd: 200,
+      debtRaw: d.debtRaw,
+      feeFromSale: false,
+    });
   });
 });
 
@@ -410,7 +485,14 @@ describe("Pay with a stock that backs the credit: the existing repay by selling"
   const maxQ = quoteAt(nv.maxSharesRaw, 249);
   const plan = (form: RepayForm, q: (s: bigint) => SellQuote) => {
     const sized = planRepay({ data: d, source: nv, form, maxQuote: ready(maxQ), now: tuesday });
-    return planRepay({ data: d, source: nv, form, maxQuote: ready(maxQ), quote: ready(q(sized.sharesRaw)), now: tuesday });
+    return planRepay({
+      data: d,
+      source: nv,
+      form,
+      maxQuote: ready(maxQ),
+      quote: ready(q(sized.sharesRaw)),
+      now: tuesday,
+    });
   };
 
   it("$50 takes the shares out, sells them and repays the floor less the fee, which the sale pays", () => {
@@ -421,8 +503,12 @@ describe("Pay with a stock that backs the credit: the existing repay by selling"
     expect(v.fee).toBe(REPAY_COPY.feeFromSale);
     expect(v.after).toBe("safe");
     expect(v.ready).toBe(true);
-    expect(repaySmallPrint(v)).toMatch(/^In one go: exactly 0\.2\d+ NVDA comes out of backing, is approved for the Aerodrome router and sold for at least \$50\.\d\d, then exactly \$50\.\d\d of it is approved and repaid\. /);
-    expect(repaySmallPrint(v)).toContain(`What the sale brings above that stays in your cash, ${formatUsd(B)} of it for the network fee.`);
+    expect(repaySmallPrint(v)).toMatch(
+      /^In one go: exactly 0\.2\d+ NVDA comes out of backing, is approved for the Aerodrome router and sold for at least \$50\.\d\d, then exactly \$50\.\d\d of it is approved and repaid\. /,
+    );
+    expect(repaySmallPrint(v)).toContain(
+      `What the sale brings above that stays in your cash, ${formatUsd(B)} of it for the network fee.`,
+    );
     const sign = repaySign(v, user, d.debtRaw)!;
     expect(sign.via).toBe("backing");
     expect(sign.input).toMatchObject({ user, stock: nvda, quote: v.quote, oraclePriceUsd: 250, debtRaw: d.debtRaw });
@@ -438,26 +524,58 @@ describe("Pay with a stock that backs the credit: the existing repay by selling"
 
   it("the sale's stops read in the sheet's words, with no protocol in them", () => {
     const paused = { ...nv, holding: { ...nv.holding!, paused: true } };
-    const sized = planRepay({ data: d, source: paused, form: { source: nv.id, amount: "50", all: false }, maxQuote: ready(maxQ), now: tuesday });
-    const v = planRepay({ data: d, source: paused, form: { source: nv.id, amount: "50", all: false }, maxQuote: ready(maxQ), quote: ready(quoteAt(sized.sharesRaw, 249)), now: tuesday });
+    const sized = planRepay({
+      data: d,
+      source: paused,
+      form: { source: nv.id, amount: "50", all: false },
+      maxQuote: ready(maxQ),
+      now: tuesday,
+    });
+    const v = planRepay({
+      data: d,
+      source: paused,
+      form: { source: nv.id, amount: "50", all: false },
+      maxQuote: ready(maxQ),
+      quote: ready(quoteAt(sized.sharesRaw, 249)),
+      now: tuesday,
+    });
     expect(v.note?.text).toBe("NVIDIA can’t come out of backing right now. Try again later.");
-    for (const text of Object.values(REPAY_COPY)) if (typeof text === "string") expect(text).not.toMatch(/Aave|spoke|collateral|borrow|loan|lock/i);
+    for (const text of Object.values(REPAY_COPY))
+      if (typeof text === "string") expect(text).not.toMatch(/Aave|spoke|collateral|borrow|loan|lock/i);
   });
 });
 
 describe("buildFreeRepayCalls: sell the free shares, then repay exactly what the sale is sure to bring", () => {
   const q: SellQuote = { venue: "aerodrome", pool: 10, amountIn: shares(0.4), amountOut: usd(99.5) };
   const build = (p: { debt?: number; feeFromSale?: boolean; quote?: SellQuote } = {}) =>
-    buildFreeRepayCalls({ user, stock: nvda, quote: p.quote ?? q, oraclePriceUsd: 250, debtRaw: usd(p.debt ?? 300), feeFromSale: p.feeFromSale ?? false, nowSec: 1_000 });
+    buildFreeRepayCalls({
+      user,
+      stock: nvda,
+      quote: p.quote ?? q,
+      oraclePriceUsd: 250,
+      debtRaw: usd(p.debt ?? 300),
+      feeFromSale: p.feeFromSale ?? false,
+      nowSec: 1_000,
+    });
 
   it("approve the shares → swap to USDC for the user → approve exactly the repay → repay it for the user", () => {
     const calls = build();
     expect(steps(calls)).toEqual(["approve", "swap", "approve", "repay"]);
     const floor = sellMinOut(q, nvda, 250);
-    expect(swapOf(calls[1])!.params).toMatchObject({ tokenIn: nvda.address, tokenOut: USDC.address, recipient: user, amountIn: shares(0.4), amountOutMinimum: floor });
+    expect(swapOf(calls[1])!.params).toMatchObject({
+      tokenIn: nvda.address,
+      tokenOut: USDC.address,
+      recipient: user,
+      amountIn: shares(0.4),
+      amountOutMinimum: floor,
+    });
     expect(decodeFunctionData({ abi: erc20Abi, data: calls[2].data }).args).toEqual([AAVE.SPOKE, floor]);
     expect(calls[2].to).toBe(USDC.address);
-    expect(decodeFunctionData({ abi: spokeAbi, data: calls[3].data }).args).toEqual([BigInt(USDC.reserveId), floor, user]);
+    expect(decodeFunctionData({ abi: spokeAbi, data: calls[3].data }).args).toEqual([
+      BigInt(USDC.reserveId),
+      floor,
+      user,
+    ]);
     // Nothing comes out of backing.
     expect(calls.some((c) => c.to === AAVE.SPOKE && fn(c.data) === "withdraw")).toBe(false);
   });
@@ -482,7 +600,12 @@ describe("buildFreeRepayCalls: sell the free shares, then repay exactly what the
   it("never repays more than the sale's floor, by construction, over any quote, debt and fee", () => {
     for (let i = 0; i < 200; i++) {
       const amountIn = BigInt(1 + Math.floor(Math.random() * 50_000_000));
-      const quote: SellQuote = { venue: i % 2 ? "aerodrome" : "uniswap", pool: i % 2 ? 10 : 3000, amountIn, amountOut: BigInt(Math.floor(Number(amountIn) * 2.5 * (0.9 + Math.random() * 0.2))) };
+      const quote: SellQuote = {
+        venue: i % 2 ? "aerodrome" : "uniswap",
+        pool: i % 2 ? 10 : 3000,
+        amountIn,
+        amountOut: BigInt(Math.floor(Number(amountIn) * 2.5 * (0.9 + Math.random() * 0.2))),
+      };
       const debt = 1 + Math.random() * 500;
       const feeFromSale = i % 3 === 0;
       const floor = sellMinOut(quote, nvda, 250);
@@ -499,9 +622,21 @@ describe("buildFreeRepayCalls: sell the free shares, then repay exactly what the
     const calls = build();
     const floor = sellMinOut(q, nvda, 250);
     const tampered = calls.map((c) =>
-      c.to === AAVE.SPOKE ? { ...c, data: encodeFunctionData({ abi: spokeAbi, functionName: "repay", args: [BigInt(USDC.reserveId), floor + 1n, user] }) } : c,
+      c.to === AAVE.SPOKE
+        ? {
+            ...c,
+            data: encodeFunctionData({
+              abi: spokeAbi,
+              functionName: "repay",
+              args: [BigInt(USDC.reserveId), floor + 1n, user],
+            }),
+          }
+        : c,
     );
-    tampered[2] = { ...tampered[2], data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [AAVE.SPOKE, floor + 1n] }) };
+    tampered[2] = {
+      ...tampered[2],
+      data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [AAVE.SPOKE, floor + 1n] }),
+    };
     expect(assertAllowed(user, tampered)).toBe(tampered); // the allowlist alone can't see the sale's floor…
     expect(() => assertSaleCoversRepay(user, tampered, false)).toThrow(/more than the sale is sure to bring/); // …this can
     // With the fee from the sale, the floor itself is already too much.
@@ -511,7 +646,10 @@ describe("buildFreeRepayCalls: sell the free shares, then repay exactly what the
   it("refuses an approval that isn't exactly the repay, a repay before the sale, and a sale paid to someone else", () => {
     const calls = build();
     const loose = [...calls];
-    loose[2] = { ...loose[2], data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [AAVE.SPOKE, usd(1_000)] }) };
+    loose[2] = {
+      ...loose[2],
+      data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [AAVE.SPOKE, usd(1_000)] }),
+    };
     expect(() => assertSaleCoversRepay(user, loose, false)).toThrow(/not exact/);
     expect(() => assertSaleCoversRepay(user, [calls[2], calls[3], calls[0], calls[1]], false)).toThrow(/after a sale/);
     expect(() => assertSaleCoversRepay(attacker, calls, false)).toThrow(/after a sale/);
@@ -521,12 +659,19 @@ describe("buildFreeRepayCalls: sell the free shares, then repay exactly what the
   it("refuses when nothing is owed, and when the sale can't pay for any repay", () => {
     expect(() => build({ debt: 0 })).toThrow(/Nothing owed/);
     // Half the fee buffer's worth of NVIDIA: its floor (the quote less 1%, or Aave's price less 10%) is under the buffer.
-    expect(() => build({ feeFromSale: true, quote: { ...q, amountIn: shares(B / 2 / 250), amountOut: usd(B / 2) } })).toThrow(/positive/);
+    expect(() =>
+      build({ feeFromSale: true, quote: { ...q, amountIn: shares(B / 2 / 250), amountOut: usd(B / 2) } }),
+    ).toThrow(/positive/);
   });
 });
 
 describe("A free repay's key and activity", () => {
-  const sellPlan = { block: undefined, sharesRaw: shares(0.4), usd: 99.5, minOutRaw: minOut(usd(99.5)) } as unknown as FreeRepayInput["plan"];
+  const sellPlan = {
+    block: undefined,
+    sharesRaw: shares(0.4),
+    usd: 99.5,
+    minOutRaw: minOut(usd(99.5)),
+  } as unknown as FreeRepayInput["plan"];
   const input: FreeRepayInput = {
     user,
     stock: nvda,

@@ -40,14 +40,18 @@ export const startEarningSteps = (save: AgentStatus) => (save === "off" ? 2 : 1)
  * The card's words (board 2g): money that just arrived, "Your $100 arrived · Start earning 4.6% on it."; with savings
  * already earning and new idle cash beside them, "$40 isn't earning". `walletUsd` is the wallet's USDC, cents kept.
  */
-export function startEarningText(p: { walletUsd: number; savingsUsd: number; rate: string | null }): { title: string; line: string } {
+export function startEarningText(p: { walletUsd: number; savingsUsd: number; rate: string | null }): {
+  title: string;
+  line: string;
+} {
   const amount = formatUsdTrim(Math.floor(p.walletUsd * 100) / 100);
   const line = `Start earning${p.rate ? ` ${p.rate}` : ""} on it.`;
   return { title: p.savingsUsd >= 0.01 ? `${amount} isn’t earning` : `Your ${amount} arrived`, line };
 }
 
 /** The toast once the batch lands: "Your cash is earning 3.9%". */
-export const startedEarningText = (rate: string | null) => (rate ? `Your cash is earning ${rate}` : "Your cash is earning");
+export const startedEarningText = (rate: string | null) =>
+  rate ? `Your cash is earning ${rate}` : "Your cash is earning";
 
 /** A coin sitting in the wallet: how much, in its own units. */
 export type Arrived = { coin: EntryCoinAsset; raw: bigint };
@@ -81,7 +85,9 @@ export type ArrivedView = { kind: "none" } | { kind: "ask" | "arriving"; text: s
 export function arrivedView(list: readonly Arrived[], entry: AgentStatus): ArrivedView {
   if (list.length === 0 || entry === "loading") return { kind: "none" };
   const coins = [...list];
-  return entry === "on" || entry === "starting" ? { kind: "arriving", text: arrivedText(coins), coins } : { kind: "ask", text: arrivedText(coins), coins };
+  return entry === "on" || entry === "starting"
+    ? { kind: "arriving", text: arrivedText(coins), coins }
+    : { kind: "ask", text: arrivedText(coins), coins };
 }
 
 /** After a conversion, whether to ask "Do this automatically next time?": only with an executor, and no Entry grant yet. */

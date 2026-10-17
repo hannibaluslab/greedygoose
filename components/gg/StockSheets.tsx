@@ -51,7 +51,15 @@ type StockSheetsState = ReturnType<typeof useStockSheets>;
  * Free up shares. One sheet slides out as the next slides in, and a flow opened from a stock's sheet goes Back to it.
  * Trade (Home's and Invest's) is its own sheet. Stocks resolve through the registry only.
  */
-export function StockSheets({ sheets, user, data }: { sheets: StockSheetsState; user: `0x${string}`; data: PositionData }) {
+export function StockSheets({
+  sheets,
+  user,
+  data,
+}: {
+  sheets: StockSheetsState;
+  user: `0x${string}`;
+  data: PositionData;
+}) {
   const { stock, buy, creditBuy, freeUp, trade } = sheets;
   const find = (symbol: string | null | undefined) => {
     const asset = EQUITIES.find((e) => e.symbol === symbol);
@@ -72,10 +80,12 @@ export function StockSheets({ sheets, user, data }: { sheets: StockSheetsState; 
   const cashFrom = buy.subject?.fromCreditBuy;
   const creditAt = creditBuy.subject;
   /** From the stock sheet on to a flow for its stock. */
-  const hop = <T,>(flow: { show: (s: T) => void }, subject: T) => () => {
-    stock.close();
-    flow.show(subject);
-  };
+  const hop =
+    <T,>(flow: { show: (s: T) => void }, subject: T) =>
+    () => {
+      stock.close();
+      flow.show(subject);
+    };
 
   return (
     <>

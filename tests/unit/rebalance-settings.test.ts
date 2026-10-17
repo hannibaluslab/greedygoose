@@ -37,7 +37,13 @@ describe("tradeLines", () => {
       { reserveId: 0, bps: 2_500 },
       { reserveId: 6, bps: 2_500 },
     ];
-    const trades = previewTrades({ holdings: HOLDINGS, rows, capRaw: usdc(500), capMaxRaw: null, options: rebalanceOptions() });
+    const trades = previewTrades({
+      holdings: HOLDINGS,
+      rows,
+      capRaw: usdc(500),
+      capMaxRaw: null,
+      options: rebalanceOptions(),
+    });
     const lines = tradeLines(trades, HOLDINGS);
     expect(lines.length).toBeGreaterThan(0);
     // NVIDIA is under its target, so it's the one bought; what's bought fits in the weekly limit.
@@ -79,7 +85,13 @@ describe("rebalanceSave", () => {
 
   it("takes one step for a new mix in stocks it may already sell", () => {
     const weights = [5_000, 0, 0, 0, 0, 2_500, 2_500];
-    expect(rebalanceSave({ ...base, weights })).toMatchObject({ mixChanged: true, needsGrant: false, steps: 1, canSave: true, note: null });
+    expect(rebalanceSave({ ...base, weights })).toMatchObject({
+      mixChanged: true,
+      needsGrant: false,
+      steps: 1,
+      canSave: true,
+      note: null,
+    });
   });
 
   it("takes a new grant for a new weekly limit", () => {
@@ -107,12 +119,19 @@ describe("rebalanceSave", () => {
       canSave: true,
       note: null,
     });
-    expect(rebalanceSave({ ...base, terms: null, running: false })).toMatchObject({ steps: 1, canSave: true, note: null });
+    expect(rebalanceSave({ ...base, terms: null, running: false })).toMatchObject({
+      steps: 1,
+      canSave: true,
+      note: null,
+    });
   });
 
   it("stays disabled until the mix adds up to 100%", () => {
     const weights = [2_500, 0, 0, 0, 0, 4_000, 2_500];
-    expect(rebalanceSave({ ...base, weights })).toMatchObject({ canSave: false, note: "Make your mix add up to 100% to save it." });
+    expect(rebalanceSave({ ...base, weights })).toMatchObject({
+      canSave: false,
+      note: "Make your mix add up to 100% to save it.",
+    });
   });
 
   it("stays disabled while fees can't be paid, it's busy, or signed out", () => {

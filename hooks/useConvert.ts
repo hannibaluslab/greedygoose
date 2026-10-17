@@ -54,11 +54,19 @@ export function convertPlan(
   const shown = quotes.filter((q) => q.fair);
   if (shown.length === 0) return null;
   return {
-    key: txKey("convert", user, shown.map((q) => [q.coin.symbol, q.amountIn, q.minOut])),
+    key: txKey(
+      "convert",
+      user,
+      shown.map((q) => [q.coin.symbol, q.amountIn, q.minOut]),
+    ),
     user,
     calls: async () => {
       const [balances, fresh] = await Promise.all([
-        Promise.all(shown.map((q) => client!.readContract({ address: q.coin.address, abi: erc20Abi, functionName: "balanceOf", args: [user] }))),
+        Promise.all(
+          shown.map((q) =>
+            client!.readContract({ address: q.coin.address, abi: erc20Abi, functionName: "balanceOf", args: [user] }),
+          ),
+        ),
         Promise.all(shown.map((q) => quoteConvert(client!, q.coin, q.amountIn).catch(() => 0n))),
       ]);
       const moved = shown.some((q, i) => balances[i] < q.amountIn);
@@ -88,5 +96,8 @@ export function useConvert() {
   const tx = useTx("This didn’t go through on Base. Your dollars are still in your account.");
   const client = usePublicClient({ chainId: CHAIN_ID });
   const queryClient = useQueryClient();
-  return { ...tx, planFor: (user: `0x${string}`, quotes: readonly ConvertQuote[]) => convertPlan(user, quotes, client, queryClient) };
+  return {
+    ...tx,
+    planFor: (user: `0x${string}`, quotes: readonly ConvertQuote[]) => convertPlan(user, quotes, client, queryClient),
+  };
 }

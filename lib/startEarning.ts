@@ -38,8 +38,10 @@ export const startEarningMinRaw = minStartRaw + feeBufferRaw;
 const decode = (c: Call | undefined) => {
   if (!c) return null;
   try {
-    if (isAddressEqual(c.to, USDC.address)) return { on: "usdc" as const, ...decodeFunctionData({ abi: erc20Abi, data: c.data }) };
-    if (isAddressEqual(c.to, GUARDIAN.AAVE_V3_POOL)) return { on: "pool" as const, ...decodeFunctionData({ abi: aaveV3PoolAbi, data: c.data }) };
+    if (isAddressEqual(c.to, USDC.address))
+      return { on: "usdc" as const, ...decodeFunctionData({ abi: erc20Abi, data: c.data }) };
+    if (isAddressEqual(c.to, GUARDIAN.AAVE_V3_POOL))
+      return { on: "pool" as const, ...decodeFunctionData({ abi: aaveV3PoolAbi, data: c.data }) };
   } catch {
     /* blocked below */
   }
@@ -53,14 +55,23 @@ const decode = (c: Call | undefined) => {
  */
 export function assertStartEarning(user: Address, calls: Call[], amountRaw: bigint): Call[] {
   if (amountRaw <= 0n) throw new Error("Blocked: nothing to put in");
-  if (calls.length !== 2 || calls.some((c) => c.value !== 0n)) throw new Error("Blocked: the batch differs from the screen");
+  if (calls.length !== 2 || calls.some((c) => c.value !== 0n))
+    throw new Error("Blocked: the batch differs from the screen");
   const [approve, supply] = calls.map(decode);
-  if (approve?.on !== "usdc" || approve.functionName !== "approve") throw new Error("Blocked: the approval differs from the screen");
+  if (approve?.on !== "usdc" || approve.functionName !== "approve")
+    throw new Error("Blocked: the approval differs from the screen");
   const [spender, allowance] = approve.args as readonly [Address, bigint];
-  if (!isAddressEqual(spender, GUARDIAN.AAVE_V3_POOL) || allowance !== amountRaw) throw new Error("Blocked: the approval differs from the screen");
-  if (supply?.on !== "pool" || supply.functionName !== "supply") throw new Error("Blocked: what earns differs from the screen");
+  if (!isAddressEqual(spender, GUARDIAN.AAVE_V3_POOL) || allowance !== amountRaw)
+    throw new Error("Blocked: the approval differs from the screen");
+  if (supply?.on !== "pool" || supply.functionName !== "supply")
+    throw new Error("Blocked: what earns differs from the screen");
   const [asset, raw, onBehalfOf, referral] = supply.args as readonly [Address, bigint, Address, number];
-  if (!isAddressEqual(asset, USDC.address) || raw !== amountRaw || !isAddressEqual(onBehalfOf, user) || referral !== 0) {
+  if (
+    !isAddressEqual(asset, USDC.address) ||
+    raw !== amountRaw ||
+    !isAddressEqual(onBehalfOf, user) ||
+    referral !== 0
+  ) {
     throw new Error("Blocked: what earns differs from the screen");
   }
   return calls;
@@ -79,7 +90,9 @@ export function buildStartEarningCalls(p: { user: Address; walletRaw: bigint }):
 }
 
 /** What Activity shows while it confirms, as the receipt will read (lib/activity/decode.ts): one move, into savings. */
-export const startEarningActivity = (amountRaw: bigint): ActivityItem[] => [{ kind: "save", symbol: USDC.symbol, amount: toUsd(amountRaw) }];
+export const startEarningActivity = (amountRaw: bigint): ActivityItem[] => [
+  { kind: "save", symbol: USDC.symbol, amount: toUsd(amountRaw) },
+];
 
 /**
  * What the tap signs (useTx): keyed by the account and the wallet USDC on screen, so a new balance is a new batch.

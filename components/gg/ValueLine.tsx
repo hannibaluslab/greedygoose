@@ -8,17 +8,33 @@ import { LINE_POINTS, downsample } from "@/lib/prices/market";
  * with Try again when they can't be had.
  */
 export function ValueLine({
-  points, height, loading, onRetry,
+  points,
+  height,
+  loading,
+  onRetry,
   label = "What your stocks were worth over the last 7 days, at market prices",
   caption = "Market prices · 7 days",
   neutral = false,
-}: { points: number[] | null; height: number; loading: boolean; onRetry: () => void; label?: string; caption?: string; neutral?: boolean }) {
+}: {
+  points: number[] | null;
+  height: number;
+  loading: boolean;
+  onRetry: () => void;
+  label?: string;
+  caption?: string;
+  neutral?: boolean;
+}) {
   if (loading) return <div aria-busy className="animate-pulse rounded-[14px] bg-chip" style={{ height }} />;
   if (!points) {
     return (
-      <p role="status" className="m-0 flex items-center justify-between gap-3 px-1 text-[13px] leading-[normal] text-ink-mid">
+      <p
+        role="status"
+        className="m-0 flex items-center justify-between gap-3 px-1 text-[13px] leading-[normal] text-ink-mid"
+      >
         Market prices aren’t available right now.
-        <button type="button" onClick={onRetry} className="-my-3 h-11 shrink-0 font-semibold text-ink">Try again</button>
+        <button type="button" onClick={onRetry} className="-my-3 h-11 shrink-0 font-semibold text-ink">
+          Try again
+        </button>
       </p>
     );
   }

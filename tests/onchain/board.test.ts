@@ -20,7 +20,11 @@ describe("the board's reads on Base", () => {
   it("finds the stock and dollar-coin pools the app swaps through, PSM3 with its pocket, and no router", async () => {
     const venues = await readVenues(client);
     // Measured 2026-10-15: NVDAc/USDC on Aerodrome (tick spacing 10) and on Uniswap (0.3%), USDT/USDC on Aerodrome's first deployment.
-    for (const p of ["0x853F5f1B92b16714Fe6CDA67CAad0856B83C7ab9", "0x60661b315553EB81872deEA9a66d567Cf0CCd33B", "0xa41Bc0AFfbA7Fd420d186b84899d7ab2aC57fcD1"] as const) {
+    for (const p of [
+      "0x853F5f1B92b16714Fe6CDA67CAad0856B83C7ab9",
+      "0x60661b315553EB81872deEA9a66d567Cf0CCd33B",
+      "0xa41Bc0AFfbA7Fd420d186b84899d7ab2aC57fcD1",
+    ] as const) {
       expect(venues.get(p.toLowerCase())).toBe(p.toLowerCase());
     }
     expect(venues.get(SPARK_PSM3.PSM3.toLowerCase())).toBe("psm3");
@@ -31,10 +35,17 @@ describe("the board's reads on Base", () => {
     const pool = parseAbi([
       "function getReserveData(address asset) view returns ((uint256 configuration, uint128 liquidityIndex, uint128 currentLiquidityRate, uint128 variableBorrowIndex, uint128 currentVariableBorrowRate, uint128 currentStableBorrowRate, uint40 lastUpdateTimestamp, uint16 id, address aTokenAddress, address stableDebtTokenAddress, address variableDebtTokenAddress, address interestRateStrategyAddress, uint128 accruedToTreasury, uint128 unbacked, uint128 isolationModeTotalDebt))",
     ]);
-    const data = await client.readContract({ address: GUARDIAN.AAVE_V3_POOL, abi: pool, functionName: "getReserveData", args: [USDC.address] });
+    const data = await client.readContract({
+      address: GUARDIAN.AAVE_V3_POOL,
+      abi: pool,
+      functionName: "getReserveData",
+      args: [USDC.address],
+    });
     expect(isAddressEqual(data.aTokenAddress, GUARDIAN.AUSDC)).toBe(true);
     expect(isAddressEqual(data.variableDebtTokenAddress, AAVE_V3_USDC_DEBT)).toBe(true);
-    expect(await client.readContract({ address: AAVE_V3_USDC_DEBT, abi: erc20Abi, functionName: "decimals" })).toBe(USDC.decimals);
+    expect(await client.readContract({ address: AAVE_V3_USDC_DEBT, abi: erc20Abi, functionName: "decimals" })).toBe(
+      USDC.decimals,
+    );
   }, 60_000);
 
   it("JAW's paymaster and EFP's four contracts have code", async () => {
@@ -44,6 +55,10 @@ describe("the board's reads on Base", () => {
   }, 60_000);
 
   it("an account without an EFP list has no contacts and no slot", async () => {
-    expect(await fetchFollowing(client, "0x000000000000000000000000000000000000dEaD")).toEqual({ addresses: [], hasList: false, slot: null });
+    expect(await fetchFollowing(client, "0x000000000000000000000000000000000000dEaD")).toEqual({
+      addresses: [],
+      hasList: false,
+      slot: null,
+    });
   }, 60_000);
 });

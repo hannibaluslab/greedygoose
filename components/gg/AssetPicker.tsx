@@ -30,7 +30,8 @@ export function CashMark({ size }: { size: number }) {
 }
 
 /** The mark for an asset: cash's USDC coin, or the stock's logo. */
-export const assetMark = (asset: string, size: number) => (asset === "cash" ? <CashMark size={size} /> : <StockAvatar symbol={asset} size={size} />);
+export const assetMark = (asset: string, size: number) =>
+  asset === "cash" ? <CashMark size={size} /> : <StockAvatar symbol={asset} size={size} />;
 
 /**
  * Cancel the mousedown and click of the tap that is under way, so it presses nothing (and focuses nothing). Undone by
@@ -76,7 +77,21 @@ const MENU_MIN_PX = 160;
  * scroll, stops halfway through a row (`peek`), so it reads as one that scrolls.
  */
 export function AssetPicker({
-  label, title, name, mark, rows, selected, open, onToggle, onClose, onPick, disabled, titleAside, footer, wide = false, peek = false,
+  label,
+  title,
+  name,
+  mark,
+  rows,
+  selected,
+  open,
+  onToggle,
+  onClose,
+  onPick,
+  disabled,
+  titleAside,
+  footer,
+  wide = false,
+  peek = false,
 }: {
   /** The pill's accessible name: "Trade from: Cash". */
   label: string;
@@ -117,7 +132,9 @@ export function AssetPicker({
     if (t?.closest('[role="dialog"]') && !t.closest('[aria-label="Close"]')) swallowNextPress();
   });
 
-  const options = () => [...(listRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]:not([aria-disabled="true"])') ?? [])];
+  const options = () => [
+    ...(listRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]:not([aria-disabled="true"])') ?? []),
+  ];
   const wasOpen = useRef(false);
   // As a listbox does: the open list has focus, on the picked row (or the first that can be picked). Once it closes
   // (a pick, Escape, a tap away), focus that fell to the page goes back to the pill; focus a tap gave elsewhere stays.
@@ -221,7 +238,9 @@ export function AssetPicker({
               {titleAside}
             </div>
           ) : (
-            <div className="shrink-0 px-2 pb-2 pt-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">{title}</div>
+            <div className="shrink-0 px-2 pb-2 pt-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">
+              {title}
+            </div>
           )}
           <div
             ref={listRef}
@@ -262,7 +281,10 @@ export function AssetPicker({
                   )}
                   {row.aside && <span className="shrink-0">{row.aside}</span>}
                   {on ? (
-                    <span aria-hidden className="flex size-[22px] shrink-0 items-center justify-center rounded-full bg-brand shadow-[0_0_0_1.5px_#0e0d0b]">
+                    <span
+                      aria-hidden
+                      className="flex size-[22px] shrink-0 items-center justify-center rounded-full bg-brand shadow-[0_0_0_1.5px_#0e0d0b]"
+                    >
                       <span className="size-2 rounded-full bg-ink" />
                     </span>
                   ) : (

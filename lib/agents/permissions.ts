@@ -79,7 +79,11 @@ export function limitRaw(usd: number, capMaxRaw: bigint): bigint {
  * In dev, when the executor's `CAP_MAX` is under the limit on screen (a D13 test deploy allows $5): "Test version: up
  * to $5". The grant is held to it either way (`limitRaw`); production never shows this line.
  */
-export function testCapNote(usd: number | null, capMaxRaw: bigint | null, dev = process.env.NODE_ENV !== "production"): string | null {
+export function testCapNote(
+  usd: number | null,
+  capMaxRaw: bigint | null,
+  dev = process.env.NODE_ENV !== "production",
+): string | null {
   if (!dev || usd === null || capMaxRaw === null) return null;
   if (BigInt(usd) * 10n ** BigInt(USDC.decimals) <= capMaxRaw) return null;
   return `Test version: up to ${formatUsdTrim(Number(capMaxRaw) / 10 ** USDC.decimals)}`;
@@ -168,7 +172,11 @@ export function sellGrant(capRaw: bigint, limitsRaw: StockLimits): PermissionsDe
   if (capRaw <= 0n) throw new Error("Daily limit must be positive");
   return {
     calls: sellCalls(limitsRaw).map(({ target, selector }) => ({ target, selector })),
-    spends: sellSpends(capRaw, limitsRaw).map(({ token, allowance }) => ({ token, allowance: allowance.toString(), unit: "day" })),
+    spends: sellSpends(capRaw, limitsRaw).map(({ token, allowance }) => ({
+      token,
+      allowance: allowance.toString(),
+      unit: "day",
+    })),
   };
 }
 
@@ -189,7 +197,12 @@ export function sellPermission(p: {
     end: p.end,
     salt: p.salt,
     calls: sellCalls(p.limitsRaw).map(({ target, selector }) => ({ target, selector, checker: zeroAddress })),
-    spends: sellSpends(p.capRaw, p.limitsRaw).map(({ token, allowance }) => ({ token, allowance, unit: PERIOD.Day, multiplier: 1 })),
+    spends: sellSpends(p.capRaw, p.limitsRaw).map(({ token, allowance }) => ({
+      token,
+      allowance,
+      unit: PERIOD.Day,
+      multiplier: 1,
+    })),
   };
 }
 
@@ -234,7 +247,11 @@ export function rebalanceGrant(capRaw: bigint, limitsRaw: StockLimits): Permissi
   if (capRaw <= 0n) throw new Error("Weekly limit must be positive");
   return {
     calls: rebalanceCalls(limitsRaw).map(({ target, selector }) => ({ target, selector })),
-    spends: rebalanceSpends(capRaw, limitsRaw).map(({ token, allowance }) => ({ token, allowance: allowance.toString(), unit: "week" })),
+    spends: rebalanceSpends(capRaw, limitsRaw).map(({ token, allowance }) => ({
+      token,
+      allowance: allowance.toString(),
+      unit: "week",
+    })),
   };
 }
 
@@ -255,7 +272,12 @@ export function rebalancePermission(p: {
     end: p.end,
     salt: p.salt,
     calls: rebalanceCalls(p.limitsRaw).map(({ target, selector }) => ({ target, selector, checker: zeroAddress })),
-    spends: rebalanceSpends(p.capRaw, p.limitsRaw).map(({ token, allowance }) => ({ token, allowance, unit: PERIOD.Week, multiplier: 1 })),
+    spends: rebalanceSpends(p.capRaw, p.limitsRaw).map(({ token, allowance }) => ({
+      token,
+      allowance,
+      unit: PERIOD.Week,
+      multiplier: 1,
+    })),
   };
 }
 
@@ -288,7 +310,11 @@ export function entryGrant(capRaw: bigint): PermissionsDetail {
   if (capRaw <= 0n) throw new Error("Daily limit must be positive");
   return {
     calls: entryCalls().map(({ target, selector }) => ({ target, selector })),
-    spends: entrySpends(capRaw).map(({ token, allowance }) => ({ token, allowance: allowance.toString(), unit: "day" })),
+    spends: entrySpends(capRaw).map(({ token, allowance }) => ({
+      token,
+      allowance: allowance.toString(),
+      unit: "day",
+    })),
   };
 }
 
@@ -308,7 +334,12 @@ export function entryPermission(p: {
     end: p.end,
     salt: p.salt,
     calls: entryCalls().map(({ target, selector }) => ({ target, selector, checker: zeroAddress })),
-    spends: entrySpends(p.capRaw).map(({ token, allowance }) => ({ token, allowance, unit: PERIOD.Day, multiplier: 1 })),
+    spends: entrySpends(p.capRaw).map(({ token, allowance }) => ({
+      token,
+      allowance,
+      unit: PERIOD.Day,
+      multiplier: 1,
+    })),
   };
 }
 
@@ -331,7 +362,12 @@ export function jobGrant(job: AgentJob, capRaw: bigint, limitsRaw?: StockLimits)
  * before registration doesn't refuse it. `pricesRaw` are Aave's prices by reserve id (8 decimals); a stock `sellable`
  * leaves out gets 0, so the grant has no approve for it.
  */
-export function stockLimitsRaw(capRaw: bigint, capMaxRaw: bigint, pricesRaw: readonly bigint[], sellable: readonly boolean[]): StockLimits {
+export function stockLimitsRaw(
+  capRaw: bigint,
+  capMaxRaw: bigint,
+  pricesRaw: readonly bigint[],
+  sellable: readonly boolean[],
+): StockLimits {
   const bound = (2n * capMaxRaw * 99n) / 100n;
   const worth = 2n * capRaw < bound ? 2n * capRaw : bound;
   return EQUITIES.map((e) => {
@@ -367,7 +403,10 @@ export type AgentGrant = {
 const FIRST_STOCK_SPEND: Record<StockJob, number> = { sell: 2, rebalance: 1 };
 
 /** The stock limits a `job` grant's spends carry, by reserve id; null if one of them isn't a stock. */
-export function readStockLimits(job: StockJob, spends: readonly { token: string; allowance: string | bigint }[]): StockLimits | null {
+export function readStockLimits(
+  job: StockJob,
+  spends: readonly { token: string; allowance: string | bigint }[],
+): StockLimits | null {
   const limits: bigint[] = EQUITIES.map(() => 0n);
   for (const s of spends.slice(FIRST_STOCK_SPEND[job])) {
     const stock = EQUITIES.find((e) => isAddressEqual(e.address, s.token as Address));
@@ -378,7 +417,10 @@ export function readStockLimits(job: StockJob, spends: readonly { token: string;
 }
 
 /** The limit and the stock limits a job's grant would carry, read off its spends; null if they can't be a job's. */
-function readTerms(job: AgentJob, spends: ListedPermission["spends"]): { capRaw: bigint; limitsRaw?: StockLimits } | null {
+function readTerms(
+  job: AgentJob,
+  spends: ListedPermission["spends"],
+): { capRaw: bigint; limitsRaw?: StockLimits } | null {
   const first = BigInt(spends[0].allowance);
   if (job === "save" || job === "protect") return { capRaw: first };
   if (job === "entry") return { capRaw: first / 10n ** BigInt(ENTRY_COINS[0].decimals - USDC.decimals) };

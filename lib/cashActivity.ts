@@ -37,7 +37,10 @@ export const CASH_ROWS = 6;
 const MIN_USD = 0.01;
 
 /** The round mark beside a row: the cash's green $, the stock's badge, or Protect's and Rebalance's marks. */
-export type CashMark = { kind: "cash" } | { kind: "stock"; symbol: string } | { kind: "agent"; agent: "Protect" | "Rebalance" };
+export type CashMark =
+  | { kind: "cash" }
+  | { kind: "stock"; symbol: string }
+  | { kind: "agent"; agent: "Protect" | "Rebalance" };
 
 type CashDetail = { label: string; value: Words };
 
@@ -57,9 +60,22 @@ export type CashRow = {
 };
 
 /** The user's own move, as useActivity has it (JAW's history, its Base receipt, this device's sends). */
-export type OwnMove = { key: string; time: number; status: "pending" | "done" | "failed"; items: ActivityItem[]; hash?: Hex };
+export type OwnMove = {
+  key: string;
+  time: number;
+  status: "pending" | "done" | "failed";
+  items: ActivityItem[];
+  hash?: Hex;
+};
 /** The executor's move, as useAgentFeed has it: the event, what the chain said around it, and the feed's details. */
-export type ExecutorMove = { key: string; time: number; hash: Hex; event: AgentEvent; ctx: MoveContext; details: AgentMove["details"] };
+export type ExecutorMove = {
+  key: string;
+  time: number;
+  hash: Hex;
+  event: AgentEvent;
+  ctx: MoveContext;
+  details: AgentMove["details"];
+};
 /** Money someone else sent (lib/activity/arrivals.ts): the transaction, when, and its USDC receives. */
 export type Arrival = { hash: Hex; time: number; items: ActivityItem[] };
 
@@ -79,7 +95,9 @@ const shares = (i: ActivityItem) => `${formatShares(i.amount)} ${ticker(i.symbol
 const isStock = (i: ActivityItem) => EQUITIES.some((e) => e.symbol === i.symbol);
 const isUsdc = (i: ActivityItem) => i.symbol === USDC.symbol;
 
-function row(p: Omit<CashRow, "line" | "details"> & { what: string[]; details?: CashDetail[]; lineText?: string }): CashRow {
+function row(
+  p: Omit<CashRow, "line" | "details"> & { what: string[]; details?: CashDetail[]; lineText?: string },
+): CashRow {
   const details: CashDetail[] = [
     ...p.what.map((w, k) => ({ label: k === 0 ? "What" : "", value: [w] })),
     ...(p.details ?? []),
@@ -116,7 +134,11 @@ export function ownCashRow(m: OwnMove): CashRow | null {
   const repays = of("repay").filter(isUsdc);
   const receives = of("receive").filter(isUsdc);
   const sends = of("send").filter(isUsdc);
-  const credit = sum(of("borrow").filter(isUsdc).map((i) => i.amount));
+  const credit = sum(
+    of("borrow")
+      .filter(isUsdc)
+      .map((i) => i.amount),
+  );
   const earned = sum(of("earn").map((i) => i.amount));
   // Start earning: the cash went into savings. It's still the one pot (D20), so it moves nothing here, but it's a row.
   const saved = sum(of("save").map((i) => i.amount));
@@ -126,18 +148,36 @@ export function ownCashRow(m: OwnMove): CashRow | null {
     sum(receives.map((i) => i.amount)) +
     sum(sells.map((i) => i.receivedUsd ?? 0)) +
     sum(converts.map((i) => i.receivedUsd ?? 0));
-  const out = sum(sends.map((i) => i.amount)) + sum(repays.map((i) => i.amount)) + sum(buys.map((i) => i.paidUsd ?? 0)) - (buys.length ? credit : 0);
+  const out =
+    sum(sends.map((i) => i.amount)) +
+    sum(repays.map((i) => i.amount)) +
+    sum(buys.map((i) => i.paidUsd ?? 0)) -
+    (buys.length ? credit : 0);
   const usd = cents(into - out);
   // A Credit Buy paid with credit leaves the cash as it was, but it's still the cash's story (Adrian: "I don't see the
   // credit buys"): it stays, its line saying what the credit paid.
   const creditBuy = buys.length > 0 && credit > 0;
   if (Math.abs(usd) < MIN_USD && !creditBuy && saved < MIN_USD) return null;
 
-  const base = { key: m.key, time: m.time, usd, hash: m.hash, pending: m.status === "pending", mark: { kind: "cash" } as CashMark };
+  const base = {
+    key: m.key,
+    time: m.time,
+    usd,
+    hash: m.hash,
+    pending: m.status === "pending",
+    mark: { kind: "cash" } as CashMark,
+  };
   if (converts.length) {
     const coins = [...new Set(converts.map((c) => c.symbol))];
-    const title = converts.length === 1 ? `${formatCoin(converts[0].amount)} ${converts[0].symbol} became cash` : `${inWords(coins)} became cash`;
-    return row({ ...base, title, what: converts.map((c) => `${formatCoin(c.amount)} ${c.symbol} → ${formatUsd(c.receivedUsd ?? 0)}`) });
+    const title =
+      converts.length === 1
+        ? `${formatCoin(converts[0].amount)} ${converts[0].symbol} became cash`
+        : `${inWords(coins)} became cash`;
+    return row({
+      ...base,
+      title,
+      what: converts.map((c) => `${formatCoin(c.amount)} ${c.symbol} → ${formatUsd(c.receivedUsd ?? 0)}`),
+    });
   }
   if (buys.length) {
     const what = buys.map(shares);
@@ -148,23 +188,46 @@ export function ownCashRow(m: OwnMove): CashRow | null {
       title: credit > 0 ? `Credit Buy ${nameOf(buys[0].symbol)}` : `Bought ${nameOf(buys[0].symbol)}`,
       what,
       // Paid all on credit: the cash didn't move, so the line says the credit; part cash says both.
-      ...(credit > 0 ? { lineText: Math.abs(usd) < MIN_USD ? `${formatUsd(credit)} on credit` : `${signedUsd(usd)} · ${formatUsd(credit)} on credit` } : {}),
+      ...(credit > 0
+        ? {
+            lineText:
+              Math.abs(usd) < MIN_USD
+                ? `${formatUsd(credit)} on credit`
+                : `${signedUsd(usd)} · ${formatUsd(credit)} on credit`,
+          }
+        : {}),
     });
   }
-  if (sells.length) return row({ ...base, mark: { kind: "stock", symbol: sells[0].symbol }, title: `Sold ${nameOf(sells[0].symbol)}`, what: sells.map(shares) });
+  if (sells.length)
+    return row({
+      ...base,
+      mark: { kind: "stock", symbol: sells[0].symbol },
+      title: `Sold ${nameOf(sells[0].symbol)}`,
+      what: sells.map(shares),
+    });
   if (repays.length) {
-    const freed = of("withdraw").filter(isStock).map((i) => `Freed up ${shares(i)}`);
+    const freed = of("withdraw")
+      .filter(isStock)
+      .map((i) => `Freed up ${shares(i)}`);
     return row({ ...base, title: "Repaid credit", what: freed });
   }
-  const backed = of("supply").filter(isStock).map((i) => `Backed by ${shares(i)}`);
+  const backed = of("supply")
+    .filter(isStock)
+    .map((i) => `Backed by ${shares(i)}`);
   // Earn with stocks: one row for the whole batch, the credit that came to the cash, earning.
   if (earned > 0) return row({ ...base, title: "Earn with stocks", what: backed, lineText: earnLine(usd) });
   if (credit > 0) return row({ ...base, title: "From credit", what: backed });
   // Start earning: one row, "Started earning · $40.00 into savings", not money leaving.
-  if (saved > 0 && Math.abs(usd) < MIN_USD) return row({ ...base, title: "Started earning", what: [], lineText: saveLine(saved) });
+  if (saved > 0 && Math.abs(usd) < MIN_USD)
+    return row({ ...base, title: "Started earning", what: [], lineText: saveLine(saved) });
   // A Send names who it went to (the name this device sent it to, else the short address); a receive names no sender.
   const sentTo = usd < 0 && sends.length === 1 && sends[0].to ? (sends[0].toName ?? shortAddress(sends[0].to)) : null;
-  return row({ ...base, title: usd > 0 ? "Received" : "Sent", what: [], details: sentTo ? [{ label: "To", value: [sentTo] }] : undefined });
+  return row({
+    ...base,
+    title: usd > 0 ? "Received" : "Sent",
+    what: [],
+    details: sentTo ? [{ label: "To", value: [sentTo] }] : undefined,
+  });
 }
 
 /** A coin of the Entry agent's by address. */
@@ -188,11 +251,17 @@ export function executorCashRow(m: ExecutorMove): CashRow | null {
     case "converted": {
       const c = coinOf(e.coin);
       const usd = toUsd(e.usdcOutRaw);
-      const title = c ? `${formatCoin(Number(e.amountInRaw) / 10 ** c.decimals)} ${c.symbol} became cash` : "Other dollars became cash";
+      const title = c
+        ? `${formatCoin(Number(e.amountInRaw) / 10 ** c.decimals)} ${c.symbol} became cash`
+        : "Other dollars became cash";
       return done({ mark: { kind: "cash" }, title, usd });
     }
     case "repaid":
-      return done({ mark: { kind: "agent", agent: "Protect" }, title: "Protect repaid credit", usd: -toUsd(e.amountRaw) });
+      return done({
+        mark: { kind: "agent", agent: "Protect" },
+        title: "Protect repaid credit",
+        usd: -toUsd(e.amountRaw),
+      });
     case "sold":
     case "rebalanced": {
       const up = m.ctx.cashRaw ? m.ctx.cashRaw[1] - m.ctx.cashRaw[0] : 0n;
@@ -211,16 +280,33 @@ export function executorCashRow(m: ExecutorMove): CashRow | null {
  * lookalike addresses.
  */
 export function arrivalCashRow(a: Arrival): CashRow | null {
-  const usd = cents(sum(a.items.filter((i) => i.kind === "receive" && isUsdc(i) && i.amount >= MIN_ARRIVAL_USD).map((i) => i.amount)));
+  const usd = cents(
+    sum(a.items.filter((i) => i.kind === "receive" && isUsdc(i) && i.amount >= MIN_ARRIVAL_USD).map((i) => i.amount)),
+  );
   if (usd < MIN_USD) return null;
-  return row({ key: `in:${a.hash}`, time: a.time, mark: { kind: "cash" }, title: "Received", usd, hash: a.hash, pending: false, what: [] });
+  return row({
+    key: `in:${a.hash}`,
+    time: a.time,
+    mark: { kind: "cash" },
+    title: "Received",
+    usd,
+    hash: a.hash,
+    pending: false,
+    what: [],
+  });
 }
 
 /**
  * The sheet's rows, newest first: the user's own moves since the window's start (`since`, ms), the executor's, and money
  * someone else sent in a transaction neither of those has, `limit` of them.
  */
-export function cashRows(p: { own: readonly OwnMove[]; executor: readonly ExecutorMove[]; arrivals: readonly Arrival[]; since: number; limit?: number }): CashRow[] {
+export function cashRows(p: {
+  own: readonly OwnMove[];
+  executor: readonly ExecutorMove[];
+  arrivals: readonly Arrival[];
+  since: number;
+  limit?: number;
+}): CashRow[] {
   const known = new Set([...p.own, ...p.executor].flatMap((m) => (m.hash ? [m.hash.toLowerCase()] : [])));
   const rows = [
     ...p.own.filter((m) => m.time >= p.since).map(ownCashRow),

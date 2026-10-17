@@ -29,7 +29,7 @@ export type ContactsChange = { verb: "add" | "remove"; user: Address; targets: A
  * the screen loaded isn't undone. Keyed by the change and its people, in any order.
  */
 export function contactsPlan(c: ContactsChange, client: ReturnType<typeof usePublicClient>): TxPlan {
-  const fresh = async <T,>(build: () => Promise<T>) => {
+  const fresh = async <T>(build: () => Promise<T>) => {
     try {
       return await build();
     } catch (e) {
@@ -42,9 +42,14 @@ export function contactsPlan(c: ContactsChange, client: ReturnType<typeof usePub
     calls: () =>
       fresh(async () => {
         const following = await fetchFollowing(client!, c.user);
-        return c.verb === "add" ? addContactsCalls(c.user, c.targets, following) : removeContactCalls(c.user, c.targets[0], following);
+        return c.verb === "add"
+          ? addContactsCalls(c.user, c.targets, following)
+          : removeContactCalls(c.user, c.targets[0], following);
       }),
-    fallback: c.verb === "add" ? "Adding didn’t go through right now. Try again in a moment." : "Removing didn’t go through right now. Try again in a moment.",
+    fallback:
+      c.verb === "add"
+        ? "Adding didn’t go through right now. Try again in a moment."
+        : "Removing didn’t go through right now. Try again in a moment.",
   };
 }
 

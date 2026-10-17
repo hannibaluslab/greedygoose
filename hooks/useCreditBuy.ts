@@ -34,7 +34,15 @@ export function useCreditBuyBatch() {
     if (stop) throw new TxStop(stop);
     const quote = await quoteToSign(p.stock, p.quote);
     const cash = await cashToSign(p.user, quote.amountIn - p.plan.creditRaw);
-    return buildCreditBuyCalls({ user: p.user, stock: p.stock, quote, creditRaw: p.plan.creditRaw, backing: p.plan.backing, limit: p.plan.limit, cash });
+    return buildCreditBuyCalls({
+      user: p.user,
+      stock: p.stock,
+      quote,
+      creditRaw: p.plan.creditRaw,
+      backing: p.plan.backing,
+      limit: p.plan.limit,
+      cash,
+    });
   };
 }
 
@@ -68,5 +76,8 @@ export const creditBuyPlan = (p: CreditBuyInput, batch: ReturnType<typeof useCre
  */
 export function useCreditBuy(input: CreditBuyInput | null) {
   const batch = useCreditBuyBatch();
-  return useTx("The Credit Buy didn’t go through on Base. Nothing moved except any network fee.", input ? creditBuyPlan(input, batch) : null);
+  return useTx(
+    "The Credit Buy didn’t go through on Base. Nothing moved except any network fee.",
+    input ? creditBuyPlan(input, batch) : null,
+  );
 }

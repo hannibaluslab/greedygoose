@@ -51,7 +51,18 @@ export function defaultNumbers(rebalance: RebalanceOptions): RuleNumbers {
 export type Plan = { action: number; job: number; amount: bigint; reason: number; off: number };
 
 /** GooseExecutor's Action, in order. */
-const ACTIONS = ["none", "prune", "repay", "save", "sell", "heads-up", "clear-heads-up", "defer", "rebalance", "convert"] as const;
+const ACTIONS = [
+  "none",
+  "prune",
+  "repay",
+  "save",
+  "sell",
+  "heads-up",
+  "clear-heads-up",
+  "defer",
+  "rebalance",
+  "convert",
+] as const;
 
 /**
  * The plan's move in words, and the agent it's for; null when a run would do nothing, or when it's a job with no agent
@@ -82,7 +93,12 @@ export function planNext(p: Plan): { agent: Agent; next: Next } | null {
 
 /** New York's calendar day of `sec`, counted from 1970-01-01, as GooseExecutor's NyCalendar.day counts it. */
 export function nyDay(sec: number): number {
-  const f = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "numeric", day: "numeric" });
+  const f = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  });
   const p = Object.fromEntries(f.formatToParts(sec * 1000).map((x) => [x.type, x.value]));
   return Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day)) / 86_400_000;
 }
@@ -90,7 +106,11 @@ export function nyDay(sec: number): number {
 /** The second `hour`:00 New York time falls on, on New York day `day`. */
 function nyHour(day: number, hour: number): number {
   const est = day * 86_400 + (hour + 5) * 3_600;
-  const shown = Number(new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", hourCycle: "h23" }).format(est * 1000));
+  const shown = Number(
+    new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", hourCycle: "h23" }).format(
+      est * 1000,
+    ),
+  );
   return shown === hour ? est : est - 3_600; // daylight time: New York is 4 hours behind
 }
 
@@ -176,7 +196,14 @@ function protectNext(i: NextInput): Next {
   const status = statusFor(d.hf);
   // Act is never healthy for the rule: the executor pins its trigger to the Act line (D13's was higher). A fallback line.
   if (d.reason === "healthy") {
-    return { idle: status === "safe" ? "Safe. Nothing to do." : status === "watch" ? "Watch. Steps in only at Act" : "Act. Nothing to repay yet" };
+    return {
+      idle:
+        status === "safe"
+          ? "Safe. Nothing to do."
+          : status === "watch"
+            ? "Watch. Steps in only at Act"
+            : "Act. Nothing to repay yet",
+    };
   }
   const label = STATUS_LABEL[status];
   if (d.reason === "too-small") return { idle: `${label}. Nothing worth repaying yet` };
@@ -229,10 +256,16 @@ function rebalanceNext(i: NextInput): Next {
     capRaw: i.capRaw.rebalance,
     capMaxRaw: i.capMaxRaw,
     options: i.numbers.rebalance,
-    left: left ? {
-      usdcRaw: left[0].leftRaw,
-      stocksRaw: readStockLimits("rebalance", left.map((s) => ({ token: s.token, allowance: s.leftRaw }))) ?? EQUITIES.map(() => 0n),
-    } : undefined,
+    left: left
+      ? {
+          usdcRaw: left[0].leftRaw,
+          stocksRaw:
+            readStockLimits(
+              "rebalance",
+              left.map((s) => ({ token: s.token, allowance: s.leftRaw })),
+            ) ?? EQUITIES.map(() => 0n),
+        }
+      : undefined,
   });
   const when = whenText(rebalanceCheckAt(i.nowSec, i.rebalanceDay), i.nowSec);
   if (trades.length === 0) return { idle: `On target. Checks ${when}` };
@@ -251,5 +284,8 @@ const RULES: Record<Agent, (i: NextInput) => Next> = {
 /** Every agent's next line: the executor's plan for the agent it names, each agent's own rule for the rest. */
 export function agentNexts(i: NextInput): Record<Agent, Next> {
   const planned = i.plan && planNext(i.plan);
-  return Object.fromEntries(AGENTS.map((a) => [a, planned?.agent === a ? planned.next : RULES[a](i)])) as Record<Agent, Next>;
+  return Object.fromEntries(AGENTS.map((a) => [a, planned?.agent === a ? planned.next : RULES[a](i)])) as Record<
+    Agent,
+    Next
+  >;
 }

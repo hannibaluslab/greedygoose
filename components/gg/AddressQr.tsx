@@ -12,7 +12,12 @@ export function AddressQr({ address }: { address: `0x${string}` }) {
 
   useEffect(() => {
     let live = true;
-    QRCode.toDataURL(address, { errorCorrectionLevel: "M", margin: 0, scale: 8, color: { dark: "#0e0d0b", light: "#ebe6db" } })
+    QRCode.toDataURL(address, {
+      errorCorrectionLevel: "M",
+      margin: 0,
+      scale: 8,
+      color: { dark: "#0e0d0b", light: "#ebe6db" },
+    })
       .then((url) => live && setSrc(url))
       .catch(() => live && setSrc(null));
     return () => {

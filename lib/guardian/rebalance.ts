@@ -145,7 +145,12 @@ export function rebalanceTrades(book: RebalanceBook, o: RebalanceOptions): Rebal
   for (let i = 0; i < s.length; i++) {
     if (buy[i] === 0n) continue;
     const usdcIn = (buy[i] * budget) / buys;
-    trades.push({ reserveId: i, buy: true, amountIn: usdcIn, minOut: (usdcIn * 10n ** 10n * (BPS - o.floorBps)) / (s[i].price * BPS) });
+    trades.push({
+      reserveId: i,
+      buy: true,
+      amountIn: usdcIn,
+      minOut: (usdcIn * 10n ** 10n * (BPS - o.floorBps)) / (s[i].price * BPS),
+    });
   }
   return trades;
 }

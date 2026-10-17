@@ -3,22 +3,61 @@ import type { SVGProps } from "react";
 
 type P = SVGProps<SVGSVGElement> & { size?: number };
 const base = (size: number, sw: number, rest: SVGProps<SVGSVGElement>) => ({
-  width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor",
-  strokeWidth: sw, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true, ...rest,
+  width: size,
+  height: size,
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: sw,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+  "aria-hidden": true,
+  ...rest,
 });
 
-export const MenuIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.8, r)}><path d="M4 7h16M4 12h16M4 17h16" /></svg>;
-export const InfoIcon = ({ size = 14, ...r }: P) => <svg {...base(size, 2, r)}><circle cx="12" cy="12" r="9" /><path d="M12 11v5M12 8h.01" /></svg>;
-export const ChevronRight = ({ size = 14, ...r }: P) => <svg {...base(size, 2, r)}><path d="M9 6l6 6-6 6" /></svg>;
-export const BackIcon = ({ size = 22, ...r }: P) => <svg {...base(size, 1.8, r)}><path d="M15 5l-7 7 7 7" /></svg>;
-export const PlusIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M12 5v14M5 12h14" /></svg>;
-export const ReceiveIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M12 4v12M6 10l6 6 6-6M5 20h14" /></svg>;
-export const RepayIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3" /></svg>;
+export const MenuIcon = ({ size = 20, ...r }: P) => (
+  <svg {...base(size, 1.8, r)}>
+    <path d="M4 7h16M4 12h16M4 17h16" />
+  </svg>
+);
+export const InfoIcon = ({ size = 14, ...r }: P) => (
+  <svg {...base(size, 2, r)}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 11v5M12 8h.01" />
+  </svg>
+);
+export const ChevronRight = ({ size = 14, ...r }: P) => (
+  <svg {...base(size, 2, r)}>
+    <path d="M9 6l6 6-6 6" />
+  </svg>
+);
+export const BackIcon = ({ size = 22, ...r }: P) => (
+  <svg {...base(size, 1.8, r)}>
+    <path d="M15 5l-7 7 7 7" />
+  </svg>
+);
+export const PlusIcon = ({ size = 20, ...r }: P) => (
+  <svg {...base(size, 1.7, r)}>
+    <path d="M12 5v14M5 12h14" />
+  </svg>
+);
+export const ReceiveIcon = ({ size = 20, ...r }: P) => (
+  <svg {...base(size, 1.7, r)}>
+    <path d="M12 4v12M6 10l6 6 6-6M5 20h14" />
+  </svg>
+);
+export const RepayIcon = ({ size = 20, ...r }: P) => (
+  <svg {...base(size, 1.7, r)}>
+    <path d="M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3" />
+  </svg>
+);
 export const CreditIcon = ({ size = 20, ...r }: P) => (
   <svg {...base(size, 1.7, r)}>
     <path d="M11 15h2a2 2 0 1 0 0-4h-3c-.6 0-1.1.2-1.4.6L3 17" />
     <path d="M7 21l1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a2 2 0 0 0-2.75-2.91l-4.2 3.9" />
-    <path d="M2 16l6 6" /><circle cx="16" cy="9" r="2.9" /><circle cx="6" cy="5" r="3" />
+    <path d="M2 16l6 6" />
+    <circle cx="16" cy="9" r="2.9" />
+    <circle cx="6" cy="5" r="3" />
   </svg>
 );
 /** Backs credit: two linked rings (D17: never a padlock). */
@@ -40,27 +79,99 @@ export const LockIcon = ({ size = 8, ...r }: P) => (
     <path d="M3 4.8V3.4a2 2 0 0 1 4 0v1.4" fill="none" stroke="currentColor" strokeWidth="1.4" />
   </svg>
 );
-export const ShieldIcon = ({ size = 12, ...r }: P) => <svg {...base(size, 2.2, r)}><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z" /></svg>;
-export const HomeIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M4 11l8-7 8 7v9H4zM10 20v-5h4v5" /></svg>;
-export const InvestIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M3 17l6-6 4 4 8-8M15 7h6v6" /></svg>;
+export const ShieldIcon = ({ size = 12, ...r }: P) => (
+  <svg {...base(size, 2.2, r)}>
+    <path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z" />
+  </svg>
+);
+export const HomeIcon = ({ size = 20, ...r }: P) => (
+  <svg {...base(size, 1.7, r)}>
+    <path d="M4 11l8-7 8 7v9H4zM10 20v-5h4v5" />
+  </svg>
+);
+export const InvestIcon = ({ size = 20, ...r }: P) => (
+  <svg {...base(size, 1.7, r)}>
+    <path d="M3 17l6-6 4 4 8-8M15 7h6v6" />
+  </svg>
+);
 export const GearIcon = ({ size = 20, ...r }: P) => (
-  <svg {...base(size, 1.7, r)}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>
+  <svg {...base(size, 1.7, r)}>
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+  </svg>
 );
 /** Invest's Market: a storefront, since ↑↓ is Trade's (Home, Invest and the Trade sheet's flip). */
-export const MarketIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M4 10v9h16v-9M3 10l2-5h14l2 5M3 10h18M9 19v-5h6v5" /></svg>;
-export const TradeIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M7 20V5M3 9l4-4 4 4M17 4v15M13 15l4 4 4-4" /></svg>;
-export const ActivityIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M3 12h4l3-8 4 16 3-8h4" /></svg>;
+export const MarketIcon = ({ size = 20, ...r }: P) => (
+  <svg {...base(size, 1.7, r)}>
+    <path d="M4 10v9h16v-9M3 10l2-5h14l2 5M3 10h18M9 19v-5h6v5" />
+  </svg>
+);
+export const TradeIcon = ({ size = 20, ...r }: P) => (
+  <svg {...base(size, 1.7, r)}>
+    <path d="M7 20V5M3 9l4-4 4 4M17 4v15M13 15l4 4 4-4" />
+  </svg>
+);
+export const ActivityIcon = ({ size = 20, ...r }: P) => (
+  <svg {...base(size, 1.7, r)}>
+    <path d="M3 12h4l3-8 4 16 3-8h4" />
+  </svg>
+);
 /** Agents: sparkles, "works on its own" (Adrian: the robot looked too much like a bot). Lucide's Sparkles in the kit's stroke. */
-export const AgentsIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0l1.58 6.14a2 2 0 0 0 1.44 1.44l6.14 1.58a.5.5 0 0 1 0 .96l-6.14 1.58a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z" /><path d="M20 3v4M22 5h-4M4 17v2M5 18H3" /></svg>;
+export const AgentsIcon = ({ size = 20, ...r }: P) => (
+  <svg {...base(size, 1.7, r)}>
+    <path d="M9.94 15.5A2 2 0 0 0 8.5 14.06l-6.14-1.58a.5.5 0 0 1 0-.96L8.5 9.94A2 2 0 0 0 9.94 8.5l1.58-6.14a.5.5 0 0 1 .96 0l1.58 6.14a2 2 0 0 0 1.44 1.44l6.14 1.58a.5.5 0 0 1 0 .96l-6.14 1.58a2 2 0 0 0-1.44 1.44l-1.58 6.14a.5.5 0 0 1-.96 0z" />
+    <path d="M20 3v4M22 5h-4M4 17v2M5 18H3" />
+  </svg>
+);
 /** The leaderboard: three bars of a podium. */
-export const BoardIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M3 20v-6h6v6M9 20V8h6v12M15 20v-9h6v9" /></svg>;
-export const SendIcon = ({ size = 20, ...r }: P) => <svg {...base(size, 1.7, r)}><path d="M4 12l16-8-6 16-3-7z" /></svg>;
-export const ArrowLeftIcon = ({ size = 18, ...r }: P) => <svg {...base(size, 2, r)}><path d="M19 12H5M11 6l-6 6 6 6" /></svg>;
-export const CloseIcon = ({ size = 16, ...r }: P) => <svg {...base(size, 2, r)}><path d="M6 6l12 12M18 6L6 18" /></svg>;
-export const ChevronDown = ({ size = 16, ...r }: P) => <svg {...base(size, 2, r)}><path d="M6 9l6 6 6-6" /></svg>;
+export const BoardIcon = ({ size = 20, ...r }: P) => (
+  <svg {...base(size, 1.7, r)}>
+    <path d="M3 20v-6h6v6M9 20V8h6v12M15 20v-9h6v9" />
+  </svg>
+);
+export const SendIcon = ({ size = 20, ...r }: P) => (
+  <svg {...base(size, 1.7, r)}>
+    <path d="M4 12l16-8-6 16-3-7z" />
+  </svg>
+);
+export const ArrowLeftIcon = ({ size = 18, ...r }: P) => (
+  <svg {...base(size, 2, r)}>
+    <path d="M19 12H5M11 6l-6 6 6 6" />
+  </svg>
+);
+export const CloseIcon = ({ size = 16, ...r }: P) => (
+  <svg {...base(size, 2, r)}>
+    <path d="M6 6l12 12M18 6L6 18" />
+  </svg>
+);
+export const ChevronDown = ({ size = 16, ...r }: P) => (
+  <svg {...base(size, 2, r)}>
+    <path d="M6 9l6 6 6-6" />
+  </svg>
+);
 /** Cash that earns (the welcome's first fact): cash going down into the pot. */
-export const SaveIcon = ({ size = 19, ...r }: P) => <svg {...base(size, 1.9, r)}><path d="M12 4v10M8 10l4 4 4-4M4 16v4h16v-4" /></svg>;
-export const RebalanceIcon = ({ size = 19, ...r }: P) => <svg {...base(size, 1.9, r)}><path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3M18 3v4h-4M6 21v-4h4" /></svg>;
-export const PadlockIcon = ({ size = 13, ...r }: P) => <svg {...base(size, 2, r)}><path d="M6 11h12v9H6zM9 11V8a3 3 0 0 1 6 0v3" /></svg>;
-export const CopyIcon = ({ size = 18, ...r }: P) => <svg {...base(size, 1.8, r)}><path d="M9 9h10v10H9zM5 15V5h10" /></svg>;
-export const TrendUpIcon = ({ size = 10, ...r }: P) => <svg {...base(size, 2.6, r)}><path d="M4 16l6-6 4 4 6-6M14 8h6v6" /></svg>;
+export const SaveIcon = ({ size = 19, ...r }: P) => (
+  <svg {...base(size, 1.9, r)}>
+    <path d="M12 4v10M8 10l4 4 4-4M4 16v4h16v-4" />
+  </svg>
+);
+export const RebalanceIcon = ({ size = 19, ...r }: P) => (
+  <svg {...base(size, 1.9, r)}>
+    <path d="M4 12a8 8 0 0 1 14-5.3M20 12a8 8 0 0 1-14 5.3M18 3v4h-4M6 21v-4h4" />
+  </svg>
+);
+export const PadlockIcon = ({ size = 13, ...r }: P) => (
+  <svg {...base(size, 2, r)}>
+    <path d="M6 11h12v9H6zM9 11V8a3 3 0 0 1 6 0v3" />
+  </svg>
+);
+export const CopyIcon = ({ size = 18, ...r }: P) => (
+  <svg {...base(size, 1.8, r)}>
+    <path d="M9 9h10v10H9zM5 15V5h10" />
+  </svg>
+);
+export const TrendUpIcon = ({ size = 10, ...r }: P) => (
+  <svg {...base(size, 2.6, r)}>
+    <path d="M4 16l6-6 4 4 6-6M14 8h6v6" />
+  </svg>
+);

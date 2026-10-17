@@ -26,7 +26,13 @@ export const EFP_LIST_MINTER = "0xDb17Bfc64aBf7B7F080a49f0Bbbf799dDbb48Ce5" as c
 export const MAX_LIST_OPS = 25;
 
 export const efpListMinterAbi = [
-  { type: "function", name: "easyMint", stateMutability: "payable", inputs: [{ name: "listStorageLocation", type: "bytes" }], outputs: [] },
+  {
+    type: "function",
+    name: "easyMint",
+    stateMutability: "payable",
+    inputs: [{ name: "listStorageLocation", type: "bytes" }],
+    outputs: [],
+  },
 ] as const;
 
 export const efpAccountMetadataAbi = [
@@ -34,7 +40,10 @@ export const efpAccountMetadataAbi = [
     type: "function",
     name: "getValue",
     stateMutability: "view",
-    inputs: [{ name: "addr", type: "address" }, { name: "key", type: "string" }],
+    inputs: [
+      { name: "addr", type: "address" },
+      { name: "key", type: "string" },
+    ],
     outputs: [{ name: "", type: "bytes" }],
   },
 ] as const;
@@ -54,23 +63,45 @@ export const efpListRecordsAbi = [
     type: "function",
     name: "applyListOps",
     stateMutability: "nonpayable",
-    inputs: [{ name: "slot", type: "uint256" }, { name: "ops", type: "bytes[]" }],
+    inputs: [
+      { name: "slot", type: "uint256" },
+      { name: "ops", type: "bytes[]" },
+    ],
     outputs: [],
   },
-  { type: "function", name: "getListOpCount", stateMutability: "view", inputs: [{ name: "slot", type: "uint256" }], outputs: [{ name: "", type: "uint256" }] },
-  { type: "function", name: "getAllListOps", stateMutability: "view", inputs: [{ name: "slot", type: "uint256" }], outputs: [{ name: "", type: "bytes[]" }] },
+  {
+    type: "function",
+    name: "getListOpCount",
+    stateMutability: "view",
+    inputs: [{ name: "slot", type: "uint256" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "getAllListOps",
+    stateMutability: "view",
+    inputs: [{ name: "slot", type: "uint256" }],
+    outputs: [{ name: "", type: "bytes[]" }],
+  },
   {
     type: "function",
     name: "getListOpsInRange",
     stateMutability: "view",
-    inputs: [{ name: "slot", type: "uint256" }, { name: "start", type: "uint256" }, { name: "end", type: "uint256" }],
+    inputs: [
+      { name: "slot", type: "uint256" },
+      { name: "start", type: "uint256" },
+      { name: "end", type: "uint256" },
+    ],
     outputs: [{ name: "", type: "bytes[]" }],
   },
   {
     type: "function",
     name: "getMetadataValue",
     stateMutability: "view",
-    inputs: [{ name: "slot", type: "uint256" }, { name: "key", type: "string" }],
+    inputs: [
+      { name: "slot", type: "uint256" },
+      { name: "key", type: "string" },
+    ],
     outputs: [{ name: "", type: "bytes" }],
   },
 ] as const;
@@ -114,12 +145,19 @@ const applyOps = (slot: bigint, ops: Hex[]): EfpCall => ({
  */
 export function buildFollowCalls(targets: Address[], hasList: boolean, slot: bigint): EfpCall[] {
   if (!targets.length) throw new Error("Nobody to follow");
-  const apply = applyOps(slot, targets.map((t) => encodeListOp("add", t)));
+  const apply = applyOps(
+    slot,
+    targets.map((t) => encodeListOp("add", t)),
+  );
   if (hasList) return [apply];
   return [
     {
       to: EFP_LIST_MINTER,
-      data: encodeFunctionData({ abi: efpListMinterAbi, functionName: "easyMint", args: [encodeListStorageLocation(slot)] }),
+      data: encodeFunctionData({
+        abi: efpListMinterAbi,
+        functionName: "easyMint",
+        args: [encodeListStorageLocation(slot)],
+      }),
       value: 0n,
     },
     apply,
@@ -132,7 +170,12 @@ export function buildFollowCalls(targets: Address[], hasList: boolean, slot: big
  */
 export function buildUnfollowCalls(targets: Address[], slot: bigint): EfpCall[] {
   if (!targets.length) throw new Error("Nobody to remove");
-  return [applyOps(slot, targets.map((t) => encodeListOp("remove", t)))];
+  return [
+    applyOps(
+      slot,
+      targets.map((t) => encodeListOp("remove", t)),
+    ),
+  ];
 }
 
 /* ── decoding, for reading a list back ─────────────────────────────── */
@@ -145,7 +188,9 @@ export function decodePrimaryListId(value: Hex | undefined): bigint | null {
   return BigInt(`0x${hex}`);
 }
 
-export function decodeListStorageLocation(value: Hex | undefined): { chainId: bigint; records: Address; slot: bigint } | null {
+export function decodeListStorageLocation(
+  value: Hex | undefined,
+): { chainId: bigint; records: Address; slot: bigint } | null {
   if (!value) return null;
   const hex = strip(value);
   if (hex.length !== 172) return null;

@@ -61,7 +61,12 @@ export function useStartEarning(p: {
   // Mid-tap the card stays as it was signed for, so it doesn't change under the user as balances re-read.
   const pinned = granting || stage === "grant-left" || (stage === "deposit" && tx.busy);
   const visible = pinned || (!landed && shown);
-  const words = pinned && held ? held : cash ? startEarningText({ walletUsd: toUsd(cash.walletRaw), savingsUsd: p.savingsUsd, rate }) : null;
+  const words =
+    pinned && held
+      ? held
+      : cash
+        ? startEarningText({ walletUsd: toUsd(cash.walletRaw), savingsUsd: p.savingsUsd, rate })
+        : null;
   const steps = pinned && held ? held.steps : startEarningSteps(setup.save);
   // Nothing to prepare mid-tap: the batch is on JAW's sheet or landed, or only the grant is left.
   const plan = visible && !pinned && cash ? startEarningPlan(account, cash.walletRaw) : null;
@@ -103,7 +108,13 @@ export function useStartEarning(p: {
     void tx.sign(plan);
   }
 
-  const phase: TxPhase = granting ? "signing" : stage === "deposit" ? tx.phase : stage === "grant-left" || landed ? "idle" : tx.phase;
+  const phase: TxPhase = granting
+    ? "signing"
+    : stage === "deposit"
+      ? tx.phase
+      : stage === "grant-left" || landed
+        ? "idle"
+        : tx.phase;
   // With a grant to follow, it needs the executor's limit read too ("One moment…"); the batch alone, only the fee.
   const blocked = setup.save === "off" || stage === "grant-left" ? setup.earning.blocked : setup.feeBlocked;
   return {

@@ -85,7 +85,11 @@ const word = (hf: bigint): Words => {
  */
 const after = (hf: bigint): Words => {
   const s = statusOf(hf);
-  return s === "none" ? ["Nothing owed now."] : s === "act" ? ["Still in ", { status: s }, "."] : ["Back to ", { status: s }, "."];
+  return s === "none"
+    ? ["Nothing owed now."]
+    : s === "act"
+      ? ["Still in ", { status: s }, "."]
+      : ["Back to ", { status: s }, "."];
 };
 
 /** "Tesla", "Tesla and Apple", "3 stocks". */
@@ -125,8 +129,16 @@ function usedRow(ctx: MoveContext, per: "today" | "this week") {
  * matter, and their switches make no row (D20).
  */
 const JOB: Partial<Record<AgentJob, { agent: AgentName; on: (cap: string) => string; off: string }>> = {
-  protect: { agent: "Protect", on: (cap) => `Protect is on. If your credit reaches Act, it repays from your cash, up to ${cap} a day.`, off: "Protect is off" },
-  sell: { agent: "Protect", on: (cap) => `Protect can sell backing stock, up to ${cap} a day.`, off: "Protect won't sell" },
+  protect: {
+    agent: "Protect",
+    on: (cap) => `Protect is on. If your credit reaches Act, it repays from your cash, up to ${cap} a day.`,
+    off: "Protect is off",
+  },
+  sell: {
+    agent: "Protect",
+    on: (cap) => `Protect can sell backing stock, up to ${cap} a day.`,
+    off: "Protect won't sell",
+  },
   rebalance: { agent: "Rebalance", on: (cap) => `Rebalance is on, up to ${cap} a week.`, off: "Rebalance is off" },
 };
 
@@ -161,7 +173,13 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
   switch (e.kind) {
     case "job-on": {
       const j = JOB[e.job];
-      return j ? { by: j.agent, line: [j.on(usd(e.capRaw))], details: [{ label: "Until", value: [DATE.format(e.end * 1000)] }] } : null;
+      return j
+        ? {
+            by: j.agent,
+            line: [j.on(usd(e.capRaw))],
+            details: [{ label: "Until", value: [DATE.format(e.end * 1000)] }],
+          }
+        : null;
     }
     case "job-off": {
       const j = JOB[e.job];
@@ -196,7 +214,10 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
     case "sold":
       return {
         by: "Protect",
-        line: [`Sold ${worth(e.sharesRaw, ctx.pricesRaw)} of ${names(held(e.sharesRaw))} to repay. `, ...after(e.hfAfter)],
+        line: [
+          `Sold ${worth(e.sharesRaw, ctx.pricesRaw)} of ${names(held(e.sharesRaw))} to repay. `,
+          ...after(e.hfAfter),
+        ],
         details: [
           {
             label: "Why",
@@ -218,11 +239,18 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
           { label: "Why", value: ["Your cash couldn't bring it back to ", { status: "watch" }, "."] },
           { label: "Would sell", value: [`${usd(e.sellValueRaw)} of backing stock`] },
           // A wait that ends while prices are held gives their reopening as the sale time: the second before is closed.
-          { label: "Sells at", value: [marketState(new Date((e.sellAfter - 1) * 1000)).open ? at(e.sellAfter) : "When prices reopen"] },
+          {
+            label: "Sells at",
+            value: [marketState(new Date((e.sellAfter - 1) * 1000)).open ? at(e.sellAfter) : "When prices reopen"],
+          },
         ],
       };
     case "heads-up-cleared":
-      return { by: "Protect", line: ["Credit recovered. Nothing was sold."], details: [{ label: "Status", value: word(e.hf) }] };
+      return {
+        by: "Protect",
+        line: ["Credit recovered. Nothing was sold."],
+        details: [{ label: "Status", value: word(e.hf) }],
+      };
     case "keep-mix":
       return {
         by: "Protect",
@@ -233,7 +261,11 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
       const set = e.weightsBps.flatMap((w, r) => (w > 0 ? [[r, w] as const] : [])).sort((a, b) => b[1] - a[1]);
       return {
         by: "Rebalance",
-        line: [set.length ? `Your mix: ${set.map(([r, w]) => `${EQUITIES[r].name} ${w / 100}%`).join(", ")}.` : "Your mix is cleared."],
+        line: [
+          set.length
+            ? `Your mix: ${set.map(([r, w]) => `${EQUITIES[r].name} ${w / 100}%`).join(", ")}.`
+            : "Your mix is cleared.",
+        ],
         details: [],
       };
     }
@@ -253,14 +285,18 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
       return {
         by: "Rebalance",
         line: ["Prices were off today, so it didn't trade."],
-        details: [{ label: "Why", value: ["Each trade must get close to Aave's price. It tries again next market day."] }],
+        details: [
+          { label: "Why", value: ["Each trade must get close to Aave's price. It tries again next market day."] },
+        ],
       };
     case "converted": {
       // Other dollars becoming cash is under the hood (D20): it reads as the money arriving.
       const c = coin(e.coin);
       return {
         by: "Cash",
-        line: [`${c ? `${coinAmount(e.amountInRaw, c.decimals)} ${c.symbol}` : "A dollar coin"} arrived as ${usd(e.usdcOutRaw)} cash.`],
+        line: [
+          `${c ? `${coinAmount(e.amountInRaw, c.decimals)} ${c.symbol}` : "A dollar coin"} arrived as ${usd(e.usdcOutRaw)} cash.`,
+        ],
         details: [
           { label: "Why", value: ["Dollars other than USDC become cash, at 99.5% of face value or better."] },
           { label: "Your cash", value: [`+${usd(e.usdcOutRaw)}`] },
@@ -275,7 +311,9 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
         by: "Agents",
         line: ["A run didn't go through. Nothing moved."],
         details: [
-          ...(e.fails < MAX_FAILS ? [{ label: "Tries again", value: [at(time + (FIRST_COOLDOWN_SEC << (e.fails - 1)))] }] : []),
+          ...(e.fails < MAX_FAILS
+            ? [{ label: "Tries again", value: [at(time + (FIRST_COOLDOWN_SEC << (e.fails - 1)))] }]
+            : []),
           { label: "In a row", value: [String(e.fails)] },
           { label: "Code", value: [errorName(e.reason)] },
         ],

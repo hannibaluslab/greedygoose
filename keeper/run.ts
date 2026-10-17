@@ -21,7 +21,13 @@ import { checkAccount, discoverPermissions } from "@/lib/guardian/keeper";
 import type { GuardianPermission } from "@/lib/guardian/permission";
 
 const STATE = new URL("./.state.json", import.meta.url);
-type State = { cursor: string; perms: (Omit<GuardianPermission, "salt" | "spends"> & { salt: string; spends: (Omit<GuardianPermission["spends"][number], "allowance"> & { allowance: string })[] })[] };
+type State = {
+  cursor: string;
+  perms: (Omit<GuardianPermission, "salt" | "spends"> & {
+    salt: string;
+    spends: (Omit<GuardianPermission["spends"][number], "allowance"> & { allowance: string })[];
+  })[];
+};
 
 const env = (k: string) => {
   const v = process.env[k];
@@ -36,8 +42,16 @@ function load(): State | null {
     return null;
   }
 }
-const revive = (s: State["perms"][number]): GuardianPermission => ({ ...s, salt: BigInt(s.salt), spends: s.spends.map((x) => ({ ...x, allowance: BigInt(x.allowance) })) });
-const freeze = (p: GuardianPermission): State["perms"][number] => ({ ...p, salt: p.salt.toString(), spends: p.spends.map((x) => ({ ...x, allowance: x.allowance.toString() })) });
+const revive = (s: State["perms"][number]): GuardianPermission => ({
+  ...s,
+  salt: BigInt(s.salt),
+  spends: s.spends.map((x) => ({ ...x, allowance: BigInt(x.allowance) })),
+});
+const freeze = (p: GuardianPermission): State["perms"][number] => ({
+  ...p,
+  salt: p.salt.toString(),
+  spends: p.spends.map((x) => ({ ...x, allowance: x.allowance.toString() })),
+});
 
 async function tick(execute: boolean) {
   const rpc = env("BASE_RPC_URL");
@@ -49,7 +63,12 @@ async function tick(execute: boolean) {
 
   const state = load() ?? { cursor: env("GUARDIAN_FROM_BLOCK"), perms: [] };
   const head = await client.getBlockNumber();
-  const fresh = await discoverPermissions(client, { keeper: keeperAccount.address, checker, fromBlock: BigInt(state.cursor), toBlock: head });
+  const fresh = await discoverPermissions(client, {
+    keeper: keeperAccount.address,
+    checker,
+    fromBlock: BigInt(state.cursor),
+    toBlock: head,
+  });
   const perms = [...state.perms.map(revive), ...fresh];
   writeFileSync(STATE, JSON.stringify({ cursor: (head + 1n).toString(), perms: perms.map(freeze) }, null, 2));
 

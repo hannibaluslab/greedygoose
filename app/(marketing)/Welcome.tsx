@@ -81,7 +81,8 @@ export function Welcome() {
               "Cash that earns"
             ) : (
               <>
-                Cash earns <span className="num font-semibold text-on-ink">{(apy * 100).toFixed(1)}%</span> APY, variable
+                Cash earns <span className="num font-semibold text-on-ink">{(apy * 100).toFixed(1)}%</span> APY,
+                variable
               </>
             )}
           </Fact>
@@ -100,7 +101,12 @@ export function Welcome() {
                 checked={attested}
                 onChange={(e) => setTicked(e.target.checked)}
               />
-              <Check aria-hidden size={12} strokeWidth={3.5} className="pointer-events-none relative text-ink opacity-0 peer-checked:opacity-100" />
+              <Check
+                aria-hidden
+                size={12}
+                strokeWidth={3.5}
+                className="pointer-events-none relative text-ink opacity-0 peer-checked:opacity-100"
+              />
             </span>
             {ATTESTATION_TEXT}
           </label>
@@ -118,7 +124,13 @@ export function Welcome() {
           disabled={busy || gated}
           // Waiting on JAW isn't "unavailable": the button keeps its full lime while it spins. Before the attestation
           // it sits dark (a dimmed lime reads as olive on ink) and lights up once ticked.
-          className={busy ? "w-full disabled:opacity-100!" : gated ? "w-full disabled:bg-pill-dark disabled:text-ink-on-dark-dim disabled:opacity-100!" : "w-full"}
+          className={
+            busy
+              ? "w-full disabled:opacity-100!"
+              : gated
+                ? "w-full disabled:bg-pill-dark disabled:text-ink-on-dark-dim disabled:opacity-100!"
+                : "w-full"
+          }
         >
           {isPending ? (
             <>
@@ -166,7 +178,8 @@ function Spinner() {
  */
 function connectFailure(error: Error): string {
   const words = `${error.name} ${error.message}`;
-  if (/failed to open popup|allow pop-?ups/i.test(words)) return "Your browser blocked the JAW window. Allow pop-ups for this site, then try again.";
+  if (/failed to open popup|allow pop-?ups/i.test(words))
+    return "Your browser blocked the JAW window. Allow pop-ups for this site, then try again.";
   const code = (error as { code?: unknown }).code;
   if (code === 4001 || /reject|denied|cancel/i.test(words)) return "Sign-in was cancelled.";
   return "We couldn’t sign you in.";

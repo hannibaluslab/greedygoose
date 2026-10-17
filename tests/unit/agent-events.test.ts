@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { encodeAbiParameters, encodeEventTopics, pad, type AbiEvent, type AbiParameter, type Address, type Hex, type Log } from "viem";
+import {
+  encodeAbiParameters,
+  encodeEventTopics,
+  pad,
+  type AbiEvent,
+  type AbiParameter,
+  type Address,
+  type Hex,
+  type Log,
+} from "viem";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import { decodeAgentLogs } from "@/lib/agents/events";
 import { logChunks } from "@/lib/agents/history";
@@ -9,7 +18,9 @@ const account: Address = "0x14087c532332dE6E971Eb2F60a252cbf511F59eA";
 const someone: Address = "0x9dF0C6b0066D5317aA5b38B36850548DaCCa6B4e";
 const USDT: Address = "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2";
 
-const EVENTS = gooseExecutorAbi.filter((x): x is Extract<(typeof gooseExecutorAbi)[number], { type: "event" }> => x.type === "event");
+const EVENTS = gooseExecutorAbi.filter(
+  (x): x is Extract<(typeof gooseExecutorAbi)[number], { type: "event" }> => x.type === "event",
+);
 
 /** A log as getLogs returns it: `args` by name, the indexed ones in topics. */
 function log(name: string, args: Record<string, unknown>, at: { address?: Address; logIndex?: number } = {}): Log {
@@ -18,7 +29,10 @@ function log(name: string, args: Record<string, unknown>, at: { address?: Addres
   return {
     address: at.address ?? executor,
     topics: encodeEventTopics({ abi: [event], eventName: name, args } as never) as [Hex, ...Hex[]],
-    data: encodeAbiParameters(data, data.map((i) => args[i.name!])),
+    data: encodeAbiParameters(
+      data,
+      data.map((i) => args[i.name!]),
+    ),
     blockNumber: 100n,
     logIndex: at.logIndex ?? 0,
     transactionHash: pad("0x01"),
@@ -47,8 +61,21 @@ const one = (l: Log) => decodeAgentLogs([l], executor, account);
 describe("decodeAgentLogs: every GooseExecutor event", () => {
   /** The events about one account: everything else is about the executor itself. */
   const ABOUT_AN_ACCOUNT = [
-    "JobOn", "JobOff", "Saved", "ProtectRepaid", "SellHeadsUp", "SellHeadsUpCleared", "ProtectSold", "KeepMixSet",
-    "MixSet", "Rebalanced", "RebalanceSkipped", "EntryConverted", "EntryWaiting", "RunFailed", "RunDeferred",
+    "JobOn",
+    "JobOff",
+    "Saved",
+    "ProtectRepaid",
+    "SellHeadsUp",
+    "SellHeadsUpCleared",
+    "ProtectSold",
+    "KeepMixSet",
+    "MixSet",
+    "Rebalanced",
+    "RebalanceSkipped",
+    "EntryConverted",
+    "EntryWaiting",
+    "RunFailed",
+    "RunDeferred",
   ];
 
   it.each(EVENTS.map((e) => e.name))("%s decodes, or is known to belong to no account", (name) => {
@@ -65,30 +92,58 @@ describe("decodeAgentLogs: every GooseExecutor event", () => {
 
 describe("decodeAgentLogs: what each event carries", () => {
   it("names the job and why it went off, in GooseExecutor's order", () => {
-    expect(one(log("JobOn", { account, job: 3, permissionHash: pad("0xab"), cap: 500_000_000n, end: 1_800_000_000 }))[0]).toMatchObject({
+    expect(
+      one(log("JobOn", { account, job: 3, permissionHash: pad("0xab"), cap: 500_000_000n, end: 1_800_000_000 }))[0],
+    ).toMatchObject({
       kind: "job-on",
       job: "rebalance",
       capRaw: 500_000_000n,
       end: 1_800_000_000,
     });
-    expect(one(log("JobOff", { account, job: 2, reason: 3 }))[0]).toMatchObject({ kind: "job-off", job: "sell", reason: "stuck" });
+    expect(one(log("JobOff", { account, job: 2, reason: 3 }))[0]).toMatchObject({
+      kind: "job-off",
+      job: "sell",
+      reason: "stuck",
+    });
     expect(one(log("JobOff", { account, job: 4, reason: 0 }))[0]).toMatchObject({ job: "entry", reason: "revoked" });
   });
 
   it("reads Protect's repay from savings: Act, or an older executor's Weekend Shield", () => {
-    const act = { account, amount: 120_000_000n, hfBefore: 1_050_000_000_000_000_000n, hfAfter: 1_200_000_000_000_000_000n, reason: 5 };
+    const act = {
+      account,
+      amount: 120_000_000n,
+      hfBefore: 1_050_000_000_000_000_000n,
+      hfAfter: 1_200_000_000_000_000_000n,
+      reason: 5,
+    };
     expect(one(log("ProtectRepaid", act))[0]).toMatchObject({ kind: "repaid", amountRaw: 120_000_000n, reason: "act" });
     // Executors deployed before Act was the line (2026-10-15) also repaid before a weekend freeze.
     expect(one(log("ProtectRepaid", { ...act, reason: 6 }))[0]).toMatchObject({ reason: "weekend" });
   });
 
   it("reads the heads-up, its clearing and the sale, by reserve id", () => {
-    expect(one(log("SellHeadsUp", { account, hf: 1_080_000_000_000_000_000n, sellValue: 180_000_000n, sellAfter: 1_760_000_000 }))[0]).toMatchObject(
-      { kind: "heads-up", hf: 1_080_000_000_000_000_000n, sellValueRaw: 180_000_000n, sellAfter: 1_760_000_000 },
-    );
-    expect(one(log("SellHeadsUpCleared", { account, hf: 1_300_000_000_000_000_000n }))[0]).toMatchObject({ kind: "heads-up-cleared" });
+    expect(
+      one(
+        log("SellHeadsUp", {
+          account,
+          hf: 1_080_000_000_000_000_000n,
+          sellValue: 180_000_000n,
+          sellAfter: 1_760_000_000,
+        }),
+      )[0],
+    ).toMatchObject({
+      kind: "heads-up",
+      hf: 1_080_000_000_000_000_000n,
+      sellValueRaw: 180_000_000n,
+      sellAfter: 1_760_000_000,
+    });
+    expect(one(log("SellHeadsUpCleared", { account, hf: 1_300_000_000_000_000_000n }))[0]).toMatchObject({
+      kind: "heads-up-cleared",
+    });
     const shares = [0n, 0n, 0n, 0n, 0n, 0n, 47_000_000n];
-    expect(one(log("ProtectSold", { account, shares, repaid: 178_200_000n, hfBefore: 1n, hfAfter: 2n, atOnce: true }))[0]).toMatchObject({
+    expect(
+      one(log("ProtectSold", { account, shares, repaid: 178_200_000n, hfBefore: 1n, hfAfter: 2n, atOnce: true }))[0],
+    ).toMatchObject({
       kind: "sold",
       sharesRaw: shares,
       repaidRaw: 178_200_000n,
@@ -103,17 +158,28 @@ describe("decodeAgentLogs: what each event carries", () => {
     });
     const sold = [27_000_000n, 0n, 0n, 0n, 0n, 0n, 0n];
     const bought = [0n, 0n, 0n, 0n, 0n, 28_000_000n, 0n];
-    expect(one(log("Rebalanced", { account, sold, bought }))[0]).toMatchObject({ kind: "rebalanced", soldRaw: sold, boughtRaw: bought });
-    expect(one(log("EntryConverted", { account, coin: USDT, amountIn: 1_000_000_000n, usdcOut: 998_630_000n }))[0]).toMatchObject({
+    expect(one(log("Rebalanced", { account, sold, bought }))[0]).toMatchObject({
+      kind: "rebalanced",
+      soldRaw: sold,
+      boughtRaw: bought,
+    });
+    expect(
+      one(log("EntryConverted", { account, coin: USDT, amountIn: 1_000_000_000n, usdcOut: 998_630_000n }))[0],
+    ).toMatchObject({
       kind: "converted",
       coin: USDT,
       usdcOutRaw: 998_630_000n,
     });
-    expect(one(log("EntryWaiting", { account, coin: USDT, amountIn: 5n, retryAt: 1_760_003_600 }))[0]).toMatchObject({ retryAt: 1_760_003_600 });
+    expect(one(log("EntryWaiting", { account, coin: USDT, amountIn: 5n, retryAt: 1_760_003_600 }))[0]).toMatchObject({
+      retryAt: 1_760_003_600,
+    });
   });
 
   it("keys each event by its transaction and place, and keeps the chain's order", () => {
-    const logs = [log("Saved", { account, amount: 1n }, { logIndex: 4 }), log("RunFailed", { account, reason: "0xdeadbeef", fails: 2 }, { logIndex: 7 })];
+    const logs = [
+      log("Saved", { account, amount: 1n }, { logIndex: 4 }),
+      log("RunFailed", { account, reason: "0xdeadbeef", fails: 2 }, { logIndex: 7 }),
+    ];
     const out = decodeAgentLogs(logs, executor, account);
     expect(out.map((e) => [e.kind, e.key, e.blockNumber])).toEqual([
       ["saved", `${pad("0x01")}:4`, 100n],
@@ -125,7 +191,9 @@ describe("decodeAgentLogs: what each event carries", () => {
   it("ignores another account's events, and the same event from any other contract", () => {
     expect(one(log("Saved", { account: someone, amount: 1n }))).toEqual([]);
     expect(one(log("Saved", { account, amount: 1n }, { address: someone }))).toEqual([]);
-    expect(decodeAgentLogs([{ ...log("Saved", { account, amount: 1n }), topics: [pad("0x99")] }], executor, account)).toEqual([]);
+    expect(
+      decodeAgentLogs([{ ...log("Saved", { account, amount: 1n }), topics: [pad("0x99")] }], executor, account),
+    ).toEqual([]);
   });
 });
 

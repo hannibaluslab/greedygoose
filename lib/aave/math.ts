@@ -21,7 +21,11 @@ const valueToUsd = (v: bigint) => Number(v / (VALUE_PER_USD / 1_000_000n)) / 1_0
 export function summarize(d: AccountData) {
   const collateralUsd = valueToUsd(d.totalCollateralValue);
   // Debt rounds up to the cent so we never understate what is owed.
-  const debtUsd = Math.ceil(Number(d.totalDebtValueRay / RAY / (VALUE_PER_USD / 100n)) + (d.totalDebtValueRay % (RAY * (VALUE_PER_USD / 100n)) > 0n ? 1 : 0)) / 100;
+  const debtUsd =
+    Math.ceil(
+      Number(d.totalDebtValueRay / RAY / (VALUE_PER_USD / 100n)) +
+        (d.totalDebtValueRay % (RAY * (VALUE_PER_USD / 100n)) > 0n ? 1 : 0),
+    ) / 100;
   const borrowLimitUsd = (collateralUsd * Number(d.avgCollateralFactor)) / Number(WAD);
   const healthFactor = d.healthFactor === MAX_UINT ? null : Number(d.healthFactor) / Number(WAD);
   return {
@@ -36,7 +40,8 @@ export function summarize(d: AccountData) {
 
 /** The health factor in a `getUserAccountData` result (lib/aave/tx.ts accountDataRead); null when nothing is owed. */
 export const healthFromAccountData = (data: Hex): number | null =>
-  summarize(decodeFunctionResult({ abi: spokeAbi, functionName: "getUserAccountData", data }) as AccountData).healthFactor;
+  summarize(decodeFunctionResult({ abi: spokeAbi, functionName: "getUserAccountData", data }) as AccountData)
+    .healthFactor;
 
 /** Health factor after changing debt/collateral, using the position's current weighted CF. */
 export function projectHealth(p: { collateralUsd: number; debtUsd: number; avgCf: number }): number | null {
@@ -64,7 +69,14 @@ export const aprToApy = (apr: number) => (1 + apr / SECONDS_PER_YEAR) ** SECONDS
  * `targetHf`: Aave's limit (1) by default, the Safe line when a sale must keep the loan Safe. Uses
  * the position's weighted collateral factor. Display only — Aave re-checks on-chain.
  */
-export function maxWithdrawUsd(p: { collateralUsd: number; avgCf: number; debtUsd: number; cf: number; lockedUsd: number; targetHf?: number }): number {
+export function maxWithdrawUsd(p: {
+  collateralUsd: number;
+  avgCf: number;
+  debtUsd: number;
+  cf: number;
+  lockedUsd: number;
+  targetHf?: number;
+}): number {
   if (p.debtUsd <= 0) return p.lockedUsd;
   if (p.cf <= 0) return p.lockedUsd;
   const room = p.collateralUsd * p.avgCf - p.debtUsd * Math.max(1, p.targetHf ?? 1);
@@ -72,7 +84,13 @@ export function maxWithdrawUsd(p: { collateralUsd: number; avgCf: number; debtUs
 }
 
 /** Health factor after removing `usd` of a collateral with factor `cf`. */
-export function healthAfterWithdraw(p: { collateralUsd: number; avgCf: number; debtUsd: number; cf: number; usd: number }): number | null {
+export function healthAfterWithdraw(p: {
+  collateralUsd: number;
+  avgCf: number;
+  debtUsd: number;
+  cf: number;
+  usd: number;
+}): number | null {
   if (p.debtUsd <= 0) return null;
   return (p.collateralUsd * p.avgCf - p.usd * p.cf) / p.debtUsd;
 }

@@ -1,153 +1,153 @@
 /** Generated: cd contracts && forge inspect src/GooseBoard.sol:GooseBoard abi --json */
 export const gooseBoardAbi = [
   {
-    "type": "function",
-    "name": "join",
-    "inputs": [],
-    "outputs": [],
-    "stateMutability": "nonpayable"
+    type: "function",
+    name: "join",
+    inputs: [],
+    outputs: [],
+    stateMutability: "nonpayable",
   },
   {
-    "type": "function",
-    "name": "joinedAt",
-    "inputs": [
+    type: "function",
+    name: "joinedAt",
+    inputs: [
       {
-        "name": "account",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "leave",
-    "inputs": [],
-    "outputs": [],
-    "stateMutability": "nonpayable"
+    type: "function",
+    name: "leave",
+    inputs: [],
+    outputs: [],
+    stateMutability: "nonpayable",
   },
   {
-    "type": "function",
-    "name": "listed",
-    "inputs": [
+    type: "function",
+    name: "listed",
+    inputs: [
       {
-        "name": "account",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
+        name: "",
+        type: "bool",
+        internalType: "bool",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "memberCount",
-    "inputs": [],
-    "outputs": [
+    type: "function",
+    name: "memberCount",
+    inputs: [],
+    outputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "members",
-    "inputs": [
+    type: "function",
+    name: "members",
+    inputs: [
       {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "",
-        "type": "address",
-        "internalType": "address"
-      }
+        name: "",
+        type: "address",
+        internalType: "address",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "function",
-    "name": "page",
-    "inputs": [
+    type: "function",
+    name: "page",
+    inputs: [
       {
-        "name": "start",
-        "type": "uint256",
-        "internalType": "uint256"
+        name: "start",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        "name": "count",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
+        name: "count",
+        type: "uint256",
+        internalType: "uint256",
+      },
     ],
-    "outputs": [
+    outputs: [
       {
-        "name": "accounts",
-        "type": "address[]",
-        "internalType": "address[]"
+        name: "accounts",
+        type: "address[]",
+        internalType: "address[]",
       },
       {
-        "name": "onBoard",
-        "type": "bool[]",
-        "internalType": "bool[]"
+        name: "onBoard",
+        type: "bool[]",
+        internalType: "bool[]",
       },
       {
-        "name": "joinedAtBlocks",
-        "type": "uint256[]",
-        "internalType": "uint256[]"
-      }
+        name: "joinedAtBlocks",
+        type: "uint256[]",
+        internalType: "uint256[]",
+      },
     ],
-    "stateMutability": "view"
+    stateMutability: "view",
   },
   {
-    "type": "event",
-    "name": "Joined",
-    "inputs": [
+    type: "event",
+    name: "Joined",
+    inputs: [
       {
-        "name": "account",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
       },
       {
-        "name": "blockNumber",
-        "type": "uint256",
-        "indexed": false,
-        "internalType": "uint256"
-      }
+        name: "blockNumber",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
     ],
-    "anonymous": false
+    anonymous: false,
   },
   {
-    "type": "event",
-    "name": "Left",
-    "inputs": [
+    type: "event",
+    name: "Left",
+    inputs: [
       {
-        "name": "account",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      }
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
     ],
-    "anonymous": false
-  }
+    anonymous: false,
+  },
 ] as const;

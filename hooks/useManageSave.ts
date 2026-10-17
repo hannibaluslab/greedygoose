@@ -95,7 +95,10 @@ export function useManageSave(account: `0x${string}`, agents: ReturnType<typeof 
     const key = txKey(p.mixChanged ? p.weights : null, p.grant);
     // The mix already landed and only its grant is left: from this tap, with the screen's newest terms once it re-read.
     if (pending && (pending.asked === key || !p.mixChanged)) {
-      grantNow(!p.mixChanged && p.grant ? p.grant : pending.grant, pending.asked, { done: pending.done, of: pending.of });
+      grantNow(!p.mixChanged && p.grant ? p.grant : pending.grant, pending.asked, {
+        done: pending.done,
+        of: pending.of,
+      });
       return;
     }
     tx.reset();
@@ -112,7 +115,11 @@ export function useManageSave(account: `0x${string}`, agents: ReturnType<typeof 
   }
 
   const phase: TxPhase =
-    step === "granting" || (step === "setting" && tx.phase === "done") ? "signing" : step === "setting" ? tx.phase : "idle";
+    step === "granting" || (step === "setting" && tx.phase === "done")
+      ? "signing"
+      : step === "setting"
+        ? tx.phase
+        : "idle";
   const grantError = agents.error
     ? isPopupBlocked(agents.error)
       ? pending && pending.done > 0

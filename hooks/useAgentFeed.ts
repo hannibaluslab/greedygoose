@@ -64,7 +64,8 @@ export function useAgentFeed(account: Address) {
         });
       const chunks = logChunks(from!, to);
       const out: Log[] = [];
-      for (let i = 0; i < chunks.length; i += PARALLEL) out.push(...(await Promise.all(chunks.slice(i, i + PARALLEL).map(read))).flat());
+      for (let i = 0; i < chunks.length; i += PARALLEL)
+        out.push(...(await Promise.all(chunks.slice(i, i + PARALLEL).map(read))).flat());
       return decodeAgentLogs(out, executor!, account).sort((a, b) =>
         a.blockNumber === b.blockNumber ? b.logIndex - a.logIndex : a.blockNumber > b.blockNumber ? -1 : 1,
       );
@@ -105,7 +106,9 @@ export function useAgentFeed(account: Address) {
     const i = events.findIndex((e) => e.kind === "heads-up");
     const e = events[i];
     const m = moves[i]?.data;
-    return e?.kind === "heads-up" && m ? { sellValueRaw: e.sellValueRaw, sellAfter: e.sellAfter, sentAt: m.time } : null;
+    return e?.kind === "heads-up" && m
+      ? { sellValueRaw: e.sellValueRaw, sellAfter: e.sellAfter, sentAt: m.time }
+      : null;
   }, [events, moves]);
 
   // Each job's newest switch: on, or off by the user (revoked) or by the executor (its grant ran out, it can't act, or
@@ -117,13 +120,24 @@ export function useAgentFeed(account: Address) {
       if ((e.kind !== "job-on" && e.kind !== "job-off") || seen.has(e.job)) return;
       seen.add(e.job);
       const time = moves[i]?.data?.time; // until its block is read, the job waits rather than show an older switch
-      if (time) out[e.job] = { on: e.kind === "job-on", byUser: e.kind === "job-off" && e.reason === "revoked", at: time };
+      if (time)
+        out[e.job] = { on: e.kind === "job-on", byUser: e.kind === "job-off" && e.reason === "revoked", at: time };
     });
     return out;
   }, [events, moves]);
 
   if (!executor) {
-    return { rows: [], headsUp: null, switched: {} as Partial<Record<AgentJob, Switched>>, since: 0, more: false, showEarlier: () => {}, isLoading: false, isError: false, refetch: () => {} };
+    return {
+      rows: [],
+      headsUp: null,
+      switched: {} as Partial<Record<AgentJob, Switched>>,
+      since: 0,
+      more: false,
+      showEarlier: () => {},
+      isLoading: false,
+      isError: false,
+      refetch: () => {},
+    };
   }
   return {
     rows,

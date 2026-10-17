@@ -77,7 +77,19 @@ export function freeUpCheck(p: {
         ? `That’s more than you can free up while you owe ${formatUsd(pos.debtUsd)}.`
         : null;
   const ok = some && !tooMuch && !inAct;
-  return { maxUsd, canAll, maxShares, usd, hfAfter, after, endsInAct: inAct, tooMuch, risky: ok && needsExtraConfirm(after), line, ok };
+  return {
+    maxUsd,
+    canAll,
+    maxShares,
+    usd,
+    hfAfter,
+    after,
+    endsInAct: inAct,
+    tooMuch,
+    risky: ok && needsExtraConfirm(after),
+    line,
+    ok,
+  };
 }
 
 /** Rounded up to the cent: the repay that frees all of it is never shown as less than it is. */
@@ -146,5 +158,17 @@ export function freeUpByRepay(p: {
   const share = backsUsd > 0 ? (backUsd / backsUsd) * SHARE_HEADROOM : 0;
   const backRaw = all ? h.lockedRaw : (h.lockedRaw * BigInt(Math.floor(share * 1_000_000))) / 1_000_000n;
   const hfAfter = oweAfterUsd <= 0 ? null : (power - backUsd * p.cf) / oweAfterUsd;
-  return { backsUsd, allRepayUsd, maxRepayUsd, repayUsd, repaysAll, backUsd, backRaw, all, oweAfterUsd, after: statusFor(hfAfter), snapped };
+  return {
+    backsUsd,
+    allRepayUsd,
+    maxRepayUsd,
+    repayUsd,
+    repaysAll,
+    backUsd,
+    backRaw,
+    all,
+    oweAfterUsd,
+    after: statusFor(hfAfter),
+    snapped,
+  };
 }
