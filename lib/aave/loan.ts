@@ -95,11 +95,20 @@ export function combinedLoan(p: { collateralUsd: number; avgCf: number; debtUsd:
 /** Margin on auto-filled backing, so a price tick between reading and signing can't undercut Safe. */
 export const FILL_MARGIN = 1.003;
 
-/** Raw units of a free balance for `usd` of it plus FILL_MARGIN; never more than the balance, and 99.99% or more rounds up to all of it. */
+/** Parts the fill's share of a free balance is counted in: fine enough that a small fill out of a large holding keeps its margin. */
+const FILL_PARTS = 1_000_000_000_000;
+
+/**
+ * Raw units of a free balance for `usd` of it plus FILL_MARGIN; never more than the balance, and 99.99% or more rounds
+ * up to all of it. The share is rounded up, in parts per 10^12: in parts per million, $9.62 out of $382,000 of Apple
+ * rounded down to $9.55, more than the margin, and the plan ended in Watch instead of Safe.
+ */
 export function fillRaw(freeRaw: bigint, freeUsd: number, usd: number): bigint {
   if (usd <= 0 || freeUsd <= 0) return 0n;
   const f = Math.min(1, (usd * FILL_MARGIN) / freeUsd);
-  return f >= 0.9999 ? freeRaw : (freeRaw * BigInt(Math.round(f * 1_000_000))) / 1_000_000n;
+  if (f >= 0.9999) return freeRaw;
+  const raw = (freeRaw * BigInt(Math.ceil(f * FILL_PARTS))) / BigInt(FILL_PARTS);
+  return raw < freeRaw ? raw : freeRaw;
 }
 
 /**

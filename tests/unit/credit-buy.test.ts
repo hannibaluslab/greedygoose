@@ -378,6 +378,19 @@ describe("fillRaw", () => {
     expect(fillRaw(1_000_000n, 100, 99.8)).toBe(1_000_000n);
     expect(fillRaw(1_000_000n, 100, 0)).toBe(0n);
   });
+
+  it("a small fill out of a large holding keeps its margin, so the plan starts Safe", () => {
+    // $382,000 of free Apple (78% counts) and $5 of credit: Safe needs $9.62 of it in use.
+    const freeRaw = 110_921_547_669n;
+    const freeUsd = 382_000;
+    const need = (RISK.safeMin * 5) / 0.78;
+    const raw = fillRaw(freeRaw, freeUsd, need);
+    expect((Number(raw) * freeUsd) / Number(freeRaw)).toBeGreaterThanOrEqual(need * FILL_MARGIN - freeUsd / Number(freeRaw)); // within one raw unit
+    const fresh: CreditPosition = { collateralUsd: 0, avgCf: 0, debtUsd: 0, healthFactor: null, usdcLiquidity: 1_000_000, borrowPaused: false };
+    const plan = planCredit({ position: fresh, options: [{ stock: aapl, freeRaw, freeUsd, cf: 0.78 }], creditRaw: usd(5), cash: walletCash });
+    expect(plan).toMatchObject({ after: "safe", extraConfirm: false, block: undefined });
+    expect(plan.hfAfter).toBeGreaterThanOrEqual(RISK.safeMin);
+  });
 });
 
 describe("planCredit with an explicit backing (Credit Buy goes backing first, Adrian 2026-10-15)", () => {
