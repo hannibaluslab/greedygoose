@@ -64,7 +64,8 @@ in one signature. To do more, repay first. No redirects and no extra lines.
 - Return counts on the user's own money only, so winning with credit lifts the rank.
 - **Greedy Fatalities:** every liquidated account is named automatically on its own tab, ranked by its multiple at the
   end. The rule is stated once before the first credit.
-- Greed tag and levels: drawn (canvas boards 12–14), not decided.
+- Leverage tag: "1.7x" (what you hold ÷ your own money) next to the credit status on Home while something is owed, and
+  on leaderboard rows; tapping it opens "Your leverage". No greed points or levels.
 
 ## Agents
 
