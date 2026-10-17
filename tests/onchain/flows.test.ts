@@ -16,7 +16,7 @@ import {
   zeroHash,
 } from "viem";
 import { CHAIN } from "@/lib/chain";
-import { CASH, CREDIT_CAP } from "@/config/risk";
+import { CASH } from "@/config/risk";
 import {
   buildCreditCalls,
   buildBackAndCreditCalls,
@@ -25,12 +25,6 @@ import {
   buildWithdrawCalls,
 } from "@/lib/aave/tx";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
-import { aaveOracleAbi } from "@/lib/aave/abis/IAaveOracle";
-import { maxWithdrawUsd, priceToUsd, summarize, type AccountData } from "@/lib/aave/math";
-import { FREE_UP_BLOCKED, freeUpCheck } from "@/lib/freeUp";
-import { checkPlan, type CheckDeps } from "@/lib/tx/prepared";
-import { withdrawPlan } from "@/lib/tx/plans";
-import { statusFor } from "@/lib/risk/status";
 import { AAVE } from "@/lib/aave/addresses";
 import { CASH_STUCK, explainRevert } from "@/lib/aave/errors";
 import { decodeActivity } from "@/lib/activity/decode";
@@ -277,110 +271,5 @@ describe("the cash a batch is signed with (readCash)", () => {
     const r = await simulate(payFromCash(user, amountRaw, c, buildRepayCalls({ user, amountRaw, all: false })));
     expect(r.results.every((x) => x.status === "success")).toBe(true);
     expect(cashShort(cashRaw(c), c)).toMatch(/^Your cash moved since you started\. You have \$[\d,]+\.\d\d now/);
-  });
-});
-
-/**
- * Act is the line (Adrian, 2026-10-15): Free up stops where taking credit does, at CREDIT_CAP.minHf, and the app's own
- * check (checkPlan with withdrawPlan's floor) stops a Free up that lands in Act on Aave's health. Deterministic: the
- * position is set up in the same simulation, from an account that never backed credit ($20 of its NVIDIA in use and
- * credit to a health of 1.75), so it doesn't hang on any real account's health drifting.
- */
-describe("Free up stops at the cap's line on Base", () => {
-  // Holds NVIDIA and backs no credit, as in credit-buy.test.ts (0xcd15…266b, the one before, sold all its stock on 2026-10-15).
-  const newcomer = "0xb5ef91ce939f2c390cff462bb231e74bb228deb4";
-  const nvda = EQUITIES.find((e) => e.symbol === "NVDAc")!;
-
-  it("its MAX leaves Aave's health at 1.12, in Watch; the old MAX (99.5% of Aave's limit) lands in Act, and the app's check stops it", async () => {
-    const id = BigInt(nvda.reserveId);
-    const [price, reserve, free] = await Promise.all([
-      client.readContract({
-        address: AAVE.SPOKE_ORACLE,
-        abi: aaveOracleAbi,
-        functionName: "getReservePrice",
-        args: [id],
-      }),
-      client.readContract({ address: AAVE.SPOKE, abi: spokeAbi, functionName: "getReserve", args: [id] }),
-      client.readContract({ address: nvda.address, abi: erc20Abi, functionName: "balanceOf", args: [newcomer] }),
-    ]);
-    const dyn = await client.readContract({
-      address: AAVE.SPOKE,
-      abi: spokeAbi,
-      functionName: "getDynamicReserveConfig",
-      args: [id, reserve.dynamicConfigKey],
-    });
-    const cf = dyn.collateralFactor / 10_000;
-    const usdPerRaw = priceToUsd(price) / 10 ** nvda.decimals;
-    const backingRaw = BigInt(Math.floor(20 / usdPerRaw));
-    expect(free).toBeGreaterThanOrEqual(backingRaw);
-    const backingUsd = Number(backingRaw) * usdPerRaw;
-    const debtUsd = Math.floor(((backingUsd * cf) / 1.75) * 1e6) / 1e6;
-    // The position, set up first in every simulation below: $20 of NVIDIA in use, credit to a health of 1.75.
-    const setup = buildBackAndCreditCalls({
-      user: newcomer,
-      backing: [{ stock: nvda, raw: backingRaw }],
-      creditRaw: parseUnits(debtUsd.toFixed(6), 6),
-    });
-    const healthAfter = async (calls: { to: `0x${string}`; data: `0x${string}` }[]) => {
-      const read = {
-        to: AAVE.SPOKE,
-        data: encodeFunctionData({ abi: spokeAbi, functionName: "getUserAccountData", args: [newcomer] }),
-      };
-      const r = await client.simulateCalls({
-        account: newcomer,
-        calls: [...setup, ...calls, read].map(({ to, data }) => ({ to, data })),
-      });
-      expect(r.results.slice(0, setup.length + calls.length).every((x) => x.status === "success")).toBe(true);
-      return summarize(
-        decodeFunctionResult({
-          abi: spokeAbi,
-          functionName: "getUserAccountData",
-          data: r.results.at(-1)!.data,
-        }) as AccountData,
-      ).healthFactor!;
-    };
-    expect(await healthAfter([])).toBeCloseTo(1.75, 3);
-
-    const creditInput = { totalBackingUsd: backingUsd, avgCf: cf, debtUsd, cf, backingUsd };
-    // The sheet's MAX (freeUpCheck), as shares rounded down.
-    const sheet = freeUpCheck({
-      position: creditInput,
-      holding: { backingRaw, backingUsd, priceUsd: priceToUsd(price), multiplier: 10n ** 18n },
-      decimals: nvda.decimals,
-      cf,
-      amountRaw: 0n,
-      all: false,
-    });
-    expect(sheet.maxUsd).toBeCloseTo(maxWithdrawUsd({ ...creditInput, targetHf: CREDIT_CAP.minHf }), 9);
-    const rawFor = (usd: number) => (backingRaw * BigInt(Math.floor((usd / backingUsd) * 1e9))) / 1_000_000_000n;
-    const maxRaw = rawFor(sheet.maxUsd);
-    const oldRaw = rawFor(maxWithdrawUsd(creditInput) * 0.995);
-    const capped = await healthAfter(
-      buildWithdrawCalls({ user: newcomer, stock: nvda, amountRaw: maxRaw, all: false }),
-    );
-    const old = await healthAfter(buildWithdrawCalls({ user: newcomer, stock: nvda, amountRaw: oldRaw, all: false }));
-    console.log(
-      `Free up NVIDIA from 1.75: MAX $${sheet.maxUsd.toFixed(4)} → health ${capped.toFixed(4)}; old MAX → ${old.toFixed(4)}`,
-    );
-    expect(statusFor(capped)).toBe("watch");
-    expect(capped).toBeGreaterThanOrEqual(CREDIT_CAP.minHf - 0.002);
-    expect(capped).toBeLessThan(CREDIT_CAP.minHf + 0.01);
-    expect(statusFor(old)).toBe("act");
-
-    // The app's own check, as useTx runs it: the batch simulated after the set-up position, Aave's health read after it.
-    const deps: CheckDeps = {
-      join: async (_u, batch) => batch,
-      simulate: async (u, batch) =>
-        (
-          await client.simulateCalls({ account: u, calls: [...setup, ...batch].map(({ to, data }) => ({ to, data })) })
-        ).results.slice(setup.length),
-      explain: explainRevert,
-    };
-    expect(await checkPlan(withdrawPlan({ user: newcomer, stock: nvda, amountRaw: oldRaw, all: false }), deps)).toEqual(
-      { ok: false, error: FREE_UP_BLOCKED.act, blocks: true },
-    );
-    expect(
-      (await checkPlan(withdrawPlan({ user: newcomer, stock: nvda, amountRaw: maxRaw, all: false }), deps)).ok,
-    ).toBe(true);
   });
 });

@@ -92,6 +92,8 @@ export function AssetPicker({
   footer,
   wide = false,
   peek = false,
+  align = "end",
+  startInset = 0,
 }: {
   /** The pill's accessible name: "Trade from: Cash". */
   label: string;
@@ -115,6 +117,10 @@ export function AssetPicker({
   wide?: boolean;
   /** When the list has to scroll, show half of its last visible row. */
   peek?: boolean;
+  /** Which edge of the pill the list lines up with: its right (a pill on the right) or its left (a pill on the left). */
+  align?: "start" | "end";
+  /** With align start: how far left of the pill the list starts, to line up with the box the pill sits in (px). */
+  startInset?: number;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const pillRef = useRef<HTMLButtonElement>(null);
@@ -227,8 +233,8 @@ export function AssetPicker({
           onPointerDown={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
-          style={{ maxHeight: maxH }}
-          className={`absolute right-0 z-30 flex ${wide ? "w-[min(350px,calc(100vw-40px))]" : "w-[min(320px,calc(100vw-40px))]"} flex-col rounded-[16px] border border-line-field bg-card p-2 shadow-[0_12px_32px_-12px_rgba(14,13,11,0.28)] animate-in fade-in-0 zoom-in-95 duration-150 ${
+          style={{ maxHeight: maxH, ...(align === "start" && startInset ? { left: -startInset } : {}) }}
+          className={`absolute ${align === "start" ? "left-0" : "right-0"} z-30 flex ${wide ? "w-[min(350px,calc(100vw-40px))]" : "w-[min(320px,calc(100vw-40px))]"} flex-col rounded-[16px] border border-line-field bg-card p-2 shadow-[0_12px_32px_-12px_rgba(14,13,11,0.28)] animate-in fade-in-0 zoom-in-95 duration-150 ${
             up ? "bottom-full mb-2 origin-bottom-right" : "top-full mt-2 origin-top-right"
           }`}
         >

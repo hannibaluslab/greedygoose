@@ -23,7 +23,7 @@ export const withdrawPlan = (p: { user: Address; stock: ReserveAsset; amountRaw:
 });
 
 /** A stock to take out of backing in a repay's batch (planFreeUp's `frees`, with its asset). */
-type TakeOut = { stock: ReserveAsset; amountRaw: bigint; all: boolean };
+export type TakeOut = { stock: ReserveAsset; amountRaw: bigint; all: boolean };
 
 const takeOutCalls = (user: Address, outs: readonly TakeOut[]) =>
   outs.flatMap((o) => buildWithdrawCalls({ user, stock: o.stock, amountRaw: o.amountRaw, all: o.all }));

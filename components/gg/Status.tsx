@@ -62,48 +62,6 @@ export function barPosition(healthFactor: number): number {
   return along(RISK.watchMin, 1, BAR.safe + BAR.watch, BAR.act);
 }
 
-/** Three-segment Safe / Watch / Act bar with marker. Labels always shown. */
-export function StatusBar({
-  status,
-  healthFactor,
-  slim = false,
-}: {
-  status: Status;
-  healthFactor: number | null;
-  /** A thin bar with no labels (Repay's card, where the pill names the status). */ slim?: boolean;
-}) {
-  const pos = healthFactor === null ? 0 : barPosition(healthFactor);
-  return (
-    <div className="flex flex-col gap-2" role="img" aria-label={`Your credit is ${STATUS_LABEL[status]}`}>
-      <div className={`relative flex gap-1 ${slim ? "h-1.5" : "h-2"}`}>
-        <span className="rounded bg-safe" style={{ flex: BAR.safe }} />
-        <span className="rounded bg-watch" style={{ flex: BAR.watch }} />
-        <span className="rounded bg-act" style={{ flex: BAR.act }} />
-        {status !== "none" && (
-          <span
-            aria-hidden
-            className={`absolute rounded-full border-ink bg-card ${slim ? "-top-[3px] size-3 border-2" : "-top-1 size-4 border-[2.5px]"}`}
-            style={{ left: `calc(${pos * 100}% - ${slim ? 6 : 8}px)`, boxShadow: "0 2px 6px rgba(14,13,11,0.18)" }}
-          />
-        )}
-      </div>
-      {!slim && (
-        <div className="flex text-xs font-semibold">
-          <span className="text-safe" style={{ flex: BAR.safe }}>
-            Safe
-          </span>
-          <span className="text-watch-text" style={{ flex: BAR.watch }}>
-            Watch
-          </span>
-          <span className="text-act" style={{ flex: BAR.act }}>
-            Act
-          </span>
-        </div>
-      )}
-    </div>
-  );
-}
-
 /** An agent pill's colour: green when it's on, neutral otherwise. */
 type AgentTone = "on" | "neutral";
 

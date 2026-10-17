@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { TopUpSheet } from "./AddMoney";
-import { RepaySheet } from "./RepaySheet";
+import { RepaySheet } from "@/components/repay/RepaySheet";
 import { useSheetSubject } from "@/hooks/useSheetSubject";
 
 /** The two money sheets every signed-in page can open over itself (Adrian: "top up and repay should open a sheet"). */
@@ -14,7 +14,7 @@ const PARAM: Record<MoneySheet, string> = { "top-up": "topup", repay: "repay" };
 /** Where each sheet's old page was, for a component drawn outside the host (the dev gallery): it redirects back here. */
 const ROUTE: Record<MoneySheet, string> = { "top-up": "/receive", repay: "/repay" };
 
-const OpenSheet = createContext<((sheet: MoneySheet) => void) | null>(null);
+const OpenSheet = createContext<((sheet: MoneySheet, free?: string) => void) | null>(null);
 
 /**
  * Opens Top up or Repay over the page. Called from inside another sheet, close that one first: one sheet slides out
@@ -24,18 +24,21 @@ const OpenSheet = createContext<((sheet: MoneySheet) => void) | null>(null);
 export function useMoneySheets() {
   const open = useContext(OpenSheet);
   const router = useRouter();
-  const go = (sheet: MoneySheet) => (open ? open(sheet) : router.push(ROUTE[sheet]));
+  const go = (sheet: MoneySheet, free?: string) =>
+    open ? open(sheet, free) : router.push(free ? `/home?repay=${encodeURIComponent(free)}` : ROUTE[sheet]);
   return {
     topUp: () => go("top-up"),
-    repay: () => go("repay"),
+    /** The Repay sheet; with a stock, open on "free up" with that stock ticked (its stock sheet's Free up shares). */
+    repay: (free?: string) => go("repay", free),
   };
 }
 
 /** The sheet a link asked for (`?topup`, `?repay`). */
-function linked(): MoneySheet | null {
+function linked(): { sheet: MoneySheet; free?: string } | null {
   if (typeof window === "undefined") return null;
   const q = new URLSearchParams(window.location.search);
-  return q.has(PARAM["top-up"]) ? "top-up" : q.has(PARAM.repay) ? "repay" : null;
+  if (q.has(PARAM["top-up"])) return { sheet: "top-up" };
+  return q.has(PARAM.repay) ? { sheet: "repay", free: q.get(PARAM.repay) || undefined } : null;
 }
 
 /**
@@ -45,8 +48,8 @@ function linked(): MoneySheet | null {
  */
 export function MoneySheets({ address, children }: { address: `0x${string}`; children: ReactNode }) {
   const [initial] = useState(linked);
-  const topUp = useSheetSubject<true>(initial === "top-up" ? true : null);
-  const repay = useSheetSubject<true>(initial === "repay" ? true : null);
+  const topUp = useSheetSubject<true>(initial?.sheet === "top-up" ? true : null);
+  const repay = useSheetSubject<{ free?: string }>(initial?.sheet === "repay" ? { free: initial.free } : null);
 
   // The query that opened a sheet goes once it has: a reload or Back doesn't open it again. The rest of the query stays.
   useEffect(() => {
@@ -57,13 +60,13 @@ export function MoneySheets({ address, children }: { address: `0x${string}`; chi
     window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
   }, []);
 
-  const open = (sheet: MoneySheet) => {
+  const open = (sheet: MoneySheet, free?: string) => {
     if (sheet === "top-up") {
       repay.close();
       topUp.show(true);
     } else {
       topUp.close();
-      repay.show(true);
+      repay.show({ free });
     }
   };
 
@@ -80,6 +83,7 @@ export function MoneySheets({ address, children }: { address: `0x${string}`; chi
           address={address}
           onClose={repay.close}
           onTopUp={() => open("top-up")}
+          freeUp={repay.subject.free}
         />
       )}
     </OpenSheet.Provider>

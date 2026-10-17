@@ -17,6 +17,7 @@ import { buildFreeRepayCalls, freeRepayActivity, freeRepayRaw, type SellPlan } f
 import { quoteKey } from "@/lib/swap/buy";
 import { sellMinOut, type SellQuote } from "@/lib/swap/sell";
 import { USDC, type ReserveAsset } from "@/lib/tokens/registry";
+import { takeOutPlan, withTakeOuts, type TakeOut } from "@/lib/tx/plans";
 
 /** What Repay would sign: a chip's exact amount, or All (every cent owed when the cash covers it, else all the cash). */
 export type RepayInput = {
@@ -185,17 +186,31 @@ export function repaySign(view: RepayView, user: `0x${string}`, debtRaw: bigint)
  * The Repay sheet's one write path: one useTx, one batch per "Pay with" row, prepared while the sheet is open and idle
  * from what it would sign now (`sign`, null while it can't), so the tap opens JAW's sheet straight away. Cash is
  * useRepayBatch (unchanged), a free stock useFreeRepayBatch, a backing stock the existing repay by selling (useSaleBatch).
+ * The stocks ticked to free up are taken out after the repay in the same batch (withTakeOuts); with nothing repaid,
+ * the take-outs alone (takeOutPlan). `ready` false keeps nothing prepared (the Watch tick not given yet).
  */
-export function useRepayWith(sign: RepaySign | null) {
+export function useRepayWith(
+  sign: RepaySign | null,
+  takeOuts: readonly TakeOut[] = [],
+  user: `0x${string}` | null = null,
+  ready = true,
+) {
   const cash = useRepayBatch();
   const free = useFreeRepayBatch();
   const sale = useSaleBatch();
-  const plan = !sign
+  const repay = !sign
     ? null
     : sign.via === "cash"
       ? repayPlan(sign.input, cash)
       : sign.via === "free"
         ? freeRepayPlan(sign.input, free)
         : salePlan(sign.input, sale);
+  const plan = !ready
+    ? null
+    : repay
+      ? withTakeOuts(repay, takeOuts)
+      : user && takeOuts.length > 0
+        ? takeOutPlan(user, takeOuts)
+        : null;
   return useTx(undefined, plan);
 }

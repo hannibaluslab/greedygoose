@@ -4,11 +4,11 @@ import { BuySheet } from "./BuySheet";
 import { CreditBuySheet } from "./CreditBuySheet";
 import { StockSheet } from "./StockSheet";
 import { TradeSheet } from "./TradeSheet";
-import { FreeUpSheet } from "./FreeUpSheet";
-import { useBackingFactors, type Holding, type PositionData } from "@/hooks/usePosition";
+import type { PositionData } from "@/hooks/usePosition";
+import { useMoneySheets } from "./MoneySheets";
 import { useSheetSubject } from "@/hooks/useSheetSubject";
 import type { TradeAsset } from "@/lib/trade";
-import { EQUITIES, type ReserveAsset } from "@/lib/tokens/registry";
+import { EQUITIES } from "@/lib/tokens/registry";
 
 /** The stock sheet's subject: which stock, and whether the Market opened it (its Back returns there). */
 type StockAt = { symbol: string; fromMarket?: boolean };
@@ -29,13 +29,11 @@ export function useStockSheets(initialBuy: FlowAt | null = null) {
   const stock = useSheetSubject<StockAt>();
   const buy = useSheetSubject<FlowAt>(initialBuy);
   const creditBuy = useSheetSubject<FlowAt>();
-  const freeUp = useSheetSubject<FlowAt & { symbol: string }>();
   const trade = useSheetSubject<TradeAt>();
   return {
     stock,
     buy,
     creditBuy,
-    freeUp,
     trade,
     openStock: (symbol: string) => stock.show({ symbol }),
     openMarket: () => buy.show({ symbol: null }),
@@ -60,14 +58,14 @@ export function StockSheets({
   user: `0x${string}`;
   data: PositionData;
 }) {
-  const { stock, buy, creditBuy, freeUp, trade } = sheets;
+  const { stock, buy, creditBuy, trade } = sheets;
+  const money = useMoneySheets();
   const find = (symbol: string | null | undefined) => {
     const asset = EQUITIES.find((e) => e.symbol === symbol);
     const holding = data.holdings.find((h) => h.symbol === symbol);
     return asset && holding ? { asset, holding } : null;
   };
   const shown = find(stock.subject?.symbol);
-  const freeing = find(freeUp.subject?.symbol);
   /** From a flow back to the stock sheet that opened it. */
   const backTo = (flow: { close: () => void }, at: StockAt | undefined) =>
     at
@@ -108,7 +106,10 @@ export function StockSheets({
           }
           onBuy={hop(buy, { symbol: stock.subject.symbol, back: stock.subject })}
           onCreditBuy={hop(creditBuy, { symbol: stock.subject.symbol, back: stock.subject })}
-          onFreeUp={hop(freeUp, { symbol: stock.subject.symbol, back: stock.subject })}
+          onFreeUp={() => {
+            stock.close();
+            money.repay(stock.subject!.symbol);
+          }}
         />
       )}
       {buy.subject && (
@@ -159,32 +160,6 @@ export function StockSheets({
           onClose={trade.close}
         />
       )}
-      {freeing && freeUp.subject && (
-        <FreeUp
-          key={`freeUp${freeUp.key}`}
-          open={freeUp.open}
-          user={user}
-          stock={freeing.asset}
-          holding={freeing.holding}
-          data={data}
-          onClose={freeUp.close}
-          onBack={backTo(freeUp, freeUp.subject.back)}
-        />
-      )}
     </>
   );
-}
-
-/** Free up shares, with the collateral factors read only once it opens. */
-function FreeUp(p: {
-  open: boolean;
-  user: `0x${string}`;
-  stock: ReserveAsset;
-  holding: Holding;
-  data: PositionData;
-  onClose: () => void;
-  onBack?: () => void;
-}) {
-  const cfs = useBackingFactors(p.data.holdings);
-  return <FreeUpSheet {...p} cf={cfs?.[p.stock.symbol]} />;
 }
