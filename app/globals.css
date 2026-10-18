@@ -326,6 +326,12 @@ select {
   background: var(--bg-sheet) !important;
 }
 
+/* A sheet sliding away (vaul's 500ms exit) never takes a tap: a hop opens the next sheet while this one leaves, and a
+   tap meant for the new sheet or the dim must not land on the old one. */
+[data-vaul-drawer][data-state="closed"] {
+  pointer-events: none;
+}
+
 /* Sheet step push / pop (SheetSteps in components/sheets/SheetShell.tsx). The header stays put,
    so the body only has to say "this replaced that": 14px and 200ms. */
 @keyframes sheet-step-fwd {

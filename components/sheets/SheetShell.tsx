@@ -155,9 +155,8 @@ export function SheetShell({
     <>
       {/* Our own dim + tap-outside-to-close: non-modal vaul (below) skips
           its overlay along with its scroll lock. z-40 sits under the drawer
-          (z-50), above the page. pointer-events-auto: vaul still opens Radix's
-          dialog as modal, which sets body { pointer-events: none } while the
-          sheet is open, and vaul only resets that for uncontrolled opens. */}
+          (z-50), above the page, so it is what keeps taps off the page while
+          a sheet is open (the Radix dialog is non-modal, DrawerContent). */}
       {open && (
         <div
           aria-hidden
@@ -181,6 +180,7 @@ export function SheetShell({
         modal={false}
       >
         <DrawerContent
+          open={open}
           // The cap is a class reading a variable, not an inline max-height: useKeyboardLift clears the drawer's
           // inline max-height whenever no keyboard is up, which left a sheet taller than the screen running off its top.
           className="max-h-(--sheet-max-h)"

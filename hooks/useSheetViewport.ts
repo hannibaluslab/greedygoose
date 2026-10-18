@@ -29,15 +29,27 @@ import { useEffect } from "react";
  * pans, so the keyboard-lift effect below can place the drawer flush above
  * the keyboard deterministically. Refcounted because sheets can overlap
  * while one closes and the next opens.
+ *
+ * A hop (one sheet closes as the next opens) keeps the lock: the release waits
+ * HOP_MS and a new lock in that time cancels it. Releasing and locking again
+ * in one go unfixed the body, scrolled the page back and fixed it again on
+ * every hop, and on iPhone a few of those left the page's scroll and the
+ * fixed sheet out of step, so taps landed under what they were aimed at.
  */
 let bodyLockCount = 0;
 let releaseBodyLock: (() => void) | null = null;
+let pendingRelease: number | undefined;
+const HOP_MS = 120;
 
 export function useBodyScrollLock(locked: boolean) {
   useEffect(() => {
     if (!locked) return;
     bodyLockCount++;
-    if (bodyLockCount === 1) {
+    if (pendingRelease !== undefined) {
+      // A hop: the body is still fixed where the last sheet left it.
+      window.clearTimeout(pendingRelease);
+      pendingRelease = undefined;
+    } else if (bodyLockCount === 1) {
       const { body } = document;
       const scrollY = window.scrollY;
       const prev = {
@@ -64,8 +76,11 @@ export function useBodyScrollLock(locked: boolean) {
     return () => {
       bodyLockCount--;
       if (bodyLockCount === 0) {
-        releaseBodyLock?.();
-        releaseBodyLock = null;
+        pendingRelease = window.setTimeout(() => {
+          pendingRelease = undefined;
+          releaseBodyLock?.();
+          releaseBodyLock = null;
+        }, HOP_MS);
       }
     };
   }, [locked]);
@@ -125,7 +140,9 @@ export function useKeyboardLift(active: boolean) {
     const vv = window.visualViewport;
     if (!vv) return;
     const apply = () => {
-      const el = document.querySelector<HTMLElement>("[data-vaul-drawer]");
+      // The newest open sheet: during a hop the one sliding away is still in the page, ahead of it.
+      const open = document.querySelectorAll<HTMLElement>('[data-vaul-drawer][data-state="open"]');
+      const el = open[open.length - 1];
       if (!el) return;
       // The lift only engages while an editable is focused. Without this
       // gate, iOS Safari's dynamic toolbar (with viewport-fit=cover) makes
