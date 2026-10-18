@@ -16,7 +16,7 @@ import { TxButton, TxDone, TxError } from "./TxUi";
 import { CloseIcon, ReceiveIcon } from "./icons";
 import { useFollowing, useNames } from "@/hooks/useContacts";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
-import { useWithBackingFactors, type PositionData } from "@/hooks/usePosition";
+import type { PositionData } from "@/hooks/usePosition";
 import { useRecipient, useSend, type ToState } from "@/hooks/useSend";
 import { readLocal, subscribeLocal, type LocalActivity } from "@/lib/activity/local";
 import { shortAddress } from "@/lib/formatting";
@@ -73,9 +73,7 @@ function useLocalActivity(user: Address): LocalActivity[] {
  * Recent and Contacts as quick picks), the summary, the small print and one button that opens JAW's sheet once. No
  * confirm screen of ours. Receive, the address and its QR, is one tap away in the header.
  */
-export function SendScreen({ user, data: position }: { user: Address; data: PositionData }) {
-  // Each stock's backing factor on its holding: a stock that backs credit sends up to the 1.12 line (Up to $X).
-  const data = useWithBackingFactors(position);
+export function SendScreen({ user, data }: { user: Address; data: PositionData }) {
   const { isConnected } = useAccount();
   const fee = useFeeSupport();
   const money = useMoneySheets();
@@ -105,8 +103,6 @@ export function SendScreen({ user, data: position }: { user: Address; data: Posi
           token: view.token,
           recipient: to.recipient,
           amountRaw: view.amountRaw,
-          takeOutRaw: view.takeOutRaw,
-          takeOutAll: view.takeOutAll,
         }
       : null;
   const tx = useSend(input);

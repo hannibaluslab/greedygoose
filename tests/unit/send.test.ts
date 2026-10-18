@@ -635,16 +635,6 @@ describe("Send's options and amount", () => {
     expect(sendSmallPrint({ token: amzn, amountRaw: 723_456n, multiplier: 2n * 10n ** 18n, to: sam })).toContain(
       "exactly 0.01446912 AMZN",
     );
-    // Up to $X: the shares that come out of backing are the first move.
-    const out = sendSmallPrint({
-      token: amzn,
-      amountRaw: 723_456n,
-      takeOutRaw: 500_000n,
-      multiplier: 10n ** 18n,
-      to: sam,
-    });
-    expect(out).toContain("In one go: 0.005 AMZN comes out of backing your credit, then exactly 0.00723456 AMZN goes");
-    expect(out).not.toContain("Only free shares");
   });
 });
 

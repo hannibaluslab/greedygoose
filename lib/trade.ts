@@ -1,22 +1,12 @@
 import { parseUnits } from "viem";
 import { CASH } from "@/config/risk";
 import { ORACLE_DECIMALS } from "@/lib/aave/addresses";
-import { buildWithdrawCalls } from "@/lib/aave/tx";
 import type { ActivityItem } from "@/lib/activity/decode";
 import { assertAllowed } from "@/lib/allowlist";
 import { feeBufferRaw, maxSpendRaw, toUsd, type Cash } from "@/lib/cash";
 import { formatShares, formatUsd } from "@/lib/formatting";
 import { marketState } from "@/lib/market-hours";
-import {
-  NO_DUST_USD,
-  SELL_BLOCKED,
-  planSell,
-  sellableRaw,
-  takeOutWords,
-  type SellBlock,
-  type SellPlan,
-  type SellPosition,
-} from "@/lib/sell";
+import { NO_DUST_USD, SELL_BLOCKED, planSell, type SellBlock, type SellPlan, type SellPosition } from "@/lib/sell";
 import { BUY_LIMITS, buildBuyCalls, minOut, quoteEconomics, type BuyQuote, type Call } from "@/lib/swap/buy";
 import { SELL_LIMITS, buildSellCalls, sellEconomics, sellMinOut, type SellQuote } from "@/lib/swap/sell";
 import { VENUE_LABEL } from "@/lib/swap/venues";
@@ -51,8 +41,6 @@ export type TradeHolding = {
   backingShares: number;
   multiplier: bigint;
   paused: boolean;
-  /** The stock's collateral factor (useBackingFactors): with it, a stock that backs credit trades Up to $X. */
-  cf?: number;
 };
 
 /** The position's fields the Trade sheet reads (usePosition's data has them all). */
@@ -90,20 +78,12 @@ export function sharesForUsdRaw(usdRaw: bigint, priceRaw: bigint, decimals: numb
   return (usdRaw * 10n ** BigInt(decimals + ORACLE_DECIMALS - USDC.decimals)) / priceRaw;
 }
 
-/** What a stock can trade now: its free shares, plus the backing the 1.12 line lets out when its factor is known. */
 /**
- * What a stock can trade or send now (Up to $X): its free shares, plus the backing the 1.12 line lets out once its
- * factor and the credit are read. Without them, the free shares only.
+ * Cents the free shares are worth at Aave's price, rounded down: what MAX shows (Up to $X). Sell, Trade and Send move
+ * free shares only; shares that back credit come back with a repay first.
  */
-export const sellableOf = (h: TradeHolding, data: object) => {
-  const pos = positionOf(data);
-  return pos ? sellableRaw(h, h.cf, pos) : h.freeRaw;
-};
-const sellable = sellableOf;
-
-/** Cents what a stock can trade is worth at Aave's price, rounded down: what MAX shows (Up to $X). */
-const sellableCents = (h: TradeHolding, stock: ReserveAsset, data: object) =>
-  (sellable(h, data) * h.priceRaw) / 10n ** BigInt(stock.decimals + ORACLE_DECIMALS - 2);
+const freeCents = (h: TradeHolding, stock: ReserveAsset) =>
+  (h.freeRaw * h.priceRaw) / 10n ** BigInt(stock.decimals + ORACLE_DECIMALS - 2);
 
 /** The cash can't keep the network-fee buffer, so a stock → stock sale pays its own fee. */
 export const feeFromSale = (cash: Cash) => cash.walletRaw + cash.savingsRaw < feeBufferRaw;
@@ -145,20 +125,13 @@ export function buildTradeCalls(p: {
   /** Aave's price for `from`, for the sale's floor. */
   oraclePriceUsd: number;
   nowSec?: number;
-  /** Shares of `from` that come out of backing first, when the free ones don't cover the sale (planSell "any"). */
-  takeOutRaw?: bigint;
-  /** All of `from` that backs credit comes out: the take-out signs "all". */
-  takeOutAll?: boolean;
 }): Call[] {
   if (p.from.kind !== "equity" || p.to.kind !== "equity" || p.from.address === p.to.address)
     throw new Error("Not a supported trade");
   const floor = sellMinOut(p.sellQuote, p.from, p.oraclePriceUsd);
   if (p.buyQuote.amountIn > floor) throw new Error("Blocked: the buy spends more than the sale is sure to bring");
   const nowSec = p.nowSec ?? Math.floor(Date.now() / 1000);
-  const out = p.takeOutRaw ?? 0n;
-  if (out > p.sellQuote.amountIn) throw new Error("Takes out more than it sells");
   return assertAllowed(p.user, [
-    ...(out > 0n ? buildWithdrawCalls({ user: p.user, stock: p.from, amountRaw: out, all: !!p.takeOutAll }) : []),
     ...buildSellCalls({ user: p.user, stock: p.from, quote: p.sellQuote, oraclePriceUsd: p.oraclePriceUsd, nowSec }),
     ...buildBuyCalls({ user: p.user, stock: p.to, quote: p.buyQuote, nowSec }),
   ]);
@@ -205,7 +178,6 @@ export const TRADE_COPY = {
   cashTooLow: `You need at least ${formatUsd(BUY_LIMITS.minUsd + CASH.feeBufferUsd)} in your cash to buy.`,
   notHeld: (name: string) => `You don’t have any ${name} to trade.`,
   allBacks: (name: string) => `All of your ${name} backs your credit.`,
-  pastLine: SELL_BLOCKED["past-line"].replace("sell", "trade").replace("sell", "trade"),
   overCash: (usd: number) => `That’s more than your cash (${formatUsd(usd)}).`,
   feeBuffer: `Leave ${formatUsd(CASH.feeBufferUsd)} for the network fee.`,
   notFree: "That’s more than your free shares.",
@@ -254,7 +226,7 @@ export function fromOptions(data: Pick<TradeData, "holdings" | "cash" | "cashUsd
   };
   const stocks = data.holdings.filter(held).map((h): FromOption => {
     const why =
-      sellable(h, data) === 0n
+      h.freeRaw === 0n
         ? ("all-backs" as const)
         : maxUsdOf(h.symbol, data) < SELL_LIMITS.minUsd
           ? ("too-small" as const)
@@ -340,15 +312,7 @@ export function maxUsdOf(from: TradeAsset, data: Pick<TradeData, "holdings" | "c
   if (from === "cash") return Number(maxSpendRaw(data.cash) / 10_000n) / 100;
   const stock = stockOf(from);
   const h = data.holdings.find((x) => x.symbol === from);
-  return stock && h ? Number(sellableCents(h, stock, data)) / 100 : 0;
-}
-
-/** The position fields Up to $X reads, or null when the caller has none (no credit read yet). */
-function positionOf(data: object): Pick<SellPosition, "totalBackingUsd" | "avgCf" | "debtUsd"> | null {
-  const d = data as Partial<SellPosition>;
-  return d.totalBackingUsd === undefined || d.avgCf === undefined || d.debtUsd === undefined
-    ? null
-    : { totalBackingUsd: d.totalBackingUsd, avgCf: d.avgCf, debtUsd: d.debtUsd };
+  return stock && h ? Number(freeCents(h, stock)) / 100 : 0;
 }
 
 /**
@@ -437,7 +401,7 @@ export function tradeAmount(p: {
   const sharesRaw =
     fromStock && fromHolding
       ? sellAll
-        ? sellable(fromHolding, p.data)
+        ? fromHolding.freeRaw
         : sharesForUsdRaw(usdRaw, fromHolding.priceRaw, fromStock.decimals)
       : 0n;
   return {
@@ -479,7 +443,6 @@ const pct = (f: number) => (f * 100).toFixed(1);
 export function saleBlockText(block: SellBlock, swap: boolean, minTradeUsd: number): string {
   if (block === "too-small") return swap ? TRADE_COPY.minTrade(minTradeUsd) : TRADE_COPY.minSale;
   if (block === "price") return TRADE_COPY.salePrice;
-  if (block === "past-line") return TRADE_COPY.pastLine;
   if (block === "paused") return SELL_BLOCKED.paused;
   return TRADE_COPY.notFree;
 }
@@ -514,10 +477,10 @@ export function planTrade(p: {
   const sellPlan =
     sellQuote && fromStock && fromHolding
       ? planSell({
-          from: "any",
+          from: "free",
           stock: fromStock,
           holding: fromHolding,
-          cf: fromHolding.cf ?? 0,
+          cf: 0,
           position: data,
           quote: sellQuote,
           now: p.now,
@@ -537,13 +500,11 @@ export function planTrade(p: {
   let blocker: string | null = null;
   if (route === "buy" && maxSpendRaw(data.cash) < MIN_BUY_RAW) blocker = TRADE_COPY.cashTooLow;
   else if (selling && fromHolding && !held(fromHolding)) blocker = TRADE_COPY.notHeld(fromHolding.name);
-  else if (selling && fromHolding && sellable(fromHolding, data) === 0n)
-    blocker = TRADE_COPY.allBacks(fromHolding.name);
+  else if (selling && fromHolding && fromHolding.freeRaw === 0n) blocker = TRADE_COPY.allBacks(fromHolding.name);
   else if (amountUsd > 0 && route) {
     if (route === "buy" && amountUsd > maxUsd)
       blocker = amountUsd > data.cashUsd ? TRADE_COPY.overCash(data.cashUsd) : TRADE_COPY.feeBuffer;
-    else if (selling && fromHolding && sharesRaw > sellable(fromHolding, data))
-      blocker = fromHolding.backingRaw > 0n && fromHolding.cf ? TRADE_COPY.pastLine : TRADE_COPY.notFree;
+    else if (selling && fromHolding && sharesRaw > fromHolding.freeRaw) blocker = TRADE_COPY.notFree;
     else if (route === "buy" && amountUsd < BUY_LIMITS.minUsd) blocker = TRADE_COPY.minBuy;
     else if (route === "sell" && amountUsd < SELL_LIMITS.minUsd) blocker = TRADE_COPY.minSale;
     else if (route === "swap" && amountUsd < SELL_LIMITS.minUsd) blocker = TRADE_COPY.minTrade(minTradeUsd);
@@ -699,7 +660,7 @@ export function swapSmallPrint(p: {
   const buyIn = formatUsd(toUsd(p.buyQuote.amountIn));
   const atLeast = (Number(minOut(p.buyQuote.amountOut)) / 10 ** p.to.decimals).toFixed(4);
   return (
-    `In one go: ${takeOutWords(p.plan.takeOutRaw, p.fromHolding.multiplier, p.from)}exactly ${shares} ${tickerOf(p.from.symbol)} is approved for the ${VENUE_LABEL[p.sellQuote.venue]} router and swapped ` +
+    `In one go: exactly ${shares} ${tickerOf(p.from.symbol)} is approved for the ${VENUE_LABEL[p.sellQuote.venue]} router and swapped ` +
     `for at least ${formatUsd(toUsd(p.plan.minOutRaw))}, then exactly ${buyIn} is approved for the ${VENUE_LABEL[p.buyQuote.venue]} router ` +
     `and swapped for ${p.to.name}. You get at least ${atLeast} ${tickerOf(p.to.symbol)}. If either price moves more than ` +
     `${BUY_LIMITS.slippageBps / 100}%, the trade is cancelled, and ${p.from.name} never sells for more than ${SELL_LIMITS.floorBps / 100}% ` +

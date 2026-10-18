@@ -1,6 +1,5 @@
 "use client";
 
-import { FREE_UP_FLOOR } from "@/lib/freeUp";
 import { TxStop, txKey, useTx, type TxPlan } from "./useTx";
 import { cashBuyPlan, useCashBuyBatch } from "./useBuy";
 import { useSigningQuote } from "./useBuyQuote";
@@ -33,7 +32,7 @@ export type TradeSign =
       from: ReserveAsset;
       to: ReserveAsset;
       sellQuote: SellQuote;
-      /** planSell ("any": free shares first, then backing up to the 1.12 line) for `sellQuote`. */
+      /** planSell (free shares) for `sellQuote`. */
       plan: SellPlan;
       /** The buy's quote for the screen's buy-in (the sale's floor, less the fee buffer when the sale pays the fee). */
       buyQuote: BuyQuote;
@@ -70,8 +69,6 @@ export async function swapBatch(p: Extract<TradeSign, { route: "swap" }>, reads:
     sellQuote,
     buyQuote,
     oraclePriceUsd: p.oraclePriceUsd,
-    takeOutRaw: p.plan.takeOutRaw,
-    takeOutAll: p.plan.takeOutAll,
   });
   return p.feeFromSale ? calls : payFromCash(p.user, 0n, await reads.cashToSign(p.user, 0n), calls);
 }
@@ -87,14 +84,11 @@ export const swapPlan = (p: Extract<TradeSign, { route: "swap" }>, reads: SwapRe
     sellMinOut(p.sellQuote, p.from, p.oraclePriceUsd),
     quoteKey(p.buyQuote),
     p.plan.block ?? null,
-    p.plan.takeOutRaw,
     p.feeFromSale,
   ),
   user: p.user,
   calls: () => swapBatch(p, reads),
   fallback: TRADE_COPY.swapFallback,
-  // Shares taken out of backing for the sale: held to the Act line on Aave's own health, as Free up is.
-  ...(p.plan.takeOutRaw > 0n ? { healthFloor: FREE_UP_FLOOR } : {}),
   activity: tradeActivity({ from: p.from, to: p.to, plan: p.plan, buyQuote: p.buyQuote }),
 });
 

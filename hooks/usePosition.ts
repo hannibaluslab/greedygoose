@@ -72,8 +72,6 @@ export type Holding = {
   multiplier: bigint;
   backingEnabled: boolean;
   dynamicConfigKey: number;
-  /** Aave's backing factor, once read (useWithBackingFactors): how far a sale can take backing shares out. */
-  cf?: number;
 };
 
 const PER = 7;
@@ -214,18 +212,6 @@ export type PositionData = NonNullable<ReturnType<typeof usePosition>["data"]>;
 /** Collateral factor (0–1) per equity reserve, read live from the spoke's dynamic config. */
 export function useBackingFactors(holdings: Holding[] | undefined) {
   return useBackingFactorsRead(holdings).cfs;
-}
-
-/**
- * The position with each stock's backing factor on its holding, for the screens that sell, trade or send up to the 1.12
- * line (Up to $X). Until the factors are read, the holdings have none and only free shares can go.
- */
-export function useWithBackingFactors(data: PositionData): PositionData {
-  const cfs = useBackingFactors(data.holdings);
-  return useMemo(
-    () => (cfs ? { ...data, holdings: data.holdings.map((h) => ({ ...h, cf: cfs[h.symbol] })) } : data),
-    [data, cfs],
-  );
 }
 
 /** useBackingFactors, with whether the read failed and a retry, for a screen that says so instead of pulsing on. */

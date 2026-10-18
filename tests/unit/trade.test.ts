@@ -985,14 +985,7 @@ describe("words on the main screen", () => {
   });
 });
 
-describe("Up to $X: trading a stock that backs credit (canvas board 10)", () => {
-  /** The backer with each stock's collateral factor read: its backing trades as far as the 1.12 line. */
-  const withCf = (data: TradeData, debtUsd = data.debtUsd): TradeData => ({
-    ...data,
-    debtUsd,
-    debtRaw: usd(debtUsd),
-    holdings: data.holdings.map((h) => ({ ...h, cf: 0.7 })),
-  });
+describe("Up to $X: a stock that backs credit trades its free shares only (canvas board 10)", () => {
   const saleQuote = (data: TradeData, symbol: string, usdIn: number): QuoteState<SellQuote> => {
     const h = data.holdings.find((x) => x.symbol === symbol)!;
     const amountIn = sharesForUsdRaw(usd(usdIn), h.priceRaw, stock(symbol).decimals);
@@ -1003,73 +996,25 @@ describe("Up to $X: trading a stock that backs credit (canvas board 10)", () => 
     };
   };
 
-  it("MAX is Up to $X: the free shares plus what the line lets out; with no factor read, the free shares only", () => {
+  it("all of it backing: MAX is 0, it can't be picked, and it says so", () => {
     expect(maxUsdOf("NVDAc", backer)).toBe(0);
-    expect(maxUsdOf("NVDAc", withCf(backer))).toBeCloseTo(2_500, 1);
-    // $4,000 owed: room = 5,125 − 4,000 × 1.12 = 645 → $921.42 of NVIDIA.
-    expect(maxUsdOf("NVDAc", withCf(backer, 4_000))).toBeCloseTo(645 / 0.7, 1);
-    expect(fromOptions(withCf(backer)).find((o) => o.asset === "NVDAc")!.disabled).toBe(false);
+    expect(fromOptions(backer).find((o) => o.asset === "NVDAc")!.disabled).toBe(true);
+    const view = planTrade({ from: "NVDAc", to: "cash", amount: "300", all: false, data: backer });
+    expect(view.blocker).toBe(TRADE_COPY.allBacks("NVIDIA"));
   });
 
-  it("a sale past the free shares takes the rest out of backing in the same batch", () => {
-    const data = withCf(backer, 4_000);
+  it("free shares beside backing: Up to $X is the free value, and more than that is more than the free shares", () => {
+    const amzn = backer.holdings.find((h) => h.symbol === "AMZNc")!;
+    expect(maxUsdOf("AMZNc", backer)).toBe(Math.floor(amzn.freeUsd * 100) / 100);
     const view = planTrade({
-      from: "NVDAc",
+      from: "AMZNc",
       to: "cash",
-      amount: "300",
+      amount: "50",
       all: false,
-      data,
-      sell: saleQuote(data, "NVDAc", 300),
+      data: backer,
+      sell: saleQuote(backer, "AMZNc", 50),
     });
-    expect(view.sellPlan?.from).toBe("any");
-    expect(view.sellPlan?.takeOutRaw).toBe(view.sellPlan?.sharesRaw);
-    expect(view.sellPlan?.block).toBeUndefined();
-  });
-
-  it("past Up to: repay first", () => {
-    const data = withCf(backer, 4_000);
-    const view = planTrade({
-      from: "NVDAc",
-      to: "cash",
-      amount: "1000",
-      all: false,
-      data,
-      sell: saleQuote(data, "NVDAc", 1_000),
-    });
-    expect(view.blocker).toBe(TRADE_COPY.pastLine);
-    expect(TRADE_COPY.pastLine).toBe("That’s more than you can trade right now. Repay some first to trade more.");
-  });
-
-  it("stock → stock takes the backing out first, then sells and buys", () => {
-    const sellQuote: SellQuote = { venue: "aerodrome", pool: 10, amountIn: 150_000_000n, amountOut: usd(298) };
-    const floor = sellMinOut(sellQuote, nvda, PRICE.NVDAc);
-    const buyQuote: BuyQuote = { venue: "aerodrome", pool: 10, amountIn: floor, amountOut: 100_000_000n };
-    const calls = buildTradeCalls({
-      user,
-      from: nvda,
-      to: aapl,
-      sellQuote,
-      buyQuote,
-      oraclePriceUsd: PRICE.NVDAc,
-      takeOutRaw: 50_000_000n,
-      nowSec: 1_000,
-    });
-    expect(isAddressEqual(calls[0].to, AAVE.SPOKE)).toBe(true);
-    expect(calls.length).toBe(
-      1 +
-        buildTradeCalls({ user, from: nvda, to: aapl, sellQuote, buyQuote, oraclePriceUsd: PRICE.NVDAc, nowSec: 1_000 })
-          .length,
-    );
-    expect(() =>
-      buildTradeCalls({
-        user,
-        from: nvda,
-        to: aapl,
-        sellQuote,
-        buyQuote,
-        oraclePriceUsd: PRICE.NVDAc,
-        takeOutRaw: 150_000_001n,
-      }),
-    ).toThrow(/more than it sells/);
+    expect(view.blocker).toBe(TRADE_COPY.notFree);
+    expect(TRADE_COPY.notFree).toBe("That’s more than your free shares.");
   });
 });

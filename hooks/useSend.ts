@@ -7,7 +7,6 @@ import { usePublicClient } from "wagmi";
 import { TxStop, txKey, useTx, type TxPlan } from "./useTx";
 import { useSigningCash } from "./useSigningCash";
 import { CHAIN_ID } from "@/lib/chain";
-import { FREE_UP_FLOOR } from "@/lib/freeUp";
 import { accountName, addressOfName, hasEthereumCode } from "@/lib/jaw/name";
 import {
   SEND_COPY,
@@ -28,9 +27,6 @@ export type SendInput = {
   token: ReserveAsset;
   recipient: Recipient;
   amountRaw: bigint;
-  /** A stock's shares that come out of backing first (Up to $X); 0 when the free shares cover it. */
-  takeOutRaw?: bigint;
-  takeOutAll?: boolean;
 };
 
 const isCashToken = (token: ReserveAsset) => isAddressEqual(token.address, USDC.address);
@@ -52,8 +48,6 @@ export function useSendBatch() {
         to: p.recipient.address,
         amountRaw: p.amountRaw,
         cash,
-        takeOutRaw: p.takeOutRaw,
-        takeOutAll: p.takeOutAll,
       });
     } catch (e) {
       throw e instanceof SendStop ? new TxStop(e.message) : e;
@@ -73,11 +67,7 @@ export const sendPlan = (p: SendInput, batch: ReturnType<typeof useSendBatch>): 
     p.token.address.toLowerCase(),
     p.recipient.address.toLowerCase(),
     p.amountRaw,
-    p.takeOutRaw ?? 0n,
-    !!p.takeOutAll,
   ),
-  // Shares taken out of backing for the send: held to the Act line on Aave's own health, as Free up is.
-  ...((p.takeOutRaw ?? 0n) > 0n ? { healthFloor: FREE_UP_FLOOR } : {}),
   user: p.user,
   calls: () => batch(p),
   fallback: isCashToken(p.token) ? SEND_COPY.fallback : SEND_COPY.stockFallback,

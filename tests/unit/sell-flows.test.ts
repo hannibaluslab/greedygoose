@@ -48,7 +48,7 @@ const owing = (debtUsd: number): SellPosition => ({
   healthFactor: debtUsd > 0 ? 700 / debtUsd : null,
 });
 const tuesday = new Date("2026-10-13T15:00:00Z");
-const plan = (from: "free" | "backing" | "repay" | "any", q: SellQuote, position = owing(300), h = holding) =>
+const plan = (from: "free" | "backing" | "repay", q: SellQuote, position = owing(300), h = holding) =>
   planSell({ from, stock: nvda, holding: h, cf: 0.7, position, quote: q, now: tuesday });
 
 describe("buildSaleCalls", () => {
@@ -316,90 +316,5 @@ describe("floorPriceUsd (the review's lowest price)", () => {
 
   it("is 0 for no shares", () => {
     expect(floorPriceUsd({ minOutRaw: usd(1), sharesRaw: 0n }, nvda)).toBe(0);
-  });
-});
-
-describe('planSell "any": Sell, Trade and Send on a stock that backs credit (Up to $X)', () => {
-  it("the free shares first: nothing comes out of backing, the health doesn't move", () => {
-    const p = plan("any", { ...quote, amountIn: shares(0.1), amountOut: usd(24.9) });
-    expect(p.block).toBeUndefined();
-    expect(p.takeOutRaw).toBe(0n);
-    expect(p.hfAfter).toBeCloseTo(700 / 300, 9);
-  });
-
-  it("past the free shares, the rest comes out of backing, as far as the 1.12 line", () => {
-    // Up to: 0.1 free + 2.08 the line lets out = 2.18 shares.
-    const p = plan("any", { ...quote, amountIn: shares(1.1), amountOut: usd(273) });
-    expect(p.maxRaw).toBe(shares(0.1) + (shares(4) * 520_000n) / 1_000_000n);
-    expect(p.takeOutRaw).toBe(shares(1));
-    expect(p.block).toBeUndefined();
-    expect(p.hfAfter).toBeCloseTo((700 - 250 * 0.7) / 300, 6);
-    expect(saleActivity(nvda, p).map((a) => a.kind)).toEqual(["withdraw", "sell"]);
-    expect(saleActivity(nvda, p)[0]).toMatchObject({ amount: 1 });
-  });
-
-  it("past Up to: blocked, repay first", () => {
-    const p = plan("any", { ...quote, amountIn: shares(2.3), amountOut: usd(572) });
-    expect(p.block).toBe("past-line");
-  });
-
-  it("a paused stock sells its free shares only", () => {
-    const paused = { ...holding, paused: true };
-    expect(
-      plan("any", { ...quote, amountIn: shares(0.1), amountOut: usd(24.9) }, owing(300), paused).block,
-    ).toBeUndefined();
-    expect(plan("any", { ...quote, amountIn: shares(0.1), amountOut: usd(24.9) }, owing(300), paused).maxRaw).toBe(
-      shares(0.1),
-    );
-    expect(plan("any", quote, owing(300), paused).block).toBe("paused");
-  });
-
-  it("the batch takes out only what the free shares don't cover, then sells it all", () => {
-    const build = (takeOutRaw: bigint, q = quote) =>
-      buildSaleCalls({
-        from: "any",
-        user,
-        stock: nvda,
-        quote: q,
-        oraclePriceUsd: price,
-        debtRaw: usd(300),
-        nowSec: 1_000,
-        takeOutRaw,
-      });
-    expect(steps(build(0n))).toEqual(["approve", "swap"]);
-    const calls = build(shares(0.3));
-    expect(steps(calls)).toEqual(["withdraw", "approve", "swap"]);
-    expect(decodeFunctionData({ abi: spokeAbi, data: calls[0].data }).args).toEqual([
-      BigInt(nvda.reserveId),
-      shares(0.3),
-      user,
-    ]);
-    expect(() => build(shares(0.5))).toThrow(/more than it sells/);
-  });
-});
-
-describe("no dust (ruling 7b)", () => {
-  it("taking out every share that backs credit signs all, so nothing is left on Aave", () => {
-    const nothingOwed = { ...owing(0) };
-    const all = plan(
-      "any",
-      { ...quote, amountIn: holding.freeRaw + holding.backingRaw, amountOut: usd(1_020) },
-      nothingOwed,
-    );
-    expect(all.block).toBeUndefined();
-    expect(all.takeOutAll).toBe(true);
-    const calls = buildSaleCalls({
-      from: "any",
-      user,
-      stock: nvda,
-      quote: { ...quote, amountIn: holding.freeRaw + holding.backingRaw, amountOut: usd(1_020) },
-      oraclePriceUsd: price,
-      debtRaw: 0n,
-      nowSec: 1_000,
-      takeOutRaw: all.takeOutRaw,
-      takeOutAll: true,
-    });
-    expect(decodeFunctionData({ abi: spokeAbi, data: calls[0].data }).args[1]).toBe(2n ** 256n - 1n);
-    expect(plan("any", { ...quote, amountIn: shares(1.1), amountOut: usd(273) }).takeOutAll).toBe(false);
   });
 });

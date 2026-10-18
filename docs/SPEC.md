@@ -77,10 +77,10 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
 
 ## Stocks that back credit (canvas boards 9–11)
 
-Sell, Trade and Send on a backing stock follow one rule: **Up to $X** = the free shares plus what the 1.12 line allows,
-in one signature. To do more, repay first. No redirects and no extra lines. Amounts are in dollars, with one line
-under them: "0.87 shares · $230.41 each" and "Up to $373". The small print starts with the shares that come out of
-backing.
+Sell, Trade and Send move **free shares only**. MAX is every free share; more than that says "That’s more than your
+free shares." Shares that back credit come back with a repay first (Repay, Free up shares); none of the three takes
+them out of backing. Amounts are in dollars, with one line under them: "0.87 shares · $230.41 each" and "Up to $373",
+the free shares' value. A stock whose shares all back credit is listed but can't be picked, and says so.
 
 ## Leaderboard
 

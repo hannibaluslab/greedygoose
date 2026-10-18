@@ -27,18 +27,8 @@ import { formatShares, formatUsd, shortAddress } from "@/lib/formatting";
 import { fullName } from "@/lib/jaw/name";
 import { rawToShares } from "@/lib/tokens/b20";
 import { EQUITIES, USDC, stockRank, type ReserveAsset } from "@/lib/tokens/registry";
-import {
-  TRADE_COPY,
-  clampAmount,
-  maxUsdOf,
-  sellableOf,
-  sharesForUsdRaw,
-  stockOf,
-  type AmountHint,
-  type TradeData,
-} from "@/lib/trade";
-import { buildWithdrawCalls } from "@/lib/aave/tx";
-import { NO_DUST_USD, takeOutWords, type SellPosition } from "@/lib/sell";
+import { clampAmount, maxUsdOf, sharesForUsdRaw, stockOf, type AmountHint, type TradeData } from "@/lib/trade";
+import { NO_DUST_USD, type SellPosition } from "@/lib/sell";
 
 /**
  * Send (Adrian, 2026-10-15): "replace pay by send, and let user send their assets out". NYM's SendSheet, Base only, in
@@ -103,7 +93,6 @@ export const SEND_COPY = {
   feeBuffer: `Leave ${formatUsd(CASH.feeBufferUsd)} for the network fee.`,
   noFee: `Add ${formatUsd(CASH.feeBufferUsd)} to your cash for the network fee first.`,
   notFree: "That’s more than your free shares.",
-  pastLine: TRADE_COPY.pastLine.replace(/trade/g, "send"),
   allBacks: (name: string) => `All of your ${name} backs your credit.`,
   tooSmall: "That’s less than the smallest part of a share.",
   // The button and what comes back.
@@ -158,14 +147,14 @@ export function sendOptions(data: SendData): SendOption[] {
       asset: h.symbol,
       name: h.name,
       sub:
-        sellableOf(h, data) === 0n
+        h.freeRaw === 0n
           ? SEND_COPY.subAllBacks
           : h.backingRaw > 0n
             ? SEND_COPY.subBacks(h.backingUsd)
             : SEND_COPY.subShares(h.freeShares),
       right: formatUsd(maxUsdOf(h.symbol, data)),
       rightSub: SEND_COPY.free,
-      disabled: sellableOf(h, data) === 0n,
+      disabled: h.freeRaw === 0n,
       freeUsd: h.freeUsd,
     }),
   );
@@ -453,10 +442,6 @@ export function buildSendCalls(p: {
   to: Address;
   amountRaw: bigint;
   cash: Cash;
-  /** A stock's shares that come out of backing first, when the free ones don't cover the send (Up to $X). */
-  takeOutRaw?: bigint;
-  /** Every share that backs credit comes out: the take-out signs "all". */
-  takeOutAll?: boolean;
 }): Call[] {
   if (!isRegistryToken(p.token)) throw new SendStop(SEND_COPY.fallback);
   if (p.amountRaw <= 0n) throw new SendStop(SEND_COPY.fallback);
@@ -468,11 +453,7 @@ export function buildSendCalls(p: {
     value: 0n,
   };
   const isCash = isAddressEqual(p.token.address, USDC.address);
-  const out = isCash ? 0n : (p.takeOutRaw ?? 0n);
-  if (out > p.amountRaw) throw new SendStop(SEND_COPY.fallback);
-  const takeOut =
-    out > 0n ? buildWithdrawCalls({ user: p.user, stock: p.token, amountRaw: out, all: !!p.takeOutAll }) : [];
-  return payFromCash(p.user, isCash ? p.amountRaw : 0n, p.cash, [...takeOut, transfer], { sendTo: p.to });
+  return payFromCash(p.user, isCash ? p.amountRaw : 0n, p.cash, [transfer], { sendTo: p.to });
 }
 
 /** What Activity shows while a Send confirms: the move, and who it went to (the name too, for this device's quick picks). */
@@ -519,14 +500,7 @@ export function planSend(p: {
     amountUsd > 0 &&
     (p.all ? amountUsd >= maxUsd : !!stock && amountUsd <= maxUsd + 1e-9 && maxUsd - amountUsd < NO_DUST_USD);
   const sharesRaw =
-    stock && holding
-      ? sellAll
-        ? sellableOf(holding, data)
-        : sharesForUsdRaw(usdRaw, holding.priceRaw, stock.decimals)
-      : 0n;
-  // Up to $X: what the free shares don't cover comes out of backing in the same batch.
-  const takeOutRaw = holding && sharesRaw > holding.freeRaw ? sharesRaw - holding.freeRaw : 0n;
-  const takeOutAll = !!holding && takeOutRaw > 0n && takeOutRaw >= holding.backingRaw;
+    stock && holding ? (sellAll ? holding.freeRaw : sharesForUsdRaw(usdRaw, holding.priceRaw, stock.decimals)) : 0n;
   const amountRaw = p.asset === "cash" ? usdRaw : sharesRaw;
   const shares = stock && holding ? rawToShares(sharesRaw, holding.multiplier, stock.decimals) : 0;
   const ticker = stock ? tickerOf(stock.symbol) : "";
@@ -537,9 +511,8 @@ export function planSend(p: {
   if (p.asset === "cash" && amountUsd > maxUsd)
     amountBlock = amountUsd > data.cashUsd ? SEND_COPY.overCash(data.cashUsd) : SEND_COPY.feeBuffer;
   else if (stock && noFee) amountBlock = SEND_COPY.noFee;
-  else if (stock && holding && sellableOf(holding, data) === 0n) amountBlock = SEND_COPY.allBacks(holding.name);
-  else if (stock && holding && sharesRaw > sellableOf(holding, data))
-    amountBlock = holding.backingRaw > 0n && holding.cf ? SEND_COPY.pastLine : SEND_COPY.notFree;
+  else if (stock && holding && holding.freeRaw === 0n) amountBlock = SEND_COPY.allBacks(holding.name);
+  else if (stock && holding && sharesRaw > holding.freeRaw) amountBlock = SEND_COPY.notFree;
   else if (stock && amountUsd > 0 && sharesRaw === 0n) amountBlock = SEND_COPY.tooSmall;
 
   const to = p.recipient ? recipientNote(p.recipient, p.user, p.checks) : null;
@@ -593,8 +566,6 @@ export function planSend(p: {
     amountUsd,
     amountRaw,
     sharesRaw,
-    takeOutRaw,
-    takeOutAll,
     hint,
     amountNote: amountBlock,
     toNote: to?.block
@@ -610,7 +581,6 @@ export function planSend(p: {
             token,
             amountRaw,
             multiplier: holding?.multiplier,
-            takeOutRaw,
             to: p.recipient.address,
           })
         : null,
@@ -636,14 +606,11 @@ export function sendSmallPrint(p: {
   token: ReserveAsset;
   amountRaw: bigint;
   multiplier?: bigint;
-  /** Shares that come out of backing first (Up to $X). */
-  takeOutRaw?: bigint;
   to: Address;
 }): string {
   const isCash = isAddressEqual(p.token.address, USDC.address);
   const what = isCash
     ? `exactly ${exact(p.amountRaw, USDC.decimals)} USDC`
     : `exactly ${exact((p.amountRaw * (p.multiplier ?? 10n ** 18n)) / 10n ** 18n, p.token.decimals)} ${tickerOf(p.token.symbol)}`;
-  const out = isCash ? "" : takeOutWords(p.takeOutRaw ?? 0n, p.multiplier ?? 10n ** 18n, p.token);
-  return `In one go: ${out}${what} goes to ${getAddress(p.to)} on Base. A send can’t be undone.`;
+  return `In one go: ${what} goes to ${getAddress(p.to)} on Base. A send can’t be undone.`;
 }

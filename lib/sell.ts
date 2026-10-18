@@ -7,26 +7,23 @@ import { buildRepayCalls, buildWithdrawCalls, fullRepayAmount, type Call } from 
 import type { ActivityItem } from "@/lib/activity/decode";
 import { assertAllowed, swapOf } from "@/lib/allowlist";
 import { feeBufferRaw, toUsd } from "@/lib/cash";
-import { formatShares, formatUsdTrim } from "@/lib/formatting";
+import { formatUsdTrim } from "@/lib/formatting";
 import { marketState } from "@/lib/market-hours";
 import { endsInAct, statusFor, type Status } from "@/lib/risk/status";
 import { SELL_LIMITS, aaveFloorRaw, buildSellCalls, sellEconomics, sellMinOut, type SellQuote } from "@/lib/swap/sell";
-import { rawToShares } from "@/lib/tokens/b20";
 import { USDC, type ReserveAsset } from "@/lib/tokens/registry";
 
 type Address = `0x${string}`;
 
 /**
  * Where the shares come from (plan item 7): free shares; a backing holding, taken out of backing in the
- * same batch; a backing holding sold to repay credit; or "any", the one rule for Sell, Trade and Send on a stock that
- * backs credit (Adrian, 2026-10-17): the free shares first, then as much backing as the 1.12 line lets out, in the same
- * batch. Its most is "Up to $X"; to do more, the user repays first.
+ * same batch; or a backing holding sold to repay credit. Sell, Trade and Send sell free shares only: shares that back
+ * credit come back with a repay first.
  */
-export type SellFrom = "free" | "backing" | "repay" | "any";
+export type SellFrom = "free" | "backing" | "repay";
 
 /**
- * No dust (ruling 7b): a sale or send that would leave less than this of the stock takes all of it instead, and taking
- * out every share that backs credit signs "all", so nothing is left behind on Aave.
+ * No dust (ruling 7b): a sale or send that would leave less than this of the stock takes all of it instead.
  */
 export const NO_DUST_USD = 1;
 
@@ -90,15 +87,10 @@ export type SellPlan = {
   /** How far under Aave's price the pool pays; `warn` past SELL_LIMITS.warnDiscount. */
   discount: number;
   warn: boolean;
-  /**
-   * Most shares this sale can take: the free shares; the backing the 1.12 line lets out; the backing that can come out
-   * before the repay; for "any", the free shares plus that backing ("Up to $X").
-   */
+  /** Most shares this sale can take: the free shares; the backing the 1.12 line lets out; the backing that can come out before the repay. */
   maxRaw: bigint;
   /** The shares that come out of backing in the same batch (0 when the free shares cover the sale). */
   takeOutRaw: bigint;
-  /** Every share that backs credit comes out: the take-out signs "all" (no dust left on Aave). */
-  takeOutAll: boolean;
   /** Repay by selling: what the sale repays, at least (0 otherwise). */
   repayRaw: bigint;
   before: Status;
@@ -124,29 +116,6 @@ const part = (raw: bigint, f: number) =>
   f >= 1 ? raw : f > 0 ? (raw * BigInt(Math.floor(f * 1_000_000))) / 1_000_000n : 0n;
 
 /**
- * The small print's first move when shares come out of backing before a sale or a send (D7): "0.0035 GOOGL comes out
- * of backing your credit, then ". Nothing when none do.
- */
-export const takeOutWords = (raw: bigint, multiplier: bigint, stock: ReserveAsset) =>
-  raw > 0n
-    ? `${formatShares(rawToShares(raw, multiplier, stock.decimals))} ${stock.symbol.replace(/c$/, "")} comes out of backing your credit, then `
-    : "";
-
-/**
- * Up to $X on a stock that backs credit (the "any" route, Sell, Trade and Send): its free shares plus the backing the
- * 1.12 line lets out, raw. A paused stock, or one whose collateral factor isn't read yet, offers its free shares only.
- */
-export function sellableRaw(
-  h: Pick<SellHolding, "freeRaw" | "backingRaw" | "backingUsd" | "paused">,
-  cf: number | undefined,
-  pos: Pick<SellPosition, "totalBackingUsd" | "avgCf" | "debtUsd">,
-): bigint {
-  if (!cf || h.paused || h.backingRaw === 0n || h.backingUsd <= 0) return h.freeRaw;
-  const usd = maxWithdrawUsd({ ...pos, cf, backingUsd: h.backingUsd, targetHf: CREDIT_CAP.minHf });
-  return h.freeRaw + part(h.backingRaw, usd / h.backingUsd);
-}
-
-/**
  * The most backing shares a repay by selling can take out (planSell's `maxRaw` for "repay"): the shares come out before
  * the repay lands, so the loan must stay within Aave's limit, with LIMIT_MARGIN, in between. All of them when
  * nothing is owed. Repay's "Pay with" offers a backing stock up to this.
@@ -168,7 +137,7 @@ export function repaySaleMaxRaw(
 
 /**
  * Plan a sale of `quote.amountIn` shares on Leo's maths. A backing holding comes out only as far as the 1.12 line
- * allows (maxWithdrawUsd at CREDIT_CAP.minHf, Act is the line), and "any" sells the free shares first. Selling to repay takes the shares out first, so the loan must
+ * allows (maxWithdrawUsd at CREDIT_CAP.minHf, Act is the line). Selling to repay takes the shares out first, so the loan must
  * stay within Aave's limit until the repay lands; it usually ends healthier, and one that would end in Act, lower
  * than it started, is blocked ("act", LIMIT_MARGIN). Plan only: the batch is simulated before JAW's sheet.
  */
@@ -205,12 +174,6 @@ export function planSell(p: {
     maxRaw = lineShare();
     takeOutRaw = sharesRaw;
     hfAfter = healthAfterWithdraw({ ...creditInput, usd: valueUsd });
-  } else if (from === "any") {
-    maxRaw = sellableRaw(h, p.cf, pos);
-    takeOutRaw = sharesRaw > h.freeRaw ? sharesRaw - h.freeRaw : 0n;
-    if (takeOutRaw > 0n) {
-      hfAfter = healthAfterWithdraw({ ...creditInput, usd: (Number(takeOutRaw) / 10 ** stock.decimals) * h.priceUsd });
-    }
   } else if (from === "repay") {
     maxRaw = repaySaleMaxRaw(h, p.cf, pos);
     takeOutRaw = sharesRaw;
@@ -221,10 +184,9 @@ export function planSell(p: {
   let block: SellBlock | undefined;
   if (from !== "free" && takeOutRaw > 0n && h.paused) block = "paused";
   else if (from === "free" && sharesRaw > h.freeRaw) block = "not-free";
-  else if (from === "any" && sharesRaw > h.freeRaw + h.backingRaw) block = "not-backing";
-  else if (from !== "free" && from !== "any" && sharesRaw > h.backingRaw) block = "not-backing";
+  else if (from !== "free" && sharesRaw > h.backingRaw) block = "not-backing";
   else if (from === "repay" && pos.debtRaw === 0n) block = "nothing-owed";
-  else if ((from === "backing" || from === "any") && sharesRaw > maxRaw) block = "past-line";
+  else if (from === "backing" && sharesRaw > maxRaw) block = "past-line";
   else if (from === "repay" && sharesRaw > maxRaw) block = "near-limit";
   else if (econ.usd < SELL_LIMITS.minUsd || (from === "repay" && repayRaw === 0n)) block = "too-small";
   else if (
@@ -245,7 +207,6 @@ export function planSell(p: {
     warn: econ.discount > SELL_LIMITS.warnDiscount,
     maxRaw,
     takeOutRaw,
-    takeOutAll: from !== "free" && takeOutRaw > 0n && takeOutRaw >= h.backingRaw,
     repayRaw,
     before: statusFor(pos.healthFactor),
     after: statusFor(hfAfter),
@@ -269,21 +230,9 @@ export function buildSaleCalls(p: {
   oraclePriceUsd: number;
   debtRaw: bigint;
   nowSec?: number;
-  /** "any": the shares that come out of backing first (planSell's takeOutRaw), and whether that's all of them. */
-  takeOutRaw?: bigint;
-  takeOutAll?: boolean;
 }): Call[] {
   const sell = buildSellCalls(p);
   if (p.from === "free") return sell;
-  if (p.from === "any") {
-    const out = p.takeOutRaw ?? 0n;
-    if (out <= 0n) return sell;
-    if (out > p.quote.amountIn) throw new Error("Takes out more than it sells");
-    return assertAllowed(p.user, [
-      ...buildWithdrawCalls({ user: p.user, stock: p.stock, amountRaw: out, all: !!p.takeOutAll }),
-      ...sell,
-    ]);
-  }
   const sale = [
     ...buildWithdrawCalls({ user: p.user, stock: p.stock, amountRaw: p.quote.amountIn, all: false }),
     ...sell,
