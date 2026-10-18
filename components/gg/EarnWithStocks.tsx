@@ -6,7 +6,7 @@ import { AmountBadge, AmountField, AmountSource } from "./AmountField";
 import { Button } from "./Button";
 import { StatusChange } from "./Status";
 import { StockAvatar } from "./StockAvatar";
-import { NETWORK_FEE_ROW, Summary } from "./Summary";
+import { Summary } from "./Summary";
 import { TxButton, TxError } from "./TxUi";
 import { usePrepare, type TxPhase, type TxPlan, type TxPrep } from "@/hooks/useTx";
 import { useEarnRates, type EarnInput } from "@/hooks/useEarnWithStocks";
@@ -248,7 +248,6 @@ export function EarnStep({
           { label: "This credit costs", value: cost === null ? "…" : `${pctText(cost)} a year` },
           { label: "What’s left", value: leftText },
           { label: "Status", value: <StatusChange from={homeStatus(plan.before)} to={homeStatus(plan.after)} /> },
-          NETWORK_FEE_ROW,
         ]}
       />
       <p className="m-0 px-0.5 text-[12.5px] leading-[1.45] text-subtle">

@@ -62,6 +62,28 @@ export function barPosition(healthFactor: number): number {
   return along(RISK.watchMin, 1, BAR.safe + BAR.watch, BAR.act);
 }
 
+/**
+ * The Safe, Watch and Act bar, with a marker where the credit is when there is one (`healthFactor` null: no credit,
+ * no marker). The Repay sheet's own card draws now and after on the same segments.
+ */
+export function StatusBar({ healthFactor, label }: { healthFactor: number | null; label: string }) {
+  const at = healthFactor === null ? null : barPosition(healthFactor);
+  return (
+    <div role="img" aria-label={label} className="relative flex h-1.5 gap-1">
+      <span className="rounded bg-safe" style={{ flex: BAR.safe }} />
+      <span className="rounded bg-watch" style={{ flex: BAR.watch }} />
+      <span className="rounded bg-act" style={{ flex: BAR.act }} />
+      {at !== null && (
+        <span
+          aria-hidden
+          className="absolute -top-1 size-3.5 rounded-full border-2 border-card bg-ink shadow-[0_2px_6px_rgba(14,13,11,0.25)]"
+          style={{ left: `calc(${at * 100}% - 7px)` }}
+        />
+      )}
+    </div>
+  );
+}
+
 /** An agent pill's colour: green when it's on, neutral otherwise. */
 type AgentTone = "on" | "neutral";
 

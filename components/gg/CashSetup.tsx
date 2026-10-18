@@ -4,7 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { ActivityAvatar } from "./Activity";
-import { NETWORK_FEE_ROW, Summary, type SummaryRow } from "./Summary";
+import { Summary, type SummaryRow } from "./Summary";
 import { TxButton, TxDone, TxError } from "./TxUi";
 import { TrendUpIcon } from "./icons";
 import { NOT_FAIR, useConvert, useConvertQuotes, type ConvertQuote } from "@/hooks/useConvert";
@@ -133,7 +133,6 @@ export function ArrivedCard({
   const rows: SummaryRow[] = [
     ...fair.map((q) => ({ label: coinText(q), value: `about ${usd(q.outRaw)}` })),
     { label: "You get at least", value: usd(sum((q) => q.minOut)) },
-    NETWORK_FEE_ROW,
   ];
   const moves = fair.map(
     (q) => `exactly ${coinText(q)} is approved for ${VENUE[q.coin.venue.kind]} and swapped into USDC`,

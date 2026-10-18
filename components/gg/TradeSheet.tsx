@@ -11,7 +11,7 @@ import { useMoneySheets } from "./MoneySheets";
 import { SmallPrint } from "./BuySheet";
 import { SellSmallPrint } from "./StockSheet";
 import { StockAvatar, tickerOf } from "./StockAvatar";
-import { NETWORK_FEE_ROW, Summary } from "./Summary";
+import { Summary } from "./Summary";
 import { TxButton, TxDone, TxError } from "./TxUi";
 import { useBoughtHome } from "@/hooks/useBoughtHome";
 import { useBuyQuote, useBuyQuoteRaw } from "@/hooks/useBuyQuote";
@@ -243,7 +243,7 @@ export function TradeSheet({
             ) : (
               <YouGetCash usd={view.youGet.usd} source={picker("to")} />
             )}
-            <Summary rows={[...view.rows, NETWORK_FEE_ROW]} />
+            <Summary rows={view.rows} />
             {view.note && (
               <p
                 role="status"

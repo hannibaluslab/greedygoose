@@ -8,7 +8,7 @@ import { AmountArrow, AmountField, AmountHintLine, AmountSource, YouGetCash } fr
 import { Button } from "./Button";
 import { StockAvatar, tickerOf } from "./StockAvatar";
 import { StatCard, StockActivity, StockChart, StockHeader, StockPosition } from "./StockOverview";
-import { NETWORK_FEE_ROW, Summary } from "./Summary";
+import { Summary } from "./Summary";
 import { TxButton, TxDone, TxError } from "./TxUi";
 import { CreditIcon } from "./icons";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
@@ -223,7 +223,6 @@ export function StockSheet({
                   label: "Lowest price",
                   value: plan && !quote.isFetching ? `${formatUsd(floorPriceUsd(plan, stock))} a share` : "…",
                 },
-                NETWORK_FEE_ROW,
               ]}
             />
             {note && (

@@ -8,7 +8,7 @@ import { AmountArrow, AmountBadge, AmountField, AmountSource, YouGet } from "./A
 import { Button } from "./Button";
 import { useMoneySheets } from "./MoneySheets";
 import { StockAvatar, tickerOf } from "./StockAvatar";
-import { NETWORK_FEE_ROW, Summary } from "./Summary";
+import { Summary } from "./Summary";
 import { TxButton, TxError } from "./TxUi";
 import { StatusChange } from "./Status";
 import { ChevronRight, BacksIcon } from "./icons";
@@ -546,7 +546,6 @@ export function CreditBuySheet({
                     label: "Status after",
                     value: <span className={AFTER_TONE[plan.after]}>{STATUS_LABEL[plan.after]}</span>,
                   },
-                  NETWORK_FEE_ROW,
                 ]}
               />
               {(blocker || warnPremium || plan.priceMayMove) && (

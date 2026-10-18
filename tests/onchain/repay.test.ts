@@ -318,7 +318,7 @@ describe("Repay · Pay with a stock held free, on Base", () => {
     expect(source.feeFromSale).toBe(true);
     const v = await sheet(data, source, REPAY_FORM);
     expect(v.ready).toBe(true);
-    expect(v.fee).toBe("Paid from the sale");
+    expect(v.source.feeFromSale).toBe(true);
     const calls = buildFreeRepayCalls({
       user: backer,
       stock: msft,
@@ -379,7 +379,7 @@ describe("Repay · Pay with a stock that backs the credit, on Base (the existing
     const v = await sheet(data, source, { source: source.id, amount: "5", all: false });
     expect(v.ready).toBe(true);
     expect(v.sellPlan?.from).toBe("repay");
-    expect(v.fee).toBe("Paid from the sale");
+    expect(v.source.feeFromSale).toBe(true);
     const calls = buildSaleCalls({
       from: "repay",
       user: backer,

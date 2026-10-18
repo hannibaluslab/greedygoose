@@ -36,11 +36,14 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
   the health read after it; a result under 1.10 stops it.
 - **Protect** acts only in Act. It repays from cash first, sells backing stock only if cash can't, and brings the
   credit back to 1.20. It never acts in Safe or Watch and never sells on a weekend.
+- On Home, the status pill (with its ⓘ) opens "Your credit status": the bar with where the credit is, and what Safe,
+  Watch and Act each mean.
 
 ## Money rules
 
 - **Fuel tank:** $0.10 of cash stays back for network fees; every spend from cash leaves it. Buying power is cash minus
-  the fuel tank, in cents. Settings shows how full it is. **(to build: a fee estimate of "~$0.01")**
+  the fuel tank, in cents. Settings shows how full it is. No screen of ours lists the network fee: JAW's sheet shows
+  it.
 - **No minimums of ours.** Only Aave's and Base's own limits apply, plus the $0.01 arrivals filter.
 - **No dust.** Sell all or Max leaves nothing; a sale that would leave under $1 sells everything.
 - **One stock order** in every list: Home's (Apple, Amazon, Alphabet, Meta, Microsoft, NVIDIA, Tesla). Lists keep

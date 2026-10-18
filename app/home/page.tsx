@@ -14,9 +14,9 @@ import { CashSheet } from "@/components/gg/CashSheet";
 import { useMoneySheets } from "@/components/gg/MoneySheets";
 import { StockSheets, useStockSheets } from "@/components/gg/StockSheets";
 import { ValueLine } from "@/components/gg/ValueLine";
-import { LeverageSheet, TotalBalanceSheet, YieldSheet } from "@/components/gg/InfoSheets";
+import { LeverageSheet, StatusSheet, TotalBalanceSheet, YieldSheet } from "@/components/gg/InfoSheets";
 import { StockAvatar } from "@/components/gg/StockAvatar";
-import { ChevronRight, CreditIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/icons";
+import { ChevronRight, CreditIcon, InfoIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/icons";
 import { MarketBanner } from "@/components/ui/MarketBanner";
 import { useCashSetup } from "@/hooks/useCashSetup";
 import { useStartEarning } from "@/hooks/useStartEarning";
@@ -25,7 +25,7 @@ import { useMarketPrices } from "@/hooks/useMarketPrices";
 import { usePosition, type PositionData } from "@/hooks/usePosition";
 import { aprToApy } from "@/lib/aave/math";
 import { arrivedCoins, arrivedView, earningLine, rateText, type ArrivedView } from "@/lib/cashSetup";
-import { homeStatus } from "@/lib/risk/status";
+import { STATUS_LABEL, homeStatus } from "@/lib/risk/status";
 import { leverageOf, leverageText } from "@/lib/leverage";
 import { toast } from "sonner";
 import { StatusPill } from "@/components/gg/Status";
@@ -37,7 +37,7 @@ export default function HomePage() {
   return <RequireAccount>{(address) => <Home address={address} />}</RequireAccount>;
 }
 
-type Sheet = "total" | "yield" | "cash" | "leverage";
+type Sheet = "total" | "yield" | "cash" | "leverage" | "status";
 
 /**
  * Design board "2 · Home · portfolio: Rail" (HomeUpliftRail.dc.html), with its sheets: Total balance (HomeInfo) and
@@ -126,6 +126,12 @@ function Home({ address }: { address: `0x${string}` }) {
             stocksUsd={data.stocksUsd}
             debtUsd={data.debtUsd}
           />
+          <StatusSheet
+            open={sheet === "status"}
+            onClose={close}
+            status={data.debtRaw > 0n ? homeStatus(data.status) : "none"}
+            healthFactor={data.healthFactor}
+          />
           <LeverageSheet
             open={sheet === "leverage"}
             onClose={close}
@@ -187,6 +193,7 @@ function Loaded({
   const priced = held.map((h) => ({ valueUsd: h.freeUsd + h.backingUsd, ...market.bySymbol[h.symbol] }));
   const today = dayChange(priced, data.stocksUsd + data.cashUsd);
   const money = useMoneySheets();
+  const shownStatus = data.debtRaw > 0n ? homeStatus(data.status) : "none";
 
   return (
     <>
@@ -221,8 +228,16 @@ function Loaded({
             // Board 2f: the status and what the credit costs a month, always (Safe and $0 / month with none taken).
             sub: (
               <span className="inline-flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1">
-                {/* Ruling 1: with nothing owed it says so, not "Safe". */}
-                <StatusPill status={data.debtRaw > 0n ? homeStatus(data.status) : "none"} size="sm" />
+                {/* Ruling 1: with nothing owed it says so, not "Safe". Ruling 32: a tap explains the statuses. */}
+                <button
+                  type="button"
+                  onClick={() => open("status")}
+                  aria-label={`Credit status: ${STATUS_LABEL[shownStatus]}. What it means`}
+                  className="-my-2 flex h-9 items-center gap-1 text-subtle"
+                >
+                  <StatusPill status={shownStatus} size="sm" />
+                  <InfoIcon aria-hidden size={12} />
+                </button>
                 <span className="whitespace-nowrap">
                   {monthlyCostText(data.monthlyCostUsd).replace(" / month", "")} /
                   <span className="text-[11px]">month</span>

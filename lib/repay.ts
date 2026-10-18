@@ -93,9 +93,6 @@ export const REPAY_COPY = {
   sells: (shares: string, ticker: string) => `Sells ${shares} ${ticker}`,
   sellsQuoting: "Sells …",
   oweAfter: "You owe after",
-  fee: "Network fee",
-  feeFromCash: "Paid from your cash",
-  feeFromSale: "Paid from the sale",
   button: "Repay",
   nothingOwed: "You don’t owe anything.",
   snappedAll: "That’s everything you owe.",
@@ -501,7 +498,6 @@ export function planRepay(p: {
     after,
     /** Under the amount, after typing more than the most: "That’s everything you owe." */
     snapLine: snapped ? snapText : null,
-    fee: source.feeFromSale ? REPAY_COPY.feeFromSale : REPAY_COPY.feeFromCash,
     quoting,
     blocker,
     note,

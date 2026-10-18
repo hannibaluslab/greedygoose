@@ -211,7 +211,7 @@ describe("Amount: All by default, quick picks, never more than owed or than the 
     expect(v.amountUsd).toBeCloseTo(100 - B, 6);
     expect(v.oweAfterUsd).toBeCloseTo(200 + B, 6);
     expect(v.ready).toBe(true);
-    expect(v.fee).toBe(REPAY_COPY.feeFromCash);
+    expect(v.source.feeFromSale).toBe(false);
   });
 
   it("quick picks are 25%, 50% and 75% of the most the row repays, to the cent, then Max; none under the smallest repay", () => {
@@ -402,7 +402,7 @@ describe("Pay with a stock held free: the plan", () => {
     expect(v.repayRaw).toBeLessThan(usd(25.01));
     expect(v.oweAfterUsd).toBeCloseTo(300 - Number(v.repayRaw) / 1e6, 6);
     expect(v.after).toBe("safe");
-    expect(v.fee).toBe(REPAY_COPY.feeFromCash);
+    expect(v.source.feeFromSale).toBe(false);
     expect(v.sharesLine).toMatch(/^Sells 0\.12\d+ AAPL$/);
     expect(repaySmallPrint(v)).toMatch(
       /exactly 0\.12\d+ AAPL is approved for the Aerodrome router and sold for at least \$25\.00, then exactly \$25\.00 of it is approved and repaid/,
@@ -413,7 +413,7 @@ describe("Pay with a stock held free: the plan", () => {
     const poor = data({ wallet: underB });
     const src = repaySources(poor, cfs).find((x) => x.id === "free:AAPLc")!;
     const v = plan({ source: src.id, amount: "25", all: false }, (s) => quoteAt(s, 199), poor, src);
-    expect(v.fee).toBe(REPAY_COPY.feeFromSale);
+    expect(v.source.feeFromSale).toBe(true);
     expect(v.repayRaw).toBe(sellMinOut(v.quote!, aapl, 200) - fee);
     expect(v.repayRaw).toBeGreaterThanOrEqual(usd(25));
   });
@@ -500,7 +500,7 @@ describe("Pay with a stock that backs the credit: the existing repay by selling"
     expect(v.sellPlan?.from).toBe("repay");
     expect(v.repayRaw).toBe(saleRepayRaw(sellMinOut(v.quote!, nvda, 250), d.debtRaw));
     expect(v.repayRaw).toBeGreaterThanOrEqual(usd(50));
-    expect(v.fee).toBe(REPAY_COPY.feeFromSale);
+    expect(v.source.feeFromSale).toBe(true);
     expect(v.after).toBe("safe");
     expect(v.ready).toBe(true);
     expect(repaySmallPrint(v)).toMatch(

@@ -8,7 +8,6 @@ import { CardTitle, ManageCard, SaveFooter } from "@/components/gg/Manage";
 import { ComingSoon } from "@/components/gg/Agents";
 import { LimitField, neverMoreThan } from "@/components/gg/LimitField";
 import { StockAvatar } from "@/components/gg/StockAvatar";
-import { NETWORK_FEE_ROW } from "@/components/gg/Summary";
 import { Switch } from "@/components/gg/Switch";
 import { useAgents } from "@/hooks/useAgents";
 import { useAgentSettings } from "@/hooks/useAgentSettings";
@@ -341,9 +340,6 @@ export function ProtectSettingsView({
               <li key={l}>{l}</li>
             ))}
           </ul>
-          <span className="text-ink-mid">
-            {NETWORK_FEE_ROW.label} · <b className="font-semibold text-ink">{NETWORK_FEE_ROW.value}</b>
-          </span>
         </div>
       )}
 

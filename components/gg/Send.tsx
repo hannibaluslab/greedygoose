@@ -10,7 +10,7 @@ import { Initial } from "./Initial";
 import { useMoneySheets } from "./MoneySheets";
 import { TabHeader } from "./Screen";
 import { StockAvatar } from "./StockAvatar";
-import { NETWORK_FEE_ROW, Summary } from "./Summary";
+import { Summary } from "./Summary";
 import { TabBar } from "./TabBar";
 import { TxButton, TxDone, TxError } from "./TxUi";
 import { CloseIcon, ReceiveIcon } from "./icons";
@@ -249,7 +249,7 @@ export function SendScreen({ user, data: position }: { user: Address; data: Posi
             </div>
           )}
 
-          <Summary rows={[...view.rows, NETWORK_FEE_ROW]} />
+          <Summary rows={view.rows} />
           {view.smallPrint && (
             <p className="m-0 break-words px-0.5 text-[11.5px] leading-[1.45] text-subtle">{view.smallPrint}</p>
           )}

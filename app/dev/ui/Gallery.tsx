@@ -15,7 +15,7 @@ import { TabHeader } from "@/components/gg/Screen";
 import { Sparkline } from "@/components/gg/Sparkline";
 import { StatusChange, StatusPill, type StatusPillSize } from "@/components/gg/Status";
 import { StockAvatar } from "@/components/gg/StockAvatar";
-import { NETWORK_FEE_ROW, Summary } from "@/components/gg/Summary";
+import { Summary } from "@/components/gg/Summary";
 import { Switch } from "@/components/gg/Switch";
 import { TxButton } from "@/components/gg/TxUi";
 import { ValueLine } from "@/components/gg/ValueLine";
@@ -374,13 +374,12 @@ export function Gallery() {
 
       <Section title="Summary rows" kit="summary">
         <div className="flex flex-col gap-3">
-          <Summary rows={[{ label: "Arrives", value: "In seconds" }, NETWORK_FEE_ROW]} />
+          <Summary rows={[{ label: "Arrives", value: "In seconds" }]} />
           <Summary
             rows={[
               { label: "From your cash", value: "$400.00" },
               { label: "On credit", value: "$300.00" },
               { label: "Status", value: <StatusChange from="safe" to="safe" /> },
-              NETWORK_FEE_ROW,
             ]}
           />
         </div>
@@ -481,7 +480,7 @@ function BuyDemoSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (op
             onMax={() => setAmount(CASH.toFixed(2))}
             hint={`Cash available: ${formatUsd(CASH)}`}
           />
-          <Summary rows={[{ label: "Arrives", value: "In seconds" }, NETWORK_FEE_ROW]} />
+          <Summary rows={[{ label: "Arrives", value: "In seconds" }]} />
           {usd > CASH && (
             <Button variant="dark" disabled className="mt-1">
               That’s more than your cash ({formatUsd(CASH)})

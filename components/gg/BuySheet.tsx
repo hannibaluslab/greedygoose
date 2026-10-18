@@ -9,7 +9,7 @@ import { Button } from "./Button";
 import { MarketList, MarketRow } from "./Market";
 import { StatusChange } from "./Status";
 import { tickerOf } from "./StockAvatar";
-import { NETWORK_FEE_ROW, Summary, type SummaryRow } from "./Summary";
+import { Summary, type SummaryRow } from "./Summary";
 import { TxButton, TxError } from "./TxUi";
 import { useBoughtHome } from "@/hooks/useBoughtHome";
 import { useBuy } from "@/hooks/useBuy";
@@ -185,11 +185,7 @@ export function BuySheet({
               priceUsd={econ ? econ.price : oraclePriceUsd}
             />
             <Summary
-              rows={
-                plan && split
-                  ? creditRows(data, plan, split.cashRaw)
-                  : [{ label: "Arrives", value: "In seconds" }, NETWORK_FEE_ROW]
-              }
+              rows={plan && split ? creditRows(data, plan, split.cashRaw) : [{ label: "Arrives", value: "In seconds" }]}
             />
             {note && (
               <p role="status" className={`m-0 text-[13px] leading-snug ${blocker ? "text-act" : "text-watch-text"}`}>
@@ -278,7 +274,6 @@ function creditRows(data: PositionData, plan: CreditPlan, cashRaw: bigint): Summ
     { label: "You owe after", value: formatUsd(data.debtUsd + creditUsd) },
     // No debt yet is as safe as it gets: the board reads "Safe → Safe" for a first Credit Buy.
     { label: "Status", value: <StatusChange from={plan.before === "none" ? "safe" : plan.before} to={plan.after} /> },
-    NETWORK_FEE_ROW,
   ];
 }
 

@@ -8,7 +8,6 @@ import { CardTitle, ManageCard, MixSlider } from "@/components/gg/Manage";
 import { ComingSoon } from "@/components/gg/Agents";
 import { LimitField, neverMoreThan } from "@/components/gg/LimitField";
 import { StockAvatar, tickerOf } from "@/components/gg/StockAvatar";
-import { NETWORK_FEE_ROW } from "@/components/gg/Summary";
 import { TxButton, TxError } from "@/components/gg/TxUi";
 import { PlusIcon } from "@/components/gg/icons";
 import { useAgents } from "@/hooks/useAgents";
@@ -330,10 +329,6 @@ export function RebalanceSettingsView({
       {configured ? (
         <div className="flex flex-col gap-2 pt-1">
           <TxError error={error ?? prepared.error} />
-          <div className="flex items-center justify-between px-1 text-[13px]">
-            <span className="text-ink-mid">{NETWORK_FEE_ROW.label}</span>
-            <span className="font-semibold">{NETWORK_FEE_ROW.value}</span>
-          </div>
           <TxButton
             label={running ? "Save" : "Switch on"}
             phase={phase}
