@@ -22,8 +22,8 @@ const sharesText = (share: number, held: number) => `${formatShares(share * held
 /**
  * "Choose stocks to free up" (canvas boards 2–6): one row per stock that backs credit. Unticked, a row says what can
  * come out of it now, as a share of what backs credit ("Free up All", "Up to 82%", "Limit reached", "Paused"), and under
- * its name what that comes to ("1.97 shares ≈ $492.50"); ticked, what the pick frees and, unless it's all, what stays
- * backing credit ("$107.50 stays backing", Adrian 2026-10-18); a chip shows how much in % (25%, 82%…), which opens
+ * its name what that comes to ("1.97 shares ≈ $492.50"); ticked, what the pick frees (Adrian 2026-10-18); a chip
+ * shows how much in % (25%, 82%…), which opens
  * the list of picks. Custom takes a typed %. Over the rows, the free-up limit the ticked stocks use.
  */
 export function FreeUpList({
@@ -232,8 +232,8 @@ function StockRow({
 }
 
 /**
- * The lines under a stock's name: what comes out, in shares and about how much (Adrian, 2026-10-18), what a tick would
- * free or what the pick frees, and, unless it's all, what stays backing credit. A row that can't free anything says
+ * The line under a stock's name: what comes out, in shares and about how much (Adrian, 2026-10-18), what a tick would
+ * free or what the pick frees. One line: a second one broke the row's balance. A row that can't free anything says
  * what backs credit.
  */
 function RowLines({ item, row, blocked }: { item: FreeUpItem; row: Row; blocked: boolean }) {
@@ -244,17 +244,11 @@ function RowLines({ item, row, blocked }: { item: FreeUpItem; row: Row; blocked:
       </span>
     );
   const out = row.picked ? row.share : row.canAll ? 1 : row.maxShare;
-  const worth = (share: number) => formatUsd(share * item.usd);
   return (
-    <>
-      <span className={`num truncate text-[12.5px] ${row.picked ? "font-medium text-ink" : "text-ink-mid"}`}>
-        {row.all ? "All " : ""}
-        {sharesText(out, item.shares)} shares ≈ {worth(out)}
-      </span>
-      {row.picked && !row.all && (
-        <span className="num truncate text-[12px] text-ink-mid">{worth(1 - row.share)} stays backing</span>
-      )}
-    </>
+    <span className={`num truncate text-[12.5px] ${row.picked ? "font-medium text-ink" : "text-ink-mid"}`}>
+      {row.all ? "All " : ""}
+      {sharesText(out, item.shares)} shares ≈ {formatUsd(out * item.usd)}
+    </span>
   );
 }
 

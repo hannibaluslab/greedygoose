@@ -45,6 +45,7 @@ import { VENUE_LABEL } from "@/lib/swap/venues";
 import { rawToShares } from "@/lib/tokens/b20";
 import { EQUITIES, USDC, byStockOrder, type ReserveAsset } from "@/lib/tokens/registry";
 import { wholePct } from "@/lib/holding";
+import { leverageOf, leverageText } from "@/lib/leverage";
 
 /**
  * Three steps (boards 30–34, Adrian 2026-10-18): what backs it (Credit ready, or a stock to back new credit) → pick a
@@ -199,6 +200,10 @@ export function CreditBuySheet({
     : pick.raw <= 0n
       ? `Backed by ${chosen.stock.name}`
       : `Backed by ${pick.raw >= chosen.freeRaw ? "all " : ""}${formatShares(backedShares)} ${chosen.stock.name} · ${backedText(backedUsd)}`;
+  // What you hold ÷ your own money, now and once the buy lands (the credit comes in as stock): "1.1x → 1.2x".
+  const holdUsd = data.stocksUsd + data.cashUsd;
+  const leverageNow = leverageText(leverageOf({ holdUsd, owedUsd: data.debtUsd }) ?? 1);
+  const leverageAfter = leverageText(leverageOf({ holdUsd: holdUsd + amount, owedUsd: data.debtUsd + amount }) ?? 1);
   // The bar moves once there's an amount the plan can read.
   const moved = amount > 0 && Number.isFinite(plan.hfAfter);
   const lead = chosen?.stock.symbol;
@@ -484,10 +489,28 @@ export function CreditBuySheet({
                   }
                   className={moved ? "mt-5" : "mt-2"}
                 />
-                <div className="num mt-1 flex justify-between gap-3 border-t border-line-field pt-2 text-[12.5px]">
-                  <span className="text-subtle">Cost</span>
-                  <span className="font-semibold text-ink-2">
-                    {(data.apr * 100).toFixed(1)}% a year · {monthlyCostText(monthlyCost(amount, data.apr))}
+                {/* Cost | Leverage, as the Repay card pairs Cost | Credit available (Adrian: show how leverage moves). */}
+                <div className="num mt-1 grid grid-cols-2 border-t border-line-field pt-2 text-[12.5px]">
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    <span className="text-subtle">Cost</span>
+                    <span className="truncate font-semibold text-ink-2">
+                      {(data.apr * 100).toFixed(1)}% · {monthlyCostText(monthlyCost(amount, data.apr))}
+                    </span>
+                  </span>
+                  <span className="flex min-w-0 flex-col gap-0.5 border-l border-line-field pl-3">
+                    <span className="text-subtle">Leverage</span>
+                    <span className="truncate whitespace-nowrap font-semibold text-ink-2">
+                      {leverageNow}
+                      {moved && leverageAfter !== leverageNow && (
+                        <>
+                          {" "}
+                          <span aria-hidden className="font-[system-ui] font-normal text-ink-mid">
+                            →
+                          </span>
+                          <span className="sr-only">after this</span> {leverageAfter}
+                        </>
+                      )}
+                    </span>
                   </span>
                 </div>
               </div>
