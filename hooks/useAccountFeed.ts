@@ -8,11 +8,9 @@ import type { FeedRow } from "@/components/gg/Activity";
 import { useActivity } from "@/hooks/useActivity";
 import type { useAgentFeed } from "@/hooks/useAgentFeed";
 import { useArrivals } from "@/hooks/useArrivals";
-import { APP_START_BLOCK } from "@/lib/activity/arrivals";
+import { APP_START_BLOCK, ARRIVALS_ON } from "@/lib/activity/arrivals";
 import { LOG_CHUNK, WEEK_BLOCKS } from "@/lib/agents/history";
 import { CHAIN_ID } from "@/lib/chain";
-
-const ARRIVALS_ON = !!process.env.NEXT_PUBLIC_BASE_RPC_URL;
 
 /**
  * Everything that happened in the account, newest first: the user's own moves (JAW's history), the executor's (`feed`:
@@ -32,8 +30,7 @@ export function useAccountFeed(address: `0x${string}`, feed: ReturnType<typeof u
     const start = back > 0n ? (back / LOG_CHUNK) * LOG_CHUNK : 0n;
     return start > APP_START_BLOCK ? start : APP_START_BLOCK;
   }, [head.data, weeks]);
-  // Arrivals need an RPC that answers getLogs: Base's public one refuses them (HTTP 429, measured 2026-10-18), so until
-  // NEXT_PUBLIC_BASE_RPC_URL names one, Activity reads none and says nothing is missing.
+  // Off on Base's public RPC, which refuses getLogs (ARRIVALS_ON).
   const arrivals = useArrivals(address, ARRIVALS_ON ? from : undefined);
   const olderArrivals = ARRIVALS_ON && from !== undefined && from > APP_START_BLOCK;
   const start = useQuery({

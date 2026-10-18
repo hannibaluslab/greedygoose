@@ -10,7 +10,7 @@ import { useNowSec } from "@/hooks/useNowSec";
 import { CHAIN_ID } from "@/lib/chain";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { LOG_CHUNK, WEEK_BLOCKS, logChunks } from "@/lib/agents/history";
-import { arrivalTxs, arrivalsOf, rateLimited, readArrivalLogs } from "@/lib/activity/arrivals";
+import { ARRIVALS_ON, arrivalTxs, arrivalsOf, rateLimited, readArrivalLogs } from "@/lib/activity/arrivals";
 import { cashRows, type Arrival } from "@/lib/cashActivity";
 
 /** A chunk this many blocks behind the head is final, and kept (as useAgentFeed keeps its own). */
@@ -52,7 +52,8 @@ export function useCashActivity(account: Address) {
 
   const logs = useQuery({
     queryKey: ["cashArrivals", account, String(from), String(head.data)],
-    enabled: !!client && from !== undefined,
+    // Off on Base's public RPC, which refuses getLogs (ARRIVALS_ON): the sheet then shows the user's own moves alone.
+    enabled: !!client && from !== undefined && ARRIVALS_ON,
     placeholderData: keepPreviousData,
     // A rate limit isn't asked again at once (viem's transport already retried it): the next block reads again.
     retry: (n, e) => !rateLimited(e) && n < 3,
@@ -120,18 +121,16 @@ export function useCashActivity(account: Address) {
   );
 
   const arrivalsFailed =
-    head.isError || logs.isError || receipts.some((q) => q.isError) || times.some((q) => q.isError);
+    ARRIVALS_ON && (head.isError || logs.isError || receipts.some((q) => q.isError) || times.some((q) => q.isError));
   const failed = [own.isError, !!GOOSE_EXECUTOR && feed.isError, arrivalsFailed];
-  const live: CashFeedError = failed.every((f, i) => f || (i === 1 && !GOOSE_EXECUTOR))
-    ? "all"
-    : failed.some(Boolean)
-      ? "some"
-      : null;
+  // A source that isn't read (no executor, no arrivals) neither fails nor keeps "all" from being true.
+  const unread = [false, !GOOSE_EXECUTOR, !ARRIVALS_ON];
+  const live: CashFeedError = failed.every((f, i) => f || unread[i]) ? "all" : failed.some(Boolean) ? "some" : null;
   const reading =
     own.isLoading ||
     feed.isLoading ||
     head.isPending ||
-    (from !== undefined && (logs.isPending || start.isPending)) ||
+    (from !== undefined && ((ARRIVALS_ON && logs.isPending) || start.isPending)) ||
     receipts.some((q) => q.isPending) ||
     times.some((q) => q.isPending);
 

@@ -31,6 +31,13 @@ const [TRANSFER] = encodeEventTopics({ abi: erc20Abi, eventName: "Transfer" });
  */
 export const APP_START_BLOCK = 51_478_830n;
 
+/**
+ * Whether arrivals can be read at all: they need an RPC that answers getLogs, and Base's public one refuses them (HTTP
+ * 429 on every request, measured 2026-10-18). Until NEXT_PUBLIC_BASE_RPC_URL names one, the Cash sheet and Activity
+ * read none and say nothing is missing.
+ */
+export const ARRIVALS_ON = !!process.env.NEXT_PUBLIC_BASE_RPC_URL;
+
 /** The smallest arrival shown: under a cent is dust, and address-poisoning sends are often less. */
 export const MIN_ARRIVAL_USD = 0.01;
 
