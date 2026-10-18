@@ -64,7 +64,7 @@ export function YieldCard({
   apy: number | null;
   /** The total earned, counting live (LiveEarning), or "–" while it's read. */
   value: ReactNode;
-  /** "Total earned", or "Not earning yet". */
+  /** "Earned all time", or "Not earning yet". */
   line: string;
   dim?: boolean;
   href?: string;

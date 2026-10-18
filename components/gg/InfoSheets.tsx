@@ -3,6 +3,8 @@
 import type { ReactNode } from "react";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { Button } from "./Button";
+import { EarnedPeriods } from "./EarnedPeriods";
+import type { TotalEarned } from "@/hooks/useTotalEarned";
 import { CASH } from "@/config/risk";
 import { formatUsd, formatUsdTrim } from "@/lib/formatting";
 import { leverageOf, leverageText } from "@/lib/leverage";
@@ -70,14 +72,20 @@ export function YieldSheet({
   cashUsd,
   savingsUsd,
   apy,
+  apr,
   earning,
+  earned,
 }: {
   open: boolean;
   onClose: () => void;
   cashUsd: number;
   savingsUsd: number;
   apy: number;
+  /** The savings APR, which the live counts run at. */
+  apr: number;
   earning: boolean;
+  /** What the savings earned (useTotalEarned), for the periods; undefined while it's read. */
+  earned: TotalEarned | undefined;
 }) {
   const rate = `${(apy * 100).toFixed(1)}%`;
   const value = formatUsdTrim(Math.round(cashUsd));
@@ -97,6 +105,11 @@ export function YieldSheet({
       description="What your cash earns. Stocks don’t earn a yield, so your average yield is your cash rate."
     >
       <SheetSteps stepKey="yield" className="num flex flex-col gap-[18px] leading-[normal]">
+        {earned ? (
+          <EarnedPeriods earned={earned} savingsUsd={savingsUsd} apr={apr} />
+        ) : (
+          <div aria-busy className="h-[148px] animate-pulse rounded-[22px] bg-chip" />
+        )}
         <div className="rounded-[22px] bg-card px-4 py-1 shadow-card-elev">
           <div className="grid grid-cols-[1fr_auto_52px] gap-3 pb-1 pt-3 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle">
             <span>Holding</span>

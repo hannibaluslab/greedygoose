@@ -9,7 +9,7 @@ import { BalanceHero, TodayChange, TodayPending } from "@/components/gg/BalanceH
 import { QuickAction } from "@/components/gg/QuickAction";
 import { CashCard, YieldCard } from "@/components/gg/Cards";
 import { LiveEarning } from "@/components/gg/LiveEarning";
-import { useTotalEarned } from "@/hooks/useTotalEarned";
+import { useTotalEarned, type TotalEarned } from "@/hooks/useTotalEarned";
 import { StartEarningCard, TurnIntoCash } from "@/components/gg/CashSetup";
 import { AddStockCard, HoldingCard } from "@/components/gg/Holding";
 import { CashSheet } from "@/components/gg/CashSheet";
@@ -151,7 +151,9 @@ function Home({ address }: { address: `0x${string}` }) {
             cashUsd={data.cashUsd}
             savingsUsd={data.savingsUsd}
             apy={apy}
+            apr={data.savingsApr}
             earning={data.cash.saveOn}
+            earned={earned.data}
           />
           <CashSheet
             open={sheet === "cash"}
@@ -183,7 +185,7 @@ function Loaded({
 }: {
   data: PositionData;
   /** What the cash has earned, all time, and when Base was read for it: the Yield card counts on from it. */
-  earned: { usd: number; readAt: number } | undefined;
+  earned: TotalEarned | undefined;
   apy: number;
   open: (sheet: Sheet) => void;
   openStock: (symbol: string) => void;
@@ -296,7 +298,7 @@ function Loaded({
             )
           }
           // Counts only while the cash really earns: savings on Base, carried at the live rate between reads.
-          line={data.savingsUsd > 0 || (earned?.usd ?? 0) > 0 ? "Total earned" : "Not earning yet"}
+          line={data.savingsUsd > 0 || (earned?.usd ?? 0) > 0 ? "Earned all time" : "Not earning yet"}
           dim={dim}
           onClick={() => open("yield")}
         />
