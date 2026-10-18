@@ -7,6 +7,7 @@ import { buildRepayCalls, buildWithdrawCalls, fullRepayAmount, type Call } from 
 import type { ActivityItem } from "@/lib/activity/decode";
 import { assertAllowed, swapOf } from "@/lib/allowlist";
 import { feeBufferRaw, toUsd } from "@/lib/cash";
+import { buildAddSavingsCalls } from "@/lib/savings";
 import { formatUsdTrim } from "@/lib/formatting";
 import { marketState } from "@/lib/market-hours";
 import { endsInAct, statusFor, type Status } from "@/lib/risk/status";
@@ -217,10 +218,20 @@ export function planSell(p: {
 }
 
 /**
- * The sale in one batch: [take the shares out of backing] → approve → swap to USDC [→ approve → repay].
- * The repay spends what the swap is sure to pay (saleRepayRaw of its floor), so it can't fail for a
- * price move within the floor; anything the swap pays over that stays in the wallet as cash. Every call
- * passes the allowlist with the user pinned.
+ * What a sale into cash puts straight into savings (Adrian, 2026-10-18: "place the usdc directly into savings"): the
+ * swap's floor, less what the wallet needs to reach the network-fee buffer (JAW charges the fee in USDC after the batch).
+ * Anything the swap pays over its floor stays in the wallet. 0 when nothing is left to put in.
+ */
+export function saleSaveRaw(minOutRaw: bigint, walletRaw: bigint): bigint {
+  const keep = feeBufferRaw > walletRaw ? feeBufferRaw - walletRaw : 0n;
+  return minOutRaw > keep ? minOutRaw - keep : 0n;
+}
+
+/**
+ * The sale in one batch: [take the shares out of backing] → approve → swap to USDC, then either → approve → supply the
+ * floor into savings (a sale into cash, given the wallet's USDC: saleSaveRaw), or → approve → repay (a repay by
+ * selling). Both spend only what the swap is sure to pay, so they can't fail for a price move within the floor;
+ * anything the swap pays over that stays in the wallet as cash. Every call passes the allowlist with the user pinned.
  */
 export function buildSaleCalls(p: {
   from: SellFrom;
@@ -229,15 +240,21 @@ export function buildSaleCalls(p: {
   quote: SellQuote;
   oraclePriceUsd: number;
   debtRaw: bigint;
+  /** The wallet's USDC before the sale: a sale into cash puts what it brings into savings (saleSaveRaw). */
+  walletRaw?: bigint;
   nowSec?: number;
 }): Call[] {
   const sell = buildSellCalls(p);
-  if (p.from === "free") return sell;
-  const sale = [
-    ...buildWithdrawCalls({ user: p.user, stock: p.stock, amountRaw: p.quote.amountIn, all: false }),
-    ...sell,
-  ];
-  if (p.from === "backing") return assertAllowed(p.user, sale);
+  const sale =
+    p.from === "free"
+      ? sell
+      : [...buildWithdrawCalls({ user: p.user, stock: p.stock, amountRaw: p.quote.amountIn, all: false }), ...sell];
+  if (p.from !== "repay") {
+    const saveRaw =
+      p.walletRaw === undefined ? 0n : saleSaveRaw(sellMinOut(p.quote, p.stock, p.oraclePriceUsd), p.walletRaw);
+    if (saveRaw === 0n) return p.from === "free" ? sale : assertAllowed(p.user, sale);
+    return assertAllowed(p.user, [...sale, ...buildAddSavingsCalls(p.user, saveRaw)], { saveTo: p.user });
+  }
   const repayRaw = saleRepayRaw(sellMinOut(p.quote, p.stock, p.oraclePriceUsd), p.debtRaw);
   return assertAllowed(p.user, [
     ...sale,

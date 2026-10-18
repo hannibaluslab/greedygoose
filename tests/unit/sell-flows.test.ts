@@ -11,12 +11,15 @@ import {
   planSell,
   saleActivity,
   saleRepayRaw,
+  saleSaveRaw,
   type SellHolding,
   type SellPosition,
 } from "@/lib/sell";
 import { minOut } from "@/lib/swap/buy";
 import type { SellQuote } from "@/lib/swap/sell";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
+import { PROTOCOLS } from "@/lib/protocols/config";
+import { aaveV3PoolAbi } from "@/lib/protocols/abis";
 
 const user: `0x${string}` = "0x000000000000000000000000000000000000dEaD";
 const attacker: `0x${string}` = "0x00000000000000000000000000000000000000ee";
@@ -28,7 +31,13 @@ const nvda = EQUITIES.find((e) => e.symbol === "NVDAc")!;
 const price = 250;
 /** 0.4 NVDA ($100 at Aave's price) sells for $99.50. */
 const quote: SellQuote = { venue: "aerodrome", pool: 10, amountIn: shares(0.4), amountOut: usd(99.5) };
-const fn = (data: `0x${string}`) => decodeFunctionData({ abi: [...erc20Abi, ...spokeAbi], data }).functionName;
+const fn = (data: `0x${string}`) => {
+  try {
+    return decodeFunctionData({ abi: [...erc20Abi, ...spokeAbi], data }).functionName;
+  } catch {
+    return decodeFunctionData({ abi: aaveV3PoolAbi, data }).functionName;
+  }
+};
 const steps = (calls: { data: `0x${string}`; to: `0x${string}` }[]) =>
   calls.map((c) => (swapOf(c) ? "swap" : fn(c.data)));
 
@@ -65,6 +74,38 @@ describe("buildSaleCalls", () => {
       user,
     ]);
     expect(swapOf(calls[2])!.params.amountIn).toBe(shares(0.4));
+  });
+
+  it("a sale into cash: approve → swap → approve → supply the floor into savings, for the user", () => {
+    const calls = buildSaleCalls({
+      from: "free",
+      user,
+      stock: nvda,
+      quote,
+      oraclePriceUsd: price,
+      debtRaw: 0n,
+      walletRaw: fee,
+      nowSec: 1_000,
+    });
+    expect(steps(calls)).toEqual(["approve", "swap", "approve", "supply"]);
+    const floor = minOut(usd(99.5));
+    expect(decodeFunctionData({ abi: erc20Abi, data: calls[2].data }).args).toEqual([PROTOCOLS.AAVE_V3_POOL, floor]);
+    expect(decodeFunctionData({ abi: aaveV3PoolAbi, data: calls[3].data }).args).toEqual([
+      USDC.address,
+      floor,
+      user,
+      0,
+    ]);
+  });
+
+  it("a sale into cash keeps back what the wallet lacks for the network fee, and nothing when it has it", () => {
+    const floor = minOut(usd(99.5));
+    expect(saleSaveRaw(floor, 0n)).toBe(floor - fee);
+    expect(saleSaveRaw(floor, fee / 2n)).toBe(floor - fee / 2n);
+    expect(saleSaveRaw(floor, usd(5))).toBe(floor);
+    expect(saleSaveRaw(fee, 0n)).toBe(0n);
+    // Without the wallet read (an older caller), the sale stays as it was.
+    expect(steps(sale("free"))).toEqual(["approve", "swap"]);
   });
 
   it("repay by selling: take out → approve → swap → approve → repay what the swap is sure to pay, less the fee", () => {

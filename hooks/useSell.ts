@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { TxStop, txKey, useTx, type TxPlan } from "./useTx";
 import { useDebounced, useSigningQuote } from "./useBuyQuote";
 import { CHAIN_ID } from "@/lib/chain";
+import { readCash } from "@/lib/cash";
 import { SELL_BLOCKED, buildSaleCalls, saleActivity, saleRepayRaw, type SellFrom, type SellPlan } from "@/lib/sell";
 import { quoteKey, quoteSwap } from "@/lib/swap/buy";
 import { sellMinOut, type SellQuote } from "@/lib/swap/sell";
@@ -46,14 +47,17 @@ const SELL_FALLBACK: Record<SellFrom, string> = {
 
 /**
  * A sale's batch, built from fresh reads before JAW's sheet: the screen's block still holds, and the quote is read
- * again. The stock sheet's Sell and the Trade sheet's stock → cash.
+ * again, and the wallet's USDC for what goes into savings. The stock sheet's Sell and the Trade sheet's stock → cash.
  */
 export function useSaleBatch() {
   const quoteToSign = useSigningQuote();
+  const client = usePublicClient({ chainId: CHAIN_ID });
   return async (p: SellInput) => {
     if (p.plan.block) throw new TxStop(SELL_BLOCKED[p.plan.block]);
     const quote = await quoteToSign(p.stock, p.quote, "sell");
-    return buildSaleCalls({ ...p, from: p.plan.from, quote });
+    // A sale into cash goes straight into savings: the wallet's USDC, read again, says what stays for the fee.
+    const walletRaw = p.plan.from === "repay" ? undefined : (await readCash(client!, p.user)).walletRaw;
+    return buildSaleCalls({ ...p, from: p.plan.from, quote, walletRaw });
   };
 }
 

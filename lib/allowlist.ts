@@ -131,8 +131,9 @@ const transferOut: ArgsCheck = (args, user, ctx) => {
   );
 };
 /**
- * Earn with stocks (Adrian, 2026-10-15: "the user should be able to put stocks get cash in saving") and Start earning
- * (the wallet's idle cash into savings, the same day), the one user-signed savings supply: Aave V3's
+ * Earn with stocks (Adrian, 2026-10-15: "the user should be able to put stocks get cash in saving"), Start earning
+ * (the wallet's idle cash into savings, the same day) and a sale into cash (what it brings, Adrian 2026-10-18), the one
+ * user-signed savings supply: Aave V3's
  * supply(asset, amount, onBehalfOf, referralCode) of USDC, for the user, referral code 0, more than 0, only in a batch
  * that declares it saves for the user (`saveTo`), once per batch.
  */
@@ -166,8 +167,8 @@ const bareJoin: ArgsCheck = (args, _user, ctx) => args.length === 0 && ctx.data.
  * functions it may be called with, and what their arguments must say. Money only moves between the
  * user's own pockets: an approve names only the spoke or a router, every position, withdrawal and
  * swap pays the user, and savings come out only as USDC. The one exception is a Send's single transfer,
- * to the recipient its batch declares (`transferOut`). Savings go in only in Earn with stocks' and Start earning's
- * batches, which declare it (`saveTo`): one USDC supply for the user, approved to Aave V3's pool for exactly that amount
+ * to the recipient its batch declares (`transferOut`). Savings go in only in Earn with stocks', Start earning's and a
+ * sale into cash's batches, which declare it (`saveTo`): one USDC supply for the user, approved to Aave V3's pool for exactly that amount
  * (`saveForUser`, `savingsApprove`). Buys, repays and savings-first batches mix
  * targets, so each target is held to its own functions. An Entry coin is approved only to the venue that converts
  * it, and converted only into USDC (D20). GooseExecutor's settings move no money and apply to the signer alone

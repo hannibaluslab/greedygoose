@@ -265,6 +265,9 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
     for (const v of usdcIn.slice(converted.length))
       items.push({ kind: "receive", symbol: USDC.symbol, amount: units(v, USDC.decimals) });
   }
+  // A sale into cash puts what it brings straight into savings (lib/sell.ts saleSaveRaw): still the one pot (D20), so
+  // the move is the sale alone, not a Start earning too.
+  if (items.some((i) => i.kind === "sell")) return items.filter((i) => i.kind !== "save");
   return items;
 }
 

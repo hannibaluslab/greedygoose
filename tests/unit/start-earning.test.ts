@@ -232,6 +232,19 @@ describe("Start earning in Activity and the Cash sheet: one row, not money leavi
     expect(startEarningActivity(usdc(41.751674))).toEqual(items);
   });
 
+  it("a sale whose cash goes straight into savings is the sale alone, not a Start earning too", () => {
+    const stock = EQUITIES[0];
+    const items = decodeActivity(
+      [
+        transfer(stock.address, user, other, 10n ** BigInt(stock.decimals - 2)),
+        transfer(USDC.address, other, user, usdc(4.58)),
+        ...receipt(usdc(4.53)),
+      ],
+      user,
+    );
+    expect(items.map((i) => i.kind)).toEqual(["sell"]);
+  });
+
   it("isn't the user's move when someone else supplied for them", () => {
     expect(decodeActivity(receipt(usdc(10), other), user)).toEqual([]);
   });
@@ -254,7 +267,7 @@ describe("Start earning in Activity and the Cash sheet: one row, not money leavi
   });
 });
 
-describe("the savings supply stays Earn with stocks' and Start earning's alone", () => {
+describe("the savings supply stays Earn with stocks', Start earning's and a sale into cash's alone", () => {
   const cash: Cash = { walletRaw: usdc(40), savingsRaw: 0n, saveOn: false };
   const save = buildStartEarningCalls({ user, walletRaw: usdc(10) });
 
@@ -270,7 +283,7 @@ describe("the savings supply stays Earn with stocks' and Start earning's alone",
     expect(() => assertAllowed(user, save)).toThrow(/unexpected/);
   });
 
-  it("only those two builders declare saveTo", () => {
+  it("only those three builders declare saveTo", () => {
     const root = join(__dirname, "..", "..");
     const files: string[] = [];
     const walk = (dir: string) => {
@@ -297,6 +310,10 @@ describe("the savings supply stays Earn with stocks' and Start earning's alone",
       )
       .map((f) => relative(root, f))
       .sort();
-    expect(declaring).toEqual([join("lib", "earnWithStocks.ts"), join("lib", "startEarning.ts")]);
+    expect(declaring).toEqual([
+      join("lib", "earnWithStocks.ts"),
+      join("lib", "sell.ts"),
+      join("lib", "startEarning.ts"),
+    ]);
   });
 });

@@ -64,6 +64,10 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
   what's owed or the cash after the fuel tank.
 - **No minimums of ours.** Only Aave's and Base's own limits apply, plus the $0.01 arrivals filter.
 - **No dust.** Sell all or Max leaves nothing; a sale that would leave under $1 sells everything.
+- **A sale into cash earns at once** (Adrian, 2026-10-18): Sell and Trade's stock → cash put what the sale is sure to
+  bring (the swap's floor) straight into savings, in the same signature. The wallet keeps only what it lacks of the
+  fuel tank; what the pool pays over the floor stays in the wallet. A repay by selling and stock → stock don't save.
+  Activity shows the sale alone: savings are the same cash.
 - **One stock order** in every list: Home's (Apple, Amazon, Alphabet, Meta, Microsoft, NVIDIA, Tesla). Lists keep
   their groups (what can go before what can't); a default still opens on the cash or the biggest free stock.
 
