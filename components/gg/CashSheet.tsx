@@ -10,11 +10,14 @@ import { CashActivity } from "./CashActivity";
 import { EarnCard, EarnStep } from "./EarnWithStocks";
 import { useMoneySheets } from "./MoneySheets";
 import { Money } from "./Money";
+import { useActivity } from "@/hooks/useActivity";
 import { useEarnOffer, useEarnWithStocks } from "@/hooks/useEarnWithStocks";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import type { PositionData } from "@/hooks/usePosition";
 import type { AgentStatus } from "@/lib/agents/status";
-import { owedBeside } from "@/lib/cashActivity";
+import { fuelTankUsd } from "@/lib/cash";
+import { cashFromCreditUsd, owedBeside } from "@/lib/cashActivity";
+import { formatUsd } from "@/lib/formatting";
 import { earningLine, type ArrivedView } from "@/lib/cashSetup";
 import { earnDone, earnTenths, pctText, type EarnOffer, type EarnOpen } from "@/lib/earnWithStocks";
 
@@ -31,10 +34,10 @@ export function cashLead(save: AgentStatus, apy: number): string {
 }
 
 /**
- * The cash, big, as the kit draws money, with the Cash card's own line under it, and what's owed on credit in the same
- * card under a hairline (Adrian: one section).
+ * The cash, big, as the kit draws money, with the Cash card's own line under it; then what it's made of (`split`,
+ * CashSplit); and what's owed on credit in the same card under a hairline (Adrian: one section).
  */
-function CashAmount({ data, arrived }: { data: PositionData; arrived: ArrivedView }) {
+function CashAmount({ data, arrived, split }: { data: PositionData; arrived: ArrivedView; split?: ReactNode }) {
   const owed = owedBeside(data.debtUsd, data.cash);
   return (
     <div className="flex flex-col gap-2 rounded-[22px] bg-card p-4 shadow-card-elev">
@@ -48,6 +51,7 @@ function CashAmount({ data, arrived }: { data: PositionData; arrived: ArrivedVie
       <span className="text-[13px] text-ink-mid">
         {arrived.kind === "arriving" ? `${arrived.text} arriving` : earningLine(data.cash.saveOn, data.savingsUsd)}
       </span>
+      {data.cashUsd > 0 && split}
       {owed && (
         <div aria-label="Credit" className="mt-1.5 flex flex-col gap-0.5 border-t border-line-field pt-3">
           <div className="flex items-center justify-between">
@@ -57,6 +61,38 @@ function CashAmount({ data, arrived }: { data: PositionData; arrived: ArrivedVie
           <span className="text-[12.5px] text-subtle">{owed.line}</span>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * What the cash is made of: my own cash, the part that came from credit backed by stocks (Earn with stocks,
+ * cashFromCreditUsd, read from Activity) and the fuel tank kept for network fees. Mounted only while the sheet is open;
+ * until Activity is read (or if it can't be), no credit row, and the rest is my cash.
+ */
+function CashSplit({ account, data }: { account: `0x${string}`; data: PositionData }) {
+  const history = useActivity(account);
+  const tank = fuelTankUsd(data.cashUsd);
+  const spendable = Math.max(0, data.cashUsd - tank);
+  const credit = history.isLoading || history.isError ? 0 : cashFromCreditUsd(history.rows, data.debtUsd, spendable);
+  return (
+    <dl aria-label="What my cash is" className="m-0 mt-1.5 flex flex-col gap-2 border-t border-line-field pt-3">
+      <SplitRow label="My cash" value={spendable - credit} />
+      {credit >= 0.01 && <SplitRow label="From credit" sub="Earn with stocks, backed by my stocks" value={credit} />}
+      <SplitRow label="Fuel tank" sub="Kept for network fees" value={tank} />
+    </dl>
+  );
+}
+
+/** One part of the cash: what it is, a line under it when it needs one, and how much. */
+function SplitRow({ label, sub, value }: { label: string; sub?: string; value: number }) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <dt className="flex min-w-0 flex-col gap-0.5">
+        <span className="text-[14px] text-ink-mid">{label}</span>
+        {sub && <span className="text-[12px] text-subtle">{sub}</span>}
+      </dt>
+      <dd className="m-0 shrink-0 text-[14px] font-semibold">{formatUsd(value)}</dd>
     </div>
   );
 }
@@ -89,6 +125,7 @@ function CashFooter({ owes, onLeave }: { owes: boolean; onLeave?: () => void }) 
 export function CashStep({
   data,
   arrived,
+  split,
   offer,
   onEarn,
   activity,
@@ -96,6 +133,8 @@ export function CashStep({
 }: {
   data: PositionData;
   arrived: ArrivedView;
+  /** What the cash is made of (CashSplit); none in the dev gallery. */
+  split?: ReactNode;
   offer: EarnOffer;
   onEarn: () => void;
   activity: ReactNode;
@@ -103,7 +142,7 @@ export function CashStep({
 }) {
   return (
     <>
-      <CashAmount data={data} arrived={arrived} />
+      <CashAmount data={data} arrived={arrived} split={split} />
       <EarnCard offer={offer} onOpen={onEarn} />
       {activity}
       <CashFooter owes={data.debtUsd > 0} onLeave={onLeave} />
@@ -224,6 +263,7 @@ export function CashSheet({
           <CashStep
             data={data}
             arrived={arrived}
+            split={open && <CashSplit account={account} data={data} />}
             offer={earn.offer}
             onEarn={() => go("earn")}
             activity={open && <CashActivity account={account} />}

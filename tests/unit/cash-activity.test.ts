@@ -20,6 +20,7 @@ import { feeBufferRaw, type Cash } from "@/lib/cash";
 import {
   CASH_ROWS,
   arrivalCashRow,
+  cashFromCreditUsd,
   cashRows,
   executorCashRow,
   ownCashRow,
@@ -430,5 +431,41 @@ describe("cashRows: the sheet's list", () => {
       since: T - 7 * day,
     });
     expect(rows.map((r) => r.key)).toEqual(["in"]);
+  });
+});
+
+describe("cashFromCreditUsd: the part of the cash that came from credit", () => {
+  const move = (time: number, items: ActivityItem[], status: "done" | "pending" | "failed" = "done") => ({
+    time,
+    status,
+    items,
+  });
+  const earn = (amount: number): ActivityItem => ({ kind: "earn", symbol: "USDC", amount });
+  const repay = (amount: number): ActivityItem => ({ kind: "repay", symbol: "USDC", amount });
+
+  it("Earn with stocks adds to it; a repay pays it back first", () => {
+    expect(cashFromCreditUsd([move(1, [earn(100)])], 100, 500)).toBe(100);
+    expect(cashFromCreditUsd([move(1, [earn(100)]), move(2, [repay(30)])], 70, 500)).toBe(70);
+  });
+
+  it("a Credit Buy's credit is spent at once and isn't in the cash; credit taken alone is", () => {
+    const creditBuy = move(1, [
+      { kind: "supply", symbol: "AAPLc", amount: 1 },
+      { kind: "borrow", symbol: "USDC", amount: 50 },
+      { kind: "buy", symbol: "MSFTc", amount: 0.1, paidUsd: 50 },
+    ]);
+    expect(cashFromCreditUsd([creditBuy], 50, 500)).toBe(0);
+    expect(cashFromCreditUsd([move(1, [{ kind: "borrow", symbol: "USDC", amount: 20 }])], 20, 500)).toBe(20);
+  });
+
+  it("never more than what's owed or than the cash after the fuel tank; nothing while nothing is owed", () => {
+    expect(cashFromCreditUsd([move(1, [earn(100)])], 40, 500)).toBe(40);
+    expect(cashFromCreditUsd([move(1, [earn(100)])], 100, 25)).toBe(25);
+    expect(cashFromCreditUsd([move(1, [earn(100)])], 0, 500)).toBe(0);
+    expect(cashFromCreditUsd([move(1, [earn(100)], "pending")], 100, 500)).toBe(0);
+  });
+
+  it("goes in time order, whatever order the rows come in", () => {
+    expect(cashFromCreditUsd([move(2, [earn(60)]), move(1, [repay(100)])], 60, 500)).toBe(60);
   });
 });

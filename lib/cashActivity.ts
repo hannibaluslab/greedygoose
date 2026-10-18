@@ -15,13 +15,7 @@ import { ENTRY_COINS } from "@/lib/tokens/stables";
  */
 
 /**
- * The credit rule: the cash shows no "part from credit". Credit enters the cash only when it's taken as cash (Use
- * credit, Earn with stocks); a Credit Buy spends it inside the same batch. Once in, it is the same USDC as the rest:
- * Save sweeps it into the same savings, buys and repays and Protect spend from the one pot, and a repay lowers one
- * debt that mixes every kind of credit. So which dollars are "credit" is a convention nothing on chain records, and
- * min(cash, owed) would say a Credit Buy's debt sits in the cash when none of it ever did. What the sheet shows
- * instead, from live data only: what's owed beside the cash (rounded up, as on Home), how it's repaid, and every time
- * credit came in as its own row ("From credit"). Null when nothing is owed.
+ * What's owed beside the cash (rounded up, as on Home) and how it's repaid. Null when nothing is owed.
  */
 export function owedBeside(debtUsd: number, cash: Cash): { owed: string; line: string } | null {
   if (debtUsd <= 0) return null;
@@ -29,6 +23,29 @@ export function owedBeside(debtUsd: number, cash: Cash): { owed: string; line: s
     owed: formatUsdTrim(Math.ceil(debtUsd)),
     line: maxSpendRaw(cash) > 0n ? "Repay from your cash any time." : "Add money to your cash to repay.",
   };
+}
+
+/** A move as Activity has it, for the split of the cash: when, whether it landed, and what it moved. */
+type CashMove = { time: number; status: "pending" | "done" | "failed"; items: readonly ActivityItem[] };
+
+/**
+ * The part of the cash that came from credit backed by stocks (Earn with stocks, or credit taken as cash), for the
+ * Cash sheet's split. Nothing on chain says which dollars of the cash are credit, since credit is the same USDC as the
+ * rest, so this is one plain convention: credit that came in as cash adds to it (an `earn` move, or credit taken
+ * without a buy in the same batch: a Credit Buy spends its credit at once), and a repay pays it back first. Never
+ * more than what's owed, nor than the cash left after the fuel tank. 0 while nothing is owed.
+ */
+export function cashFromCreditUsd(moves: readonly CashMove[], debtUsd: number, spendableUsd: number): number {
+  if (debtUsd <= 0 || spendableUsd <= 0) return 0;
+  let open = 0;
+  for (const m of [...moves].filter((x) => x.status === "done").sort((a, b) => a.time - b.time)) {
+    const bought = m.items.some((i) => i.kind === "buy");
+    for (const i of m.items) {
+      if (i.kind === "earn" || (i.kind === "borrow" && i.symbol === USDC.symbol && !bought)) open += i.amount;
+      if (i.kind === "repay" && i.symbol === USDC.symbol) open = Math.max(0, open - i.amount);
+    }
+  }
+  return Math.max(0, Math.min(open, debtUsd, spendableUsd));
 }
 
 /** Rows the sheet shows; "See all" opens Activity for the rest. */
