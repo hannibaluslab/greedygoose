@@ -23,7 +23,7 @@ import { EQUITIES, USDC, stockRank, type ReserveAsset } from "@/lib/tokens/regis
 /**
  * Repay is one choice: pay with (Adrian, 2026-10-15). The sheet says what's owed, then "Pay with": the cash, each stock
  * held free, each stock that backs the credit, in that order, every row with the status it would land in. One amount in
- * dollars (All by default, $25 and $50 as quick picks), what's owed after, who pays the network fee, one Repay button.
+ * dollars (0 to start, All in the field), what's owed after, who pays the network fee, one Repay button.
  * Everything the sheet shows comes from here; the sheet holds no money maths.
  *
  * - Cash repays as before (useRepayBatch: savings first through payFromCash, exact approve, allowance reset on a full repay).
@@ -310,7 +310,8 @@ export function statusAfter(
  * over the most and snapped back to it (`snapped`: the sheet says so in one line).
  */
 export type RepayForm = { source: string | null; amount: string; all: boolean; snapped?: boolean };
-export const REPAY_FORM: RepayForm = { source: null, amount: "", all: true };
+/** The sheet opens at 0: nothing is repaid until an amount is typed, a pick is tapped or All. */
+export const REPAY_FORM: RepayForm = { source: null, amount: "", all: false };
 export type RepayAction =
   | { type: "source"; id: string }
   | { type: "amount"; value: string; max: RepayMax }
@@ -318,12 +319,13 @@ export type RepayAction =
   | { type: "all" };
 
 /**
- * One step of the sheet's form. A new row starts on All. The amount is typed in dollars, and a quick pick fills it.
- * Dollars at the most the row repays are All; more than that (more than owed, or than the row can pay) snap back to
- * it, All, and the sheet says so in one line (NYM's clamp). So the amount is never more than owed or than the row can pay.
+ * One step of the sheet's form. A new row keeps the amount (or All). The amount is typed in dollars, and a quick pick
+ * fills it. Dollars at the most the row repays are All, so typing what's owed repays all of it and frees every stock,
+ * as All does; more than that (more than owed, or than the row can pay) snap back to it, All, and the sheet says so in
+ * one line (NYM's clamp). So the amount is never more than owed or than the row can pay.
  */
 export function repayForm(state: RepayForm, action: RepayAction): RepayForm {
-  if (action.type === "source") return { source: action.id, amount: "", all: true };
+  if (action.type === "source") return { source: action.id, amount: state.amount, all: state.all };
   if (action.type === "all") return { source: state.source, amount: "", all: true };
   const value = action.type === "chip" ? String(action.usd) : action.value;
   const { max } = action;

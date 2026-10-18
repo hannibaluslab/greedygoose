@@ -40,6 +40,8 @@ const shares = (n: number) => parseUnits(n.toFixed(8), 8);
 const fee = usd(CASH.feeBufferUsd);
 /** The network-fee buffer in dollars, and cash just under it (the sale then pays the fee). */
 const B = CASH.feeBufferUsd;
+/** All tapped: the most the row repays. */
+const ALL: RepayForm = { source: null, amount: "", all: true };
 const underB = B * 0.6;
 const nvda = EQUITIES.find((e) => e.symbol === "NVDAc")!;
 const aapl = EQUITIES.find((e) => e.symbol === "AAPLc")!;
@@ -181,14 +183,14 @@ describe("Pay with: the rows, their order and who's listed", () => {
     const s = repaySources(d, cfs);
     expect(ids(s)).toEqual(["cash"]);
     expect(s[0].estUsd).toBeCloseTo(1.36 - B, 6);
-    const v = planRepay({ data: d, source: s[0], form: REPAY_FORM });
+    const v = planRepay({ data: d, source: s[0], form: ALL });
     expect(v.fieldText).toBe((1.36 - B).toFixed(2));
     expect(v.repayRaw).toBe(usd(1.36) - fee);
     expect(v.ready).toBe(true);
   });
 });
 
-describe("Amount: All by default, quick picks, never more than owed or than the row pays", () => {
+describe("Amount: 0 to start, All in the field, quick picks, never more than owed or than the row pays", () => {
   const cashOf = (d: RepayData) => repaySources(d, cfs)[0];
 
   it("cash: All is all of it less the fee, or a full repay when it covers what's owed", () => {
@@ -203,9 +205,18 @@ describe("Amount: All by default, quick picks, never more than owed or than the 
     expect(allText(covers)).toBe("64.01"); // rounded up: never shown as less than what's owed
   });
 
-  it("the sheet opens on All", () => {
+  it("the sheet opens at 0: nothing to repay, nothing ready", () => {
     const d = data();
     const v = planRepay({ data: d, source: cashOf(d), form: REPAY_FORM });
+    expect(v.all).toBe(false);
+    expect(v.fieldText).toBe("");
+    expect(v.amountUsd).toBe(0);
+    expect(v.ready).toBe(false);
+  });
+
+  it("All repays the most the row can", () => {
+    const d = data();
+    const v = planRepay({ data: d, source: cashOf(d), form: ALL });
     expect(v.all).toBe(true);
     expect(v.fieldText).toBe((100 - B).toFixed(2));
     expect(v.amountUsd).toBeCloseTo(100 - B, 6);
@@ -239,8 +250,13 @@ describe("Amount: All by default, quick picks, never more than owed or than the 
       amount: "",
       all: true,
     });
-    // A new row starts on All again.
+    // A new row keeps the amount, or All.
     expect(f({ source: "cash", amount: "40", all: false }, { type: "source", id: "free:AAPLc" })).toEqual({
+      source: "free:AAPLc",
+      amount: "40",
+      all: false,
+    });
+    expect(f({ source: "cash", amount: "", all: true }, { type: "source", id: "free:AAPLc" })).toEqual({
       source: "free:AAPLc",
       amount: "",
       all: true,
@@ -264,6 +280,17 @@ describe("Amount: All by default, quick picks, never more than owed or than the 
     });
   });
 
+  it("typing what's owed by hand is All: it repays all of it, so every stock comes back", () => {
+    const d = data({ debt: 0.9187, wallet: 1.13 });
+    const cash = cashOf(d);
+    const typed = repayForm(REPAY_FORM, { type: "amount", value: "0.92", max: repayMax(cash, d) });
+    expect(typed.all).toBe(true);
+    const v = planRepay({ data: d, source: cash, form: typed });
+    expect(v.coversAll).toBe(true);
+    expect(v.fieldText).toBe("0.92");
+    expect(v.snapLine).toBeNull();
+  });
+
   it("snapping says in one plain line what the most is: all that's owed, the cash's most, or the stock's", () => {
     const d = data();
     const cash = cashOf(d);
@@ -281,7 +308,7 @@ describe("Amount: All by default, quick picks, never more than owed or than the 
     expect(all.snapLine).toBe("That’s everything you owe.");
     expect(all.fieldText).toBe("64.00");
     // All picked, or the exact most typed, says nothing.
-    expect(planRepay({ data: d, source: cash, form: REPAY_FORM }).snapLine).toBeNull();
+    expect(planRepay({ data: d, source: cash, form: ALL }).snapLine).toBeNull();
     expect(
       planRepay({
         data: d,
@@ -304,7 +331,7 @@ describe("Amount: All by default, quick picks, never more than owed or than the 
 
   it("All that covers what's owed says so, and the toast says all of it", () => {
     const d = data({ debt: 64, wallet: 500 });
-    const v = planRepay({ data: d, source: cashOf(d), form: REPAY_FORM });
+    const v = planRepay({ data: d, source: cashOf(d), form: ALL });
     expect(v.coversAll).toBe(true);
     expect(v.oweAfterUsd).toBe(0);
     expect(v.after).toBe("safe");
@@ -385,7 +412,7 @@ describe("Pay with a stock held free: the plan", () => {
   };
 
   it("All is what selling every free share is sure to bring", () => {
-    const v = plan(REPAY_FORM, (s) => quoteAt(s, 199));
+    const v = plan(ALL, (s) => quoteAt(s, 199));
     expect(v.sharesRaw).toBe(apple.maxSharesRaw);
     expect(v.max.raw).toBe(minOut(maxQ.amountOut));
     expect(v.repayRaw).toBe(minOut(maxQ.amountOut));
@@ -421,7 +448,7 @@ describe("Pay with a stock held free: the plan", () => {
   it("covering what's owed repays it in full, and the toast says so", () => {
     const small = data({ debt: 20 });
     const src = repaySources(small, cfs).find((x) => x.id === "free:AAPLc")!;
-    const v = plan(REPAY_FORM, (s) => quoteAt(s, 199), small, src);
+    const v = plan(ALL, (s) => quoteAt(s, 199), small, src);
     expect(v.max.coversAll).toBe(true);
     expect(v.fieldText).toBe("20.00");
     expect(v.sharesRaw).toBeLessThan(src.maxSharesRaw);
@@ -437,7 +464,7 @@ describe("Pay with a stock held free: the plan", () => {
     const v = planRepay({
       data: one,
       source: src,
-      form: REPAY_FORM,
+      form: ALL,
       maxQuote: ready(quoteAt(src.maxSharesRaw, 190)),
       now: tuesday,
     });
@@ -447,14 +474,14 @@ describe("Pay with a stock held free: the plan", () => {
   });
 
   it("waits for its quotes, says when there's no market, and warns on a thin one", () => {
-    const quoting = planRepay({ data: d, source: apple, form: REPAY_FORM, now: tuesday });
+    const quoting = planRepay({ data: d, source: apple, form: ALL, now: tuesday });
     expect(quoting.ready).toBe(false);
     expect(quoting.quoting).toBe(true);
     expect(quoting.sharesLine).toBe(REPAY_COPY.sellsQuoting);
     const none = planRepay({
       data: d,
       source: apple,
-      form: REPAY_FORM,
+      form: ALL,
       maxQuote: { data: null, isFetching: false, isSuccess: true },
       now: tuesday,
     });
@@ -515,7 +542,7 @@ describe("Pay with a stock that backs the credit: the existing repay by selling"
   });
 
   it("All repays everything owed with the margin, and what the sale brings above it stays as cash", () => {
-    const v = plan(REPAY_FORM, (s) => quoteAt(s, 249));
+    const v = plan(ALL, (s) => quoteAt(s, 249));
     expect(v.max.coversAll).toBe(true);
     expect(v.coversAll).toBe(true);
     expect(v.sharesRaw).toBeLessThan(nv.maxSharesRaw);

@@ -64,7 +64,8 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
 - Ticked stocks share one limit that stops at 1.12. A chip shows the % of the shares held (25%, 50%, Max, All); the
   line under the stock shows the shares, "0.60 of 2.40 shares". All carries a padlock until the repay covers it.
 - Repay and free up go in one signature: repay first, then take each ticked stock out.
-- **Repay all** repays every cent and returns every stock, in one signature.
+- The amount opens at 0. **Repay all** (All, or typing what's owed) repays every cent and returns every stock, in one
+  signature: clearing the debt always frees every stock, with no option to keep any backing.
 - Paying with a stock that backs credit can go to Aave's own limit (less 0.5%), because the debt drops in the same
   signature.
 
