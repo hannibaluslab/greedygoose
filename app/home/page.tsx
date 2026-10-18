@@ -15,7 +15,8 @@ import { CashSheet } from "@/components/gg/CashSheet";
 import { useMoneySheets } from "@/components/gg/MoneySheets";
 import { StockSheets, useStockSheets } from "@/components/gg/StockSheets";
 import { ValueLine } from "@/components/gg/ValueLine";
-import { LeverageSheet, StatusSheet, TotalBalanceSheet, YieldSheet } from "@/components/gg/InfoSheets";
+import { StatusSheet } from "@/components/gg/CreditStatusSheet";
+import { LeverageSheet, TotalBalanceSheet, YieldSheet } from "@/components/gg/InfoSheets";
 import { StockAvatar } from "@/components/gg/StockAvatar";
 import { ChevronRight, CreditIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/icons";
 import { useCashSetup } from "@/hooks/useCashSetup";
@@ -133,7 +134,7 @@ function Home({ address }: { address: `0x${string}` }) {
             open={sheet === "status"}
             onClose={close}
             status={data.debtRaw > 0n ? homeStatus(data.status) : "none"}
-            healthFactor={data.healthFactor}
+            data={data}
           />
           <LeverageSheet
             open={sheet === "leverage"}

@@ -6,8 +6,8 @@ import { Button } from "./Button";
 import { CASH } from "@/config/risk";
 import { formatUsd, formatUsdTrim } from "@/lib/formatting";
 import { leverageOf, leverageText } from "@/lib/leverage";
-import { STATUS_LABEL, type Status } from "@/lib/risk/status";
-import { StatusBar, StatusPill } from "./Status";
+import { type Status } from "@/lib/risk/status";
+import { StatusPill } from "./Status";
 
 const CASH_DOT = "#1f6a4a";
 const STOCKS_DOT = "#76b900";
@@ -243,73 +243,5 @@ function Term({ value, label }: { value: string; label: string }) {
       <span className="text-[22px] font-semibold tracking-[-0.02em]">{value}</span>
       <span className="text-[12px] text-ink-mid">{label}</span>
     </span>
-  );
-}
-
-/** What each status means, in the order the bar runs. */
-const STATUS_LINES: { status: Exclude<Status, "none">; line: string }[] = [
-  { status: "safe", line: "Your stocks back what you owe with plenty to spare." },
-  {
-    status: "watch",
-    line: "Prices fell or more credit is in use. Nothing is sold. Repaying some brings you back to Safe.",
-  },
-  {
-    status: "act",
-    line: "Close to the line where part of your stocks can be sold to repay what you owe. Protect steps in here if it’s on.",
-  },
-];
-
-/**
- * "Your credit status" (ruling 32), from Credit's ⓘ on Home: the bar with where the credit is now, and what Safe,
- * Watch and Act each mean. With nothing owed, the pill says No credit and the bar has no marker.
- */
-export function StatusSheet({
-  open,
-  onClose,
-  status,
-  healthFactor,
-}: {
-  open: boolean;
-  onClose: () => void;
-  status: Status;
-  healthFactor: number | null;
-}) {
-  return (
-    <SheetShell
-      open={open}
-      onOpenChange={(next) => !next && onClose()}
-      look="info"
-      title="My credit status"
-      titleAccessory={<StatusPill status={status} size="sm" />}
-      description={
-        status === "none"
-          ? "Nothing is owed, so there’s no status yet. It starts with your first credit."
-          : "How far your credit is from stocks being sold."
-      }
-    >
-      <SheetSteps stepKey="status" className="flex flex-col gap-[18px] leading-[normal]">
-        <div className="flex flex-col gap-4 rounded-[22px] bg-card p-4 shadow-card-elev">
-          <div className="pt-1">
-            <StatusBar
-              healthFactor={status === "none" ? null : healthFactor}
-              label={status === "none" ? "No credit" : `Now ${STATUS_LABEL[status]}`}
-            />
-          </div>
-          <ul className="m-0 flex list-none flex-col gap-3 p-0">
-            {STATUS_LINES.map((r) => (
-              <li key={r.status} className="flex items-start gap-2.5">
-                <span className="w-[58px] shrink-0">
-                  <StatusPill status={r.status} size="sm" />
-                </span>
-                <span className="text-[13px] leading-snug text-ink-2">{r.line}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <Button variant="dark" onClick={onClose} className="w-full">
-          Got it
-        </Button>
-      </SheetSteps>
-    </SheetShell>
   );
 }

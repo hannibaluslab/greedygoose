@@ -11,6 +11,9 @@ export const RISK: RiskBands = {
   watchMin: 1.1,
 };
 
+/** Aave's own line: under a health factor of 1.0, Aave can sell part of the stocks that back credit to repay it. */
+export const AAVE_LINE_HF = 1;
+
 /**
  * Act is the line (Adrian, 2026-10-15: "watch is ok, it is act that is not"). Every way of taking credit may end in
  * Watch, never in Act, and Free up never ends in Act either. The most credit (and the most freed up) is what keeps the

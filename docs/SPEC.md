@@ -44,8 +44,10 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
   the health read after it; a result under 1.10 stops it.
 - **Protect** acts only in Act. It repays from cash first, sells backing stock only if cash can't, and brings the
   credit back to 1.20. It never acts in Safe or Watch and never sells on a weekend.
-- On Home, Credit's ⓘ opens "My credit status": the bar with where the credit is, and what Safe, Watch and Act
-  each mean. The owed amount opens the Credit sheet.
+- On Home, Credit's ⓘ opens "My credit status", on Aave's rules: the health and how far the stocks can fall, all
+  together, before Aave's line (1.0) and before Act (1 − line ÷ health); how it's worked out (each stock that backs
+  credit counts its value × the share Aave counts, together ÷ what's owed); and the scale: Safe, Watch, Act and Aave's
+  line, each with where it starts and what happens there. The owed amount opens the Credit sheet.
 
 ## Money rules
 
