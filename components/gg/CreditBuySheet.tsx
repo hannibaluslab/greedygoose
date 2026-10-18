@@ -8,9 +8,8 @@ import { AmountArrow, AmountBadge, AmountField, AmountSource, YouGet } from "./A
 import { Button } from "./Button";
 import { useMoneySheets } from "./MoneySheets";
 import { StockAvatar, tickerOf } from "./StockAvatar";
-import { Summary } from "./Summary";
 import { TxButton, TxError } from "./TxUi";
-import { StatusChange } from "./Status";
+import { StatusChange, StatusMoveBar, StatusPill } from "./Status";
 import { ChevronRight, BacksIcon } from "./icons";
 import { useAgents } from "@/hooks/useAgents";
 import { useBoughtHome } from "@/hooks/useBoughtHome";
@@ -26,15 +25,13 @@ import {
   FEE_FIRST,
   backers,
   backingOptions,
-  backingRawFor,
+  backingForBuy,
   MIN_BACKING_USD,
   NO_CREDIT,
-  bestBacking,
   canBuyWithCash,
   creditAvailable,
   creditWith,
-  freeShownUsd,
-  isAllFree,
+  ownCreditUsd,
   planCredit,
   shortNames,
   type BackingOption,
@@ -42,24 +39,33 @@ import {
   type CreditAvailable,
 } from "@/lib/creditBuy";
 import { formatShares, formatUsd, formatUsdTrim, inWords, monthlyCostText } from "@/lib/formatting";
-import { STATUS_LABEL, type Status } from "@/lib/risk/status";
+import { STATUS_LABEL } from "@/lib/risk/status";
 import { BUY_LIMITS, quoteEconomics } from "@/lib/swap/buy";
 import { VENUE_LABEL } from "@/lib/swap/venues";
 import { rawToShares } from "@/lib/tokens/b20";
 import { EQUITIES, USDC, byStockOrder, type ReserveAsset } from "@/lib/tokens/registry";
-import { CREDIT_CAP } from "@/config/risk";
+import { wholePct } from "@/lib/holding";
 
-/** The four steps, backing first (Adrian, 2026-10-15): Back it with → How much → pick a stock → amount to buy. */
-type Step = "back" | "much" | "pick" | "amount";
-const ORDER: Step[] = ["back", "much", "pick", "amount"];
-/** Step 1's row for what already backs credit: nothing new goes in use. */
+/**
+ * Three steps (boards 30–34, Adrian 2026-10-18): what backs it (Credit ready, or a stock to back new credit) → pick a
+ * stock → the amount to buy. How much stock goes in is worked out from the buy, so there is no step for it.
+ */
+type Step = "back" | "pick" | "amount";
+const ORDER: Step[] = ["back", "pick", "amount"];
+/** Step 1's Credit ready: the credit left on what already backs credit; nothing new goes in. */
 const EXISTING = "existing";
 
 const valueOf = (h: Holding) => h.freeUsd + h.backingUsd;
-/** "Status after" in words, coloured once it needs the extra confirmation. */
-const AFTER_TONE: Record<Status, string> = { none: "", safe: "", watch: "text-watch-text", act: "text-act" };
-/** Credit figures in whole dollars, as the boards print them ("$700", "Up to $1,000"). */
-const wholeUsd = (n: number) => formatUsdTrim(Math.max(0, Math.floor(n)));
+/**
+ * Credit figures, rounded down so they're never more than there is: to the cent under $100 (a small account's "Up to
+ * $0.68" isn't "$0"), in whole dollars above, as the boards print them ("Up to $417").
+ */
+/** What a backing is worth, rounded up so it's never shown as less than goes in: cents under $100, dollars above. */
+const backedText = (n: number) => (n < 100 ? formatUsd(Math.ceil(n * 100 - 1e-6) / 100) : formatUsdTrim(Math.ceil(n)));
+const wholeUsd = (n: number) => {
+  const usd = Math.max(0, n);
+  return usd < 100 ? formatUsd(Math.floor(usd * 100 + 1e-6) / 100) : formatUsdTrim(Math.floor(usd));
+};
 
 /**
  * Design boards "F2 · 3–5", reordered backing first (Adrian, 2026-10-15: "selecting and typing the amount of an asset
@@ -105,13 +111,6 @@ export function CreditBuySheet({
   const [direction, setDirection] = useState<"forward" | "back">("forward");
   const [stock, setStock] = useState<ReserveAsset | null>(preset);
   const [picked, setPicked] = useState<string | null>(null);
-  // Step 2: the dollars typed, and the shares they were worth as they were typed (`backRaw`), or `backAll` after MAX or
-  // the whole free value typed (exactly its free shares, whatever the price does next). `backFor` is the holding they
-  // were typed for: another holding starts empty.
-  const [backFor, setBackFor] = useState<string | null>(null);
-  const [backUsd, setBackUsd] = useState("");
-  const [backRaw, setBackRaw] = useState(0n);
-  const [backAll, setBackAll] = useState(false);
   const [raw, setRaw] = useState("");
   const [ack, setAck] = useState(false);
 
@@ -126,27 +125,20 @@ export function CreditBuySheet({
   const others = EQUITIES.filter((e) => !held.some((h) => h.symbol === e.symbol));
   const priceOf = (symbol: string) => data.holdings.find((h) => h.symbol === symbol)?.priceUsd ?? 0;
 
-  // What each free holding gives on its own (all its free shares), so a holding too small to reach the $1 minimum buy
-  // is listed with that reason instead of being offered (Adrian: $1 of Alphabet read as "nothing free").
-  const gives = useMemo(() => {
-    const m = new Map<string, number>();
-    if (!cfs) return m;
-    for (const o of backingOptions(data.holdings, cfs)) {
-      m.set(
-        o.stock.symbol,
-        planCredit({ position: data, backing: { option: o, raw: o.freeRaw }, creditRaw: 0n, cash: data.cash }).maxUsd,
-      );
-    }
-    return m;
-  }, [data, cfs]);
+  // What each free holding backs on its own (ownCreditUsd), so one too small for the smallest buy is listed with that
+  // reason instead of being offered (Adrian: $1 of Alphabet read as "nothing free").
+  const gives = useMemo(
+    () => new Map(cfs ? backingOptions(data.holdings, cfs).map((o) => [o.stock.symbol, ownCreditUsd(data, o)]) : []),
+    [data, cfs],
+  );
   const options = useMemo(
     () =>
       cfs
         ? backingOptions(data.holdings, cfs)
-            .filter((o) => o.freeUsd >= MIN_BACKING_USD && (gives.get(o.stock.symbol) ?? 0) >= BUY_LIMITS.minUsd)
+            .filter((o) => o.freeUsd >= MIN_BACKING_USD && ownCreditUsd(data, o) >= BUY_LIMITS.minUsd)
             .sort((a, b) => byStockOrder(a.stock, b.stock))
         : [],
-    [data.holdings, cfs, gives],
+    [data, cfs],
   );
   // Whether a Credit Buy can use anything at all (with every free holding at its best): $0 says why on step 1.
   // Owning no stock needs no collateral factors to say $0.
@@ -154,35 +146,35 @@ export function CreditBuySheet({
     cfs || held.length === 0
       ? creditAvailable({ position: data, options, cash: data.cash, holdsStock: held.length > 0 })
       : null;
-  // The credit left on what already backs credit alone: step 1's "already backs" row.
+  // The credit left on what already backs credit alone: step 1's Credit ready.
   const existingLeft = creditWith(data);
   // In Act no credit is taken (Act is the line): step 1's one line says so, with no list of why each holding can't.
   const inAct = available?.why === "in-act";
   const canUseExisting = data.totalBackingUsd > 0 && existingLeft >= BUY_LIMITS.minUsd;
-  // Step 1 picks the holding that can back the most until Sam picks another, else what already backs credit. A pick
-  // that can't back it any more (under $1 free, paused, or no longer read) falls back to that default on step 1.
+  // Step 1 picks Credit ready until Sam picks another, else the stock that backs the most on its own. A pick that can't
+  // back it any more (too small, paused, or no longer read) falls back to that default on step 1.
   const canPick = (key: string) => (key === EXISTING ? canUseExisting : options.some((o) => o.stock.symbol === key));
-  const fallbackKey = bestBacking(data, options)?.option.stock.symbol ?? (canUseExisting ? EXISTING : null);
+  const mostOwn = options.reduce<BackingOption | null>(
+    (b, o) => (!b || ownCreditUsd(data, o) > ownCreditUsd(data, b) ? o : b),
+    null,
+  );
+  const fallbackKey = canUseExisting ? EXISTING : (mostOwn?.stock.symbol ?? null);
   const pickedKey = (step === "back" && picked && !canPick(picked) ? null : picked) ?? fallbackKey;
   const chosen = options.find((o) => o.stock.symbol === pickedKey) ?? null;
   const chosenHolding = chosen ? (data.holdings.find((h) => h.symbol === chosen.stock.symbol) ?? null) : null;
   // Past step 1, a picked holding that dropped out of the list: the buy can't quietly fall back to what already backs
-  // credit, so nothing is prepared for it, and steps 2–4 say so and send Sam back to pick again (`lostPick`, below: not
-  // once the batch is on its way or has landed).
+  // credit, so nothing is prepared for it, and the next steps say so and send Sam back to pick again (`lostPick`, below:
+  // not once the batch is on its way or has landed).
   const pickGone = step !== "back" && !!picked && picked !== EXISTING && !chosen;
 
-  // Step 2's typed backing, in raw units: MAX, or the whole free value typed, is exactly the free shares, so no dust is
-  // left behind; otherwise the shares the dollars were worth when typed.
-  const typed = !!chosen && backFor === chosen.stock.symbol;
-  const backAmount = typed ? Math.max(0, Number(backUsd) || 0) : 0;
-  const pick: BackingPick = { option: chosen, raw: chosen && typed ? (backAll ? chosen.freeRaw : backRaw) : 0n };
-  // What this backing gives: "You can use up to $X" on step 2, step 3's number and step 4's "Up to" are this one figure.
-  const reach = planCredit({ position: data, backing: pick, creditRaw: 0n, cash: data.cash });
-  const reachUsd = reach.maxUsd;
-  const canUse = reachUsd >= BUY_LIMITS.minUsd && reach.block !== "over-free";
+  // The most this pick can back: Credit ready's credit left, or what the stock backs on its own. Step 3's number and the
+  // amount's "Up to" are this one figure.
+  const reachUsd = chosen ? ownCreditUsd(data, chosen) : existingLeft;
 
   const amount = Math.max(0, Number(raw) || 0);
   const creditRaw = parseUnits(amount.toFixed(USDC.decimals), USDC.decimals);
+  // Only what the buy needs goes in (boards 31–33): enough of the stock for it to stay Safe on its own, or all of it.
+  const pick: BackingPick = { option: chosen, raw: chosen ? backingForBuy(chosen, amount) : 0n };
   const plan = planCredit({ position: data, backing: pick, creditRaw, cash: data.cash });
 
   // D2's tick is for the status it names: a price refresh that moves the result (Watch to Act) asks again.
@@ -198,6 +190,17 @@ export function CreditBuySheet({
   const econ = q && stock ? quoteEconomics(q, stock, oraclePriceUsd) : null;
 
   // What backs it once it lands: what this buy puts in use (the picked holding first) and what's in use already.
+  // Under the amount: what backs it, "Backed by 1.16 Apple · $290", all of it, or nothing new (Credit ready).
+  const backedShares =
+    chosen && chosenHolding ? rawToShares(pick.raw, chosenHolding.multiplier, chosen.stock.decimals) : 0;
+  const backedUsd = chosen && chosen.freeRaw > 0n ? (Number(pick.raw) / Number(chosen.freeRaw)) * chosen.freeUsd : 0;
+  const backingLine = !chosen
+    ? "Nothing new goes in"
+    : pick.raw <= 0n
+      ? `Backed by ${chosen.stock.name}`
+      : `Backed by ${pick.raw >= chosen.freeRaw ? "all " : ""}${formatShares(backedShares)} ${chosen.stock.name} · ${backedText(backedUsd)}`;
+  // The bar moves once there's an amount the plan can read.
+  const moved = amount > 0 && Number.isFinite(plan.hfAfter);
   const lead = chosen?.stock.symbol;
   const adding = pick.raw > 0n && lead ? [lead] : [];
   const against = backers(data.holdings, adding, lead);
@@ -206,6 +209,10 @@ export function CreditBuySheet({
   let blocker: string | null = null;
   if (pickGone) blocker = "That stock can’t back credit right now.";
   else if (amount > 0 && amount < BUY_LIMITS.minUsd) blocker = `Minimum buy is ${formatUsd(BUY_LIMITS.minUsd)}.`;
+  else if (amount > reachUsd + 1e-9)
+    blocker = chosen
+      ? `${chosen.stock.name} can back up to ${wholeUsd(reachUsd)}. Pick another stock for more.`
+      : `Credit ready goes up to ${wholeUsd(reachUsd)}. Back new credit with a stock for more.`;
   else if (amount > 0 && plan.block) blocker = CREDIT_BLOCKED[plan.block];
   else if (stock && amount > 0 && quote.isSuccess && q === null)
     blocker = `There’s no market for ${stock.name} right now.`;
@@ -235,19 +242,10 @@ export function CreditBuySheet({
   // F2-5 → F2-7: once the batch lands, Home with "Bought … with Credit Buy", the shares read from the receipt.
   useBoughtHome({ phase, user, symbol: stock?.symbol ?? "", txHash, credit: true, onClose });
 
-  /** Step 1's pick: a new holding starts step 2 empty again (`backFor`), and step 4 too. */
+  /** Step 1's pick: another one starts the amount empty again. */
   const choose = (key: string | null) => {
     if (key !== picked) setRaw("");
     setPicked(key);
-  };
-  /** Step 2's backing changed: the amount to buy was for the old one, so step 4 starts empty again. */
-  const setBacking = (usd: string, all: boolean, rawIn: bigint) => {
-    setBackFor(chosen?.stock.symbol ?? null);
-    setBackUsd(usd);
-    setBackAll(all);
-    setBackRaw(rawIn);
-    setRaw("");
-    setAck(false);
   };
   const afterBacking: Step = preset ? "amount" : "pick";
   const pickStock = (s: ReserveAsset) => {
@@ -260,20 +258,7 @@ export function CreditBuySheet({
   // The stock being bought names the sheet once it's known: from step 4, or from the start when it was preset.
   const named = step === "amount" ? stock : preset;
   const title = named ? `Credit Buy ${named.name}` : "Credit Buy";
-  const back: Step | null =
-    step === "much"
-      ? "back"
-      : step === "pick"
-        ? chosen
-          ? "much"
-          : "back"
-        : step === "amount"
-          ? preset
-            ? chosen
-              ? "much"
-              : "back"
-            : "pick"
-          : null;
+  const back: Step | null = step === "pick" ? "back" : step === "amount" ? (preset ? "back" : "pick") : null;
   const leave = step === "back" && preset ? onBack : undefined;
   // The plain line under "You can use up to": cash pays the network fee (D4), so without it the fee comes first.
   const creditLine = cashRaw(data.cash) < feeBufferRaw ? FEE_FIRST : CREDIT_FROM;
@@ -328,8 +313,18 @@ export function CreditBuySheet({
               </div>
             ) : (
               <>
-                <h3 className="label m-0 px-1">Back it with</h3>
+                {/* Board 30: Credit ready first (what already backs credit, nothing new goes in), then each stock that
+                    can back new credit, with what it backs on its own. */}
                 <div role="radiogroup" aria-label="Back it with" className="flex flex-col gap-2">
+                  {canUseExisting && (
+                    <ReadyRow
+                      names={backers(data.holdings, []).map((h) => h.name)}
+                      usd={existingLeft}
+                      checked={pickedKey === EXISTING}
+                      onPick={() => choose(EXISTING)}
+                    />
+                  )}
+                  {options.length > 0 && <h3 className="label m-0 px-1 pt-2">Back new credit with</h3>}
                   {options.map((o) => {
                     const h = data.holdings.find((x) => x.symbol === o.stock.symbol)!;
                     return (
@@ -339,25 +334,16 @@ export function CreditBuySheet({
                         checked={pickedKey === h.symbol}
                         right={
                           <>
+                            <span className="text-[11.5px] text-ink-mid">Up to</span>
                             <span className="num text-[20px] font-bold leading-[1.1] tracking-[-0.02em]">
-                              {formatUsd(o.freeUsd)}
+                              {wholeUsd(ownCreditUsd(data, o))}
                             </span>
-                            <span className="whitespace-nowrap text-[11.5px] text-ink-mid">free</span>
                           </>
                         }
                         onPick={() => choose(h.symbol)}
                       />
                     );
                   })}
-                  {canUseExisting && (
-                    <ExistingRow
-                      names={backers(data.holdings, []).map((h) => h.name)}
-                      valueUsd={data.totalBackingUsd}
-                      reachUsd={existingLeft}
-                      checked={pickedKey === EXISTING}
-                      onPick={() => choose(EXISTING)}
-                    />
-                  )}
                 </div>
                 <CantBack
                   inUse={
@@ -395,17 +381,18 @@ export function CreditBuySheet({
                   </>
                 ) : (
                   <>
-                    {/* The board's "Your cash isn't used": the network fee is paid from cash. D19: no "It keeps earning." */}
-                    <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">
-                      Amounts move with the price. Your cash only pays the network fee.
-                    </p>
+                    {options.length > 0 && (
+                      <p className="m-0 px-1 text-[12.5px] leading-[1.4] text-ink-mid">
+                        Only what your buy needs goes in.
+                      </p>
+                    )}
                     <Button
                       variant="dark"
                       disabled={!pickedKey}
                       onClick={() => {
                         // Hold the pick from here on: the default must not move to another holding when prices tick.
                         choose(pickedKey);
-                        go(chosen ? "much" : afterBacking);
+                        go(afterBacking);
                       }}
                       className="mt-1"
                     >
@@ -433,69 +420,6 @@ export function CreditBuySheet({
                 </Button>
               </>
             )
-          ) : step === "much" && chosen && chosenHolding ? (
-            <>
-              <AmountField
-                label="How much to put in use"
-                badge={<StockAvatar symbol={chosen.stock.symbol} />}
-                value={typed ? backUsd : ""}
-                onValue={(v) => {
-                  // The whole free value typed is all of it from now on; otherwise the shares it is worth now.
-                  const usd = Math.max(0, Number(v) || 0);
-                  setBacking(v, isAllFree(chosen, usd), backingRawFor(chosen, usd));
-                }}
-                onMax={() => setBacking(freeShownUsd(chosen).toFixed(2), true, chosen.freeRaw)}
-                hint={
-                  reach.block === "over-free"
-                    ? `${formatShares(chosenHolding.freeShares)} ${tickerOf(chosen.stock.symbol)} shares · ${formatUsd(chosen.freeUsd)} free`
-                    : `${formatShares(rawToShares(pick.raw, chosenHolding.multiplier, chosen.stock.decimals))} of ${formatShares(chosenHolding.freeShares)} ${tickerOf(chosen.stock.symbol)} shares · ${formatUsd(chosen.freeUsd)} free`
-                }
-                autoFocus
-              />
-              <UseUpTo
-                usd={canUse ? reachUsd : 0}
-                line={
-                  reach.block === "over-free"
-                    ? null
-                    : data.status === "act"
-                      ? CREDIT_BLOCKED["in-act"]
-                      : canUse
-                        ? // Ties the two dollar figures together (Adrian: "up to 3 but MAX is 3.99?"): credit is a share of what's
-                          // put in use (its collateral factor over the cap's line, CREDIT_CAP.minHf), plus any credit left on
-                          // what already backs credit, or less what that credit already needs when it's under the line.
-                          creditLine === FEE_FIRST
-                          ? creditLine
-                          : `${pick.raw > 0n ? `About ${Math.round((chosen.cf / CREDIT_CAP.minHf) * 100)}% of the ${formatUsd(backAmount || chosen.freeUsd)} of ${chosen.stock.name} you put in use${existingLeft > 0 ? ", plus what’s left on what already backs credit" : data.debtUsd > 0 ? ", less what your credit already needs" : ""}.` : "From what already backs credit."}${reach.maxSafeUsd >= 1 ? ` Stays Safe up to ${wholeUsd(reach.maxSafeUsd)}.` : ""}`
-                        : backAmount > 0 || pick.raw > 0n
-                          ? `A Credit Buy needs at least ${formatUsd(BUY_LIMITS.minUsd)} of credit. Put more in use.`
-                          : `Type how much ${chosen.stock.name} to put in use.`
-                }
-              />
-              {canUse && data.debtUsd > 0 && (
-                <Summary
-                  rows={[
-                    // How much of it keeps the credit Safe (D2's bands); none at all reads in the status instead.
-                    // What putting it in use does on its own, before any new credit (nothing owed has no status yet).
-                    ...(data.debtUsd > 0
-                      ? [{ label: "Status", value: <StatusChange from={reach.before} to={reach.after} /> }]
-                      : []),
-                  ]}
-                />
-              )}
-              {reach.block === "over-free" && (
-                <p role="status" className="m-0 text-[13px] leading-snug text-act">
-                  That’s more than your free {chosen.stock.name} ({formatUsd(chosen.freeUsd)}).
-                </p>
-              )}
-              {against.length > 0 && (
-                <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">
-                  {riskNote(againstNames, protect === "on")}
-                </p>
-              )}
-              <Button variant="dark" disabled={!canUse} onClick={() => go(afterBacking)} className="mt-1">
-                Continue
-              </Button>
-            </>
           ) : step === "pick" ? (
             <div className="flex flex-col gap-4 pt-1">
               <CreditHero available={{ usd: reachUsd, line: creditLine }} failed={false} onRetry={cfRead.retry} />
@@ -506,11 +430,12 @@ export function CreditBuySheet({
               <AmountField
                 label="On credit"
                 source={
-                  against.length > 0 && (
-                    <AmountSource mark={<StockAvatar symbol={against[0].symbol} size={16} />}>
-                      Against {against[0].name}
-                      {against.length > 1 ? ` +${against.length - 1}` : ""}
+                  chosen ? (
+                    <AmountSource mark={<StockAvatar symbol={chosen.stock.symbol} size={16} />}>
+                      Back: {chosen.stock.name}
                     </AmountSource>
+                  ) : (
+                    <AmountSource mark={<BacksIcon size={12} />}>Credit ready</AmountSource>
                   )
                 }
                 badge={<AmountBadge kind="credit" />}
@@ -520,10 +445,17 @@ export function CreditBuySheet({
                   setAck(false);
                 }}
                 onMax={() => {
-                  setRaw(String(Math.max(0, Math.floor(plan.maxUsd))));
+                  setRaw(String(Math.max(0, Math.floor(reachUsd))));
                   setAck(false);
                 }}
-                hint={`Up to ${wholeUsd(plan.maxUsd)} against your ${shortNames(againstNames)}`}
+                hint={
+                  <span className="flex justify-between gap-2 text-[12.5px] text-ink-mid">
+                    <span className="num truncate font-medium text-ink">{backingLine}</span>
+                    <span className="shrink-0 whitespace-nowrap">
+                      Up to <b className="num font-semibold text-ink">{wholeUsd(reachUsd)}</b>
+                    </span>
+                  </span>
+                }
                 autoFocus
               />
               <AmountArrow />
@@ -532,22 +464,33 @@ export function CreditBuySheet({
                 shares={quote.isFetching && amount > 0 ? null : econ ? econ.shares : 0}
                 priceUsd={econ ? econ.price : oraclePriceUsd}
               />
-              <Summary
-                rows={[
-                  {
-                    label: "Cost",
-                    value: `${(data.apr * 100).toFixed(1)}% a year · ${monthlyCostText(monthlyCost(amount, data.apr))}`,
-                  },
-                  {
-                    label: against.length === 1 ? `Credit left on ${against[0].name}` : "Credit left",
-                    value: wholeUsd(plan.maxUsd - amount),
-                  },
-                  {
-                    label: "Status after",
-                    value: <span className={AFTER_TONE[plan.after]}>{STATUS_LABEL[plan.after]}</span>,
-                  },
-                ]}
-              />
+              {/* Board 34 (Adrian: say how much it moves): the bar from now to after, and the status change. */}
+              <div className="flex flex-col gap-2 rounded-[16px] border border-line-field bg-card px-3.5 py-3 leading-[normal]">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-[13px] font-medium text-ink-mid">Your credit</span>
+                  {moved && plan.after !== plan.before ? (
+                    <StatusChange from={plan.before} to={plan.after} />
+                  ) : (
+                    <StatusPill status={plan.before} size="sm" />
+                  )}
+                </div>
+                <StatusMoveBar
+                  now={data.healthFactor}
+                  after={moved ? plan.hfAfter : undefined}
+                  label={
+                    moved
+                      ? `Now ${STATUS_LABEL[plan.before]}, after this ${STATUS_LABEL[plan.after]}`
+                      : STATUS_LABEL[plan.before]
+                  }
+                  className={moved ? "mt-5" : "mt-2"}
+                />
+                <div className="num mt-1 flex justify-between gap-3 border-t border-line-field pt-2 text-[12.5px]">
+                  <span className="text-subtle">Cost</span>
+                  <span className="font-semibold text-ink-2">
+                    {(data.apr * 100).toFixed(1)}% a year · {monthlyCostText(monthlyCost(amount, data.apr))}
+                  </span>
+                </div>
+              </div>
               {(blocker || warnPremium || plan.priceMayMove) && (
                 <p role="status" className={`m-0 text-[13px] leading-snug ${blocker ? "text-act" : "text-watch-text"}`}>
                   {blocker ??
@@ -669,98 +612,41 @@ function StockLists({
 }
 
 /**
- * Step 2's live answer under the amount: "You can use up to $X", the credit this backing gives with what already backs
- * credit (planCredit's MAX), in whole dollars like the sheet's other credit figures, and one plain line (none while a
- * red line says the amount is more than is free).
+ * Step 1's Credit ready (board 30): the credit left on what already backs credit, from which stocks, picked first.
+ * Using it puts nothing new in, so the amount step shows how far it moves the credit.
  */
-function UseUpTo({ usd, line }: { usd: number; line: string | null }) {
-  const whole = Math.floor(usd);
-  return (
-    <div
-      className="flex flex-col gap-1 rounded-[16px] border border-line-field bg-card px-3.5 py-3 leading-[normal]"
-      aria-live="polite"
-    >
-      {/* At $0 the label drops "up to", as step 1's CreditHero does. */}
-      <span className="label">{whole === 0 ? "Credit you can use" : "Credit it gives you"}</span>
-      <span className="num inline-flex items-baseline">
-        <span aria-hidden className="text-[18px] font-medium text-ink-mid">
-          $
-        </span>
-        <span aria-hidden className="text-[32px] font-semibold leading-none tracking-[-0.04em]">
-          {whole.toLocaleString("en-US")}
-        </span>
-        <span className="sr-only">{formatUsdTrim(whole)}</span>
-      </span>
-      {line && <p className="m-0 text-pretty text-[13px] leading-[1.4] text-ink-mid">{line}</p>}
-    </div>
-  );
-}
-
-/**
- * Step 1's row for what already backs credit (when there is some): picking it puts nothing new in use, and the buy
- * uses the credit left on it. Without `onPick` (under the $1 minimum buy) it says there's nothing left, with Repay.
- */
-function ExistingRow({
+function ReadyRow({
   names,
-  valueUsd,
-  reachUsd,
+  usd,
   checked,
   onPick,
 }: {
   names: string[];
-  valueUsd: number;
-  reachUsd: number;
+  usd: number;
   checked: boolean;
-  onPick?: () => void;
+  onPick: () => void;
 }) {
-  const body = (
-    <>
-      <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-full bg-ink text-on-ink">
-        <BacksIcon size={12} />
-      </span>
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="text-[15px] font-semibold">Already backs credit</span>
-        <span className="num truncate text-[12.5px] text-ink-mid">
-          {shortNames(names)} · {formatUsd(valueUsd)}
-        </span>
-        {!onPick && (
-          <span className="text-[12px] text-ink-mid">
-            Nothing left to use · <RepayLink />
-          </span>
-        )}
-      </span>
-      {onPick ? (
-        <span className="flex shrink-0 flex-col gap-px text-right">
-          <span className="num text-[20px] font-bold leading-[1.1] tracking-[-0.02em]">{wholeUsd(reachUsd)}</span>
-          <span className="whitespace-nowrap text-[11.5px] text-ink-mid">left to use</span>
-        </span>
-      ) : (
-        <span className="shrink-0 whitespace-nowrap text-[13px] font-semibold text-ink-mid">Not available</span>
-      )}
-      <Radio checked={checked} />
-    </>
-  );
-  const cls = "flex min-h-11 items-center gap-3 rounded-[16px] bg-card px-3.5 py-3 text-left leading-[normal] text-ink";
-  return onPick ? (
+  return (
     <button
       type="button"
       role="radio"
       aria-checked={checked}
       onClick={onPick}
-      className={`${cls} ${checked ? "border-[1.5px] border-ink" : "border border-line-field"}`}
+      className={`flex min-h-11 items-center gap-3 rounded-[16px] bg-card px-3.5 py-3 text-left leading-[normal] text-ink ${checked ? "border-[1.5px] border-ink" : "border border-line-field"}`}
     >
-      {body}
+      <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-full bg-ink text-on-ink">
+        <BacksIcon size={12} />
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="text-[15px] font-semibold">Credit ready</span>
+        <span className="truncate text-[12.5px] text-ink-mid">From {shortNames(names)}</span>
+      </span>
+      <span className="flex shrink-0 flex-col gap-px text-right">
+        <span className="text-[11.5px] text-ink-mid">Up to</span>
+        <span className="num text-[20px] font-bold leading-[1.1] tracking-[-0.02em]">{wholeUsd(usd)}</span>
+      </span>
+      <Radio checked={checked} />
     </button>
-  ) : (
-    <div
-      role="radio"
-      aria-checked={false}
-      aria-disabled
-      aria-label="Already backs credit, not available: nothing left to use"
-      className={`${cls} border border-line-field opacity-60`}
-    >
-      {body}
-    </div>
   );
 }
 
@@ -829,19 +715,21 @@ function CreditHero({
   failed: boolean;
   onRetry: () => void;
 }) {
-  const whole = available ? Math.floor(available.usd) : 0;
+  // Rounded down; to the cent under $100, so a small account's $0.72 isn't "$0".
+  const figure = available ? wholeUsd(available.usd) : "$0";
+  const none = !available || available.usd < 0.01;
   return (
     <div className="flex flex-col gap-1.5 px-1 leading-[normal]">
-      <span className="label">{available && whole === 0 ? "Credit you can use" : "You can use up to"}</span>
+      <span className="label">{available && none ? "Credit you can use" : "You can use up to"}</span>
       {available ? (
         <span className="num inline-flex items-baseline">
           <span aria-hidden className="text-[22px] font-medium text-ink-mid">
             $
           </span>
           <span aria-hidden className="text-[44px] font-semibold leading-none tracking-[-0.04em]">
-            {whole.toLocaleString("en-US")}
+            {figure.replace("$", "")}
           </span>
-          <span className="sr-only">{formatUsdTrim(whole)}</span>
+          <span className="sr-only">{figure}</span>
         </span>
       ) : failed ? null : (
         <span role="status" className="h-[42px] w-[150px] animate-pulse rounded-xl bg-chip">
@@ -954,11 +842,22 @@ function BackingRow({
     <>
       <StockAvatar symbol={h.symbol} size={36} font={ticker.length > 4 ? undefined : 10.5} weight={800} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="text-[15px] font-semibold">{h.name}</span>
+        <span className="flex items-center gap-1.5 text-[15px] font-semibold">
+          {h.name}
+          {onPick && h.backingShares > 0 && (
+            <span
+              title={`${wholePct(h.backingShares / (h.freeShares + h.backingShares))}% backs credit`}
+              className="num inline-flex h-[18px] items-center gap-[3px] rounded-[9px] bg-ground px-1.5 text-[10.5px] font-semibold text-ink-2"
+            >
+              {wholePct(h.backingShares / (h.freeShares + h.backingShares))}%
+              <BacksIcon size={10} />
+            </span>
+          )}
+        </span>
         <span className="num whitespace-nowrap text-[12.5px] text-ink-mid">
           {formatShares(h.freeShares + h.backingShares)} shares
         </span>
-        {(h.backingShares > 0 || reason) && (
+        {!onPick && (h.backingShares > 0 || reason) && (
           <span className="num whitespace-nowrap text-[12px] text-ink-mid">
             {reason ?? (
               <>

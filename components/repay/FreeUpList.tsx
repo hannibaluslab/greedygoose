@@ -4,7 +4,7 @@ import { useState } from "react";
 import { StockAvatar } from "@/components/gg/StockAvatar";
 import { AssetPicker, type PickerRow } from "@/components/gg/AssetPicker";
 import { LockIcon } from "@/components/gg/icons";
-import { formatShares, formatUsdTrim } from "@/lib/formatting";
+import { formatShares, formatUsd, formatUsdTrim } from "@/lib/formatting";
 import { wholePct } from "@/lib/holding";
 import type { planFreeUp } from "@/lib/freeUpPlan";
 
@@ -21,9 +21,9 @@ const sharesText = (share: number, held: number) => `${formatShares(share * held
 
 /**
  * "Choose stocks to free up" (canvas boards 2–6): one row per stock that backs credit. Unticked, a row says what can
- * come out of it now, as a share of what backs credit ("Free up All", "Up to 82%", "Limit reached", "Paused"); its line
- * counts only the shares that back credit ("2.40 backing · $600"), and ticked, how many of them come out ("0.60 of 2.40
- * backing", Adrian 2026-10-18); a chip shows how much in % (25%, 82%…), which opens
+ * come out of it now, as a share of what backs credit ("Free up All", "Up to 82%", "Limit reached", "Paused"), and under
+ * its name what that comes to ("1.97 shares ≈ $492.50"); ticked, what the pick frees and, unless it's all, what stays
+ * backing credit ("$107.50 stays backing", Adrian 2026-10-18); a chip shows how much in % (25%, 82%…), which opens
  * the list of picks. Custom takes a typed %. Over the rows, the free-up limit the ticked stocks use.
  */
 export function FreeUpList({
@@ -164,17 +164,7 @@ function StockRow({
           </span>
           <span className="flex min-w-0 flex-col gap-0.5">
             <span className="truncate text-[15px] font-semibold">{item.name}</span>
-            {row.picked ? (
-              <span className="num truncate text-[12.5px] font-medium text-ink">
-                {row.all
-                  ? `${formatShares(item.shares)} backing`
-                  : `${sharesText(row.share, item.shares)} of ${formatShares(item.shares)} backing`}
-              </span>
-            ) : (
-              <span className="num truncate text-[12.5px] text-ink-mid">
-                {formatShares(item.shares)} backing · {formatUsdTrim(Math.round(item.usd))}
-              </span>
-            )}
+            <RowLines item={item} row={row} blocked={blocked} />
           </span>
         </label>
         {row.picked ? (
@@ -238,6 +228,33 @@ function StockRow({
         </form>
       )}
     </div>
+  );
+}
+
+/**
+ * The lines under a stock's name: what comes out, in shares and about how much (Adrian, 2026-10-18), what a tick would
+ * free or what the pick frees, and, unless it's all, what stays backing credit. A row that can't free anything says
+ * what backs credit.
+ */
+function RowLines({ item, row, blocked }: { item: FreeUpItem; row: Row; blocked: boolean }) {
+  if (blocked)
+    return (
+      <span className="num truncate text-[12.5px] text-ink-mid">
+        {formatShares(item.shares)} backing · {formatUsdTrim(Math.round(item.usd))}
+      </span>
+    );
+  const out = row.picked ? row.share : row.canAll ? 1 : row.maxShare;
+  const worth = (share: number) => formatUsd(share * item.usd);
+  return (
+    <>
+      <span className={`num truncate text-[12.5px] ${row.picked ? "font-medium text-ink" : "text-ink-mid"}`}>
+        {row.all ? "All " : ""}
+        {sharesText(out, item.shares)} shares ≈ {worth(out)}
+      </span>
+      {row.picked && !row.all && (
+        <span className="num truncate text-[12px] text-ink-mid">{worth(1 - row.share)} stays backing</span>
+      )}
+    </>
   );
 }
 

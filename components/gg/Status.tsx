@@ -84,6 +84,61 @@ export function StatusBar({ healthFactor, label }: { healthFactor: number | null
   );
 }
 
+/**
+ * The bar with where the credit is now and where a change leaves it (the Repay sheet's card, Credit Buy's amount step):
+ * a hollow dot now, a solid dot labelled After, and the stretch between. `after` undefined: nothing changes yet, one
+ * solid dot where it is. A health factor of null (nothing owed) sits at the bar's start.
+ */
+export function StatusMoveBar({
+  now,
+  after,
+  label,
+  className = "",
+}: {
+  now: number | null;
+  after?: number | null;
+  label: string;
+  className?: string;
+}) {
+  const at = now === null ? 0 : barPosition(now);
+  const moves = after !== undefined;
+  const to = !moves ? at : after === null ? 0 : barPosition(after);
+  return (
+    <div role="img" aria-label={label} className={`relative flex h-1.5 gap-1 ${className}`}>
+      <span className="rounded bg-safe" style={{ flex: BAR.safe }} />
+      <span className="rounded bg-watch" style={{ flex: BAR.watch }} />
+      <span className="rounded bg-act" style={{ flex: BAR.act }} />
+      {moves && (
+        <>
+          {/* The way it moves, from now to after. */}
+          <span
+            aria-hidden
+            className="absolute top-px h-1 rounded-sm bg-ink/55"
+            style={{ left: `${Math.min(at, to) * 100}%`, width: `${Math.abs(at - to) * 100}%` }}
+          />
+          <span
+            aria-hidden
+            className="absolute -top-[22px] w-10 text-center text-[10.5px] font-bold text-ink"
+            style={{ left: `calc(${to * 100}% - 20px)` }}
+          >
+            After
+          </span>
+          <span
+            aria-hidden
+            className="absolute -top-[3px] size-3 rounded-full border-2 border-ink/35 bg-ground"
+            style={{ left: `calc(${at * 100}% - 6px)` }}
+          />
+        </>
+      )}
+      <span
+        aria-hidden
+        className="absolute -top-1 size-3.5 rounded-full border-2 border-card bg-ink shadow-[0_2px_6px_rgba(14,13,11,0.25)]"
+        style={{ left: `calc(${to * 100}% - 7px)` }}
+      />
+    </div>
+  );
+}
+
 /** An agent pill's colour: green when it's on, neutral otherwise. */
 type AgentTone = "on" | "neutral";
 

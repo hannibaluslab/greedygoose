@@ -16,6 +16,7 @@ import {
   assertCreditBuy,
   backers,
   backingOptions,
+  backingForBuy,
   backingRawFor,
   bestBacking,
   buildCreditBuyCalls,
@@ -26,6 +27,7 @@ import {
   creditWith,
   freeShownUsd,
   isAllFree,
+  ownCreditUsd,
   noCreditLine,
   planCredit,
   shortNames,
@@ -401,10 +403,10 @@ describe('creditAvailable (F2-3\'s "You can use up to")', () => {
     expect(bestBacking(fresh, [])).toBeNull();
   });
 
-  it("counts what already backs credit, net of what's owed", () => {
+  it("the most one Credit Buy can use: Credit ready, or the stock that backs the most on its own", () => {
     const backed: CreditPosition = { ...fresh, totalBackingUsd: 1_000, avgCf: 0.7, debtUsd: 300, healthFactor: 2.33 };
-    // (1,000 × 0.7 + 2,000 × 0.7) ÷ 1.12 − 300
-    expect(avail(backed, [nvdaFree]).usd).toBe(1_575);
+    // NVIDIA on its own: 2,000 × 0.7 ÷ 1.12 (more than Credit ready's 325).
+    expect(avail(backed, [nvdaFree]).usd).toBe(1_250);
     // Everything in use: the room on it alone, 1,000 × 0.7 ÷ 1.12 − 300.
     expect(avail(backed, [])).toEqual({ usd: 325, line: CREDIT_FROM });
   });
@@ -1014,33 +1016,21 @@ describe("Act is the line (Adrian, 2026-10-15): every way of taking credit may e
     );
   });
 
-  it("one number: Invest's buying power, step 1's pick, step 2's figure, step 3's headline, step 4's MAX and Up to, and Home's Available", () => {
+  it("one number: Invest's buying power, step 1's Up to, step 2's headline, and the amount's MAX and Up to", () => {
     const backed = at(1_000, 0.7, 300);
     const options = [msftFree, nvdaFree];
     const headline = creditAvailable({ position: backed, options, cash: walletCash, holdsStock: true }).usd;
-    const best = bestBacking(backed, options)!;
-    const all = { option: best.option, raw: best.option.freeRaw };
-    const step2 = planCredit({ position: backed, backing: all, creditRaw: 0n, cash: walletCash });
-    const step4 = planCredit({
-      position: backed,
-      backing: all,
-      creditRaw: usd(Math.floor(step2.maxUsd)),
-      cash: walletCash,
-    });
-    expect(headline).toBe(1_575); // (700 + 1,400) ÷ 1.12 − 300
-    expect(best.usd).toBe(headline);
-    expect(step2.maxUsd).toBe(headline);
-    expect(step4.maxUsd).toBe(headline);
-    expect(step4.block).toBeUndefined();
-    expect(planCredit({ position: backed, backing: all, creditRaw: usd(headline), cash: walletCash })).toMatchObject({
+    // NVIDIA on its own (2,000 × 0.7 ÷ 1.12) beats Microsoft's (500 × 0.78 ÷ 1.12) and Credit ready's 325.
+    expect(headline).toBe(1_250);
+    expect(ownCreditUsd(backed, nvdaFree)).toBe(headline);
+    // MAX with NVIDIA: Safe on its own would take more than is free, so all of it goes in, and it ends in Watch.
+    const pick = { option: nvdaFree, raw: backingForBuy(nvdaFree, headline) };
+    expect(pick.raw).toBe(nvdaFree.freeRaw);
+    expect(planCredit({ position: backed, backing: pick, creditRaw: usd(headline), cash: walletCash })).toMatchObject({
       after: "watch",
       block: undefined,
     });
-    expect(
-      planCredit({ position: backed, backing: all, creditRaw: usd(headline + 0.01), cash: walletCash }).block,
-    ).toBe("too-much");
-    expect(toUsdc(step4.limit.maxCreditRaw)).toBe(headline);
-    // usePosition's availableUsd (what the old Credit sheet called "Available") is the same cap on what already backs credit.
+    // Credit ready: the credit left on what already backs credit (usePosition's availableUsd, the same cap).
     expect(creditWith(backed)).toBe(creditCap(backed).maxUsd);
     expect(creditWith(backed)).toBe(325);
   });
@@ -1109,5 +1099,42 @@ describe("Act is the line (Adrian, 2026-10-15): every way of taking credit may e
   it("its words keep D17's and protocol words off screen", () => {
     for (const line of [CREDIT_BLOCKED.act, CREDIT_BLOCKED["in-act"], NO_CREDIT["in-act"]])
       expect(line).not.toMatch(/creditCall|loan|lock|aave|collateral|health/i);
+  });
+});
+
+describe("Credit Buy puts in only what the buy needs (boards 30–34)", () => {
+  // The boards' example: $600 of Apple free at a 78% backing factor, $250 a share.
+  const apple: BackingOption = {
+    stock: EQUITIES.find((e) => e.symbol === "AAPLc")!,
+    freeRaw: 240_000_000n,
+    freeUsd: 600,
+    cf: 0.78,
+  };
+  const none: CreditPosition = {
+    totalBackingUsd: 0,
+    avgCf: 0,
+    debtUsd: 0,
+    healthFactor: null,
+    usdcLiquidity: 1_000_000,
+    creditPaused: false,
+  };
+
+  it("a stock backs up to its free value × its factor ÷ the line, on its own", () => {
+    expect(ownCreditUsd(none, apple)).toBe(417.85);
+    // Never more than Aave has to lend.
+    expect(ownCreditUsd({ ...none, usdcLiquidity: 100 }, apple)).toBe(100);
+  });
+
+  it("puts in just enough for the buy to stay Safe on its own", () => {
+    // $150 × 1.5 ÷ 0.78 = $288.46 of Apple: 1.1538 shares of 2.40.
+    const raw = backingForBuy(apple, 150);
+    expect(Number(raw) / 1e8).toBeCloseTo(1.1538, 4);
+    expect(((Number(raw) / 1e8) * 250 * 0.78) / 150).toBeCloseTo(1.5, 3);
+  });
+
+  it("all of it when that's not enough, nothing for no credit", () => {
+    expect(backingForBuy(apple, 400)).toBe(apple.freeRaw);
+    expect(backingForBuy(apple, 0)).toBe(0n);
+    expect(backingForBuy(apple, Number.NaN)).toBe(0n);
   });
 });

@@ -49,6 +49,15 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
 - **One stock order** in every list: Home's (Apple, Amazon, Alphabet, Meta, Microsoft, NVIDIA, Tesla). Lists keep
   their groups (what can go before what can't); a default still opens on the cash or the biggest free stock.
 
+## Credit Buy (canvas boards 30–34)
+
+- Step 1: **Credit ready** first (the credit left on what already backs credit; nothing new goes in), then **Back new
+  credit with** each stock and what it backs on its own ("Up to $417"). Then the stock to buy, then the amount.
+- No "how much to put in" step: only what the buy needs goes in, enough of the picked stock for the buy to stay Safe on
+  its own, or all of it (then it may end in Watch, with the tick). The amount says "Backed by 1.16 Apple · $290".
+- The amount step shows how far the buy moves the credit: the bar from now to after, and "Safe → Watch" when it changes.
+  Credit ready only lowers health; new backing moves it toward Safe.
+
 ## Repay (canvas boards 1–8)
 
 - One sheet over the page: Pay with (cash or a stock) and the amount, then an optional "Also free up stocks".

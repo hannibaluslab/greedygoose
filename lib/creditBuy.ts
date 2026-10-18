@@ -1,5 +1,5 @@
 import { decodeFunctionData, erc20Abi, isAddressEqual, parseUnits } from "viem";
-import { CASH, RISK } from "@/config/risk";
+import { CASH, CREDIT_CAP, RISK } from "@/config/risk";
 import { swapOf } from "@/lib/allowlist";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
@@ -191,6 +191,27 @@ export function backingRawFor(option: BackingOption, usd: number): bigint {
 }
 
 /**
+ * What a stock can back on its own, all of its free shares at the line (boards 30–34, "Back new credit with"): its free
+ * value × its backing factor ÷ 1.12, in dollars rounded down to the cent. Credit ready (what already backs credit) is
+ * its own choice, so this never counts it; and never more than the whole position allows with it in (creditWith: what
+ * Aave has to lend, and what's owed past the line already).
+ */
+export const ownCreditUsd = (position: CreditPosition, option: BackingOption) =>
+  Math.floor(
+    Math.max(0, Math.min((option.freeUsd * option.cf) / CREDIT_CAP.minHf, creditWith(position, option))) * 100 + 1e-6,
+  ) / 100;
+
+/**
+ * The backing a Credit Buy of `creditUsd` puts in with `option` (boards 31–33): just enough of the stock for the buy to
+ * stay Safe on its own (its value × backing factor ÷ the credit ≥ Safe's line), never more than its free shares; when
+ * that's not enough, all of them, and the buy may end in Watch. Nothing for no credit.
+ */
+export function backingForBuy(option: BackingOption, creditUsd: number): bigint {
+  if (!(creditUsd > 0) || option.cf <= 0) return 0n;
+  return backingRawFor(option, Math.min(option.freeUsd, (creditUsd * RISK.safeMin) / option.cf));
+}
+
+/**
  * The most one Credit Buy can use with all of `option` in use and what already backs credit (planCredit's MAX with that
  * one option: step 2's MAX on it). Without `option`, the credit left on what already backs credit alone (step 1's "Already
  * backs credit" row).
@@ -352,7 +373,8 @@ export function creditAvailable(p: {
   cash: Cash;
   holdsStock: boolean;
 }): CreditAvailable {
-  const usd = Math.max(creditWith(p.position), bestBacking(p.position, p.options)?.usd ?? 0);
+  // The most one Credit Buy can use (boards 30–34): Credit ready, or the stock that backs the most on its own.
+  const usd = Math.max(creditWith(p.position), ...p.options.map((o) => ownCreditUsd(p.position, o)));
   const why = ((): NoCredit | undefined => {
     if (!p.holdsStock) return "no-stocks";
     if (p.position.creditPaused) return "paused";
