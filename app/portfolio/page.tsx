@@ -130,8 +130,9 @@ function Loaded({
         <MarketBanner />
       </section>
 
-      {/* The board's pills (52px, 15px labels with 18px icons), three even cells with Trade between: 8px apart so Credit Buy fits at 390px. */}
-      <div className="grid grid-cols-3 gap-2">
+      {/* The board's pills (52px, 15px labels with 18px icons), 8px apart, Trade between. Trade's short label takes the
+          narrowest cell and Credit Buy the widest, so its label fits on a small phone. */}
+      <div className="grid grid-cols-[1fr_0.82fr_1.18fr] gap-2">
         <Button variant="white" size="row" icon={<MarketIcon size={18} strokeWidth={1.8} />} onClick={openMarket}>
           Market
         </Button>
@@ -143,7 +144,7 @@ function Loaded({
         </Button>
       </div>
 
-      <HoldingList title="Your holdings">
+      <HoldingList title="My holdings">
         {held.length === 0 ? (
           <p className="m-0 py-4 text-[15px]">
             You don’t hold any supported stocks yet.{" "}

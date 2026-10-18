@@ -46,7 +46,7 @@ function Rates({ rates, left }: { rates: EarnRates; left: boolean }) {
   return (
     // What's left sizes to "about 1.9%" so it never wraps at 320px; the two rates share the rest.
     <dl className={`m-0 grid gap-2 ${left ? "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" : "grid-cols-2"}`}>
-      {cell("Your cash earns", pctText(rates.earn))}
+      {cell("My cash earns", pctText(rates.earn))}
       {cell("This credit costs", pctText(rates.cost))}
       {left &&
         cell(
@@ -220,7 +220,7 @@ export function EarnStep({
   return (
     <>
       <AmountField
-        label="Add to your cash"
+        label="Add to my cash"
         source={
           backedBy.length > 0 && (
             <AmountSource mark={<StockAvatar symbol={backedBy[0].symbol} size={16} />}>
@@ -244,7 +244,7 @@ export function EarnStep({
       />
       <Summary
         rows={[
-          { label: "Your cash earns", value: `${pctText(offer.rates.earn)} a year` },
+          { label: "My cash earns", value: `${pctText(offer.rates.earn)} a year` },
           { label: "This credit costs", value: cost === null ? "…" : `${pctText(cost)} a year` },
           { label: "What’s left", value: leftText },
           { label: "Status", value: <StatusChange from={homeStatus(plan.before)} to={homeStatus(plan.after)} /> },

@@ -85,7 +85,7 @@ export function StockPosition({ holding }: { holding: Holding }) {
   return (
     <section className="num flex flex-col gap-3 rounded-[22px] bg-card p-4 leading-[normal] shadow-card-elev">
       <div className="flex items-center justify-between">
-        <span className="label">Your holding</span>
+        <span className="label">My holding</span>
         <span className="text-xs text-subtle">At Aave’s price</span>
       </div>
       <div className="flex items-baseline justify-between gap-3">

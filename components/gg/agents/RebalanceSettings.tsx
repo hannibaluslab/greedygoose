@@ -207,7 +207,7 @@ export function RebalanceSettingsView({
     <div className="flex flex-col gap-2.5 leading-[normal]">
       <ManageCard>
         <div className="flex items-start justify-between gap-3">
-          <CardTitle title="Your mix" sub="A target for each stock" />
+          <CardTitle title="My mix" sub="A target for each stock" />
           {/* Ruling 24: no "Adds up to" before a stock is in the mix. */}
           {rows.length > 0 && (
             <span

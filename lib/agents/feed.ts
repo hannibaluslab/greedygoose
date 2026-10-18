@@ -207,7 +207,7 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
           ...owedRow(ctx),
           { label: "Status", value: [...word(e.hfBefore), " → ", ...word(e.hfAfter)] },
           // Cash is savings (D15): the repay came from it (plan §6's "From your cash: $X", in the board's 82px label).
-          { label: "Your cash", value: [`${usd(e.amountRaw)} used`] },
+          { label: "My cash", value: [`${usd(e.amountRaw)} used`] },
           ...usedRow(ctx, "today"),
         ],
       };
@@ -227,7 +227,7 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
           },
           ...owedRow(ctx),
           { label: "Status", value: [...word(e.hfBefore), " → ", ...word(e.hfAfter)] },
-          { label: "Your cash", value: cashAfterTrade(ctx) },
+          { label: "My cash", value: cashAfterTrade(ctx) },
           ...usedRow(ctx, "today"),
         ],
       };
@@ -277,7 +277,7 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
         ],
         details: [
           { label: "Why", value: ["Your mix drifted too far from its target."] },
-          { label: "Your cash", value: cashAfterTrade(ctx) },
+          { label: "My cash", value: cashAfterTrade(ctx) },
           ...usedRow(ctx, "this week"),
         ],
       };
@@ -299,7 +299,7 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
         ],
         details: [
           { label: "Why", value: ["Dollars other than USDC become cash, at 99.5% of face value or better."] },
-          { label: "Your cash", value: [`+${usd(e.usdcOutRaw)}`] },
+          { label: "My cash", value: [`+${usd(e.usdcOutRaw)}`] },
         ],
       };
     }

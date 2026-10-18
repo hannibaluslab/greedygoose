@@ -250,8 +250,8 @@ function Loaded({
       </section>
 
       <section className="grid grid-cols-4 gap-2 px-5 pt-[22px]">
-        <QuickAction onClick={openTrade} label="Trade" icon={<TradeIcon />} />
         <QuickAction onClick={money.topUp} label="Top up" icon={<PlusIcon />} />
+        <QuickAction onClick={openTrade} label="Trade" icon={<TradeIcon />} />
         <QuickAction onClick={openCreditBuy} label="Credit Buy" icon={<CreditIcon />} />
         {/* Rulings 3 and 38: nothing owed, Repay fades and a tap says why. */}
         <QuickAction
@@ -414,7 +414,7 @@ function LeverageTag({ data, onOpen }: { data: PositionData; onOpen: () => void 
     <button
       type="button"
       onClick={onOpen}
-      aria-label={`Your leverage: ${text}. What it means`}
+      aria-label={`My leverage: ${text}. What it means`}
       // The tap area stays 40px tall; the chip it holds is small and light, in proportion with the header.
       className="flex h-10 items-center"
     >

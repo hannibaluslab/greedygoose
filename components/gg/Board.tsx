@@ -301,7 +301,7 @@ export function BoardView({
           </Note>
         ) : null}
         {s.ranked.length > 0 && (
-          <List label={filter === "all" ? "Everyone, ranked" : "Your contacts, ranked"}>
+          <List label={filter === "all" ? "Everyone, ranked" : "My contacts, ranked"}>
             {s.ranked.map((l) => (l.kind === "gap" ? <Gap key={l.key} /> : row(l.person)))}
           </List>
         )}

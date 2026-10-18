@@ -167,7 +167,7 @@ export function StockSheet({
             <StockChart holding={holding} name={stock.name} />
             <div className="grid grid-cols-2 gap-2.5">
               <StatCard
-                label="Of your portfolio"
+                label="Of my portfolio"
                 value={
                   owned
                     ? `${((portfolioShare(holding.freeUsd + holding.backingUsd, data.stocksUsd) ?? 0) * 100).toFixed(1)}%`

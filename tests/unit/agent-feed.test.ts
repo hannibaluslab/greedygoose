@@ -43,7 +43,7 @@ describe("describeAgentEvent: the Agents board's rows", () => {
         Why: "Your credit fell deep into Act, so Protect sold at once.",
         "You owe": "$780 → $600",
         Status: "Act → Watch",
-        "Your cash": "Not touched",
+        "My cash": "Not touched",
         "Used today": "$180 of $300",
       },
     });
@@ -84,7 +84,7 @@ describe("describeAgentEvent: the Agents board's rows", () => {
     expect(row({ ...sale, hfAfter: hf(1.07) }, { pricesRaw: prices }).line).toBe(
       "Sold $180 of NVIDIA to repay. Still in Act.",
     );
-    expect(r.details["Your cash"]).toBe("Not used · +$1.80");
+    expect(r.details["My cash"]).toBe("Not used · +$1.80");
   });
 
   it("falls back to shares when Aave's price at the move can't be read", () => {
@@ -109,7 +109,7 @@ describe("describeAgentEvent: the Agents board's rows", () => {
       Why: "Your credit reached Act.",
       "You owe": "$780.01 → $660.01",
       Status: "Act → Watch",
-      "Your cash": "$120 used",
+      "My cash": "$120 used",
       "Used today": "$120 of $300",
     });
     const weekend = row({
@@ -132,7 +132,7 @@ describe("describeAgentEvent: the Agents board's rows", () => {
     expect(r).toMatchObject({ by: "Rebalance", line: "Sold $50 of Apple, bought $50 of NVIDIA." });
     expect(r.details).toEqual({
       Why: "Your mix drifted too far from its target.",
-      "Your cash": "Not touched",
+      "My cash": "Not touched",
       "Used this week": "$50 of $500",
     });
   });
@@ -160,7 +160,7 @@ describe("describeAgentEvent: the Agents board's rows", () => {
       line: "1,000 USDe arrived as $999.57 cash.",
       details: {
         Why: "Dollars other than USDC become cash, at 99.5% of face value or better.",
-        "Your cash": "+$999.57",
+        "My cash": "+$999.57",
       },
     });
     expect(

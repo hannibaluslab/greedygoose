@@ -42,7 +42,7 @@ export function AgentsView({
     <div className="relative flex min-h-dvh flex-col gap-3 px-5 pt-[calc(env(safe-area-inset-top)+8px)] leading-[normal]">
       <TabHeader title="Agents" back="/home" />
       {cards}
-      <section aria-label="Your agents" className="flex flex-col gap-2">
+      <section aria-label="My agents" className="flex flex-col gap-2">
         {rows}
         {!live && <p className="m-0 px-1 text-xs leading-[1.4] text-subtle">{NOT_LIVE}</p>}
       </section>
@@ -129,7 +129,7 @@ export function MixBar({ mixBps }: { mixBps: readonly number[] }) {
   return (
     <span
       role="img"
-      aria-label={`Your mix: ${set.map((e) => `${e.name} ${mixBps[e.reserveId] / 100}%`).join(", ")}`}
+      aria-label={`My mix: ${set.map((e) => `${e.name} ${mixBps[e.reserveId] / 100}%`).join(", ")}`}
       className="mt-1 flex h-1 w-full max-w-[160px] gap-px overflow-hidden rounded-[2px]"
     >
       {set.map((e) => (

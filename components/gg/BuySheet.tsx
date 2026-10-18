@@ -264,7 +264,7 @@ function creditRows(data: PositionData, plan: CreditPlan, cashRaw: bigint): Summ
     ? plan.backing.map((b) => b.stock.name)
     : data.holdings.filter((h) => h.backingRaw > 0n).map((h) => h.name);
   return [
-    { label: "From your cash", value: formatUsd(toUsd(cashRaw)) },
+    { label: "From my cash", value: formatUsd(toUsd(cashRaw)) },
     { label: "On credit", value: formatUsd(creditUsd) },
     { label: "Backed by", value: backers.length > 2 ? `${backers.length} of your stocks` : inWords(backers) },
     {

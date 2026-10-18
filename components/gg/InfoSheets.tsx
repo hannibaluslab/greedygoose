@@ -185,7 +185,7 @@ export function LeverageSheet({
       open={open}
       onOpenChange={(next) => !next && onClose()}
       look="info"
-      title="Your leverage"
+      title="My leverage"
       titleAccessory={<StatusPill status={status} size="sm" />}
       description="How much of what you hold runs on credit."
     >
@@ -279,7 +279,7 @@ export function StatusSheet({
       open={open}
       onOpenChange={(next) => !next && onClose()}
       look="info"
-      title="Your credit status"
+      title="My credit status"
       titleAccessory={<StatusPill status={status} size="sm" />}
       description={
         status === "none"

@@ -189,7 +189,7 @@ export function RepaySheet({
   const canSign = (sign !== null || (repayUsd === 0 && takeOuts.length > 0)) && (!needsTick || ack);
 
   return (
-    <SheetShell open={open} onOpenChange={onOpenChange} title="Your credit">
+    <SheetShell open={open} onOpenChange={onOpenChange} title="My credit">
       <SheetSteps stepKey="repay" className="flex flex-col gap-3">
         {data?.debtRaw === 0n ? (
           <p className="m-0 px-1 pb-2 text-[17px] text-ink-mid">{REPAY_COPY.nothingOwed}</p>

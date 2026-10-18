@@ -22,6 +22,11 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
 - **Agents** run on-chain in `GooseExecutor`, triggered by Chainlink Automation. There is no server and no database:
   the app reads everything from Base, and the price route is stateless.
 
+## Home
+
+- Quick actions: Top up, Trade, Credit Buy, Repay.
+- A tap on the name in the header copies it ("sam.justan.id"), with a toast.
+
 ## Credit health
 
 | Band  | Health factor | What happens                                         |
@@ -36,7 +41,7 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
   the health read after it; a result under 1.10 stops it.
 - **Protect** acts only in Act. It repays from cash first, sells backing stock only if cash can't, and brings the
   credit back to 1.20. It never acts in Safe or Watch and never sells on a weekend.
-- On Home, Credit's ⓘ opens "Your credit status": the bar with where the credit is, and what Safe, Watch and Act
+- On Home, Credit's ⓘ opens "My credit status": the bar with where the credit is, and what Safe, Watch and Act
   each mean. The owed amount opens the Credit sheet.
 
 ## Money rules
@@ -51,6 +56,7 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
 
 ## Credit Buy (canvas boards 30–34)
 
+- The stock to buy lists the other stocks first, then My holdings. MAX fills the most to the cent, rounded down.
 - Step 1: **Credit ready** first (the credit left on what already backs credit; nothing new goes in), then **Back new
   credit with** each stock and what it backs on its own ("Up to $417"). Then the stock to buy, then the amount.
 - No "how much to put in" step: only what the buy needs goes in, enough of the picked stock for the buy to stay Safe on
@@ -83,7 +89,7 @@ backing.
 - **Greedy Fatalities (to build, once its boards are checked):** every liquidated account is named automatically on its own tab, ranked by its multiple at the
   end. The rule is stated once before the first credit.
 - Leverage tag: "1.7x" (what you hold ÷ your own money), a small chip in Home's header while something is owed;
-  tapping it opens "Your leverage". On leaderboard rows **(to build, once its boards are checked)**. No greed points or
+  tapping it opens "My leverage". On leaderboard rows **(to build, once its boards are checked)**. No greed points or
   levels.
 
 ## Agents
@@ -102,6 +108,7 @@ backing.
 - Never on screen: borrow, loan, lock, locked, unlock, collateral, room, protocol names in instructions. Never: cooked,
   goosed, golden.
 - Use: credit, backs credit, free up, get back, in use, Cash.
+- Titles and labels say **My** ("My holdings", "My credit", "My mix"); sentences say you and your.
 - JAW appears only as the trust mark ("Enforced by JAW.id"), never in instructions.
 - An off button says why ("Enter an amount", "Add who to send to").
 - Buttons name the intent only ("Repay", "Repay & free up"). No confirm screens of ours: JAW's sheet is the

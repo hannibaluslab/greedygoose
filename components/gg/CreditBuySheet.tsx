@@ -67,6 +67,8 @@ const wholeUsd = (n: number) => {
   const usd = Math.max(0, n);
   return usd < 100 ? formatUsd(Math.floor(usd * 100 + 1e-6) / 100) : formatUsdTrim(Math.floor(usd));
 };
+/** MAX's amount: the most there is, to the cent, rounded down ("0.69", "417.35"). */
+const maxText = (n: number) => String(Math.floor(Math.max(0, n) * 100 + 1e-6) / 100);
 
 /**
  * Design boards "F2 · 3–5", reordered backing first (Adrian, 2026-10-15: "selecting and typing the amount of an asset
@@ -428,7 +430,14 @@ export function CreditBuySheet({
           ) : step === "pick" ? (
             <div className="flex flex-col gap-4 pt-1">
               <CreditHero available={{ usd: reachUsd, line: creditLine }} failed={false} onRetry={cfRead.retry} />
-              <StockLists held={held} others={others} priceOf={priceOf} withCash={false} onPick={pickStock} />
+              <StockLists
+                held={held}
+                others={others}
+                priceOf={priceOf}
+                withCash={false}
+                othersFirst
+                onPick={pickStock}
+              />
             </div>
           ) : step === "amount" && stock ? (
             <>
@@ -450,7 +459,8 @@ export function CreditBuySheet({
                   setAck(false);
                 }}
                 onMax={() => {
-                  setRaw(String(Math.max(0, Math.floor(reachUsd))));
+                  // To the cent, rounded down: a small account's $0.69 fills $0.69, not $0.
+                  setRaw(maxText(reachUsd));
                   setAck(false);
                 }}
                 hint={
@@ -472,7 +482,7 @@ export function CreditBuySheet({
               {/* Board 34 (Adrian: say how much it moves): the bar from now to after, and the status change. */}
               <div className="flex flex-col gap-2 rounded-[16px] border border-line-field bg-card px-3.5 py-3 leading-[normal]">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-[13px] font-medium text-ink-mid">Your credit</span>
+                  <span className="text-[13px] font-medium text-ink-mid">My credit</span>
                   {moved && plan.after !== plan.before ? (
                     <StatusChange from={plan.before} to={plan.after} />
                   ) : (
@@ -583,53 +593,66 @@ export function CreditBuySheet({
 
 const optionOf = (options: BackingOption[], h: Holding) => options.find((o) => o.stock.symbol === h.symbol);
 
-/** Step 3's lists (F2-3): your holdings first, then the other stocks. `withCash`: the $0 state, where a tap buys with cash. */
+/**
+ * Step 3's lists (F2-3): the holdings, then the other stocks. `othersFirst` (the stock to buy): the other stocks on
+ * top, since a Credit Buy usually buys something new, and the holdings under them. `withCash`: the $0 state, where a
+ * tap buys with cash.
+ */
 function StockLists({
   held,
   others,
   priceOf,
   withCash,
+  othersFirst = false,
   onPick,
 }: {
   held: Holding[];
   others: ReserveAsset[];
   priceOf: (symbol: string) => number;
   withCash: boolean;
+  othersFirst?: boolean;
   onPick: (s: ReserveAsset) => void;
 }) {
-  return (
+  const heldList = held.length > 0 && (
+    <PickList title="My holdings">
+      {held.map((h) => (
+        <PickRow
+          key={h.symbol}
+          symbol={h.symbol}
+          name={h.name}
+          owned={valueOf(h)}
+          priceUsd={h.priceUsd}
+          withCash={withCash}
+          disabled={false}
+          onClick={() => onPick(EQUITIES.find((e) => e.symbol === h.symbol)!)}
+        />
+      ))}
+    </PickList>
+  );
+  const othersList = others.length > 0 && (
+    <PickList title={withCash ? "Buy with cash" : held.length > 0 ? "Other stocks" : "Stocks"}>
+      {others.map((e) => (
+        <PickRow
+          key={e.symbol}
+          symbol={e.symbol}
+          name={e.name}
+          priceUsd={priceOf(e.symbol)}
+          withCash={withCash}
+          disabled={false}
+          onClick={() => onPick(e)}
+        />
+      ))}
+    </PickList>
+  );
+  return othersFirst ? (
     <>
-      {held.length > 0 && (
-        <PickList title="Your holdings">
-          {held.map((h) => (
-            <PickRow
-              key={h.symbol}
-              symbol={h.symbol}
-              name={h.name}
-              owned={valueOf(h)}
-              priceUsd={h.priceUsd}
-              withCash={withCash}
-              disabled={false}
-              onClick={() => onPick(EQUITIES.find((e) => e.symbol === h.symbol)!)}
-            />
-          ))}
-        </PickList>
-      )}
-      {others.length > 0 && (
-        <PickList title={withCash ? "Buy with cash" : held.length > 0 ? "Other stocks" : "Stocks"}>
-          {others.map((e) => (
-            <PickRow
-              key={e.symbol}
-              symbol={e.symbol}
-              name={e.name}
-              priceUsd={priceOf(e.symbol)}
-              withCash={withCash}
-              disabled={false}
-              onClick={() => onPick(e)}
-            />
-          ))}
-        </PickList>
-      )}
+      {othersList}
+      {heldList}
+    </>
+  ) : (
+    <>
+      {heldList}
+      {othersList}
     </>
   );
 }
