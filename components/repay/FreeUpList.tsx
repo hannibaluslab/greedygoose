@@ -82,6 +82,7 @@ export function FreeUpList({
             row={row}
             disabled={disabled}
             menuOpen={menu === item.symbol}
+            othersPicked={picked}
             onMenu={(on) => setMenu(on ? item.symbol : null)}
             onTick={(on) => onTick(item.symbol, on, row.canAll ? 1 : row.maxShare)}
             onShare={(share) => {
@@ -100,6 +101,7 @@ function StockRow({
   row,
   disabled,
   menuOpen,
+  othersPicked,
   onMenu,
   onTick,
   onShare,
@@ -108,6 +110,8 @@ function StockRow({
   row: Row;
   disabled: boolean;
   menuOpen: boolean;
+  /** Another stock is ticked: an unticked row's "Up to" is what that one leaves (Adrian: say so). */
+  othersPicked: boolean;
   onMenu: (open: boolean) => void;
   onTick: (on: boolean) => void;
   onShare: (share: number) => void;
@@ -198,7 +202,9 @@ function StockRow({
           <span className="shrink-0 text-[12.5px] text-ink-mid">Limit reached</span>
         ) : (
           <span className="flex shrink-0 flex-col items-end gap-0.5">
-            <span className="text-[11.5px] text-ink-mid">{row.canAll ? "Free up" : "Up to"}</span>
+            <span className="text-[11.5px] text-ink-mid">
+              {row.canAll ? "Free up" : othersPicked ? "With what’s left" : "Up to"}
+            </span>
             <span className="num text-[14px] font-semibold">{row.canAll ? "All" : `${wholePct(row.maxShare)}%`}</span>
           </span>
         )}
