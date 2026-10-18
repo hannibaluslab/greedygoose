@@ -798,7 +798,7 @@ describe("planTrade: stock → stock", () => {
       `In one go: exactly 0.015 NVDA is approved for the Aerodrome router and swapped for at least ${floor}, then exactly ${floor} is approved ` +
         `for the Aerodrome router and swapped for Apple. You get at least ${(Number(minOut(bq.amountOut)) / 1e8).toFixed(4)} AAPL. If either price ` +
         `moves more than 1%, the trade is cancelled, and NVIDIA never sells for more than 10% under Aave’s price ($200.00). What the sale brings ` +
-        `above ${floor} stays in your cash. NVIDIA and Apple here are tokenized stocks. They track the share price; they are not company shares or voting rights.`,
+        `above ${floor} stays in your cash.`,
     );
   });
 

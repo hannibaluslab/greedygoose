@@ -315,7 +315,6 @@ export function SmallPrint({
       {BUY_LIMITS.slippageBps / 100}%, the buy is cancelled.{" "}
       {plan &&
         `Credit costs ${(data.apr * 100).toFixed(2)}% a year (variable). If your stocks fall too far, part of them can be sold to repay what you owe. `}
-      {stock.name} here is a tokenized stock. It tracks the share price; it is not company shares or voting rights.
     </p>
   );
 }

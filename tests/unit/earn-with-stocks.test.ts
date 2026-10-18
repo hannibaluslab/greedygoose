@@ -293,7 +293,7 @@ describe("the words around the button", () => {
     expect(earnRiskLine({ names: ["Tesla"], protect: "starting", sell: "off" })).not.toMatch(/Protect is off/);
   });
 
-  it("lists every move in small print, with the tokenized-stock line", () => {
+  it("lists every move in small print; what a stock is stays on the stock sheet (ruling 35)", () => {
     const text = earnSmallPrint({
       backing: [{ symbol: "TSLAc", shares: 0.43 }],
       amountUsd: 1_000,
@@ -302,7 +302,7 @@ describe("the words around the button", () => {
       risk: "R.",
     });
     expect(text).toBe(
-      "In one go: 0.43 TSLA goes in use to back credit and $1,000 of credit comes to your cash and starts earning. You’ll owe $1,064, backed by Tesla. R. Tokenized stocks track the share price; they are not company shares or voting rights.",
+      "In one go: 0.43 TSLA goes in use to back credit and $1,000 of credit comes to your cash and starts earning. You’ll owe $1,064, backed by Tesla. R.",
     );
     expect(earnDone(500)).toBe("$500 is in your cash, earning.");
   });

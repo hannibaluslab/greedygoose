@@ -512,7 +512,7 @@ export function planRepay(p: {
 }
 
 /**
- * A repay by selling's small print (D7): every move in the batch, the floor, the repay and what the stock is. It may
+ * A repay by selling's small print (D7): every move in the batch, the floor and the repay. It may
  * name the venue and Aave's price, as the Sell step's small print does.
  */
 export function repaySmallPrint(
@@ -531,7 +531,6 @@ export function repaySmallPrint(
   return (
     `In one go: exactly ${out}is approved for the ${VENUE_LABEL[quote.venue]} router and sold for at least ${floor}, then ${repaid}. ` +
     `What the sale brings above that stays in your cash${source.feeFromSale ? `, ${formatUsd(CASH.feeBufferUsd)} of it for the network fee` : ""}. ` +
-    `It never sells for more than ${SELL_LIMITS.floorBps / 100}% under Aave’s price (${formatUsd(source.holding.priceUsd)}). ` +
-    `${source.stock.name} here is a tokenized stock. It tracks the share price; it is not company shares or voting rights.`
+    `It never sells for more than ${SELL_LIMITS.floorBps / 100}% under Aave’s price (${formatUsd(source.holding.priceUsd)}).`
   );
 }

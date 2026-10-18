@@ -703,7 +703,6 @@ export function swapSmallPrint(p: {
     `for at least ${formatUsd(toUsd(p.plan.minOutRaw))}, then exactly ${buyIn} is approved for the ${VENUE_LABEL[p.buyQuote.venue]} router ` +
     `and swapped for ${p.to.name}. You get at least ${atLeast} ${tickerOf(p.to.symbol)}. If either price moves more than ` +
     `${BUY_LIMITS.slippageBps / 100}%, the trade is cancelled, and ${p.from.name} never sells for more than ${SELL_LIMITS.floorBps / 100}% ` +
-    `under Aave’s price (${formatUsd(p.fromHolding.priceUsd)}). What the sale brings above ${buyIn} stays in your cash. ` +
-    `${p.from.name} and ${p.to.name} here are tokenized stocks. They track the share price; they are not company shares or voting rights.`
+    `under Aave’s price (${formatUsd(p.fromHolding.priceUsd)}). What the sale brings above ${buyIn} stays in your cash.`
   );
 }

@@ -265,7 +265,7 @@ export function earnSmallPrint(p: {
   // What's owed rounds up, as on Home: never shown as less than it is.
   return (
     `In one go: ${inWords(moves)}. You’ll owe ${formatUsdTrim(Math.ceil(p.owedUsd))}, backed by ${shortNames(p.backedBy)}. ` +
-    `${p.risk} Tokenized stocks track the share price; they are not company shares or voting rights.`
+    p.risk
   );
 }
 

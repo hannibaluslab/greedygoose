@@ -323,8 +323,8 @@ function Actions({
 }
 
 /**
- * The Sell step's small print (and the Trade sheet's stock → cash): every move in the batch (D7), the lowest price the
- * swap accepts and what the stock is.
+ * The Sell step's small print (and the Trade sheet's stock → cash): every move in the batch (D7) and the lowest price
+ * the swap accepts. What the stock is stays in the sheet's footnote (ruling 35).
  */
 export function SellSmallPrint({
   stock,
@@ -346,8 +346,7 @@ export function SellSmallPrint({
       In one go: {takeOutWords(plan.takeOutRaw, holding.multiplier, stock)}exactly {shares} {ticker} is approved for the{" "}
       {venue} router and swapped, and at least {formatUsd(toUsd(plan.minOutRaw))} lands in your cash. If the price falls
       under {floor} a share, the sale is cancelled, so it never sells for more than {SELL_LIMITS.floorBps / 100}% under
-      Aave’s price ({formatUsd(holding.priceUsd)}). {stock.name} here is a tokenized stock. It tracks the share price;
-      it is not company shares or voting rights.
+      Aave’s price ({formatUsd(holding.priceUsd)}).
     </p>
   );
 }

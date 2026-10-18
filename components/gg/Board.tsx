@@ -218,7 +218,10 @@ function Skeleton() {
   );
 }
 
-/** The tab: header, the All | Contacts filter, then the board in its state. `pickBar` floats over the tab bar. */
+/**
+ * The tab: header, the All | Contacts filter (not while the board opens soon, ruling 47), then the board in its state.
+ * `pickBar` floats over the tab bar.
+ */
 export function BoardView({
   filter,
   onFilter,
@@ -347,7 +350,8 @@ export function BoardView({
   return (
     <div className="relative flex min-h-dvh flex-col gap-3 px-5 pt-[calc(env(safe-area-inset-top)+8px)] leading-[normal]">
       <TabHeader title="Leaderboard" back="/home" />
-      <SegmentedControl label="Show" options={FILTERS} value={filter} onChange={onFilter} />
+      {/* Ruling 47: no All | Contacts while the board opens soon. */}
+      {state.kind !== "soon" && <SegmentedControl label="Show" options={FILTERS} value={filter} onChange={onFilter} />}
       {ready && filter === "all" && addable > 0 && (
         <div className="-mb-1 flex items-center justify-between px-1">
           <span className="text-[13px] text-ink-mid">
@@ -365,7 +369,7 @@ export function BoardView({
       {body}
       {pickBar && (
         <>
-          {/* Room under the last row for the bar. */}
+          {/* Space under the last row for the bar. */}
           <div aria-hidden className="h-[72px] shrink-0" />
           {pickBar}
         </>

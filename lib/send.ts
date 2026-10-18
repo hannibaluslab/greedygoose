@@ -605,7 +605,6 @@ export function planSend(p: {
             multiplier: holding?.multiplier,
             takeOutRaw,
             to: p.recipient.address,
-            name: holding?.name,
           })
         : null,
     button,
@@ -622,8 +621,9 @@ const exact = (raw: bigint, decimals: number) => {
 };
 
 /**
- * A Send's small print (D7): the one move, to the last decimal, with the full address, and what a stock is. It may name
- * the token, as the Buy and Sell steps' small print does. A stock's amount is in shares (raw × uiMultiplier).
+ * A Send's small print (D7): the one move, to the last decimal, with the full address. What a stock is stays on the
+ * stock sheet (ruling 35). It may name the token, as the Buy and Sell steps' small print does. A stock's amount is in
+ * shares (raw × uiMultiplier).
  */
 export function sendSmallPrint(p: {
   token: ReserveAsset;
@@ -632,15 +632,11 @@ export function sendSmallPrint(p: {
   /** Shares that come out of backing first (Up to $X). */
   takeOutRaw?: bigint;
   to: Address;
-  name?: string;
 }): string {
   const isCash = isAddressEqual(p.token.address, USDC.address);
   const what = isCash
     ? `exactly ${exact(p.amountRaw, USDC.decimals)} USDC`
     : `exactly ${exact((p.amountRaw * (p.multiplier ?? 10n ** 18n)) / 10n ** 18n, p.token.decimals)} ${tickerOf(p.token.symbol)}`;
-  const stockLine = isCash
-    ? ""
-    : ` ${p.name ?? p.token.name} here is a tokenized stock: it tracks the share price; it is not a company share and carries no vote.`;
   const out = isCash ? "" : takeOutWords(p.takeOutRaw ?? 0n, p.multiplier ?? 10n ** 18n, p.token);
-  return `In one go: ${out}${what} goes to ${getAddress(p.to)} on Base.${stockLine} A send can’t be undone.`;
+  return `In one go: ${out}${what} goes to ${getAddress(p.to)} on Base. A send can’t be undone.`;
 }
