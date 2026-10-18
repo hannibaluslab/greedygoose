@@ -5,7 +5,8 @@ import { AmountInput } from "./AmountInput";
 import { StockAvatar, tickerOf } from "./StockAvatar";
 import { CreditIcon, TradeIcon } from "./icons";
 import { CashMark } from "./AssetPicker";
-import { formatUsd } from "@/lib/formatting";
+import { formatShares, formatUsd } from "@/lib/formatting";
+import type { AmountHint } from "@/lib/trade";
 
 /**
  * Size ladder from NYM's amount field: the number steps down as it lengthens so it never runs
@@ -18,14 +19,12 @@ export function amountFontSize(value: string): number {
 
 /**
  * The canvas amount card (F1-4, F2-5): label with the money's source on the right, a round badge,
- * "$" + amount, optional MAX, a hint under it. With `unit`, an amount of shares: the ticker after
- * the number instead of the "$" before it (the stock sheet's sell step).
+ * "$" + amount, optional MAX, a hint under it (AmountHintLine).
  */
 export function AmountField({
   label,
   source,
   badge,
-  unit,
   value,
   onValue,
   decimals,
@@ -36,10 +35,8 @@ export function AmountField({
   label?: string;
   /** Where the money comes from, top right: an `AmountSource` pill ("Cash", "Against NVIDIA"). */
   source?: ReactNode;
-  /** The 30px round mark before the amount: an `AmountBadge`, or the stock's badge for shares. */
+  /** The 30px round mark before the amount: an `AmountBadge`, or the stock's badge. */
   badge?: ReactNode;
-  /** Shares of this ticker rather than dollars. */
-  unit?: string;
   onMax?: () => void;
   hint?: ReactNode;
 } & Omit<ComponentProps<typeof AmountInput>, "id" | "style" | "className">) {
@@ -61,15 +58,13 @@ export function AmountField({
       <div className="flex h-[30px] items-center gap-2.5">
         {badge}
         <div className="num flex min-w-0 flex-1 items-center font-semibold">
-          {!unit && (
-            <span
-              aria-hidden
-              className="mr-0.5 text-subtle transition-[font-size] duration-150 ease-out"
-              style={{ fontSize: Math.round(size * 0.72) }}
-            >
-              $
-            </span>
-          )}
+          <span
+            aria-hidden
+            className="mr-0.5 text-subtle transition-[font-size] duration-150 ease-out"
+            style={{ fontSize: Math.round(size * 0.72) }}
+          >
+            $
+          </span>
           <AmountInput
             id={id}
             value={value}
@@ -80,7 +75,6 @@ export function AmountField({
             style={{ fontSize: size }}
             {...rest}
           />
-          {unit && <span className="ml-1 shrink-0 text-sm font-semibold text-subtle">{unit}</span>}
         </div>
         {/* MAX follows the field: while it's disabled (a send or trade in flight), so is MAX. */}
         {onMax && (
@@ -95,11 +89,31 @@ export function AmountField({
         )}
       </div>
       {hint && (
-        <span id={`${id}-hint`} className="text-[12px] text-subtle">
+        <div id={`${id}-hint`} className="text-[12px] text-subtle">
           {hint}
-        </span>
+        </div>
       )}
     </div>
+  );
+}
+
+/**
+ * The line under an amount: the sentence for cash, or for a stock (canvas boards 9–11) "0.87 shares · $230.41 each" on
+ * the left, the dollars typed in shares at Aave's price, and "Up to $373" on the right.
+ */
+export function AmountHintLine({ hint }: { hint: AmountHint }) {
+  if (typeof hint === "string") return hint;
+  return (
+    <span className="flex justify-between gap-2 text-[12.5px] text-ink-mid">
+      <span className="num truncate">
+        {hint.shares > 0
+          ? `${formatShares(hint.shares)} shares · ${formatUsd(hint.priceUsd)} each`
+          : `${formatUsd(hint.priceUsd)} a share`}
+      </span>
+      <span className="shrink-0 whitespace-nowrap">
+        Up to <b className="num font-semibold text-ink">{formatUsd(hint.upToUsd)}</b>
+      </span>
+    </span>
   );
 }
 

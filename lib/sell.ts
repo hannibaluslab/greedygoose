@@ -7,10 +7,11 @@ import { buildRepayCalls, buildWithdrawCalls, fullRepayAmount, type Call } from 
 import type { ActivityItem } from "@/lib/activity/decode";
 import { assertAllowed, swapOf } from "@/lib/allowlist";
 import { feeBufferRaw, toUsd } from "@/lib/cash";
-import { formatUsdTrim } from "@/lib/formatting";
+import { formatShares, formatUsdTrim } from "@/lib/formatting";
 import { marketState } from "@/lib/market-hours";
 import { endsInAct, statusFor, type Status } from "@/lib/risk/status";
 import { SELL_LIMITS, aaveFloorRaw, buildSellCalls, sellEconomics, sellMinOut, type SellQuote } from "@/lib/swap/sell";
+import { rawToShares } from "@/lib/tokens/b20";
 import { USDC, type ReserveAsset } from "@/lib/tokens/registry";
 
 type Address = `0x${string}`;
@@ -121,6 +122,15 @@ export function saleRepayRaw(minOutRaw: bigint, debtRaw: bigint): bigint {
 /** `raw × f`, rounded down; all of it at f ≥ 1. */
 const part = (raw: bigint, f: number) =>
   f >= 1 ? raw : f > 0 ? (raw * BigInt(Math.floor(f * 1_000_000))) / 1_000_000n : 0n;
+
+/**
+ * The small print's first move when shares come out of backing before a sale or a send (D7): "0.0035 GOOGL comes out
+ * of backing your credit, then ". Nothing when none do.
+ */
+export const takeOutWords = (raw: bigint, multiplier: bigint, stock: ReserveAsset) =>
+  raw > 0n
+    ? `${formatShares(rawToShares(raw, multiplier, stock.decimals))} ${stock.symbol.replace(/c$/, "")} comes out of backing your credit, then `
+    : "";
 
 /**
  * Up to $X on a stock that backs credit (the "any" route, Sell, Trade and Send): its free shares plus the backing the

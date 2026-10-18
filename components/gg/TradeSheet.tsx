@@ -4,7 +4,7 @@ import { EQUITIES } from "@/lib/tokens/registry";
 import { useRef, useState } from "react";
 import { useAccount } from "wagmi";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
-import { AmountArrow, AmountBadge, AmountField, YouGet, YouGetCash } from "./AmountField";
+import { AmountArrow, AmountBadge, AmountField, AmountHintLine, YouGet, YouGetCash } from "./AmountField";
 import { AssetPicker, assetMark, type PickerRow } from "./AssetPicker";
 import { Button } from "./Button";
 import { useMoneySheets } from "./MoneySheets";
@@ -16,7 +16,7 @@ import { TxButton, TxDone, TxError } from "./TxUi";
 import { useBoughtHome } from "@/hooks/useBoughtHome";
 import { useBuyQuote, useBuyQuoteRaw } from "@/hooks/useBuyQuote";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
-import type { PositionData } from "@/hooks/usePosition";
+import { useWithBackingFactors, type PositionData } from "@/hooks/usePosition";
 import { useSellQuote } from "@/hooks/useSell";
 import { useTrade, type TradeSign } from "@/hooks/useTrade";
 import { formatShares } from "@/lib/formatting";
@@ -68,7 +68,7 @@ const pickerRows = (options: AssetOption[]): PickerRow[] =>
 export function TradeSheet({
   open,
   user,
-  data,
+  data: position,
   from: seedFrom,
   to: seedTo,
   onClose,
@@ -80,6 +80,8 @@ export function TradeSheet({
   to?: TradeAsset;
   onClose: () => void;
 }) {
+  // Each stock's backing factor on its holding: a stock that backs credit trades up to the 1.12 line (Up to $X).
+  const data = useWithBackingFactors(position);
   const { isConnected } = useAccount();
   const fee = useFeeSupport();
   const money = useMoneySheets();
@@ -228,15 +230,7 @@ export function TradeSheet({
               onValue={onValue}
               onMax={view.maxUsd > 0 ? onMax : undefined}
               disabled={busy}
-              hint={
-                <>
-                  {view.hint.map((line) => (
-                    <span key={line} className="block">
-                      {line}
-                    </span>
-                  ))}
-                </>
-              }
+              hint={<AmountHintLine hint={view.hint} />}
             />
             <AmountArrow onFlip={flip} disabled={busy} />
             {view.youGet.kind === "stock" ? (

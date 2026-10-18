@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useAccount } from "wagmi";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { MarketBanner } from "@/components/ui/MarketBanner";
-import { AmountArrow, AmountField, AmountSource, YouGetCash } from "./AmountField";
+import { AmountArrow, AmountField, AmountHintLine, AmountSource, YouGetCash } from "./AmountField";
 import { Button } from "./Button";
 import { StockAvatar, tickerOf } from "./StockAvatar";
 import { StatCard, StockActivity, StockChart, StockHeader, StockPosition } from "./StockOverview";
@@ -13,15 +13,16 @@ import { TxButton, TxDone, TxError } from "./TxUi";
 import { CreditIcon } from "./icons";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { useMarketPrices } from "@/hooks/useMarketPrices";
-import { useBackingFactors, type Holding, type PositionData } from "@/hooks/usePosition";
+import { useWithBackingFactors, type Holding, type PositionData } from "@/hooks/usePosition";
 import { useSell, useSellQuote } from "@/hooks/useSell";
 import { toUsd } from "@/lib/cash";
 import { formatShares, formatUsd } from "@/lib/formatting";
 import { portfolioShare } from "@/lib/holding";
-import { SELL_BLOCKED, floorPriceUsd, planSell, sellableRaw, type SellPlan } from "@/lib/sell";
+import { SELL_BLOCKED, floorPriceUsd, planSell, takeOutWords, type SellPlan } from "@/lib/sell";
+import { sellableOf, tradeAmount } from "@/lib/trade";
 import { SELL_LIMITS, sellEconomics, type SellQuote } from "@/lib/swap/sell";
 import { VENUE_LABEL } from "@/lib/swap/venues";
-import { rawToShares, sharesToRaw } from "@/lib/tokens/b20";
+import { rawToShares } from "@/lib/tokens/b20";
 import type { ReserveAsset } from "@/lib/tokens/registry";
 
 type Step = "stock" | "sell";
@@ -30,9 +31,10 @@ const ORDER: Step[] = ["stock", "sell"];
 /**
  * One stock in a sheet: NYM's CoinDetailSheet in the GreedyGoose kit, opened from the Home rail, the Invest rows and
  * the Market. The stock's market price and today's move, your holding and how it splits, the price chart, its share
- * of your portfolio and Aave's price (stocks earn no yield, D19), the actions, and this stock's moves. Selling free
- * shares is a step inside this sheet (useSell) whose Sell opens JAW's own sheet: the step says the lowest price, what
- * moves and the fee, so there is no confirm of ours. Buy, Credit Buy and Free up shares open their own flows, which
+ * of your portfolio and Aave's price (stocks earn no yield, D19), the actions, and this stock's moves. Selling is a step
+ * inside this sheet (useSell), in dollars up to $X: free shares first, then backing ones down to the 1.12 line, in one
+ * batch. Its Sell opens JAW's own sheet: the step says the lowest price, what moves and the fee, so there is no
+ * confirm of ours. Buy, Credit Buy and Free up shares open their own flows, which
  * come back here (StockSheets). For a stock you don't own: Buy and Credit Buy only.
  */
 export function StockSheet({
@@ -65,7 +67,7 @@ export function StockSheet({
 
   const [step, setStep] = useState<Step>("stock");
   const [direction, setDirection] = useState<"forward" | "back">("forward");
-  const [raw, setRaw] = useState("");
+  const [amount, setAmount] = useState("");
   const [all, setAll] = useState(false);
   // What went to JAW's sheet: once the sale lands the shares are re-read, and MAX's free shares are then none.
   const [sold, setSold] = useState(0n);
@@ -74,15 +76,14 @@ export function StockSheet({
     setStep(next);
   };
 
-  const ticker = tickerOf(stock.symbol);
   const owned = holding.freeRaw + holding.backingRaw > 0n;
-  const cf = useBackingFactors(data.holdings)?.[holding.symbol];
-  // Up to $X: the free shares, then backing shares down to the 1.12 line. MAX sells all of that, to the last unit;
-  // typed shares go through the token's multiplier.
-  const maxRaw = sellableRaw(holding, cf, data);
-  const sharesRaw = all ? maxRaw : sharesToRaw(raw, holding.multiplier, stock.decimals);
-  const maxShares = rawToShares(maxRaw, holding.multiplier, stock.decimals);
-  const maxUsd = maxShares * holding.priceUsd;
+  // Up to $X (canvas board 9): the free shares, then backing shares down to the 1.12 line. The dollars typed become
+  // shares at Aave's price, as on Trade; MAX, or an amount that would leave dust, sells all of that to the last unit.
+  const position = useWithBackingFactors(data);
+  const mine = position.holdings.find((h) => h.symbol === holding.symbol) ?? holding;
+  const cf = mine.cf;
+  const maxRaw = sellableOf(mine, position);
+  const { sharesRaw, maxUsd } = tradeAmount({ from: holding.symbol, to: "cash", amount, all, data: position });
 
   const quote = useSellQuote(stock, step === "stock" ? 0n : sharesRaw);
   const q = quote.data ?? null;
@@ -91,7 +92,7 @@ export function StockSheet({
   const econ = q ? sellEconomics(q, stock, holding.priceUsd) : null;
 
   let blocker: string | null = null;
-  if (sharesRaw > maxRaw) blocker = SELL_BLOCKED[holding.backingRaw > 0n ? "past-line" : "not-free"];
+  if (sharesRaw > maxRaw) blocker = SELL_BLOCKED[holding.backingRaw > 0n && cf ? "past-line" : "not-free"];
   else if (sharesRaw > 0n && quote.isSuccess && q === null) blocker = `There’s no market for ${stock.name} right now.`;
   else if (plan?.block) blocker = SELL_BLOCKED[plan.block];
   const warning =
@@ -171,9 +172,9 @@ export function StockSheet({
               onCreditBuy={onCreditBuy}
               onFreeUp={onFreeUp}
             />
-            {owned && holding.freeRaw === 0n && (
+            {owned && maxRaw === 0n && cf !== undefined && !holding.paused && (
               <p className="m-0 px-0.5 text-[13px] leading-snug text-ink-mid">
-                All of it backs credit. Free up shares to sell them.
+                All of it backs your credit right now. Repay some first to sell.
               </p>
             )}
             <StockActivity user={user} holding={holding} name={stock.name} owned={owned} />
@@ -187,19 +188,30 @@ export function StockSheet({
           <>
             <AmountField
               label="You sell"
-              source={
-                <AmountSource>{holding.backingRaw > 0n ? `Up to ${formatUsd(maxUsd)}` : "Free shares"}</AmountSource>
-              }
+              source={<AmountSource mark={<StockAvatar symbol={stock.symbol} size={16} />}>{stock.name}</AmountSource>}
               badge={<StockAvatar symbol={stock.symbol} />}
-              unit={ticker}
-              decimals={6}
-              value={all ? String(Math.floor(maxShares * 1e6) / 1e6) : raw}
+              value={amount}
               onValue={(v) => {
                 setAll(false);
-                setRaw(v);
+                setAmount(v);
               }}
-              onMax={() => setAll(true)}
-              hint={`${formatShares(maxShares)} shares · ${formatUsd(holding.priceUsd)} each`}
+              onMax={
+                maxUsd > 0
+                  ? () => {
+                      setAll(true);
+                      setAmount(String(maxUsd));
+                    }
+                  : undefined
+              }
+              hint={
+                <AmountHintLine
+                  hint={{
+                    shares: rawToShares(sharesRaw, holding.multiplier, stock.decimals),
+                    priceUsd: holding.priceUsd,
+                    upToUsd: maxUsd,
+                  }}
+                />
+              }
               autoFocus
             />
             <AmountArrow />
@@ -333,11 +345,11 @@ export function SellSmallPrint({
   const venue = VENUE_LABEL[quote.venue];
   return (
     <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">
-      In one go: exactly {shares} {ticker} is approved for the {venue} router and swapped, and at least{" "}
-      {formatUsd(toUsd(plan.minOutRaw))} lands in your cash. If the price falls under {floor} a share, the sale is
-      cancelled, so it never sells for more than {SELL_LIMITS.floorBps / 100}% under Aave’s price (
-      {formatUsd(holding.priceUsd)}). {stock.name} here is a tokenized stock. It tracks the share price; it is not
-      company shares or voting rights.
+      In one go: {takeOutWords(plan.takeOutRaw, holding.multiplier, stock)}exactly {shares} {ticker} is approved for the{" "}
+      {venue} router and swapped, and at least {formatUsd(toUsd(plan.minOutRaw))} lands in your cash. If the price falls
+      under {floor} a share, the sale is cancelled, so it never sells for more than {SELL_LIMITS.floorBps / 100}% under
+      Aave’s price ({formatUsd(holding.priceUsd)}). {stock.name} here is a tokenized stock. It tracks the share price;
+      it is not company shares or voting rights.
     </p>
   );
 }

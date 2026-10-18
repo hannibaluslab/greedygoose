@@ -27,9 +27,18 @@ import { formatShares, formatUsd, shortAddress } from "@/lib/formatting";
 import { fullName } from "@/lib/jaw/name";
 import { rawToShares } from "@/lib/tokens/b20";
 import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
-import { TRADE_COPY, clampAmount, maxUsdOf, sellableOf, sharesForUsdRaw, stockOf, type TradeData } from "@/lib/trade";
+import {
+  TRADE_COPY,
+  clampAmount,
+  maxUsdOf,
+  sellableOf,
+  sharesForUsdRaw,
+  stockOf,
+  type AmountHint,
+  type TradeData,
+} from "@/lib/trade";
 import { buildWithdrawCalls } from "@/lib/aave/tx";
-import { NO_DUST_USD, type SellPosition } from "@/lib/sell";
+import { NO_DUST_USD, takeOutWords, type SellPosition } from "@/lib/sell";
 
 /**
  * Send (Adrian, 2026-10-15): "replace pay by send, and let user send their assets out". NYM's SendSheet, Base only, in
@@ -56,9 +65,6 @@ export const SEND_COPY = {
   pill: (name: string) => `Send from: ${name}`,
   cashName: "Cash",
   cashHint: (usd: number) => `Cash available: ${formatUsd(usd)}`,
-  freeHint: (usd: number) => `Free to send: ${formatUsd(usd)}`,
-  backsHint: (usd: number) => `${formatUsd(usd)} of it backs your credit.`,
-  sharesHint: (shares: string, ticker: string) => `That’s ${shares} ${ticker}.`,
   subBacks: (usd: number) => `${formatUsd(usd)} of it backs your credit`,
   subShares: (shares: number) => `${formatShares(shares)} shares`,
   subAllBacks: "All of it backs your credit",
@@ -534,15 +540,11 @@ export function planSend(p: {
   const to = p.recipient ? recipientNote(p.recipient, p.user, p.checks) : null;
   const who = p.recipient ? (p.recipient.name ?? shortAddress(p.recipient.address)) : null;
 
-  const hint = !p.asset
-    ? []
+  const hint: AmountHint | null = !p.asset
+    ? null
     : p.asset === "cash"
-      ? [SEND_COPY.cashHint(data.cashUsd)]
-      : [
-          SEND_COPY.freeHint(maxUsd),
-          ...(holding && holding.backingRaw > 0n ? [SEND_COPY.backsHint(holding.backingUsd)] : []),
-          ...(sharesRaw > 0n && !amountBlock ? [SEND_COPY.sharesHint(formatShares(shares), ticker)] : []),
-        ];
+      ? SEND_COPY.cashHint(data.cashUsd)
+      : { shares, priceUsd: holding?.priceUsd ?? 0, upToUsd: maxUsd };
 
   const shown = amountRaw > 0n && !amountBlock;
   // A stock's dollars are what the shares sent are worth at Aave's price, not the dollars typed: on MAX, a refresh
@@ -598,6 +600,7 @@ export function planSend(p: {
             token,
             amountRaw,
             multiplier: holding?.multiplier,
+            takeOutRaw,
             to: p.recipient.address,
             name: holding?.name,
           })
@@ -623,6 +626,8 @@ export function sendSmallPrint(p: {
   token: ReserveAsset;
   amountRaw: bigint;
   multiplier?: bigint;
+  /** Shares that come out of backing first (Up to $X). */
+  takeOutRaw?: bigint;
   to: Address;
   name?: string;
 }): string {
@@ -632,6 +637,7 @@ export function sendSmallPrint(p: {
     : `exactly ${exact((p.amountRaw * (p.multiplier ?? 10n ** 18n)) / 10n ** 18n, p.token.decimals)} ${tickerOf(p.token.symbol)}`;
   const stockLine = isCash
     ? ""
-    : ` Only free shares are sent; what backs your credit stays. ${p.name ?? p.token.name} here is a tokenized stock: it tracks the share price; it is not a company share and carries no vote.`;
-  return `In one go: ${what} goes to ${getAddress(p.to)} on Base.${stockLine} A send can’t be undone.`;
+    : ` ${p.name ?? p.token.name} here is a tokenized stock: it tracks the share price; it is not a company share and carries no vote.`;
+  const out = isCash ? "" : takeOutWords(p.takeOutRaw ?? 0n, p.multiplier ?? 10n ** 18n, p.token);
+  return `In one go: ${out}${what} goes to ${getAddress(p.to)} on Base.${stockLine} A send can’t be undone.`;
 }

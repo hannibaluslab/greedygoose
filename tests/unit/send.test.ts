@@ -556,13 +556,13 @@ describe("Send's options and amount", () => {
     const v = planSend({ ...f, data: backer, user, recipient: null, checks: {} });
     expect(v.sharesRaw).toBe(amznHolding.freeRaw);
     expect(v.amountRaw).toBe(amznHolding.freeRaw);
-    expect(v.hint).toEqual(["Free to send: $1.80", "$1,721.43 of it backs your credit.", "That’s 0.008 AMZN."]);
+    expect(v.hint).toMatchObject({ shares: amznHolding.freeShares, upToUsd: 1.8 });
   });
 
   it("typed dollars become shares at Aave's price, rounded down, and the screen says how many", () => {
     const v = planSend({ asset: "TSLAc", amount: "10", all: false, data: backer, user, recipient: null, checks: {} });
     expect(v.sharesRaw).toBe(2_500_000n); // $10 at $400
-    expect(v.hint.at(-1)).toBe("That’s 0.025 TSLA.");
+    expect(v.hint).toMatchObject({ shares: 0.025, priceUsd: 400 });
   });
 
   it("says why the amount can't go", () => {
@@ -635,6 +635,16 @@ describe("Send's options and amount", () => {
     expect(sendSmallPrint({ token: amzn, amountRaw: 723_456n, multiplier: 2n * 10n ** 18n, to: sam })).toContain(
       "exactly 0.01446912 AMZN",
     );
+    // Up to $X: the shares that come out of backing are the first move.
+    const out = sendSmallPrint({
+      token: amzn,
+      amountRaw: 723_456n,
+      takeOutRaw: 500_000n,
+      multiplier: 10n ** 18n,
+      to: sam,
+    });
+    expect(out).toContain("In one go: 0.005 AMZN comes out of backing your credit, then exactly 0.00723456 AMZN goes");
+    expect(out).not.toContain("Only free shares");
   });
 });
 

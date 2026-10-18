@@ -12,6 +12,7 @@ import {
   SELL_BLOCKED,
   planSell,
   sellableRaw,
+  takeOutWords,
   type SellBlock,
   type SellPlan,
   type SellPosition,
@@ -56,6 +57,12 @@ export type TradeHolding = {
 
 /** The position's fields the Trade sheet reads (usePosition's data has them all). */
 export type TradeData = SellPosition & { holdings: TradeHolding[]; cash: Cash; cashUsd: number };
+
+/**
+ * The line under an amount: a sentence for cash, or for a stock (canvas boards 9–11) the dollars typed in shares at
+ * Aave's price and the most it can be, Up to $X.
+ */
+export type AmountHint = string | { shares: number; priceUsd: number; upToUsd: number };
 
 const usdcRaw = (usd: number) => parseUnits(usd.toFixed(USDC.decimals), USDC.decimals);
 const MIN_BUY_RAW = usdcRaw(BUY_LIMITS.minUsd);
@@ -171,8 +178,6 @@ export const TRADE_COPY = {
   toPill: (name: string) => `Trade to: ${name}`,
   cashName: "Cash",
   cashHint: (usd: number) => `Cash available: ${formatUsd(usd)}`,
-  freeHint: (usd: number) => `Free to trade: ${formatUsd(usd)}`,
-  backsHint: (usd: number) => `${formatUsd(usd)} of it backs your credit.`,
   subBacks: (usd: number) => `${formatUsd(usd)} of it backs your credit`,
   subShares: (shares: number) => `${formatShares(shares)} shares`,
   subAllBacks: "All of it backs your credit",
@@ -612,12 +617,13 @@ export function planTrade(p: {
           : [];
 
   const fromCash = p.from === "cash";
-  const hint = fromCash
-    ? [TRADE_COPY.cashHint(data.cashUsd)]
-    : [
-        TRADE_COPY.freeHint(maxUsd),
-        ...(fromHolding && fromHolding.backingRaw > 0n ? [TRADE_COPY.backsHint(fromHolding.backingUsd)] : []),
-      ];
+  const hint: AmountHint = fromCash
+    ? TRADE_COPY.cashHint(data.cashUsd)
+    : {
+        shares: fromStock && fromHolding ? rawToShares(sharesRaw, fromHolding.multiplier, fromStock.decimals) : 0,
+        priceUsd: fromHolding?.priceUsd ?? 0,
+        upToUsd: maxUsd,
+      };
 
   return {
     route,
@@ -692,7 +698,7 @@ export function swapSmallPrint(p: {
   const buyIn = formatUsd(toUsd(p.buyQuote.amountIn));
   const atLeast = (Number(minOut(p.buyQuote.amountOut)) / 10 ** p.to.decimals).toFixed(4);
   return (
-    `In one go: exactly ${shares} ${tickerOf(p.from.symbol)} is approved for the ${VENUE_LABEL[p.sellQuote.venue]} router and swapped ` +
+    `In one go: ${takeOutWords(p.plan.takeOutRaw, p.fromHolding.multiplier, p.from)}exactly ${shares} ${tickerOf(p.from.symbol)} is approved for the ${VENUE_LABEL[p.sellQuote.venue]} router and swapped ` +
     `for at least ${formatUsd(toUsd(p.plan.minOutRaw))}, then exactly ${buyIn} is approved for the ${VENUE_LABEL[p.buyQuote.venue]} router ` +
     `and swapped for ${p.to.name}. You get at least ${atLeast} ${tickerOf(p.to.symbol)}. If either price moves more than ` +
     `${BUY_LIMITS.slippageBps / 100}%, the trade is cancelled, and ${p.from.name} never sells for more than ${SELL_LIMITS.floorBps / 100}% ` +

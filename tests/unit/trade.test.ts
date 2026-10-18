@@ -566,7 +566,7 @@ describe("planTrade: cash → stock", () => {
     expect(v).toMatchObject({
       route: "buy",
       fromLabel: "You pay",
-      hint: ["Cash available: $1,939.18"],
+      hint: "Cash available: $1,939.18",
       button: "Buy NVIDIA",
       note: null,
       ready: false,
@@ -664,7 +664,7 @@ describe("planTrade: stock → cash", () => {
     expect(v).toMatchObject({
       route: "sell",
       fromLabel: "You sell",
-      hint: ["Free to trade: $50.00"],
+      hint: { upToUsd: 50 },
       button: "Sell NVIDIA",
       ready: true,
     });
@@ -693,16 +693,16 @@ describe("planTrade: stock → cash", () => {
     expect(planTrade({ ...base, amount: "50", sell: noPool }).blocker).toBe("There’s no market for NVIDIA right now.");
   });
 
-  it("all of it backs credit: Free to trade $0.00, why, and no MAX", () => {
+  it("all of it backs credit: Up to $0.00, why, and no MAX", () => {
     const v = planTrade({ from: "NVDAc", to: "cash", amount: "", all: false, data: backer, now: OPEN });
-    expect(v.hint).toEqual(["Free to trade: $0.00", "$2,500.00 of it backs your credit."]);
+    expect(v.hint).toMatchObject({ shares: 0, upToUsd: 0 });
     expect(v.maxUsd).toBe(0);
     expect(v.note).toEqual({ tone: "act", text: "All of your NVIDIA backs your credit." });
   });
 
-  it("some of it backs credit: the second line says how much", () => {
+  it("some of it backs credit, with no factor read: up to the free shares", () => {
     const v = planTrade({ from: "AMZNc", to: "cash", amount: "", all: false, data: backer, now: OPEN });
-    expect(v.hint).toEqual(["Free to trade: $1.80", "$1,721.43 of it backs your credit."]);
+    expect(v.hint).toMatchObject({ shares: 0, upToUsd: 1.8 });
     expect(v.note).toBeNull();
   });
 
@@ -805,7 +805,10 @@ describe("planTrade: stock → stock", () => {
   it("Amazon's free shares into NVIDIA on the backer: the From card says what backs credit", () => {
     const v = planTrade({ from: "AMZNc", to: "NVDAc", amount: "1.8", all: true, data: backer, now: OPEN });
     expect(v.sharesRaw).toBe(backer.holdings.find((h) => h.symbol === "AMZNc")!.freeRaw);
-    expect(v.hint).toEqual(["Free to trade: $1.80", "$1,721.43 of it backs your credit."]);
+    expect(v.hint).toMatchObject({
+      shares: backer.holdings.find((h) => h.symbol === "AMZNc")!.freeShares,
+      upToUsd: 1.8,
+    });
     expect(v.route).toBe("swap");
   });
 });
@@ -976,7 +979,7 @@ describe("words on the main screen", () => {
         buy: ready(buyQuoteFor("NVDAc", usd(100), 0.2)),
         now: OPEN,
       }).blocker,
-      ...planTrade({ from: "AMZNc", to: "cash", amount: "", all: false, data: backer }).hint,
+      String(planTrade({ from: "cash", to: "NVDAc", amount: "", all: false, data: backer }).hint),
     ];
     for (const l of lines) expect(l).not.toMatch(BANNED);
   });

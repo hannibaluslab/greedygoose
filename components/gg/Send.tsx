@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
 import { isAddressEqual, type Address } from "viem";
 import { useAccount } from "wagmi";
-import { AmountBadge, AmountField } from "./AmountField";
+import { AmountBadge, AmountField, AmountHintLine } from "./AmountField";
 import { AssetPicker, assetMark, type PickerRow } from "./AssetPicker";
 import { Button } from "./Button";
 import { Initial } from "./Initial";
@@ -16,7 +16,7 @@ import { TxButton, TxDone, TxError } from "./TxUi";
 import { CloseIcon, ReceiveIcon } from "./icons";
 import { useFollowing, useNames } from "@/hooks/useContacts";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
-import type { PositionData } from "@/hooks/usePosition";
+import { useWithBackingFactors, type PositionData } from "@/hooks/usePosition";
 import { useRecipient, useSend, type ToState } from "@/hooks/useSend";
 import { readLocal, subscribeLocal, type LocalActivity } from "@/lib/activity/local";
 import { shortAddress } from "@/lib/formatting";
@@ -73,7 +73,9 @@ function useLocalActivity(user: Address): LocalActivity[] {
  * Recent and Contacts as quick picks), the summary, the small print and one button that opens JAW's sheet once. No
  * confirm screen of ours. Receive, the address and its QR, is one tap away in the header.
  */
-export function SendScreen({ user, data }: { user: Address; data: PositionData }) {
+export function SendScreen({ user, data: position }: { user: Address; data: PositionData }) {
+  // Each stock's backing factor on its holding: a stock that backs credit sends up to the 1.12 line (Up to $X).
+  const data = useWithBackingFactors(position);
   const { isConnected } = useAccount();
   const fee = useFeeSupport();
   const money = useMoneySheets();
@@ -216,11 +218,7 @@ export function SendScreen({ user, data }: { user: Address; data: PositionData }
             onValue={(value) => dispatch({ type: "amount", value })}
             onMax={view.maxUsd > 0 ? () => dispatch({ type: "max" }) : undefined}
             disabled={busy}
-            hint={view.hint.map((line) => (
-              <span key={line} className="block">
-                {line}
-              </span>
-            ))}
+            hint={view.hint && <AmountHintLine hint={view.hint} />}
           />
           {view.amountNote && (
             <p role="alert" className="m-0 px-0.5 text-[13px] leading-snug text-act">
