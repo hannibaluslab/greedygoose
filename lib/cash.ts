@@ -22,6 +22,12 @@ const keepBackRaw = usdcRaw(CASH.keepBackUsd);
 export const feeBufferRaw = usdcRaw(CASH.feeBufferUsd);
 
 export const cashRaw = (c: Cash) => c.walletRaw + c.savingsRaw;
+/**
+ * How much of the fuel tank (the cash kept back for network fees) is there, in whole cents rounded down: a tank a
+ * fraction of a cent short never reads full.
+ */
+export const fuelTankUsd = (cashUsd: number) =>
+  Math.min(Math.floor(cashUsd * 100 + 1e-6), Math.round(CASH.feeBufferUsd * 100)) / 100;
 export const toUsd = (raw: bigint) => Number(raw) / 10 ** USDC.decimals;
 
 /** Whether Save runs for the account, from the job bits of GooseExecutor's `accounts(account)`. */

@@ -21,7 +21,8 @@ export function BalanceHero({
   even = false,
 }: Column & {
   value: number;
-  side: Column & { value: ReactNode; unit?: string };
+  /** `onClick`: the figure and its unit open something (Home: the owed amount opens the Credit sheet). */
+  side: Column & { value: ReactNode; unit?: string; onClick?: { label: string; run: () => void } };
   /** Two equal columns, not the figure's own width (Invest). */ even?: boolean;
 }) {
   return (
@@ -42,24 +43,79 @@ export function BalanceHero({
       {/* 8px under its label (Adrian: not tight under it, not down on the big figure's foot); stretched so the
           hairline runs on. */}
       <Divided className="flex items-start justify-center self-stretch pt-2">
-        <span className="flex items-baseline gap-1">
-          <span className="text-[30px] font-semibold leading-none tracking-[-0.03em]">{side.value}</span>
-          {side.unit && <span className="text-[13px] font-medium text-subtle">{side.unit}</span>}
-        </span>
+        {side.onClick ? (
+          <button
+            type="button"
+            aria-label={side.onClick.label}
+            onClick={side.onClick.run}
+            className="flex items-baseline gap-1 text-ink"
+          >
+            <SideFigure side={side} />
+          </button>
+        ) : (
+          <span className="flex items-baseline gap-1">
+            <SideFigure side={side} />
+          </span>
+        )}
       </Divided>
 
       {(sub || side.sub) && (
         <>
-          <div className="whitespace-nowrap pt-[5px] text-[13px] text-ink-mid">{sub}</div>
+          {/* Each line under a figure stays on one line (Adrian): smaller when it wouldn't fit, never two lines. */}
+          <div className="min-w-0 pt-[5px] text-[13px] text-ink-mid">
+            <FitLine align="start">{sub}</FitLine>
+          </div>
           {/* Stretched when empty, so the hairline still runs down beside the line under the big figure. */}
           <Divided className={`min-w-0 pt-[5px] text-[13px] text-ink-mid ${side.sub ? "" : "self-stretch"}`}>
-            {side.sub}
+            {side.sub && <FitLine align="center">{side.sub}</FitLine>}
           </Divided>
         </>
       )}
     </div>
   );
 }
+
+/**
+ * One line that never wraps: drawn at full size when it fits its column, else zoomed down to the column's width. Its
+ * width is measured at full size on an invisible copy, as FitMoney does, and again whenever the column resizes.
+ */
+function FitLine({ children, align }: { children: ReactNode; align: "start" | "center" }) {
+  const box = useRef<HTMLDivElement>(null);
+  const probe = useRef<HTMLSpanElement>(null);
+  const [k, setK] = useState(1);
+  useLayoutEffect(() => {
+    const measure = () => {
+      const room = box.current?.clientWidth;
+      const need = probe.current?.getBoundingClientRect().width;
+      if (!room || !need) return;
+      const next = Math.min(1, room / need);
+      setK((k) => (Math.abs(k - next) > 0.005 ? next : k));
+    };
+    measure();
+    const seen = new ResizeObserver(measure);
+    if (box.current) seen.observe(box.current);
+    if (probe.current) seen.observe(probe.current);
+    return () => seen.disconnect();
+  }, []);
+  return (
+    <div ref={box} className={`relative flex min-w-0 ${align === "center" ? "justify-center" : "justify-start"}`}>
+      <span ref={probe} aria-hidden className="invisible absolute left-0 top-0 inline-block whitespace-nowrap">
+        {children}
+      </span>
+      <span className="inline-block whitespace-nowrap" style={k < 1 ? { zoom: k } : undefined}>
+        {children}
+      </span>
+    </div>
+  );
+}
+
+/** The right column's figure and its unit ("$600 owed"). */
+const SideFigure = ({ side }: { side: { value: ReactNode; unit?: string } }) => (
+  <>
+    <span className="text-[30px] font-semibold leading-none tracking-[-0.03em]">{side.value}</span>
+    {side.unit && <span className="text-[13px] font-medium text-subtle">{side.unit}</span>}
+  </>
+);
 
 const ScaledMoney = ({ value, k }: { value: number; k: number }) => (
   <Money value={value} size={46 * k} dollarSize={22 * k} centsSize={19 * k} />

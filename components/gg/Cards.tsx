@@ -9,19 +9,19 @@ const CARD = "flex flex-col gap-2 rounded-[22px] px-4 py-3.5 leading-[normal]";
 
 /**
  * The dark Cash card on Home (board 2f): cash is savings plus wallet USDC (D15), with a USDC chip and one line under
- * it: "Always earning", or "Not earning yet" before the Save grant; `note` ("120 USDT arriving") takes the line's
- * place. `dim`: board 2g, money is in but earning isn't on yet, so the card sits at 60% with no shadow.
+ * it, the fuel tank ("Fuel tank: $0.10", Adrian 2026-10-18); `note` ("120 USDT arriving") takes the line's place.
+ * `dim`: board 2g, money is in but earning isn't on yet, so the card sits at 60% with no shadow.
  */
 export function CashCard({
   cashUsd,
-  earning,
+  line,
   note,
   dim = false,
   href,
   onClick,
 }: {
   cashUsd: number;
-  /** The line under the amount: "Always earning", "$25 earning" or "Not earning yet". */ earning: string;
+  /** The line under the amount: "Fuel tank: $0.10". */ line: string;
   note?: string;
   dim?: boolean;
   href?: string;
@@ -41,7 +41,7 @@ export function CashCard({
       </span>
       <MoneyCompact value={cashUsd} size={26} centsSize={15} centsClass="text-ink-on-dark-mute" lineHeight="normal" />
       <span className="-mt-1 flex items-center gap-0.5 text-[11px] text-ink-on-dark-mute">
-        {note ?? earning}
+        {note ?? line}
         {note && (href || onClick) && <ChevronRight size={12} strokeWidth={2.2} />}
       </span>
     </Tap>
@@ -50,15 +50,17 @@ export function CashCard({
 
 /**
  * The white Yield card next to Cash (board 2f): the cash rate (D19: stocks earn no yield, so it's the one rate) with a
- * VARIABLE chip. "Earned so far" joins it once it's read from the chain; never estimated from the rate.
+ * VARIABLE chip, and under it whether the cash earns: "Always earning", "$25 earning" or "Not earning yet".
  */
 export function YieldCard({
   apy,
+  line,
   dim = false,
   href,
   onClick,
 }: {
   apy: number | null;
+  line: string;
   dim?: boolean;
   href?: string;
   onClick?: () => void;
@@ -83,6 +85,7 @@ export function YieldCard({
         </span>
         <span className="text-[13px] text-subtle">APY</span>
       </span>
+      <span className="-mt-1 text-[11px] text-subtle">{line}</span>
     </Tap>
   );
 }

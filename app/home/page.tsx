@@ -16,7 +16,7 @@ import { StockSheets, useStockSheets } from "@/components/gg/StockSheets";
 import { ValueLine } from "@/components/gg/ValueLine";
 import { LeverageSheet, StatusSheet, TotalBalanceSheet, YieldSheet } from "@/components/gg/InfoSheets";
 import { StockAvatar } from "@/components/gg/StockAvatar";
-import { ChevronRight, CreditIcon, InfoIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/icons";
+import { ChevronRight, CreditIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/icons";
 import { useCashSetup } from "@/hooks/useCashSetup";
 import { useStartEarning } from "@/hooks/useStartEarning";
 import { useEntryBalances } from "@/hooks/useEntryBalances";
@@ -24,11 +24,12 @@ import { useMarketPrices } from "@/hooks/useMarketPrices";
 import { usePosition, type PositionData } from "@/hooks/usePosition";
 import { aprToApy } from "@/lib/aave/math";
 import { arrivedCoins, arrivedView, earningLine, rateText, type ArrivedView } from "@/lib/cashSetup";
-import { STATUS_LABEL, homeStatus } from "@/lib/risk/status";
+import { homeStatus } from "@/lib/risk/status";
 import { leverageOf, leverageText } from "@/lib/leverage";
 import { toast } from "sonner";
 import { StatusPill } from "@/components/gg/Status";
-import { formatUsdTrim, monthlyCostText } from "@/lib/formatting";
+import { fuelTankUsd } from "@/lib/cash";
+import { formatUsd, formatUsdTrim, monthlyCostText } from "@/lib/formatting";
 import { EQUITIES } from "@/lib/tokens/registry";
 import { dayChange, weekValue } from "@/lib/prices/market";
 
@@ -214,8 +215,10 @@ function Loaded({
           // Board 2f: what you have on the left, what you owe on the right. Owed is rounded up, never shown as less.
           side={{
             label: "Credit",
-            // The one credit sheet is Repay's (Adrian, 2026-10-15): with nothing owed it says only that.
-            info: { label: "Your credit", onClick: () => money.repay() },
+            // Credit's ⓘ explains the status (ruling 32, Adrian 2026-10-18); the owed amount opens the Credit sheet,
+            // which is Repay's (with nothing owed it says only that).
+            info: { label: "What your credit status means", onClick: () => open("status") },
+            onClick: { label: "Open your credit", run: () => money.repay() },
             // The "$" drawn as the total balance draws it (Adrian): smaller, in the mid ink.
             value: (
               <>
@@ -226,17 +229,9 @@ function Loaded({
             unit: "owed",
             // Board 2f: the status and what the credit costs a month, always (Safe and $0 / month with none taken).
             sub: (
-              <span className="inline-flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1">
-                {/* Ruling 1: with nothing owed it says so, not "Safe". Ruling 32: a tap explains the statuses. */}
-                <button
-                  type="button"
-                  onClick={() => open("status")}
-                  aria-label={`Credit status: ${STATUS_LABEL[shownStatus]}. What it means`}
-                  className="-my-2 flex h-9 items-center gap-1 text-subtle"
-                >
-                  <StatusPill status={shownStatus} size="sm" />
-                  <InfoIcon aria-hidden size={12} />
-                </button>
+              <span className="inline-flex items-center gap-1.5">
+                {/* Ruling 1: with nothing owed it says so, not "Safe". */}
+                <StatusPill status={shownStatus} size="sm" />
                 <span className="whitespace-nowrap">
                   {monthlyCostText(data.monthlyCostUsd).replace(" / month", "")} /
                   <span className="text-[11px]">month</span>
@@ -272,12 +267,17 @@ function Loaded({
       <section className="grid grid-cols-2 gap-2.5 px-5 pt-[18px]">
         <CashCard
           cashUsd={data.cashUsd}
-          earning={earningLine(data.cash.saveOn, data.savingsUsd)}
+          line={`Fuel tank: ${formatUsd(fuelTankUsd(data.cashUsd))}`}
           dim={dim}
           note={arrived.kind === "arriving" ? `${arrived.text} arriving` : undefined}
           onClick={() => open("cash")}
         />
-        <YieldCard apy={apy} dim={dim} onClick={() => open("yield")} />
+        <YieldCard
+          apy={apy}
+          line={earningLine(data.cash.saveOn, data.savingsUsd)}
+          dim={dim}
+          onClick={() => open("yield")}
+        />
       </section>
 
       {/* With no stocks, the empty state takes the room down to the tab bar. */}

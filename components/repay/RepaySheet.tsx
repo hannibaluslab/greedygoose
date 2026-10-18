@@ -18,7 +18,7 @@ import {
   pickedSource,
   planRepay,
   repayForm,
-  repaySmallPrint,
+  repaySheetSmallPrint,
   repaySources,
   type RepayAction,
   type RepayForm,
@@ -116,6 +116,16 @@ export function RepaySheet({
     return asset ? [{ stock: asset, amountRaw: f.raw, all: f.all }] : [];
   });
   const changes = !!plan && (repayUsd > 0 || takeOuts.length > 0);
+  // Every move in the batch (D7): the repay's, then each stock that comes out of backing.
+  const smallPrint = changes
+    ? repaySheetSmallPrint(
+        view?.ready ? view : null,
+        takeOuts.map((t) => ({
+          ...t,
+          multiplier: data?.holdings.find((h) => h.symbol === t.stock.symbol)?.multiplier ?? 10n ** 18n,
+        })),
+      )
+    : null;
   // Prices moved under a ticked stock: the limit shrank with the repay unchanged, so its amount was cut.
   const moved =
     !!plan &&
@@ -273,9 +283,7 @@ export function RepaySheet({
                 void tx.sign();
               }}
             />
-            {view.ready && repaySmallPrint(view) && (
-              <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">{repaySmallPrint(view)}</p>
-            )}
+            {smallPrint && <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">{smallPrint}</p>}
           </>
         )}
       </SheetSteps>

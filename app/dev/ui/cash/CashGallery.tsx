@@ -222,7 +222,7 @@ function HomeFixture({ note, cards, sheet }: { note?: string; cards: ReactNode; 
       </section>
       <section className="flex flex-col gap-2.5 px-5 pt-[18px] empty:hidden">{cards}</section>
       <section className="grid grid-cols-2 gap-2.5 px-5 pt-[18px]">
-        <CashCard cashUsd={400} earning="Always earning" note={note} href="#" />
+        <CashCard cashUsd={400} line="Fuel tank: $0.10" note={note} href="#" />
         <CreditCard debtUsd={600} status="safe" monthlyCostUsd={3} availableUsd={800} href="#" />
       </section>
       <TabBar />

@@ -260,7 +260,7 @@ const STATUS_LINES: { status: Exclude<Status, "none">; line: string }[] = [
 ];
 
 /**
- * "Your credit status" (ruling 32), from the status pill on Home: the bar with where the credit is now, and what Safe,
+ * "Your credit status" (ruling 32), from Credit's ⓘ on Home: the bar with where the credit is now, and what Safe,
  * Watch and Act each mean. With nothing owed, the pill says No credit and the bar has no marker.
  */
 export function StatusSheet({

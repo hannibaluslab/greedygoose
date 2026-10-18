@@ -4,6 +4,7 @@ import { useDisconnect } from "wagmi";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { Line, TabHeader, WhiteCard } from "@/components/gg/Screen";
 import { CASH } from "@/config/risk";
+import { fuelTankUsd } from "@/lib/cash";
 import { useAccountName } from "@/hooks/useAccountName";
 import { usePosition } from "@/hooks/usePosition";
 import { addressUrl } from "@/lib/chain";
@@ -22,8 +23,7 @@ function Settings({ address }: { address: `0x${string}` }) {
   const { data: name } = useAccountName(address);
   const { data } = usePosition(address);
   const tank = CASH.feeBufferUsd;
-  // In whole cents, rounded down: a tank a fraction of a cent short never reads "full".
-  const fuel = data ? Math.min(Math.floor(data.cashUsd * 100 + 1e-6), Math.round(tank * 100)) / 100 : null;
+  const fuel = data ? fuelTankUsd(data.cashUsd) : null;
   const link = (
     <a className="underline" href={addressUrl(address)} target="_blank" rel="noreferrer">
       {shortAddress(address)}

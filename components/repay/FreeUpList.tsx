@@ -21,9 +21,9 @@ const sharesText = (share: number, held: number) => `${formatShares(share * held
 
 /**
  * "Choose stocks to free up" (canvas boards 2–6): one row per stock that backs credit. Unticked, a row says what can
- * come out of it now ("Free up All", "Up to 0.67 shares", "Limit reached", "Paused"); ticked, its line says the shares
- * that come out ("0.60 of 2.40 shares") and a chip shows how much as a share of what it holds (25%, 82%…), which opens
- * the list of picks. Over the rows, the free-up limit the ticked stocks use.
+ * come out of it now, as a share of what it holds ("Free up All", "Up to 82%", "Limit reached", "Paused"); ticked, its
+ * line says the shares that come out ("0.60 of 2.40 shares") and a chip shows how much in % (25%, 82%…), which opens
+ * the list of picks. Custom takes a typed %. Over the rows, the free-up limit the ticked stocks use.
  */
 export function FreeUpList({
   items,
@@ -198,9 +198,7 @@ function StockRow({
         ) : (
           <span className="flex shrink-0 flex-col items-end gap-0.5">
             <span className="text-[11.5px] text-ink-mid">{row.canAll ? "Free up" : "Up to"}</span>
-            <span className="num text-[14px] font-semibold">
-              {row.canAll ? "All" : `${sharesText(row.maxShare, item.shares)} shares`}
-            </span>
+            <span className="num text-[14px] font-semibold">{row.canAll ? "All" : `${wholePct(row.maxShare)}%`}</span>
           </span>
         )}
       </div>
@@ -210,22 +208,23 @@ function StockRow({
           onSubmit={(e) => {
             e.preventDefault();
             const n = Number(custom);
-            if (n > 0 && item.shares > 0) {
-              onShare(Math.min(1, n / item.shares));
+            if (n > 0) {
+              // A typed % of what it holds, never past what the limit lets out.
+              onShare(Math.min(n / 100, row.canAll ? 1 : row.maxShare));
               setCustom(null);
             }
           }}
         >
           <input
             autoFocus
-            inputMode="decimal"
-            aria-label={`Shares of ${item.name} to free up`}
-            placeholder={`Up to ${sharesText(row.canAll ? 1 : row.maxShare, item.shares)}`}
+            inputMode="numeric"
+            aria-label={`Percent of ${item.name} to free up`}
+            placeholder={`Up to ${row.canAll ? 100 : wholePct(row.maxShare)}`}
             value={custom}
-            onChange={(e) => setCustom(e.target.value.replace(/[^0-9.]/g, ""))}
+            onChange={(e) => setCustom(e.target.value.replace(/\D/g, "").slice(0, 3))}
             className="num min-w-0 grow bg-transparent text-[15px] font-semibold outline-none"
           />
-          <span className="text-[13px] text-ink-mid">shares</span>
+          <span className="text-[13px] text-ink-mid">%</span>
           <button type="submit" className="h-8 rounded-[16px] bg-chip px-3 text-[13px] font-semibold">
             Set
           </button>
@@ -269,6 +268,6 @@ function shareRows(item: FreeUpItem, row: Row): PickerRow[] {
       mark: null,
       right: shares(s),
     })),
-    { id: "custom", name: "Custom", mark: null, sub: "Type the shares" },
+    { id: "custom", name: "Custom", mark: null, sub: "Type a %" },
   ];
 }

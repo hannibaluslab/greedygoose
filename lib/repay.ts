@@ -530,3 +530,31 @@ export function repaySmallPrint(
     `It never sells for more than ${SELL_LIMITS.floorBps / 100}% under Aave’s price (${formatUsd(source.holding.priceUsd)}).`
   );
 }
+
+/** A stock the Repay sheet frees up, as its small print names it. */
+type FreedOut = { stock: ReserveAsset; amountRaw: bigint; multiplier: bigint };
+
+/**
+ * The Repay sheet's whole small print (D7): the repay's own moves (the sale, or the cash), then each stock that comes
+ * out of backing, after the repay, in the same signature. Null when nothing would be signed.
+ */
+export function repaySheetSmallPrint(
+  v: (Parameters<typeof repaySmallPrint>[0] & { amountUsd: number }) | null,
+  outs: readonly FreedOut[],
+): string | null {
+  const sale = v ? repaySmallPrint(v) : null;
+  const freed = outs.map(
+    (o) => `${formatShares(rawToShares(o.amountRaw, o.multiplier, o.stock.decimals))} ${tickerOf(o.stock.symbol)}`,
+  );
+  if (freed.length === 0) return sale;
+  const names = freed.length > 1 ? `${freed.slice(0, -1).join(", ")} and ${freed.at(-1)}` : freed[0];
+  const comes = `${names} ${freed.length > 1 ? "come" : "comes"} out of backing your credit`;
+  if (sale) return `${sale} Then ${comes}.`;
+  const cash =
+    v && v.amountUsd > 0
+      ? v.coversAll
+        ? "everything you owe is repaid from your cash, then "
+        : `exactly ${formatUsd(toUsd(v.repayRaw))} of your cash is repaid, then `
+      : "";
+  return `In one go: ${cash}${comes}.`;
+}

@@ -36,8 +36,8 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
   the health read after it; a result under 1.10 stops it.
 - **Protect** acts only in Act. It repays from cash first, sells backing stock only if cash can't, and brings the
   credit back to 1.20. It never acts in Safe or Watch and never sells on a weekend.
-- On Home, the status pill (with its ⓘ) opens "Your credit status": the bar with where the credit is, and what Safe,
-  Watch and Act each mean.
+- On Home, Credit's ⓘ opens "Your credit status": the bar with where the credit is, and what Safe, Watch and Act
+  each mean. The owed amount opens the Credit sheet.
 
 ## Money rules
 
