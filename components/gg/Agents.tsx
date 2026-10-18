@@ -13,6 +13,7 @@ import { NOT_LIVE, type Agent, type AgentCard, type AgentItem, type CardAction }
 import type { AgentJob } from "@/lib/agents/permissions";
 import { stepsNote } from "@/lib/formatting";
 import { EQUITIES } from "@/lib/tokens/registry";
+import { RetryButton } from "./RetryButton";
 
 /*
  * The Agents tab (Adrian, 2026-10-15): cards only when something needs the user, the two agents with their
@@ -265,11 +266,7 @@ export function AgentsFeed({
   more: boolean;
   onShowEarlier: () => void;
 }) {
-  const retry = (
-    <button type="button" onClick={onRetry} className="h-10 shrink-0 rounded-[20px] bg-chip px-4 text-sm font-semibold">
-      Try again
-    </button>
-  );
+  const retry = <RetryButton onClick={onRetry} />;
   return (
     <section className="flex flex-col gap-1.5">
       {title && <h2 className="label m-0 px-1">{title}</h2>}

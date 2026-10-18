@@ -20,6 +20,7 @@ import {
   type OffBoard,
 } from "@/lib/board/view";
 import { shortAddress } from "@/lib/formatting";
+import { RetryButton } from "./RetryButton";
 
 /*
  * The Leaderboard tab (Adrian, 2026-10-15): one board, All | Contacts. Everyone is on it from their first move, ranked
@@ -280,9 +281,7 @@ export function BoardView({
         title={contacts ? BOARD_COPY.contactsError : BOARD_COPY.error}
         line={contacts ? BOARD_COPY.contactsErrorLine : BOARD_COPY.errorLine}
       >
-        <button type="button" onClick={onRetry} className={buttonClass("dark", "md")}>
-          Try again
-        </button>
+        <RetryButton look="dark" onClick={onRetry} />
       </Note>
     );
   } else if (s && ready) {

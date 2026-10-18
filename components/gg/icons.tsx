@@ -175,3 +175,8 @@ export const TrendUpIcon = ({ size = 10, ...r }: P) => (
     <path d="M4 16l6-6 4 4 6-6M14 8h6v6" />
   </svg>
 );
+export const RefreshIcon = ({ size = 18, ...r }: P) => (
+  <svg {...base(size, 2, r)}>
+    <path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5" />
+  </svg>
+);

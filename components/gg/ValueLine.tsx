@@ -1,5 +1,6 @@
 import { Sparkline } from "./Sparkline";
 import { LINE_POINTS, downsample } from "@/lib/prices/market";
+import { RetryButton } from "./RetryButton";
 
 /**
  * The line under the balance hero (HomeUpliftRail draws it 68px tall, PortfolioPage 34px): what the stocks held now
@@ -32,9 +33,7 @@ export function ValueLine({
         className="m-0 flex items-center justify-between gap-3 px-1 text-[13px] leading-[normal] text-ink-mid"
       >
         Market prices aren’t available right now.
-        <button type="button" onClick={onRetry} className="-my-3 h-11 shrink-0 font-semibold text-ink">
-          Try again
-        </button>
+        <RetryButton look="inline" onClick={onRetry} />
       </p>
     );
   }

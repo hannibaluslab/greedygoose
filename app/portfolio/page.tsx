@@ -18,6 +18,7 @@ import { formatUsd, formatUsdTrim } from "@/lib/formatting";
 import { MIN_BACKING_USD, backingOptions, creditAvailable } from "@/lib/creditBuy";
 import { maxSpendRaw, toUsd } from "@/lib/cash";
 import { dayChange, weekValue } from "@/lib/prices/market";
+import { RetryButton } from "@/components/gg/RetryButton";
 
 export default function PortfolioPage() {
   return <RequireAccount>{(address) => <Portfolio address={address} />}</RequireAccount>;
@@ -50,13 +51,9 @@ function Portfolio({ address }: { address: `0x${string}` }) {
             <p role="alert" className="m-0 text-[15px]">
               We couldn’t load your account from Base.
             </p>
-            <button
-              type="button"
-              onClick={() => refetch()}
-              className="mt-3 h-11 rounded-full bg-chip px-4 font-semibold"
-            >
-              Try again
-            </button>
+            <div className="mt-3">
+              <RetryButton onClick={() => void refetch()} />
+            </div>
           </div>
         ) : !data ? (
           <div aria-busy className="h-[300px] animate-pulse rounded-[22px] bg-chip" />

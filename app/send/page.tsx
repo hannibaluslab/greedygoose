@@ -4,6 +4,7 @@ import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { SendHeader, SendScreen } from "@/components/gg/Send";
 import { TabBar } from "@/components/gg/TabBar";
 import { usePosition } from "@/hooks/usePosition";
+import { RetryButton } from "@/components/gg/RetryButton";
 
 /** The Send tab (D16: it replaced Pay, 2026-10-15). Receive, which Pay was, opens from its header and from Home's Top up. */
 export default function SendPage() {
@@ -19,13 +20,7 @@ function Send({ address }: { address: `0x${string}` }) {
       {isError ? (
         <div className="flex flex-col items-start gap-2 pt-1">
           <p className="m-0 text-[15px] text-ink-mid">We couldn’t read your account from Base.</p>
-          <button
-            type="button"
-            onClick={() => void refetch()}
-            className="h-11 rounded-[22px] bg-chip px-4 text-sm font-semibold"
-          >
-            Try again
-          </button>
+          <RetryButton onClick={() => void refetch()} />
         </div>
       ) : (
         <div aria-busy className="flex flex-col gap-3">

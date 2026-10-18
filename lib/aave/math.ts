@@ -59,7 +59,7 @@ export function creditApr(drawnRateRay: bigint, riskPremiumBps: bigint = 0n): nu
 
 export const monthlyCost = (debtUsd: number, apr: number) => (debtUsd * apr) / 12;
 
-const SECONDS_PER_YEAR = 31_536_000;
+export const SECONDS_PER_YEAR = 31_536_000;
 
 /** Aave V3 quotes the savings rate as an APR that compounds every second; the boards show it as an APY. */
 export const aprToApy = (apr: number) => (1 + apr / SECONDS_PER_YEAR) ** SECONDS_PER_YEAR - 1;

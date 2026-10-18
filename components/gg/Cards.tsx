@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { MoneyCompact } from "./Money";
 import { StatusPill } from "./Status";
 import { Tap } from "./Tap";
@@ -60,7 +61,8 @@ export function YieldCard({
   onClick,
 }: {
   apy: number | null;
-  line: string;
+  /** "Not earning yet", or the live counter (LiveEarning) while the cash really earns. */
+  line: ReactNode;
   dim?: boolean;
   href?: string;
   onClick?: () => void;

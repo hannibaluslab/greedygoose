@@ -46,6 +46,7 @@ import { rawToShares } from "@/lib/tokens/b20";
 import { EQUITIES, USDC, byStockOrder, type ReserveAsset } from "@/lib/tokens/registry";
 import { wholePct } from "@/lib/holding";
 import { leverageOf, leverageText } from "@/lib/leverage";
+import { RetryButton } from "./RetryButton";
 
 /**
  * Three steps (boards 30–34, Adrian 2026-10-18): what backs it (Credit ready, or a stock to back new credit) → pick a
@@ -796,9 +797,7 @@ function CantCheck({ onRetry }: { onRetry: () => void }) {
   return (
     <p role="status" className="m-0 flex items-center justify-between gap-3 text-[13px] leading-[normal] text-ink-mid">
       Your credit can’t be checked right now.
-      <button type="button" onClick={onRetry} className="-my-3 h-11 shrink-0 font-semibold text-ink">
-        Try again
-      </button>
+      <RetryButton look="inline" onClick={onRetry} />
     </p>
   );
 }

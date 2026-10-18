@@ -17,6 +17,7 @@ import { usePriceHistory } from "@/hooks/usePriceHistory";
 import { formatShares, formatUsd } from "@/lib/formatting";
 import { holdingSplit } from "@/lib/holding";
 import { RANGES, moveUsd, yearLineStart, type Range } from "@/lib/prices/market";
+import { RetryButton } from "./RetryButton";
 
 /** Pieces of the stock sheet's first step (StockSheet), from NYM's CoinDetailSheet in the GreedyGoose kit. */
 
@@ -24,15 +25,6 @@ const RANGE_WORDS: Record<Range, string> = { "1D": "1 day", "1W": "7 days", "1M"
 const RANGE_OPTIONS = (Object.keys(RANGES) as Range[]).map((r) => ({ value: r, label: r }));
 /** Daily closes are UTC days. */
 const UTC_DAY = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-
-/** A retry inside a line of text, 44px tall without moving the line. */
-function TryAgain({ onClick }: { onClick: () => void }) {
-  return (
-    <button type="button" onClick={onClick} className="-my-3 h-11 shrink-0 font-semibold text-ink">
-      Try again
-    </button>
-  );
-}
 
 /**
  * The stock: its badge, ticker, market price and today's move (NYM's identity row). Market prices are labelled as
@@ -67,7 +59,7 @@ export function StockHeader({ holding, market }: { holding: Holding; market: Mar
           ) : (
             <>
               No market price right now.
-              <TryAgain onClick={market.retry} />
+              <RetryButton look="inline" onClick={market.retry} />
             </>
           )}
         </span>
@@ -146,7 +138,7 @@ export function StockChart({ holding, name }: { holding: Holding; name: string }
       ) : (
         <p role="status" className="m-0 flex h-[150px] items-center justify-between gap-3 text-[13px] text-ink-mid">
           Market prices aren’t available right now.
-          <TryAgain onClick={history.retry} />
+          <RetryButton look="inline" onClick={history.retry} />
         </p>
       )}
       <SegmentedControl options={RANGE_OPTIONS} value={range} onChange={setRange} label="Chart range" />
@@ -202,13 +194,9 @@ export function StockActivity({
             <p role="alert" className="m-0 text-sm text-ink-2">
               We couldn’t load your activity.
             </p>
-            <button
-              type="button"
-              onClick={() => refetch()}
-              className="mt-2.5 h-11 rounded-[22px] bg-chip px-4 text-sm font-semibold"
-            >
-              Try again
-            </button>
+            <div className="mt-2.5">
+              <RetryButton onClick={() => void refetch()} />
+            </div>
           </div>
         ) : mine.length === 0 ? (
           <p className="m-0 py-3.5 text-sm leading-[1.4] text-ink-mid">

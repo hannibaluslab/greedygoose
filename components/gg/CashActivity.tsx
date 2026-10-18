@@ -9,6 +9,7 @@ import { useCashActivity, type CashFeedError } from "@/hooks/useCashActivity";
 import { useNowSec } from "@/hooks/useNowSec";
 import type { CashMark, CashRow } from "@/lib/cashActivity";
 import { USDC } from "@/lib/tokens/registry";
+import { RetryButton } from "./RetryButton";
 
 const NOTICE: Record<Exclude<CashFeedError, null>, string> = {
   all: "We couldn’t load your activity.",
@@ -50,11 +51,7 @@ export function CashFeed({
   onRetry: () => void;
 }) {
   const [open, setOpen] = useState<string | null>(null);
-  const retry = (
-    <button type="button" onClick={onRetry} className="h-10 shrink-0 rounded-[20px] bg-chip px-4 text-sm font-semibold">
-      Try again
-    </button>
-  );
+  const retry = <RetryButton onClick={onRetry} />;
   const days = rows.reduce<{ label: string; rows: CashRow[] }[]>((out, row) => {
     const label = dayLabel(row.time, nowMs);
     if (out.at(-1)?.label === label) out.at(-1)!.rows.push(row);

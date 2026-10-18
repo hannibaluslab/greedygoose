@@ -8,6 +8,7 @@ import { TabBar } from "@/components/gg/TabBar";
 import { BalanceHero, TodayChange, TodayPending } from "@/components/gg/BalanceHero";
 import { QuickAction } from "@/components/gg/QuickAction";
 import { CashCard, YieldCard } from "@/components/gg/Cards";
+import { LiveEarning } from "@/components/gg/LiveEarning";
 import { StartEarningCard, TurnIntoCash } from "@/components/gg/CashSetup";
 import { AddStockCard, HoldingCard } from "@/components/gg/Holding";
 import { CashSheet } from "@/components/gg/CashSheet";
@@ -23,7 +24,7 @@ import { useEntryBalances } from "@/hooks/useEntryBalances";
 import { useMarketPrices } from "@/hooks/useMarketPrices";
 import { usePosition, type PositionData } from "@/hooks/usePosition";
 import { aprToApy } from "@/lib/aave/math";
-import { arrivedCoins, arrivedView, earningLine, rateText, type ArrivedView } from "@/lib/cashSetup";
+import { arrivedCoins, arrivedView, rateText, type ArrivedView } from "@/lib/cashSetup";
 import { homeStatus } from "@/lib/risk/status";
 import { leverageOf, leverageText } from "@/lib/leverage";
 import { toast } from "sonner";
@@ -32,6 +33,7 @@ import { fuelTankUsd } from "@/lib/cash";
 import { formatUsd, formatUsdTrim, monthlyCostText } from "@/lib/formatting";
 import { EQUITIES } from "@/lib/tokens/registry";
 import { dayChange, weekValue } from "@/lib/prices/market";
+import { RetryButton } from "@/components/gg/RetryButton";
 
 export default function HomePage() {
   return <RequireAccount>{(address) => <Home address={address} />}</RequireAccount>;
@@ -52,7 +54,7 @@ type Sheet = "total" | "yield" | "cash" | "leverage" | "status";
  * Cash card only says they're arriving.
  */
 function Home({ address }: { address: `0x${string}` }) {
-  const { data, isError, refetch } = usePosition(address);
+  const { data, isError, refetch, dataUpdatedAt } = usePosition(address);
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const stocks = useStockSheets();
   const close = () => setSheet(null);
@@ -76,9 +78,9 @@ function Home({ address }: { address: `0x${string}` }) {
           <p role="alert" className="m-0 text-[15px]">
             We couldn’t load your account from Base.
           </p>
-          <button type="button" onClick={() => refetch()} className="mt-3 h-11 rounded-full bg-chip px-4 font-semibold">
-            Try again
-          </button>
+          <div className="mt-3">
+            <RetryButton onClick={() => void refetch()} />
+          </div>
         </div>
       )}
 
@@ -87,6 +89,7 @@ function Home({ address }: { address: `0x${string}` }) {
       ) : (
         <Loaded
           data={data}
+          readAt={dataUpdatedAt}
           apy={apy}
           open={setSheet}
           openStock={stocks.openStock}
@@ -165,6 +168,7 @@ function Home({ address }: { address: `0x${string}` }) {
 
 function Loaded({
   data,
+  readAt,
   apy,
   open,
   openStock,
@@ -175,6 +179,8 @@ function Loaded({
   dim,
 }: {
   data: PositionData;
+  /** When Base was last read for `data`: the Yield counter restarts from it. */
+  readAt: number;
   apy: number;
   open: (sheet: Sheet) => void;
   openStock: (symbol: string) => void;
@@ -274,7 +280,14 @@ function Loaded({
         />
         <YieldCard
           apy={apy}
-          line={earningLine(data.cash.saveOn, data.savingsUsd)}
+          line={
+            // Counts only while the cash really earns: savings on Base, carried at the live rate between reads.
+            data.savingsUsd > 0 ? (
+              <LiveEarning usd={data.savingsUsd} apr={data.savingsApr} readAt={readAt} />
+            ) : (
+              "Not earning yet"
+            )
+          }
           dim={dim}
           onClick={() => open("yield")}
         />

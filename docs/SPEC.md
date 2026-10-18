@@ -26,6 +26,8 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
 
 - Quick actions: Top up, Trade, Credit Buy, Repay.
 - A tap on the name in the header copies it ("sam.justan.id"), with a toast.
+- The Yield card counts only while the cash really earns (savings on Base above 0): the savings balance as last read,
+  carried at the live rate between reads and restarted from each read. Otherwise it says "Not earning yet".
 
 ## Credit health
 
@@ -49,6 +51,10 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
 - **Fuel tank:** $0.10 of cash stays back for network fees; every spend from cash leaves it. Buying power is cash minus
   the fuel tank, in cents. Settings shows how full it is. No screen of ours lists the network fee: JAW's sheet shows
   it.
+- **The Cash sheet splits the cash** into My cash, From credit (credit backed by stocks that came in as cash: Earn
+  with stocks, or credit taken alone) and the fuel tank. Nothing on chain says which dollars are credit, so the rule
+  is a convention: credit that came in as cash adds to it, a repay pays it back first, and it is never more than
+  what's owed or the cash after the fuel tank.
 - **No minimums of ours.** Only Aave's and Base's own limits apply, plus the $0.01 arrivals filter.
 - **No dust.** Sell all or Max leaves nothing; a sale that would leave under $1 sells everything.
 - **One stock order** in every list: Home's (Apple, Amazon, Alphabet, Meta, Microsoft, NVIDIA, Tesla). Lists keep
@@ -111,6 +117,7 @@ the free shares' value. A stock whose shares all back credit is listed but can't
 - Titles and labels say **My** ("My holdings", "My credit", "My mix"); sentences say you and your.
 - JAW appears only as the trust mark ("Enforced by JAW.id"), never in instructions.
 - An off button says why ("Enter an amount", "Add who to send to").
+- Try again is a refresh icon (its name stays "Try again" for screen readers).
 - Buttons name the intent only ("Repay", "Repay & free up"). No confirm screens of ours: JAW's sheet is the
   confirmation.
 
