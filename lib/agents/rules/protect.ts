@@ -8,7 +8,7 @@ import { CASH, CASH_AGENT } from "@/config/risk";
  * Act is the line (Adrian, 2026-10-15: "watch is ok, it is act that is not, also the guardian should only act on act
  * and not take decision and repays under watch"):
  * - Trigger: health factor below `triggerHf`, the Act line. In Safe or Watch it does nothing.
- * - Target: repay just enough to reach `targetHf`, back in Watch with room (1.2), not back to Safe.
+ * - Target: repay just enough to reach `targetHf`, back in Watch with a margin (1.2), not back to Safe.
  * - Never more than the savings balance, the remaining daily cap, or the debt itself.
  *
  * Weekend Shield no longer repays: before a freeze the credit is outside Act by definition, so it is a heads-up card
@@ -74,7 +74,7 @@ export function planProtect(i: ProtectInput): ProtectDecision {
  * The weekend heads-up: what Weekend Shield used to repay, now only a card (Adrian, 2026-10-15: no move outside Act).
  * Shortly before stock prices freeze, a stressed price (−15% at the reopen) is tested; if it would take a credit that
  * isn't in Act today into Act, the card says so, and what repaying would keep it in Watch through that drop: the
- * stressed health back to the Act line plus the same room a repay leaves (1.1 + 0.1). Nothing moves; in Act Protect
+ * stressed health back to the Act line plus the same margin a repay leaves (1.1 + 0.1). Nothing moves; in Act Protect
  * acts on its own. App-only: the executor has no weekend move, and so no port of this.
  */
 type WeekendHeadsUpInput = {

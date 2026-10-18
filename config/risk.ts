@@ -46,7 +46,7 @@ export const CREDIT_CAP = {
 export const CASH_AGENT = {
   /** Protect repays from cash below this health factor (the Act line)… */
   triggerHf: RISK.watchMin,
-  /** …just enough to bring the credit back to this one, in Watch with room. */
+  /** …just enough to bring the credit back to this one, in Watch with a margin. */
   targetHf: 1.2,
   /**
    * The weekend heads-up (no move, a card only): the price drop it tests just before prices freeze, and the health

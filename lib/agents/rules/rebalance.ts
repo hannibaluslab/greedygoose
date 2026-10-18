@@ -105,8 +105,8 @@ export function rebalanceTrades(book: RebalanceBook, o: RebalanceOptions): Rebal
   if (need < 0n) need = -need;
   for (const i of candidates) {
     if (need === 0n) break;
-    const room = gap[i] < 0n ? min(-gap[i], o.maxSliceRaw) : min(gap[i], sellable[i]);
-    const leg = min(need, room);
+    const can = gap[i] < 0n ? min(-gap[i], o.maxSliceRaw) : min(gap[i], sellable[i]);
+    const leg = min(need, can);
     if (leg < o.minTradeRaw) continue;
     side[i] = leg;
     need -= leg;

@@ -140,7 +140,7 @@ export function sellAmounts(book: SellBook, o: SellOptions): bigint[] {
  * Splits the amounts into withdraw → swap → repay slices, in `sellOrder`. Each withdrawal leaves the health at least
  * `withdrawFloorHf` (Aave reverts a withdrawal that leaves it under 1.0), each swap stays within `maxSliceRaw` USDC
  * at Aave's price, and each repays exactly its minimum output. Stops at `maxSlices`, or when Aave's floor leaves no
- * room: the rest waits for the next run.
+ * fits: the rest waits for the next run.
  */
 export function sellSlices(
   book: SellBook,
@@ -156,9 +156,9 @@ export function sellSlices(
     let left = take[i];
     while (left > 0n) {
       if (slices.length === SELL_RULE.maxSlices) return slices;
-      const room =
+      const fits =
         power * 10n ** 14n > floor * debt ? (power * 10n ** 14n - floor * debt) / (s.cfBps * s.price * 10n ** 24n) : 0n;
-      const shares = min(left, room, (o.maxSliceRaw * 10n ** 10n) / s.price);
+      const shares = min(left, fits, (o.maxSliceRaw * 10n ** 10n) / s.price);
       const minOut = (shares * s.price * (BPS - o.floorBps)) / 10n ** 14n;
       if (minOut === 0n) return slices;
       slices.push({ reserveId: i, sharesRaw: shares, minOutRaw: minOut });

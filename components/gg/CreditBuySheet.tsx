@@ -28,7 +28,9 @@ import {
   backingOptions,
   backingRawFor,
   MIN_BACKING_USD,
+  NO_CREDIT,
   bestBacking,
+  canBuyWithCash,
   creditAvailable,
   creditWith,
   freeShownUsd,
@@ -152,11 +154,11 @@ export function CreditBuySheet({
     cfs || held.length === 0
       ? creditAvailable({ position: data, options, cash: data.cash, holdsStock: held.length > 0 })
       : null;
-  // The room on what already backs credit alone: step 1's "already backs" row.
-  const existingRoom = creditWith(data);
+  // The credit left on what already backs credit alone: step 1's "already backs" row.
+  const existingLeft = creditWith(data);
   // In Act no credit is taken (Act is the line): step 1's one line says so, with no list of why each holding can't.
   const inAct = available?.why === "in-act";
-  const canUseExisting = data.totalBackingUsd > 0 && existingRoom >= BUY_LIMITS.minUsd;
+  const canUseExisting = data.totalBackingUsd > 0 && existingLeft >= BUY_LIMITS.minUsd;
   // Step 1 picks the holding that can back the most until Sam picks another, else what already backs credit. A pick
   // that can't back it any more (under $1 free, paused, or no longer read) falls back to that default on step 1.
   const canPick = (key: string) => (key === EXISTING ? canUseExisting : options.some((o) => o.stock.symbol === key));
@@ -175,9 +177,9 @@ export function CreditBuySheet({
   const backAmount = typed ? Math.max(0, Number(backUsd) || 0) : 0;
   const pick: BackingPick = { option: chosen, raw: chosen && typed ? (backAll ? chosen.freeRaw : backRaw) : 0n };
   // What this backing gives: "You can use up to $X" on step 2, step 3's number and step 4's "Up to" are this one figure.
-  const room = planCredit({ position: data, backing: pick, creditRaw: 0n, cash: data.cash });
-  const roomUsd = room.maxUsd;
-  const canUse = roomUsd >= BUY_LIMITS.minUsd && room.block !== "over-free";
+  const reach = planCredit({ position: data, backing: pick, creditRaw: 0n, cash: data.cash });
+  const reachUsd = reach.maxUsd;
+  const canUse = reachUsd >= BUY_LIMITS.minUsd && reach.block !== "over-free";
 
   const amount = Math.max(0, Number(raw) || 0);
   const creditRaw = parseUnits(amount.toFixed(USDC.decimals), USDC.decimals);
@@ -295,15 +297,26 @@ export function CreditBuySheet({
                 <div aria-busy className="h-[220px] animate-pulse rounded-[16px] bg-chip" />
               )
             ) : available.why === "no-stocks" ? (
-              // No stocks at all (Adrian: step 1 always shows): the step's title, an empty slot saying why, then the
-              // stocks, which buy with cash. Holding any stock shows it below instead, with why it can't back this yet.
+              // No stocks at all (Adrian: step 1 always shows; rulings 8, 9): where credit comes from, what to do first
+              // and, with no cash to buy one, Top up; then the stocks, which buy with cash. Holding any stock shows it
+              // below instead, with why it can't back this yet.
               <div className="flex flex-col gap-3 pt-1">
                 <h3 className="label m-0 px-1">Back it with</h3>
                 <div className="flex flex-col items-center gap-1.5 rounded-[16px] border-[1.5px] border-dashed border-[rgba(14,13,11,0.2)] px-5 py-5 text-center">
-                  <p className="m-0 text-[15px] font-semibold">
-                    {available.why === "no-stocks" ? "No stocks to back it with yet" : "Nothing free to back it with"}
-                  </p>
+                  <p className="m-0 text-[15px] font-semibold">{NO_CREDIT["no-stocks"]}</p>
                   <p className="m-0 text-pretty text-[13px] leading-[1.4] text-ink-mid">{available.line}</p>
+                  {!canBuyWithCash(data.cash) && (
+                    <Button
+                      variant="dark"
+                      onClick={() => {
+                        close();
+                        money.topUp();
+                      }}
+                      className="mt-2 w-full"
+                    >
+                      Top up
+                    </Button>
+                  )}
                 </div>
                 <StockLists
                   held={preset ? held.filter((h) => h.symbol === preset.symbol) : held}
@@ -340,7 +353,7 @@ export function CreditBuySheet({
                     <ExistingRow
                       names={backers(data.holdings, []).map((h) => h.name)}
                       valueUsd={data.totalBackingUsd}
-                      roomUsd={existingRoom}
+                      reachUsd={existingLeft}
                       checked={pickedKey === EXISTING}
                       onPick={() => choose(EXISTING)}
                     />
@@ -433,26 +446,26 @@ export function CreditBuySheet({
                 }}
                 onMax={() => setBacking(freeShownUsd(chosen).toFixed(2), true, chosen.freeRaw)}
                 hint={
-                  room.block === "over-free"
+                  reach.block === "over-free"
                     ? `${formatShares(chosenHolding.freeShares)} ${tickerOf(chosen.stock.symbol)} shares · ${formatUsd(chosen.freeUsd)} free`
                     : `${formatShares(rawToShares(pick.raw, chosenHolding.multiplier, chosen.stock.decimals))} of ${formatShares(chosenHolding.freeShares)} ${tickerOf(chosen.stock.symbol)} shares · ${formatUsd(chosen.freeUsd)} free`
                 }
                 autoFocus
               />
               <UseUpTo
-                usd={canUse ? roomUsd : 0}
+                usd={canUse ? reachUsd : 0}
                 line={
-                  room.block === "over-free"
+                  reach.block === "over-free"
                     ? null
                     : data.status === "act"
                       ? CREDIT_BLOCKED["in-act"]
                       : canUse
                         ? // Ties the two dollar figures together (Adrian: "up to 3 but MAX is 3.99?"): credit is a share of what's
-                          // put in use (its collateral factor over the cap's line, CREDIT_CAP.minHf), plus any room left on
+                          // put in use (its collateral factor over the cap's line, CREDIT_CAP.minHf), plus any credit left on
                           // what already backs credit, or less what that credit already needs when it's under the line.
                           creditLine === FEE_FIRST
                           ? creditLine
-                          : `${pick.raw > 0n ? `About ${Math.round((chosen.cf / CREDIT_CAP.minHf) * 100)}% of the ${formatUsd(backAmount || chosen.freeUsd)} of ${chosen.stock.name} you put in use${existingRoom > 0 ? ", plus room on what already backs credit" : data.debtUsd > 0 ? ", less what your credit already needs" : ""}.` : "From what already backs credit."}${room.maxSafeUsd >= 1 ? ` Stays Safe up to ${wholeUsd(room.maxSafeUsd)}.` : ""}`
+                          : `${pick.raw > 0n ? `About ${Math.round((chosen.cf / CREDIT_CAP.minHf) * 100)}% of the ${formatUsd(backAmount || chosen.freeUsd)} of ${chosen.stock.name} you put in use${existingLeft > 0 ? ", plus what’s left on what already backs credit" : data.debtUsd > 0 ? ", less what your credit already needs" : ""}.` : "From what already backs credit."}${reach.maxSafeUsd >= 1 ? ` Stays Safe up to ${wholeUsd(reach.maxSafeUsd)}.` : ""}`
                         : backAmount > 0 || pick.raw > 0n
                           ? `A Credit Buy needs at least ${formatUsd(BUY_LIMITS.minUsd)} of credit. Put more in use.`
                           : `Type how much ${chosen.stock.name} to put in use.`
@@ -464,12 +477,12 @@ export function CreditBuySheet({
                     // How much of it keeps the credit Safe (D2's bands); none at all reads in the status instead.
                     // What putting it in use does on its own, before any new credit (nothing owed has no status yet).
                     ...(data.debtUsd > 0
-                      ? [{ label: "Status", value: <StatusChange from={room.before} to={room.after} /> }]
+                      ? [{ label: "Status", value: <StatusChange from={reach.before} to={reach.after} /> }]
                       : []),
                   ]}
                 />
               )}
-              {room.block === "over-free" && (
+              {reach.block === "over-free" && (
                 <p role="status" className="m-0 text-[13px] leading-snug text-act">
                   That’s more than your free {chosen.stock.name} ({formatUsd(chosen.freeUsd)}).
                 </p>
@@ -485,7 +498,7 @@ export function CreditBuySheet({
             </>
           ) : step === "pick" ? (
             <div className="flex flex-col gap-4 pt-1">
-              <CreditHero available={{ usd: roomUsd, line: creditLine }} failed={false} onRetry={cfRead.retry} />
+              <CreditHero available={{ usd: reachUsd, line: creditLine }} failed={false} onRetry={cfRead.retry} />
               <StockLists held={held} others={others} priceOf={priceOf} withCash={false} onPick={pickStock} />
             </div>
           ) : step === "amount" && stock ? (
@@ -557,8 +570,7 @@ export function CreditBuySheet({
                     `exactly ${formatUsd(econ!.usd)} is approved for the ${VENUE_LABEL[q!.venue]} router and swapped`,
                   ])}
                   . You’ll owe {formatUsd(data.debtUsd + amount)}, backed by {shortNames(againstNames)}.{" "}
-                  {riskNote(againstNames, protect === "on")} {stock.name} here is a tokenized stock. It tracks the share
-                  price; it is not company shares or voting rights.
+                  {riskNote(againstNames, protect === "on")}
                 </p>
               )}
               {ready && plan.extraConfirm && (
@@ -639,7 +651,7 @@ function StockLists({
         </PickList>
       )}
       {others.length > 0 && (
-        <PickList title={held.length > 0 ? "Other stocks" : "Stocks"}>
+        <PickList title={withCash ? "Buy with cash" : held.length > 0 ? "Other stocks" : "Stocks"}>
           {others.map((e) => (
             <PickRow
               key={e.symbol}
@@ -687,18 +699,18 @@ function UseUpTo({ usd, line }: { usd: number; line: string | null }) {
 
 /**
  * Step 1's row for what already backs credit (when there is some): picking it puts nothing new in use, and the buy
- * uses the room left on it. Without `onPick` (under the $1 minimum buy) it says there's nothing left, with Repay.
+ * uses the credit left on it. Without `onPick` (under the $1 minimum buy) it says there's nothing left, with Repay.
  */
 function ExistingRow({
   names,
   valueUsd,
-  roomUsd,
+  reachUsd,
   checked,
   onPick,
 }: {
   names: string[];
   valueUsd: number;
-  roomUsd: number;
+  reachUsd: number;
   checked: boolean;
   onPick?: () => void;
 }) {
@@ -720,7 +732,7 @@ function ExistingRow({
       </span>
       {onPick ? (
         <span className="flex shrink-0 flex-col gap-px text-right">
-          <span className="num text-[20px] font-bold leading-[1.1] tracking-[-0.02em]">{wholeUsd(roomUsd)}</span>
+          <span className="num text-[20px] font-bold leading-[1.1] tracking-[-0.02em]">{wholeUsd(reachUsd)}</span>
           <span className="whitespace-nowrap text-[11.5px] text-ink-mid">left to use</span>
         </span>
       ) : (
@@ -1000,7 +1012,7 @@ function BackingRow({
 
 /**
  * Step 1's quiet note for what can't back this buy (Adrian: disabled rows repeated each other): what already backs
- * credit with no room left, and holdings too small or paused, each in a few words. Nothing to pick here.
+ * credit with nothing left, and holdings too small or paused, each in a few words. Nothing to pick here.
  */
 function CantBack({
   inUse,

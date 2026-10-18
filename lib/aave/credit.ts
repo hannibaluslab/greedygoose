@@ -18,21 +18,21 @@ export function combinedCredit(p: {
   const power = p.totalBackingUsd * p.avgCf + p.lines.reduce((a, l) => a + l.usd * l.cf, 0);
   const debtAfter = p.debtUsd + p.creditUsd;
   const hfAfter = debtAfter > 0 ? power / debtAfter : Infinity;
-  const room = (target: number) => Math.max(0, Math.min(power / target - p.debtUsd, p.liquidityUsd));
+  const upTo = (target: number) => Math.max(0, Math.min(power / target - p.debtUsd, p.liquidityUsd));
   return {
     powerUsd: power,
     hfAfter,
     /** Most you can borrow with these locks and still be Safe. */
-    maxSafe: room(RISK.safeMin),
+    maxSafe: upTo(RISK.safeMin),
     /** Most you can borrow before the loan reaches Act (the Watch line). */
-    maxWatch: room(RISK.watchMin),
+    maxWatch: upTo(RISK.watchMin),
     /**
      * The most credit the app takes with these locks (Act is the line, Adrian 2026-10-15): health stays at or above
      * CREDIT_CAP.minHf, the Act line plus its margin. Every way of taking credit is capped here (lib/creditBuy.ts creditCap).
      */
-    maxCredit: room(CREDIT_CAP.minHf),
+    maxCredit: upTo(CREDIT_CAP.minHf),
     /** Aave's own limit with these locks (HF = 1). Never borrow right up to it. */
-    maxAave: room(1),
+    maxAave: upTo(1),
   };
 }
 

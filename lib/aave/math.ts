@@ -79,8 +79,8 @@ export function maxWithdrawUsd(p: {
 }): number {
   if (p.debtUsd <= 0) return p.backingUsd;
   if (p.cf <= 0) return p.backingUsd;
-  const room = p.totalBackingUsd * p.avgCf - p.debtUsd * Math.max(1, p.targetHf ?? 1);
-  return Math.max(0, Math.min(p.backingUsd, room / p.cf));
+  const spare = p.totalBackingUsd * p.avgCf - p.debtUsd * Math.max(1, p.targetHf ?? 1);
+  return Math.max(0, Math.min(p.backingUsd, spare / p.cf));
 }
 
 /** Health factor after removing `usd` of a collateral with factor `cf`. */

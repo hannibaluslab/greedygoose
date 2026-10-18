@@ -73,12 +73,12 @@ export const SELL_BLOCKED: Record<SellBlock, string> = {
 };
 
 /**
- * Headroom under Aave's limit for what comes out before the repay, for interest and price moves. A repay by selling
+ * A margin under Aave's limit for what comes out before the repay, for interest and price moves. A repay by selling
  * usually ends healthier, but not always: it repays the sale's floor less the network-fee buffer, so a small sale can
  * repay less than its shares backed. One that would end in Act, lower than it started, is blocked ("act", Act is the
  * line, Adrian 2026-10-15).
  */
-const LIMIT_HEADROOM = 0.995;
+const LIMIT_MARGIN = 0.995;
 
 export type SellPlan = {
   from: SellFrom;
@@ -148,7 +148,7 @@ export function sellableRaw(
 
 /**
  * The most backing shares a repay by selling can take out (planSell's `maxRaw` for "repay"): the shares come out before
- * the repay lands, so the loan must stay within Aave's limit, with LIMIT_HEADROOM, in between. All of them when
+ * the repay lands, so the loan must stay within Aave's limit, with LIMIT_MARGIN, in between. All of them when
  * nothing is owed. Repay's "Pay with" offers a backing stock up to this.
  */
 export function repaySaleMaxRaw(
@@ -163,14 +163,14 @@ export function repaySaleMaxRaw(
     cf,
     backingUsd: h.backingUsd,
   };
-  return part(h.backingRaw, h.backingUsd > 0 ? (maxWithdrawUsd(creditInput) * LIMIT_HEADROOM) / h.backingUsd : 0);
+  return part(h.backingRaw, h.backingUsd > 0 ? (maxWithdrawUsd(creditInput) * LIMIT_MARGIN) / h.backingUsd : 0);
 }
 
 /**
  * Plan a sale of `quote.amountIn` shares on Leo's maths. A backing holding comes out only as far as the 1.12 line
  * allows (maxWithdrawUsd at CREDIT_CAP.minHf, Act is the line), and "any" sells the free shares first. Selling to repay takes the shares out first, so the loan must
  * stay within Aave's limit until the repay lands; it usually ends healthier, and one that would end in Act, lower
- * than it started, is blocked ("act", LIMIT_HEADROOM). Plan only: the batch is simulated before JAW's sheet.
+ * than it started, is blocked ("act", LIMIT_MARGIN). Plan only: the batch is simulated before JAW's sheet.
  */
 export function planSell(p: {
   from: SellFrom;

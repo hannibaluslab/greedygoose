@@ -451,9 +451,11 @@ describe('creditAvailable (F2-3\'s "You can use up to")', () => {
   });
 
   it("at $0, says cash still buys, or to top up when cash can't pay the smallest buy and its fee", () => {
-    expect(avail(fresh, [], false).line).toBe("Credit comes from the stocks you own. Buy one with cash first.");
+    // No stocks (rulings 8, 9): the title says "Credit comes from your stocks"; the line says what to do first.
+    expect(NO_CREDIT["no-stocks"]).toBe("Credit comes from your stocks");
+    expect(avail(fresh, [], false).line).toBe("Buy one with your cash first.");
     expect(avail(fresh, [], false, { walletRaw: 0n, savingsRaw: 0n, saveOn: false }).line).toBe(
-      "Credit comes from the stocks you own. Top up, then buy one with cash.",
+      "Top up, then buy one with your cash.",
     );
     // A cent short of the smallest buy (a cent) plus the fee buffer: it doesn't fit.
     expect(avail(fresh, [], true, { walletRaw: usd(B), savingsRaw: 0n, saveOn: false }).line).toBe(

@@ -10,7 +10,7 @@ import { statusFor, type Status } from "@/lib/risk/status";
  */
 
 /** Under the limit by a hair when a stock comes out at its most, so a price tick before signing doesn't stop it. */
-const AT_MOST_HEADROOM = 0.995;
+const AT_MOST_MARGIN = 0.995;
 const EPS = 1e-9;
 
 export type FreeUpStock = {
@@ -117,7 +117,7 @@ export function planFreeUp(p: {
       ? 0n
       : all
         ? s.backingRaw
-        : (s.backingRaw * BigInt(Math.floor(share * (atMost ? AT_MOST_HEADROOM : 1) * 1_000_000))) / 1_000_000n;
+        : (s.backingRaw * BigInt(Math.floor(share * (atMost ? AT_MOST_MARGIN : 1) * 1_000_000))) / 1_000_000n;
     return {
       symbol: s.symbol,
       paused: s.paused,

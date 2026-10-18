@@ -201,7 +201,7 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
             label: "Why",
             value:
               e.reason === "weekend"
-                ? ["Prices pause for the weekend. Protect made room in case they reopen lower."]
+                ? ["Prices pause for the weekend. Protect repaid a little in case they reopen lower."]
                 : ["Your credit reached ", ...word(e.hfBefore), "."],
           },
           ...owedRow(ctx),

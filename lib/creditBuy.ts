@@ -152,15 +152,15 @@ export function creditCap(
 }
 
 /** The most credit with every option in use (creditCap): the MAX and the most that stays Safe. */
-function creditRoom(pos: CreditPosition, options: readonly BackingOption[]): { maxUsd: number; maxSafeUsd: number } {
-  return roomWith(
+function creditReach(pos: CreditPosition, options: readonly BackingOption[]): { maxUsd: number; maxSafeUsd: number } {
+  return reachWith(
     pos,
     options.map((o) => lineOf(o, o.freeUsd)),
   );
 }
 
 /** creditCap with these lines in use. */
-const roomWith = (pos: CreditPosition, lines: BackingLine[]) => creditCap(pos, lines);
+const reachWith = (pos: CreditPosition, lines: BackingLine[]) => creditCap(pos, lines);
 
 /** The value of `raw` of a free holding, at the price its free value was read at. */
 const usdOf = (o: BackingOption, raw: bigint) => (o.freeRaw > 0n ? (o.freeUsd * Number(raw)) / Number(o.freeRaw) : 0);
@@ -192,11 +192,11 @@ export function backingRawFor(option: BackingOption, usd: number): bigint {
 
 /**
  * The most one Credit Buy can use with all of `option` in use and what already backs credit (planCredit's MAX with that
- * one option: step 2's MAX on it). Without `option`, the room on what already backs credit alone (step 1's "Already
+ * one option: step 2's MAX on it). Without `option`, the credit left on what already backs credit alone (step 1's "Already
  * backs credit" row).
  */
 export function creditWith(position: CreditPosition, option?: BackingOption): number {
-  return creditRoom(position, option ? [option] : []).maxUsd;
+  return creditReach(position, option ? [option] : []).maxUsd;
 }
 
 /**
@@ -218,7 +218,7 @@ export function bestBacking(
 /**
  * What backs `creditRaw` of credit and the status it ends in, on Leo's loan maths.
  *
- * With `backing` (Credit Buy, backing first): exactly that pick goes in use, and the room is what it and what already
+ * With `backing` (Credit Buy, backing first): exactly that pick goes in use, and the credit it can take is what it and what already
  * backs credit allow (creditCap). More than its free shares is blocked ("over-free"); 0n uses only what already backs
  * credit.
  *
@@ -239,14 +239,14 @@ export function planCredit(
   const creditInput = creditInputOf(pos);
 
   let chosen: { option: BackingOption; raw: bigint; usd: number }[];
-  let room: { maxUsd: number; maxSafeUsd: number };
+  let reach: { maxUsd: number; maxSafeUsd: number };
   let overFree = false;
   if (p.backing) {
     const { option, raw: want } = p.backing;
     overFree = want > (option?.freeRaw ?? 0n);
     const raw = option ? (want < option.freeRaw ? want : option.freeRaw) : 0n;
     chosen = option && raw > 0n ? [{ option, raw, usd: usdOf(option, raw) }] : [];
-    room = roomWith(
+    reach = reachWith(
       pos,
       chosen.map((c) => lineOf(c.option, c.usd)),
     );
@@ -257,15 +257,15 @@ export function planCredit(
       const raw = fillRaw(o.freeRaw, o.freeUsd, fill[o.stock.symbol]);
       return raw > 0n ? [{ option: o, raw, usd: usdOf(o, raw) }] : [];
     });
-    room = creditRoom(pos, options);
+    reach = creditReach(pos, options);
   }
   const lines = chosen.map((c) => lineOf(c.option, c.usd));
   const calc = combinedCredit({ ...creditInput, creditUsd: creditUsd, lines: lines });
-  const { maxUsd, maxSafeUsd } = room;
+  const { maxUsd, maxSafeUsd } = reach;
   const after = statusFor(pos.debtUsd + creditUsd > 0 ? calc.hfAfter : null);
-  // The batch's own ceiling: the room with exactly the backing it puts in use (for an explicit pick, maxUsd itself).
+  // The batch’s own ceiling: the credit with exactly the backing it puts in use (for an explicit pick, maxUsd itself).
   const limit: CreditLimit = {
-    maxCreditRaw: usdcRaw(p.backing ? maxUsd : roomWith(pos, lines).maxUsd),
+    maxCreditRaw: usdcRaw(p.backing ? maxUsd : reachWith(pos, lines).maxUsd),
     freeRaw: Object.fromEntries(chosen.map((c) => [c.option.stock.symbol, c.option.freeRaw])),
   };
 
@@ -301,7 +301,7 @@ type NoCredit = "no-stocks" | "cant-back" | "too-small" | "all-in-use" | "in-act
 
 /** F2-3's line under "$0", first half: why. */
 export const NO_CREDIT: Record<NoCredit, string> = {
-  "no-stocks": "Credit comes from the stocks you own.",
+  "no-stocks": "Credit comes from your stocks",
   "cant-back": "Your stocks can’t back credit right now.",
   "too-small": "Your free stock is too small to back credit yet.",
   "all-in-use": "Your stocks already back what you owe. Repay some to use more.",
@@ -315,16 +315,13 @@ export const NO_CREDIT: Record<NoCredit, string> = {
  * with too little cash for the smallest buy and its network fee, to top up first.
  */
 export function noCreditLine(why: NoCredit, canPayCash: boolean): string {
-  const then =
-    why === "no-stocks"
-      ? canPayCash
-        ? "Buy one with cash first."
-        : "Top up, then buy one with cash."
-      : canPayCash
-        ? "You can still buy with cash."
-        : "Top up to buy with cash.";
-  return `${NO_CREDIT[why]} ${then}`;
+  // No stocks (rulings 8, 9): the step's title says where credit comes from, so the line only says what to do.
+  if (why === "no-stocks") return canPayCash ? "Buy one with your cash first." : "Top up, then buy one with your cash.";
+  return `${NO_CREDIT[why]} ${canPayCash ? "You can still buy with cash." : "Top up to buy with cash."}`;
 }
+
+/** Whether the cash can pay the smallest buy, the fuel tank kept back. */
+export const canBuyWithCash = (cash: Cash) => toUsd(maxSpendRaw(cash)) >= BUY_LIMITS.minUsd;
 
 /** F2-3's line under the number when there is credit to use. */
 export const CREDIT_FROM = "In credit, backed by the stocks you own.";
@@ -343,7 +340,7 @@ export type CreditAvailable = {
  * The most one Credit Buy can use right now, with the best holding all in use (Invest's buying power), and whether it
  * can use anything at all (Credit Buy's step 1 says why at $0). A Credit Buy is backed by one free holding plus what
  * already backs credit, so this is the best of the per-holding figures (bestBacking, the one step 1 picks first), or
- * the room on what already backs credit when nothing free can back it. Each is creditCap: net of what's owed, within
+ * the credit left on what already backs credit when nothing free can back it. Each is creditCap: net of what's owed, within
  * what Aave can lend, and never past the Act line's margin, so this figure, step 2's and step 4's MAX and "Up to" are
  * the same number. Under the minimum buy, while new credit is paused, or while the credit is in Act, it is $0 with the
  * reason. With credit but less cash than the network fee, the number stays and the line asks for the fee first.
@@ -366,7 +363,7 @@ export function creditAvailable(p: {
     if (p.position.totalBackingUsd <= 0) return p.options.length === 0 ? "cant-back" : "too-small";
     return "all-in-use";
   })();
-  if (why) return { usd: 0, why, line: noCreditLine(why, toUsd(maxSpendRaw(p.cash)) >= BUY_LIMITS.minUsd) };
+  if (why) return { usd: 0, why, line: noCreditLine(why, canBuyWithCash(p.cash)) };
   return { usd, line: cashRaw(p.cash) < feeBufferRaw ? FEE_FIRST : CREDIT_FROM };
 }
 
