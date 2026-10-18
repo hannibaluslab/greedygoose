@@ -25,6 +25,7 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
 ## Home
 
 - Quick actions: Top up, Trade, Credit Buy, Repay.
+- The menu: Activity, Guide (Coming soon, at /guide) and Settings.
 - A tap on the name in the header copies it ("sam.justan.id"), with a toast.
 - The Yield card counts only while the cash really earns (savings on Base above 0): the savings balance as last read,
   carried at the live rate between reads and restarted from each read. Otherwise it says "Not earning yet".
@@ -100,14 +101,16 @@ the free shares' value. A stock whose shares all back credit is listed but can't
 
 ## Agents
 
-- Visible: **Protect** and **Rebalance**, on the Agents tab.
+- Visible: **Protect** and **Rebalance**, on the Agents tab. Under them, **DCA**, **Auto top up** and **JAW MCP** show as
+  Coming soon, with nothing to open yet.
 - Invisible: earning on idle cash (Save) and turning other dollars into cash (Receive). Their permissions are asked
   when money first arrives.
 - Permissions go through JAW's own screens; the spender is `GooseExecutor`. Each limit is one typed amount.
 - Until Chainlink approves the automation (`NEXT_PUBLIC_AGENTS_LIVE=1`), "Coming soon" stands where the switches and
   Save are; the figures are real.
 - The Agents feed shows the agents' moves only. "Turn off all agents" shows only while one is on.
-- Rebalance only moves stocks that don't back credit, and never spends cash beyond the network fee.
+- Rebalance only moves stocks that don't back credit, and never spends cash beyond the network fee. Its mix never adds
+  up to more than 100%: a target stops where the other stocks' leave off.
 
 ## Words
 

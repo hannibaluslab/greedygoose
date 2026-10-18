@@ -180,3 +180,18 @@ export const RefreshIcon = ({ size = 18, ...r }: P) => (
     <path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5" />
   </svg>
 );
+export const GuideIcon = ({ size = 20, ...r }: P) => (
+  <svg {...base(size, 1.8, r)}>
+    <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5zM20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5a1.5 1.5 0 0 0 1.5-1.5z" />
+  </svg>
+);
+export const RepeatIcon = ({ size = 19, ...r }: P) => (
+  <svg {...base(size, 1.9, r)}>
+    <path d="M17 3l3 3-3 3M4 11V9a3 3 0 0 1 3-3h13M7 21l-3-3 3-3M20 13v2a3 3 0 0 1-3 3H4" />
+  </svg>
+);
+export const PlugIcon = ({ size = 19, ...r }: P) => (
+  <svg {...base(size, 1.9, r)}>
+    <path d="M9 3v5M15 3v5M7 8h10v3a5 5 0 0 1-10 0zM12 16v5" />
+  </svg>
+);

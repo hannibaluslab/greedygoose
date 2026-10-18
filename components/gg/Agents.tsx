@@ -8,7 +8,7 @@ import { TabHeader } from "./Screen";
 import { stockColor } from "./StockAvatar";
 import { Switch } from "./Switch";
 import { TabBar } from "./TabBar";
-import { ChevronRight, PadlockIcon } from "./icons";
+import { ChevronRight, PadlockIcon, PlugIcon, PlusIcon, RepeatIcon } from "./icons";
 import { NOT_LIVE, type Agent, type AgentCard, type AgentItem, type CardAction } from "@/lib/agents/list";
 import type { AgentJob } from "@/lib/agents/permissions";
 import { stepsNote } from "@/lib/formatting";
@@ -46,6 +46,11 @@ export function AgentsView({
       <section aria-label="My agents" className="flex flex-col gap-2">
         {rows}
         {!live && <p className="m-0 px-1 text-xs leading-[1.4] text-subtle">{NOT_LIVE}</p>}
+      </section>
+      <section aria-label="Coming soon" className="flex flex-col gap-2">
+        {PLANNED.map((p) => (
+          <PlannedRow key={p.name} {...p} />
+        ))}
       </section>
       {feed}
       {turnOffAll}
@@ -137,6 +142,29 @@ export function MixBar({ mixBps }: { mixBps: readonly number[] }) {
         <span key={e.symbol} style={{ flex: mixBps[e.reserveId], background: stockColor(e.symbol) }} />
       ))}
     </span>
+  );
+}
+
+/** Agents planned after Protect and Rebalance: on the tab as Coming soon, with nothing to open yet. */
+const PLANNED = [
+  { name: "DCA", does: "Buys stocks with your cash on a schedule", Icon: RepeatIcon },
+  { name: "Auto top up", does: "Tops up your cash from another wallet every month", Icon: PlusIcon },
+  { name: "JAW MCP", does: "Lets your AI assistant use your account, within limits you sign", Icon: PlugIcon },
+] as const;
+
+/** A planned agent's row: the agent row's card, its mark and name, what it will do, and Coming soon. */
+function PlannedRow({ name, does, Icon }: (typeof PLANNED)[number]) {
+  return (
+    <div className="flex items-center gap-2.5 rounded-[22px] bg-card px-3 py-3 shadow-card-elev">
+      <span aria-hidden className="flex size-[38px] shrink-0 items-center justify-center rounded-full bg-chip text-ink">
+        <Icon />
+      </span>
+      <span className="flex min-w-0 grow flex-col gap-0.5">
+        <span className="text-base font-semibold">{name}</span>
+        <span className="text-[13px] leading-[1.35] text-subtle">{does}</span>
+      </span>
+      <ComingSoon />
+    </div>
   );
 }
 

@@ -3,14 +3,15 @@
 import Link from "next/link";
 import { useState } from "react";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
-import { ActivityIcon, ChevronRight, GearIcon, MenuIcon } from "./icons";
+import { ActivityIcon, ChevronRight, GearIcon, GuideIcon, MenuIcon } from "./icons";
 
 const ITEMS = [
   { href: "/activity", label: "Activity", Icon: ActivityIcon },
+  { href: "/guide", label: "Guide", Icon: GuideIcon },
   { href: "/settings", label: "Settings", Icon: GearIcon },
 ] as const;
 
-/** The header menu (D16): Activity and Settings live here, out of the tab bar. */
+/** The header menu (D16): Activity, the Guide and Settings live here, out of the tab bar. */
 export function MenuButton() {
   const [open, setOpen] = useState(false);
   return (
