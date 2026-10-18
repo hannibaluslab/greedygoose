@@ -8,7 +8,7 @@ import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { LIMIT_USD, limitRaw } from "@/lib/agents/permissions";
 
 /** Why a grant can't be signed now; null when it can. */
-const FEE_BLOCKED = "Your account can’t pay network fees in USDC on Base right now.";
+const FEE_BLOCKED = "Your account can’t pay network fees from your cash right now.";
 
 /** A grant's button and what's around it: signing, its last error, why it can't be signed, and the dev preview. */
 export type GrantView = { busy: boolean; error: string | null; blocked: string | null; preview: boolean };

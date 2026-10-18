@@ -181,7 +181,7 @@ export function CashSheet({
 
   const preview = !signer || !isAddressEqual(signer, account);
   const feeBlocked =
-    !!signer && fee.state === "unsupported" ? "Your account can’t pay network fees in USDC on Base right now." : null;
+    !!signer && fee.state === "unsupported" ? "Your account can’t pay network fees from your cash right now." : null;
   const earning = step === "earn" && offer !== null;
 
   return (

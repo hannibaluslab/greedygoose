@@ -171,7 +171,7 @@ function Agents({ address }: { address: `0x${string}` }) {
   const blocked = !live
     ? "Coming soon"
     : !!signer && fee.state === "unsupported"
-      ? "Your account can’t pay network fees in USDC on Base right now."
+      ? "Your account can’t pay network fees from your cash right now."
       : capMax === null || !position
         ? "One moment…"
         : preview

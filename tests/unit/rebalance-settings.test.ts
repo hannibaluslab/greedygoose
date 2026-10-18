@@ -138,7 +138,7 @@ describe("rebalanceSave", () => {
     const weights = [5_000, 0, 0, 0, 0, 2_500, 2_500];
     expect(rebalanceSave({ ...base, weights, feeBlocked: true })).toMatchObject({
       canSave: false,
-      note: "Your account can’t pay network fees in USDC on Base right now.",
+      note: "Your account can’t pay network fees from your cash right now.",
     });
     expect(rebalanceSave({ ...base, weights, busy: true }).canSave).toBe(false);
     expect(rebalanceSave({ ...base, weights, feeLoading: true }).canSave).toBe(false);

@@ -60,6 +60,10 @@ function AddMoneyBody({ address, name, rate, arrived, onCopy }: AddMoneyProps) {
         <p className="num m-0 text-sm leading-[1.45] text-ink-mid">
           USDC, USDT, USDe or USDS on Base. {rate ? `They arrive as cash and earn ${rate}.` : "They arrive as cash."}
         </p>
+        {/* Ruling 11. */}
+        <p className="m-0 text-sm font-semibold leading-[1.45] text-ink">
+          Send on Base only. Other networks can lose it.
+        </p>
       </div>
 
       <div className="flex flex-col gap-1.5 rounded-[22px] bg-card-bone px-5 py-[18px]">

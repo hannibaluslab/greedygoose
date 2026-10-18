@@ -190,7 +190,7 @@ export function ProtectSettingsView({
   const note = !live
     ? "Not live yet"
     : feeBlocked
-      ? "Your account can’t pay network fees in USDC on Base right now."
+      ? "Your account can’t pay network fees from your cash right now."
       : plan.blocked;
   // Save's first JAW sheet is "Sells first" when it changed: its batch is prepared while the body is idle.
   const first = steps[0];

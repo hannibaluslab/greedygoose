@@ -27,7 +27,7 @@ export function Leaderboard() {
 }
 
 const lower = (a: string) => a.toLowerCase();
-const FEE_BLOCKED = "Your account can’t pay network fees in USDC on Base right now.";
+const FEE_BLOCKED = "Your account can’t pay network fees from your cash right now.";
 
 /**
  * The Leaderboard tab (Adrian, 2026-10-15). Members come from GooseBoard and are scored in this browser from the

@@ -587,7 +587,7 @@ export function CreditBuySheet({
               )}
               {feeBlocked && (
                 <p role="alert" className="m-0 text-[13px] text-act">
-                  Your account can’t pay network fees in USDC on Base right now, so this Credit Buy can’t go through.
+                  Your account can’t pay network fees from your cash right now, so this Credit Buy can’t go through.
                 </p>
               )}
               <TxError error={error} />

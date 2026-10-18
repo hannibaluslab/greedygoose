@@ -75,7 +75,7 @@ export function rebalanceSave(p: {
   const note = !p.configured
     ? "Not live yet"
     : p.connected && p.feeBlocked
-      ? "Your account can’t pay network fees in USDC on Base right now."
+      ? "Your account can’t pay network fees from your cash right now."
       : !whole
         ? "Make your mix add up to 100% to save it."
         : null;

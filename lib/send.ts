@@ -108,9 +108,11 @@ export const SEND_COPY = {
   tooSmall: "That’s less than the smallest part of a share.",
   // The button and what comes back.
   button: "Send",
+  enterAmount: "Enter an amount",
+  addWho: "Add who to send to",
   sendUsd: (usd: number) => `Send ${formatUsd(usd)}`,
   sendStock: (name: string) => `Send ${name}`,
-  feeUnsupported: "Your account can’t pay network fees in USDC on Base right now, so this can’t be sent.",
+  feeUnsupported: "Your account can’t pay network fees from your cash right now, so this can’t be sent.",
   fallback: "This send would fail right now. Check the amount and try again in a moment.",
   stockFallback: "This stock can’t go to that address right now. Send to someone else, or try again later.",
   failedOnChain: "The send didn’t go through on Base. Nothing moved except any network fee.",
@@ -567,14 +569,19 @@ export function planSend(p: {
   ];
 
   const ready = !!token && amountRaw > 0n && !amountBlock && !!p.recipient && !!to && !to.block && !to.waiting;
+  // Ruling 44: while it's off for want of an amount or a person, the button says which.
   const button =
-    p.asset === "cash"
-      ? amountUsd > 0 && !amountBlock
-        ? SEND_COPY.sendUsd(amountUsd)
-        : SEND_COPY.button
-      : holding
-        ? SEND_COPY.sendStock(holding.name)
-        : SEND_COPY.button;
+    amountRaw === 0n
+      ? SEND_COPY.enterAmount
+      : !p.recipient
+        ? SEND_COPY.addWho
+        : p.asset === "cash"
+          ? amountUsd > 0 && !amountBlock
+            ? SEND_COPY.sendUsd(amountUsd)
+            : SEND_COPY.button
+          : holding
+            ? SEND_COPY.sendStock(holding.name)
+            : SEND_COPY.button;
   // The done line names the stock ("Sent 0.0072 Amazon"), as the Trade sheet's "Sold 0.0029 Alphabet" does.
   const what = p.asset === "cash" ? formatUsd(amountUsd) : `${formatShares(shares)} ${holding?.name ?? ticker}`;
 

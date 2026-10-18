@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { StockAvatar, tickerOf } from "./StockAvatar";
 import { AgentsIcon, ChevronDown, ChevronRight, RebalanceIcon, ShieldIcon } from "./icons";
 import type { ActivityRow } from "@/hooks/useActivity";
+import { useNames } from "@/hooks/useContacts";
 import type { AgentRow } from "@/hooks/useAgentFeed";
 import type { ActivityItem } from "@/lib/activity/decode";
 import type { MoveBy, Words } from "@/lib/agents/feed";
@@ -13,11 +14,19 @@ import { ALL_RESERVES, USDC, findByAddress } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 import { formatCoin, formatShares, formatUsd, shortAddress } from "@/lib/formatting";
 
-/** One decoded move in words: what happened, then its amount and sign. */
-export function describeActivity(i: ActivityItem): { title: string; amount: string; sign: "+" | "−" | "" } {
+/**
+ * One decoded move in words: what happened, then its amount and sign. Dollars are "Cash" (ruling 26); a send names who
+ * it went to, `to` (ruling 25: "Sent Cash to ana.eth").
+ */
+export function describeActivity(
+  i: ActivityItem,
+  to?: string,
+): { title: string; amount: string; sign: "+" | "−" | "" } {
   const r = ALL_RESERVES.find((x) => x.symbol === i.symbol) ?? findByAddress(i.symbol);
-  const name = r?.kind === "equity" ? r.name : "USDC";
+  const name = r?.kind === "equity" ? r.name : "Cash";
   const shares = `${formatShares(i.amount)} ${tickerOf(i.symbol)}`;
+  // What moved: shares of a stock, else dollars.
+  const moved = r?.kind === "equity" ? shares : formatUsd(i.amount);
   switch (i.kind) {
     case "buy":
       return { title: `Bought ${name}`, amount: `${shares} · ${formatUsd(i.paidUsd ?? 0)}`, sign: "" };
@@ -26,11 +35,11 @@ export function describeActivity(i: ActivityItem): { title: string; amount: stri
     case "supply":
       return {
         title: `Backed credit with ${name}`,
-        amount: r?.kind === "equity" ? shares : formatUsd(i.amount),
+        amount: moved,
         sign: "",
       };
     case "withdraw":
-      return { title: `Freed up ${name}`, amount: r?.kind === "equity" ? shares : formatUsd(i.amount), sign: "" };
+      return { title: `Freed up ${name}`, amount: moved, sign: "" };
     case "borrow":
       return { title: "Used credit", amount: formatUsd(i.amount), sign: "+" };
     case "earn":
@@ -42,9 +51,13 @@ export function describeActivity(i: ActivityItem): { title: string; amount: stri
     case "repay":
       return { title: "Repaid credit", amount: formatUsd(i.amount), sign: "−" };
     case "receive":
-      return { title: `Received ${name}`, amount: r?.kind === "equity" ? shares : formatUsd(i.amount), sign: "+" };
+      return { title: `Received ${name}`, amount: moved, sign: "+" };
     case "send":
-      return { title: `Sent ${name}`, amount: r?.kind === "equity" ? shares : formatUsd(i.amount), sign: "−" };
+      return {
+        title: to ? `Sent ${name} to ${to}` : `Sent ${name}`,
+        amount: moved,
+        sign: "−",
+      };
     case "convert":
       return {
         title: `Turned ${i.symbol} into cash`,
@@ -174,7 +187,11 @@ export function FeedDays({ rows, nowMs }: { rows: readonly FeedRow[]; nowMs: num
 /** One move, as the board draws an agent's: title · time, one line on what changed, details on tap. */
 function Move({ row, last, open, onToggle }: { row: ActivityRow; last: boolean; open: boolean; onToggle: () => void }) {
   const main = row.items[0];
-  const d = main ? describeActivity(main) : null;
+  // Who a send went to: the name this device sent it to, else the name the address has, else a short address.
+  const sentTo = main?.kind === "send" && main.to ? main.to : null;
+  const looked = useNames(sentTo && !main?.toName ? [sentTo] : []);
+  const who = sentTo ? (main?.toName ?? looked.get(sentTo.toLowerCase()) ?? shortAddress(sentTo)) : undefined;
+  const d = main ? describeActivity(main, who) : null;
   const status = row.status === "pending" ? "Confirming" : row.status === "failed" ? "Failed" : null;
   // Earn with stocks reads as one move: the backing it put in use is in its details, not "1 more".
   const more = main?.kind !== "earn" && row.items.length > 1;
@@ -205,7 +222,7 @@ function Move({ row, last, open, onToggle }: { row: ActivityRow; last: boolean; 
         <div className="mt-2 rounded-[16px] bg-card-bone px-3 pt-2.5 text-[13px] leading-[1.35]">
           <dl className="num m-0 grid grid-cols-[82px_minmax(0,1fr)] gap-y-[5px]">
             {row.items.map((item, i) => {
-              const x = describeActivity(item);
+              const x = describeActivity(item, i === 0 ? who : undefined);
               return (
                 <Detail key={i} label={i === 0 ? "What" : ""}>
                   {x.title}, {x.sign}

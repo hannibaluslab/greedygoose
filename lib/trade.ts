@@ -209,7 +209,7 @@ export const TRADE_COPY = {
   overCash: (usd: number) => `That’s more than your cash (${formatUsd(usd)}).`,
   feeBuffer: `Leave ${formatUsd(CASH.feeBufferUsd)} for the network fee.`,
   notFree: "That’s more than your free shares.",
-  feeUnsupported: "Your account can’t pay network fees in USDC on Base right now, so this trade can’t go through.",
+  feeUnsupported: "Your account can’t pay network fees from your cash right now, so this trade can’t go through.",
   swapFallback:
     "This trade would fail right now — a price may have moved or a stock may be paused. Try again in a moment.",
   failedOnChain: "The trade didn’t go through on Base. Nothing moved except any network fee.",

@@ -68,7 +68,7 @@ function Settings({ address }: { address: `0x${string}` }) {
         </p>
       </WhiteCard>
       <WhiteCard className="p-4 text-[13px] leading-snug text-ink-mid">
-        GreedyGoose is a non-custodial interface. Your stocks and USDC stay in your own smart account. Credit comes from
+        GreedyGoose is a non-custodial interface. Your stocks and cash stay in your own smart account. Credit comes from
         the Aave protocol; if the stocks backing it fall too far in value, Aave can sell part of them. Not available to
         US persons.
       </WhiteCard>

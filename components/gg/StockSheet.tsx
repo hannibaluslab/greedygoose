@@ -234,7 +234,7 @@ export function StockSheet({
             {ready && plan && q && <SellSmallPrint stock={stock} holding={holding} quote={q} plan={plan} />}
             {feeBlocked && (
               <p role="alert" className="m-0 text-[13px] text-act">
-                Your account can’t pay network fees in USDC on Base right now, so this sale can’t go through.
+                Your account can’t pay network fees from your cash right now, so this sale can’t go through.
               </p>
             )}
             <TxError error={error} />

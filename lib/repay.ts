@@ -114,7 +114,7 @@ export const REPAY_COPY = {
   nearLimit: "That would take too much out of backing before the repay lands. Repay less, or pay with cash.",
   act: "That would put your credit in Act. Repay more, or pay with cash.",
   notHeld: "That’s more than you have.",
-  feeUnsupported: "Your account can’t pay network fees in USDC on Base right now.",
+  feeUnsupported: "Your account can’t pay network fees from your cash right now.",
   done: (usd: number) => `Repaid ${formatUsdTrim(usd)}`,
   doneAll: "Repaid all your credit",
 } as const;
