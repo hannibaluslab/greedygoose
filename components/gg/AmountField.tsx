@@ -210,30 +210,58 @@ export function YouGet({
   );
 }
 
-/** What a sale pays, in YouGet's card: the cash badge, dollars and the price a share. `usd` null while quoting. */
-export function YouGetCash({ usd, priceUsd, source }: { usd: number | null; priceUsd: number; source?: ReactNode }) {
+/**
+ * What a stock bought in a trade comes to (canvas board 10, UX note 1): its badge and dollars, with "1.10 shares ·
+ * $180.00 each" under them, so the price never sits beside the amount as a second one. `shares` null while quoting.
+ */
+export function YouGetShares({
+  symbol,
+  shares,
+  priceUsd,
+  source,
+}: {
+  symbol: string;
+  shares: number | null;
+  priceUsd: number;
+  source?: ReactNode;
+}) {
   return (
     <Arrives
-      mark={<AmountBadge kind="cash" />}
-      amount={usd === null ? null : formatUsd(usd)}
-      unit="Cash"
-      priceUsd={priceUsd}
+      mark={<StockAvatar symbol={symbol} />}
+      amount={shares === null ? null : formatUsd(shares * priceUsd)}
+      line={shares === null ? null : `${formatShares(shares)} shares · ${formatUsd(priceUsd)} each`}
       source={source}
     />
   );
 }
 
+/** What a sale pays (canvas board 9): the cash badge and the dollars, nothing beside them. `usd` null while quoting. */
+export function YouGetCash({ usd, source }: { usd: number | null; source?: ReactNode }) {
+  return (
+    <Arrives
+      mark={<AmountBadge kind="cash" />}
+      amount={usd === null ? null : formatUsd(usd)}
+      unit="Cash"
+      source={source}
+    />
+  );
+}
+
+/** The "You get" card. The price on the right is the Buy and Credit Buy sheets' look; boards 9–10 drop it. */
 function Arrives({
   mark,
   amount,
   unit,
+  line,
   priceUsd,
   source,
 }: {
   mark: ReactNode;
   amount: string | null;
-  unit: string;
-  priceUsd: number;
+  unit?: string;
+  /** A line under the card's amount: "1.10 shares · $180.00 each". */
+  line?: string | null;
+  priceUsd?: number;
   source?: ReactNode;
 }) {
   const label = (
@@ -257,13 +285,16 @@ function Arrives({
           <div className="num text-2xl font-semibold leading-[1.1] tracking-[-0.03em]" aria-live="polite">
             {amount ?? "…"}
           </div>
-          <div className="text-[12px] text-subtle">{unit}</div>
+          {unit && <div className="text-[12px] text-subtle">{unit}</div>}
         </div>
-        <div className="text-right">
-          <div className="text-[12px] text-subtle">Price</div>
-          <div className="num text-[14px] font-semibold">{formatUsd(priceUsd)}</div>
-        </div>
+        {priceUsd !== undefined && (
+          <div className="text-right">
+            <div className="text-[12px] text-subtle">Price</div>
+            <div className="num text-[14px] font-semibold">{formatUsd(priceUsd)}</div>
+          </div>
+        )}
       </div>
+      {line && <span className="num text-[12.5px] text-ink-mid">{line}</span>}
     </div>
   );
 }

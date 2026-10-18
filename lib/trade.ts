@@ -469,7 +469,7 @@ export function legOf<Q extends BuyQuote>(q: QuoteState<Q> | undefined, amountIn
 
 type YouGet =
   | { kind: "stock"; symbol: string; shares: number | null; priceUsd: number }
-  | { kind: "cash"; usd: number | null; priceUsd: number };
+  | { kind: "cash"; usd: number | null };
 
 const pct = (f: number) => (f * 100).toFixed(1);
 
@@ -592,7 +592,6 @@ export function planTrade(p: {
     : {
         kind: "cash",
         usd: sellEcon ? sellEcon.usd : quoting ? null : 0,
-        priceUsd: sellEcon ? sellEcon.price : (fromHolding?.priceUsd ?? 0),
       };
 
   const shown = amountUsd > 0 && !blocker;

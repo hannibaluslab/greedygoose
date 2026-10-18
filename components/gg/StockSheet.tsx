@@ -150,18 +150,7 @@ export function StockSheet({
             )}
             <MarketBanner />
             {owned && <StockPosition holding={holding} />}
-            <StockChart holding={holding} name={stock.name} />
-            <div className="grid grid-cols-2 gap-2.5">
-              <StatCard
-                label="Of your portfolio"
-                value={
-                  owned
-                    ? `${((portfolioShare(holding.freeUsd + holding.backingUsd, data.stocksUsd) ?? 0) * 100).toFixed(1)}%`
-                    : "0%"
-                }
-              />
-              <StatCard label="Aave’s price" value={formatUsd(holding.priceUsd)} />
-            </div>
+            {/* UX note 9: the actions sit right under the holding card, not under the chart and stats. */}
             <Actions
               owned={owned}
               canSell={maxRaw > 0n}
@@ -177,6 +166,18 @@ export function StockSheet({
                 All of it backs your credit right now. Repay some first to sell.
               </p>
             )}
+            <StockChart holding={holding} name={stock.name} />
+            <div className="grid grid-cols-2 gap-2.5">
+              <StatCard
+                label="Of your portfolio"
+                value={
+                  owned
+                    ? `${((portfolioShare(holding.freeUsd + holding.backingUsd, data.stocksUsd) ?? 0) * 100).toFixed(1)}%`
+                    : "0%"
+                }
+              />
+              <StatCard label="Aave’s price" value={formatUsd(holding.priceUsd)} />
+            </div>
             <StockActivity user={user} holding={holding} name={stock.name} owned={owned} />
             <p className="m-0 px-1 text-xs leading-snug text-subtle">
               Values use the price your credit is measured at. The price at the top and the chart are market prices, for
@@ -215,10 +216,7 @@ export function StockSheet({
               autoFocus
             />
             <AmountArrow />
-            <YouGetCash
-              usd={quote.isFetching && sharesRaw > 0n ? null : econ ? econ.usd : 0}
-              priceUsd={econ ? econ.price : holding.priceUsd}
-            />
+            <YouGetCash usd={quote.isFetching && sharesRaw > 0n ? null : econ ? econ.usd : 0} />
             <Summary
               rows={[
                 {

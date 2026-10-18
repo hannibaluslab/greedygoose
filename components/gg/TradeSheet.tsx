@@ -4,7 +4,7 @@ import { EQUITIES } from "@/lib/tokens/registry";
 import { useRef, useState } from "react";
 import { useAccount } from "wagmi";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
-import { AmountArrow, AmountBadge, AmountField, AmountHintLine, YouGet, YouGetCash } from "./AmountField";
+import { AmountArrow, AmountBadge, AmountField, AmountHintLine, YouGetCash, YouGetShares } from "./AmountField";
 import { AssetPicker, assetMark, type PickerRow } from "./AssetPicker";
 import { Button } from "./Button";
 import { useMoneySheets } from "./MoneySheets";
@@ -234,14 +234,14 @@ export function TradeSheet({
             />
             <AmountArrow onFlip={flip} disabled={busy} />
             {view.youGet.kind === "stock" ? (
-              <YouGet
+              <YouGetShares
                 symbol={view.youGet.symbol}
                 shares={view.youGet.shares}
                 priceUsd={view.youGet.priceUsd}
                 source={picker("to")}
               />
             ) : (
-              <YouGetCash usd={view.youGet.usd} priceUsd={view.youGet.priceUsd} source={picker("to")} />
+              <YouGetCash usd={view.youGet.usd} source={picker("to")} />
             )}
             <Summary rows={[...view.rows, NETWORK_FEE_ROW]} />
             {view.note && (
