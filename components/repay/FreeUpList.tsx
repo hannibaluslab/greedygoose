@@ -21,8 +21,9 @@ const sharesText = (share: number, held: number) => `${formatShares(share * held
 
 /**
  * "Choose stocks to free up" (canvas boards 2–6): one row per stock that backs credit. Unticked, a row says what can
- * come out of it now, as a share of what it holds ("Free up All", "Up to 82%", "Limit reached", "Paused"); ticked, its
- * line says the shares that come out ("0.60 of 2.40 shares") and a chip shows how much in % (25%, 82%…), which opens
+ * come out of it now, as a share of what backs credit ("Free up All", "Up to 82%", "Limit reached", "Paused"); its line
+ * counts only the shares that back credit ("2.40 backing · $600"), and ticked, how many of them come out ("0.60 of 2.40
+ * backing", Adrian 2026-10-18); a chip shows how much in % (25%, 82%…), which opens
  * the list of picks. Custom takes a typed %. Over the rows, the free-up limit the ticked stocks use.
  */
 export function FreeUpList({
@@ -162,12 +163,12 @@ function StockRow({
             {row.picked ? (
               <span className="num truncate text-[12.5px] font-medium text-ink">
                 {row.all
-                  ? `${formatShares(item.shares)} shares`
-                  : `${sharesText(row.share, item.shares)} of ${formatShares(item.shares)} shares`}
+                  ? `${formatShares(item.shares)} backing`
+                  : `${sharesText(row.share, item.shares)} of ${formatShares(item.shares)} backing`}
               </span>
             ) : (
               <span className="num truncate text-[12.5px] text-ink-mid">
-                {formatShares(item.shares)} shares · {formatUsdTrim(Math.round(item.usd))}
+                {formatShares(item.shares)} backing · {formatUsdTrim(Math.round(item.usd))}
               </span>
             )}
           </span>
