@@ -31,6 +31,9 @@ export type BackingPick = { option: BackingOption | null; raw: bigint };
  */
 export type CreditLimit = { maxCreditRaw: bigint; freeRaw: Readonly<Record<string, bigint>> };
 
+/** Free stock worth less than a cent can't back a Credit Buy: no minimum of ours (ruling 2, Oct 17). */
+export const MIN_BACKING_USD = 0.01;
+
 /** Free holdings that can back credit: a collateral factor, not paused or frozen. */
 export function backingOptions(
   holdings: readonly { symbol: string; freeRaw: bigint; freeUsd: number; paused: boolean; frozen: boolean }[],

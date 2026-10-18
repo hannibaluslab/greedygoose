@@ -21,7 +21,7 @@ import { BUY_LIMITS, buildBuyCalls, minOut, quoteEconomics, type BuyQuote, type 
 import { SELL_LIMITS, buildSellCalls, sellEconomics, sellMinOut, type SellQuote } from "@/lib/swap/sell";
 import { VENUE_LABEL } from "@/lib/swap/venues";
 import { rawToShares } from "@/lib/tokens/b20";
-import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
+import { EQUITIES, USDC, byStockOrder, stockRank, type ReserveAsset } from "@/lib/tokens/registry";
 
 /**
  * The Trade sheet (Adrian, 2026-10-15): NYM's MoveSheet in the GreedyGoose kit. From is Cash or a stock's free shares,
@@ -69,7 +69,6 @@ const MIN_BUY_RAW = usdcRaw(BUY_LIMITS.minUsd);
 const tickerOf = (symbol: string) => symbol.replace(/c$/, "");
 const held = (h: TradeHolding) => h.freeRaw + h.backingRaw > 0n;
 const valueOf = (h: TradeHolding) => h.freeUsd + h.backingUsd;
-const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
 
 /** A stock from the registry, never from a string alone; undefined for cash or anything else. */
 export const stockOf = (a: TradeAsset): ReserveAsset | undefined =>
@@ -281,12 +280,13 @@ export function fromOptions(data: Pick<TradeData, "holdings" | "cash" | "cashUsd
       why,
     };
   });
-  const pickable = stocks.filter((s) => !s.disabled).sort((a, b) => b.freeUsd - a.freeUsd);
-  const rest = stocks.filter((s) => s.disabled).sort((a, b) => b.freeUsd - a.freeUsd || b.backsUsd - a.backsUsd);
+  const inOrder = (a: FromOption, b: FromOption) => stockRank(a.asset) - stockRank(b.asset);
+  const pickable = stocks.filter((s) => !s.disabled).sort(inOrder);
+  const rest = stocks.filter((s) => s.disabled).sort(inOrder);
   return [cash, ...pickable, ...rest];
 }
 
-/** "Trade to": Cash, then the stocks held by value, then the others A to Z, each with Aave's price a share. */
+/** "Trade to": Cash, then the stocks held, then the others, each in Home's order with Aave's price a share. */
 export function toOptions(data: Pick<TradeData, "holdings" | "cashUsd">): ToOption[] {
   const cash: ToOption = {
     asset: "cash",
@@ -304,8 +304,8 @@ export function toOptions(data: Pick<TradeData, "holdings" | "cashUsd">): ToOpti
     ownedUsd: held(h) ? valueOf(h) : 0,
     disabled: false,
   });
-  const mine = data.holdings.filter(held).sort((a, b) => valueOf(b) - valueOf(a));
-  const others = data.holdings.filter((h) => !held(h)).sort(byName);
+  const mine = data.holdings.filter(held).sort(byStockOrder);
+  const others = data.holdings.filter((h) => !held(h)).sort(byStockOrder);
   return [cash, ...mine.map(row), ...others.map(row)];
 }
 
@@ -320,12 +320,14 @@ export function defaultLegs(
 ): { from: TradeAsset; to: TradeAsset } | null {
   const pickable = fromOptions(data).filter((o) => !o.disabled);
   if (!pickable.length) return null;
-  const from = seed.from && pickable.some((o) => o.asset === seed.from) ? seed.from : pickable[0].asset;
+  // The cash when it can pay, else the stock with the most free value (the list itself is in Home's order).
+  const lead = pickable[0].asset === "cash" ? "cash" : [...pickable].sort((a, b) => b.freeUsd - a.freeUsd)[0].asset;
+  const from = seed.from && pickable.some((o) => o.asset === seed.from) ? seed.from : lead;
   if (seed.to && routeOf(from, seed.to)) return { from, to: seed.to };
   if (from !== "cash") return { from, to: "cash" };
   const biggest =
-    data.holdings.filter(held).sort((a, b) => valueOf(b) - valueOf(a))[0] ?? [...data.holdings].sort(byName)[0];
-  const to = biggest?.symbol ?? [...EQUITIES].sort(byName)[0].symbol;
+    data.holdings.filter(held).sort((a, b) => valueOf(b) - valueOf(a))[0] ?? [...data.holdings].sort(byStockOrder)[0];
+  const to = biggest?.symbol ?? EQUITIES[0].symbol;
   return { from, to };
 }
 

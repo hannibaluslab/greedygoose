@@ -26,12 +26,10 @@ import { STATUS_LABEL } from "@/lib/risk/status";
 import { BUY_LIMITS, minOut, quoteEconomics } from "@/lib/swap/buy";
 import { VENUE_LABEL } from "@/lib/swap/venues";
 import { rawToShares } from "@/lib/tokens/b20";
-import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
+import { EQUITIES, USDC, byStockOrder, type ReserveAsset } from "@/lib/tokens/registry";
 
 type Step = "market" | "amount";
 const ORDER: Step[] = ["market", "amount"];
-
-const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name);
 
 /**
  * Flow 1: Market (F1-3) → the stock's sheet → Buy (F1-4), then Home with the "Bought …" toast (F1-6). A Market row
@@ -129,8 +127,8 @@ export function BuySheet({
     else go("market");
   };
 
-  // F1-3: every stock in one list, A to Z, the ones you own marked "You own $X".
-  const stocks = [...data.holdings].sort(byName);
+  // F1-3: every stock in one list, in Home's order (ruling 43), the ones you own marked "You own $X".
+  const stocks = [...data.holdings].sort(byStockOrder);
   const sign = () => {
     if (!signable) return;
     if (phase === "failed") reset();

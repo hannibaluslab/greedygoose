@@ -26,7 +26,7 @@ import { recipientBlock, type RecipientBlock } from "@/lib/contracts";
 import { formatShares, formatUsd, shortAddress } from "@/lib/formatting";
 import { fullName } from "@/lib/jaw/name";
 import { rawToShares } from "@/lib/tokens/b20";
-import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
+import { EQUITIES, USDC, stockRank, type ReserveAsset } from "@/lib/tokens/registry";
 import {
   TRADE_COPY,
   clampAmount,
@@ -167,8 +167,9 @@ export function sendOptions(data: SendData): SendOption[] {
       freeUsd: h.freeUsd,
     }),
   );
-  const pickable = stocks.filter((s) => !s.disabled).sort((a, b) => b.freeUsd - a.freeUsd);
-  const rest = stocks.filter((s) => s.disabled);
+  const inOrder = (a: SendOption, b: SendOption) => stockRank(a.asset) - stockRank(b.asset);
+  const pickable = stocks.filter((s) => !s.disabled).sort(inOrder);
+  const rest = stocks.filter((s) => s.disabled).sort(inOrder);
   return [cash, ...pickable, ...rest];
 }
 
@@ -176,7 +177,9 @@ export function sendOptions(data: SendData): SendOption[] {
 export function defaultAsset(data: SendData, seed?: SendAsset): SendAsset | null {
   const pickable = sendOptions(data).filter((o) => !o.disabled);
   if (!pickable.length) return null;
-  return seed && pickable.some((o) => o.asset === seed) ? seed : pickable[0].asset;
+  if (seed && pickable.some((o) => o.asset === seed)) return seed;
+  // The cash when it can go, else the stock with the most free value (the list itself is in Home's order).
+  return pickable[0].asset === "cash" ? "cash" : [...pickable].sort((a, b) => b.freeUsd - a.freeUsd)[0].asset;
 }
 
 /** Send's own state: what is sent (null with nothing to send), the dollars typed, and whether a stock sends every free share. */

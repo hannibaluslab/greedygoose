@@ -523,12 +523,12 @@ describe("toLookups (To's lookups, in order)", () => {
 });
 
 describe("Send's options and amount", () => {
-  it("lists Cash, then free stocks by value, then stocks all backing credit, which can't be picked", () => {
+  it("lists Cash, then the stocks that can go, then those that can't, each in Home's order", () => {
     const opts = sendOptions(backer);
     expect(opts.map((o) => [o.asset, o.disabled])).toEqual([
       ["cash", false],
-      ["TSLAc", false],
       ["AMZNc", false],
+      ["TSLAc", false],
       ["NVDAc", true],
     ]);
     expect(opts[0].right).toBe(formatUsd(BACKER_MAX));

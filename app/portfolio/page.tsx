@@ -15,7 +15,7 @@ import { MarketBanner } from "@/components/ui/MarketBanner";
 import { useMarketPrices } from "@/hooks/useMarketPrices";
 import { useBackingFactorsRead, usePosition, type PositionData } from "@/hooks/usePosition";
 import { formatUsd, formatUsdTrim } from "@/lib/formatting";
-import { backingOptions, creditAvailable } from "@/lib/creditBuy";
+import { MIN_BACKING_USD, backingOptions, creditAvailable } from "@/lib/creditBuy";
 import { maxSpendRaw, toUsd } from "@/lib/cash";
 import { dayChange, weekValue } from "@/lib/prices/market";
 
@@ -43,7 +43,7 @@ function Portfolio({ address }: { address: `0x${string}` }) {
   return (
     <div className="relative min-h-dvh">
       <div className="flex flex-col gap-4 px-5 pt-[calc(env(safe-area-inset-top)+12px)]">
-        <TabHeader title="Portfolio" back="/home" status={data?.status} onStatus={() => money.repay()} />
+        <TabHeader title="Investments" back="/home" status={data?.status} onStatus={() => money.repay()} />
 
         {isError && !data ? (
           <div className="rounded-[22px] bg-card p-4 shadow-card-elev">
@@ -100,20 +100,18 @@ function Loaded({
         <BalanceHero
           // Half the width for the portfolio, half for buying power (Adrian: more width for the portfolio).
           even
-          label="Portfolio"
+          label="Stocks"
           value={data.stocksUsd}
           sub={today ? <TodayChange usd={today.usd} pct={today.pct} /> : market.loading ? <TodayPending /> : undefined}
           // Buying power (Adrian): the cash you can spend plus the credit one Credit Buy can use, the same figure the Credit
-          // Buy sheet opens on. Whole dollars, rounded down, so it's never more than there is.
+          // Buy sheet opens on. To the cent, rounded down, so it's never more than there is (ruling 7).
           side={{
             label: "Buying power",
             // The "$" drawn as the portfolio's (as on Home): smaller, in the mid ink.
             value: power ? (
               <>
                 <span className="text-[22px] font-medium tracking-normal text-ink-mid">$</span>
-                {formatUsd(Math.floor(power.cashUsd + power.creditUsd))
-                  .replace(/\.00$/, "")
-                  .replace("$", "")}
+                {formatUsd(floorCents(power.cashUsd + power.creditUsd)).replace("$", "")}
               </>
             ) : (
               "–"
@@ -121,7 +119,7 @@ function Loaded({
             sub: power ? (
               // One line (Adrian): the total is above, so this only says what's in it.
               <span className="whitespace-nowrap">
-                {power.creditUsd >= 1 ? `Cash + ${formatUsdTrim(Math.floor(power.creditUsd))} credit` : "Cash only"}
+                {power.creditUsd >= 0.01 ? `Cash + ${formatUsdTrim(floorCents(power.creditUsd))} credit` : "Cash only"}
               </span>
             ) : undefined,
           }}
@@ -186,10 +184,13 @@ function Loaded({
 }
 
 /** Cash you can spend (less the network-fee buffer) and the credit one Credit Buy can use; null while the backing reads. */
+/** Dollars rounded down to the cent: a figure to spend is never more than there is. */
+const floorCents = (usd: number) => Math.floor(usd * 100 + 1e-6) / 100;
+
 function useBuyingPower(data: PositionData, holdsStock: boolean) {
   const cfs = useBackingFactorsRead(data.holdings).cfs;
   if (holdsStock && !cfs) return null;
-  const options = cfs ? backingOptions(data.holdings, cfs).filter((o) => o.freeUsd >= 1) : [];
+  const options = cfs ? backingOptions(data.holdings, cfs).filter((o) => o.freeUsd >= MIN_BACKING_USD) : [];
   const credit = creditAvailable({ position: data, options, cash: data.cash, holdsStock });
   return { cashUsd: toUsd(maxSpendRaw(data.cash)), creditUsd: credit.usd };
 }

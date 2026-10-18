@@ -18,7 +18,7 @@ import { SELL_LIMITS, sellMinOut, type SellQuote } from "@/lib/swap/sell";
 import { VENUE_LABEL } from "@/lib/swap/venues";
 import { legOf, type Leg, type QuoteState } from "@/lib/trade";
 import { rawToShares } from "@/lib/tokens/b20";
-import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
+import { EQUITIES, USDC, stockRank, type ReserveAsset } from "@/lib/tokens/registry";
 
 /**
  * Repay is one choice: pay with (Adrian, 2026-10-15). The sheet says what's owed, then "Pay with": the cash, each stock
@@ -206,12 +206,15 @@ export function repaySources(data: RepayData, cfs: Record<string, number> | unde
       },
     ];
   });
-  const byMost = (a: RepaySource, b: RepaySource) => b.estUsd - a.estUsd || b.valueUsd - a.valueUsd;
+  // Cash, the free stocks, then the ones that back credit (board 8), each group in Home's order (ruling 43).
+  const inOrder = (a: RepaySource, b: RepaySource) => stockRank(a.stock!.symbol) - stockRank(b.stock!.symbol);
   const min = minRepayUsd(data.debtUsd);
   // A stock's estimate with its pool paying up to 1% under Aave's price (LIST_POOL_ALLOWANCE); the cash is exact.
   const canRepay = (s: RepaySource) =>
     s.kind === "cash" ? s.estUsd : cap(s.valueUsd * SLIP * LIST_POOL_ALLOWANCE - (s.feeFromSale ? fee : 0));
-  return [cash, ...free.sort(byMost), ...backing.sort(byMost)].filter((s) => s.estUsd > 0 && canRepay(s) >= min - 1e-9);
+  return [cash, ...free.sort(inOrder), ...backing.sort(inOrder)].filter(
+    (s) => s.estUsd > 0 && canRepay(s) >= min - 1e-9,
+  );
 }
 
 /** The row on screen: the one picked while it's still listed, else the first (the cash when it can repay $1). */

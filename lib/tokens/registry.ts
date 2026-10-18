@@ -77,6 +77,13 @@ export const EQUITIES = [
   enabled: true,
 })) satisfies ReserveAsset[];
 
+/** Home's stock order, the one every list of stocks uses (ruling 43): the registry's, Apple first and Tesla last. */
+export const stockRank = (symbol: string) => {
+  const i = EQUITIES.findIndex((e) => e.symbol === symbol);
+  return i < 0 ? EQUITIES.length : i;
+};
+export const byStockOrder = (a: { symbol: string }, b: { symbol: string }) => stockRank(a.symbol) - stockRank(b.symbol);
+
 export const USDC: ReserveAsset = {
   symbol: "USDC",
   name: "USD Coin",

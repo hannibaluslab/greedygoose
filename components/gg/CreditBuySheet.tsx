@@ -27,6 +27,7 @@ import {
   backers,
   backingOptions,
   backingRawFor,
+  MIN_BACKING_USD,
   bestBacking,
   creditAvailable,
   creditWith,
@@ -43,7 +44,7 @@ import { STATUS_LABEL, type Status } from "@/lib/risk/status";
 import { BUY_LIMITS, quoteEconomics } from "@/lib/swap/buy";
 import { VENUE_LABEL } from "@/lib/swap/venues";
 import { rawToShares } from "@/lib/tokens/b20";
-import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
+import { EQUITIES, USDC, byStockOrder, type ReserveAsset } from "@/lib/tokens/registry";
 import { CREDIT_CAP } from "@/config/risk";
 
 /** The four steps, backing first (Adrian, 2026-10-15): Back it with → How much → pick a stock → amount to buy. */
@@ -55,8 +56,6 @@ const EXISTING = "existing";
 const valueOf = (h: Holding) => h.freeUsd + h.backingUsd;
 /** "Status after" in words, coloured once it needs the extra confirmation. */
 const AFTER_TONE: Record<Status, string> = { none: "", safe: "", watch: "text-watch-text", act: "text-act" };
-/** Free stock worth less than a cent can't back a Credit Buy: no minimum of ours (ruling 2, Oct 17). */
-const MIN_BACKING_USD = 0.01;
 /** Credit figures in whole dollars, as the boards print them ("$700", "Up to $1,000"). */
 const wholeUsd = (n: number) => formatUsdTrim(Math.max(0, Math.floor(n)));
 
@@ -120,10 +119,9 @@ export function CreditBuySheet({
     // The extra confirmation is for the plan on screen; any step away, or a new amount, asks again.
     setAck(false);
   };
-  const held = data.holdings.filter((h) => h.freeShares + h.backingShares > 0).sort((a, b) => valueOf(b) - valueOf(a));
-  const others = EQUITIES.filter((e) => !held.some((h) => h.symbol === e.symbol)).sort((a, b) =>
-    a.name.localeCompare(b.name),
-  );
+  // Every list in Home's order (ruling 43): the stocks you hold, then the others.
+  const held = data.holdings.filter((h) => h.freeShares + h.backingShares > 0).sort(byStockOrder);
+  const others = EQUITIES.filter((e) => !held.some((h) => h.symbol === e.symbol));
   const priceOf = (symbol: string) => data.holdings.find((h) => h.symbol === symbol)?.priceUsd ?? 0;
 
   // What each free holding gives on its own (all its free shares), so a holding too small to reach the $1 minimum buy
@@ -144,7 +142,7 @@ export function CreditBuySheet({
       cfs
         ? backingOptions(data.holdings, cfs)
             .filter((o) => o.freeUsd >= MIN_BACKING_USD && (gives.get(o.stock.symbol) ?? 0) >= BUY_LIMITS.minUsd)
-            .sort((a, b) => b.freeUsd - a.freeUsd)
+            .sort((a, b) => byStockOrder(a.stock, b.stock))
         : [],
     [data.holdings, cfs, gives],
   );

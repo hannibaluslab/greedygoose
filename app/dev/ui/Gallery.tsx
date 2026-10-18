@@ -114,7 +114,7 @@ export function Gallery() {
       </div>
 
       <Section title="Page header" kit="page-header">
-        <TabHeader title="Portfolio" back="/home" status="safe" statusHref="/repay" />
+        <TabHeader title="Investments" back="/home" status="safe" statusHref="/repay" />
       </Section>
 
       <Section title="Balance hero · Home" kit="hero-home">

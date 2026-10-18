@@ -326,16 +326,16 @@ describe("buildTradeCalls (stock → stock in one batch)", () => {
 });
 
 describe("the pickers", () => {
-  it("From: cash, then the free stocks by free value, then the ones that can't trade, with why", () => {
+  it("From: cash, then the stocks that can trade, then the ones that can't, with why, each in Home's order", () => {
     const rows = fromOptions(backer);
     expect(rows.map((r) => [r.asset, r.disabled, r.sub])).toEqual([
       ["cash", false, undefined],
       ["AMZNc", false, "$1,721.43 of it backs your credit"],
       ["TSLAc", false, "0.0002 shares"],
-      ["NVDAc", true, "All of it backs your credit"],
-      ["METAc", true, "All of it backs your credit"],
       ["GOOGLc", true, "All of it backs your credit"],
+      ["METAc", true, "All of it backs your credit"],
       ["MSFTc", true, "All of it backs your credit"],
+      ["NVDAc", true, "All of it backs your credit"],
     ]);
     expect(rows[1]).toMatchObject({ right: "$1.80", rightSub: "free" });
     expect(rows.find((r) => r.asset === "AAPLc")).toBeUndefined(); // not held, not listed
@@ -358,8 +358,8 @@ describe("the pickers", () => {
 
   it("From: a newcomer's free stocks show their shares; cash without $1 and the fee buffer can't be picked", () => {
     const rows = fromOptions(newcomer);
-    expect(rows.map((r) => r.asset)).toEqual(["cash", "NVDAc", "AAPLc", "METAc", "AMZNc", "MSFTc", "GOOGLc", "TSLAc"]);
-    expect(rows[1].sub).toBe("0.25 shares");
+    expect(rows.map((r) => r.asset)).toEqual(["cash", "AAPLc", "AMZNc", "GOOGLc", "METAc", "MSFTc", "NVDAc", "TSLAc"]);
+    expect(rows.find((r) => r.asset === "NVDAc")!.sub).toBe("0.25 shares");
     const poor = fromOptions({
       ...newcomer,
       cash: { walletRaw: usd(B), savingsRaw: 0n, saveOn: false },
@@ -368,9 +368,9 @@ describe("the pickers", () => {
     expect(poor[0]).toMatchObject({ asset: "cash", disabled: true, sub: "Not enough to trade", why: "no-cash" });
   });
 
-  it("To: cash, the stocks held by value, then the rest A to Z, each with Aave's price a share", () => {
+  it("To: cash, the stocks held, then the rest, each in Home's order with Aave's price a share", () => {
     const rows = toOptions(backer);
-    expect(rows.map((r) => r.asset)).toEqual(["cash", "NVDAc", "AMZNc", "METAc", "GOOGLc", "MSFTc", "TSLAc", "AAPLc"]);
+    expect(rows.map((r) => r.asset)).toEqual(["cash", "AMZNc", "GOOGLc", "METAc", "MSFTc", "NVDAc", "TSLAc", "AAPLc"]);
     expect(rows.find((r) => r.asset === "AAPLc")).toMatchObject({
       sub: "$250.00 a share",
       right: undefined,
@@ -386,7 +386,7 @@ describe("the pickers", () => {
     const noCash = { ...newcomer, cash: { walletRaw: 0n, savingsRaw: 0n, saveOn: false }, cashUsd: 0 };
     expect(defaultLegs(noCash)).toEqual({ from: "NVDAc", to: "cash" });
     expect(defaultLegs({ ...empty, cash: { walletRaw: usd(10), savingsRaw: 0n, saveOn: false }, cashUsd: 10 })).toEqual(
-      { from: "cash", to: "GOOGLc" },
+      { from: "cash", to: "AAPLc" },
     );
     expect(defaultLegs(empty)).toBeNull();
     expect(
