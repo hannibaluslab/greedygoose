@@ -179,7 +179,7 @@ function Spinner() {
 function connectFailure(error: Error): string {
   const words = `${error.name} ${error.message}`;
   if (/failed to open popup|allow pop-?ups/i.test(words))
-    return "Your browser blocked the JAW window. Allow pop-ups for this site, then try again.";
+    return "Your browser blocked the sign-in window. Allow pop-ups for this site, then try again.";
   const code = (error as { code?: unknown }).code;
   if (code === 4001 || /reject|denied|cancel/i.test(words)) return "Sign-in was cancelled.";
   return "We couldn’t sign you in.";

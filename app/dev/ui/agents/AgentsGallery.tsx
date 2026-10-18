@@ -196,6 +196,7 @@ export function AgentsGallery() {
     <AgentRow
       key={`${item.agent}-${item.status}`}
       item={item}
+      live={live}
       switchable={live && item.status !== "loading"}
       onOpen={() => setSheet(item.agent)}
       onSwitch={NOTHING_SIGNED}
@@ -207,6 +208,7 @@ export function AgentsGallery() {
     <>
       <AgentsView
         live={live}
+        signed={allOffSteps > 0}
         cards={cards.map((c) => (
           <AttentionCard key={c.key} card={c} onRenew={NOTHING_SIGNED} />
         ))}
@@ -219,7 +221,7 @@ export function AgentsGallery() {
         }
         feed={
           <AgentsFeed
-            empty="Nothing yet. Your buys, credit and repayments show up here, and so will what your agents do."
+            empty="Nothing yet. What your agents do shows up here, with why."
             rows={live ? rows : []}
             nowMs={nowMs}
             loading={false}
@@ -229,7 +231,7 @@ export function AgentsGallery() {
             onShowEarlier={() => {}}
           />
         }
-        turnOffAll={<TurnOffAll steps={allOffSteps} live={live} disabled={false} onClick={NOTHING_SIGNED} />}
+        turnOffAll={allOffSteps > 0 && <TurnOffAll steps={allOffSteps} disabled={false} onClick={NOTHING_SIGNED} />}
       />
       {sheet && (
         <GallerySheet

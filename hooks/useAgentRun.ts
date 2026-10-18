@@ -38,10 +38,8 @@ export function runError(done: number, of: number, error: unknown): string {
   if (isPopupBlocked(error)) return done > 0 ? `${done} of ${of} went through. ${TAP_AGAIN}` : TAP_AGAIN;
   const cancelled = error instanceof Error && CANCELLED.test(error.message);
   if (done > 0)
-    return `${done} of ${of} went through, then ${cancelled ? "you cancelled on JAW’s screen" : "the next one didn’t"}. Try again for the rest.`;
-  return cancelled
-    ? "You cancelled on JAW’s screen. Nothing changed."
-    : "We couldn’t do that right now. Nothing changed. Try again.";
+    return `${done} of ${of} went through, then ${cancelled ? "you cancelled" : "the next one didn’t"}. Try again for the rest.`;
+  return cancelled ? "You cancelled. Nothing changed." : "We couldn’t do that right now. Nothing changed. Try again.";
 }
 
 /**

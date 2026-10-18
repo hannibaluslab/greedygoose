@@ -63,9 +63,9 @@ function AddMoneyBody({ address, name, rate, arrived, onCopy }: AddMoneyProps) {
       </div>
 
       <div className="flex flex-col gap-1.5 rounded-[22px] bg-card-bone px-5 py-[18px]">
-        <span className="text-[15px] font-semibold">Already hold stocks with JAW?</span>
+        <span className="text-[15px] font-semibold">Already hold stocks in this account?</span>
         <p className="m-0 text-sm leading-[1.45] text-ink-2">
-          They are already here. Any supported stock in your JAW account shows up on Home, ready to back credit.
+          They are already here. Every supported stock in it shows up on Home, ready to back credit.
         </p>
       </div>
     </div>

@@ -30,7 +30,7 @@ export const PREPARE_EVERY_MS = 15_000;
 export const PREPARE_SETTLE_MS = 300;
 
 /** JAW couldn't open its popup (Safari, the activation was gone): the batch is kept, and the next tap opens it. */
-export const TAP_AGAIN = "Tap again to open JAW.";
+export const TAP_AGAIN = "Tap again to confirm.";
 /** Base didn't answer while the batch was prepared: shown before any tap too, so it doesn't ask to try again. */
 export const CANT_CHECK = "We couldn’t check this with Base right now.";
 export const ONLY_SIGNER = "Only the signed-in account can do this. Nothing was sent.";

@@ -17,7 +17,7 @@ import { stepsNote } from "@/lib/formatting";
  */
 
 const PILL: Record<AgentStatus, { text: string; tone: "on" | "neutral" }> = {
-  unconfigured: { text: "Not live yet", tone: "neutral" },
+  unconfigured: { text: "Coming soon", tone: "neutral" },
   loading: { text: "…", tone: "neutral" },
   off: { text: "Off", tone: "neutral" },
   starting: { text: "Starting", tone: "neutral" },

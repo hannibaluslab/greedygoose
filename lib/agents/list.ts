@@ -125,7 +125,7 @@ export function agentItems(i: AgentItemsInput): AgentItem[] {
 }
 
 /** One line under the rows while no agent can be switched on. */
-export const NOT_LIVE = "Not live yet. Switching on opens after the agents’ audit.";
+export const NOT_LIVE = "Coming soon: the agents open once their automation is approved.";
 
 /*
  * Cards: only when something needs the user, one sentence and one or two actions each.

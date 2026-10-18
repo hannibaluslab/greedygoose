@@ -139,7 +139,7 @@ export function useProtectSave(account: `0x${string}`, agents: ReturnType<typeof
         ? runError(pending.done, pending.of, agents.error)
         : TAP_AGAIN
       : CANCELLED.test(agents.error.message)
-        ? "You cancelled on JAW’s screen. Nothing after it changed."
+        ? "You cancelled. Nothing after it changed."
         : "We couldn’t save this right now. Try again."
     : null;
   return {

@@ -5,7 +5,8 @@ import { isAddressEqual } from "viem";
 import { useAccount } from "wagmi";
 import { toast } from "sonner";
 import { CardTitle, ManageCard, MixSlider } from "@/components/gg/Manage";
-import { LimitChips, neverMoreThan } from "@/components/gg/LimitChips";
+import { ComingSoon } from "@/components/gg/Agents";
+import { LimitField, neverMoreThan } from "@/components/gg/LimitField";
 import { StockAvatar, tickerOf } from "@/components/gg/StockAvatar";
 import { NETWORK_FEE_ROW } from "@/components/gg/Summary";
 import { TxButton, TxError } from "@/components/gg/TxUi";
@@ -16,7 +17,7 @@ import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { useManageSave } from "@/hooks/useManageSave";
 import { usePosition } from "@/hooks/usePosition";
 import { usePrepare, type TxPhase, type TxPlan, type TxPrep } from "@/hooks/useTx";
-import { GOOSE_EXECUTOR } from "@/lib/agents/config";
+import { AGENTS_LIVE } from "@/lib/agents/config";
 import {
   MIX_WHOLE,
   mixWeights,
@@ -53,7 +54,7 @@ export function RebalanceSettings({ account, onDone }: { account: `0x${string}`;
     onDone?.();
   }, [onDone]);
   const saving = useManageSave(account, agents, onSaved);
-  const configured = !!GOOSE_EXECUTOR;
+  const configured = AGENTS_LIVE;
   const status = agents.status.rebalance;
 
   if (!data || (configured && (!settings || status === "loading"))) return <RebalanceSettingsSkeleton />;
@@ -208,12 +209,15 @@ export function RebalanceSettingsView({
       <ManageCard>
         <div className="flex items-start justify-between gap-3">
           <CardTitle title="Your mix" sub="A target for each stock" />
-          <span
-            role="status"
-            className={`flex h-6 shrink-0 items-center whitespace-nowrap rounded-xl px-2.5 text-xs font-semibold ${whole ? "bg-pos-soft text-pos" : "bg-watch-soft text-watch-text"}`}
-          >
-            Adds up to {Math.round(sum / 100)}%
-          </span>
+          {/* Ruling 24: no "Adds up to" before a stock is in the mix. */}
+          {rows.length > 0 && (
+            <span
+              role="status"
+              className={`flex h-6 shrink-0 items-center whitespace-nowrap rounded-xl px-2.5 text-xs font-semibold ${whole ? "bg-pos-soft text-pos" : "bg-watch-soft text-watch-text"}`}
+            >
+              Adds up to {Math.round(sum / 100)}%
+            </span>
+          )}
         </div>
         {rows.length === 0 && <p className="m-0 text-[13px] text-ink-mid">Add a stock to start your mix.</p>}
         {rows.map((r, i) => {
@@ -299,16 +303,13 @@ export function RebalanceSettingsView({
 
       <ManageCard>
         <CardTitle title="Weekly limit" sub={neverMoreThan("Rebalance", "week")} />
-        <LimitChips
+        <LimitField
           label="Weekly limit"
-          options={LIMIT_USD.rebalance.options}
           value={limitUsd}
           onChange={(usd) => {
             setLimitTyped(usd !== null);
             if (usd !== null) setChosenUsd(usd);
           }}
-          size="sm"
-          custom
         />
         {limitTyped && testCapNote(limitUsd, capMaxRaw) && (
           <span className="text-xs leading-[1.4] text-subtle">{testCapNote(limitUsd, capMaxRaw)}</span>
@@ -321,25 +322,35 @@ export function RebalanceSettingsView({
           Only when a stock drifts too far from its target, and then part of the way back. Skips trades under{" "}
           {formatUsdTrim(toUsd(options.minTradeRaw))}.
         </span>
+        <span className="text-xs leading-[1.4] text-subtle">
+          Rebalance never spends your cash. Only the network fee comes from it.
+        </span>
       </ManageCard>
 
-      <div className="flex flex-col gap-2 pt-1">
-        <TxError error={error ?? prepared.error} />
-        <div className="flex items-center justify-between px-1 text-[13px]">
-          <span className="text-ink-mid">{NETWORK_FEE_ROW.label}</span>
-          <span className="font-semibold">{NETWORK_FEE_ROW.value}</span>
+      {configured ? (
+        <div className="flex flex-col gap-2 pt-1">
+          <TxError error={error ?? prepared.error} />
+          <div className="flex items-center justify-between px-1 text-[13px]">
+            <span className="text-ink-mid">{NETWORK_FEE_ROW.label}</span>
+            <span className="font-semibold">{NETWORK_FEE_ROW.value}</span>
+          </div>
+          <TxButton
+            label={running ? "Save" : "Switch on"}
+            phase={phase}
+            checking={prepared.checking}
+            steps={plan.steps}
+            note={plan.note}
+            disabled={!plan.canSave || !limitTyped || busy || prepared.blocked}
+            preview={preview}
+            onClick={() => onSave({ weights, capRaw, plan })}
+          />
         </div>
-        <TxButton
-          label={configured && !running ? "Switch on" : "Save"}
-          phase={phase}
-          checking={prepared.checking}
-          steps={plan.steps}
-          note={plan.note}
-          disabled={!plan.canSave || !limitTyped || busy || prepared.blocked}
-          preview={configured && preview}
-          onClick={() => onSave({ weights, capRaw, plan })}
-        />
-      </div>
+      ) : (
+        // Ruling 22: no Save while the agents aren't live.
+        <div className="flex justify-center pt-1">
+          <ComingSoon />
+        </div>
+      )}
     </div>
   );
 }

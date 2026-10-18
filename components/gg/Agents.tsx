@@ -24,14 +24,18 @@ export function AgentsView({
   cards,
   rows,
   live,
+  signed,
   feed,
   turnOffAll,
 }: {
   cards: ReactNode;
   rows: ReactNode;
-  /** Whether an executor is configured: until then nothing can be switched on. */
+  /** Whether the agents can be switched on (AGENTS_LIVE): until then, Coming soon. */
   live: boolean;
+  /** Whether a limit is signed: the foot says so once one is (ruling 16). */
+  signed: boolean;
   feed: ReactNode;
+  /** "Turn off all agents", only while one is on (ruling 18). */
   turnOffAll: ReactNode;
 }) {
   return (
@@ -47,7 +51,8 @@ export function AgentsView({
       <p className="m-0 flex items-center justify-center gap-1.5 text-xs text-subtle">
         <PadlockIcon />
         <span>
-          Limits you signed with Face ID. Enforced by <span className="font-bold text-ink">JAW.id</span>.
+          {signed ? "Limits you signed with Face ID." : "You approve each agent’s limit with Face ID."} Enforced by{" "}
+          <span className="font-bold text-ink">JAW.id</span>.
         </span>
       </p>
       <TabBar />
@@ -134,18 +139,30 @@ export function MixBar({ mixBps }: { mixBps: readonly number[] }) {
   );
 }
 
+/** In place of a switch or Save while the agents aren't live (rulings 19, 22). */
+export function ComingSoon() {
+  return (
+    <span className="flex h-6 shrink-0 items-center whitespace-nowrap rounded-xl bg-pill px-2.5 text-xs font-semibold text-ink-mid">
+      Coming soon
+    </span>
+  );
+}
+
 /**
- * One agent: its mark, name and what it does, its switch, then what it does next and its limit. The row opens the
- * agent's sheet; the switch opens JAW's own sheet for the grant at the limit shown, or for the revoke.
+ * One agent: its mark, name and what it does, its switch (Coming soon until the agents are live), then what it does
+ * next and its limit. The row opens the agent's sheet; the switch opens JAW's own sheet for the grant at the limit
+ * shown, or for the revoke.
  */
 export function AgentRow({
   item,
+  live,
   switchable,
   onOpen,
   onSwitch,
   extra,
 }: {
   item: AgentItem;
+  live: boolean;
   switchable: boolean;
   onOpen: () => void;
   onSwitch: (on: boolean) => void;
@@ -167,14 +184,18 @@ export function AgentRow({
           <span className="truncate text-[13px] text-subtle">{item.does}</span>
           {extra}
         </span>
-        <span className="pointer-events-auto">
-          <Switch
-            label={`${item.name} ${item.on ? "on" : "off"}`}
-            checked={item.on}
-            disabled={!switchable}
-            onChange={onSwitch}
-          />
-        </span>
+        {live ? (
+          <span className="pointer-events-auto">
+            <Switch
+              label={`${item.name} ${item.on ? "on" : "off"}`}
+              checked={item.on}
+              disabled={!switchable}
+              onChange={onSwitch}
+            />
+          </span>
+        ) : (
+          <ComingSoon />
+        )}
       </div>
       <div className="pointer-events-none relative flex items-center gap-2 border-t border-hairline py-2.5 pl-3 pr-2.5">
         <span className="num min-w-0 grow truncate text-[13px] text-ink-2">{item.line}</span>
@@ -187,24 +208,17 @@ export function AgentRow({
   );
 }
 
-/** "Turn off all agents": straight to JAW's own sheet, once for each grant that's on ("3 steps"). */
-export function TurnOffAll({
-  steps,
-  live,
-  disabled,
-  onClick,
-}: {
-  steps: number;
-  live: boolean;
-  disabled: boolean;
-  onClick: () => void;
-}) {
-  const note = !live ? "Not live yet" : steps === 0 ? "None of them is on." : stepsNote(steps);
+/**
+ * "Turn off all agents", shown only while one is on (ruling 18): straight to JAW's own sheet, once for each grant that's
+ * on ("3 steps").
+ */
+export function TurnOffAll({ steps, disabled, onClick }: { steps: number; disabled: boolean; onClick: () => void }) {
+  const note = stepsNote(steps);
   return (
     <div className="flex flex-col items-center gap-0.5">
       <button
         type="button"
-        disabled={disabled || steps === 0}
+        disabled={disabled}
         onClick={onClick}
         className="flex h-11 items-center px-4 text-sm font-semibold text-act disabled:text-ink-mid disabled:opacity-60"
       >

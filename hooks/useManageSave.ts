@@ -126,7 +126,7 @@ export function useManageSave(account: `0x${string}`, agents: ReturnType<typeof 
         ? runError(pending.done, pending.of, agents.error)
         : TAP_AGAIN
       : CANCELLED.test(agents.error.message)
-        ? "You cancelled on JAW’s screen. Its limit didn’t change."
+        ? "You cancelled. Its limit didn’t change."
         : "We couldn’t change its limit right now. Try again."
     : null;
   return {

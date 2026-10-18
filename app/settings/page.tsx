@@ -26,7 +26,7 @@ function Settings({ address }: { address: `0x${string}` }) {
           }
         />
         <Line label="Network" value="Base" />
-        <Line label="Security" value="Passkey (JAW)" />
+        <Line label="Security" value="Passkey" />
       </WhiteCard>
       <WhiteCard className="p-4 text-[13px] leading-snug text-ink-mid">
         GreedyGoose is a non-custodial interface. Your stocks and USDC stay in your own smart account. Credit comes from

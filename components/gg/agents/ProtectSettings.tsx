@@ -5,7 +5,8 @@ import { isAddressEqual } from "viem";
 import { useAccount } from "wagmi";
 import { toast } from "sonner";
 import { CardTitle, ManageCard, SaveFooter } from "@/components/gg/Manage";
-import { LimitChips, neverMoreThan } from "@/components/gg/LimitChips";
+import { ComingSoon } from "@/components/gg/Agents";
+import { LimitField, neverMoreThan } from "@/components/gg/LimitField";
 import { StockAvatar } from "@/components/gg/StockAvatar";
 import { NETWORK_FEE_ROW } from "@/components/gg/Summary";
 import { Switch } from "@/components/gg/Switch";
@@ -15,8 +16,8 @@ import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { usePosition } from "@/hooks/usePosition";
 import { useProtectSave } from "@/hooks/useProtectSave";
 import { usePrepare, type TxPhase, type TxPlan, type TxPrep } from "@/hooks/useTx";
-import { GOOSE_EXECUTOR } from "@/lib/agents/config";
-import { LIMIT_USD, limitRaw, testCapNote } from "@/lib/agents/permissions";
+import { AGENTS_LIVE } from "@/lib/agents/config";
+import { limitRaw, testCapNote } from "@/lib/agents/permissions";
 import {
   protectSteps,
   savedChoice,
@@ -56,7 +57,7 @@ export function ProtectSettings({ account, onDone }: { account: `0x${string}`; o
   const agents = useAgents(account);
   const settings = useAgentSettings(account);
   const fee = useFeeSupport();
-  const live = !!GOOSE_EXECUTOR;
+  const live = AGENTS_LIVE;
   const [round, setRound] = useState(0);
   const saving = useProtectSave(account, agents, () => {
     toast.success("Protect is saved");
@@ -215,16 +216,13 @@ export function ProtectSettingsView({
     <div className="flex flex-col gap-3.5 leading-[normal]">
       <ManageCard className="flex flex-col gap-3 px-4 py-3.5">
         <CardTitle title="Daily limit" sub={neverMoreThan("Protect", "day")} />
-        <LimitChips
+        <LimitField
           label="Daily limit"
-          options={LIMIT_USD.protect.options}
           value={choice.limitUsd}
           onChange={(usd) => {
             setLimitTyped(usd !== null);
             if (usd !== null) set({ limitUsd: usd });
           }}
-          size="md"
-          custom
         />
         {limitTyped && testCapNote(choice.limitUsd, capMaxRaw) && (
           <span className="text-xs leading-[1.4] text-subtle">{testCapNote(choice.limitUsd, capMaxRaw)}</span>
@@ -335,7 +333,7 @@ export function ProtectSettingsView({
         )}
       </ManageCard>
 
-      {limitTyped && lines.length > 0 && (
+      {live && limitTyped && lines.length > 0 && (
         <div className="flex flex-col gap-1.5 rounded-[16px] bg-card-bone px-[13px] pb-3 pt-[11px] text-[13px]">
           <span className="font-semibold">{off ? "Switching on does" : "Saving does"}</span>
           <ul className="m-0 flex list-none flex-col gap-1 p-0 text-ink-2">
@@ -349,17 +347,24 @@ export function ProtectSettingsView({
         </div>
       )}
 
-      <SaveFooter
-        label={live && off ? "Switch on" : "Save"}
-        phase={phase}
-        checking={prepared.checking}
-        steps={count}
-        disabled={!canSave || prepared.blocked}
-        preview={live && preview}
-        onSave={() => onSave(steps)}
-        error={error ?? prepared.error}
-        note={note}
-      />
+      {live ? (
+        <SaveFooter
+          label={off ? "Switch on" : "Save"}
+          phase={phase}
+          checking={prepared.checking}
+          steps={count}
+          disabled={!canSave || prepared.blocked}
+          preview={preview}
+          onSave={() => onSave(steps)}
+          error={error ?? prepared.error}
+          note={note}
+        />
+      ) : (
+        // Ruling 22: no Save while the agents aren't live.
+        <div className="flex justify-center pt-1">
+          <ComingSoon />
+        </div>
+      )}
     </div>
   );
 }

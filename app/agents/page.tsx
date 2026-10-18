@@ -11,7 +11,6 @@ import { AgentSheet } from "@/components/gg/AgentSheet";
 import { ProtectSettings } from "@/components/gg/agents/ProtectSettings";
 import { RebalanceSettings } from "@/components/gg/agents/RebalanceSettings";
 import { AgentRow, AgentsFeed, AgentsView, AttentionCard, MixBar, TurnOffAll } from "@/components/gg/Agents";
-import { useAccountFeed } from "@/hooks/useAccountFeed";
 import { useAgentFeed } from "@/hooks/useAgentFeed";
 import { useAgentRun, type AgentStep } from "@/hooks/useAgentRun";
 import { TAP_AGAIN } from "@/hooks/useTx";
@@ -23,7 +22,7 @@ import { useHeadsUp } from "@/hooks/useHeadsUp";
 import { useNextFreeze } from "@/hooks/useNextFreeze";
 import { useNowSec } from "@/hooks/useNowSec";
 import { usePosition, type PositionData } from "@/hooks/usePosition";
-import { GOOSE_EXECUTOR } from "@/lib/agents/config";
+import { AGENTS_LIVE } from "@/lib/agents/config";
 import {
   AGENT_JOBS,
   AGENT_NAME,
@@ -59,8 +58,8 @@ const PREVIEW = "Preview mode — sign in to do this.";
  * list (useAgents, D14); its next move is the executor's `planOf` or its TypeScript rule on live data
  * (lib/agents/next.ts); the cards come from the executor's events and registry. Every switch, Renew and Turn off opens
  * JAW's own sheet straight away (its Review and Face ID), once a grant or revoke: the row or the sheet already says the
- * limit, so there is no confirm step of ours. With no executor configured, everything renders with real data and
- * nothing can be switched on ("Not live yet"). Earning and turning other dollars into cash run under the hood and have
+ * limit, so there is no confirm step of ours. Until the agents are live (AGENTS_LIVE), everything renders with real
+ * data and Coming soon stands where the switches are. The feed is the agents' moves only (ruling 15). Earning and turning other dollars into cash run under the hood and have
  * no place here (D20).
  */
 function Agents({ address }: { address: `0x${string}` }) {
@@ -70,12 +69,11 @@ function Agents({ address }: { address: `0x${string}` }) {
   const settings = useAgentSettings(address);
   const { data: position } = usePosition(address);
   const feed = useAgentFeed(address);
-  const all = useAccountFeed(address, feed);
   const nowSec = useNowSec();
   const freezeAt = useNextFreeze(nowSec);
   const headsUp = useHeadsUp(address, feed.headsUp, settings, nowSec);
   const runner = useAgentRun(agents);
-  const live = !!GOOSE_EXECUTOR;
+  const live = AGENTS_LIVE;
 
   // The sheet keeps its last agent while it slides away. A link can name one (`/agents?agent=protect`): its sheet
   // opens on arrival, as a row's tap opens it.
@@ -171,7 +169,7 @@ function Agents({ address }: { address: `0x${string}` }) {
   // The dev preview (`?as=`) reads another account: nothing can be signed for it.
   const preview = !signer || !isAddressEqual(signer, address);
   const blocked = !live
-    ? "Not live yet"
+    ? "Coming soon"
     : !!signer && fee.state === "unsupported"
       ? "Your account can’t pay network fees in USDC on Base right now."
       : capMax === null || !position
@@ -257,6 +255,7 @@ function Agents({ address }: { address: `0x${string}` }) {
     <>
       <AgentsView
         live={live}
+        signed={TAB_JOBS.some((j) => !!agents.terms[j])}
         cards={cards.map((c) => (
           <AttentionCard
             key={c.key}
@@ -269,6 +268,7 @@ function Agents({ address }: { address: `0x${string}` }) {
           <AgentRow
             key={item.agent}
             item={item}
+            live={live}
             switchable={live && item.status !== "loading" && !runner.running}
             onOpen={() => openSheet(item.agent)}
             onSwitch={(on) => onSwitch(item.agent, on)}
@@ -277,18 +277,25 @@ function Agents({ address }: { address: `0x${string}` }) {
         ))}
         feed={
           <AgentsFeed
-            empty="Nothing yet. Your buys, credit and repayments show up here, and so will what your agents do."
+            empty="Nothing yet. What your agents do shows up here, with why."
             nowMs={nowSec * 1000}
-            {...all}
+            rows={feed.rows}
+            loading={feed.isLoading}
+            error={feed.isError ? "all" : null}
+            onRetry={feed.refetch}
+            more={feed.more}
+            onShowEarlier={feed.showEarlier}
           />
         }
         turnOffAll={
-          <TurnOffAll
-            steps={allOffIds}
-            live={live}
-            disabled={agents.busy || runner.running}
-            onClick={() => start("all:off", null, allOffSteps, "Your agents are off")}
-          />
+          live &&
+          allOffIds > 0 && (
+            <TurnOffAll
+              steps={allOffIds}
+              disabled={agents.busy || runner.running}
+              onClick={() => start("all:off", null, allOffSteps, "Your agents are off")}
+            />
+          )
         }
       />
       {sheet}
