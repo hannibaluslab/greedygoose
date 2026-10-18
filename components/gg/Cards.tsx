@@ -50,19 +50,22 @@ export function CashCard({
 }
 
 /**
- * The white Yield card next to Cash (board 2f): the cash rate (D19: stocks earn no yield, so it's the one rate) with a
- * VARIABLE chip, and under it whether the cash earns: "Always earning", "$25 earning" or "Not earning yet".
+ * The white Yield card next to Cash (board 2f): the cash rate as its tag (D19: stocks earn no yield, so it's the one
+ * rate), and the total the cash has earned, counting up live while it earns (Adrian, 2026-10-18).
  */
 export function YieldCard({
   apy,
+  value,
   line,
   dim = false,
   href,
   onClick,
 }: {
   apy: number | null;
-  /** "Not earning yet", or the live counter (LiveEarning) while the cash really earns. */
-  line: ReactNode;
+  /** The total earned, counting live (LiveEarning), or "–" while it's read. */
+  value: ReactNode;
+  /** "Total earned", or "Not earning yet". */
+  line: string;
   dim?: boolean;
   href?: string;
   onClick?: () => void;
@@ -75,18 +78,13 @@ export function YieldCard({
     >
       <span className="flex items-center justify-between">
         <span className="text-[14px] font-semibold">Yield</span>
-        {/* Ruling 4: the ⓘ says the card opens what the rate is and why it moves. */}
-        <span className="flex h-[22px] items-center gap-1 rounded-[6px] bg-pill px-[7px] font-mono text-[10px] font-medium tracking-[0.04em] text-ink-mid">
-          VARIABLE
+        {/* Ruling 4: the ⓘ says the card opens what the rate is and why it moves (VARIABLE is in the sheet). */}
+        <span className="num flex h-[22px] items-center gap-1 rounded-[6px] bg-pill px-[7px] font-mono text-[10px] font-medium tracking-[0.04em] text-ink-mid">
+          {apy == null ? "–" : `${(apy * 100).toFixed(1)}%`} APY
           <InfoIcon aria-hidden size={12} />
         </span>
       </span>
-      <span className="flex items-baseline gap-1.5">
-        <span className="num text-[26px] font-semibold tracking-[-0.03em]">
-          {apy == null ? "–" : `${(apy * 100).toFixed(1)}%`}
-        </span>
-        <span className="text-[13px] text-subtle">APY</span>
-      </span>
+      <span className="flex h-[31px] items-center font-semibold tracking-[-0.03em]">{value}</span>
       <span className="-mt-1 text-[11px] text-subtle">{line}</span>
     </Tap>
   );

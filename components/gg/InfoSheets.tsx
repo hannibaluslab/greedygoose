@@ -89,6 +89,11 @@ export function YieldSheet({
       onOpenChange={(next) => !next && onClose()}
       look="info"
       title="Average yield"
+      titleAccessory={
+        <span className="flex h-[22px] items-center rounded-[6px] bg-pill px-[7px] font-mono text-[10px] font-medium tracking-[0.04em] text-ink-mid">
+          VARIABLE
+        </span>
+      }
       description="What your cash earns. Stocks don’t earn a yield, so your average yield is your cash rate."
     >
       <SheetSteps stepKey="yield" className="num flex flex-col gap-[18px] leading-[normal]">

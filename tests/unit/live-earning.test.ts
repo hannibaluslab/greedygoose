@@ -1,16 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { liveDecimals, liveSavingsUsd, liveText } from "@/lib/liveEarning";
+import { liveDecimals, liveEarnedUsd, liveText } from "@/lib/liveEarning";
 
 describe("the Yield card's live counter", () => {
-  it("carries the balance read forward at the APR, linearly, and restarts from each read", () => {
-    expect(liveSavingsUsd(1000, 0.04, 0)).toBe(1000);
-    expect(liveSavingsUsd(1000, 0.04, 31_536_000)).toBeCloseTo(1040, 9);
-    expect(liveSavingsUsd(1000, 0.04, 86_400)).toBeCloseTo(1000 + 40 / 365, 9);
+  it("carries the total read forward at the APR on the savings, linearly, and restarts from each read", () => {
+    expect(liveEarnedUsd(1.5, 1000, 0.04, 0)).toBe(1.5);
+    expect(liveEarnedUsd(1.5, 1000, 0.04, 31_536_000)).toBeCloseTo(41.5, 9);
+    expect(liveEarnedUsd(0, 1000, 0.04, 86_400)).toBeCloseTo(40 / 365, 9);
   });
 
-  it("counts nothing while nothing earns, and never backwards", () => {
-    expect(liveSavingsUsd(0, 0.04, 100)).toBe(0);
-    expect(liveSavingsUsd(1000, 0.04, -5)).toBe(1000);
+  it("counts slower on less cash, holds still with no savings, and never goes backwards", () => {
+    expect(liveEarnedUsd(0, 100, 0.04, 86_400)).toBeCloseTo(4 / 365, 9);
+    expect(liveEarnedUsd(0.25, 0, 0.04, 100)).toBe(0.25);
+    expect(liveEarnedUsd(0.25, 1000, 0.04, -5)).toBe(0.25);
   });
 
   it("shows enough digits for the last one to move about once a second", () => {

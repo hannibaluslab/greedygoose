@@ -9,6 +9,7 @@ import { BalanceHero, TodayChange, TodayPending } from "@/components/gg/BalanceH
 import { QuickAction } from "@/components/gg/QuickAction";
 import { CashCard, YieldCard } from "@/components/gg/Cards";
 import { LiveEarning } from "@/components/gg/LiveEarning";
+import { useTotalEarned } from "@/hooks/useTotalEarned";
 import { StartEarningCard, TurnIntoCash } from "@/components/gg/CashSetup";
 import { AddStockCard, HoldingCard } from "@/components/gg/Holding";
 import { CashSheet } from "@/components/gg/CashSheet";
@@ -55,7 +56,8 @@ type Sheet = "total" | "yield" | "cash" | "leverage" | "status";
  * Cash card only says they're arriving.
  */
 function Home({ address }: { address: `0x${string}` }) {
-  const { data, isError, refetch, dataUpdatedAt } = usePosition(address);
+  const { data, isError, refetch } = usePosition(address);
+  const earned = useTotalEarned(address);
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const stocks = useStockSheets();
   const close = () => setSheet(null);
@@ -90,7 +92,7 @@ function Home({ address }: { address: `0x${string}` }) {
       ) : (
         <Loaded
           data={data}
-          readAt={dataUpdatedAt}
+          earned={earned.data}
           apy={apy}
           open={setSheet}
           openStock={stocks.openStock}
@@ -169,7 +171,7 @@ function Home({ address }: { address: `0x${string}` }) {
 
 function Loaded({
   data,
-  readAt,
+  earned,
   apy,
   open,
   openStock,
@@ -180,8 +182,8 @@ function Loaded({
   dim,
 }: {
   data: PositionData;
-  /** When Base was last read for `data`: the Yield counter restarts from it. */
-  readAt: number;
+  /** What the cash has earned, all time, and when Base was read for it: the Yield card counts on from it. */
+  earned: { usd: number; readAt: number } | undefined;
   apy: number;
   open: (sheet: Sheet) => void;
   openStock: (symbol: string) => void;
@@ -281,14 +283,20 @@ function Loaded({
         />
         <YieldCard
           apy={apy}
-          line={
-            // Counts only while the cash really earns: savings on Base, carried at the live rate between reads.
-            data.savingsUsd > 0 ? (
-              <LiveEarning usd={data.savingsUsd} apr={data.savingsApr} readAt={readAt} />
+          value={
+            earned ? (
+              <LiveEarning
+                earnedUsd={earned.usd}
+                savingsUsd={data.savingsUsd}
+                apr={data.savingsApr}
+                readAt={earned.readAt}
+              />
             ) : (
-              "Not earning yet"
+              <span className="num text-[26px]">–</span>
             )
           }
+          // Counts only while the cash really earns: savings on Base, carried at the live rate between reads.
+          line={data.savingsUsd > 0 || (earned?.usd ?? 0) > 0 ? "Total earned" : "Not earning yet"}
           dim={dim}
           onClick={() => open("yield")}
         />

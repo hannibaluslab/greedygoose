@@ -1,13 +1,13 @@
 import { SECONDS_PER_YEAR } from "@/lib/aave/math";
 
 /**
- * The Yield card's live counter: the savings balance as Base last read it, carried forward at the savings APR. Aave
- * V3's supply interest is linear between the pool's updates, so `usd × (1 + apr × t / year)`; each new read restarts
- * it from the balance read, so it never drifts from the chain. Nothing earns, nothing counts: 0 in, 0 out.
+ * The Yield card's live total: what the cash had earned when Base was last read, carried forward at the savings APR on
+ * the savings balance. Aave V3's supply interest is linear between the pool's updates, so `savings × apr × t / year`
+ * more; each new read restarts it from the chain, so it never drifts. Less cash, slower count; no savings, no count.
  */
-export function liveSavingsUsd(usd: number, apr: number, sinceSec: number): number {
-  if (usd <= 0) return 0;
-  return usd * (1 + (Math.max(0, apr) * Math.max(0, sinceSec)) / SECONDS_PER_YEAR);
+export function liveEarnedUsd(earnedUsd: number, savingsUsd: number, apr: number, sinceSec: number): number {
+  if (savingsUsd <= 0) return Math.max(0, earnedUsd);
+  return Math.max(0, earnedUsd) + (savingsUsd * Math.max(0, apr) * Math.max(0, sinceSec)) / SECONDS_PER_YEAR;
 }
 
 /** Digits after the point: enough that the last one moves about once a second, between 2 and 8. */

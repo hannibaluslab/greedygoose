@@ -27,8 +27,12 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
 - Quick actions: Top up, Trade, Credit Buy, Repay.
 - The menu: Activity, Guide (Coming soon, at /guide) and Settings.
 - A tap on the name in the header copies it ("sam.justan.id"), with a toast.
-- The Yield card counts only while the cash really earns (savings on Base above 0): the savings balance as last read,
-  carried at the live rate between reads and restarted from each read. Otherwise it says "Not earning yet".
+- The Yield card: the cash rate as its tag ("4.0% APY ⓘ"; VARIABLE sits in the Average yield sheet) and, big, the total
+  the cash has earned in savings, all time, counting up live (Adrian, 2026-10-18). Total earned is Aave V3's own number:
+  the `balanceIncrease` of each aUSDC Mint and Burn of the account (one per savings move, read from the receipts of its
+  JAW batches and kept on the phone), plus what built up since the last move (balance less the balance at that move's
+  index). Between reads it carries on at the live rate on the savings, so less cash counts slower and no savings holds
+  still; each read restarts it and it never steps back. With nothing earned and nothing saved: "Not earning yet".
 
 ## Credit health
 

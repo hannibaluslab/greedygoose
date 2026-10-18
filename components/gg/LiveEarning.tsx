@@ -1,21 +1,49 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { liveDecimals, liveSavingsUsd, liveText } from "@/lib/liveEarning";
+import { liveDecimals, liveEarnedUsd, liveText } from "@/lib/liveEarning";
 
 /** How often the counter redraws. */
 const TICK_MS = 250;
 
+/** Holding still: cents, or enough digits that a sliver earned isn't shown as $0.00. */
+const stillDecimals = (usd: number) => (usd === 0 || usd >= 0.01 ? 2 : Math.min(8, Math.ceil(-Math.log10(usd)) + 1));
+
 /**
- * The savings balance, counting up between reads: "$0.99041237 earning". `readAt` is when Base was last read (the
- * position query's time), so every read restarts the count from the balance on chain and it never drifts.
+ * Total earned, counting up between reads: "$0.00015823". `readAt` is when Base was last read (useTotalEarned), so
+ * every read restarts the count from the chain and it never drifts. With no savings it holds still.
  */
-export function LiveEarning({ usd, apr, readAt }: { usd: number; apr: number; readAt: number }) {
-  const [now, setNow] = useState(readAt);
+export function LiveEarning({
+  earnedUsd,
+  savingsUsd,
+  apr,
+  readAt,
+  className,
+}: {
+  earnedUsd: number;
+  savingsUsd: number;
+  apr: number;
+  readAt: number;
+  className?: string;
+}) {
+  const counts = savingsUsd > 0;
+  // The highest count shown so far. Base counts in whole micro-dollars, so a fresh read can land a hair under the
+  // count: it never steps back.
+  const [shown, setShown] = useState(0);
   useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), TICK_MS);
+    if (!counts) return;
+    const id = window.setInterval(
+      () => setShown((prev) => Math.max(prev, liveEarnedUsd(earnedUsd, savingsUsd, apr, (Date.now() - readAt) / 1000))),
+      TICK_MS,
+    );
     return () => window.clearInterval(id);
-  }, []);
-  const value = liveSavingsUsd(usd, apr, (Math.max(now, readAt) - readAt) / 1000);
-  return <span className="num tabular-nums">{liveText(value, liveDecimals(usd, apr))} earning</span>;
+  }, [counts, earnedUsd, savingsUsd, apr, readAt]);
+  const value = Math.max(shown, liveEarnedUsd(earnedUsd, savingsUsd, apr, 0));
+  const text = liveText(value, counts ? liveDecimals(savingsUsd, apr) : stillDecimals(value));
+  // Long counters ("$0.00015823") step down a size so they fit the half-width card.
+  return (
+    <span className={`num tabular-nums ${text.length > 8 ? "text-[20px]" : "text-[26px]"} ${className ?? ""}`}>
+      {text}
+    </span>
+  );
 }
