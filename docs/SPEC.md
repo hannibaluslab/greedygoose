@@ -39,12 +39,14 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
 
 ## Money rules
 
-- **Fuel tank:** $0.10 of cash stays back for network fees. Buying power is cash minus the fuel tank, in cents.
-  **(to build: shown in Settings, and a fee estimate of "~$0.01")**
-- **No minimums of ours.** Only Aave's and Base's own limits apply, plus the $0.01 arrivals filter. **(to build)**
-- **No dust.** Sell all or Max leaves nothing; a sale that would leave under $1 sells everything. **(to build)**
+- **Fuel tank:** $0.10 of cash stays back for network fees; every spend from cash leaves it. Buying power is cash minus
+  the fuel tank, in cents. Settings shows how full it is. **(to build: a fee estimate of "~$0.01")**
+- **No minimums of ours.** Only Aave's and Base's own limits apply, plus the $0.01 arrivals filter.
+- **No dust.** Sell all or Max leaves nothing; a sale that would leave under $1 sells everything.
+- **One stock order** in every list: Home's (Apple, Amazon, Alphabet, Meta, Microsoft, NVIDIA, Tesla). Lists keep
+  their groups (what can go before what can't); a default still opens on the cash or the biggest free stock.
 
-## Repay **(to build: canvas boards 1–8)**
+## Repay (canvas boards 1–8)
 
 - One sheet over the page: Pay with (cash or a stock) and the amount, then an optional "Also free up stocks".
 - Ticked stocks share one limit that stops at 1.12. A chip shows the % of the shares held (25%, 50%, Max, All); the
@@ -54,26 +56,32 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
 - Paying with a stock that backs credit can go to Aave's own limit (less 0.5%), because the debt drops in the same
   signature.
 
-## Stocks that back credit **(to build: canvas boards 9–11)**
+## Stocks that back credit (canvas boards 9–11)
 
 Sell, Trade and Send on a backing stock follow one rule: **Up to $X** = the free shares plus what the 1.12 line allows,
-in one signature. To do more, repay first. No redirects and no extra lines.
+in one signature. To do more, repay first. No redirects and no extra lines. Amounts are in dollars, with one line
+under them: "0.87 shares · $230.41 each" and "Up to $373". The small print starts with the shares that come out of
+backing.
 
-## Leaderboard **(to build)**
+## Leaderboard
 
 - Return counts on the user's own money only, so winning with credit lifts the rank.
-- **Greedy Fatalities:** every liquidated account is named automatically on its own tab, ranked by its multiple at the
+- While it opens soon, there are no All | Contacts tabs.
+- **Greedy Fatalities (to build, once its boards are checked):** every liquidated account is named automatically on its own tab, ranked by its multiple at the
   end. The rule is stated once before the first credit.
-- Leverage tag: "1.7x" (what you hold ÷ your own money) next to the credit status on Home while something is owed, and
-  on leaderboard rows; tapping it opens "Your leverage". No greed points or levels.
+- Leverage tag: "1.7x" (what you hold ÷ your own money), a small chip in Home's header while something is owed;
+  tapping it opens "Your leverage". On leaderboard rows **(to build, once its boards are checked)**. No greed points or
+  levels.
 
 ## Agents
 
 - Visible: **Protect** and **Rebalance**, on the Agents tab.
 - Invisible: earning on idle cash (Save) and turning other dollars into cash (Receive). Their permissions are asked
   when money first arrives.
-- Permissions go through JAW's own screens; the spender is `GooseExecutor`. Each limit is one typed amount **(to
-  build)**.
+- Permissions go through JAW's own screens; the spender is `GooseExecutor`. Each limit is one typed amount.
+- Until Chainlink approves the automation (`NEXT_PUBLIC_AGENTS_LIVE=1`), "Coming soon" stands where the switches and
+  Save are; the figures are real.
+- The Agents feed shows the agents' moves only. "Turn off all agents" shows only while one is on.
 - Rebalance only moves stocks that don't back credit, and never spends cash beyond the network fee.
 
 ## Words
@@ -81,7 +89,8 @@ in one signature. To do more, repay first. No redirects and no extra lines.
 - Never on screen: borrow, loan, lock, locked, unlock, collateral, room, protocol names in instructions. Never: cooked,
   goosed, golden.
 - Use: credit, backs credit, free up, get back, in use, Cash.
-- JAW appears only as the trust mark ("Enforced by JAW.id").
+- JAW appears only as the trust mark ("Enforced by JAW.id"), never in instructions.
+- An off button says why ("Enter an amount", "Add who to send to").
 - Buttons name the intent only ("Repay", "Repay & free up"). No confirm screens of ours: JAW's sheet is the
   confirmation.
 
