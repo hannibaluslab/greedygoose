@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { marketState } from "@/lib/market-hours";
 
+/** "Markets closed", on the Invest page only (Adrian, 2026-10-18): the trade steps carry their own price note. */
 export function MarketBanner() {
   const [state, setState] = useState<ReturnType<typeof marketState> | null>(null);
   useEffect(() => {

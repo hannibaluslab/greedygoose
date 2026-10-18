@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useAccount } from "wagmi";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
-import { MarketBanner } from "@/components/ui/MarketBanner";
 import { AmountArrow, AmountField, AmountHintLine, AmountSource, YouGetCash } from "./AmountField";
 import { Button } from "./Button";
 import { StockAvatar, tickerOf } from "./StockAvatar";
@@ -148,7 +147,6 @@ export function StockSheet({
                   : `Aave has frozen ${stock.name} for now: it can’t back new credit.`}
               </p>
             )}
-            <MarketBanner />
             {owned && <StockPosition holding={holding} />}
             {/* UX note 9: the actions sit right under the holding card, not under the chart and stats. */}
             <Actions

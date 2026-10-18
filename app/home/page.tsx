@@ -17,7 +17,6 @@ import { ValueLine } from "@/components/gg/ValueLine";
 import { LeverageSheet, StatusSheet, TotalBalanceSheet, YieldSheet } from "@/components/gg/InfoSheets";
 import { StockAvatar } from "@/components/gg/StockAvatar";
 import { ChevronRight, CreditIcon, InfoIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/icons";
-import { MarketBanner } from "@/components/ui/MarketBanner";
 import { useCashSetup } from "@/hooks/useCashSetup";
 import { useStartEarning } from "@/hooks/useStartEarning";
 import { useEntryBalances } from "@/hooks/useEntryBalances";
@@ -253,7 +252,6 @@ function Loaded({
           loading={market.loading}
           onRetry={market.retry}
         />
-        <MarketBanner />
       </section>
 
       <section className="grid grid-cols-4 gap-2 px-5 pt-[22px]">

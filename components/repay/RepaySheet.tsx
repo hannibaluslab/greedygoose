@@ -6,7 +6,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/gg/Button";
 import { TxButton, TxError } from "@/components/gg/TxUi";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
-import { MarketBanner } from "@/components/ui/MarketBanner";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { useBackingFactorsRead, usePosition } from "@/hooks/usePosition";
 import { repaySign, useRepayWith } from "@/hooks/useRepay";
@@ -182,7 +181,6 @@ export function RepaySheet({
   return (
     <SheetShell open={open} onOpenChange={onOpenChange} title="Your credit">
       <SheetSteps stepKey="repay" className="flex flex-col gap-3">
-        <MarketBanner />
         {data?.debtRaw === 0n ? (
           <p className="m-0 px-1 pb-2 text-[17px] text-ink-mid">{REPAY_COPY.nothingOwed}</p>
         ) : !data || waitingForCfs ? (
