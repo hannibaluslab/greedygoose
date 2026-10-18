@@ -39,6 +39,21 @@ export type ActivityItem = {
   toName?: string;
 };
 
+/** A stock's own moves: bought, sold, sent or received. */
+const TRADES: readonly ActivityKind[] = ["buy", "sell", "send", "receive"];
+
+/**
+ * Whether a move is about `symbol`, for that stock's sheet: the stock is the main item, not only the backing for
+ * something else. A buy, sale, send or receipt of the stock is; so is the stock coming out of backing (a free-up, a
+ * repay that frees it). The stock going in to back credit counts only when nothing else is the move: in a Credit Buy
+ * of another stock, or credit that went to earn, it only backs that.
+ */
+export function aboutStock(items: readonly ActivityItem[], symbol: string): boolean {
+  if (items.some((i) => i.symbol === symbol && (TRADES.includes(i.kind) || i.kind === "withdraw"))) return true;
+  const other = items.some((i) => i.kind === "earn" || (TRADES.includes(i.kind) && i.symbol !== USDC.symbol));
+  return !other && items.some((i) => i.symbol === symbol && i.kind === "supply");
+}
+
 const byReserveId = (id: bigint) => ALL_RESERVES.find((r) => BigInt(r.reserveId) === id);
 const units = (raw: bigint, decimals: number) => Number(raw) / 10 ** decimals;
 

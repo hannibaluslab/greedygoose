@@ -9,6 +9,7 @@ import { SegmentedControl } from "./SegmentedControl";
 import { StockAvatar, tickerOf } from "./StockAvatar";
 import { BacksIcon } from "./icons";
 import { useActivity } from "@/hooks/useActivity";
+import { aboutStock } from "@/lib/activity/decode";
 import type { MarketPrices } from "@/hooks/useMarketPrices";
 import { useNowSec } from "@/hooks/useNowSec";
 import type { Holding } from "@/hooks/usePosition";
@@ -168,7 +169,8 @@ export function StatCard({ label, value }: { label: string; value: ReactNode }) 
 
 /**
  * This stock's moves only: JAW's call history for the account, each transaction decoded from its Base receipt (Leo's
- * Activity), kept when a move names this stock. With nothing to show for a stock you don't own, it isn't drawn.
+ * Activity), kept when the stock is the move's main item (aboutStock), not when it only backs another buy. With
+ * nothing to show for a stock you don't own, it isn't drawn.
  */
 export function StockActivity({
   user,
@@ -183,7 +185,7 @@ export function StockActivity({
 }) {
   const { rows, isLoading, isError, refetch } = useActivity(user);
   const nowMs = useNowSec() * 1000;
-  const mine = rows.filter((r) => r.items.some((i) => i.symbol === holding.symbol));
+  const mine = rows.filter((r) => aboutStock(r.items, holding.symbol));
   if (!owned && !isLoading && !isError && mine.length === 0) return null;
   return (
     <section className="flex flex-col gap-1.5">
