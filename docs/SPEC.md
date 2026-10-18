@@ -32,6 +32,14 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
   one refuses them, so it stays off until NEXT_PUBLIC_BASE_RPC_URL is set. The Cash sheet's "Received" rows (the last 7
   days) wait for the same: until then it lists the user's own moves alone, with no "couldn’t load" notice.
 - A tap on the name in the header copies it ("sam.justan.id"), with a toast.
+- Under the total balance, all-time P&L once it can be added up (Adrian, 2026-10-19): "+$142.84 · +7.14% all time",
+  and the line under it is that P&L at each day's end since the first money in, from $0 (a dashed line) to now. P&L
+  is worth now (cash + stocks at Aave's price − credit owed) + what was sent out − what was put in: money and stocks
+  someone sent, and other coins turned into cash, are put in, not profit. Stocks that moved count at Aave's price at
+  that block. The % is the gain over the average money in, each flow weighted by how long it was in (Modified Dietz).
+  Money others sent comes from Alchemy's Transfers API (Base's public RPC refuses getLogs, Etherscan's free plan has no
+  Base), so until NEXT_PUBLIC_ALCHEMY_KEY is set Home shows today's change and the week's line as before. Past days
+  and transfers are kept on the phone. The Leaderboard's % is to move to the same method.
 - The Yield card: the cash rate as its tag ("4.0% APY ⓘ"; VARIABLE sits in the Average yield sheet) and, big, what the
   cash has earned in savings, "Earned all time", counting up live with a green dot while it earns (Adrian, 2026-10-18).
   One size for the whole number, one digit past the digit that moves each second. It is Aave V3's own number: the

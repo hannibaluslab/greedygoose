@@ -16,6 +16,7 @@ export function ValueLine({
   label = "What your stocks were worth over the last 7 days, at market prices",
   caption = "Market prices · 7 days",
   neutral = false,
+  zero = false,
 }: {
   points: number[] | null;
   height: number;
@@ -24,6 +25,8 @@ export function ValueLine({
   label?: string;
   caption?: string;
   neutral?: boolean;
+  /** The P&L line: a dashed $0 line (Sparkline's `zero`). */
+  zero?: boolean;
 }) {
   if (loading) return <div aria-busy className="animate-pulse rounded-[14px] bg-chip" style={{ height }} />;
   if (!points) {
@@ -45,6 +48,7 @@ export function ValueLine({
       label={label}
       caption={caption}
       tone={neutral ? "neutral" : undefined}
+      zero={zero}
     />
   );
 }

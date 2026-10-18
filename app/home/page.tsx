@@ -5,17 +5,18 @@ import { useState, type ReactNode } from "react";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { Header } from "@/components/gg/Header";
 import { TabBar } from "@/components/gg/TabBar";
-import { BalanceHero, TodayChange, TodayPending } from "@/components/gg/BalanceHero";
+import { AllTimeChange, BalanceHero, TodayChange, TodayPending } from "@/components/gg/BalanceHero";
 import { QuickAction } from "@/components/gg/QuickAction";
 import { CashCard, YieldCard } from "@/components/gg/Cards";
 import { LiveEarning } from "@/components/gg/LiveEarning";
 import { useTotalEarned, type TotalEarned } from "@/hooks/useTotalEarned";
+import { usePnl } from "@/hooks/usePnl";
 import { StartEarningCard, TurnIntoCash } from "@/components/gg/CashSetup";
 import { AddStockCard, HoldingCard } from "@/components/gg/Holding";
 import { CashSheet } from "@/components/gg/CashSheet";
 import { useMoneySheets } from "@/components/gg/MoneySheets";
 import { StockSheets, useStockSheets } from "@/components/gg/StockSheets";
-import { ValueLine } from "@/components/gg/ValueLine";
+import { HeroLine } from "@/components/gg/HeroLine";
 import { StatusSheet } from "@/components/gg/CreditStatusSheet";
 import { LeverageSheet, TotalBalanceSheet, YieldSheet } from "@/components/gg/InfoSheets";
 import { StockAvatar } from "@/components/gg/StockAvatar";
@@ -58,6 +59,8 @@ type Sheet = "total" | "yield" | "cash" | "leverage" | "status";
 function Home({ address }: { address: `0x${string}` }) {
   const { data, isError, refetch } = usePosition(address);
   const earned = useTotalEarned(address);
+  // All-time P&L: off until Alchemy's key is set (usePnl), and Home then shows today's change as before.
+  const pnl = usePnl(address, data ? data.cashUsd + data.stocksUsd - data.debtUsd : undefined);
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const stocks = useStockSheets();
   const close = () => setSheet(null);
@@ -93,6 +96,7 @@ function Home({ address }: { address: `0x${string}` }) {
         <Loaded
           data={data}
           earned={earned.data}
+          pnl={pnl}
           apy={apy}
           open={setSheet}
           openStock={stocks.openStock}
@@ -174,6 +178,7 @@ function Home({ address }: { address: `0x${string}` }) {
 function Loaded({
   data,
   earned,
+  pnl,
   apy,
   open,
   openStock,
@@ -186,6 +191,8 @@ function Loaded({
   data: PositionData;
   /** What the cash has earned, all time, and when Base was read for it: the Yield card counts on from it. */
   earned: TotalEarned | undefined;
+  /** All-time P&L (usePnl): `on` only with Alchemy's key; `data` once it's added up. */
+  pnl: ReturnType<typeof usePnl>;
   apy: number;
   open: (sheet: Sheet) => void;
   openStock: (symbol: string) => void;
@@ -205,6 +212,8 @@ function Loaded({
   const today = dayChange(priced, data.stocksUsd + data.cashUsd);
   const money = useMoneySheets();
   const shownStatus = data.debtRaw > 0n ? homeStatus(data.status) : "none";
+  const allTime = pnl.on ? pnl.data : undefined;
+  const pnlReading = pnl.on && pnl.data === undefined && !pnl.isError;
 
   return (
     <>
@@ -213,9 +222,14 @@ function Loaded({
           label="Total balance"
           info={{ label: "What’s in your total balance", onClick: () => open("total") }}
           value={data.stocksUsd + data.cashUsd}
+          // All time once P&L can be added up (Adrian, 2026-10-19); until then, or if it can't be read, today's change.
           // Board 2f: today's change is always there; with no stocks nothing moves, so it reads $0.00 · 0.00% today.
           sub={
-            today ? (
+            allTime ? (
+              <AllTimeChange usd={allTime.gainUsd} pct={allTime.pct} />
+            ) : pnlReading ? (
+              <TodayPending />
+            ) : today ? (
               <TodayChange usd={today.usd} pct={today.pct} />
             ) : market.loading ? (
               <TodayPending />
@@ -251,7 +265,9 @@ function Loaded({
             ),
           }}
         />
-        <BalanceLine
+        <HeroLine
+          pnl={allTime?.series}
+          pnlReading={pnlReading}
           held={held.length > 0}
           stockWeek={weekValue(priced)}
           cashUsd={data.cashUsd}
@@ -388,41 +404,6 @@ function EmptyPortfolio() {
         Buy your first stock
       </Link>
     </div>
-  );
-}
-
-/**
- * The line under the hero is the total balance's week (Adrian): what's held now, at each day's market prices, plus
- * the cash, so it ends on the big number. With no stocks it's the cash alone, a flat line; a flat line is neither
- * green nor red.
- */
-function BalanceLine({
-  held,
-  stockWeek,
-  cashUsd,
-  loading,
-  onRetry,
-}: {
-  held: boolean;
-  stockWeek: number[] | null;
-  cashUsd: number;
-  loading: boolean;
-  onRetry: () => void;
-}) {
-  const points = held ? (stockWeek ? stockWeek.map((v) => v + cashUsd) : null) : [cashUsd, cashUsd];
-  const flat = !!points && points[0] === points[points.length - 1];
-  return (
-    <ValueLine
-      points={points}
-      // 44px, down from the board's 68 (Adrian: smaller).
-      height={44}
-      loading={held && loading}
-      onRetry={onRetry}
-      label="What your total balance was worth over the last 7 days: what you hold now, at market prices"
-      // No caption (Adrian): the line sits under the total balance, so it needs no title of its own.
-      caption=""
-      neutral={flat}
-    />
   );
 }
 

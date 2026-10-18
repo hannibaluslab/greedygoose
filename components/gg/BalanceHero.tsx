@@ -176,6 +176,25 @@ export function TodayChange({ usd, pct }: { usd: number; pct: number }) {
   );
 }
 
+/** All-time P&L under the total balance (Adrian, 2026-10-19): "+$142.84 · +7.14% all time". */
+export function AllTimeChange({ usd, pct }: { usd: number; pct: number | null }) {
+  const still = Math.abs(usd) < 0.005;
+  const money = still ? "$0.00" : formatSignedUsd(usd);
+  const tone = still ? "" : money.startsWith("−") ? "text-neg" : "text-pos";
+  return (
+    <>
+      <span className={`font-semibold ${tone}`}>{money}</span>
+      {pct !== null && (
+        <>
+          {" "}
+          · <span className={`font-semibold ${tone}`}>{still ? "0.00%" : formatSignedPct(pct)}</span>
+        </>
+      )}{" "}
+      all time
+    </>
+  );
+}
+
 /** TodayChange's place while market prices load. */
 export function TodayPending() {
   return (

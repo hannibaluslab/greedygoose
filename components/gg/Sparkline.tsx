@@ -78,6 +78,7 @@ export function Sparkline({
   tone,
   label,
   caption,
+  zero = false,
   className = "",
 }: {
   points: number[];
@@ -89,16 +90,19 @@ export function Sparkline({
   label?: string;
   /** What the line is, inside its box ("Market prices · 7 days"); shown only, `label` says it to a screen reader. */
   caption?: string;
+  /** A P&L line: a dashed line at $0, and green or red by where the last point is against it. */
+  zero?: boolean;
   className?: string;
 }) {
   const gradientId = `spark${useId().replace(/[^\w-]/g, "")}`;
   if (points.length < 2) return null;
 
   const { stroke, area, pad, dotR } = LOOK[variant];
-  const color = TONE[tone ?? (points[points.length - 1] >= points[0] ? "pos" : "neg")];
+  const color = TONE[tone ?? ((zero ? 0 : points[0]) <= points[points.length - 1] ? "pos" : "neg")];
   const w = width ?? 350; // drawing width; the svg stretches to the container when `width` is unset
-  const min = Math.min(...points);
-  const range = Math.max(...points) - min;
+  // A P&L line keeps $0 inside its box, so the dashed zero line is always drawn.
+  const min = Math.min(...points, ...(zero ? [0] : []));
+  const range = Math.max(...points, ...(zero ? [0] : [])) - min;
   const xy = points.map((p, i) => ({
     x: pad.l + (i / (points.length - 1)) * (w - pad.l - pad.r),
     y: range === 0 ? height / 2 : pad.t + (1 - (p - min) / range) * (height - pad.t - pad.b),
@@ -131,6 +135,19 @@ export function Sparkline({
           fill={variant === "hero" ? `url(#${gradientId})` : color}
           fillOpacity={variant === "hero" ? undefined : area}
         />
+        {zero && range > 0 && (
+          <line
+            x1={0}
+            x2={w}
+            y1={pad.t + (1 - (0 - min) / range) * (height - pad.t - pad.b)}
+            y2={pad.t + (1 - (0 - min) / range) * (height - pad.t - pad.b)}
+            stroke="#5a564e"
+            strokeOpacity={0.45}
+            strokeWidth={1}
+            strokeDasharray="3 3"
+            vectorEffect="non-scaling-stroke"
+          />
+        )}
         <path
           d={line}
           fill="none"
