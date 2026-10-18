@@ -27,14 +27,13 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
 - Quick actions: Top up, Trade, Credit Buy, Repay.
 - The menu: Activity, Guide (Coming soon, at /guide) and Settings.
 - A tap on the name in the header copies it ("sam.justan.id"), with a toast.
-- The Yield card: the cash rate as its tag ("4.0% APY ⓘ"; VARIABLE sits in the Average yield sheet) and, big, what
-  the cash has earned in savings, "Earned all time", counting up live with a green dot while it earns (Adrian,
-  2026-10-18). Dollars and cents at the card's size, the digits past them smaller, one past the digit that moves each
-  second. It is Aave V3's own number: the `balanceIncrease` of each aUSDC Mint and Burn of the account (one per savings
-  move, read from the receipts of its JAW batches and kept on the phone), plus what built up since the last move
-  (balance less the balance at that move's index). Between reads it carries on at the live rate on the savings, so less
-  cash counts slower and no savings holds still; each read restarts it and it never steps back. With nothing earned and
-  nothing saved: "Not earning yet".
+- The Yield card: the cash rate as its tag ("4.0% APY ⓘ"; VARIABLE sits in the Average yield sheet) and, big, what the
+  cash has earned in savings, "Earned all time", counting up live with a green dot while it earns (Adrian, 2026-10-18).
+  One size for the whole number, one digit past the digit that moves each second. It is Aave V3's own number: the
+  `balanceIncrease` of each aUSDC Mint and Burn of the account (one per savings move, read from the receipts of its JAW
+  batches and kept on the phone), plus what built up since the last move (balance less the balance at that move's
+  index). Between reads it carries on at the live rate on the savings, so less cash counts slower and no savings holds
+  still; each read restarts it and it never steps back. With nothing earned and nothing saved: "Not earning yet".
 - The Average yield sheet opens on the earnings by period: Week, Month, Year or All (the default). Each shows what was
   earned in it (live), what savings held on average over it, and over how long; a period longer than the savings
   starts at the first money in and says since when. Between two moves the balance holds still and its interest comes

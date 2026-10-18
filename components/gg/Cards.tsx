@@ -84,7 +84,7 @@ export function YieldCard({
           <InfoIcon aria-hidden size={12} />
         </span>
       </span>
-      <span className="flex h-[31px] items-center font-semibold tracking-[-0.03em]">{value}</span>
+      <span className="@container flex h-[31px] w-full items-center font-semibold tracking-[-0.03em]">{value}</span>
       <span className="-mt-1 text-[11px] text-subtle">{line}</span>
     </Tap>
   );

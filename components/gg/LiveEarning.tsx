@@ -10,7 +10,7 @@ const TICK_MS = 250;
 const stillDecimals = (usd: number) => (usd === 0 || usd >= 0.01 ? 2 : Math.min(8, Math.ceil(-Math.log10(usd)) + 1));
 
 /**
- * Earned all time, counting up between reads: "$0.00" then "0158231" smaller. `readAt` is when Base was last read (useTotalEarned), so
+ * Earned all time, counting up between reads: "$0.000166448". `readAt` is when Base was last read (useTotalEarned), so
  * every read restarts the count from the chain and it never drifts. With no savings it holds still.
  */
 export function LiveEarning({
@@ -41,14 +41,13 @@ export function LiveEarning({
   const value = Math.max(shown, liveEarnedUsd(earnedUsd, savingsUsd, apr, 0));
   // One digit past the one that moves each second (Adrian, 2026-10-18), so the count is seen running.
   const text = liveText(value, counts ? liveDecimals(savingsUsd, apr) + 1 : stillDecimals(value));
-  const [head, tail] = splitCents(text);
   return (
     <span className={`num flex items-center gap-1.5 tabular-nums ${className ?? ""}`}>
-      <span>
-        {/* Dollars and cents at the card's size, the digits past the cents behind them, smaller. */}
-        <span className={head.length > 7 ? "text-[20px]" : "text-[26px]"}>{head}</span>
-        {tail && <span className="text-[14px] font-medium tracking-normal text-ink-mid">{tail}</span>}
-      </span>
+      {/*
+        One size for the whole number (Adrian, 2026-10-18), 26px at most, down to what fits its container beside the dot
+        (a digit is about 0.6em; the Yield card is the container, the sheet has none and keeps 26px).
+      */}
+      <span style={{ fontSize: `min(26px, calc((100cqw - 14px) / ${(text.length * 0.6).toFixed(1)}))` }}>{text}</span>
       {/* Live, as Aave marks its own counters: a green dot that breathes while the cash earns. */}
       {counts && (
         <span aria-hidden className="relative flex size-[7px]">
@@ -58,10 +57,4 @@ export function LiveEarning({
       )}
     </span>
   );
-}
-
-/** "$0.09980412" → ["$0.09", "980412"]: the cents end the head. */
-function splitCents(text: string): [string, string] {
-  const dot = text.indexOf(".");
-  return dot < 0 ? [text, ""] : [text.slice(0, dot + 3), text.slice(dot + 3)];
 }
