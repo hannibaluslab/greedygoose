@@ -3,7 +3,7 @@
  * the ones supplied to Aave; the rest are free.
  */
 
-/** A share of the holding as a whole percent, never "0%" for a part that's there (the chip's "33% backs Credit Buy"). */
+/** A share of the holding as a whole percent, never "0%" for a part that's there (the chip’s "33% backs credit"). */
 export function wholePct(f: number): number {
   return f > 0 ? Math.min(100, Math.max(1, Math.round(f * 100))) : 0;
 }

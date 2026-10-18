@@ -24,11 +24,11 @@ type HoldingProps = {
 };
 
 /**
- * "33% backs Credit Buy" or "Not backing credit". `compact` is the Home rail's small chip
+ * "33% backs credit" or "Not backing credit". `compact` is the Home rail's small chip
  * (the figure and linked rings, or one empty ring when free; D17: no padlock); the words go to screen readers and the tooltip.
  */
 function BacksChip({ backs, compact = false }: { backs: number; compact?: boolean }) {
-  const words = backs > 0 ? `${wholePct(backs)}% backs Credit Buy` : "Not backing credit";
+  const words = backs > 0 ? `${wholePct(backs)}% backs credit` : "Not backing credit";
   if (compact) {
     return backs > 0 ? (
       <span
