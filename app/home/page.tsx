@@ -402,9 +402,13 @@ function LeverageTag({ data, onOpen }: { data: PositionData; onOpen: () => void 
       type="button"
       onClick={onOpen}
       aria-label={`Your leverage: ${text}. What it means`}
-      className="num flex h-[30px] items-center rounded-[15px] bg-ink px-2.5 text-[13px] font-bold text-brand"
+      // The tap area stays 40px tall; the chip it holds is small and light, in proportion with the header.
+      className="flex h-10 items-center"
     >
-      {text}
+      <span className="num flex h-6 items-center gap-1.5 rounded-xl border border-line-field bg-card pl-2 pr-2.5 text-[12px] font-semibold tracking-[-0.01em] text-ink-2">
+        <span aria-hidden className="size-1.5 rounded-full bg-brand ring-1 ring-ink/25" />
+        {text}
+      </span>
     </button>
   );
 }
