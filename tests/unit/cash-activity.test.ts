@@ -7,12 +7,13 @@ import {
   encodeEventTopics,
   erc20Abi,
   getAbiItem,
+  pad,
   type Hex,
   type Log,
 } from "viem";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
-import { arrivalTxs, arrivalsOf, rateLimited } from "@/lib/activity/arrivals";
+import { arrivalTxs, arrivalsOf, rangesToScan, rateLimited } from "@/lib/activity/arrivals";
 import type { ActivityItem } from "@/lib/activity/decode";
 import type { AgentEvent } from "@/lib/agents/events";
 import { describeAgentEvent, type MoveContext } from "@/lib/agents/feed";
@@ -30,7 +31,7 @@ import {
   type OwnMove,
 } from "@/lib/cashActivity";
 import { PROTOCOLS } from "@/lib/protocols/config";
-import { USDC } from "@/lib/tokens/registry";
+import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 
 type Address = `0x${string}`;
@@ -345,6 +346,53 @@ describe("money someone else sent", () => {
       { hash: tx(7), blockNumber: 22n },
       { hash: tx(6), blockNumber: 21n },
     ]);
+  });
+
+  const stockTransfer = (from: Address, to: Address, value: bigint, hash?: Hex, block?: bigint) =>
+    log(
+      EQUITIES[0].address,
+      encodeEventTopics({ abi: erc20Abi, eventName: "Transfer", args: { from, to } }),
+      encodeAbiParameters([{ type: "uint256" }], [value]),
+      hash,
+      block,
+    );
+
+  it("Activity also shows stocks someone sent, at any size; the Cash sheet only the cash", () => {
+    const sent = [stockTransfer(other, user, 10n ** 15n)];
+    expect(arrivalsOf(sent, user, true)).toEqual([
+      { kind: "receive", symbol: EQUITIES[0].symbol, amount: 10 ** 15 / 10 ** EQUITIES[0].decimals },
+    ]);
+    expect(arrivalsOf(sent, user)).toEqual([]);
+    expect(arrivalTxs([stockTransfer(other, user, 1n, tx(4), 30n)])).toEqual([{ hash: tx(4), blockNumber: 30n }]);
+  });
+
+  it("never counts the account's own batch as money sent to it", () => {
+    // EntryPoint's UserOperationEvent with the account as its sender: a sale or a withdrawal paying the account.
+    const userOp = log(
+      "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
+      [
+        "0x49628fd1471006c1482da88028e9ce4dbb080b815c9b0344d39e5a8e6ec1419f",
+        tx(1),
+        pad(user.toLowerCase() as Hex),
+        pad("0x0000000000000000000000000000000000000000"),
+      ],
+      "0x",
+    );
+    expect(arrivalsOf([transfer(other, user, usdc(5)), userOp], user, true)).toEqual([]);
+  });
+
+  it("scans only the blocks never read, keeping one stretch with no gap", () => {
+    expect(rangesToScan(100n, 200n, null)).toEqual([{ from: 100n, to: 200n }]);
+    const kept = { lo: 100n, hi: 200n, txs: [] };
+    expect(rangesToScan(100n, 200n, kept)).toEqual([]);
+    expect(rangesToScan(100n, 260n, kept)).toEqual([{ from: 201n, to: 260n }]);
+    // Show earlier: the week below.
+    expect(rangesToScan(40n, 260n, kept)).toEqual([
+      { from: 201n, to: 260n },
+      { from: 40n, to: 99n },
+    ]);
+    // Back after a long break: from the stretch's top, so the blocks between are read too.
+    expect(rangesToScan(500n, 600n, kept)).toEqual([{ from: 201n, to: 600n }]);
   });
 
   it("doesn't ask again at once when the RPC rate-limits it", () => {

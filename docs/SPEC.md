@@ -26,6 +26,10 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
 
 - Quick actions: Top up, Trade, Credit Buy, Repay.
 - The menu: Activity, Guide (Coming soon, at /guide) and Settings.
+- Activity also lists money and stocks someone else sent ("Received …"), read from USDC's and the stocks' Transfer logs
+  to the account, a week at a time with Show earlier, back to the app's first block (2026-09-18). Received money is
+  money put in, not profit. Scanned blocks are kept on the phone. It needs an RPC that answers getLogs: Base's public
+  one refuses them, so it stays off until NEXT_PUBLIC_BASE_RPC_URL is set.
 - A tap on the name in the header copies it ("sam.justan.id"), with a toast.
 - The Yield card: the cash rate as its tag ("4.0% APY ⓘ"; VARIABLE sits in the Average yield sheet) and, big, what the
   cash has earned in savings, "Earned all time", counting up live with a green dot while it earns (Adrian, 2026-10-18).
