@@ -23,6 +23,7 @@ import {
   nowPercents,
   previewTrades,
   rebalanceOptions,
+  setMixRow,
   startingMix,
   type MixHolding,
   type MixRow,
@@ -200,8 +201,8 @@ export function RebalanceSettingsView({
     setEdited([...rows, { reserveId, bps: 0 }]);
     setAdding(false);
   };
-  const setBps = (reserveId: number, bps: number) =>
-    setEdited(rows.map((r) => (r.reserveId === reserveId ? { ...r, bps } : r)));
+  // Never past 100% in all: a target stops where the other stocks' leave off (setMixRow).
+  const setBps = (reserveId: number, bps: number) => setEdited(setMixRow(rows, reserveId, bps));
 
   return (
     <div className="flex flex-col gap-2.5 leading-[normal]">

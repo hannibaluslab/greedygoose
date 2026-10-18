@@ -35,6 +35,16 @@ export function mixWeights(rows: readonly MixRow[]): number[] {
   return EQUITIES.map((e) => rows.find((r) => r.reserveId === e.reserveId)?.bps ?? 0);
 }
 
+/**
+ * One stock's target set on the card: never past what the other stocks leave, so the mix can't add up to more than
+ * 100%. The slider stops where the room ends.
+ */
+export function setMixRow(rows: readonly MixRow[], reserveId: number, bps: number): MixRow[] {
+  const others = rows.reduce((a, r) => (r.reserveId === reserveId ? a : a + r.bps), 0);
+  const most = Math.max(0, MIX_WHOLE - others);
+  return rows.map((r) => (r.reserveId === reserveId ? { ...r, bps: Math.min(Math.max(0, bps), most) } : r));
+}
+
 /** Whole percents of `values` that add up to 100, by largest remainder (ties go to the earlier one). */
 export function wholePercents(values: readonly number[]): number[] {
   const total = values.reduce((a, b) => a + b, 0);
