@@ -62,6 +62,12 @@ export function startEarningText(p: { walletUsd: number; savingsUsd: number; rat
 export const startedEarningText = (rate: string | null) =>
   rate ? `Your cash is earning ${rate}` : "Your cash is earning";
 
+/** The coins Add money takes on Base, as its line says them: USDC, then Turn into cash's ("…, DAI or EURC"). */
+export const ACCEPTED_COINS_TEXT = (() => {
+  const all = [USDC.symbol, ...CASH_COINS.map((c) => c.symbol)];
+  return `${all.slice(0, -1).join(", ")} or ${all.at(-1)}`;
+})();
+
 /** A coin sitting in the wallet: how much, in its own units. */
 export type Arrived = { coin: EntryCoinAsset; raw: bigint };
 

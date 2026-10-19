@@ -11,7 +11,7 @@ import { useCashSetup } from "@/hooks/useCashSetup";
 import { useCashCoinBalances } from "@/hooks/useCashCoinBalances";
 import { usePosition } from "@/hooks/usePosition";
 import { aprToApy } from "@/lib/aave/math";
-import { arrivedCoins, arrivedView, rateText } from "@/lib/cashSetup";
+import { ACCEPTED_COINS_TEXT, arrivedCoins, arrivedView, rateText } from "@/lib/cashSetup";
 import { shortAddress } from "@/lib/formatting";
 
 type AddMoneyProps = {
@@ -58,7 +58,7 @@ function AddMoneyBody({ address, name, rate, arrived, onCopy }: AddMoneyProps) {
         </div>
         <AddressQr address={address} />
         <p className="num m-0 text-sm leading-[1.45] text-ink-mid">
-          USDC, USDT, USDe or USDS on Base. {rate ? `They arrive as cash and earn ${rate}.` : "They arrive as cash."}
+          {ACCEPTED_COINS_TEXT} on Base. {rate ? `They arrive as cash and earn ${rate}.` : "They arrive as cash."}
         </p>
         {/* Ruling 11. */}
         <p className="m-0 text-sm font-semibold leading-[1.45] text-ink">

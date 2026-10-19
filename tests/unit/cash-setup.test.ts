@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AGENTS_LIVE } from "@/lib/agents/config";
 import {
+  ACCEPTED_COINS_TEXT,
   arrivedCoins,
   arrivedText,
   arrivedView,
@@ -118,6 +119,12 @@ describe("other dollars in the account", () => {
       " ",
     );
     expect(words).not.toMatch(/agent|saving|receive|limit|permission|executor/i);
+  });
+});
+
+describe("Add money's coins", () => {
+  it("names USDC and every coin Turn into cash takes, USDbC no longer among them", () => {
+    expect(ACCEPTED_COINS_TEXT).toBe("USDC, USDT, USDe, USDS, DAI or EURC");
   });
 });
 
