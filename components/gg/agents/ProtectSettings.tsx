@@ -7,7 +7,6 @@ import { toast } from "sonner";
 import { CardTitle, ManageCard, SaveFooter } from "@/components/gg/Manage";
 import { ComingSoon } from "@/components/gg/Agents";
 import { LimitField, neverMoreThan } from "@/components/gg/LimitField";
-import { StockAvatar } from "@/components/gg/StockAvatar";
 import { Switch } from "@/components/gg/Switch";
 import { useAgents } from "@/hooks/useAgents";
 import { useAgentSettings } from "@/hooks/useAgentSettings";
@@ -27,20 +26,9 @@ import {
 } from "@/lib/agents/protect";
 import type { AgentStatus } from "@/lib/agents/status";
 import { toUsd } from "@/lib/cash";
-import { formatUsdShort, formatUsdTrim, inWords } from "@/lib/formatting";
+import { formatUsdTrim, inWords } from "@/lib/formatting";
 import { EQUITIES } from "@/lib/tokens/registry";
-
-/** "Sells first": GooseExecutor's `keepMix` for Protect · sell. */
-const ORDER = [
-  {
-    keepMix: false,
-    label: "Most safety per dollar",
-    sub: "Sells the least it takes to bring your credit back to Watch.",
-  },
-  { keepMix: true, label: "Keep my mix", sub: "Sells the same share of each stock that backs your credit." },
-] as const;
-
-const NEVER_SELL_WARNING = "Protect won’t sell it, but Aave still can if your credit goes past its limit.";
+import { LimitNotes, ORDER, SaveSummary, SellChoices, saveState } from "./ProtectSettingsParts";
 
 const running = (s: AgentStatus) => s === "on" || s === "starting";
 
@@ -176,21 +164,13 @@ export function ProtectSettingsView({
 
   // While repaying from cash is off, saving switches Protect on (protectSteps).
   const off = saved.repayCapRaw === null;
-  const canSave =
-    live &&
-    limitTyped &&
-    !preview &&
-    !feeBlocked &&
-    !waiting &&
-    !busy &&
-    !plan.blocked &&
-    steps.length > 0 &&
-    capMaxRaw !== null;
-  const note = !live
-    ? "Not live yet"
-    : feeBlocked
-      ? "Your account can’t pay network fees from your cash right now."
-      : plan.blocked;
+  const { canSave, note } = saveState({
+    live,
+    ready: limitTyped && !preview && !waiting && !busy && capMaxRaw !== null,
+    feeBlocked,
+    blocked: plan.blocked,
+    changes: steps.length,
+  });
   // Save's first JAW sheet is "Sells first" when it changed: its batch is prepared while the body is idle.
   const first = steps[0];
   const prepared = usePrepare(prep, canSave && first?.kind === "keepMix" && settingPlan ? settingPlan(first.on) : null);
@@ -223,14 +203,7 @@ export function ProtectSettingsView({
             if (usd !== null) set({ limitUsd: usd });
           }}
         />
-        {limitTyped && testCapNote(choice.limitUsd, capMaxRaw) && (
-          <span className="text-xs leading-[1.4] text-subtle">{testCapNote(choice.limitUsd, capMaxRaw)}</span>
-        )}
-        {live && off && (
-          <span className="text-xs leading-[1.4] text-subtle">
-            Off now. It starts on this limit when you switch it on.
-          </span>
-        )}
+        <LimitNotes capNote={limitTyped ? testCapNote(choice.limitUsd, capMaxRaw) : null} offNow={live && off} />
       </ManageCard>
 
       <ManageCard className="flex flex-col px-4 py-0.5">
@@ -256,92 +229,18 @@ export function ProtectSettingsView({
         </div>
 
         {choice.sellOn && (
-          <>
-            <div className="flex flex-col gap-2 border-t border-hairline py-[13px]">
-              <span className="text-[15px] font-semibold">Sells first</span>
-              <div role="radiogroup" aria-label="Sells first" className="flex flex-col">
-                {ORDER.map((o) => {
-                  const on = o.keepMix === choice.keepMix;
-                  return (
-                    <button
-                      key={o.label}
-                      type="button"
-                      role="radio"
-                      aria-checked={on}
-                      onClick={() => set({ keepMix: o.keepMix })}
-                      className="flex min-h-11 w-full items-center gap-3 py-1.5 text-left text-ink"
-                    >
-                      <span
-                        aria-hidden
-                        className={`flex size-[22px] shrink-0 items-center justify-center rounded-full ${on ? "bg-ink text-on-ink" : "border-[1.5px] border-line-strong"}`}
-                      >
-                        {on && (
-                          <svg
-                            width="12"
-                            height="12"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.8"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <path d="M5 12l5 5 9-10" />
-                          </svg>
-                        )}
-                      </span>
-                      <span className="flex grow flex-col gap-[3px]">
-                        <span className="text-sm font-semibold">{o.label}</span>
-                        <span className="text-xs leading-[1.35] text-ink-mid">{o.sub}</span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="flex flex-col gap-2 border-t border-hairline py-[13px]">
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[15px] font-semibold">Never sell</span>
-                <span className="text-xs leading-[1.4] text-subtle">{NEVER_SELL_WARNING}</span>
-              </div>
-              {listedStocks.length === 0 ? (
-                <p className="m-0 text-sm text-ink-mid">None of your stocks back your credit.</p>
-              ) : (
-                listedStocks.map((e) => (
-                  <div key={e.symbol} className="flex items-center gap-3 py-1">
-                    <StockAvatar symbol={e.symbol} size={30} />
-                    <span className="flex grow flex-col gap-[3px]">
-                      <span className="text-sm font-semibold">{e.name}</span>
-                      <span className="num text-xs text-subtle">
-                        {backsUsd[e.reserveId] > 0
-                          ? `Backs ${formatUsdShort(backsUsd[e.reserveId])}`
-                          : "Backs nothing now"}
-                      </span>
-                    </span>
-                    <Switch
-                      label={`Never sell ${e.name}`}
-                      checked={choice.never.includes(e.reserveId)}
-                      onChange={(on) => toggleNever(e.reserveId, on)}
-                    />
-                  </div>
-                ))
-              )}
-            </div>
-          </>
+          <SellChoices
+            keepMix={choice.keepMix}
+            onKeepMix={(keepMix) => set({ keepMix })}
+            never={choice.never}
+            onNever={toggleNever}
+            listedStocks={listedStocks}
+            backsUsd={backsUsd}
+          />
         )}
       </ManageCard>
 
-      {live && limitTyped && lines.length > 0 && (
-        <div className="flex flex-col gap-1.5 rounded-[16px] bg-card-bone px-[13px] pb-3 pt-[11px] text-[13px]">
-          <span className="font-semibold">{off ? "Switching on does" : "Saving does"}</span>
-          <ul className="m-0 flex list-none flex-col gap-1 p-0 text-ink-2">
-            {lines.map((l) => (
-              <li key={l}>{l}</li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {live && limitTyped && <SaveSummary off={off} lines={lines} />}
 
       {live ? (
         <SaveFooter
