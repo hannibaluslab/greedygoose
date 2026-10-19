@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import { StockAvatar } from "./StockAvatar";
-import { Tap } from "./Tap";
-import { ChevronRight } from "./icons";
+import { StockAvatar } from "../StockAvatar";
+import { Tap } from "../Tap";
+import { ChevronRight } from "../icons";
 import { formatUsd, formatUsdShort } from "@/lib/formatting";
 
 /** The Market sheet's list card (F1-3). */

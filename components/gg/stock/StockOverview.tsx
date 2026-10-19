@@ -1,13 +1,13 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { FeedCard, FeedDays } from "./activity/Activity";
-import { TodayChange, TodayPending } from "./BalanceHero";
-import { MoneyCompact } from "./Money";
+import { FeedCard, FeedDays } from "../activity/Activity";
+import { TodayChange, TodayPending } from "../BalanceHero";
+import { MoneyCompact } from "../Money";
 import { PriceChart } from "./PriceChart";
-import { SegmentedControl } from "./SegmentedControl";
-import { StockAvatar, tickerOf } from "./StockAvatar";
-import { BacksIcon } from "./icons";
+import { SegmentedControl } from "../SegmentedControl";
+import { StockAvatar, tickerOf } from "../StockAvatar";
+import { BacksIcon } from "../icons";
 import { useActivity } from "@/hooks/useActivity";
 import { aboutStock } from "@/lib/activity/decode";
 import type { MarketPrices } from "@/hooks/useMarketPrices";
@@ -17,7 +17,7 @@ import { usePriceHistory } from "@/hooks/usePriceHistory";
 import { formatShares, formatUsd } from "@/lib/formatting";
 import { holdingSplit } from "@/lib/holding";
 import { RANGES, moveUsd, yearLineStart, type Range } from "@/lib/prices/market";
-import { RetryButton } from "./RetryButton";
+import { RetryButton } from "../RetryButton";
 
 /** Pieces of the stock sheet's first step (StockSheet), from NYM's CoinDetailSheet in the GreedyGoose kit. */
 

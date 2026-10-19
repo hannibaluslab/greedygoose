@@ -1,10 +1,10 @@
 "use client";
 
-import { AmountArrow, AmountBadge, AmountField, AmountSource, YouGet } from "./AmountField";
-import { StockAvatar, tickerOf } from "./StockAvatar";
-import { TxButton, TxError } from "./TxUi";
-import { StatusChange, StatusMoveBar, StatusPill } from "./Status";
-import { BacksIcon } from "./icons";
+import { AmountArrow, AmountBadge, AmountField, AmountSource, YouGet } from "../AmountField";
+import { StockAvatar, tickerOf } from "../StockAvatar";
+import { TxButton, TxError } from "../TxUi";
+import { StatusChange, StatusMoveBar, StatusPill } from "../Status";
+import { BacksIcon } from "../icons";
 import { wholeUsd } from "./CreditBuyBacking";
 import type { useBuyQuote } from "@/hooks/useBuyQuote";
 import type { useCreditBuy } from "@/hooks/useCreditBuy";

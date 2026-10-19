@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
-import { MoneyCompact } from "./Money";
-import { Sparkline } from "./Sparkline";
-import { StockAvatar } from "./StockAvatar";
-import { Tap } from "./Tap";
-import { BacksIcon, ChevronRight, FreeIcon, PlusIcon } from "./icons";
+import { MoneyCompact } from "../Money";
+import { Sparkline } from "../Sparkline";
+import { StockAvatar } from "../StockAvatar";
+import { Tap } from "../Tap";
+import { BacksIcon, ChevronRight, FreeIcon, PlusIcon } from "../icons";
 import { formatShares, formatSignedPct, formatUsd } from "@/lib/formatting";
 import { wholePct } from "@/lib/holding";
 import { LINE_POINTS, downsample } from "@/lib/prices/market";

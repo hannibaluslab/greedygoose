@@ -5,7 +5,7 @@ import { CreditBuySheet } from "./CreditBuySheet";
 import { StockSheet } from "./StockSheet";
 import { TradeSheet } from "./TradeSheet";
 import type { PositionData } from "@/hooks/usePosition";
-import { useMoneySheets } from "./MoneySheets";
+import { useMoneySheets } from "../MoneySheets";
 import { useSheetSubject } from "@/hooks/useSheetSubject";
 import type { TradeAsset } from "@/lib/trade";
 import { EQUITIES } from "@/lib/tokens/registry";

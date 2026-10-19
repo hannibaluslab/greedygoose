@@ -7,9 +7,9 @@ import { AmountArrow, AmountBadge, AmountField, AmountSource, YouGet } from "@/c
 import { BalanceHero, TodayChange } from "@/components/gg/BalanceHero";
 import { Button } from "@/components/gg/Button";
 import { CashCard, CreditCard } from "@/components/gg/Cards";
-import { AddStockCard, HoldingCard, HoldingList, HoldingRow } from "@/components/gg/Holding";
+import { AddStockCard, HoldingCard, HoldingList, HoldingRow } from "@/components/gg/stock/Holding";
 import { ProtectDemo } from "./ProtectDemos";
-import { MarketList, MarketRow } from "@/components/gg/Market";
+import { MarketList, MarketRow } from "@/components/gg/stock/Market";
 import { QuickAction } from "@/components/gg/QuickAction";
 import { TabHeader } from "@/components/gg/Screen";
 import { Sparkline } from "@/components/gg/Sparkline";
