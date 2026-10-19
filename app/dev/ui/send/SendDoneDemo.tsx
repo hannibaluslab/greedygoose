@@ -1,7 +1,7 @@
 "use client";
 
 import { toast } from "sonner";
-import { SendDone, SendHeader } from "@/components/gg/Send";
+import { SendDone, SendHeader } from "@/components/gg/send/Send";
 import { TabBar } from "@/components/gg/TabBar";
 import { SEND_COPY } from "@/lib/send";
 

@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 import { SheetShell } from "@/components/sheets/SheetShell";
-import { AddressQr } from "./AddressQr";
+import { AddressQr } from "./send/AddressQr";
 import { TurnIntoCash } from "./CashSetup";
 import { CopyIcon } from "./icons";
 import { useAccountName } from "@/hooks/useAccountName";

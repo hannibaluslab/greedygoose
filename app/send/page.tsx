@@ -1,7 +1,7 @@
 "use client";
 
 import { RequireAccount } from "@/components/wallet/RequireAccount";
-import { SendHeader, SendScreen } from "@/components/gg/Send";
+import { SendHeader, SendScreen } from "@/components/gg/send/Send";
 import { TabBar } from "@/components/gg/TabBar";
 import { usePosition } from "@/hooks/usePosition";
 import { RetryButton } from "@/components/gg/RetryButton";
