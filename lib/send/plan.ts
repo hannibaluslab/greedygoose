@@ -13,12 +13,7 @@ import type { Recipient, RecipientChecks } from "./recipient";
 
 // ─── The screen ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/**
- * Everything the Send screen shows, from what is sent, the dollars, the account and the recipient: the amount card's
- * hint, MAX, what it moves (USDC raw units, or the stock's raw shares: every free share on MAX), the line that says why
- * the amount can't go, the recipient's guard, the summary rows, the small print, the button and whether it's ready.
- */
-export function planSend(p: {
+type SendInput = {
   asset: SendAsset | null;
   amount: string;
   all: boolean;
@@ -26,16 +21,20 @@ export function planSend(p: {
   user: Address;
   recipient: Recipient | null;
   checks: RecipientChecks;
-}) {
+};
+type SendAmount = ReturnType<typeof sendAmount>;
+
+/**
+ * What the amount moves: USDC raw units, or the stock's raw shares. MAX sends every free share, to the last unit, while
+ * the dollars still say all of it; typed dollars become shares at Aave's price, rounded down.
+ */
+function sendAmount(p: SendInput) {
   const { data } = p;
-  const token = p.asset ? sendTokenOf(p.asset) : undefined;
   const stock = p.asset && p.asset !== "cash" ? stockOf(p.asset) : undefined;
   const holding = stock ? data.holdings.find((h) => h.symbol === stock.symbol) : undefined;
   const usdRaw = usdRawOf(p.amount);
   const amountUsd = toUsd(usdRaw);
   const maxUsd = p.asset ? maxUsdOf(p.asset, data) : 0;
-  // MAX sends every free share, to the last unit, while the dollars still say all of it; typed dollars become shares at
-  // Aave's price, rounded down.
   // An amount that would leave less than NO_DUST_USD of a stock sends all of it (ruling 7b).
   const sellAll =
     maxUsd > 0 &&
@@ -43,60 +42,89 @@ export function planSend(p: {
     (p.all ? amountUsd >= maxUsd : !!stock && amountUsd <= maxUsd + 1e-9 && maxUsd - amountUsd < NO_DUST_USD);
   const sharesRaw =
     stock && holding ? (sellAll ? holding.freeRaw : sharesForUsdRaw(usdRaw, holding.priceRaw, stock.decimals)) : 0n;
-  const amountRaw = p.asset === "cash" ? usdRaw : sharesRaw;
   const shares = stock && holding ? rawToShares(sharesRaw, holding.multiplier, stock.decimals) : 0;
-  const ticker = stock ? tickerOf(stock.symbol) : "";
-  const noFee = cashRaw(data.cash) < feeBufferRaw;
-
-  // Why the amount can't go: first what the asset allows at any amount, then the amount.
-  let amountBlock: string | null = null;
-  if (p.asset === "cash" && amountUsd > maxUsd)
-    amountBlock = amountUsd > data.cashUsd ? SEND_COPY.overCash(data.cashUsd) : SEND_COPY.feeBuffer;
-  else if (stock && noFee) amountBlock = SEND_COPY.noFee;
-  else if (stock && holding && holding.freeRaw === 0n) amountBlock = SEND_COPY.allBacks(holding.name);
-  else if (stock && holding && sharesRaw > holding.freeRaw) amountBlock = SEND_COPY.notFree;
-  else if (stock && amountUsd > 0 && sharesRaw === 0n) amountBlock = SEND_COPY.tooSmall;
-
-  const to = p.recipient ? recipientNote(p.recipient, p.user, p.checks) : null;
-  const who = p.recipient ? (p.recipient.name ?? shortAddress(p.recipient.address)) : null;
-
-  const hint: AmountHint | null = !p.asset
-    ? null
-    : p.asset === "cash"
-      ? SEND_COPY.cashHint(data.cashUsd)
-      : { shares, priceUsd: holding?.priceUsd ?? 0, upToUsd: maxUsd };
-
-  const shown = amountRaw > 0n && !amountBlock;
   // A stock's dollars are what the shares sent are worth at Aave's price, not the dollars typed: on MAX, a refresh
   // that leaves fewer free shares sends fewer, and the summary says what they're worth.
   const sharesUsdRaw =
     stock && holding
       ? (sharesRaw * holding.priceRaw) / 10n ** BigInt(stock.decimals + ORACLE_DECIMALS - USDC.decimals)
       : 0n;
-  const theyGet = !shown
-    ? "—"
-    : p.asset === "cash"
-      ? formatUsd(amountUsd)
-      : `${formatShares(shares)} ${ticker} · ${SEND_COPY.about(toUsd(sharesUsdRaw))}`;
+  return {
+    stock,
+    holding,
+    usdRaw,
+    amountUsd,
+    maxUsd,
+    sharesRaw,
+    amountRaw: p.asset === "cash" ? usdRaw : sharesRaw,
+    shares,
+    sharesUsdRaw,
+    ticker: stock ? tickerOf(stock.symbol) : "",
+  };
+}
+
+/** Why the amount can't go: first what the asset allows at any amount, then the amount. */
+function sendAmountBlock(p: SendInput, a: SendAmount): string | null {
+  const { data } = p;
+  const { stock, holding, amountUsd } = a;
+  if (p.asset === "cash" && amountUsd > a.maxUsd)
+    return amountUsd > data.cashUsd ? SEND_COPY.overCash(data.cashUsd) : SEND_COPY.feeBuffer;
+  if (!stock) return null;
+  if (cashRaw(data.cash) < feeBufferRaw) return SEND_COPY.noFee;
+  if (holding && holding.freeRaw === 0n) return SEND_COPY.allBacks(holding.name);
+  if (holding && a.sharesRaw > holding.freeRaw) return SEND_COPY.notFree;
+  if (amountUsd > 0 && a.sharesRaw === 0n) return SEND_COPY.tooSmall;
+  return null;
+}
+
+/** Ruling 44: while it's off for want of an amount or a person, the button says which. */
+function sendButton(p: SendInput, a: SendAmount, amountBlock: string | null): string {
+  if (a.amountRaw === 0n) return SEND_COPY.enterAmount;
+  if (!p.recipient) return SEND_COPY.addWho;
+  if (p.asset === "cash") return a.amountUsd > 0 && !amountBlock ? SEND_COPY.sendUsd(a.amountUsd) : SEND_COPY.button;
+  return a.holding ? SEND_COPY.sendStock(a.holding.name) : SEND_COPY.button;
+}
+
+/** The amount card's hint: the cash there is, or a stock's shares for the dollars typed and the most it can be. */
+function sendHint(p: SendInput, a: SendAmount): AmountHint | null {
+  if (!p.asset) return null;
+  if (p.asset === "cash") return SEND_COPY.cashHint(p.data.cashUsd);
+  return { shares: a.shares, priceUsd: a.holding?.priceUsd ?? 0, upToUsd: a.maxUsd };
+}
+
+/** What they get: the dollars, or the shares and what they're worth at Aave's price. */
+function theyGetOf(p: SendInput, a: SendAmount): string {
+  if (p.asset === "cash") return formatUsd(a.amountUsd);
+  return `${formatShares(a.shares)} ${a.ticker} · ${SEND_COPY.about(toUsd(a.sharesUsdRaw))}`;
+}
+
+/** The recipient's line: refused (act), warned (watch), or none. */
+function toNoteOf(to: { block: string | null; warn: string | null } | null) {
+  if (to?.block) return { text: to.block, tone: "act" as const };
+  if (to?.warn) return { text: to.warn, tone: "watch" as const };
+  return null;
+}
+
+/**
+ * Everything the Send screen shows, from what is sent, the dollars, the account and the recipient: the amount card's
+ * hint, MAX, what it moves (USDC raw units, or the stock's raw shares: every free share on MAX), the line that says why
+ * the amount can't go, the recipient's guard, the summary rows, the small print, the button and whether it's ready.
+ */
+export function planSend(p: SendInput) {
+  const token = p.asset ? sendTokenOf(p.asset) : undefined;
+  const a = sendAmount(p);
+  const { stock, holding, maxUsd, amountUsd, amountRaw, shares, ticker } = a;
+  const amountBlock = sendAmountBlock(p, a);
+
+  const to = p.recipient ? recipientNote(p.recipient, p.user, p.checks) : null;
+  const who = p.recipient ? (p.recipient.name ?? shortAddress(p.recipient.address)) : null;
+
   const rows = [
     { label: SEND_COPY.to, value: who ?? "—" },
-    { label: SEND_COPY.theyGet, value: theyGet },
+    { label: SEND_COPY.theyGet, value: amountRaw > 0n && !amountBlock ? theyGetOf(p, a) : "—" },
   ];
 
   const ready = !!token && amountRaw > 0n && !amountBlock && !!p.recipient && !!to && !to.block && !to.waiting;
-  // Ruling 44: while it's off for want of an amount or a person, the button says which.
-  const button =
-    amountRaw === 0n
-      ? SEND_COPY.enterAmount
-      : !p.recipient
-        ? SEND_COPY.addWho
-        : p.asset === "cash"
-          ? amountUsd > 0 && !amountBlock
-            ? SEND_COPY.sendUsd(amountUsd)
-            : SEND_COPY.button
-          : holding
-            ? SEND_COPY.sendStock(holding.name)
-            : SEND_COPY.button;
   // The done line names the stock ("Sent 0.0072 Amazon"), as the Trade sheet's "Sold 0.0029 Alphabet" does.
   const what = p.asset === "cash" ? formatUsd(amountUsd) : `${formatShares(shares)} ${holding?.name ?? ticker}`;
 
@@ -107,14 +135,10 @@ export function planSend(p: {
     maxUsd,
     amountUsd,
     amountRaw,
-    sharesRaw,
-    hint,
+    sharesRaw: a.sharesRaw,
+    hint: sendHint(p, a),
     amountNote: amountBlock,
-    toNote: to?.block
-      ? { text: to.block, tone: "act" as const }
-      : to?.warn
-        ? { text: to.warn, tone: "watch" as const }
-        : null,
+    toNote: toNoteOf(to),
     waiting: !!to?.waiting,
     rows,
     smallPrint:
@@ -126,7 +150,7 @@ export function planSend(p: {
             to: p.recipient.address,
           })
         : null,
-    button,
+    button: sendButton(p, a, amountBlock),
     ready,
     /** "$20.00" or "0.043 NVIDIA", and to whom, for the done state. */
     sentTitle: who ? SEND_COPY.sent(what, who) : null,
