@@ -2,15 +2,16 @@ import { describe, expect, it, vi } from "vitest";
 import type { Address } from "viem";
 import { cashBuyPlan } from "@/hooks/useBuy";
 import { contactsPlan } from "@/hooks/useContacts";
-import { convertPlan, type ConvertQuote } from "@/hooks/useConvert";
 import { creditBuyPlan } from "@/hooks/useCreditBuy";
 import {
+  convertPlan,
   earnPlan,
   keepMixPlan,
   repayPlan,
   sendPlan,
   setMixPlan,
   swapPlan,
+  type ConvertQuote,
   type EarnInput,
   type RepayInput,
   type SendInput,

@@ -17,7 +17,7 @@ import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import type { FeedRow } from "@/components/gg/Activity";
 import type { ActivityRow } from "@/hooks/useActivity";
 import type { GrantView } from "@/hooks/useCashSetup";
-import type { ConvertQuote } from "@/hooks/useConvert";
+import type { ConvertQuote } from "@/lib/tx/plans";
 import { useNowSec } from "@/hooks/useNowSec";
 import type { AgentEvent } from "@/lib/agents/events";
 import { describeAgentEvent, type MoveContext } from "@/lib/agents/feed";
