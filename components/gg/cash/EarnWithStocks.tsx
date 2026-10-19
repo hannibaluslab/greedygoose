@@ -6,7 +6,7 @@ import { AmountBadge, AmountField, AmountSource } from "../AmountField";
 import { Button } from "../Button";
 import { StatusChange } from "../Status";
 import { StockAvatar } from "../StockAvatar";
-import { Summary } from "../Summary";
+import { Summary } from "../home/Summary";
 import { TxButton, TxError } from "../TxUi";
 import { usePrepare, type TxPhase, type TxPlan, type TxPrep } from "@/hooks/useTx";
 import { useEarnRates } from "@/hooks/useEarnWithStocks";

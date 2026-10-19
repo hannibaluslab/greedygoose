@@ -1,4 +1,4 @@
-import { ValueLine } from "./ValueLine";
+import { ValueLine } from "../ValueLine";
 
 /**
  * The line under Home's total balance: all-time P&L at each day's end, with its dashed $0 line, once it can be added up

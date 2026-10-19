@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { AmountBadge, AmountField, AmountSource } from "@/components/gg/AmountField";
 import { Button } from "@/components/gg/Button";
 import type { StatusPillSize } from "@/components/gg/Status";
-import { Summary } from "@/components/gg/Summary";
+import { Summary } from "@/components/gg/home/Summary";
 import { TxButton } from "@/components/gg/TxUi";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import type { ActivityRow } from "@/hooks/useActivity";

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { MoneyCompact } from "../Money";
-import { Sparkline } from "../Sparkline";
+import { Sparkline } from "../home/Sparkline";
 import { StockAvatar } from "../StockAvatar";
 import { Tap } from "../Tap";
 import { BacksIcon, ChevronRight, FreeIcon, PlusIcon } from "../icons";

@@ -2,8 +2,8 @@
 
 import type { ReactNode } from "react";
 import { toast } from "sonner";
-import { GooseMark } from "./GooseMark";
-import { MenuButton } from "./MenuButton";
+import { GooseMark } from "../GooseMark";
+import { MenuButton } from "../MenuButton";
 import { useAccountName } from "@/hooks/useAccountName";
 import { firstName } from "@/lib/jaw/name";
 import { shortAddress } from "@/lib/formatting";

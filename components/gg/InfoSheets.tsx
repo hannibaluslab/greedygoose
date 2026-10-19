@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { Button } from "./Button";
-import { EarnedPeriods } from "./EarnedPeriods";
+import { EarnedPeriods } from "./home/EarnedPeriods";
 import type { TotalEarned } from "@/hooks/useTotalEarned";
 import { CASH } from "@/config/risk";
 import { formatUsd, formatUsdTrim } from "@/lib/formatting";

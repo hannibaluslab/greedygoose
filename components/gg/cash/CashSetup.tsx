@@ -4,7 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { ActivityAvatar } from "../activity/Activity";
-import { Summary, type SummaryRow } from "../Summary";
+import { Summary, type SummaryRow } from "../home/Summary";
 import { TxButton, TxDone, TxError } from "../TxUi";
 import { TrendUpIcon } from "../icons";
 import { useConvert, useConvertQuotes } from "@/hooks/useConvert";

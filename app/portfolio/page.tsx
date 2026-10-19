@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { TabBar } from "@/components/gg/TabBar";
 import { TabHeader } from "@/components/gg/Screen";
-import { BalanceHero, TodayChange, TodayPending } from "@/components/gg/BalanceHero";
+import { BalanceHero, TodayChange, TodayPending } from "@/components/gg/home/BalanceHero";
 import { Button } from "@/components/gg/Button";
 import { useMoneySheets } from "@/components/gg/cash/MoneySheets";
 import { StockSheets, useStockSheets } from "@/components/gg/stock/StockSheets";

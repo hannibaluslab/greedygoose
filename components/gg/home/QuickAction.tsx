@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Tap } from "./Tap";
+import { Tap } from "../Tap";
 
 /** A round dark action under the balance (HomeUpliftRail: Trade, Top up, Credit Buy, Repay); four sit in a row. */
 export function QuickAction({

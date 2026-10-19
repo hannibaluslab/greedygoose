@@ -1,4 +1,4 @@
-import { Sparkline } from "./Sparkline";
+import { Sparkline } from "./home/Sparkline";
 import { LINE_POINTS, downsample } from "@/lib/prices/market";
 import { RetryButton } from "./RetryButton";
 

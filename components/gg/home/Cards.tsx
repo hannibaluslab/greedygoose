@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
-import { MoneyCompact } from "./Money";
-import { StatusPill } from "./Status";
-import { Tap } from "./Tap";
-import { ChevronRight, InfoIcon } from "./icons";
+import { MoneyCompact } from "../Money";
+import { StatusPill } from "../Status";
+import { Tap } from "../Tap";
+import { ChevronRight, InfoIcon } from "../icons";
 import type { Status } from "@/lib/risk/status";
 import { formatUsdTrim, monthlyCostText } from "@/lib/formatting";
 

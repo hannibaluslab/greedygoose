@@ -9,7 +9,7 @@ import { Button } from "../Button";
 import { useMoneySheets } from "../cash/MoneySheets";
 import { TabHeader } from "../Screen";
 import { StockAvatar } from "../StockAvatar";
-import { Summary } from "../Summary";
+import { Summary } from "../home/Summary";
 import { TabBar } from "../TabBar";
 import { TxButton, TxDone, TxError } from "../TxUi";
 import { ReceiveIcon } from "../icons";

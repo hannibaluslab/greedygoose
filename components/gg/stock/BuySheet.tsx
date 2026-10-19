@@ -9,7 +9,7 @@ import { Button } from "../Button";
 import { MarketList, MarketRow } from "./Market";
 import { StatusChange } from "../Status";
 import { tickerOf } from "../StockAvatar";
-import { Summary, type SummaryRow } from "../Summary";
+import { Summary, type SummaryRow } from "../home/Summary";
 import { TxButton, TxError } from "../TxUi";
 import { useBoughtHome } from "@/hooks/useBoughtHome";
 import { useBuy } from "@/hooks/useBuy";

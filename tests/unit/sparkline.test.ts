@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { captionCorner } from "@/components/gg/Sparkline";
+import { captionCorner } from "@/components/gg/home/Sparkline";
 
 // Invest's hero line (PortfolioPage): 350 × 34, padded 2 / 10 / 7 / 7 as Sparkline draws it, with "Market prices · 7 days"
 // (22 characters at 6.8px) 12px tall in a corner, and the lime dot's 4.25px around the last point.

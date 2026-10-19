@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { FeedCard, FeedDays } from "../activity/Activity";
-import { TodayChange, TodayPending } from "../BalanceHero";
+import { TodayChange, TodayPending } from "../home/BalanceHero";
 import { MoneyCompact } from "../Money";
 import { PriceChart } from "./PriceChart";
 import { SegmentedControl } from "../SegmentedControl";

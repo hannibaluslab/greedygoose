@@ -11,7 +11,7 @@ import { useMoneySheets } from "../cash/MoneySheets";
 import { SmallPrint } from "./BuySheet";
 import { SellSmallPrint } from "./StockSheet";
 import { StockAvatar, tickerOf } from "../StockAvatar";
-import { Summary } from "../Summary";
+import { Summary } from "../home/Summary";
 import { TxButton, TxDone, TxError } from "../TxUi";
 import { useBoughtHome } from "@/hooks/useBoughtHome";
 import { useBuyQuote, useBuyQuoteRaw } from "@/hooks/useBuyQuote";

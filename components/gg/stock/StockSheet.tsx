@@ -7,7 +7,7 @@ import { AmountArrow, AmountField, AmountHintLine, AmountSource, YouGetCash } fr
 import { Button } from "../Button";
 import { StockAvatar, tickerOf } from "../StockAvatar";
 import { StatCard, StockActivity, StockChart, StockHeader, StockPosition } from "./StockOverview";
-import { Summary } from "../Summary";
+import { Summary } from "../home/Summary";
 import { TxButton, TxDone, TxError } from "../TxUi";
 import { CreditIcon } from "../icons";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
