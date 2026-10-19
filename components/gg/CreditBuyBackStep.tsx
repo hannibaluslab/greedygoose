@@ -11,16 +11,88 @@ import {
   MIN_BACKING_USD,
   NO_CREDIT,
   canBuyWithCash,
+  creditAvailable,
+  creditWith,
   ownCreditUsd,
   type BackingOption,
   type CreditAvailable,
 } from "@/lib/creditBuy";
 import { formatUsd } from "@/lib/formatting";
 import { BUY_LIMITS } from "@/lib/swap/buy";
-import type { ReserveAsset } from "@/lib/tokens/registry";
+import { EQUITIES, byStockOrder, type ReserveAsset } from "@/lib/tokens/registry";
 
 /** Step 1's Credit ready: the credit left on what already backs credit; nothing new goes in. */
 export const EXISTING = "existing";
+
+/**
+ * What the sheet's steps share about the backing: the lists, what can back it, what Credit Buy can use, and the pick
+ * (Sam's, or the default) with the most it can back.
+ */
+export function useBackingPick({
+  data,
+  cfs,
+  onFirstStep,
+  picked,
+}: {
+  data: PositionData;
+  cfs: Record<string, number> | undefined;
+  onFirstStep: boolean;
+  picked: string | null;
+}) {
+  // Every list in Home's order (ruling 43): the stocks you hold, then the others.
+  const held = data.holdings.filter((h) => h.freeShares + h.backingShares > 0).sort(byStockOrder);
+  const others = EQUITIES.filter((e) => !held.some((h) => h.symbol === e.symbol));
+  const priceOf = (symbol: string) => data.holdings.find((h) => h.symbol === symbol)?.priceUsd ?? 0;
+
+  const options = useMemo(
+    () =>
+      cfs
+        ? backingOptions(data.holdings, cfs)
+            .filter((o) => o.freeUsd >= MIN_BACKING_USD && ownCreditUsd(data, o) >= BUY_LIMITS.minUsd)
+            .sort((a, b) => byStockOrder(a.stock, b.stock))
+        : [],
+    [data, cfs],
+  );
+  // Whether a Credit Buy can use anything at all (with every free holding at its best): $0 says why on step 1.
+  // Owning no stock needs no collateral factors to say $0.
+  const available =
+    cfs || held.length === 0
+      ? creditAvailable({ position: data, options, cash: data.cash, holdsStock: held.length > 0 })
+      : null;
+  // The credit left on what already backs credit alone: step 1's Credit ready.
+  const existingLeft = creditWith(data);
+  const canUseExisting = data.totalBackingUsd > 0 && existingLeft >= BUY_LIMITS.minUsd;
+  // Step 1 picks Credit ready until Sam picks another, else the stock that backs the most on its own. A pick that can't
+  // back it any more (too small, paused, or no longer read) falls back to that default on step 1.
+  const canPick = (key: string) => (key === EXISTING ? canUseExisting : options.some((o) => o.stock.symbol === key));
+  const mostOwn = options.reduce<BackingOption | null>(
+    (b, o) => (!b || ownCreditUsd(data, o) > ownCreditUsd(data, b) ? o : b),
+    null,
+  );
+  const fallbackKey = canUseExisting ? EXISTING : (mostOwn?.stock.symbol ?? null);
+  const pickedKey = (onFirstStep && picked && !canPick(picked) ? null : picked) ?? fallbackKey;
+  const chosen = options.find((o) => o.stock.symbol === pickedKey) ?? null;
+  // Past step 1, a picked holding that dropped out of the list: the buy can't quietly fall back to what already backs
+  // credit, so nothing is prepared for it, and the next steps say so and send Sam back to pick again (the sheet's
+  // `lostPick`: not once the batch is on its way or has landed).
+  const pickGone = !onFirstStep && !!picked && picked !== EXISTING && !chosen;
+  // The most this pick can back: Credit ready's credit left, or what the stock backs on its own. Step 3's number and the
+  // amount's "Up to" are this one figure.
+  const reachUsd = chosen ? ownCreditUsd(data, chosen) : existingLeft;
+  return {
+    held,
+    others,
+    priceOf,
+    options,
+    available,
+    existingLeft,
+    canUseExisting,
+    pickedKey,
+    chosen,
+    pickGone,
+    reachUsd,
+  };
+}
 
 /**
  * Step 1, "Back it with" (board 30): Credit ready first (what already backs credit, nothing new goes in), then each
@@ -47,7 +119,7 @@ export function CreditBuyBackStep({
   onBuyWithCash,
 }: {
   data: PositionData;
-  cfs: Record<string, number> | null | undefined;
+  cfs: Record<string, number> | undefined;
   cfFailed: boolean;
   onRetry: () => void;
   available: CreditAvailable | null;

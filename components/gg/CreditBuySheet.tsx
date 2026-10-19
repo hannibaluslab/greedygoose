@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { parseUnits } from "viem";
 import { useAccount } from "wagmi";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
@@ -8,7 +8,7 @@ import { Button } from "./Button";
 import { useMoneySheets } from "./MoneySheets";
 import { LeaveForRepay, wholeUsd } from "./CreditBuyBacking";
 import { CreditHero, CreditPending, StockLists } from "./CreditBuyStocks";
-import { CreditBuyBackStep, EXISTING } from "./CreditBuyBackStep";
+import { CreditBuyBackStep, useBackingPick } from "./CreditBuyBackStep";
 import { CreditBuyAmountStep } from "./CreditBuyAmountStep";
 import { useAgents } from "@/hooks/useAgents";
 import { useBoughtHome } from "@/hooks/useBoughtHome";
@@ -17,23 +17,10 @@ import { useCreditBuy } from "@/hooks/useCreditBuy";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { useBackingFactorsRead, type PositionData } from "@/hooks/usePosition";
 import { cashRaw, feeBufferRaw } from "@/lib/cash";
-import {
-  CREDIT_BLOCKED,
-  CREDIT_FROM,
-  FEE_FIRST,
-  backingOptions,
-  backingForBuy,
-  MIN_BACKING_USD,
-  creditAvailable,
-  creditWith,
-  ownCreditUsd,
-  planCredit,
-  type BackingOption,
-  type BackingPick,
-} from "@/lib/creditBuy";
+import { CREDIT_BLOCKED, CREDIT_FROM, FEE_FIRST, backingForBuy, planCredit, type BackingPick } from "@/lib/creditBuy";
 import { formatUsd } from "@/lib/formatting";
 import { BUY_LIMITS, quoteEconomics } from "@/lib/swap/buy";
-import { EQUITIES, USDC, byStockOrder, type ReserveAsset } from "@/lib/tokens/registry";
+import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
 
 /**
  * Three steps (boards 30–34, Adrian 2026-10-18): what backs it (Credit ready, or a stock to back new credit) → pick a
@@ -95,47 +82,19 @@ export function CreditBuySheet({
     // The extra confirmation is for the plan on screen; any step away, or a new amount, asks again.
     setAck(false);
   };
-  // Every list in Home's order (ruling 43): the stocks you hold, then the others.
-  const held = data.holdings.filter((h) => h.freeShares + h.backingShares > 0).sort(byStockOrder);
-  const others = EQUITIES.filter((e) => !held.some((h) => h.symbol === e.symbol));
-  const priceOf = (symbol: string) => data.holdings.find((h) => h.symbol === symbol)?.priceUsd ?? 0;
-
-  const options = useMemo(
-    () =>
-      cfs
-        ? backingOptions(data.holdings, cfs)
-            .filter((o) => o.freeUsd >= MIN_BACKING_USD && ownCreditUsd(data, o) >= BUY_LIMITS.minUsd)
-            .sort((a, b) => byStockOrder(a.stock, b.stock))
-        : [],
-    [data, cfs],
-  );
-  // Whether a Credit Buy can use anything at all (with every free holding at its best): $0 says why on step 1.
-  // Owning no stock needs no collateral factors to say $0.
-  const available =
-    cfs || held.length === 0
-      ? creditAvailable({ position: data, options, cash: data.cash, holdsStock: held.length > 0 })
-      : null;
-  // The credit left on what already backs credit alone: step 1's Credit ready.
-  const existingLeft = creditWith(data);
-  const canUseExisting = data.totalBackingUsd > 0 && existingLeft >= BUY_LIMITS.minUsd;
-  // Step 1 picks Credit ready until Sam picks another, else the stock that backs the most on its own. A pick that can't
-  // back it any more (too small, paused, or no longer read) falls back to that default on step 1.
-  const canPick = (key: string) => (key === EXISTING ? canUseExisting : options.some((o) => o.stock.symbol === key));
-  const mostOwn = options.reduce<BackingOption | null>(
-    (b, o) => (!b || ownCreditUsd(data, o) > ownCreditUsd(data, b) ? o : b),
-    null,
-  );
-  const fallbackKey = canUseExisting ? EXISTING : (mostOwn?.stock.symbol ?? null);
-  const pickedKey = (step === "back" && picked && !canPick(picked) ? null : picked) ?? fallbackKey;
-  const chosen = options.find((o) => o.stock.symbol === pickedKey) ?? null;
-  // Past step 1, a picked holding that dropped out of the list: the buy can't quietly fall back to what already backs
-  // credit, so nothing is prepared for it, and the next steps say so and send Sam back to pick again (`lostPick`, below:
-  // not once the batch is on its way or has landed).
-  const pickGone = step !== "back" && !!picked && picked !== EXISTING && !chosen;
-
-  // The most this pick can back: Credit ready's credit left, or what the stock backs on its own. Step 3's number and the
-  // amount's "Up to" are this one figure.
-  const reachUsd = chosen ? ownCreditUsd(data, chosen) : existingLeft;
+  const {
+    held,
+    others,
+    priceOf,
+    options,
+    available,
+    existingLeft,
+    canUseExisting,
+    pickedKey,
+    chosen,
+    pickGone,
+    reachUsd,
+  } = useBackingPick({ data, cfs, onFirstStep: step === "back", picked });
 
   const amount = Math.max(0, Number(raw) || 0);
   const creditRaw = parseUnits(amount.toFixed(USDC.decimals), USDC.decimals);
