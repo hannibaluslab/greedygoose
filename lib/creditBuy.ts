@@ -7,6 +7,7 @@ import { autoFill, combinedCredit, fillRaw, type BackingLine } from "@/lib/aave/
 import { buildBackAndCreditCalls, type Call } from "@/lib/aave/tx";
 import { cashRaw, feeBufferRaw, maxSpendRaw, payFromCash, toUsd, type Cash } from "@/lib/cash";
 import { CREDIT_BLOCKED, creditLine, noCreditLine, type CreditBlock, type NoCredit } from "./creditBuy/copy";
+import { floorCents } from "@/lib/formatting";
 import { marketState } from "@/lib/market-hours";
 import type { ActivityItem } from "@/lib/activity/decode";
 import { STATUS_LABEL, endsInAct, needsExtraConfirm, statusFor, type Status } from "@/lib/risk/status";
@@ -112,9 +113,6 @@ const creditInputOf = (pos: CreditPosition) => ({
 });
 const lineOf = (o: BackingOption, usd: number) => ({ key: o.stock.symbol, usd, cf: o.cf, freeUsd: o.freeUsd });
 
-/** Dollars rounded down to the cent. The epsilon keeps an exact cent ($1,400 ÷ 1.12 = $1,250) from flooring one under. */
-const floorCents = (usd: number) => Math.floor(usd * 100 + 1e-6) / 100;
-
 /**
  * The one cap on taking credit (Act is the line, Adrian 2026-10-15), for every way of taking it: Credit Buy, decision
  * 1's "Use credit for the other $Y", Earn with stocks, and every figure that says how much (usePosition's
@@ -148,7 +146,7 @@ const usdOf = (o: BackingOption, raw: bigint) => (o.freeRaw > 0n ? (o.freeUsd * 
 const usdcRaw = (usd: number) => parseUnits(Math.max(0, usd).toFixed(USDC.decimals), USDC.decimals);
 
 /** A holding's free value as step 2's MAX fills it in: floored to the cent, so it is never more than is free. */
-export const freeShownUsd = (option: BackingOption) => Math.floor(option.freeUsd * 100 + 1e-6) / 100;
+export const freeShownUsd = (option: BackingOption) => floorCents(option.freeUsd);
 
 /**
  * Whether dollars typed in step 2 are all of the holding's free value: from the cent it's shown at (MAX's figure, or
@@ -178,9 +176,7 @@ export function backingRawFor(option: BackingOption, usd: number): bigint {
  * Aave has to lend, and what's owed past the line already).
  */
 export const ownCreditUsd = (position: CreditPosition, option: BackingOption) =>
-  Math.floor(
-    Math.max(0, Math.min((option.freeUsd * option.cf) / CREDIT_CAP.minHf, creditWith(position, option))) * 100 + 1e-6,
-  ) / 100;
+  floorCents(Math.max(0, Math.min((option.freeUsd * option.cf) / CREDIT_CAP.minHf, creditWith(position, option))));
 
 /**
  * The backing a Credit Buy of `creditUsd` puts in with `option` (boards 31–33): just enough of the stock for the buy to

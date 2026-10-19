@@ -2,7 +2,7 @@ import { parseUnits } from "viem";
 import { CASH } from "@/config/risk";
 import { fullRepayAmount } from "@/lib/aave/tx";
 import { cashRaw, feeBufferRaw, feeFromSale, maxSpendRaw, toUsd, type Cash } from "@/lib/cash";
-import { formatShares, formatUsd, formatUsdTrim } from "@/lib/formatting";
+import { ceilCents, floorCents, formatShares, formatUsd, formatUsdTrim } from "@/lib/formatting";
 import { homeStatus, statusFor, type Status } from "@/lib/risk/status";
 import {
   freeRepayRaw,
@@ -131,7 +131,7 @@ const ceilDiv = (a: bigint, b: bigint) => (a + b - 1n) / b;
 const tickerOf = (symbol: string) => symbol.replace(/c$/, "");
 const stockOf = (symbol: string) => EQUITIES.find((e) => e.symbol === symbol);
 /** Dollars to the cent: up for a full repay (what's owed is never shown as less), down otherwise. */
-const toCents = (usd: number, up: boolean) => (up ? Math.ceil(usd * 100 - 1e-6) : Math.floor(usd * 100 + 1e-6)) / 100;
+const toCents = (usd: number, up: boolean) => (up ? ceilCents(usd) : floorCents(usd));
 
 /**
  * "Pay with", in Adrian's order: the cash, then each stock held free, then each stock that backs the credit; within each

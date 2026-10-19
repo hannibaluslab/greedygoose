@@ -11,7 +11,15 @@ import type { useCreditBuy } from "@/hooks/useCreditBuy";
 import type { PositionData } from "@/hooks/usePosition";
 import { monthlyCost } from "@/lib/aave/math";
 import { backers, shortNames, type BackingOption, type BackingPick, type CreditPlan } from "@/lib/creditBuy";
-import { formatShares, formatUsd, formatUsdTrim, inWords, monthlyCostText } from "@/lib/formatting";
+import {
+  ceilCents,
+  floorCents,
+  formatShares,
+  formatUsd,
+  formatUsdTrim,
+  inWords,
+  monthlyCostText,
+} from "@/lib/formatting";
 import { STATUS_LABEL } from "@/lib/risk/status";
 import { BUY_LIMITS, type BuyQuote, type quoteEconomics } from "@/lib/swap/buy";
 import { VENUE_LABEL } from "@/lib/swap/venues";
@@ -20,9 +28,9 @@ import type { ReserveAsset } from "@/lib/tokens/registry";
 import { leverageOf, leverageText } from "@/lib/leverage";
 
 /** What a backing is worth, rounded up so it's never shown as less than goes in: cents under $100, dollars above. */
-const backedText = (n: number) => (n < 100 ? formatUsd(Math.ceil(n * 100 - 1e-6) / 100) : formatUsdTrim(Math.ceil(n)));
+const backedText = (n: number) => (n < 100 ? formatUsd(ceilCents(n)) : formatUsdTrim(Math.ceil(n)));
 /** MAX's amount: the most there is, to the cent, rounded down ("0.69", "417.35"). */
-const maxText = (n: number) => String(Math.floor(Math.max(0, n) * 100 + 1e-6) / 100);
+const maxText = (n: number) => String(floorCents(Math.max(0, n)));
 
 /**
  * What backs it once it lands: what this buy puts in use (the picked holding first) and what's in use already.

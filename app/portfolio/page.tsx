@@ -14,7 +14,7 @@ import { CreditIcon, MarketIcon, TradeIcon } from "@/components/gg/icons";
 import { MarketBanner } from "@/components/ui/MarketBanner";
 import { useMarketPrices } from "@/hooks/useMarketPrices";
 import { useBackingFactorsRead, usePosition, type PositionData } from "@/hooks/usePosition";
-import { formatUsd, formatUsdTrim } from "@/lib/formatting";
+import { floorCents, formatUsd, formatUsdTrim } from "@/lib/formatting";
 import { MIN_BACKING_USD, backingOptions, creditAvailable } from "@/lib/creditBuy";
 import { maxSpendRaw, toUsd } from "@/lib/cash";
 import { dayChange, weekValue } from "@/lib/prices/market";
@@ -181,8 +181,6 @@ function Loaded({
 }
 
 /** Cash you can spend (less the network-fee buffer) and the credit one Credit Buy can use; null while the backing reads. */
-/** Dollars rounded down to the cent: a figure to spend is never more than there is. */
-const floorCents = (usd: number) => Math.floor(usd * 100 + 1e-6) / 100;
 
 function useBuyingPower(data: PositionData, holdsStock: boolean) {
   const cfs = useBackingFactorsRead(data.holdings).cfs;

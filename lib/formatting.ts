@@ -2,6 +2,12 @@ const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" 
 const usd0 = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
 export const formatUsd = (n: number) => usd.format(n);
+/**
+ * Dollars to the cent, down (never more than there is) or up (never shown as less than it is). The epsilon keeps an
+ * exact cent ($1,400 ÷ 1.12 = $1,250) from rounding one cent the wrong way in floating point.
+ */
+export const floorCents = (usd: number) => Math.floor(usd * 100 + 1e-6) / 100;
+export const ceilCents = (usd: number) => Math.ceil(usd * 100 - 1e-6) / 100;
 export const formatUsdShort = (n: number) => (Math.abs(n) >= 1000 ? usd0.format(n) : usd.format(n));
 /** Cents only when there are some: "$3", "$1.50" (the boards' "$3 / month", "$600 owed"). */
 export const formatUsdTrim = (n: number) => usd.format(n).replace(/\.00$/, "");

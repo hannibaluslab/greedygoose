@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatSignedPct, formatSignedUsd, formatUsdTrim, stepsNote } from "@/lib/formatting";
+import { ceilCents, floorCents, formatSignedPct, formatSignedUsd, formatUsdTrim, stepsNote } from "@/lib/formatting";
 
 describe("formatUsdTrim", () => {
   it("drops cents only when they are zero", () => {
@@ -31,5 +31,28 @@ describe("stepsNote (the line under a button that opens JAW's sheet more than on
   it("says nothing for one step, and counts two or more", () => {
     expect([0, 1].map(stepsNote)).toEqual([null, null]);
     expect([2, 3, 5].map(stepsNote)).toEqual(["2 steps", "3 steps", "5 steps"]);
+  });
+});
+
+describe("cents", () => {
+  it("rounds down to the cent, an exact cent staying exact", () => {
+    expect(floorCents(0.1 + 0.2)).toBe(0.3);
+    expect(floorCents(12.3)).toBe(12.3);
+    expect(floorCents(1400 / 1.12)).toBe(1250);
+    expect(floorCents(0.005)).toBe(0);
+    expect(floorCents(12.299)).toBe(12.29);
+  });
+
+  it("rounds up to the cent, an exact cent staying exact", () => {
+    expect(ceilCents(0.1 + 0.2)).toBe(0.3);
+    expect(ceilCents(12.3)).toBe(12.3);
+    expect(ceilCents(0.005)).toBe(0.01);
+    expect(ceilCents(12.301)).toBe(12.31);
+  });
+
+  it("treats float noise under a millionth of a cent as the cent", () => {
+    expect(floorCents(12.3 - 1e-10)).toBe(12.3);
+    expect(ceilCents(12.3 + 1e-10)).toBe(12.3);
+    expect(floorCents(12.3 - 1e-7)).toBe(12.29);
   });
 });

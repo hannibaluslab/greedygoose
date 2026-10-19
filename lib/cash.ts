@@ -6,7 +6,7 @@ import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { JOBS } from "@/lib/agents/permissions";
 import type { CHAIN } from "@/lib/chain";
-import { formatUsd } from "@/lib/formatting";
+import { floorCents, formatUsd } from "@/lib/formatting";
 import { PROTOCOLS } from "@/lib/protocols/config";
 import { buildWithdrawSavingsCalls } from "@/lib/savings";
 import { USDC } from "@/lib/tokens/registry";
@@ -29,7 +29,7 @@ export const feeFromSale = (cash: Cash) => cashRaw(cash) < feeBufferRaw;
  * fraction of a cent short never reads full.
  */
 export const fuelTankUsd = (cashUsd: number) =>
-  Math.min(Math.floor(cashUsd * 100 + 1e-6), Math.round(CASH.feeBufferUsd * 100)) / 100;
+  Math.min(floorCents(cashUsd), Math.round(CASH.feeBufferUsd * 100) / 100);
 export const toUsd = (raw: bigint) => Number(raw) / 10 ** USDC.decimals;
 
 /** Whether Save runs for the account, from the job bits of GooseExecutor's `accounts(account)`. */

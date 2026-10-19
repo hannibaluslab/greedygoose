@@ -5,7 +5,7 @@ import { StockAvatar, tickerOf } from "./StockAvatar";
 import { BacksIcon } from "./icons";
 import type { Holding } from "@/hooks/usePosition";
 import { MIN_BACKING_USD, shortNames, type BackingOption } from "@/lib/creditBuy";
-import { formatShares, formatUsd, formatUsdTrim } from "@/lib/formatting";
+import { floorCents, formatShares, formatUsd, formatUsdTrim } from "@/lib/formatting";
 import { wholePct } from "@/lib/holding";
 
 /**
@@ -14,7 +14,7 @@ import { wholePct } from "@/lib/holding";
  */
 export const wholeUsd = (n: number) => {
   const usd = Math.max(0, n);
-  return usd < 100 ? formatUsd(Math.floor(usd * 100 + 1e-6) / 100) : formatUsdTrim(Math.floor(usd));
+  return usd < 100 ? formatUsd(floorCents(usd)) : formatUsdTrim(Math.floor(usd));
 };
 
 export const optionOf = (options: BackingOption[], h: Holding) => options.find((o) => o.stock.symbol === h.symbol);

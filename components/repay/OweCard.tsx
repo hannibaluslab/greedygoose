@@ -1,12 +1,11 @@
 import { StatusChange, StatusMoveBar, StatusPill } from "@/components/gg/Status";
 import { WhiteCard } from "@/components/gg/Screen";
 import type { PositionData } from "@/hooks/usePosition";
-import { formatUsdTrim, monthlyCostText } from "@/lib/formatting";
+import { ceilCents, formatUsdTrim, monthlyCostText } from "@/lib/formatting";
 import { STATUS_LABEL, type Status } from "@/lib/risk/status";
 
 /** What's owed, rounded up: to the cent under $1,000, to the dollar above, never shown as less than it is. */
-const owedText = (usd: number) =>
-  formatUsdTrim(Math.max(0, usd < 1000 ? Math.ceil(usd * 100 - 1e-6) / 100 : Math.ceil(usd)));
+const owedText = (usd: number) => formatUsdTrim(Math.max(0, usd < 1000 ? ceilCents(usd) : Math.ceil(usd)));
 
 /**
  * "You owe" (canvas boards 1–8): the amount with its status, which turns into "now → after" once the repay or a
