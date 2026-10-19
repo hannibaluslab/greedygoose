@@ -6,8 +6,9 @@ import { useAccount } from "wagmi";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { Button } from "./Button";
 import { useMoneySheets } from "./MoneySheets";
-import { BackingRow, CantBack, LeaveForRepay, ReadyRow, optionOf, unavailable, wholeUsd } from "./CreditBuyBacking";
-import { CashStockLists, CreditHero, CreditPending, StockLists } from "./CreditBuyStocks";
+import { LeaveForRepay, wholeUsd } from "./CreditBuyBacking";
+import { CreditHero, CreditPending, StockLists } from "./CreditBuyStocks";
+import { CreditBuyBackStep, EXISTING } from "./CreditBuyBackStep";
 import { CreditBuyAmountStep } from "./CreditBuyAmountStep";
 import { useAgents } from "@/hooks/useAgents";
 import { useBoughtHome } from "@/hooks/useBoughtHome";
@@ -20,12 +21,9 @@ import {
   CREDIT_BLOCKED,
   CREDIT_FROM,
   FEE_FIRST,
-  backers,
   backingOptions,
   backingForBuy,
   MIN_BACKING_USD,
-  NO_CREDIT,
-  canBuyWithCash,
   creditAvailable,
   creditWith,
   ownCreditUsd,
@@ -43,8 +41,6 @@ import { EQUITIES, USDC, byStockOrder, type ReserveAsset } from "@/lib/tokens/re
  */
 type Step = "back" | "pick" | "amount";
 const ORDER: Step[] = ["back", "pick", "amount"];
-/** Step 1's Credit ready: the credit left on what already backs credit; nothing new goes in. */
-const EXISTING = "existing";
 
 /**
  * Design boards "F2 · 3–5", reordered backing first (Adrian, 2026-10-15: "selecting and typing the amount of an asset
@@ -104,12 +100,6 @@ export function CreditBuySheet({
   const others = EQUITIES.filter((e) => !held.some((h) => h.symbol === e.symbol));
   const priceOf = (symbol: string) => data.holdings.find((h) => h.symbol === symbol)?.priceUsd ?? 0;
 
-  // What each free holding backs on its own (ownCreditUsd), so one too small for the smallest buy is listed with that
-  // reason instead of being offered (Adrian: $1 of Alphabet read as "nothing free").
-  const gives = useMemo(
-    () => new Map(cfs ? backingOptions(data.holdings, cfs).map((o) => [o.stock.symbol, ownCreditUsd(data, o)]) : []),
-    [data, cfs],
-  );
   const options = useMemo(
     () =>
       cfs
@@ -127,8 +117,6 @@ export function CreditBuySheet({
       : null;
   // The credit left on what already backs credit alone: step 1's Credit ready.
   const existingLeft = creditWith(data);
-  // In Act no credit is taken (Act is the line): step 1's one line says so, with no list of why each holding can't.
-  const inAct = available?.why === "in-act";
   const canUseExisting = data.totalBackingUsd > 0 && existingLeft >= BUY_LIMITS.minUsd;
   // Step 1 picks Credit ready until Sam picks another, else the stock that backs the most on its own. A pick that can't
   // back it any more (too small, paused, or no longer read) falls back to that default on step 1.
@@ -208,14 +196,11 @@ export function CreditBuySheet({
     if (key !== picked) setRaw("");
     setPicked(key);
   };
-  const afterBacking: Step = preset ? "amount" : "pick";
   const pickStock = (s: ReserveAsset) => {
     setStock(s);
     go("amount");
   };
 
-  // Step 1 lists what can back it first, then what already backs credit, then what can't, and why.
-  const unpickable = held.filter((h) => !optionOf(options, h));
   // The stock being bought names the sheet once it's known: from step 4, or from the start when it was preset.
   const named = step === "amount" ? stock : preset;
   const title = named ? `Credit Buy ${named.name}` : "Credit Buy";
@@ -236,123 +221,32 @@ export function CreditBuySheet({
       >
         <SheetSteps stepKey={step} direction={direction} className="flex flex-col gap-3">
           {step === "back" ? (
-            !available ? (
-              <CreditPending failed={cfRead.failed} onRetry={cfRead.retry} />
-            ) : available.why === "no-stocks" ? (
-              // No stocks at all (Adrian: step 1 always shows; rulings 8, 9): where credit comes from, what to do first
-              // and, with no cash to buy one, Top up; then the stocks, which buy with cash. Holding any stock shows it
-              // below instead, with why it can't back this yet.
-              <div className="flex flex-col gap-3 pt-1">
-                <h3 className="label m-0 px-1">Back it with</h3>
-                <div className="flex flex-col items-center gap-1.5 rounded-[16px] border-[1.5px] border-dashed border-[rgba(14,13,11,0.2)] px-5 py-5 text-center">
-                  <p className="m-0 text-[15px] font-semibold">{NO_CREDIT["no-stocks"]}</p>
-                  <p className="m-0 text-pretty text-[13px] leading-[1.4] text-ink-mid">{available.line}</p>
-                  {!canBuyWithCash(data.cash) && (
-                    <Button
-                      variant="dark"
-                      onClick={() => {
-                        close();
-                        money.topUp();
-                      }}
-                      className="mt-2 w-full"
-                    >
-                      Top up
-                    </Button>
-                  )}
-                </div>
-                <CashStockLists held={held} others={others} preset={preset} priceOf={priceOf} onPick={onBuyWithCash} />
-              </div>
-            ) : (
-              <>
-                {/* Board 30: Credit ready first (what already backs credit, nothing new goes in), then each stock that
-                    can back new credit, with what it backs on its own. */}
-                <div role="radiogroup" aria-label="Back it with" className="flex flex-col gap-2">
-                  {canUseExisting && (
-                    <ReadyRow
-                      names={backers(data.holdings, []).map((h) => h.name)}
-                      usd={existingLeft}
-                      checked={pickedKey === EXISTING}
-                      onPick={() => choose(EXISTING)}
-                    />
-                  )}
-                  {options.length > 0 && <h3 className="label m-0 px-1 pt-2">Back new credit with</h3>}
-                  {options.map((o) => {
-                    const h = data.holdings.find((x) => x.symbol === o.stock.symbol)!;
-                    return (
-                      <BackingRow
-                        key={h.symbol}
-                        holding={h}
-                        checked={pickedKey === h.symbol}
-                        right={
-                          <>
-                            <span className="text-[11.5px] text-ink-mid">Up to</span>
-                            <span className="num text-[20px] font-bold leading-[1.1] tracking-[-0.02em]">
-                              {wholeUsd(ownCreditUsd(data, o))}
-                            </span>
-                          </>
-                        }
-                        onPick={() => choose(h.symbol)}
-                      />
-                    );
-                  })}
-                </div>
-                <CantBack
-                  inUse={
-                    data.totalBackingUsd > 0 && !canUseExisting && !inAct
-                      ? { names: backers(data.holdings, []).map((h) => h.name), usd: data.totalBackingUsd }
-                      : null
-                  }
-                  items={
-                    inAct
-                      ? []
-                      : unpickable.flatMap((h) => {
-                          const g = gives.get(h.symbol);
-                          const reason =
-                            g != null && g < BUY_LIMITS.minUsd && !h.paused && !h.frozen && h.freeUsd >= MIN_BACKING_USD
-                              ? `gives ${formatUsd(Math.max(0, g))} of credit, under the smallest buy`
-                              : unavailable(h)?.toLowerCase();
-                          // All in use: the line above already names it.
-                          return reason ? [{ name: h.name, reason }] : [];
-                        })
-                  }
-                />
-                {available.why ? (
-                  // Holdings, but none can back a Credit Buy yet: why, and the stocks still buy with cash.
-                  <>
-                    <p role="status" className="m-0 px-1 text-[13px] leading-[1.4] text-ink-mid">
-                      {available.line}
-                    </p>
-                    <CashStockLists
-                      held={held}
-                      others={others}
-                      preset={preset}
-                      priceOf={priceOf}
-                      onPick={onBuyWithCash}
-                    />
-                  </>
-                ) : (
-                  <>
-                    {options.length > 0 && (
-                      <p className="m-0 px-1 text-[12.5px] leading-[1.4] text-ink-mid">
-                        Only what your buy needs goes in.
-                      </p>
-                    )}
-                    <Button
-                      variant="dark"
-                      disabled={!pickedKey}
-                      onClick={() => {
-                        // Hold the pick from here on: the default must not move to another holding when prices tick.
-                        choose(pickedKey);
-                        go(afterBacking);
-                      }}
-                      className="mt-1"
-                    >
-                      Continue
-                    </Button>
-                  </>
-                )}
-              </>
-            )
+            <CreditBuyBackStep
+              data={data}
+              cfs={cfs}
+              cfFailed={cfRead.failed}
+              onRetry={cfRead.retry}
+              available={available}
+              options={options}
+              held={held}
+              others={others}
+              preset={preset}
+              priceOf={priceOf}
+              existingLeft={existingLeft}
+              canUseExisting={canUseExisting}
+              pickedKey={pickedKey}
+              onChoose={choose}
+              onContinue={() => {
+                // Hold the pick from here on: the default must not move to another holding when prices tick.
+                choose(pickedKey);
+                go(preset ? "amount" : "pick");
+              }}
+              onTopUp={() => {
+                close();
+                money.topUp();
+              }}
+              onBuyWithCash={onBuyWithCash}
+            />
           ) : lostPick ? (
             // The holding picked on step 1 can't back credit any more (see `lostPick`): say so, and pick again.
             !cfs ? (
