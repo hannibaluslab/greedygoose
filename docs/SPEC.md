@@ -94,6 +94,11 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
   bring (the swap's floor) straight into savings, in the same signature. The wallet keeps only what it lacks of the
   fuel tank; what the pool pays over the floor stays in the wallet. A repay by selling and stock → stock don't save.
   Activity shows the sale alone: savings are the same cash.
+- **Turn into cash** (the user's own conversion) takes USDT, USDe, USDS, DAI and EURC; USDbC is dropped (Adrian,
+  2026-10-19). Each coin is approved and swapped only at its own venue and pool, into USDC for the user. A dollar coin's
+  floor is 99.5% of face value; EURC's is 99.5% of its value at Chainlink's EUR / USD rate, read again at signing (a
+  rate that rose raises the floor, one that fell never lowers it), and refused when the rate is over two hours old or
+  reads 0 or less. The Entry agent keeps its own list until the executor's pre-launch redeploy.
 - **One stock order** in every list: Home's (Apple, Amazon, Alphabet, Meta, Microsoft, NVIDIA, Tesla). Lists keep
   their groups (what can go before what can't); a default still opens on the cash or the biggest free stock.
 

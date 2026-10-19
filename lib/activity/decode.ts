@@ -3,7 +3,7 @@ import { entryPoint08Abi, entryPoint08Address } from "viem/account-abstraction";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { ALL_RESERVES, EQUITIES, USDC, findByAddress } from "@/lib/tokens/registry";
-import { ENTRY_COINS } from "@/lib/tokens/stables";
+import { OTHER_COINS } from "@/lib/tokens/stables";
 import { PROTOCOLS } from "@/lib/protocols/config";
 import { savingsEventsAbi } from "@/lib/board/logs";
 
@@ -290,12 +290,12 @@ function walletMoves(logs: Log[], user: `0x${string}`, fees: Set<Log>) {
 function conversions(logs: Log[], user: `0x${string}`, usdcIn: readonly bigint[]) {
   const coinsOut = parseEventLogs({
     abi: erc20Abi,
-    logs: logs.filter((l) => ENTRY_COINS.some((c) => isAddressEqual(c.address, l.address))),
+    logs: logs.filter((l) => OTHER_COINS.some((c) => isAddressEqual(c.address, l.address))),
     eventName: "Transfer",
     strict: false,
   }).flatMap((t) => {
     const { from, value } = t.args as { from?: `0x${string}`; value?: bigint };
-    const coin = ENTRY_COINS.find((c) => isAddressEqual(c.address, t.address));
+    const coin = OTHER_COINS.find((c) => isAddressEqual(c.address, t.address));
     return coin && from && value !== undefined && isAddressEqual(from, user) ? [{ coin, value }] : [];
   });
   return usdcIn.length >= coinsOut.length ? coinsOut : [];

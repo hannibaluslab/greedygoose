@@ -24,7 +24,7 @@ import { describeAgentEvent, type MoveContext } from "@/lib/agents/feed";
 import { arrivedCoins, arrivedView, rateText, startEarningText } from "@/lib/cashSetup";
 import { convertFloorRaw } from "@/lib/swap/entry";
 import { TAP_AGAIN } from "@/lib/tx/prepared";
-import { ENTRY_COINS } from "@/lib/tokens/stables";
+import { CASH_COINS } from "@/lib/tokens/stables";
 import { CashSheetDemo, SHEET_VIEWS, type SheetView } from "./CashSheetDemo";
 
 /*
@@ -53,9 +53,9 @@ import { CashSheetDemo, SHEET_VIEWS, type SheetView } from "./CashSheetDemo";
 const RATE = rateText(0.0391);
 const ADDRESS = "0x2b8ce2c87c166d8e24e186e7e4253c11fc805427";
 const usdc = (x: number) => BigInt(Math.round(x * 1e6));
-const [USDT, USDE] = ENTRY_COINS;
-/** 120 USDT in the wallet, and nothing else: what the Entry coins' balances would read. */
-const BALANCES = [usdc(120), 0n, 0n, 0n];
+const [USDT, USDE] = CASH_COINS;
+/** 120 USDT in the wallet, and nothing else: what Turn into cash's coins' balances would read. */
+const BALANCES = [usdc(120), 0n, 0n, 0n, 0n];
 const QUOTES: ConvertQuote[] = [
   { coin: USDT, amountIn: usdc(120), minOut: convertFloorRaw(USDT, usdc(120)), outRaw: usdc(119.83), fair: true },
 ];

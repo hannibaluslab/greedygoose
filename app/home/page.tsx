@@ -23,7 +23,7 @@ import { StockAvatar } from "@/components/gg/kit/StockAvatar";
 import { ChevronRight, CreditIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/kit/icons";
 import { useCashSetup } from "@/hooks/useCashSetup";
 import { useStartEarning } from "@/hooks/useStartEarning";
-import { useEntryBalances } from "@/hooks/useEntryBalances";
+import { useCashCoinBalances } from "@/hooks/useCashCoinBalances";
 import { useMarketPrices } from "@/hooks/useMarketPrices";
 import { usePosition, type PositionData } from "@/hooks/usePosition";
 import { aprToApy } from "@/lib/aave/math";
@@ -66,7 +66,7 @@ function Home({ address }: { address: `0x${string}` }) {
   const close = () => setSheet(null);
   const apy = data ? aprToApy(data.savingsApr) : 0;
   const setup = useCashSetup(address);
-  const arrived = arrivedView(arrivedCoins(useEntryBalances(address)), setup.entry);
+  const arrived = arrivedView(arrivedCoins(useCashCoinBalances(address)), setup.entry);
   const earn = useStartEarning({
     account: address,
     cash: data?.cash,

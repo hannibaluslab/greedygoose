@@ -1,9 +1,11 @@
+import { erc20Abi, isAddressEqual } from "viem";
 import type { AgentStatus } from "@/lib/agents/status";
+import { CHAIN_ID } from "@/lib/chain";
 import { formatCoin, formatUsdTrim } from "@/lib/formatting";
 import { startEarningMinRaw } from "@/lib/startEarning";
 import { faceRaw, MIN_CONVERT_RAW } from "@/lib/swap/entry";
 import { USDC } from "@/lib/tokens/registry";
-import { ENTRY_COINS, type EntryCoinAsset } from "@/lib/tokens/stables";
+import { CASH_COINS, ENTRY_COINS, type EntryCoinAsset } from "@/lib/tokens/stables";
 
 /*
  * Earning and other dollars turning into cash run under the hood (D20). The user meets them only where they matter:
@@ -63,10 +65,20 @@ export const startedEarningText = (rate: string | null) =>
 /** A coin sitting in the wallet: how much, in its own units. */
 export type Arrived = { coin: EntryCoinAsset; raw: bigint };
 
-/** The other dollars in the wallet worth turning into cash (face value of $1 or more), in ENTRY_COINS order. */
+/** The balance reads of Turn into cash's coins in `account`'s wallet, in CASH_COINS order (arrivedCoins reads them). */
+export const cashBalanceReads = (account: `0x${string}`) =>
+  CASH_COINS.map(
+    (c) =>
+      ({ address: c.address, abi: erc20Abi, functionName: "balanceOf", args: [account], chainId: CHAIN_ID }) as const,
+  );
+
+/**
+ * The other dollars in the wallet worth turning into cash (face value of $1 or more; 1 EURC for the euro), from
+ * cashBalanceReads' results in CASH_COINS order.
+ */
 export function arrivedCoins(balances: readonly bigint[] | undefined): Arrived[] {
   if (!balances) return [];
-  return ENTRY_COINS.flatMap((coin, k) => {
+  return CASH_COINS.flatMap((coin, k) => {
     const raw = balances[k] ?? 0n;
     return faceRaw(coin, raw) >= MIN_CONVERT_RAW ? [{ coin, raw }] : [];
   });
@@ -74,27 +86,35 @@ export function arrivedCoins(balances: readonly bigint[] | undefined): Arrived[]
 
 const amountOf = (a: Arrived) => `${formatCoin(Number(a.raw) / 10 ** a.coin.decimals)} ${a.coin.symbol}`;
 
-/** "120 USDT", "120 USDT and 50 USDe", or past two coins their face value: "$170 in other dollars". */
+/**
+ * "120 USDT", "120 USDT and 50 USDe", or past two coins their face value: "$170 in other dollars". A euro isn't a
+ * dollar, so with EURC among them each amount is named: "120 USDT, 50 USDe and 30 EURC".
+ */
 export function arrivedText(list: readonly Arrived[]): string {
   if (list.length <= 2) return list.map(amountOf).join(" and ");
+  if (list.some((a) => a.coin.peg))
+    return `${list.slice(0, -1).map(amountOf).join(", ")} and ${amountOf(list.at(-1)!)}`;
   const usd = Number(list.reduce((t, a) => t + faceRaw(a.coin, a.raw), 0n)) / 10 ** USDC.decimals;
   return `${formatUsdTrim(Math.floor(usd))} in other dollars`;
 }
 
 /**
  * What Home and Pay show for other dollars in the wallet:
- * - "ask": nothing converts them on its own (no Entry grant, or no executor at all), so a card offers "Turn into cash";
- * - "arriving": an Entry grant converts them, so the Cash card only says "120 USDT arriving" until they're cash;
+ * - "ask": nothing converts them on its own (no Entry grant, no executor at all, or a coin the Entry agent doesn't take,
+ *   DAI and EURC until EntryJob has them), so a card offers "Turn into cash" for those;
+ * - "arriving": an Entry grant converts them all, so the Cash card only says "120 USDT arriving" until they're cash;
  * - "none": no coins, or the grant's state is still loading.
  */
 export type ArrivedView = { kind: "none" } | { kind: "ask" | "arriving"; text: string; coins: Arrived[] };
 
+const agentTakes = (a: Arrived) => ENTRY_COINS.some((c) => isAddressEqual(c.address, a.coin.address));
+
 export function arrivedView(list: readonly Arrived[], entry: AgentStatus): ArrivedView {
   if (list.length === 0 || entry === "loading") return { kind: "none" };
-  const coins = [...list];
-  return entry === "on" || entry === "starting"
-    ? { kind: "arriving", text: arrivedText(coins), coins }
-    : { kind: "ask", text: arrivedText(coins), coins };
+  const granted = entry === "on" || entry === "starting";
+  const ask = granted ? list.filter((a) => !agentTakes(a)) : [...list];
+  if (ask.length > 0) return { kind: "ask", text: arrivedText(ask), coins: ask };
+  return { kind: "arriving", text: arrivedText(list), coins: [...list] };
 }
 
 /**

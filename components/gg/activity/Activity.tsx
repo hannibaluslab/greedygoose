@@ -11,12 +11,12 @@ import { describeActivity, moveLine, moveStatus } from "@/lib/activity/describe"
 import { STATUS_LABEL } from "@/lib/risk/status";
 import { txUrl } from "@/lib/chain";
 import { USDC } from "@/lib/tokens/registry";
-import { ENTRY_COINS } from "@/lib/tokens/stables";
+import { OTHER_COINS } from "@/lib/tokens/stables";
 import { shortAddress } from "@/lib/formatting";
 
 /** The round mark beside a move: the stock's badge, or a green $ for USDC and the other dollars that become cash. */
 export function ActivityAvatar({ symbol, size }: { symbol: string; size: number }) {
-  if (symbol !== USDC.symbol && !ENTRY_COINS.some((c) => c.symbol === symbol))
+  if (symbol !== USDC.symbol && !OTHER_COINS.some((c) => c.symbol === symbol))
     return <StockAvatar symbol={symbol} size={size} />;
   return (
     <span

@@ -6,7 +6,7 @@ import { PROTOCOLS, SEL } from "@/lib/protocols/config";
 import { BUY_LIMITS } from "@/lib/swap/buy";
 import { AERODROME_V1, ROUTERS, SPARK_PSM3 } from "@/lib/swap/venues";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
-import { ENTRY_COINS } from "@/lib/tokens/stables";
+import { OTHER_COINS } from "@/lib/tokens/stables";
 
 const PLAIN: Record<string, string> = {
   HealthFactorBelowThreshold: "That’s more than your stocks can back right now. Try a smaller amount.",
@@ -63,7 +63,7 @@ function stfText(call: { to: `0x${string}`; data: Hex }): string | null {
 function isConversion(call: { to: `0x${string}`; data: Hex }): boolean {
   if (isAddressEqual(call.to, AERODROME_V1.ROUTER) || isAddressEqual(call.to, SPARK_PSM3.PSM3)) return true;
   const swap = swapOf(call);
-  return !!swap && ENTRY_COINS.some((c) => isAddressEqual(c.address, swap.params.tokenIn));
+  return !!swap && OTHER_COINS.some((c) => isAddressEqual(c.address, swap.params.tokenIn));
 }
 
 /** Turn a revert into consumer language (CLAUDE.md › Error handling). `call` is the call that reverted. */

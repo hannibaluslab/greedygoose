@@ -144,3 +144,20 @@ export const psm3Abi = [
     outputs: [{ name: "amountOut", type: "uint256" }],
   },
 ] as const;
+
+/* Chainlink's AggregatorV3Interface: the latest round of a price feed (EUR / USD on Base, for EURC's floor). */
+export const usdFeedAbi = [
+  {
+    type: "function",
+    name: "latestRoundData",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [
+      { name: "roundId", type: "uint80" },
+      { name: "answer", type: "int256" },
+      { name: "startedAt", type: "uint256" },
+      { name: "updatedAt", type: "uint256" },
+      { name: "answeredInRound", type: "uint80" },
+    ],
+  },
+] as const;

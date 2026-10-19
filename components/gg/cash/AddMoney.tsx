@@ -8,7 +8,7 @@ import { TurnIntoCash } from "./CashSetup";
 import { CopyIcon } from "../kit/icons";
 import { useAccountName } from "@/hooks/useAccountName";
 import { useCashSetup } from "@/hooks/useCashSetup";
-import { useEntryBalances } from "@/hooks/useEntryBalances";
+import { useCashCoinBalances } from "@/hooks/useCashCoinBalances";
 import { usePosition } from "@/hooks/usePosition";
 import { aprToApy } from "@/lib/aave/math";
 import { arrivedCoins, arrivedView, rateText } from "@/lib/cashSetup";
@@ -94,7 +94,7 @@ export function TopUpSheet({ open, address, onClose }: { open: boolean; address:
   const { data } = usePosition(address);
   const { data: name } = useAccountName(address);
   const setup = useCashSetup(address);
-  const arrived = arrivedView(arrivedCoins(useEntryBalances(address)), setup.entry);
+  const arrived = arrivedView(arrivedCoins(useCashCoinBalances(address)), setup.entry);
   const earning = setup.save === "on" || setup.save === "starting";
   const copy = async () => {
     try {

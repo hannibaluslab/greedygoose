@@ -10,7 +10,7 @@ import { EFP_ACCOUNT_METADATA, EFP_LIST_MINTER, EFP_LIST_RECORDS, EFP_LIST_REGIS
 import { PROTOCOLS } from "@/lib/protocols/config";
 import { AERODROME, AERODROME_V1, SPARK_PSM3, UNISWAP } from "@/lib/swap/venues";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
-import { ENTRY_COINS } from "@/lib/tokens/stables";
+import { OTHER_COINS } from "@/lib/tokens/stables";
 
 /**
  * Where JAW's paymaster sends the USDC network fees it takes, measured on JAW receipts 2026-10-15 (tx 0xfb269d33… and
@@ -29,7 +29,7 @@ const JAW_FEE_TREASURY: Address = "0x4337Ff05c84B9A80Ea0a78dBE7B8E102F66d4c08";
 export const APP_CONTRACTS: readonly Address[] = [
   USDC.address,
   ...EQUITIES.map((e) => e.address),
-  ...ENTRY_COINS.map((c) => c.address),
+  ...OTHER_COINS.map((c) => c.address),
   PROTOCOLS.AUSDC,
   AAVE_V3_USDC_DEBT,
   AAVE.HUB,
