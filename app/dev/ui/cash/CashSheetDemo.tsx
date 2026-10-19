@@ -257,7 +257,16 @@ export function CashSheetDemo({ view, nowSec }: { view: SheetView; nowSec: numbe
           // Owed, part of it earning: the card says so, with Stop earning with stocks.
           card={
             view === "sheet-owed" ? (
-              <EarnCard offer={offer} onOpen={noop} earning={{ usd: 200, backedBy: ["NVIDIA"], onStop: noop }} />
+              <EarnCard
+                offer={offer}
+                onOpen={noop}
+                earning={{
+                  usd: 200,
+                  rates: { earn: 45, cost: 19, left: 26 },
+                  used: [{ symbol: "NVDA", name: "NVIDIA", shares: 1.6, usd: 296 }],
+                  onStop: noop,
+                }}
+              />
             ) : undefined
           }
           activity={

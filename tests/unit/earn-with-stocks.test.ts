@@ -25,6 +25,7 @@ import {
   pctText,
   type EarnInput,
   type EarnOpen,
+  usedForEarning,
 } from "@/lib/earnWithStocks";
 import { aaveV3PoolAbi } from "@/lib/protocols/abis";
 import { PROTOCOLS } from "@/lib/protocols/config";
@@ -504,5 +505,31 @@ describe("offerFor: the offer held to the stocks ticked on the earn step", () =>
     expect(none.maxUsd).toBeLessThan(less.maxUsd);
     expect(none.maxUsd).toBeGreaterThan(0);
     expect(less.rates).toEqual(all.rates);
+  });
+});
+
+describe("usedForEarning: each stock's share in the credit that's earning", () => {
+  const holdings = [
+    { symbol: "AAPL", name: "Apple", backingShares: 0.0049, priceUsd: 345 },
+    { symbol: "GOOGL", name: "Alphabet", backingShares: 0.0176, priceUsd: 345.5 },
+    { symbol: "NVDA", name: "NVIDIA", backingShares: 0, priceUsd: 217 },
+    { symbol: "TSLA", name: "Tesla", backingShares: 0.0097, priceUsd: 367 },
+  ];
+
+  it("scales every backing stock to the earning part of what's owed, in Home's order", () => {
+    // $1.95 of the $8 owed is earning: a quarter less a bit of each backing stock.
+    const used = usedForEarning(holdings, 1.95, 8);
+    expect(used.map((u) => u.symbol)).toEqual(["AAPL", "GOOGL", "TSLA"]);
+    expect(used[0].shares).toBeCloseTo(0.0049 * (1.95 / 8), 10);
+    expect(used[0].usd).toBeCloseTo(0.0049 * (1.95 / 8) * 345, 10);
+    // Together they are that part of all the backing.
+    const all = holdings.reduce((t, h) => t + h.backingShares * h.priceUsd, 0);
+    expect(used.reduce((t, u) => t + u.usd, 0)).toBeCloseTo(all * (1.95 / 8), 10);
+  });
+
+  it("is all of the backing when everything owed is earning, and nothing when nothing is", () => {
+    expect(usedForEarning(holdings, 10, 8).map((u) => u.shares)).toEqual([0.0049, 0.0176, 0.0097]);
+    expect(usedForEarning(holdings, 0, 8)).toEqual([]);
+    expect(usedForEarning(holdings, 2, 0)).toEqual([]);
   });
 });

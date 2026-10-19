@@ -57,6 +57,30 @@ export function earnRates(cashApy: number, creditApy: number): EarnRates {
   return { earn, cost, left: earn - cost };
 }
 
+/** One stock's part in the credit that's earning ("Used for this"): its shares and their value at Aave's price. */
+export type UsedFor = { symbol: string; name: string; shares: number; usd: number };
+
+/**
+ * What backs the credit that's earning. Every stock that backs credit backs all of it as one pool, so each counts its
+ * share: its backing shares × the earning part of what's owed (earningUsd ÷ owedUsd, never more than all of it).
+ */
+export function usedForEarning(
+  holdings: readonly { symbol: string; name: string; backingShares: number; priceUsd: number }[],
+  earningUsd: number,
+  owedUsd: number,
+): UsedFor[] {
+  if (earningUsd <= 0 || owedUsd <= 0) return [];
+  const part = Math.min(1, earningUsd / owedUsd);
+  return holdings
+    .filter((h) => h.backingShares > 0)
+    .map((h) => ({
+      symbol: h.symbol,
+      name: h.name,
+      shares: h.backingShares * part,
+      usd: h.backingShares * part * h.priceUsd,
+    }));
+}
+
 /**
  * What this credit costs a year as a rate on it (an APY): the rate and the risk premium apply to the whole debt, so
  * taking more can raise what the existing debt costs too. That rise is this credit's cost. Never less than the rate

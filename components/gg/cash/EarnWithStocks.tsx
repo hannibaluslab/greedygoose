@@ -26,10 +26,11 @@ import {
   type EarnOpen,
   type EarnQuote,
   type EarnRates,
+  type UsedFor,
   offerFor,
 } from "@/lib/earnWithStocks";
 import { aprToApy } from "@/lib/aave/math";
-import { formatUsd, formatUsdTrim, inWords } from "@/lib/formatting";
+import { formatShares, formatUsd, formatUsdTrim } from "@/lib/formatting";
 import { homeStatus } from "@/lib/risk/status";
 import { backingShares } from "@/lib/holding";
 import { USDC } from "@/lib/tokens/registry";
@@ -37,8 +38,11 @@ import { USDC } from "@/lib/tokens/registry";
 const CARD = "flex flex-col gap-3 rounded-[22px] bg-card p-4 shadow-card-elev";
 const MONO = "font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-subtle";
 
-/** The rates side by side: what the cash earns, what credit costs, and (when it's offered) what's left. */
-function Rates({ rates, left }: { rates: EarnRates; left: boolean }) {
+/**
+ * The rates side by side: what the cash earns, what credit costs, and (when it's offered) what's left. `cost` names the
+ * credit's column: "Credit costs" once it's earning, short enough not to wrap at 375px.
+ */
+function Rates({ rates, left, cost = "This credit costs" }: { rates: EarnRates; left: boolean; cost?: string }) {
   const cell = (label: string, value: ReactNode) => (
     <div className="flex min-w-0 flex-col justify-between gap-1">
       <dt className={MONO}>{label}</dt>
@@ -49,7 +53,7 @@ function Rates({ rates, left }: { rates: EarnRates; left: boolean }) {
     // What's left sizes to "about 1.9%" so it never wraps at 320px; the two rates share the rest.
     <dl className={`m-0 grid gap-2 ${left ? "grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" : "grid-cols-2"}`}>
       {cell("My cash earns", pctText(rates.earn))}
-      {cell("This credit costs", pctText(rates.cost))}
+      {cell(cost, pctText(rates.cost))}
       {left &&
         cell(
           "What’s left",
@@ -65,8 +69,9 @@ function Rates({ rates, left }: { rates: EarnRates; left: boolean }) {
 /**
  * "Earn with stocks" on the Cash sheet's first step: the live rates side by side and one button to the earn step, or
  * one plain line on why it's not offered now. It needs no agent: the batch puts the credit where the cash earns. Once
- * some of the cash came from credit (`earning`), it says how much and what backs it, with Stop earning with stocks
- * (Adrian, 2026-10-19): Repay opens with that cash to repay and those stocks ticked to free up.
+ * some of the cash came from credit (`earning`), it says how much, what the cash earns and the credit costs right now
+ * (`rates`, live, whether or not more can be added), each stock's share in it ("Used for this", usedForEarning), and
+ * Stop earning with stocks: Repay opens with that cash to repay and those stocks ticked to free up.
  */
 export function EarnCard({
   offer,
@@ -75,7 +80,7 @@ export function EarnCard({
 }: {
   offer: EarnOffer;
   onOpen: () => void;
-  earning?: { usd: number; backedBy: string[]; onStop: () => void } | null;
+  earning?: { usd: number; rates: EarnRates; used: UsedFor[]; onStop: () => void } | null;
 }) {
   if (offer.kind === "loading" && !earning)
     return (
@@ -87,7 +92,7 @@ export function EarnCard({
   const line =
     offer.kind === "offer"
       ? earning
-        ? "Add more, or stop and free up your stocks."
+        ? null
         : "Use your stocks to add cash that earns."
       : offer.kind === "closed" && !(earning && offer.why === "credit")
         ? offer.text
@@ -99,23 +104,32 @@ export function EarnCard({
         {earning && (
           <p className="m-0 text-[14px] leading-[1.4] text-ink">
             <span className="font-semibold">{formatUsd(earning.usd)}</span> from credit is earning
-            {earning.backedBy.length > 0 ? `, backed by ${inWords(earning.backedBy)}.` : "."}
           </p>
         )}
         {line && <p className="m-0 text-[13px] leading-[1.4] text-ink-mid">{line}</p>}
       </div>
-      {offer.kind === "offer" ? (
+      {earning ? (
         <>
-          <Rates rates={offer.rates} left />
-          <p className="m-0 -mt-1 text-[12.5px] leading-[1.4] text-subtle">
-            A year, at today’s rates. Both are variable.
-          </p>
-          <Button variant="soft" onClick={onOpen}>
-            {earning ? "Add more" : "Earn with stocks"}
-          </Button>
+          <Rates rates={earning.rates} left cost="Credit costs" />
+          <p className="m-0 -mt-1 text-[12.5px] leading-[1.4] text-subtle">Live, a year. Both are variable.</p>
+          {earning.used.length > 0 && <UsedForThis used={earning.used} />}
         </>
       ) : (
-        offer.kind === "closed" && offer.rates && <Rates rates={offer.rates} left={false} />
+        offer.kind === "offer" && (
+          <>
+            <Rates rates={offer.rates} left />
+            <p className="m-0 -mt-1 text-[12.5px] leading-[1.4] text-subtle">
+              A year, at today’s rates. Both are variable.
+            </p>
+          </>
+        )
+      )}
+      {offer.kind === "offer" ? (
+        <Button variant="soft" onClick={onOpen}>
+          {earning ? "Add more" : "Earn with stocks"}
+        </Button>
+      ) : (
+        !earning && offer.kind === "closed" && offer.rates && <Rates rates={offer.rates} left={false} />
       )}
       {earning && (
         <Button variant="soft" onClick={earning.onStop}>
@@ -123,6 +137,25 @@ export function EarnCard({
         </Button>
       )}
     </section>
+  );
+}
+
+/** "Used for this": each stock's share in the credit that's earning, its shares with their value beside them. */
+function UsedForThis({ used }: { used: UsedFor[] }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className={MONO}>Used for this</span>
+      <dl className="m-0 flex flex-col gap-1">
+        {used.map((u) => (
+          <div key={u.symbol} className="flex items-baseline justify-between gap-3 text-[14px]">
+            <dt className="min-w-0 truncate text-ink">{u.name}</dt>
+            <dd className="num m-0 whitespace-nowrap text-ink-2">
+              {formatShares(u.shares)} ({formatUsd(u.usd)})
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
   );
 }
 

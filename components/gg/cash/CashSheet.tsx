@@ -15,11 +15,20 @@ import { useEarnOffer, useEarnWithStocks } from "@/hooks/useEarnWithStocks";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import type { PositionData } from "@/hooks/usePosition";
 import type { AgentStatus } from "@/lib/agents/status";
+import { aprToApy } from "@/lib/aave/math";
 import { fuelTankUsd } from "@/lib/cash";
 import { cashFromCreditUsd, owedBeside } from "@/lib/cashActivity";
 import { formatUsd } from "@/lib/formatting";
 import { earningLine, type ArrivedView } from "@/lib/cashSetup";
-import { earnDone, earnTenths, pctText, type EarnOffer, type EarnOpen } from "@/lib/earnWithStocks";
+import {
+  earnDone,
+  earnRates,
+  earnTenths,
+  pctText,
+  usedForEarning,
+  type EarnOffer,
+  type EarnOpen,
+} from "@/lib/earnWithStocks";
 
 type Step = "cash" | "earn";
 
@@ -97,7 +106,8 @@ function EarnCardLive({
     usd >= 0.01
       ? {
           usd,
-          backedBy: backing.map((h) => h.name),
+          rates: earnRates(aprToApy(data.savingsApr), aprToApy(data.apr)),
+          used: usedForEarning(data.holdings, usd, data.debtUsd),
           onStop: () => {
             onLeave();
             money.stopEarning({ amountUsd: usd, free: backing.map((h) => h.symbol) });

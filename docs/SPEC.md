@@ -107,8 +107,11 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
 - The earn step lists the free stocks under "Back it with", all ticked to start; a tap leaves one out or takes it
   back, and the most it can add follows what's ticked (offerFor). What already backs credit always counts
   (Adrian, 2026-10-19: one, several or all, not always all).
-- Once some of the cash came from credit, the card says how much and what backs it ("$2.00 from credit is earning,
-  backed by Alphabet."), keeps "Add more" while more is possible, and offers **Stop earning with stocks**: the Cash
+- Once some of the cash came from credit, the card says how much ("$1.95 from credit is earning"), always with the live
+  rates (what the cash earns, what the credit costs, what's left: "Live, a year. Both are variable.") and **Used for
+  this**: each stock that backs credit, its shares and their value at Aave's price, scaled to the earning part of what's
+  owed ("Apple 0.0012 ($0.41)"), since every backing stock backs all of the credit as one pool (Adrian, 2026-10-19). It
+  keeps "Add more" while more is possible, and offers **Stop earning with stocks**: the Cash
   sheet slides out and Repay opens with that cash to repay and the stocks that back credit ticked to free up, in one
   signature. "Your stocks can't back more credit right now" no longer shows while it earns.
 
