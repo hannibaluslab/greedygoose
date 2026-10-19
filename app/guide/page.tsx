@@ -1,17 +1,18 @@
-import { TabHeader, WhiteCard } from "@/components/gg/Screen";
-import { ComingSoon } from "@/components/gg/Agents";
+import { TabHeader } from "@/components/gg/Screen";
+import { GuideView } from "@/components/gg/guide/Guide";
+import { guideContent } from "@/lib/guide/content";
 
-/** The Guide, from the menu: how GreedyGoose works, step by step. A placeholder until its content is written. */
+/**
+ * The Guide, from the menu: what you can do in GreedyGoose, where it is, and how. Readable signed in or out. No tab
+ * bar, and the header stays on top while it scrolls, so the way back is always one tap away.
+ */
 export default function GuidePage() {
   return (
-    <div className="flex min-h-dvh flex-col gap-3.5 px-5 pb-[34px] pt-[calc(env(safe-area-inset-top)+8px)]">
-      <TabHeader title="Guide" back="/home" />
-      <WhiteCard className="flex flex-col items-start gap-2 px-4 py-4 leading-[normal]">
-        <ComingSoon />
-        <p className="m-0 text-[15px] leading-[1.4] text-ink-2">
-          How cash, stocks and credit work in GreedyGoose, step by step.
-        </p>
-      </WhiteCard>
+    <div className="flex min-h-dvh flex-col gap-3.5 px-5 pb-[34px]">
+      <div className="sticky top-0 z-20 -mx-5 bg-[rgba(244,242,236,0.92)] px-5 pb-2 pt-[calc(env(safe-area-inset-top)+8px)] backdrop-blur-md">
+        <TabHeader title="Guide" back="/home" />
+      </div>
+      <GuideView guide={guideContent()} />
     </div>
   );
 }
