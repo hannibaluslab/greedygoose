@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { ActivityAvatar, AgentMark, FeedCard, FeedItem, dayLabel } from "./Activity";
+import { ActivityAvatar, AgentMark, FeedCard, FeedItem, dayLabel } from "./activity/Activity";
 import { StockAvatar } from "./StockAvatar";
 import { ChevronRight } from "./icons";
 import { useCashActivity } from "@/hooks/useCashActivity";

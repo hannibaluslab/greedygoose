@@ -6,7 +6,7 @@ import { isAddressEqual } from "viem";
 import { useAccount } from "wagmi";
 import { toast } from "sonner";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
-import { FeedCard, FeedDays } from "@/components/gg/Activity";
+import { FeedCard, FeedDays } from "@/components/gg/activity/Activity";
 import { AgentSheet } from "@/components/gg/AgentSheet";
 import { ProtectSettings } from "@/components/gg/agents/ProtectSettings";
 import { RebalanceSettings } from "@/components/gg/agents/RebalanceSettings";

@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { FeedCard, FeedDays } from "@/components/gg/Activity";
+import { FeedCard, FeedDays } from "@/components/gg/activity/Activity";
 import { AgentSheet } from "@/components/gg/AgentSheet";
 import { AgentRow, AgentsFeed, AgentsView, AttentionCard, MixBar, TurnOffAll } from "@/components/gg/Agents";
 import type { AgentRow as FeedAgentRow } from "@/hooks/useAgentFeed";

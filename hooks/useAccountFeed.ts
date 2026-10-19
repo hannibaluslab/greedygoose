@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useBlockNumber, usePublicClient } from "wagmi";
 import type { FeedError } from "@/components/gg/Agents";
-import type { FeedRow } from "@/components/gg/Activity";
+import type { FeedRow } from "@/components/gg/activity/Activity";
 import { useActivity } from "@/hooks/useActivity";
 import type { useAgentFeed } from "@/hooks/useAgentFeed";
 import { useArrivals } from "@/hooks/useArrivals";

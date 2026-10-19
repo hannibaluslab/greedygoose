@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { StockAvatar } from "./StockAvatar";
-import { AgentsIcon, ChevronDown, ChevronRight, RebalanceIcon, ShieldIcon } from "./icons";
+import { StockAvatar } from "../StockAvatar";
+import { AgentsIcon, ChevronDown, ChevronRight, RebalanceIcon, ShieldIcon } from "../icons";
 import type { ActivityRow } from "@/hooks/useActivity";
 import { useNames } from "@/hooks/useContacts";
 import type { AgentRow } from "@/hooks/useAgentFeed";

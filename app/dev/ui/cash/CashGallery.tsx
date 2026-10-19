@@ -14,7 +14,7 @@ import { TabBar } from "@/components/gg/TabBar";
 import { TxDone } from "@/components/gg/TxUi";
 import { CreditIcon, MenuIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/icons";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
-import type { FeedRow } from "@/components/gg/Activity";
+import type { FeedRow } from "@/components/gg/activity/Activity";
 import type { ActivityRow } from "@/hooks/useActivity";
 import type { GrantView } from "@/hooks/useCashSetup";
 import type { ConvertQuote } from "@/lib/tx/plans";

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { AgentMark, FeedCard, FeedDays, type FeedRow } from "./Activity";
+import { AgentMark, FeedCard, FeedDays, type FeedRow } from "./activity/Activity";
 import { Button } from "./Button";
 import { useMoneySheets } from "./MoneySheets";
 import { TabHeader } from "./Screen";

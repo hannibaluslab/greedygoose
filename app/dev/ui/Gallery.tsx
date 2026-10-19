@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { FeedCard, FeedDays } from "@/components/gg/Activity";
+import { FeedCard, FeedDays } from "@/components/gg/activity/Activity";
 import { AmountArrow, AmountBadge, AmountField, AmountSource, YouGet } from "@/components/gg/AmountField";
 import { BalanceHero, TodayChange } from "@/components/gg/BalanceHero";
 import { Button } from "@/components/gg/Button";
