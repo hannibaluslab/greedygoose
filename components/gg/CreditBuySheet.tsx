@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { parseUnits } from "viem";
 import { useAccount } from "wagmi";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
@@ -8,15 +8,17 @@ import { AmountArrow, AmountBadge, AmountField, AmountSource, YouGet } from "./A
 import { Button } from "./Button";
 import { useMoneySheets } from "./MoneySheets";
 import { StockAvatar, tickerOf } from "./StockAvatar";
+import { BackingRow, CantBack, LeaveForRepay, ReadyRow, optionOf, unavailable, wholeUsd } from "./CreditBuyBacking";
+import { CantCheck, CreditHero, StockLists } from "./CreditBuyStocks";
 import { TxButton, TxError } from "./TxUi";
 import { StatusChange, StatusMoveBar, StatusPill } from "./Status";
-import { ChevronRight, BacksIcon } from "./icons";
+import { BacksIcon } from "./icons";
 import { useAgents } from "@/hooks/useAgents";
 import { useBoughtHome } from "@/hooks/useBoughtHome";
 import { useBuyQuote } from "@/hooks/useBuyQuote";
 import { useCreditBuy } from "@/hooks/useCreditBuy";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
-import { useBackingFactorsRead, type Holding, type PositionData } from "@/hooks/usePosition";
+import { useBackingFactorsRead, type PositionData } from "@/hooks/usePosition";
 import { monthlyCost } from "@/lib/aave/math";
 import { cashRaw, feeBufferRaw } from "@/lib/cash";
 import {
@@ -36,7 +38,6 @@ import {
   shortNames,
   type BackingOption,
   type BackingPick,
-  type CreditAvailable,
 } from "@/lib/creditBuy";
 import { formatShares, formatUsd, formatUsdTrim, inWords, monthlyCostText } from "@/lib/formatting";
 import { STATUS_LABEL } from "@/lib/risk/status";
@@ -44,9 +45,7 @@ import { BUY_LIMITS, quoteEconomics } from "@/lib/swap/buy";
 import { VENUE_LABEL } from "@/lib/swap/venues";
 import { rawToShares } from "@/lib/tokens/b20";
 import { EQUITIES, USDC, byStockOrder, type ReserveAsset } from "@/lib/tokens/registry";
-import { wholePct } from "@/lib/holding";
 import { leverageOf, leverageText } from "@/lib/leverage";
-import { RetryButton } from "./RetryButton";
 
 /**
  * Three steps (boards 30–34, Adrian 2026-10-18): what backs it (Credit ready, or a stock to back new credit) → pick a
@@ -57,17 +56,8 @@ const ORDER: Step[] = ["back", "pick", "amount"];
 /** Step 1's Credit ready: the credit left on what already backs credit; nothing new goes in. */
 const EXISTING = "existing";
 
-const valueOf = (h: Holding) => h.freeUsd + h.backingUsd;
-/**
- * Credit figures, rounded down so they're never more than there is: to the cent under $100 (a small account's "Up to
- * $0.68" isn't "$0"), in whole dollars above, as the boards print them ("Up to $417").
- */
 /** What a backing is worth, rounded up so it's never shown as less than goes in: cents under $100, dollars above. */
 const backedText = (n: number) => (n < 100 ? formatUsd(Math.ceil(n * 100 - 1e-6) / 100) : formatUsdTrim(Math.ceil(n)));
-const wholeUsd = (n: number) => {
-  const usd = Math.max(0, n);
-  return usd < 100 ? formatUsd(Math.floor(usd * 100 + 1e-6) / 100) : formatUsdTrim(Math.floor(usd));
-};
 /** MAX's amount: the most there is, to the cent, rounded down ("0.69", "417.35"). */
 const maxText = (n: number) => String(Math.floor(Math.max(0, n) * 100 + 1e-6) / 100);
 
@@ -592,145 +582,6 @@ export function CreditBuySheet({
   );
 }
 
-const optionOf = (options: BackingOption[], h: Holding) => options.find((o) => o.stock.symbol === h.symbol);
-
-/**
- * Step 3's lists (F2-3): the holdings, then the other stocks. `othersFirst` (the stock to buy): the other stocks on
- * top, since a Credit Buy usually buys something new, and the holdings under them. `withCash`: the $0 state, where a
- * tap buys with cash.
- */
-function StockLists({
-  held,
-  others,
-  priceOf,
-  withCash,
-  othersFirst = false,
-  onPick,
-}: {
-  held: Holding[];
-  others: ReserveAsset[];
-  priceOf: (symbol: string) => number;
-  withCash: boolean;
-  othersFirst?: boolean;
-  onPick: (s: ReserveAsset) => void;
-}) {
-  const heldList = held.length > 0 && (
-    <PickList title="My holdings">
-      {held.map((h) => (
-        <PickRow
-          key={h.symbol}
-          symbol={h.symbol}
-          name={h.name}
-          owned={valueOf(h)}
-          priceUsd={h.priceUsd}
-          withCash={withCash}
-          disabled={false}
-          onClick={() => onPick(EQUITIES.find((e) => e.symbol === h.symbol)!)}
-        />
-      ))}
-    </PickList>
-  );
-  const othersList = others.length > 0 && (
-    <PickList title={withCash ? "Buy with cash" : held.length > 0 ? "Other stocks" : "Stocks"}>
-      {others.map((e) => (
-        <PickRow
-          key={e.symbol}
-          symbol={e.symbol}
-          name={e.name}
-          priceUsd={priceOf(e.symbol)}
-          withCash={withCash}
-          disabled={false}
-          onClick={() => onPick(e)}
-        />
-      ))}
-    </PickList>
-  );
-  return othersFirst ? (
-    <>
-      {othersList}
-      {heldList}
-    </>
-  ) : (
-    <>
-      {heldList}
-      {othersList}
-    </>
-  );
-}
-
-/**
- * Step 1's Credit ready (board 30): the credit left on what already backs credit, from which stocks, picked first.
- * Using it puts nothing new in, so the amount step shows how far it moves the credit.
- */
-function ReadyRow({
-  names,
-  usd,
-  checked,
-  onPick,
-}: {
-  names: string[];
-  usd: number;
-  checked: boolean;
-  onPick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={checked}
-      onClick={onPick}
-      className={`flex min-h-11 items-center gap-3 rounded-[16px] bg-card px-3.5 py-3 text-left leading-[normal] text-ink ${checked ? "border-[1.5px] border-ink" : "border border-line-field"}`}
-    >
-      <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-full bg-ink text-on-ink">
-        <BacksIcon size={12} />
-      </span>
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="text-[15px] font-semibold">Credit ready</span>
-        <span className="truncate text-[12.5px] text-ink-mid">From {shortNames(names)}</span>
-      </span>
-      <span className="flex shrink-0 flex-col gap-px text-right">
-        <span className="text-[11.5px] text-ink-mid">Up to</span>
-        <span className="num text-[20px] font-bold leading-[1.1] tracking-[-0.02em]">{wholeUsd(usd)}</span>
-      </span>
-      <Radio checked={checked} />
-    </button>
-  );
-}
-
-/** How a Repay link inside the sheet leaves it for the Repay sheet (CreditBuySheet sets it). */
-const LeaveForRepay = createContext<() => void>(() => {});
-
-/** "Repay" inside a row or a note: opens the Repay sheet in this one's place. */
-function RepayLink() {
-  const repay = useContext(LeaveForRepay);
-  return (
-    <button type="button" onClick={repay} className="font-semibold text-ink">
-      Repay
-    </button>
-  );
-}
-
-/** The rows' radio mark: lime with an ink dot when picked. */
-function Radio({ checked }: { checked: boolean }) {
-  return checked ? (
-    <span
-      aria-hidden
-      className="flex size-[22px] shrink-0 items-center justify-center rounded-full bg-brand shadow-[0_0_0_1.5px_#0e0d0b]"
-    >
-      <span className="size-2 rounded-full bg-ink" />
-    </span>
-  ) : (
-    <span aria-hidden className="size-[22px] shrink-0 rounded-full border-[1.5px] border-[#d9d2c3]" />
-  );
-}
-
-/** Why a holding can't back the buy, in a few words; none when it's all in use already (the row says so, with Repay). */
-function unavailable(h: Holding): string | undefined {
-  if (h.paused || h.frozen) return "Paused by Aave";
-  if (h.freeUsd >= MIN_BACKING_USD) return "Can’t back credit";
-  return h.backingRaw > 0n ? undefined : "Too small to back credit";
-}
-
 /**
  * The risk line (F2-6's, now in the amount step's small print). The board's "Your cash is never touched" is left out:
  * the network fee comes from cash, and Protect repays from savings first (D11).
@@ -746,239 +597,4 @@ function riskNote(backers: string[], protectOn: boolean): string {
   return one
     ? `If ${one} falls, you can repay. If it falls too far, part of it can be sold to repay what you owe.`
     : "If your stocks fall, you can repay. If they fall too far, part of them can be sold to repay what you owe.";
-}
-
-/**
- * F2-3's head (Adrian, 2026-10-15): the most one Credit Buy can use, in whole dollars as the sheet's credit figures,
- * drawn like the balance hero's figure, read out as one amount; a pulse while the collateral factors load, and a plain
- * line with Try again if they can't be read. One plain line under it. At $0 the label drops "up to".
- */
-function CreditHero({
-  available,
-  failed,
-  onRetry,
-}: {
-  available: CreditAvailable | null;
-  failed: boolean;
-  onRetry: () => void;
-}) {
-  // Rounded down; to the cent under $100, so a small account's $0.72 isn't "$0".
-  const figure = available ? wholeUsd(available.usd) : "$0";
-  const none = !available || available.usd < 0.01;
-  return (
-    <div className="flex flex-col gap-1.5 px-1 leading-[normal]">
-      <span className="label">{available && none ? "Credit you can use" : "You can use up to"}</span>
-      {available ? (
-        <span className="num inline-flex items-baseline">
-          <span aria-hidden className="text-[22px] font-medium text-ink-mid">
-            $
-          </span>
-          <span aria-hidden className="text-[44px] font-semibold leading-none tracking-[-0.04em]">
-            {figure.replace("$", "")}
-          </span>
-          <span className="sr-only">{figure}</span>
-        </span>
-      ) : failed ? null : (
-        <span role="status" className="h-[42px] w-[150px] animate-pulse rounded-xl bg-chip">
-          <span className="sr-only">Loading</span>
-        </span>
-      )}
-      {available ? (
-        <p className="m-0 text-pretty text-[13px] leading-[1.4] text-ink-mid">{available.line}</p>
-      ) : (
-        failed && <CantCheck onRetry={onRetry} />
-      )}
-    </div>
-  );
-}
-
-/** The collateral factors couldn't be read: say so, with Try again (ValueLine's pattern), instead of pulsing on. */
-function CantCheck({ onRetry }: { onRetry: () => void }) {
-  return (
-    <p role="status" className="m-0 flex items-center justify-between gap-3 text-[13px] leading-[normal] text-ink-mid">
-      Your credit can’t be checked right now.
-      <RetryButton look="inline" onClick={onRetry} />
-    </p>
-  );
-}
-
-/** F2-3's titled white list. */
-function PickList({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="flex flex-col gap-2 leading-[normal]">
-      <h3 className="label m-0 px-1">{title}</h3>
-      <div className="rounded-[16px] border border-line-field bg-card">{children}</div>
-    </section>
-  );
-}
-
-/**
- * A stock to Credit Buy (F2-3): badge, name ("You own $X" for a holding), its price. Stocks earn no yield (D19), so
- * "per share" sits where the board had the APY. `withCash`: with $0 to use it opens a Buy with cash, and its name says so.
- * `disabled` until the number is known.
- */
-function PickRow({
-  symbol,
-  name,
-  owned,
-  priceUsd,
-  withCash,
-  disabled,
-  onClick,
-}: {
-  symbol: string;
-  name: string;
-  owned?: number;
-  priceUsd: number;
-  withCash: boolean;
-  disabled: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      className="group flex min-h-16 w-full items-stretch pl-4 text-left text-ink"
-    >
-      <span className="flex items-center py-2.5">
-        <StockAvatar symbol={symbol} size={40} font={9.5} weight={800} />
-      </span>
-      <span className="ml-3 flex min-w-0 flex-1 items-center gap-3 border-b border-line-field py-2.5 pr-4 group-last:border-b-0">
-        <span className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="truncate text-[15px] font-semibold leading-[18px]">{name}</span>
-          {owned !== undefined && (
-            <span className="num whitespace-nowrap text-[13px] font-medium leading-[18px] text-ink-mid">
-              You own <b className="font-semibold text-ink">{formatUsd(owned)}</b>
-            </span>
-          )}
-        </span>
-        <span className="num flex shrink-0 flex-col items-end gap-1 whitespace-nowrap">
-          <span className="text-[15px] font-semibold leading-[18px]">{formatUsd(priceUsd)}</span>
-          <span className="text-[12px] font-medium leading-4 text-ink-mid">per share</span>
-        </span>
-        <ChevronRight strokeWidth={2.2} className="shrink-0 text-ink-faint" />
-        {withCash && <span className="sr-only">, buy with cash</span>}
-      </span>
-    </button>
-  );
-}
-
-/**
- * A holding that could back the buy (step 1, board F2-4): what it's worth, how much is in use, and either its free
- * value (`right`, a radio) or, without `onPick`, why it can't ("All in use · Repay", disabled).
- */
-function BackingRow({
-  holding: h,
-  checked = false,
-  right,
-  onPick,
-  reason,
-}: {
-  holding: Holding;
-  checked?: boolean;
-  right?: ReactNode;
-  onPick?: () => void;
-  reason?: string;
-}) {
-  const ticker = tickerOf(h.symbol);
-  const allInUse = !reason && h.backingRaw > 0n && !onPick;
-  const body = (
-    <>
-      <StockAvatar symbol={h.symbol} size={36} font={ticker.length > 4 ? undefined : 10.5} weight={800} />
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="flex items-center gap-1.5 text-[15px] font-semibold">
-          {h.name}
-          {onPick && h.backingShares > 0 && (
-            <span
-              title={`${wholePct(h.backingShares / (h.freeShares + h.backingShares))}% backs credit`}
-              className="num inline-flex h-[18px] items-center gap-[3px] rounded-[9px] bg-ground px-1.5 text-[10.5px] font-semibold text-ink-2"
-            >
-              {wholePct(h.backingShares / (h.freeShares + h.backingShares))}%
-              <BacksIcon size={10} />
-            </span>
-          )}
-        </span>
-        <span className="num whitespace-nowrap text-[12.5px] text-ink-mid">
-          {formatShares(h.freeShares + h.backingShares)} shares
-        </span>
-        {!onPick && (h.backingShares > 0 || reason) && (
-          <span className="num whitespace-nowrap text-[12px] text-ink-mid">
-            {reason ?? (
-              <>
-                <BacksIcon size={10} className="mr-1 inline align-[-1px] text-ink" />
-                {allInUse ? (
-                  <>
-                    <b className="font-semibold text-ink">All</b> in use · <RepayLink />
-                  </>
-                ) : (
-                  <>
-                    <b className="font-semibold text-ink">{formatShares(h.backingShares)}</b> in use
-                  </>
-                )}
-              </>
-            )}
-          </span>
-        )}
-      </span>
-      {onPick ? (
-        <span className="flex shrink-0 flex-col gap-px text-right">{right}</span>
-      ) : (
-        <span className="shrink-0 whitespace-nowrap text-[13px] font-semibold text-ink-mid">Not available</span>
-      )}
-      <Radio checked={checked} />
-    </>
-  );
-  const cls = "flex min-h-11 items-center gap-3 rounded-[16px] bg-card px-3.5 py-3 text-left leading-[normal] text-ink";
-  return onPick ? (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={checked}
-      onClick={onPick}
-      className={`${cls} ${checked ? "border-[1.5px] border-ink" : "border border-line-field"}`}
-    >
-      {body}
-    </button>
-  ) : (
-    <div
-      role="radio"
-      aria-checked={false}
-      aria-disabled
-      aria-label={`${h.name}, not available${allInUse ? ": all in use" : reason ? `: ${reason}` : ""}`}
-      className={`${cls} border border-line-field opacity-60`}
-    >
-      {body}
-    </div>
-  );
-}
-
-/**
- * Step 1's quiet note for what can't back this buy (Adrian: disabled rows repeated each other): what already backs
- * credit with nothing left, and holdings too small or paused, each in a few words. Nothing to pick here.
- */
-function CantBack({
-  inUse,
-  items,
-}: {
-  inUse: { names: string[]; usd: number } | null;
-  items: { name: string; reason: string }[];
-}) {
-  if (!inUse && items.length === 0) return null;
-  return (
-    <div className="flex flex-col gap-1.5 rounded-[16px] border border-dashed border-line-field px-3.5 py-3 text-[12.5px] leading-[1.45] text-ink-mid">
-      {inUse && (
-        <p className="m-0">
-          <BacksIcon size={10} className="mr-1 inline align-[-1px] text-ink" />
-          <b className="font-semibold text-ink">{shortNames(inUse.names)}</b> ({formatUsd(inUse.usd)}) already{" "}
-          {inUse.names.length > 1 ? "back" : "backs"} your credit, with nothing left to use. <RepayLink />
-        </p>
-      )}
-      {items.map((i) => (
-        <p key={i.name} className="m-0">
-          <b className="font-semibold text-ink">{i.name}</b>: {i.reason}.
-        </p>
-      ))}
-    </div>
-  );
 }
