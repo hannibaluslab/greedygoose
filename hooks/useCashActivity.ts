@@ -11,16 +11,13 @@ import { CHAIN_ID } from "@/lib/chain";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { LOG_CHUNK, WEEK_BLOCKS, logChunks } from "@/lib/agents/history";
 import { ARRIVALS_ON, arrivalTxs, arrivalsOf, rateLimited, readArrivalLogs } from "@/lib/activity/arrivals";
-import { cashRows, type Arrival } from "@/lib/cashActivity";
+import { cashFeedState, cashRows, type Arrival, type CashFeedError } from "@/lib/cashActivity";
 
 /** A chunk this many blocks behind the head is final, and kept (as useAgentFeed keeps its own). */
 const SETTLED_BLOCKS = 300n;
 /** getLogs requests in flight at once, as useAgentFeed. */
 const PARALLEL = 4;
 const WEEK_MS = 7 * 86_400_000;
-
-/** Which part couldn't be read: all of it, or some (the rows that were read still show). */
-export type CashFeedError = "all" | "some" | null;
 
 /**
  * The Cash sheet's activity for the last 7 days: Activity's own sources filtered to the cash (the user's moves from
@@ -120,19 +117,17 @@ export function useCashActivity(account: Address) {
     [own.rows, feed.rows, arrivals, since],
   );
 
-  const arrivalsFailed =
-    ARRIVALS_ON && (head.isError || logs.isError || receipts.some((q) => q.isError) || times.some((q) => q.isError));
-  const failed = [own.isError, !!GOOSE_EXECUTOR && feed.isError, arrivalsFailed];
-  // A source that isn't read (no executor, no arrivals) neither fails nor keeps "all" from being true.
-  const unread = [false, !GOOSE_EXECUTOR, !ARRIVALS_ON];
-  const live: CashFeedError = failed.every((f, i) => f || unread[i]) ? "all" : failed.some(Boolean) ? "some" : null;
-  const reading =
-    own.isLoading ||
-    feed.isLoading ||
-    head.isPending ||
-    (from !== undefined && ((ARRIVALS_ON && logs.isPending) || start.isPending)) ||
-    receipts.some((q) => q.isPending) ||
-    times.some((q) => q.isPending);
+  const { live, reading } = cashFeedState({
+    executor: !!GOOSE_EXECUTOR,
+    arrivals: ARRIVALS_ON,
+    windowKnown: from !== undefined,
+    own,
+    feed,
+    head,
+    logs,
+    start,
+    txReads: [...receipts, ...times],
+  });
 
   // What was shown once everything settled: null until the first read has. A new block's read (a new query, which
   // starts pending when the last one failed) keeps that on screen instead of the skeleton, until it settles too.

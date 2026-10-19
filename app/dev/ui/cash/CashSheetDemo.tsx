@@ -6,7 +6,7 @@ import { CashStep, cashLead } from "@/components/gg/CashSheet";
 import { EarnStep } from "@/components/gg/EarnWithStocks";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import type { Holding, PositionData } from "@/hooks/usePosition";
-import type { CashFeedError } from "@/hooks/useCashActivity";
+import type { CashFeedError } from "@/lib/cashActivity";
 import { aprToApy, monthlyCost } from "@/lib/aave/math";
 import type { AgentEvent } from "@/lib/agents/events";
 import { describeAgentEvent, type MoveContext } from "@/lib/agents/feed";

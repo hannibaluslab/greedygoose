@@ -342,3 +342,37 @@ export function cashRows(p: {
   ].filter((r): r is CashRow => r !== null);
   return rows.sort((a, b) => b.time - a.time).slice(0, p.limit ?? CASH_ROWS);
 }
+
+/** Which part of the Cash sheet's activity couldn't be read: all of it, or some (the rows that were read still show). */
+export type CashFeedError = "all" | "some" | null;
+
+type Read = { isError: boolean; isPending: boolean };
+
+/**
+ * Where the Cash sheet's reads stand: which part failed (`live`), and whether any is still reading. A source that isn't
+ * read (no executor, no arrivals) neither fails nor keeps "all" from being true. `windowKnown`: the week's first block
+ * is known, so the arrivals and its time are being read.
+ */
+export function cashFeedState(p: {
+  executor: boolean;
+  arrivals: boolean;
+  windowKnown: boolean;
+  own: { isError: boolean; isLoading: boolean };
+  feed: { isError: boolean; isLoading: boolean };
+  head: Read;
+  logs: Read;
+  start: Read;
+  txReads: readonly Read[];
+}): { live: CashFeedError; reading: boolean } {
+  const arrivalsFailed = p.arrivals && (p.head.isError || p.logs.isError || p.txReads.some((q) => q.isError));
+  const failed = [p.own.isError, p.executor && p.feed.isError, arrivalsFailed];
+  const unread = [false, !p.executor, !p.arrivals];
+  const live: CashFeedError = failed.every((f, i) => f || unread[i]) ? "all" : failed.some(Boolean) ? "some" : null;
+  const reading =
+    p.own.isLoading ||
+    p.feed.isLoading ||
+    p.head.isPending ||
+    (p.windowKnown && ((p.arrivals && p.logs.isPending) || p.start.isPending)) ||
+    p.txReads.some((q) => q.isPending);
+  return { live, reading };
+}
