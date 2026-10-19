@@ -15,7 +15,8 @@ import {
   type NameLookup,
 } from "@/components/gg/Board";
 import { useBoard } from "@/hooks/useBoard";
-import { useContactsTx, useFollowing, useNames, type ContactsChange } from "@/hooks/useContacts";
+import { useContactsTx, useFollowing, useNames } from "@/hooks/useContacts";
+import type { ContactsChange } from "@/lib/tx/plans";
 import { TAP_AGAIN } from "@/hooks/useTx";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { GOOSE_BOARD } from "@/lib/board/config";

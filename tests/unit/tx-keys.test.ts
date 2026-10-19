@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Address } from "viem";
 import { cashBuyPlan } from "@/hooks/useBuy";
-import { contactsPlan } from "@/hooks/useContacts";
 import { creditBuyPlan } from "@/hooks/useCreditBuy";
 import {
+  contactsPlan,
   convertPlan,
   earnPlan,
   keepMixPlan,

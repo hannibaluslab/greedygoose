@@ -3,11 +3,11 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
 import type { Address } from "viem";
 import { usePublicClient } from "wagmi";
-import { TxStop, txKey, useTx, type TxPlan } from "./useTx";
+import { useTx } from "./useTx";
 import { CHAIN_ID } from "@/lib/chain";
-import { addContactsCalls, ContactsStop, removeContactCalls } from "@/lib/efp/contacts";
 import { fetchFollowing } from "@/lib/efp/read";
 import { accountName } from "@/lib/jaw/name";
+import { contactsPlan, type ContactsChange } from "@/lib/tx/plans";
 
 /** The people `address` added as contacts: its EFP list on Base, read from the chain (no server, D12). */
 export function useFollowing(address: Address) {
@@ -19,38 +19,6 @@ export function useFollowing(address: Address) {
     staleTime: 30_000,
     retry: 1,
   });
-}
-
-/** A change to the contacts: add one or several (one JAW sheet), or remove one. */
-export type ContactsChange = { verb: "add" | "remove"; user: Address; targets: Address[] };
-
-/**
- * What a contacts change signs (useTx): the list is read again while it's prepared, so a change made elsewhere since
- * the screen loaded isn't undone. Keyed by the change and its people, in any order.
- */
-export function contactsPlan(c: ContactsChange, client: ReturnType<typeof usePublicClient>): TxPlan {
-  const fresh = async <T>(build: () => Promise<T>) => {
-    try {
-      return await build();
-    } catch (e) {
-      throw e instanceof ContactsStop ? new TxStop(e.message) : e;
-    }
-  };
-  return {
-    key: txKey("contacts", c.verb, c.user, [...new Set(c.targets.map((t) => t.toLowerCase()))].sort()),
-    user: c.user,
-    calls: () =>
-      fresh(async () => {
-        const following = await fetchFollowing(client!, c.user);
-        return c.verb === "add"
-          ? addContactsCalls(c.user, c.targets, following)
-          : removeContactCalls(c.user, c.targets[0], following);
-      }),
-    fallback:
-      c.verb === "add"
-        ? "Adding didn’t go through right now. Try again in a moment."
-        : "Removing didn’t go through right now. Try again in a moment.",
-  };
 }
 
 /**
