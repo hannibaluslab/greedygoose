@@ -270,13 +270,19 @@ export function assertAllowed<C extends { to: Address; data: Hex; value: bigint 
   calls: C[],
   own?: AllowContext,
 ): C[] {
-  const listSlots: bigint[] = own?.listSlot != null ? [own.listSlot] : [];
   const sendTo = own?.sendTo ?? null;
   const saveTo = own?.saveTo ?? null;
   if (saveTo && !isAddressEqual(saveTo, user)) throw new Error("Blocked: savings are only for the user");
   const saveRaw = saveTo ? savingsSupplyRaw(calls) : null;
-  let transfers = 0;
-  let savingsApproves = 0;
+  const batch = { listSlots: listSlotsOf(calls, own), sendTo, saveTo, saveRaw };
+  const count = { transfers: 0, savingsApproves: 0 };
+  for (const c of calls) assertCall(c, user, batch, count);
+  return calls;
+}
+
+/** The list slots a batch may write to: the user's own, as read from Base, and any slot a call in the batch mints. */
+function listSlotsOf(calls: readonly { to: Address; data: Hex }[], own?: AllowContext): bigint[] {
+  const listSlots: bigint[] = own?.listSlot != null ? [own.listSlot] : [];
   for (const c of calls) {
     if (!isAddressEqual(c.to, EFP_LIST_MINTER)) continue;
     try {
@@ -287,42 +293,54 @@ export function assertAllowed<C extends { to: Address; data: Hex; value: bigint 
       /* blocked below */
     }
   }
-  for (const c of calls) {
-    const rule = RULES.find((r) => r.targets.some((t) => isAddressEqual(t, c.to)));
-    if (!rule) throw new Error(`Blocked: unexpected target ${c.to}`);
-    if (c.value !== 0n) throw new Error("Blocked: unexpected value");
-    let call: { functionName: string; args?: readonly unknown[] };
-    try {
-      call = decodeFunctionData({ abi: rule.abi, data: c.data });
-    } catch {
-      throw new Error(`Blocked: unexpected call to ${c.to}`);
-    }
-    const check = Object.hasOwn(rule.functions, call.functionName) ? rule.functions[call.functionName] : undefined;
-    // Outside a Send (no recipient declared), transfer is no function of any target at all; outside Earn with stocks and
-    // Start earning (no saveTo declared), neither is a savings supply.
-    if (
-      !check ||
-      (call.functionName === "transfer" && !sendTo) ||
-      (isSavingsSupply(c.to, call.functionName) && !saveTo)
-    ) {
-      throw new Error(`Blocked: unexpected call to ${c.to}`);
-    }
-    if (call.functionName === "transfer" && ++transfers > 1) throw new Error("Blocked: more than one transfer");
-    if (call.functionName === "approve" && is(call.args?.[0], PROTOCOLS.AAVE_V3_POOL) && ++savingsApproves > 1) {
-      throw new Error("Blocked: more than one savings approval");
-    }
-    if (!check(call.args ?? [], user, { listSlots, to: c.to, data: c.data, sendTo, saveTo, saveRaw })) {
-      throw new Error(
-        call.functionName === "approve"
-          ? `Blocked: unexpected spender ${call.args?.[0]}`
-          : call.functionName === "transfer"
-            ? `Blocked: unexpected recipient ${call.args?.[0]}`
-            : `Blocked: unexpected arguments to ${call.functionName} on ${c.to}`,
-      );
-    }
-  }
-  return calls;
+  return listSlots;
 }
+
+/**
+ * One call's checks, in order: a known target, no value, a known function of it (transfer only in a Send, a savings
+ * supply only with `saveTo`), at most one transfer and one savings approval in the batch (`count`), then its arguments.
+ */
+function assertCall(
+  c: { to: Address; data: Hex; value: bigint },
+  user: Address,
+  batch: Omit<BatchContext, "to" | "data">,
+  count: { transfers: number; savingsApproves: number },
+) {
+  const rule = RULES.find((r) => r.targets.some((t) => isAddressEqual(t, c.to)));
+  if (!rule) throw new Error(`Blocked: unexpected target ${c.to}`);
+  if (c.value !== 0n) throw new Error("Blocked: unexpected value");
+  let call: { functionName: string; args?: readonly unknown[] };
+  try {
+    call = decodeFunctionData({ abi: rule.abi, data: c.data });
+  } catch {
+    throw new Error(`Blocked: unexpected call to ${c.to}`);
+  }
+  const check = Object.hasOwn(rule.functions, call.functionName) ? rule.functions[call.functionName] : undefined;
+  // Outside a Send (no recipient declared), transfer is no function of any target at all; outside Earn with stocks and
+  // Start earning (no saveTo declared), neither is a savings supply.
+  if (
+    !check ||
+    (call.functionName === "transfer" && !batch.sendTo) ||
+    (isSavingsSupply(c.to, call.functionName) && !batch.saveTo)
+  ) {
+    throw new Error(`Blocked: unexpected call to ${c.to}`);
+  }
+  if (call.functionName === "transfer" && ++count.transfers > 1) throw new Error("Blocked: more than one transfer");
+  if (call.functionName === "approve" && is(call.args?.[0], PROTOCOLS.AAVE_V3_POOL) && ++count.savingsApproves > 1) {
+    throw new Error("Blocked: more than one savings approval");
+  }
+  if (!check(call.args ?? [], user, { ...batch, to: c.to, data: c.data })) {
+    throw new Error(blockedArgs(call.functionName, call.args?.[0], c.to));
+  }
+}
+
+/** Why a call's arguments were refused: an approve's spender, a transfer's recipient, or any other call's arguments. */
+const blockedArgs = (functionName: string, first: unknown, to: Address) =>
+  functionName === "approve"
+    ? `Blocked: unexpected spender ${first}`
+    : functionName === "transfer"
+      ? `Blocked: unexpected recipient ${first}`
+      : `Blocked: unexpected arguments to ${functionName} on ${to}`;
 
 type SwapParams = {
   tokenIn: Address;
