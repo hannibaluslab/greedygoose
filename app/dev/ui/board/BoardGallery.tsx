@@ -4,14 +4,9 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { numberToHex, type Address } from "viem";
-import {
-  AddByNameSheet,
-  BoardView,
-  PersonSheet,
-  PickBar,
-  type BoardState,
-  type NameLookup,
-} from "@/components/gg/Board";
+import { AddByNameSheet, type NameLookup } from "@/components/gg/leaderboard/AddByNameSheet";
+import { BoardView, PickBar, type BoardState } from "@/components/gg/leaderboard/BoardView";
+import { PersonSheet } from "@/components/gg/leaderboard/PersonSheet";
 import { rankRows, returnSinceJoining } from "@/lib/board/score";
 import type { BoardFilter, BoardPerson, OffBoard } from "@/lib/board/view";
 

@@ -6,14 +6,9 @@ import { isAddressEqual, type Address } from "viem";
 import { useAccount } from "wagmi";
 import { toast } from "sonner";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
-import {
-  AddByNameSheet,
-  BoardView,
-  PersonSheet,
-  PickBar,
-  type BoardState,
-  type NameLookup,
-} from "@/components/gg/Board";
+import { AddByNameSheet, type NameLookup } from "@/components/gg/leaderboard/AddByNameSheet";
+import { BoardView, PickBar, type BoardState } from "@/components/gg/leaderboard/BoardView";
+import { PersonSheet } from "@/components/gg/leaderboard/PersonSheet";
 import { useBoard } from "@/hooks/useBoard";
 import { useContactsTx, useFollowing, useNames } from "@/hooks/useContacts";
 import type { ContactsChange } from "@/lib/tx/plans";
