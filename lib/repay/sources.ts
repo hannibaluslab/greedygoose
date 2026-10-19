@@ -132,7 +132,8 @@ export function repaySources(data: RepayData, cfs: Record<string, number> | unde
     ];
   });
   // Cash, the free stocks, then the ones that back credit (board 8), each group in Home's order (ruling 43).
-  const inOrder = (a: RepaySource, b: RepaySource) => stockRank(a.stock!.symbol) - stockRank(b.stock!.symbol);
+  const inOrder = (a: RepaySource, b: RepaySource) =>
+    stockRank(a.stock?.symbol ?? "") - stockRank(b.stock?.symbol ?? "");
   const min = minRepayUsd(data.debtUsd);
   // A stock's estimate with its pool paying up to 1% under Aave's price (LIST_POOL_ALLOWANCE); the cash is exact.
   const canRepay = (s: RepaySource) =>

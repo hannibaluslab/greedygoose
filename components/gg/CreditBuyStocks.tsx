@@ -43,7 +43,10 @@ export function StockLists({
           priceUsd={h.priceUsd}
           withCash={withCash}
           disabled={false}
-          onClick={() => onPick(EQUITIES.find((e) => e.symbol === h.symbol)!)}
+          onClick={() => {
+            const stock = EQUITIES.find((e) => e.symbol === h.symbol);
+            if (stock) onPick(stock);
+          }}
         />
       ))}
     </PickList>

@@ -101,7 +101,11 @@ export function CreditBuyAmountStep({
 }) {
   const { sign, phase, error, reset, checking, blocked } = tx;
   const backingLine = backingLineOf(data, chosen, pick);
-  const warnPremium = !blocker && econ && econ.premium > BUY_LIMITS.warnPremium;
+  // A small market: what the buy pays over Aave's price, once nothing blocks it.
+  const warnPremium =
+    !blocker && econ && econ.premium > BUY_LIMITS.warnPremium
+      ? `You’d pay ${(econ.premium * 100).toFixed(1)}% over Aave’s price — the market for ${stock.name} is small.`
+      : null;
 
   return (
     <>
@@ -147,9 +151,8 @@ export function CreditBuyAmountStep({
       {(blocker || warnPremium || plan.priceMayMove) && (
         <p role="status" className={`m-0 text-[13px] leading-snug ${blocker ? "text-act" : "text-watch-text"}`}>
           {blocker ??
-            (warnPremium
-              ? `You’d pay ${(econ!.premium * 100).toFixed(1)}% over Aave’s price — the market for ${stock.name} is small.`
-              : "Stock markets are closed. You can still buy, but the price can jump when they reopen.")}
+            warnPremium ??
+            "Stock markets are closed. You can still buy, but the price can jump when they reopen."}
         </p>
       )}
       {ready && econ && q && (
@@ -284,9 +287,13 @@ function BatchNote({
     <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">
       In one go:{" "}
       {inWords([
-        ...plan.backing.map((b) => {
-          const h = data.holdings.find((x) => x.symbol === b.stock.symbol)!;
-          return `${formatShares(rawToShares(b.raw, h.multiplier, b.stock.decimals))} ${tickerOf(b.stock.symbol)} goes in use to back credit`;
+        ...plan.backing.flatMap((b) => {
+          const h = data.holdings.find((x) => x.symbol === b.stock.symbol);
+          return h
+            ? [
+                `${formatShares(rawToShares(b.raw, h.multiplier, b.stock.decimals))} ${tickerOf(b.stock.symbol)} goes in use to back credit`,
+              ]
+            : [];
         }),
         `${formatUsd(amount)} of credit is taken`,
         `exactly ${formatUsd(usd)} is approved for the ${VENUE_LABEL[venue]} router and swapped`,
