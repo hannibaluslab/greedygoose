@@ -22,7 +22,7 @@ import { BUY_LIMITS } from "@/lib/swap/buy";
 import { EQUITIES, byStockOrder, type ReserveAsset } from "@/lib/tokens/registry";
 
 /** Step 1's Credit ready: the credit left on what already backs credit; nothing new goes in. */
-export const EXISTING = "existing";
+const EXISTING = "existing";
 
 /**
  * What the sheet's steps share about the backing: the lists, what can back it, what Credit Buy can use, and the pick
