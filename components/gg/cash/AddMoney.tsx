@@ -21,14 +21,16 @@ type AddMoneyProps = {
   /** "3.9%" while the cash earns; null before earning is set up. */
   rate: string | null;
   arrived?: ReactNode;
-  onCopy: () => void;
+  /** Copies the name, or the address (the hex under the name, or the only line without one). */
+  onCopy: (what: "name" | "address") => void;
 };
 
 /**
  * Design board "Add money" (AddMoney.dc.html), Receive, saying what's true now (D20): the dollars it takes on Base,
  * that they arrive as cash, and the rate they earn once earning is set up (`rate`, the live one; nothing about earning
- * before then). `arrived` is the "Turn into cash" card for other dollars nothing converts on its own. The QR and the
- * copy button give the address, which every wallet reads. Auto top up is parked (PARKED.md).
+ * before then). `arrived` is the "Turn into cash" card for other dollars nothing converts on its own. The name is the
+ * one to copy (Adrian, 2026-10-19), with the hex under it for wallets that don't read names; the QR is the hex, which
+ * every scanner reads. Auto top up is parked (PARKED.md).
  *
  * No SheetSteps around it: "Turn into cash" opens its own sheet once it lands ("Do this automatically next time?"),
  * which a step host would fold into this one without its title.
@@ -40,21 +42,31 @@ function AddMoneyBody({ address, name, rate, arrived, onCopy }: AddMoneyProps) {
 
       <div className="flex flex-col gap-3.5 rounded-[22px] bg-card p-5 shadow-card-elev">
         <span className="font-mono text-xs uppercase tracking-[0.08em] text-ink-mid">Send dollars to your name</span>
-        <div className="flex items-center justify-between gap-3">
-          <span className="num flex min-w-0 flex-col gap-0.5">
-            <span className="select-all truncate text-2xl font-semibold tracking-[-0.02em]">
+        <div className="flex flex-col">
+          <div className="flex items-center justify-between gap-3">
+            <span className="num min-w-0 select-all truncate text-2xl font-semibold tracking-[-0.02em]">
               {name ?? shortAddress(address)}
             </span>
-            {name && <span className="select-all text-xs text-subtle">{shortAddress(address)}</span>}
-          </span>
-          <button
-            type="button"
-            onClick={onCopy}
-            aria-label="Copy address"
-            className="flex size-11 shrink-0 items-center justify-center rounded-[22px] bg-chip text-ink"
-          >
-            <CopyIcon />
-          </button>
+            <button
+              type="button"
+              onClick={() => onCopy(name ? "name" : "address")}
+              aria-label={name ? "Copy name" : "Copy address"}
+              className="flex size-11 shrink-0 items-center justify-center rounded-[22px] bg-chip text-ink"
+            >
+              <CopyIcon />
+            </button>
+          </div>
+          {name && (
+            <button
+              type="button"
+              onClick={() => onCopy("address")}
+              aria-label="Copy address"
+              className="num -mt-1 flex min-h-11 items-center gap-1.5 self-start text-xs text-subtle touch:active:opacity-60"
+            >
+              {shortAddress(address)}
+              <CopyIcon size={13} />
+            </button>
+          )}
         </div>
         <AddressQr address={address} />
         <p className="num m-0 text-sm leading-[1.45] text-ink-mid">
@@ -92,12 +104,12 @@ export function TopUpSheet({ open, address, onClose }: { open: boolean; address:
   const setup = useCashSetup(address);
   const arrived = arrivedView(arrivedCoins(useCashCoinBalances(address)), setup.entry);
   const earning = setup.save === "on" || setup.save === "starting";
-  const copy = async () => {
+  const copy = async (what: "name" | "address") => {
     try {
-      await navigator.clipboard.writeText(address);
-      toast("Address copied");
+      await navigator.clipboard.writeText(what === "name" && name ? name : address);
+      toast(what === "name" && name ? "Name copied" : "Address copied");
     } catch {
-      toast("Couldn’t copy. Press and hold the address instead.");
+      toast("Couldn’t copy. Press and hold it instead.");
     }
   };
 
@@ -109,7 +121,7 @@ export function TopUpSheet({ open, address, onClose }: { open: boolean; address:
       name={name ?? null}
       rate={earning && data ? rateText(aprToApy(data.savingsApr)) : null}
       arrived={<TurnIntoCash user={address} view={arrived} setup={setup} active={open} />}
-      onCopy={() => void copy()}
+      onCopy={(what) => void copy(what)}
     />
   );
 }
