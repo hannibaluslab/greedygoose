@@ -143,47 +143,15 @@ export function EarnStep({
   const [ack, setAck] = useState(false);
   const amount = Math.max(0, Number(raw) || 0);
   const creditRaw = parseUnits(amount.toFixed(USDC.decimals), USDC.decimals);
-  const apyNow = aprToApy(data.apr);
-
-  // The plan first, for the batch the rate after it is read from.
-  const draft = earnQuote({
-    offer,
-    position: data,
-    options,
-    cash: data.cash,
-    creditRaw,
-    creditApyNow: apyNow,
-    creditApyAfter: null,
-  });
-  const read = useEarnRates({
-    user,
-    backing: draft.plan.backing,
-    creditRaw,
-    cash: data.cash,
-    apyNow,
-    enabled: fixedApyAfter === undefined,
-  });
-  const apyAfter = fixedApyAfter ?? read.apyAfter;
-  const quote =
-    apyAfter === null
-      ? draft
-      : earnQuote({
-          offer,
-          position: data,
-          options,
-          cash: data.cash,
-          creditRaw,
-          creditApyNow: apyNow,
-          creditApyAfter: apyAfter,
-        });
+  const quote = useEarnQuote({ user, data, offer, options, creditRaw, fixedApyAfter });
   const { plan } = quote;
 
   const block = amount > 0 ? earnBlock(quote, offer) : null;
   const ready = amount > 0 && !block && quote.left !== null;
   const tick = ready && plan.extraConfirm;
   // What the button would sign now, prepared while the step is idle so the tap opens JAW's sheet at once.
-  const signable =
-    ready && !(tick && !ack) && !feeBlocked && planFor ? planFor({ user, quote, offer, confirmedRisk: ack }) : null;
+  const allowed = ready && !(tick && !ack) && !feeBlocked;
+  const signable = allowed && planFor ? planFor({ user, quote, offer, confirmedRisk: ack }) : null;
   const prepared = usePrepare(prep, signable);
 
   // D2's tick is for the status it names: a price refresh that moves the result (Watch to Act) asks again.
@@ -193,43 +161,16 @@ export function EarnStep({
     setAck(false);
   }
 
-  // What backs it: what the plan puts in use and what's in use already, the stock picked first.
-  const lead = plan.backing[0]?.stock.symbol ?? [...options].sort((a, b) => b.cf - a.cf)[0]?.stock.symbol;
-  const adding = plan.backing.length
-    ? plan.backing.map((b) => b.stock.symbol)
-    : data.totalBackingUsd > 0 || !lead
-      ? []
-      : [lead];
-  const backedBy = backers(data.holdings, adding, lead);
-
+  const backedBy = backedByOf(plan, options, data);
   const hint = earnHint(offer);
-
   const cost = amount > 0 ? quote.cost : offer.rates.cost;
-  const left = amount > 0 ? quote.left : offer.rates.left;
-  const leftText =
-    left === null
-      ? "…"
-      : amount > 0 && quote.leftUsdYear !== null
-        ? `about ${pctText(left)} · ${quote.leftUsdYear >= 1 ? formatUsdTrim(quote.leftUsdYear) : "under $1"} a year`
-        : `about ${pctText(left)} a year`;
-
-  const backingShares = plan.backing.map((b) => {
-    const h = data.holdings.find((x) => x.symbol === b.stock.symbol)!;
-    return { symbol: b.stock.symbol, shares: rawToShares(b.raw, h.multiplier, b.stock.decimals) };
-  });
+  const leftText = leftTextOf(amount, quote, offer);
 
   return (
     <>
       <AmountField
         label="Add to my cash"
-        source={
-          backedBy.length > 0 && (
-            <AmountSource mark={<StockAvatar symbol={backedBy[0].symbol} size={16} />}>
-              Backed by {backedBy[0].name}
-              {backedBy.length > 1 ? ` +${backedBy.length - 1}` : ""}
-            </AmountSource>
-          )
-        }
+        source={backedBy.length > 0 && <BackedBySource backedBy={backedBy} />}
         badge={<AmountBadge kind="credit" />}
         value={raw}
         onValue={(v) => {
@@ -254,15 +195,11 @@ export function EarnStep({
       <p className="m-0 px-0.5 text-[12.5px] leading-[1.45] text-subtle">
         Both rates are variable. It starts earning right away.
       </p>
-      {(block || plan.priceMayMove) && (
-        <p role="status" className={`m-0 text-[13px] leading-snug ${block ? "text-act" : "text-watch-text"}`}>
-          {block ?? "Stock markets are closed. You can still do this, but prices can jump when they reopen."}
-        </p>
-      )}
+      <EarnNote block={block} closed={plan.priceMayMove} />
       {ready && (
         <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">
           {earnSmallPrint({
-            backing: backingShares,
+            backing: backingSharesOf(plan, data),
             amountUsd: amount,
             owedUsd: data.debtUsd + amount,
             backedBy: backedBy.map((h) => h.name),
@@ -294,10 +231,85 @@ export function EarnStep({
           phase={phase}
           checking={prepared.checking}
           preview={preview}
-          disabled={!ready || (tick && !ack) || !!feeBlocked || prepared.blocked || phase === "done"}
+          disabled={!allowed || prepared.blocked || phase === "done"}
           onClick={() => onEarn(quote, ack)}
         />
       </div>
     </>
+  );
+}
+
+/**
+ * One amount's quote: the plan first, for the batch the rate after it is read from (useEarnRates, or the dev gallery's
+ * fixed rate), then the quote with that rate once it's in.
+ */
+function useEarnQuote(p: {
+  user: `0x${string}`;
+  data: PositionData;
+  offer: EarnOpen;
+  options: BackingOption[];
+  creditRaw: bigint;
+  fixedApyAfter: number | undefined;
+}) {
+  const { user, data, offer, options, creditRaw } = p;
+  const apyNow = aprToApy(data.apr);
+  const base = { offer, position: data, options, cash: data.cash, creditRaw, creditApyNow: apyNow };
+  const draft = earnQuote({ ...base, creditApyAfter: null });
+  const read = useEarnRates({
+    user,
+    backing: draft.plan.backing,
+    creditRaw,
+    cash: data.cash,
+    apyNow,
+    enabled: p.fixedApyAfter === undefined,
+  });
+  const apyAfter = p.fixedApyAfter ?? read.apyAfter;
+  return apyAfter === null ? draft : earnQuote({ ...base, creditApyAfter: apyAfter });
+}
+
+/** What backs it: what the plan puts in use and what's in use already, the stock picked first. */
+function backedByOf(plan: EarnQuote["plan"], options: BackingOption[], data: PositionData) {
+  const lead = plan.backing[0]?.stock.symbol ?? [...options].sort((a, b) => b.cf - a.cf)[0]?.stock.symbol;
+  const adding = plan.backing.length
+    ? plan.backing.map((b) => b.stock.symbol)
+    : data.totalBackingUsd > 0 || !lead
+      ? []
+      : [lead];
+  return backers(data.holdings, adding, lead);
+}
+
+/** What's left after the credit's cost: a percent a year, and in dollars once an amount is typed. */
+function leftTextOf(amount: number, quote: EarnQuote, offer: EarnOpen): string {
+  const left = amount > 0 ? quote.left : offer.rates.left;
+  if (left === null) return "…";
+  if (amount > 0 && quote.leftUsdYear !== null)
+    return `about ${pctText(left)} · ${quote.leftUsdYear >= 1 ? formatUsdTrim(quote.leftUsdYear) : "under $1"} a year`;
+  return `about ${pctText(left)} a year`;
+}
+
+/** The shares each stock puts in use, for the small print. */
+const backingSharesOf = (plan: EarnQuote["plan"], data: PositionData) =>
+  plan.backing.flatMap((b) => {
+    const h = data.holdings.find((x) => x.symbol === b.stock.symbol);
+    return h ? [{ symbol: b.stock.symbol, shares: rawToShares(b.raw, h.multiplier, b.stock.decimals) }] : [];
+  });
+
+/** The amount card's source: the stock that backs it, and how many more. */
+function BackedBySource({ backedBy }: { backedBy: { symbol: string; name: string }[] }) {
+  return (
+    <AmountSource mark={<StockAvatar symbol={backedBy[0].symbol} size={16} />}>
+      Backed by {backedBy[0].name}
+      {backedBy.length > 1 ? ` +${backedBy.length - 1}` : ""}
+    </AmountSource>
+  );
+}
+
+/** Why this amount can't go ahead (act), or that markets are closed (watch). */
+function EarnNote({ block, closed }: { block: string | null; closed: boolean }) {
+  if (!block && !closed) return null;
+  return (
+    <p role="status" className={`m-0 text-[13px] leading-snug ${block ? "text-act" : "text-watch-text"}`}>
+      {block ?? "Stock markets are closed. You can still do this, but prices can jump when they reopen."}
+    </p>
   );
 }
