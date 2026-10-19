@@ -22,6 +22,8 @@ const keepBackRaw = usdcRaw(CASH.keepBackUsd);
 export const feeBufferRaw = usdcRaw(CASH.feeBufferUsd);
 
 export const cashRaw = (c: Cash) => c.walletRaw + c.savingsRaw;
+/** The cash can't keep the network-fee buffer, so a sale (Trade's stock → stock, Repay's) pays its own fee. */
+export const feeFromSale = (cash: Cash) => cashRaw(cash) < feeBufferRaw;
 /**
  * How much of the fuel tank (the cash kept back for network fees) is there, in whole cents rounded down: a tank a
  * fraction of a cent short never reads full.

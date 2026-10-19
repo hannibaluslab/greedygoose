@@ -11,7 +11,7 @@ import { TxStop } from "@/hooks/useTx";
 import { swapBatch, type SwapReads } from "@/hooks/useTrade";
 import { AAVE } from "@/lib/aave/addresses";
 import { assertAllowed, swapOf } from "@/lib/allowlist";
-import { feeBufferRaw, payFromCash, type Cash } from "@/lib/cash";
+import { feeBufferRaw, feeFromSale, payFromCash, type Cash } from "@/lib/cash";
 import { PROTOCOLS } from "@/lib/protocols/config";
 import { aaveV3PoolAbi } from "@/lib/protocols/abis";
 import { aeroRouterAbi } from "@/lib/swap/abis";
@@ -27,7 +27,6 @@ import {
   clampAmount,
   defaultLegs,
   emptyLine,
-  feeFromSale,
   fromOptions,
   maxUsdOf,
   planTrade,

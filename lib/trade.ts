@@ -3,7 +3,7 @@ import { CASH } from "@/config/risk";
 import { ORACLE_DECIMALS } from "@/lib/aave/addresses";
 import type { ActivityItem } from "@/lib/activity/decode";
 import { assertAllowed } from "@/lib/allowlist";
-import { feeBufferRaw, maxSpendRaw, toUsd, type Cash } from "@/lib/cash";
+import { feeBufferRaw, feeFromSale, maxSpendRaw, toUsd, type Cash } from "@/lib/cash";
 import { formatShares, formatUsd } from "@/lib/formatting";
 import { marketState } from "@/lib/market-hours";
 import { NO_DUST_USD, SELL_BLOCKED, planSell, type SellBlock, type SellPlan, type SellPosition } from "@/lib/sell";
@@ -84,9 +84,6 @@ export function sharesForUsdRaw(usdRaw: bigint, priceRaw: bigint, decimals: numb
  */
 const freeCents = (h: TradeHolding, stock: ReserveAsset) =>
   (h.freeRaw * h.priceRaw) / 10n ** BigInt(stock.decimals + ORACLE_DECIMALS - 2);
-
-/** The cash can't keep the network-fee buffer, so a stock → stock sale pays its own fee. */
-export const feeFromSale = (cash: Cash) => cash.walletRaw + cash.savingsRaw < feeBufferRaw;
 
 /**
  * What the buy in a stock → stock trade spends: exactly the sale's floor, which the router guarantees reaches the

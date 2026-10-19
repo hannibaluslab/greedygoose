@@ -1,7 +1,7 @@
 import { parseUnits } from "viem";
 import { CASH } from "@/config/risk";
 import { fullRepayAmount } from "@/lib/aave/tx";
-import { cashRaw, feeBufferRaw, maxSpendRaw, toUsd, type Cash } from "@/lib/cash";
+import { cashRaw, feeBufferRaw, feeFromSale, maxSpendRaw, toUsd, type Cash } from "@/lib/cash";
 import { formatShares, formatUsd, formatUsdTrim } from "@/lib/formatting";
 import { homeStatus, statusFor, type Status } from "@/lib/risk/status";
 import {
@@ -133,9 +133,6 @@ const stockOf = (symbol: string) => EQUITIES.find((e) => e.symbol === symbol);
 /** Dollars to the cent: up for a full repay (what's owed is never shown as less), down otherwise. */
 const toCents = (usd: number, up: boolean) => (up ? Math.ceil(usd * 100 - 1e-6) : Math.floor(usd * 100 + 1e-6)) / 100;
 
-/** The cash can't keep the network-fee buffer, so a sale pays the fee (as the Trade sheet's `feeFromSale`). */
-const cashCantPayFee = (cash: Cash) => cashRaw(cash) < feeBufferRaw;
-
 /**
  * "Pay with", in Adrian's order: the cash, then each stock held free, then each stock that backs the credit; within each
  * group the one that can repay the most first. Only rows that can repay at least $1 (or all of it, when less is owed)
@@ -146,7 +143,7 @@ const cashCantPayFee = (cash: Cash) => cashRaw(cash) < feeBufferRaw;
 export function repaySources(data: RepayData, cfs: Record<string, number> | undefined): RepaySource[] {
   if (data.debtRaw <= 0n) return [];
   const fee = CASH.feeBufferUsd;
-  const feeFromSale = cashCantPayFee(data.cash);
+  const fromSale = feeFromSale(data.cash);
   const cap = (usd: number) => Math.max(0, Math.min(usd, data.debtUsd));
   const cash: RepaySource = {
     id: "cash",
@@ -173,8 +170,8 @@ export function repaySources(data: RepayData, cfs: Record<string, number> | unde
         cf: 0,
         maxSharesRaw: h.freeRaw,
         valueUsd: h.freeUsd,
-        feeFromSale,
-        estUsd: cap(h.freeUsd * SLIP_KEEP - (feeFromSale ? fee : 0)),
+        feeFromSale: fromSale,
+        estUsd: cap(h.freeUsd * SLIP_KEEP - (fromSale ? fee : 0)),
       },
     ];
   });
