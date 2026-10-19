@@ -48,6 +48,14 @@ Measured on 2026-10-19, on `v2` at `391053a` and the Credit Buy split after it; 
 Each row is done module by module as V1 (engines) and V2 (screens) reach it, never as one big sweep across working
 code.
 
+## Before the executor's pre-launch redeploy
+
+- **The Entry agent's coins.** `ENTRY_COINS` (lib/tokens/stables.ts) mirrors `contracts/src/jobs/EntryJob.sol` and the
+  Entry permission's hash, so it still holds USDT, USDe, USDbC and USDS. The user's own Turn into cash already uses
+  `CASH_COINS` (USDT, USDe, USDS, DAI, EURC). At the redeploy, EntryJob takes `CASH_COINS`' list, with EURC's floor at
+  Chainlink's EUR / USD rate (refused when stale), and `ENTRY_COINS` follows it. Until then `arrivedView` asks the user
+  to turn DAI and EURC into cash even while the Entry grant runs.
+
 ## Branches
 
 - `v2` is the line for the new version. It holds everything from `jl/welcome-bg`, `main`, `jl/credit-cap-act` and

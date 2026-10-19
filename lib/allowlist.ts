@@ -22,7 +22,7 @@ import { aaveV3PoolAbi } from "@/lib/protocols/abis";
 import { aeroRouterAbi, psm3Abi, swapRouter02Abi } from "@/lib/swap/abis";
 import { AERODROME, AERODROME_V1, ROUTERS, SPARK_PSM3, UNISWAP } from "@/lib/swap/venues";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
-import { ENTRY_COINS, type EntryVenue } from "@/lib/tokens/stables";
+import { CASH_COINS, type EntryVenue } from "@/lib/tokens/stables";
 
 type Address = `0x${string}`;
 /**
@@ -50,34 +50,32 @@ const oneOf = (a: unknown, list: readonly Address[]) => list.some((b) => is(a, b
 const TOKENS: readonly Address[] = [USDC.address, ...EQUITIES.map((e) => e.address)];
 const SPENDERS: readonly Address[] = [AAVE.SPOKE, ...ROUTERS];
 
-/** Where each Entry coin is converted (lib/tokens/stables.ts), and the coins converted at a kind of venue. */
+/** Where a coin of Turn into cash is converted (lib/tokens/stables.ts), and the pool its swap names there. */
 const venueOf = (v: EntryVenue): Address => (v.kind === "psm3" ? v.psm : v.router);
-const ENTRY_AT = (kind: EntryVenue["kind"]): readonly Address[] =>
-  ENTRY_COINS.filter((c) => c.venue.kind === kind).map((c) => c.address);
+const poolOf = (v: EntryVenue) => (v.kind === "aerodrome" ? v.tickSpacing : v.kind === "uniswap" ? v.fee : null);
 
 /** Aave V4 spoke calls: the third argument (onBehalfOf) is the position, and it must be the user's. */
 const forUser: ArgsCheck = (args, user) => is(args[2], user);
+type SwapArgs = { tokenIn: unknown; tokenOut: unknown; recipient: unknown };
+/** A swap between registry tokens that pays out to the user. */
+const swapToUser: ArgsCheck = (args, user) => {
+  const p = args[0] as SwapArgs;
+  return is(p.recipient, user) && oneOf(p.tokenIn, TOKENS) && oneOf(p.tokenOut, TOKENS);
+};
 /**
- * A swap that pays out to the user: between registry tokens, or (`entry`) one of the Entry coins converted on this
- * router into USDC.
+ * A coin of Turn into cash into USDC for the user, on the one venue (`ctx.to`) and pool (`pool`: Aerodrome's tick
+ * spacing, Uniswap's fee, none at PSM3) that converts it, and nothing else.
  */
-const swapToUser =
-  (entry: readonly Address[] = []): ArgsCheck =>
-  (args, user) => {
-    const p = args[0] as { tokenIn: unknown; tokenOut: unknown; recipient: unknown };
-    if (!is(p.recipient, user)) return false;
-    return (
-      (oneOf(p.tokenIn, TOKENS) && oneOf(p.tokenOut, TOKENS)) ||
-      (oneOf(p.tokenIn, entry) && is(p.tokenOut, USDC.address))
-    );
-  };
-/** An Entry coin into USDC for the user, and nothing else (Aerodrome's first deployment, PSM3). */
-const convertToUser =
-  (entry: readonly Address[]): ArgsCheck =>
-  (args, user) => {
-    const p = args[0] as { tokenIn: unknown; tokenOut: unknown; recipient: unknown };
-    return is(p.recipient, user) && oneOf(p.tokenIn, entry) && is(p.tokenOut, USDC.address);
-  };
+const convertsForUser = (p: SwapArgs, pool: unknown, user: Address, ctx: BatchContext) => {
+  const coin = CASH_COINS.find((c) => is(p.tokenIn, c.address));
+  return (
+    !!coin &&
+    is(p.recipient, user) &&
+    is(p.tokenOut, USDC.address) &&
+    is(ctx.to, venueOf(coin.venue)) &&
+    pool === poolOf(coin.venue)
+  );
+};
 /** The swap inside Uniswap's multicall(deadline, data): exactly one call, and it must be exactInputSingle. */
 function innerSwap(data: readonly Hex[]): readonly unknown[] | null {
   if (data.length !== 1) return null;
@@ -91,7 +89,9 @@ function innerSwap(data: readonly Hex[]): readonly unknown[] | null {
 /** Uniswap's router takes the deadline through multicall: one swap inside, to the user. */
 const swapWithDeadline: ArgsCheck = (args, user, ctx) => {
   const inner = innerSwap(args[1] as readonly Hex[]);
-  return !!inner && swapToUser(ENTRY_AT("uniswap"))(inner, user, ctx);
+  if (!inner) return false;
+  const p = inner[0] as SwapArgs & { fee: unknown };
+  return swapToUser(inner, user, ctx) || convertsForUser(p, p.fee, user, ctx);
 };
 
 /** An EFP list location on Base, in the records contract the app reads (lib/efp/read.ts): the slot it mints. */
@@ -170,8 +170,8 @@ const bareJoin: ArgsCheck = (args, _user, ctx) => args.length === 0 && ctx.data.
  * to the recipient its batch declares (`transferOut`). Savings go in only in Earn with stocks', Start earning's and a
  * sale into cash's batches, which declare it (`saveTo`): one USDC supply for the user, approved to Aave V3's pool for exactly that amount
  * (`saveForUser`, `savingsApprove`). Buys, repays and savings-first batches mix
- * targets, so each target is held to its own functions. An Entry coin is approved only to the venue that converts
- * it, and converted only into USDC (D20). GooseExecutor's settings move no money and apply to the signer alone
+ * targets, so each target is held to its own functions. A coin of Turn into cash is approved only to the venue that
+ * converts it, and converted only there, at its own pool, into USDC (D20). GooseExecutor's settings move no money and apply to the signer alone
  * (`msg.sender`): a mix must add up to 100% (or clear it).
  */
 const RULES: readonly Rule[] = [
@@ -183,7 +183,7 @@ const RULES: readonly Rule[] = [
       transfer: transferOut,
     },
   },
-  ...ENTRY_COINS.map((c) => ({
+  ...CASH_COINS.map((c) => ({
     targets: [c.address],
     abi: erc20Abi,
     functions: { approve: (args: readonly unknown[]) => is(args[0], venueOf(c.venue)) },
@@ -198,11 +198,16 @@ const RULES: readonly Rule[] = [
     abi: aaveV3PoolAbi,
     functions: { withdraw: (args, user) => is(args[0], USDC.address) && is(args[2], user), supply: saveForUser },
   },
-  { targets: [AERODROME.ROUTER], abi: aeroRouterAbi, functions: { exactInputSingle: swapToUser() } },
+  { targets: [AERODROME.ROUTER], abi: aeroRouterAbi, functions: { exactInputSingle: swapToUser } },
   {
     targets: [AERODROME_V1.ROUTER],
     abi: aeroRouterAbi,
-    functions: { exactInputSingle: convertToUser(ENTRY_AT("aerodrome")) },
+    functions: {
+      exactInputSingle: (args, user, ctx) => {
+        const p = args[0] as SwapArgs & { tickSpacing: unknown };
+        return convertsForUser(p, p.tickSpacing, user, ctx);
+      },
+    },
   },
   { targets: [UNISWAP.SWAP_ROUTER_02], abi: swapRouter02Abi, functions: { multicall: swapWithDeadline } },
   {
@@ -211,7 +216,7 @@ const RULES: readonly Rule[] = [
     functions: {
       // swapExactIn(assetIn, assetOut, amountIn, minAmountOut, receiver, referralCode)
       swapExactIn: (args, user, ctx) =>
-        convertToUser(ENTRY_AT("psm3"))([{ tokenIn: args[0], tokenOut: args[1], recipient: args[4] }], user, ctx),
+        convertsForUser({ tokenIn: args[0], tokenOut: args[1], recipient: args[4] }, null, user, ctx),
     },
   },
   { targets: [EFP_LIST_MINTER], abi: efpListMinterAbi, functions: { easyMint: mintsBaseList } },
@@ -339,7 +344,7 @@ function assertCall(
 }
 
 /**
- * Every approve, on every target (USDC, the stocks, the Entry coins, the savings approve), is for an exact amount:
+ * Every approve, on every target (USDC, the stocks, Turn into cash's coins, the savings approve), is for an exact amount:
  * max uint, or anything from 2^128 up, counts as unlimited and is refused. No balance comes near it.
  */
 const UNLIMITED_FROM = 2n ** 128n;

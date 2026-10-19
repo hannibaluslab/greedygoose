@@ -20,7 +20,7 @@ import { AAVE } from "@/lib/aave/addresses";
 import { swapRouter02Abi } from "@/lib/swap/abis";
 import { UNISWAP } from "@/lib/swap/venues";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
-import { ENTRY_COINS } from "@/lib/tokens/stables";
+import { CASH_COINS } from "@/lib/tokens/stables";
 
 const user = "0x000000000000000000000000000000000000dEaD";
 const attacker = "0x00000000000000000000000000000000000000ee";
@@ -108,7 +108,7 @@ describe("assertAllowed (one allowlist for every user batch)", () => {
     for (const amount of unlimited) {
       expect(() => assertAllowed(user, [approve(USDC.address, AAVE.SPOKE, amount)])).toThrow(/unexpected/);
       expect(() => assertAllowed(user, [approve(nvda.address, UNISWAP.SWAP_ROUTER_02, amount)])).toThrow(/unexpected/);
-      for (const coin of ENTRY_COINS) {
+      for (const coin of CASH_COINS) {
         const venue = coin.venue.kind === "psm3" ? coin.venue.psm : coin.venue.router;
         expect(() => assertAllowed(user, [approve(coin.address, venue, amount)])).toThrow(/unexpected/);
       }
@@ -134,7 +134,7 @@ describe("assertAllowed (one allowlist for every user batch)", () => {
     }
     // Just under the line, as any real balance is, still passes.
     expect(() => assertAllowed(user, [approve(USDC.address, AAVE.SPOKE, 2n ** 128n - 1n)])).not.toThrow();
-    const [coin] = ENTRY_COINS;
+    const [coin] = CASH_COINS;
     const venue = coin.venue.kind === "psm3" ? coin.venue.psm : coin.venue.router;
     expect(() => assertAllowed(user, [approve(coin.address, venue, 10n ** 24n)])).not.toThrow();
   });
