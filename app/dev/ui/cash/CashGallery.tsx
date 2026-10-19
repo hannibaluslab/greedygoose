@@ -3,11 +3,11 @@
 import type { ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { TopUpSheetView } from "@/components/gg/AddMoney";
+import { TopUpSheetView } from "@/components/gg/cash/AddMoney";
 import { AgentsFeed } from "@/components/gg/Agents";
 import { BalanceHero, TodayChange } from "@/components/gg/BalanceHero";
 import { CashCard, CreditCard } from "@/components/gg/Cards";
-import { ArrivedCard, AutomaticStep, cashNowText, StartEarningCard } from "@/components/gg/CashSetup";
+import { ArrivedCard, AutomaticStep, cashNowText, StartEarningCard } from "@/components/gg/cash/CashSetup";
 import { QuickAction } from "@/components/gg/QuickAction";
 import { TabHeader } from "@/components/gg/Screen";
 import { TabBar } from "@/components/gg/TabBar";

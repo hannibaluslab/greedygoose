@@ -4,7 +4,7 @@ import { useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { isAddress } from "viem";
 import { useAccount, useSwitchChain } from "wagmi";
-import { MoneySheets } from "@/components/gg/MoneySheets";
+import { MoneySheets } from "@/components/gg/cash/MoneySheets";
 import { CHAIN } from "@/lib/chain";
 
 const noopSubscribe = () => () => {};

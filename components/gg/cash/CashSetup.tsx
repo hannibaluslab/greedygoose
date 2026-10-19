@@ -3,10 +3,10 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
-import { ActivityAvatar } from "./activity/Activity";
-import { Summary, type SummaryRow } from "./Summary";
-import { TxButton, TxDone, TxError } from "./TxUi";
-import { TrendUpIcon } from "./icons";
+import { ActivityAvatar } from "../activity/Activity";
+import { Summary, type SummaryRow } from "../Summary";
+import { TxButton, TxDone, TxError } from "../TxUi";
+import { TrendUpIcon } from "../icons";
 import { useConvert, useConvertQuotes } from "@/hooks/useConvert";
 import { NOT_FAIR, type ConvertQuote } from "@/lib/tx/plans";
 import type { GrantView, useCashSetup } from "@/hooks/useCashSetup";

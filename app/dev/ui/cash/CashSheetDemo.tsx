@@ -1,9 +1,9 @@
 "use client";
 
 import { toast } from "sonner";
-import { CashFeed } from "@/components/gg/CashActivity";
-import { CashStep, cashLead } from "@/components/gg/CashSheet";
-import { EarnStep } from "@/components/gg/EarnWithStocks";
+import { CashFeed } from "@/components/gg/cash/CashActivity";
+import { CashStep, cashLead } from "@/components/gg/cash/CashSheet";
+import { EarnStep } from "@/components/gg/cash/EarnWithStocks";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import type { Holding, PositionData } from "@/hooks/usePosition";
 import type { CashFeedError } from "@/lib/cashActivity";

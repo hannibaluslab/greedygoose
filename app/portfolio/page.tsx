@@ -6,7 +6,7 @@ import { TabBar } from "@/components/gg/TabBar";
 import { TabHeader } from "@/components/gg/Screen";
 import { BalanceHero, TodayChange, TodayPending } from "@/components/gg/BalanceHero";
 import { Button } from "@/components/gg/Button";
-import { useMoneySheets } from "@/components/gg/MoneySheets";
+import { useMoneySheets } from "@/components/gg/cash/MoneySheets";
 import { StockSheets, useStockSheets } from "@/components/gg/stock/StockSheets";
 import { HoldingList, HoldingRow } from "@/components/gg/stock/Holding";
 import { ValueLine } from "@/components/gg/ValueLine";

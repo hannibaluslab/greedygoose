@@ -2,12 +2,12 @@
 
 import { useState, type ReactNode } from "react";
 import { parseUnits } from "viem";
-import { AmountBadge, AmountField, AmountSource } from "./AmountField";
-import { Button } from "./Button";
-import { StatusChange } from "./Status";
-import { StockAvatar } from "./StockAvatar";
-import { Summary } from "./Summary";
-import { TxButton, TxError } from "./TxUi";
+import { AmountBadge, AmountField, AmountSource } from "../AmountField";
+import { Button } from "../Button";
+import { StatusChange } from "../Status";
+import { StockAvatar } from "../StockAvatar";
+import { Summary } from "../Summary";
+import { TxButton, TxError } from "../TxUi";
 import { usePrepare, type TxPhase, type TxPlan, type TxPrep } from "@/hooks/useTx";
 import { useEarnRates } from "@/hooks/useEarnWithStocks";
 import type { EarnInput } from "@/lib/tx/plans";
