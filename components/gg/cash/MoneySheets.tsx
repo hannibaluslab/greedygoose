@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { TopUpSheet } from "./AddMoney";
-import { RepaySheet } from "@/components/repay/RepaySheet";
+import { RepaySheet } from "@/components/gg/repay/RepaySheet";
 import { useSheetSubject } from "@/hooks/useSheetSubject";
 
 /** The two money sheets every signed-in page can open over itself (Adrian: "top up and repay should open a sheet"). */
