@@ -10,7 +10,14 @@ import type { useBuyQuote } from "@/hooks/useBuyQuote";
 import type { useCreditBuy } from "@/hooks/useCreditBuy";
 import type { PositionData } from "@/hooks/usePosition";
 import { monthlyCost } from "@/lib/aave/math";
-import { backers, shortNames, type BackingOption, type BackingPick, type CreditPlan } from "@/lib/creditBuy";
+import {
+  CREDIT_BLOCKED,
+  backers,
+  shortNames,
+  type BackingOption,
+  type BackingPick,
+  type CreditPlan,
+} from "@/lib/creditBuy";
 import { formatShares, formatUsd, formatUsdTrim, inWords, monthlyCostText } from "@/lib/formatting";
 import { STATUS_LABEL } from "@/lib/risk/status";
 import { BUY_LIMITS, type BuyQuote, type quoteEconomics } from "@/lib/swap/buy";
@@ -38,6 +45,40 @@ function backingLineOf(data: PositionData, chosen: BackingOption | null, pick: B
     : pick.raw <= 0n
       ? `Backed by ${chosen.stock.name}`
       : `Backed by ${pick.raw >= chosen.freeRaw ? "all " : ""}${formatShares(backedShares)} ${chosen.stock.name} · ${backedText(backedUsd)}`;
+}
+
+/** Why the amount can't be bought yet, first reason only; none when it can. */
+export function amountBlocker({
+  pickGone,
+  amount,
+  reachUsd,
+  chosen,
+  plan,
+  stock,
+  quote,
+  econ,
+}: {
+  pickGone: boolean;
+  amount: number;
+  reachUsd: number;
+  chosen: BackingOption | null;
+  plan: CreditPlan;
+  stock: ReserveAsset | null;
+  quote: ReturnType<typeof useBuyQuote>;
+  econ: ReturnType<typeof quoteEconomics> | null;
+}): string | null {
+  if (pickGone) return "That stock can’t back credit right now.";
+  if (amount > 0 && amount < BUY_LIMITS.minUsd) return `Minimum buy is ${formatUsd(BUY_LIMITS.minUsd)}.`;
+  if (amount > reachUsd + 1e-9)
+    return chosen
+      ? `${chosen.stock.name} can back up to ${wholeUsd(reachUsd)}. Pick another stock for more.`
+      : `Credit ready goes up to ${wholeUsd(reachUsd)}. Back new credit with a stock for more.`;
+  if (amount > 0 && plan.block) return CREDIT_BLOCKED[plan.block];
+  if (stock && amount > 0 && quote.isSuccess && (quote.data ?? null) === null)
+    return `There’s no market for ${stock.name} right now.`;
+  if (econ && econ.premium > BUY_LIMITS.blockPremium)
+    return `Too big for the market right now: you’d pay ${(econ.premium * 100).toFixed(1)}% over Aave’s price. Try a smaller amount.`;
+  return null;
 }
 
 /** Step 3 (F2-5): the amount to buy on credit, what backs it, how far it moves the credit, and the Credit Buy button. */

@@ -6,10 +6,10 @@ import { useAccount } from "wagmi";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { Button } from "./Button";
 import { useMoneySheets } from "./MoneySheets";
-import { LeaveForRepay, wholeUsd } from "./CreditBuyBacking";
+import { LeaveForRepay } from "./CreditBuyBacking";
 import { CreditHero, CreditPending, StockLists } from "./CreditBuyStocks";
 import { CreditBuyBackStep, useBackingPick } from "./CreditBuyBackStep";
-import { CreditBuyAmountStep } from "./CreditBuyAmountStep";
+import { CreditBuyAmountStep, amountBlocker } from "./CreditBuyAmountStep";
 import { useAgents } from "@/hooks/useAgents";
 import { useBoughtHome } from "@/hooks/useBoughtHome";
 import { useBuyQuote } from "@/hooks/useBuyQuote";
@@ -17,8 +17,7 @@ import { useCreditBuy } from "@/hooks/useCreditBuy";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { useBackingFactorsRead, type PositionData } from "@/hooks/usePosition";
 import { cashRaw, feeBufferRaw } from "@/lib/cash";
-import { CREDIT_BLOCKED, CREDIT_FROM, FEE_FIRST, backingForBuy, planCredit, type BackingPick } from "@/lib/creditBuy";
-import { formatUsd } from "@/lib/formatting";
+import { CREDIT_FROM, FEE_FIRST, backingForBuy, planCredit, type BackingPick } from "@/lib/creditBuy";
 import { BUY_LIMITS, quoteEconomics } from "@/lib/swap/buy";
 import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
 
@@ -114,18 +113,7 @@ export function CreditBuySheet({
   const oraclePriceUsd = stock ? priceOf(stock.symbol) : 0;
   const econ = q && stock ? quoteEconomics(q, stock, oraclePriceUsd) : null;
 
-  let blocker: string | null = null;
-  if (pickGone) blocker = "That stock can’t back credit right now.";
-  else if (amount > 0 && amount < BUY_LIMITS.minUsd) blocker = `Minimum buy is ${formatUsd(BUY_LIMITS.minUsd)}.`;
-  else if (amount > reachUsd + 1e-9)
-    blocker = chosen
-      ? `${chosen.stock.name} can back up to ${wholeUsd(reachUsd)}. Pick another stock for more.`
-      : `Credit ready goes up to ${wholeUsd(reachUsd)}. Back new credit with a stock for more.`;
-  else if (amount > 0 && plan.block) blocker = CREDIT_BLOCKED[plan.block];
-  else if (stock && amount > 0 && quote.isSuccess && q === null)
-    blocker = `There’s no market for ${stock.name} right now.`;
-  else if (econ && econ.premium > BUY_LIMITS.blockPremium)
-    blocker = `Too big for the market right now: you’d pay ${(econ.premium * 100).toFixed(1)}% over Aave’s price. Try a smaller amount.`;
+  const blocker = amountBlocker({ pickGone, amount, reachUsd, chosen, plan, stock, quote, econ });
   const ready = amount >= BUY_LIMITS.minUsd && !!econ && q?.amountIn === creditRaw && !blocker && !quote.isFetching;
   const feeBlocked = isConnected && fee.state === "unsupported";
   // What Credit Buy would sign now, prepared while the step is idle so the tap opens JAW's sheet at once.
