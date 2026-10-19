@@ -1,19 +1,9 @@
 import { describe, expect, it } from "vitest";
-import {
-  HttpRequestError,
-  LimitExceededRpcError,
-  RpcRequestError,
-  encodeAbiParameters,
-  encodeEventTopics,
-  erc20Abi,
-  getAbiItem,
-  pad,
-  type Hex,
-  type Log,
-} from "viem";
+import { encodeAbiParameters, encodeEventTopics, erc20Abi, getAbiItem, pad, type Hex, type Log } from "viem";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
-import { arrivalTxs, arrivalsOf, rangesToScan, rateLimited } from "@/lib/activity/arrivals";
+import { foldTransfers, type AlchemyTransfer, type TransferIn } from "@/lib/activity/alchemy";
+import { arrivalTxs, arrivalsOf } from "@/lib/activity/arrivals";
 import type { ActivityItem } from "@/lib/activity/decode";
 import type { AgentEvent } from "@/lib/agents/events";
 import { describeAgentEvent, type MoveContext } from "@/lib/agents/feed";
@@ -323,28 +313,51 @@ describe("money someone else sent", () => {
     expect(arrivalsOf([transfer(PROTOCOLS.AUSDC, user, usdc(40))], user)).toEqual([]);
   });
 
+  /** Alchemy's record of one transfer to the account: its token, raw amount, transaction, block and time. */
+  const record = (token: Address, raw: bigint, hash: Hex, block: number, iso = "2026-10-19T14:41:01.000Z") =>
+    ({
+      hash,
+      blockNum: `0x${block.toString(16)}`,
+      rawContract: { value: `0x${raw.toString(16)}`, address: token.toLowerCase() },
+      metadata: { blockTimestamp: iso },
+    }) as AlchemyTransfer;
+  const fold = (records: AlchemyTransfer[]) => [...foldTransfers(new Map(), records).values()];
+  const sentIn = (hash: Hex, block: bigint, usdcRaw: bigint, stock = false): TransferIn => ({
+    hash,
+    block,
+    t: 1_792_420_861,
+    usdcRaw,
+    stock,
+  });
+
+  it("folds Alchemy's records into one per transaction: its USDC added up, any stock, its block and time", () => {
+    expect(
+      fold([
+        record(USDC.address, usdc(1), tx(8), 10),
+        record(EQUITIES[0].address, 5n, tx(8), 10),
+        record(USDC.address, usdc(2), tx(8), 10),
+        record(USDC.address, usdc(3), tx(9), 12),
+      ]),
+    ).toEqual([sentIn(tx(8), 10n, usdc(3), true), sentIn(tx(9), 12n, usdc(3))]);
+  });
+
   it("reads each transaction once, newest first", () => {
-    const logs = [
-      transfer(other, user, usdc(1), tx(8), 10n),
-      transfer(other, user, usdc(2), tx(9), 12n),
-      transfer(other, user, usdc(3), tx(8), 10n),
-    ];
-    expect(arrivalTxs(logs)).toEqual([
-      { hash: tx(9), blockNumber: 12n },
-      { hash: tx(8), blockNumber: 10n },
+    expect(arrivalTxs([sentIn(tx(8), 10n, usdc(4)), sentIn(tx(9), 12n, usdc(2))])).toEqual([
+      sentIn(tx(9), 12n, usdc(2)),
+      sentIn(tx(8), 10n, usdc(4)),
     ]);
   });
 
   it("leaves out transactions that brought under a cent in all, before any receipt is fetched", () => {
-    const logs = [
-      transfer(other, user, 9_999n, tx(5), 20n), // dust: no receipt to fetch
-      transfer(other, user, 6_000n, tx(6), 21n), // two sub-cent transfers that add up to a cent or more
-      transfer(other, user, 4_000n, tx(6), 21n),
-      transfer(other, user, 10_000n, tx(7), 22n), // exactly a cent
-    ];
-    expect(arrivalTxs(logs)).toEqual([
-      { hash: tx(7), blockNumber: 22n },
-      { hash: tx(6), blockNumber: 21n },
+    const sent = fold([
+      record(USDC.address, 9_999n, tx(5), 20), // dust: no receipt to fetch
+      record(USDC.address, 6_000n, tx(6), 21), // two sub-cent transfers that add up to a cent or more
+      record(USDC.address, 4_000n, tx(6), 21),
+      record(USDC.address, 10_000n, tx(7), 22), // exactly a cent
+    ]);
+    expect(arrivalTxs(sent).map((t) => [t.hash, t.block])).toEqual([
+      [tx(7), 22n],
+      [tx(6), 21n],
     ]);
   });
 
@@ -363,7 +376,7 @@ describe("money someone else sent", () => {
       { kind: "receive", symbol: EQUITIES[0].symbol, amount: 10 ** 15 / 10 ** EQUITIES[0].decimals },
     ]);
     expect(arrivalsOf(sent, user)).toEqual([]);
-    expect(arrivalTxs([stockTransfer(other, user, 1n, tx(4), 30n)])).toEqual([{ hash: tx(4), blockNumber: 30n }]);
+    expect(arrivalTxs(fold([record(EQUITIES[0].address, 1n, tx(4), 30)])).map((t) => t.hash)).toEqual([tx(4)]);
   });
 
   it("never counts the account's own batch as money sent to it", () => {
@@ -379,46 +392,6 @@ describe("money someone else sent", () => {
       "0x",
     );
     expect(arrivalsOf([transfer(other, user, usdc(5)), userOp], user, true)).toEqual([]);
-  });
-
-  it("scans only the blocks never read, keeping one stretch with no gap", () => {
-    expect(rangesToScan(100n, 200n, null)).toEqual([{ from: 100n, to: 200n }]);
-    const kept = { lo: 100n, hi: 200n, txs: [] };
-    expect(rangesToScan(100n, 200n, kept)).toEqual([]);
-    expect(rangesToScan(100n, 260n, kept)).toEqual([{ from: 201n, to: 260n }]);
-    // Show earlier: the week below.
-    expect(rangesToScan(40n, 260n, kept)).toEqual([
-      { from: 201n, to: 260n },
-      { from: 40n, to: 99n },
-    ]);
-    // Back after a long break: from the stretch's top, so the blocks between are read too.
-    expect(rangesToScan(500n, 600n, kept)).toEqual([{ from: 201n, to: 600n }]);
-  });
-
-  it("doesn't ask again at once when the RPC rate-limits it", () => {
-    expect(rateLimited(new HttpRequestError({ status: 429, url: "https://mainnet.base.org" }))).toBe(true);
-    expect(rateLimited(new LimitExceededRpcError(new Error("limit")))).toBe(true);
-    // Base's public RPC: HTTP 429 with a JSON-RPC body viem reads as code -32011.
-    expect(
-      rateLimited(
-        new RpcRequestError({
-          body: {},
-          error: { code: -32011, message: "request limit reached" },
-          url: "https://mainnet.base.org",
-        }),
-      ),
-    ).toBe(true);
-    expect(
-      rateLimited(
-        new RpcRequestError({
-          body: {},
-          error: { code: -32000, message: "header not found" },
-          url: "https://mainnet.base.org",
-        }),
-      ),
-    ).toBe(false);
-    expect(rateLimited(new HttpRequestError({ status: 503, url: "https://mainnet.base.org" }))).toBe(false);
-    expect(rateLimited(new Error("network"))).toBe(false);
   });
 
   it("reads as Received, with no sender", () => {

@@ -360,11 +360,11 @@ export function cashFeedState(p: {
   own: { isError: boolean; isLoading: boolean };
   feed: { isError: boolean; isLoading: boolean };
   head: Read;
-  logs: Read;
+  transfers: Read;
   start: Read;
   txReads: readonly Read[];
 }): { live: CashFeedError; reading: boolean } {
-  const arrivalsFailed = p.arrivals && (p.head.isError || p.logs.isError || p.txReads.some((q) => q.isError));
+  const arrivalsFailed = p.arrivals && (p.head.isError || p.transfers.isError || p.txReads.some((q) => q.isError));
   const failed = [p.own.isError, p.executor && p.feed.isError, arrivalsFailed];
   const unread = [false, !p.executor, !p.arrivals];
   const live: CashFeedError = failed.every((f, i) => f || unread[i]) ? "all" : failed.some(Boolean) ? "some" : null;
@@ -372,7 +372,7 @@ export function cashFeedState(p: {
     p.own.isLoading ||
     p.feed.isLoading ||
     p.head.isPending ||
-    (p.windowKnown && ((p.arrivals && p.logs.isPending) || p.start.isPending)) ||
+    (p.windowKnown && ((p.arrivals && p.transfers.isPending) || p.start.isPending)) ||
     p.txReads.some((q) => q.isPending);
   return { live, reading };
 }

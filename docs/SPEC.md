@@ -26,11 +26,11 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
 
 - Quick actions: Top up, Trade, Credit Buy, Repay.
 - The menu: Activity, Guide (Coming soon, at /guide) and Settings.
-- Activity also lists money and stocks someone else sent ("Received …"), read from USDC's and the stocks' Transfer logs
-  to the account, a week at a time with Show earlier, back to the app's first block (2026-09-18). Received money is
-  money put in, not profit. Scanned blocks are kept on the phone. It needs an RPC that answers getLogs: Base's public
-  one refuses them, so it stays off until NEXT_PUBLIC_BASE_RPC_URL is set. The Cash sheet's "Received" rows (the last 7
-  days) wait for the same: until then it lists the user's own moves alone, with no "couldn’t load" notice.
+- Activity also lists money and stocks someone else sent ("Received …"), from Alchemy's Transfers API (USDC's and the
+  stocks' transfers to the account), a week at a time with Show earlier, back to the app's first block (2026-09-18).
+  Received money is money put in, not profit; under a cent in all is dust and isn't shown. Base's public RPC refuses
+  getLogs, so it stays off until NEXT_PUBLIC_ALCHEMY_KEY is set. The Cash sheet's "Received" rows (the last 7 days, USDC
+  only) wait for the same: until then it lists the user's own moves alone, with no "couldn’t load" notice.
 - A tap on the name in the header copies it ("sam.justan.id"), with a toast.
 - Under the total balance, all-time P&L once it can be added up (Adrian, 2026-10-19): "+$142.84 · +7.14% all time",
   and the line under it is that P&L at each day's end since the first money in, from $0 (a dashed line) to now. P&L

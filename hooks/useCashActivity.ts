@@ -1,34 +1,30 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { keepPreviousData, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { useBlockNumber, usePublicClient } from "wagmi";
-import type { Address, Log } from "viem";
+import type { Address } from "viem";
 import { useActivity } from "@/hooks/useActivity";
 import { useAgentFeed } from "@/hooks/useAgentFeed";
 import { useNowSec } from "@/hooks/useNowSec";
+import { useTransfersIn } from "@/hooks/useTransfersIn";
 import { CHAIN_ID } from "@/lib/chain";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
-import { LOG_CHUNK, WEEK_BLOCKS, logChunks } from "@/lib/agents/history";
-import { ARRIVALS_ON, arrivalTxs, arrivalsOf, rateLimited, readArrivalLogs } from "@/lib/activity/arrivals";
+import { LOG_CHUNK, WEEK_BLOCKS } from "@/lib/agents/history";
+import { ALCHEMY_ON } from "@/lib/activity/alchemy";
+import { arrivalsOf } from "@/lib/activity/arrivals";
 import { cashFeedState, cashRows, type Arrival, type CashFeedError } from "@/lib/cashActivity";
 
-/** A chunk this many blocks behind the head is final, and kept (as useAgentFeed keeps its own). */
-const SETTLED_BLOCKS = 300n;
-/** getLogs requests in flight at once, as useAgentFeed. */
-const PARALLEL = 4;
 const WEEK_MS = 7 * 86_400_000;
 
 /**
  * The Cash sheet's activity for the last 7 days: Activity's own sources filtered to the cash (the user's moves from
- * JAW's history and their receipts, and the executor's moves), plus money someone else sent, read from USDC's Transfer
- * logs to the account in useAgentFeed's chunks. Mounted only while the sheet is open; a chunk the chain has moved past
- * is read once and kept, so opening it again reads only the newest one. Only the first read shows the skeleton: after
- * it, each new block's read keeps the rows and the notice on screen until it settles (no flicker on a busy RPC).
+ * JAW's history and their receipts, and the executor's moves), plus money someone else sent (useTransfersIn, USDC
+ * only). Mounted only while the sheet is open. Only the first read shows the skeleton: after it, each new read keeps
+ * the rows and the notice on screen until it settles (no flicker on a busy RPC).
  */
 export function useCashActivity(account: Address) {
   const client = usePublicClient({ chainId: CHAIN_ID });
-  const queryClient = useQueryClient();
   const own = useActivity(account);
   const feed = useAgentFeed(account);
   const head = useBlockNumber({ chainId: CHAIN_ID, query: { refetchInterval: 20_000 } });
@@ -47,30 +43,8 @@ export function useCashActivity(account: Address) {
     queryFn: async () => Number((await client!.getBlock({ blockNumber: from! })).timestamp) * 1000,
   });
 
-  const logs = useQuery({
-    queryKey: ["cashArrivals", account, String(from), String(head.data)],
-    // Off on Base's public RPC, which refuses getLogs (ARRIVALS_ON): the sheet then shows the user's own moves alone.
-    enabled: !!client && from !== undefined && ARRIVALS_ON,
-    placeholderData: keepPreviousData,
-    // A rate limit isn't asked again at once (viem's transport already retried it): the next block reads again.
-    retry: (n, e) => !rateLimited(e) && n < 3,
-    queryFn: async () => {
-      const to = head.data!;
-      const settled = to - SETTLED_BLOCKS;
-      const read = (c: { from: bigint; to: bigint }) =>
-        queryClient.fetchQuery({
-          queryKey: ["cashArrivalChunk", account, String(c.from), String(c.to)],
-          staleTime: c.to <= settled ? Infinity : 0,
-          gcTime: c.to <= settled ? Infinity : undefined,
-          queryFn: () => readArrivalLogs(client!, { account, ...c }),
-        });
-      const chunks = logChunks(from!, to);
-      const out: Log[] = [];
-      for (let i = 0; i < chunks.length; i += PARALLEL)
-        out.push(...(await Promise.all(chunks.slice(i, i + PARALLEL).map(read))).flat());
-      return arrivalTxs(out);
-    },
-  });
+  // Off without Alchemy's key: Base's public RPC refuses getLogs, so the sheet shows the user's own moves alone.
+  const sent = useTransfersIn(account);
 
   // Only the transactions neither the user's history nor the executor's feed has: their receipts and their blocks' time.
   const known = useMemo(
@@ -78,8 +52,11 @@ export function useCashActivity(account: Address) {
     [own.rows, feed.rows],
   );
   const txs = useMemo(
-    () => (own.isLoading ? [] : (logs.data ?? []).filter((t) => !known.has(t.hash.toLowerCase()))),
-    [logs.data, known, own.isLoading],
+    () =>
+      own.isLoading || from === undefined
+        ? []
+        : (sent.data ?? []).filter((t) => t.block >= from && t.usdcRaw > 0n && !known.has(t.hash.toLowerCase())),
+    [sent.data, known, own.isLoading, from],
   );
   const receipts = useQueries({
     queries: txs.map((t) => ({
@@ -89,25 +66,15 @@ export function useCashActivity(account: Address) {
       queryFn: () => client!.getTransactionReceipt({ hash: t.hash }),
     })),
   });
-  const times = useQueries({
-    queries: txs.map((t) => ({
-      queryKey: ["blockTime", String(t.blockNumber)],
-      enabled: !!client,
-      staleTime: Infinity,
-      queryFn: async () => Number((await client!.getBlock({ blockNumber: t.blockNumber })).timestamp) * 1000,
-    })),
-  });
-
   const arrivals = useMemo<Arrival[]>(
     () =>
       txs.flatMap((t, i) => {
         const r = receipts[i]?.data;
-        const time = times[i]?.data;
-        return r && time !== undefined && r.status === "success"
-          ? [{ hash: t.hash, time, items: arrivalsOf(r.logs, account) }]
+        return r && r.status === "success"
+          ? [{ hash: t.hash, time: t.t * 1000, items: arrivalsOf(r.logs, account) }]
           : [];
       }),
-    [txs, receipts, times, account],
+    [txs, receipts, account],
   );
 
   // Until the window's first block is read, a week back from now (the head can't be read: the RPC is down).
@@ -119,14 +86,14 @@ export function useCashActivity(account: Address) {
 
   const { live, reading } = cashFeedState({
     executor: !!GOOSE_EXECUTOR,
-    arrivals: ARRIVALS_ON,
+    arrivals: ALCHEMY_ON,
     windowKnown: from !== undefined,
     own,
     feed,
     head,
-    logs,
+    transfers: sent,
     start,
-    txReads: [...receipts, ...times],
+    txReads: receipts,
   });
 
   // What was shown once everything settled: null until the first read has. A new block's read (a new query, which
@@ -143,9 +110,9 @@ export function useCashActivity(account: Address) {
       void own.refetch();
       feed.refetch();
       void head.refetch();
-      void logs.refetch();
+      void sent.refetch();
       if (start.isError) void start.refetch();
-      for (const q of [...receipts, ...times]) if (q.isError) void q.refetch();
+      for (const q of receipts) if (q.isError) void q.refetch();
     },
   };
 }

@@ -8,7 +8,8 @@ import type { FeedRow } from "@/components/gg/activity/Activity";
 import { useActivity } from "@/hooks/useActivity";
 import type { useAgentFeed } from "@/hooks/useAgentFeed";
 import { useArrivals } from "@/hooks/useArrivals";
-import { APP_START_BLOCK, ARRIVALS_ON } from "@/lib/activity/arrivals";
+import { ALCHEMY_ON } from "@/lib/activity/alchemy";
+import { APP_START_BLOCK } from "@/lib/activity/arrivals";
 import { LOG_CHUNK, WEEK_BLOCKS } from "@/lib/agents/history";
 import { CHAIN_ID } from "@/lib/chain";
 
@@ -30,9 +31,9 @@ export function useAccountFeed(address: `0x${string}`, feed: ReturnType<typeof u
     const start = back > 0n ? (back / LOG_CHUNK) * LOG_CHUNK : 0n;
     return start > APP_START_BLOCK ? start : APP_START_BLOCK;
   }, [head.data, weeks]);
-  // Off on Base's public RPC, which refuses getLogs (ARRIVALS_ON).
-  const arrivals = useArrivals(address, ARRIVALS_ON ? from : undefined);
-  const olderArrivals = ARRIVALS_ON && from !== undefined && from > APP_START_BLOCK;
+  // Off without Alchemy's key: Base's public RPC refuses getLogs.
+  const arrivals = useArrivals(address, ALCHEMY_ON ? from : undefined);
+  const olderArrivals = ALCHEMY_ON && from !== undefined && from > APP_START_BLOCK;
   const start = useQuery({
     queryKey: ["blockTime", String(from)],
     enabled: !!client && olderArrivals,
