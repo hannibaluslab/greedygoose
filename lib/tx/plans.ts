@@ -1,6 +1,6 @@
 import { isAddressEqual } from "viem";
 import { buildWithdrawCalls, type Call } from "@/lib/aave/tx";
-import { buildSetMixCalls } from "@/lib/agents/settings";
+import { buildSetKeepMixCalls, buildSetMixCalls } from "@/lib/agents/settings";
 import { payFromCash, type Cash } from "@/lib/cash";
 import { SEND_COPY, sendActivity, type Recipient } from "@/lib/send";
 import { TRADE_COPY, buildTradeCalls, saleBlockText, swapMinUsd, tradeActivity } from "@/lib/trade";
@@ -311,4 +311,11 @@ export const setMixPlan = (account: `0x${string}`, weights: readonly number[]): 
   key: txKey("setMix", account, weights),
   user: account,
   calls: () => Promise.resolve(buildSetMixCalls(account, weights)),
+});
+
+/** "Sells first" (`setKeepMix`), as useTx signs it: keyed by the account and the choice. */
+export const keepMixPlan = (account: `0x${string}`, on: boolean): TxPlan => ({
+  key: txKey("keepMix", account, on),
+  user: account,
+  calls: () => Promise.resolve(buildSetKeepMixCalls(account, on)),
 });

@@ -5,17 +5,10 @@ import { TAP_AGAIN, txKey, useTx, type TxPhase, type TxPlan } from "@/hooks/useT
 import { runError } from "@/hooks/useAgentRun";
 import type { useAgents } from "@/hooks/useAgents";
 import type { ProtectStep } from "@/lib/agents/protect";
-import { buildSetKeepMixCalls } from "@/lib/agents/settings";
 import { isPopupBlocked } from "@/lib/tx/prepared";
+import { keepMixPlan } from "@/lib/tx/plans";
 
 const CANCELLED = /reject|denied|cancel/i;
-
-/** "Sells first" (`setKeepMix`), as useTx signs it: keyed by the account and the choice. */
-export const keepMixPlan = (account: `0x${string}`, on: boolean): TxPlan => ({
-  key: txKey("keepMix", account, on),
-  user: account,
-  calls: () => Promise.resolve(buildSetKeepMixCalls(account, on)),
-});
 
 /**
  * Each grant or revoke in order, on JAW's own screen; the first that fails stops the rest. Each request is built as

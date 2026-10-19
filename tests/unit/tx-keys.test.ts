@@ -6,6 +6,7 @@ import { convertPlan, type ConvertQuote } from "@/hooks/useConvert";
 import { creditBuyPlan } from "@/hooks/useCreditBuy";
 import {
   earnPlan,
+  keepMixPlan,
   repayPlan,
   sendPlan,
   setMixPlan,
@@ -16,7 +17,6 @@ import {
   type SwapReads,
   withdrawPlan,
 } from "@/lib/tx/plans";
-import { keepMixPlan } from "@/hooks/useProtectSave";
 import { salePlan, type SellInput } from "@/hooks/useSell";
 import { CREDIT_FLOOR, type CreditPlan } from "@/lib/creditBuy";
 import { EARN_FLOOR } from "@/lib/earnWithStocks";
