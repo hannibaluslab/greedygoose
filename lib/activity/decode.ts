@@ -122,11 +122,63 @@ function feeTransfers(logs: readonly Log[], user: `0x${string}`): Set<Log> {
  * the cash started earning, nothing left it.
  */
 export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[] {
-  const items: ActivityItem[] = [];
   const fees = feeTransfers(logs, user);
-  const savedRaw = savedByUser(logs, user);
-  let creditRaw = 0n;
+  const { items: spoke, creditRaw } = spokeItems(logs, user);
+  const items = withEarning(spoke, creditRaw, savedByUser(logs, user));
+  const w = walletMoves(logs, user, fees);
+  for (const s of w.stockIn) {
+    items.push(
+      w.usdcOut > 0n
+        ? { kind: "buy", symbol: s.symbol, amount: units(s.raw, s.decimals), paidUsd: units(w.usdcOut, USDC.decimals) }
+        : { kind: "receive", symbol: s.symbol, amount: units(s.raw, s.decimals) },
+    );
+  }
+  // Stock out and USDC in, in one transaction, is a sale (the app sells one stock per batch).
+  const receivedRaw = w.usdcIn.reduce((a, v) => a + v, 0n);
+  for (const s of w.stockOut) {
+    items.push(
+      receivedRaw > 0n
+        ? {
+            kind: "sell",
+            symbol: s.symbol,
+            amount: units(s.raw, s.decimals),
+            receivedUsd: units(receivedRaw, USDC.decimals),
+          }
+        : { kind: "send", symbol: s.symbol, amount: units(s.raw, s.decimals), ...(s.to ? { to: s.to } : {}) },
+    );
+  }
+  const converted = conversions(logs, user, w.usdcIn);
+  converted.forEach(({ coin, value }, i) =>
+    items.push({
+      kind: "convert",
+      symbol: coin.symbol,
+      amount: units(value, coin.decimals),
+      receivedUsd: units(w.usdcIn[i], USDC.decimals),
+    }),
+  );
+  if (w.stockIn.length === 0 && w.usdcOut > 0n) {
+    const [to] = [...w.usdcOutTo.values()];
+    items.push({
+      kind: "send",
+      symbol: USDC.symbol,
+      amount: units(w.usdcOut, USDC.decimals),
+      ...(w.usdcOutTo.size === 1 ? { to } : {}),
+    });
+  }
+  if (w.stockOut.length === 0) {
+    for (const v of w.usdcIn.slice(converted.length))
+      items.push({ kind: "receive", symbol: USDC.symbol, amount: units(v, USDC.decimals) });
+  }
+  // A sale into cash puts what it brings straight into savings (lib/sell.ts saleSaveRaw): still the one pot (D20), so
+  // the move is the sale alone, not a Start earning too.
+  if (items.some((i) => i.kind === "sell")) return items.filter((i) => i.kind !== "save");
+  return items;
+}
 
+/** The user's own Aave V4 moves (the Spoke's events), and the USDC credit among them. */
+function spokeItems(logs: Log[], user: `0x${string}`): { items: ActivityItem[]; creditRaw: bigint } {
+  const items: ActivityItem[] = [];
+  let creditRaw = 0n;
   const spokeLogs = parseEventLogs({
     abi: spokeAbi,
     logs: logs.filter((l) => isAddressEqual(l.address, AAVE.SPOKE)),
@@ -158,22 +210,45 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
     if (kind === "borrow" && r.symbol === USDC.symbol) creditRaw += raw;
     items.push({ kind, symbol: r.symbol, amount: units(raw, r.decimals) });
   }
-  // Earn with stocks: the credit that went in to earn is one move, first; any credit beyond it stays credit.
+  return { items, creditRaw };
+}
+
+/**
+ * Earn with stocks: the credit that went in to earn is one move, first; any credit beyond it stays credit. With no
+ * credit beside it, Start earning: the wallet's cash went into savings, one move, first (the USDC to the savings pot
+ * isn't a send).
+ */
+function withEarning(items: ActivityItem[], creditRaw: bigint, savedRaw: bigint): ActivityItem[] {
   if (creditRaw > 0n && savedRaw > 0n) {
     const earnRaw = creditRaw < savedRaw ? creditRaw : savedRaw;
     const rest = creditRaw - earnRaw;
     const others = items.filter((i) => !(i.kind === "borrow" && i.symbol === USDC.symbol));
-    items.length = 0;
-    items.push(
+    return [
       { kind: "earn", symbol: USDC.symbol, amount: units(earnRaw, USDC.decimals) },
       ...others,
       ...(rest > 0n ? [{ kind: "borrow" as const, symbol: USDC.symbol, amount: units(rest, USDC.decimals) }] : []),
-    );
-  } else if (creditRaw === 0n && savedRaw > 0n) {
-    // Start earning: the wallet's cash went into savings. One move, first; the USDC to the savings pot isn't a send.
-    items.unshift({ kind: "save", symbol: USDC.symbol, amount: units(savedRaw, USDC.decimals) });
+    ];
   }
+  if (creditRaw === 0n && savedRaw > 0n)
+    return [{ kind: "save", symbol: USDC.symbol, amount: units(savedRaw, USDC.decimals) }, ...items];
+  return items;
+}
 
+const touchesAave = (addr?: `0x${string}`) =>
+  !!addr && (isAddressEqual(addr, AAVE.HUB) || isAddressEqual(addr, AAVE.SPOKE));
+
+/** Aave V3 savings: USDC into or out of the aToken contract, within the user's own cash. */
+const isSavingsMove = (from: `0x${string}`, to: `0x${string}`, user: `0x${string}`) =>
+  (isAddressEqual(from, user) && isAddressEqual(to, PROTOCOLS.AUSDC)) ||
+  (isAddressEqual(from, PROTOCOLS.AUSDC) && isAddressEqual(to, user));
+
+type StockMove = { symbol: string; raw: bigint; decimals: number; to?: `0x${string}` };
+
+/**
+ * The user's stock and USDC transfers outside Aave V4 (its moves are the Spoke's events) and outside the savings pot:
+ * the USDC that left and to whom, each USDC that came in, and the stock in and out. JAW's fee transfers are left out.
+ */
+function walletMoves(logs: Log[], user: `0x${string}`, fees: Set<Log>) {
   const tracked = [...EQUITIES.map((e) => e.address), USDC.address];
   const transfers = parseEventLogs({
     abi: erc20Abi,
@@ -181,13 +256,11 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
     eventName: "Transfer",
     strict: false,
   });
-  const touchesAave = (addr?: `0x${string}`) =>
-    !!addr && (isAddressEqual(addr, AAVE.HUB) || isAddressEqual(addr, AAVE.SPOKE));
   let usdcOut = 0n;
   const usdcOutTo = new Map<string, `0x${string}`>();
   const usdcIn: bigint[] = [];
-  const stockIn: { symbol: string; raw: bigint; decimals: number }[] = [];
-  const stockOut: { symbol: string; raw: bigint; decimals: number; to?: `0x${string}` }[] = [];
+  const stockIn: StockMove[] = [];
+  const stockOut: StockMove[] = [];
   for (const t of transfers) {
     const { from, to, value } = t.args as { from?: `0x${string}`; to?: `0x${string}`; value?: bigint };
     if (value === undefined) continue;
@@ -195,44 +268,26 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
     if (!token) continue;
     // Aave V4 moves are already covered by Spoke events.
     if (touchesAave(from) || touchesAave(to)) continue;
-    // Aave V3 savings: USDC into or out of the aToken contract, within the user's own cash.
-    if (token.kind === "debt" && from && to && isAddressEqual(from, user) && isAddressEqual(to, PROTOCOLS.AUSDC))
-      continue;
-    if (token.kind === "debt" && from && to && isAddressEqual(from, PROTOCOLS.AUSDC) && isAddressEqual(to, user))
-      continue;
-    if (token.kind === "debt" && from && isAddressEqual(from, user)) {
+    if (token.kind === "debt" && from && to && isSavingsMove(from, to, user)) continue;
+    const fromUser = !!from && isAddressEqual(from, user);
+    const toUser = !!to && isAddressEqual(to, user);
+    if (token.kind === "debt" && fromUser) {
       usdcOut += value;
       if (to) usdcOutTo.set(to.toLowerCase(), to);
     }
-    if (token.kind === "equity" && to && isAddressEqual(to, user))
-      stockIn.push({ symbol: token.symbol, raw: value, decimals: token.decimals });
-    if (token.kind === "equity" && from && isAddressEqual(from, user))
+    if (token.kind === "equity" && toUser) stockIn.push({ symbol: token.symbol, raw: value, decimals: token.decimals });
+    if (token.kind === "equity" && fromUser)
       stockOut.push({ symbol: token.symbol, raw: value, decimals: token.decimals, to });
-    if (token.kind === "debt" && to && isAddressEqual(to, user)) usdcIn.push(value);
+    if (token.kind === "debt" && toUser) usdcIn.push(value);
   }
-  for (const s of stockIn) {
-    items.push(
-      usdcOut > 0n
-        ? { kind: "buy", symbol: s.symbol, amount: units(s.raw, s.decimals), paidUsd: units(usdcOut, USDC.decimals) }
-        : { kind: "receive", symbol: s.symbol, amount: units(s.raw, s.decimals) },
-    );
-  }
-  // Stock out and USDC in, in one transaction, is a sale (the app sells one stock per batch).
-  const receivedRaw = usdcIn.reduce((a, v) => a + v, 0n);
-  for (const s of stockOut) {
-    items.push(
-      receivedRaw > 0n
-        ? {
-            kind: "sell",
-            symbol: s.symbol,
-            amount: units(s.raw, s.decimals),
-            receivedUsd: units(receivedRaw, USDC.decimals),
-          }
-        : { kind: "send", symbol: s.symbol, amount: units(s.raw, s.decimals), ...(s.to ? { to: s.to } : {}) },
-    );
-  }
-  // Other dollars out and USDC in is a conversion into cash (lib/swap/entry.ts): each swap pays the user once, in the
-  // order the coins went out.
+  return { usdcOut, usdcOutTo, usdcIn, stockIn, stockOut };
+}
+
+/**
+ * Other dollars out and USDC in is a conversion into cash (lib/swap/entry.ts): each swap pays the user once, in the
+ * order the coins went out. None when fewer USDC came in than coins went out.
+ */
+function conversions(logs: Log[], user: `0x${string}`, usdcIn: readonly bigint[]) {
   const coinsOut = parseEventLogs({
     abi: erc20Abi,
     logs: logs.filter((l) => ENTRY_COINS.some((c) => isAddressEqual(c.address, l.address))),
@@ -240,35 +295,10 @@ export function decodeActivity(logs: Log[], user: `0x${string}`): ActivityItem[]
     strict: false,
   }).flatMap((t) => {
     const { from, value } = t.args as { from?: `0x${string}`; value?: bigint };
-    const coin = ENTRY_COINS.find((c) => isAddressEqual(c.address, t.address))!;
-    return from && value !== undefined && isAddressEqual(from, user) ? [{ coin, value }] : [];
+    const coin = ENTRY_COINS.find((c) => isAddressEqual(c.address, t.address));
+    return coin && from && value !== undefined && isAddressEqual(from, user) ? [{ coin, value }] : [];
   });
-  const converted = usdcIn.length >= coinsOut.length ? coinsOut : [];
-  converted.forEach(({ coin, value }, i) =>
-    items.push({
-      kind: "convert",
-      symbol: coin.symbol,
-      amount: units(value, coin.decimals),
-      receivedUsd: units(usdcIn[i], USDC.decimals),
-    }),
-  );
-  if (stockIn.length === 0 && usdcOut > 0n) {
-    const [to] = [...usdcOutTo.values()];
-    items.push({
-      kind: "send",
-      symbol: USDC.symbol,
-      amount: units(usdcOut, USDC.decimals),
-      ...(usdcOutTo.size === 1 ? { to } : {}),
-    });
-  }
-  if (stockOut.length === 0) {
-    for (const v of usdcIn.slice(converted.length))
-      items.push({ kind: "receive", symbol: USDC.symbol, amount: units(v, USDC.decimals) });
-  }
-  // A sale into cash puts what it brings straight into savings (lib/sell.ts saleSaveRaw): still the one pot (D20), so
-  // the move is the sale alone, not a Start earning too.
-  if (items.some((i) => i.kind === "sell")) return items.filter((i) => i.kind !== "save");
-  return items;
+  return usdcIn.length >= coinsOut.length ? coinsOut : [];
 }
 
 /**
