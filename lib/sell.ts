@@ -1,11 +1,8 @@
-import { decodeFunctionData, erc20Abi, isAddressEqual } from "viem";
 import { CREDIT_CAP } from "@/config/risk";
-import { AAVE } from "@/lib/aave/addresses";
-import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { healthAfterWithdraw, maxWithdrawUsd } from "@/lib/aave/math";
 import { buildRepayCalls, buildWithdrawCalls, fullRepayAmount, type Call } from "@/lib/aave/tx";
 import type { ActivityItem } from "@/lib/activity/decode";
-import { assertAllowed, swapOf } from "@/lib/allowlist";
+import { assertAllowed } from "@/lib/allowlist";
 import { feeBufferRaw, toUsd } from "@/lib/cash";
 import { buildAddSavingsCalls } from "@/lib/savings";
 import { formatUsdTrim } from "@/lib/formatting";
@@ -13,6 +10,7 @@ import { marketState } from "@/lib/market-hours";
 import { endsInAct, statusFor, type Status } from "@/lib/risk/status";
 import { SELL_LIMITS, aaveFloorRaw, buildSellCalls, sellEconomics, sellMinOut, type SellQuote } from "@/lib/swap/sell";
 import { USDC, type ReserveAsset } from "@/lib/tokens/registry";
+import { assertSaleCoversRepay, assertSaleCoversSave } from "./sell/covers";
 
 type Address = `0x${string}`;
 
@@ -259,7 +257,8 @@ export function buildSaleCalls(p: {
     const saveRaw =
       p.walletRaw === undefined ? 0n : saleSaveRaw(sellMinOut(p.quote, p.stock, p.oraclePriceUsd), p.walletRaw);
     if (saveRaw === 0n) return p.from === "free" ? sale : assertAllowed(p.user, sale);
-    return assertAllowed(p.user, [...sale, ...buildAddSavingsCalls(p.user, saveRaw)], { saveTo: p.user });
+    const calls = [...sale, ...buildAddSavingsCalls(p.user, saveRaw)];
+    return assertAllowed(p.user, assertSaleCoversSave(p.user, calls, p.walletRaw ?? 0n), { saveTo: p.user });
   }
   const repayRaw = saleRepayRaw(sellMinOut(p.quote, p.stock, p.oraclePriceUsd), p.debtRaw);
   return assertAllowed(p.user, [
@@ -277,53 +276,6 @@ export function buildSaleCalls(p: {
 export function freeRepayRaw(minOutRaw: bigint, debtRaw: bigint, feeFromSale: boolean): bigint {
   if (feeFromSale) return saleRepayRaw(minOutRaw, debtRaw);
   return minOutRaw > 0n ? fullRepayAmount(debtRaw, minOutRaw) : 0n;
-}
-
-const repayOf = (c: Call): bigint | null => {
-  if (!isAddressEqual(c.to, AAVE.SPOKE)) return null;
-  try {
-    const call = decodeFunctionData({ abi: spokeAbi, data: c.data });
-    return call.functionName === "repay" ? call.args[1] : null;
-  } catch {
-    return null;
-  }
-};
-
-/**
- * A repay that rides on a sale spends only what the sale is sure to bring. Throws unless the batch has exactly one
- * swap into USDC for the user and one repay after it, the repay is no more than the swap's floor (`amountOutMinimum`,
- * less the network-fee buffer when the sale pays the fee), and every USDC approve to the spoke is exactly the repay
- * (or the 0 that resets it). So a batch that would dip into the cash the user already had is never built.
- */
-export function assertSaleCoversRepay(user: Address, calls: Call[], feeFromSale: boolean): Call[] {
-  const swaps = calls.map((c, i) => ({ i, swap: swapOf(c) })).filter((x) => x.swap !== null);
-  const repays = calls
-    .map((c, i) => ({ i, raw: repayOf(c) }))
-    .filter((x): x is { i: number; raw: bigint } => x.raw !== null);
-  if (swaps.length !== 1 || repays.length !== 1)
-    throw new Error("Blocked: a repay by selling is one sale and one repay");
-  const [{ i: at, swap }] = swaps;
-  const [{ i: repayAt, raw: repayRaw }] = repays;
-  const sale = swap!.params;
-  if (!isAddressEqual(sale.tokenOut, USDC.address) || !isAddressEqual(sale.recipient, user) || repayAt < at) {
-    throw new Error("Blocked: the repay must come after a sale into USDC for the user");
-  }
-  const covered = sale.amountOutMinimum - (feeFromSale ? feeBufferRaw : 0n);
-  if (repayRaw <= 0n || repayRaw > covered)
-    throw new Error("Blocked: the repay is more than the sale is sure to bring");
-  for (const c of calls) {
-    if (!isAddressEqual(c.to, USDC.address)) continue;
-    const call = decodeFunctionData({ abi: erc20Abi, data: c.data });
-    if (
-      call.functionName === "approve" &&
-      isAddressEqual(call.args[0], AAVE.SPOKE) &&
-      call.args[1] !== repayRaw &&
-      call.args[1] !== 0n
-    ) {
-      throw new Error("Blocked: the repay's approval is not exact");
-    }
-  }
-  return calls;
 }
 
 /**

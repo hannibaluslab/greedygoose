@@ -15,6 +15,8 @@ import {
   type SellHolding,
   type SellPosition,
 } from "@/lib/sell";
+import { assertSaleCoversSave } from "@/lib/sell/covers";
+import { buildAddSavingsCalls } from "@/lib/savings";
 import { minOut } from "@/lib/swap/buy";
 import type { SellQuote } from "@/lib/swap/sell";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
@@ -139,6 +141,76 @@ describe("buildSaleCalls", () => {
     // Half the fee buffer's worth of NVIDIA: its floor (the quote less 1%, or Aave's price less 10%) is under the buffer.
     expect(() => sale("repay", usd(300), { ...quote, amountIn: shares(B / 2 / price), amountOut: usd(B / 2) })).toThrow(
       /positive/,
+    );
+  });
+});
+
+describe("a sale into savings (assertSaleCoversSave)", () => {
+  const floor = minOut(usd(99.5));
+  const intoCash = (from: "free" | "backing", walletRaw: bigint) =>
+    buildSaleCalls({
+      from,
+      user,
+      stock: nvda,
+      quote,
+      oraclePriceUsd: price,
+      debtRaw: usd(300),
+      walletRaw,
+      nowSec: 1_000,
+    });
+  const approveOf = (c: { data: `0x${string}` }) => decodeFunctionData({ abi: erc20Abi, data: c.data }).args;
+  const supplyOf = (c: { data: `0x${string}` }) => decodeFunctionData({ abi: aaveV3PoolAbi, data: c.data }).args;
+
+  it("a backing sale with the wallet read: take out → approve → swap → approve → supply the floor less the fee keep-back", () => {
+    const calls = intoCash("backing", 0n);
+    expect(steps(calls)).toEqual(["withdraw", "approve", "swap", "approve", "supply"]);
+    expect(decodeFunctionData({ abi: spokeAbi, data: calls[0].data }).args).toEqual([
+      BigInt(nvda.reserveId),
+      shares(0.4),
+      user,
+    ]);
+    expect(swapOf(calls[2])!.params.amountOutMinimum).toBe(floor);
+    expect(approveOf(calls[3])).toEqual([PROTOCOLS.AAVE_V3_POOL, floor - fee]);
+    expect(supplyOf(calls[4])).toEqual([USDC.address, floor - fee, user, 0]);
+    expect(assertSaleCoversSave(user, calls, 0n)).toBe(calls);
+    // With the fee buffer already in the wallet, the whole floor goes in.
+    expect(supplyOf(intoCash("backing", fee).at(-1)!)[1]).toBe(floor);
+  });
+
+  it("passes what buildSaleCalls makes, free or backing, whatever the wallet holds", () => {
+    for (const from of ["free", "backing"] as const)
+      for (const walletRaw of [0n, fee / 2n, fee, usd(50)]) {
+        const calls = intoCash(from, walletRaw);
+        expect(assertSaleCoversSave(user, calls, walletRaw)).toBe(calls);
+      }
+  });
+
+  it("refuses a supply over the sale's floor, or one that eats the fee keep-back", () => {
+    const sale = intoCash("free", fee).slice(0, 2);
+    expect(() => assertSaleCoversSave(user, [...sale, ...buildAddSavingsCalls(user, floor + 1n)], fee)).toThrow(
+      /more than the sale is sure to bring/,
+    );
+    // The wallet holds nothing: the whole floor would leave no fee buffer.
+    expect(() => assertSaleCoversSave(user, [...sale, ...buildAddSavingsCalls(user, floor)], 0n)).toThrow(
+      /more than the sale is sure to bring/,
+    );
+    expect(assertSaleCoversSave(user, [...sale, ...buildAddSavingsCalls(user, floor - fee)], 0n)).toHaveLength(4);
+  });
+
+  it("refuses an approve to the pool that isn't exactly the supply", () => {
+    const calls = intoCash("free", fee);
+    const loose = [...calls.slice(0, 2), buildAddSavingsCalls(user, floor + 1n)[0], calls[3]];
+    expect(() => assertSaleCoversSave(user, loose, fee)).toThrow(/not exact/);
+  });
+
+  it("refuses a supply before the sale, a sale for someone else, and anything but one sale and one supply", () => {
+    const calls = intoCash("free", fee);
+    expect(() => assertSaleCoversSave(user, [calls[2], calls[3], calls[0], calls[1]], fee)).toThrow(/after a sale/);
+    expect(() => assertSaleCoversSave(attacker, calls, fee)).toThrow(/after a sale/);
+    expect(() => assertSaleCoversSave(user, calls.slice(0, 2), fee)).toThrow(/one sale and one savings supply/);
+    expect(() => assertSaleCoversSave(user, [...calls, calls[3]], fee)).toThrow(/one sale and one savings supply/);
+    expect(() => assertSaleCoversSave(user, [calls[0], calls[1], ...calls], fee)).toThrow(
+      /one sale and one savings supply/,
     );
   });
 });

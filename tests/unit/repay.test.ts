@@ -25,7 +25,8 @@ import {
   type RepayHolding,
   type RepaySource,
 } from "@/lib/repay";
-import { assertSaleCoversRepay, buildFreeRepayCalls, freeRepayRaw, saleRepayRaw } from "@/lib/sell";
+import { buildFreeRepayCalls, freeRepayRaw, saleRepayRaw } from "@/lib/sell";
+import { assertSaleCoversRepay } from "@/lib/sell/covers";
 import { repaySign } from "@/hooks/useRepay";
 import { freeRepayPlan, type FreeRepayInput } from "@/lib/tx/plans";
 import type { QuoteState } from "@/lib/trade";
