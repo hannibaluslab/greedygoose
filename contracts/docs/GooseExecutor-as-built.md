@@ -227,3 +227,20 @@ Adrian (JUSTALAB-DECISIONS.md, "2026-10-19 · Protect's line and the runner swit
 | One list, `members` | Also `protectMembers` (Protect or Protect · sell ever on; `Account.protectIndex`) and `checkProtect(shard, shards)` | A price update scans only the accounts that can need a rescue (C1). |
 | Registration through Automation's log trigger (`checkLog`, `performUpkeep(Mode.Register, …)`) | `registerApproved(permission)` (open, the PermissionApproved data as is) and `registrationOf(permission)` (a read, so a runner pays nothing for other apps' grants) | Runners read the event's data; Automation's `Log` record is hard to rebuild outside it (C2). `performData` is now `abi.encode(address[])`. |
 | Callers: Automation's forwarders | Any runner on `isForwarder`: `GooseReceiver` for CRE (only Base's KeystoneForwarder, only our workflow's owner and name, only `performUpkeep` or `registerApproved`), and KeeperHub's wallet | C3. |
+
+**Fork, as built** (`test/ProtectSellFork.t.sol`, `test/GooseExecutorFork.t.sol`, Base at the latest block through a public RPC, 2026-10-19; NVIDIA unless named):
+
+| Start | What happens | Slices | Run gas |
+| --- | --- | --- | --- |
+| 1.30 (Watch), 1.08 (Act), 1.031; cash and selling on | nothing; at 1.029 cash goes first | | |
+| 1.02, $100 of cash | repaid from cash to 1.12 (5/56 of what's owed); rescue over | | |
+| 1.02, cash of 2% of what's owed, selling on | the cash lifts it to about 1.04, over the line; the rescue sells the rest; 1.12 | | |
+| 1.02, the same, Friday 19:45 New York | the cash on Friday; nothing while prices are held; the sale at the reopen; 1.12 | | |
+| 1.025 | sale at once; 1.12 | 5 | 2.22M |
+| 1.02 | sale at once; 1.12 | 5 | 2.22M |
+| 1.01 | six slices, then the rescue's next run; 1.12 | 6 + 1 | 2.44M + 1.30M |
+| $900 at 1.01 and $8,000 at 1.025, pool cap $1,000, no amount limit | the lower one first; both rescues go on run after run, never past the cap, wait while the window is full, and end at 1.12 | | |
+| a batch repaying a fifth of what's owed | reverts `Overshoot` | | |
+| any, weekend | nothing | | |
+
+Measured too: seven stocks from 1.01 sell six slices cold in 4.00M (a 5M run) and plan in 1.35M (under `CHECK_RESERVE`); six slices over three stocks in 2.92M; `MAX_WORK` Protect repays run in 3.95M; the worst-case weekend page (accounts at 1.02 with a cent of savings) checks in 8.29M. GooseExecutor is 24,224 bytes (`ExecutorHarness`, test only, is about 150 bytes over and only `forge build --sizes` flags it; CI runs `forge build`).
