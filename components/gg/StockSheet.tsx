@@ -75,39 +75,22 @@ export function StockSheet({
     setStep(next);
   };
 
-  const owned = holding.freeRaw + holding.backingRaw > 0n;
   // Up to $X (canvas board 9): the free shares only. The dollars typed become shares at Aave's price, as on Trade; MAX,
   // or an amount that would leave dust, sells every free share to the last unit.
-  const maxRaw = holding.freeRaw;
   const { sharesRaw, maxUsd } = tradeAmount({ from: holding.symbol, to: "cash", amount, all, data });
 
-  const quote = useSellQuote(stock, step === "stock" ? 0n : sharesRaw);
-  const q = quote.data ?? null;
-  const plan = q ? planSell({ from: "free", stock, holding, cf: 0, position: data, quote: q }) : null;
-  const econ = q ? sellEconomics(q, stock, holding.priceUsd) : null;
-
-  let blocker: string | null = null;
-  if (sharesRaw > maxRaw) blocker = SELL_BLOCKED["not-free"];
-  else if (sharesRaw > 0n && quote.isSuccess && q === null) blocker = `There’s no market for ${stock.name} right now.`;
-  else if (plan?.block) blocker = SELL_BLOCKED[plan.block];
-  const warning =
-    blocker ??
-    (plan?.warn
-      ? `You’d get ${(plan.discount * 100).toFixed(1)}% under Aave’s price — the market for ${stock.name} is small.`
-      : null);
-  const note =
-    warning ??
-    (plan?.priceMayMove
-      ? "Stock markets are closed. You can still sell, but the price can jump when they reopen."
-      : null);
-  const ready = sharesRaw > 0n && !!plan && q?.amountIn === sharesRaw && !blocker && !quote.isFetching;
-  const feeBlocked = isConnected && fee.state === "unsupported";
-  // What Sell would sign now, prepared while the step is idle so the tap opens JAW's sheet at once.
-  const signable =
-    open && step === "sell" && ready && plan && q && !feeBlocked
-      ? { user, stock, quote: q, plan, oraclePriceUsd: holding.priceUsd, debtRaw: data.debtRaw }
-      : null;
-  const { sign, phase, error, reset, busy, txHash, checking, blocked } = useSell(signable);
+  const { quote, q, plan, econ, blocker, note, ready, feeBlocked, signable, tx } = useSale({
+    live: open && step === "sell",
+    quoting: step !== "stock",
+    user,
+    data,
+    stock,
+    holding,
+    sharesRaw,
+    isConnected,
+    feeUnsupported: fee.state === "unsupported",
+  });
+  const { sign, phase, error, reset, busy, txHash, checking, blocked } = tx;
 
   const back = () => {
     if (busy) onClose();
@@ -134,51 +117,17 @@ export function StockSheet({
             onDone={onClose}
           />
         ) : step === "stock" ? (
-          <>
-            <StockHeader holding={holding} market={market} />
-            {(holding.paused || holding.frozen) && (
-              <p role="status" className="m-0 text-[13px] leading-snug text-act">
-                {holding.paused
-                  ? `Aave has paused ${stock.name} for now: it can’t come out of backing or back new credit.`
-                  : `Aave has frozen ${stock.name} for now: it can’t back new credit.`}
-              </p>
-            )}
-            {owned && <StockPosition holding={holding} />}
-            {/* UX note 9: the actions sit right under the holding card, not under the chart and stats. */}
-            <Actions
-              owned={owned}
-              canSell={maxRaw > 0n}
-              backs={holding.backingRaw > 0n}
-              paused={holding.paused}
-              onBuy={onBuy}
-              onSell={() => go("sell")}
-              onCreditBuy={onCreditBuy}
-              onFreeUp={onFreeUp}
-            />
-            {owned && maxRaw === 0n && (
-              <p className="m-0 px-0.5 text-[13px] leading-snug text-ink-mid">
-                All of it backs your credit right now. Repay some first to sell.
-              </p>
-            )}
-            <StockChart holding={holding} name={stock.name} />
-            <div className="grid grid-cols-2 gap-2.5">
-              <StatCard
-                label="Of my portfolio"
-                value={
-                  owned
-                    ? `${((portfolioShare(holding.freeUsd + holding.backingUsd, data.stocksUsd) ?? 0) * 100).toFixed(1)}%`
-                    : "0%"
-                }
-              />
-              <StatCard label="Aave’s price" value={formatUsd(holding.priceUsd)} />
-            </div>
-            <StockActivity user={user} holding={holding} name={stock.name} owned={owned} />
-            <p className="m-0 px-1 text-xs leading-snug text-subtle">
-              Values use the price your credit is measured at. The price at the top and the chart are market prices, for
-              information only. Tokenized stocks track the share price; they are not company shares and carry no voting
-              rights.
-            </p>
-          </>
+          <StockStep
+            user={user}
+            data={data}
+            stock={stock}
+            holding={holding}
+            market={market}
+            onBuy={onBuy}
+            onSell={() => go("sell")}
+            onCreditBuy={onCreditBuy}
+            onFreeUp={onFreeUp}
+          />
         ) : (
           <>
             <AmountField
@@ -251,6 +200,141 @@ export function StockSheet({
         )}
       </SheetSteps>
     </SheetShell>
+  );
+}
+
+/**
+ * The sale step's quote for the shares, its plan, why it can't go or what to look out for, and the batch Sell would
+ * sign now, prepared while the step is idle so the tap opens JAW's sheet at once.
+ */
+function useSale(p: {
+  live: boolean;
+  quoting: boolean;
+  user: `0x${string}`;
+  data: PositionData;
+  stock: ReserveAsset;
+  holding: Holding;
+  sharesRaw: bigint;
+  isConnected: boolean;
+  feeUnsupported: boolean;
+}) {
+  const { user, data, stock, holding, sharesRaw } = p;
+  const quote = useSellQuote(stock, p.quoting ? sharesRaw : 0n);
+  const q = quote.data ?? null;
+  const plan = q ? planSell({ from: "free", stock, holding, cf: 0, position: data, quote: q }) : null;
+  const econ = q ? sellEconomics(q, stock, holding.priceUsd) : null;
+
+  const { blocker, note } = saleLines({ sharesRaw, maxRaw: holding.freeRaw, quote, plan, name: stock.name });
+  const ready = sharesRaw > 0n && !!plan && q?.amountIn === sharesRaw && !blocker && !quote.isFetching;
+  const feeBlocked = p.isConnected && p.feeUnsupported;
+  const signable =
+    p.live && ready && plan && q && !feeBlocked
+      ? { user, stock, quote: q, plan, oraclePriceUsd: holding.priceUsd, debtRaw: data.debtRaw }
+      : null;
+  const tx = useSell(signable);
+  return { quote, q, plan, econ, blocker, note, ready, feeBlocked, signable, tx };
+}
+
+/** Why the sale can't go (blocker), or what to look out for: a small market, or markets closed (note, either). */
+function saleLines(p: {
+  sharesRaw: bigint;
+  maxRaw: bigint;
+  quote: { isSuccess: boolean; data?: SellQuote | null };
+  plan: SellPlan | null;
+  name: string;
+}) {
+  const { sharesRaw, plan, name } = p;
+  const q = p.quote.data ?? null;
+  let blocker: string | null = null;
+  if (sharesRaw > p.maxRaw) blocker = SELL_BLOCKED["not-free"];
+  else if (sharesRaw > 0n && p.quote.isSuccess && q === null) blocker = `There’s no market for ${name} right now.`;
+  else if (plan?.block) blocker = SELL_BLOCKED[plan.block];
+  const warning =
+    blocker ??
+    (plan?.warn
+      ? `You’d get ${(plan.discount * 100).toFixed(1)}% under Aave’s price — the market for ${name} is small.`
+      : null);
+  const note =
+    warning ??
+    (plan?.priceMayMove
+      ? "Stock markets are closed. You can still sell, but the price can jump when they reopen."
+      : null);
+  return { blocker, note };
+}
+
+/**
+ * The stock itself: its market price and today's move, a pause or freeze, your holding, the actions right under it,
+ * the chart, its share of your portfolio and Aave's price, and this stock's moves.
+ */
+function StockStep({
+  user,
+  data,
+  stock,
+  holding,
+  market,
+  onBuy,
+  onSell,
+  onCreditBuy,
+  onFreeUp,
+}: {
+  user: `0x${string}`;
+  data: PositionData;
+  stock: ReserveAsset;
+  holding: Holding;
+  market: ReturnType<typeof useMarketPrices>;
+  onBuy: () => void;
+  onSell: () => void;
+  onCreditBuy: () => void;
+  onFreeUp: () => void;
+}) {
+  const owned = holding.freeRaw + holding.backingRaw > 0n;
+  const maxRaw = holding.freeRaw;
+  return (
+    <>
+      <StockHeader holding={holding} market={market} />
+      {(holding.paused || holding.frozen) && (
+        <p role="status" className="m-0 text-[13px] leading-snug text-act">
+          {holding.paused
+            ? `Aave has paused ${stock.name} for now: it can’t come out of backing or back new credit.`
+            : `Aave has frozen ${stock.name} for now: it can’t back new credit.`}
+        </p>
+      )}
+      {owned && <StockPosition holding={holding} />}
+      {/* UX note 9: the actions sit right under the holding card, not under the chart and stats. */}
+      <Actions
+        owned={owned}
+        canSell={maxRaw > 0n}
+        backs={holding.backingRaw > 0n}
+        paused={holding.paused}
+        onBuy={onBuy}
+        onSell={onSell}
+        onCreditBuy={onCreditBuy}
+        onFreeUp={onFreeUp}
+      />
+      {owned && maxRaw === 0n && (
+        <p className="m-0 px-0.5 text-[13px] leading-snug text-ink-mid">
+          All of it backs your credit right now. Repay some first to sell.
+        </p>
+      )}
+      <StockChart holding={holding} name={stock.name} />
+      <div className="grid grid-cols-2 gap-2.5">
+        <StatCard
+          label="Of my portfolio"
+          value={
+            owned
+              ? `${((portfolioShare(holding.freeUsd + holding.backingUsd, data.stocksUsd) ?? 0) * 100).toFixed(1)}%`
+              : "0%"
+          }
+        />
+        <StatCard label="Aave’s price" value={formatUsd(holding.priceUsd)} />
+      </div>
+      <StockActivity user={user} holding={holding} name={stock.name} owned={owned} />
+      <p className="m-0 px-1 text-xs leading-snug text-subtle">
+        Values use the price your credit is measured at. The price at the top and the chart are market prices, for
+        information only. Tokenized stocks track the share price; they are not company shares and carry no voting
+        rights.
+      </p>
+    </>
   );
 }
 
