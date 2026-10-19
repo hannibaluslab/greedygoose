@@ -51,7 +51,7 @@ export function RepaySheet({
   onClose: () => void;
   /** Nothing to repay with: Add money opens the Top up sheet in this one's place. */
   onTopUp: () => void;
-  /** A stock to start on, ticked under "Also free up stocks" (its stock sheet's Free up shares): all it can. */
+  /** A stock to start on, ticked under "Free up stocks" (its stock sheet's Free up shares): all it can. */
   freeUp?: string;
 }) {
   const { isConnected } = useAccount();
@@ -60,7 +60,6 @@ export function RepaySheet({
   const fee = useFeeSupport();
   const [form, setForm] = useState<RepayForm>(REPAY_FORM);
   const { menu, setMenu, closeMenu, onOpenChange } = useMenuGuard(onClose, false);
-  const [freeOpen, setFreeOpen] = useState(!!freeUp);
   // Ticked from the stock sheet: all of it, held to what the limit allows (no "prices moved" for that first cut).
   const [picks, setPicks] = useState<FreeUpTick[]>(
     freeUp ? [{ symbol: freeUp, share: 1, atRepayUsd: Number.NaN }] : [],
@@ -82,7 +81,7 @@ export function RepaySheet({
     needsTick,
     label,
     doneLine,
-  } = planRepaySheet({ data, cfs: cfRead.cfs, source, view, freeOpen, ticks: picks });
+  } = planRepaySheet({ data, cfs: cfRead.cfs, source, view, ticks: picks });
 
   const feeBlocked = isConnected && fee.state === "unsupported";
   const sign = signOf(view, data, address);
@@ -139,11 +138,9 @@ export function RepaySheet({
             <FreeUpPart
               repaysAll={repaysAll}
               hasStocks={stocks.length > 0}
-              open={freeOpen}
               items={items}
               plan={plan}
               disabled={tx.busy}
-              onOpen={() => setFreeOpen(true)}
               onTick={(symbol, on, share) => {
                 setAck(false);
                 setPicks((ps) =>
@@ -154,8 +151,7 @@ export function RepaySheet({
                 setAck(false);
                 setPicks((ps) => ps.map((p) => (p.symbol === symbol ? { ...p, share, atRepayUsd: repayUsd } : p)));
               }}
-              onClose={() => {
-                setFreeOpen(false);
+              onClear={() => {
                 setPicks([]);
                 setAck(false);
               }}
@@ -189,37 +185,6 @@ export function RepaySheet({
   );
 }
 
-/** "Also free up stocks · Optional" (board 1): the list stays closed until asked for. */
-function AlsoFreeUp({ onOpen, disabled }: { onOpen: () => void; disabled: boolean }) {
-  return (
-    <button
-      type="button"
-      aria-expanded={false}
-      disabled={disabled}
-      onClick={onOpen}
-      className="flex min-h-[60px] items-center gap-3 rounded-[22px] bg-card px-4 py-2.5 text-left shadow-[0_1px_3px_rgba(14,13,11,0.06)]"
-    >
-      <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-full bg-chip">
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.2"
-          strokeLinecap="round"
-        >
-          <path d="M12 5v14M5 12h14" />
-        </svg>
-      </span>
-      <span className="flex flex-col gap-0.5">
-        <span className="text-[15px] font-semibold">Also free up stocks</span>
-        <span className="text-[12.5px] text-ink-mid">Optional</span>
-      </span>
-    </button>
-  );
-}
-
 /** Repay all (board 7): every stock that backs credit comes back in the same signature. */
 function AllBack() {
   return (
@@ -241,34 +206,33 @@ function AllBack() {
   );
 }
 
-/** "Also free up stocks": closed until asked for, the list once open, or, on Repay all, every stock coming back. */
+/**
+ * "Free up stocks", open from the start (Adrian, 2026-10-19: what can come out now shouldn't sit behind a button, and
+ * it needs no repay when the credit allows it), or, on Repay all, every stock coming back.
+ */
 function FreeUpPart({
   repaysAll,
   hasStocks,
-  open,
   items,
   plan,
   disabled,
-  onOpen,
   onTick,
   onShare,
-  onClose,
+  onClear,
 }: {
   repaysAll: boolean;
   hasStocks: boolean;
-  open: boolean;
   items: FreeUpItem[];
   plan: ComponentProps<typeof FreeUpList>["plan"];
   disabled: boolean;
-  onOpen: () => void;
   onTick: ComponentProps<typeof FreeUpList>["onTick"];
   onShare: ComponentProps<typeof FreeUpList>["onShare"];
-  onClose: () => void;
+  onClear: () => void;
 }) {
-  if (repaysAll) return hasStocks && <AllBack />;
-  if (!open) return hasStocks && <AlsoFreeUp onOpen={onOpen} disabled={disabled} />;
+  if (!hasStocks) return null;
+  if (repaysAll) return <AllBack />;
   return (
-    <FreeUpList items={items} plan={plan} disabled={disabled} onTick={onTick} onShare={onShare} onClose={onClose} />
+    <FreeUpList items={items} plan={plan} disabled={disabled} onTick={onTick} onShare={onShare} onClear={onClear} />
   );
 }
 

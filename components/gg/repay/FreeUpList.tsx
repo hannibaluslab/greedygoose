@@ -20,7 +20,7 @@ const PICKS = [0.5, 0.25] as const;
 const sharesText = (share: number, held: number) => `${formatShares(share * held)}`;
 
 /**
- * "Choose stocks to free up" (canvas boards 2–6): one row per stock that backs credit. Unticked, a row says what can
+ * "Free up stocks" (canvas boards 2–6, open from the start): one row per stock that backs credit. Unticked, a row says what can
  * come out of it now, as a share of what backs credit ("Free up All", "Up to 82%", "Limit reached", "Paused"), and under
  * its name what that comes to ("1.97 shares ≈ $492.50"); ticked, what the pick frees (Adrian 2026-10-18); a chip
  * shows how much in % (25%, 82%…), which opens
@@ -32,30 +32,37 @@ export function FreeUpList({
   disabled,
   onTick,
   onShare,
-  onClose,
+  onClear,
 }: {
   items: FreeUpItem[];
   plan: Plan;
   disabled: boolean;
   onTick: (symbol: string, on: boolean, share: number) => void;
   onShare: (symbol: string, share: number) => void;
-  /** "Not now": the list closes and nothing comes out. */
-  onClose: () => void;
+  /** "Clear": every tick comes off and nothing comes out. */
+  onClear: () => void;
 }) {
   const [menu, setMenu] = useState<string | null>(null);
   const picked = plan.rows.some((r) => r.picked);
   const used = wholePct(plan.used);
   return (
-    <section className="flex flex-col gap-2" aria-label="Choose stocks to free up">
-      <div className="flex items-center justify-between pl-1">
-        <h2 className="m-0 text-[15px] font-semibold">Choose stocks to free up</h2>
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex h-10 items-center px-1 text-[13px] font-semibold text-ink-mid underline underline-offset-2"
-        >
-          Not now
-        </button>
+    <section className="flex flex-col gap-2" aria-label="Free up stocks">
+      <div className="flex min-h-10 items-center justify-between pl-1">
+        <div className="flex flex-col gap-0.5">
+          <h2 className="m-0 text-[15px] font-semibold">Free up stocks</h2>
+          <p className="m-0 text-[12.5px] leading-snug text-ink-mid">
+            What you can take out now. Repaying first frees more.
+          </p>
+        </div>
+        {picked && (
+          <button
+            type="button"
+            onClick={onClear}
+            className="flex h-10 items-center px-1 text-[13px] font-semibold text-ink-mid underline underline-offset-2"
+          >
+            Clear
+          </button>
+        )}
       </div>
       {picked && (
         <div

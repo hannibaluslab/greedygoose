@@ -109,7 +109,9 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
 
 ## Repay (canvas boards 1–8)
 
-- One sheet over the page: Pay with (cash or a stock) and the amount, then an optional "Also free up stocks".
+- One sheet over the page: Pay with (cash or a stock) and the amount, then "Free up stocks", open from the start
+  (Adrian, 2026-10-19): each stock that backs credit says what can come out now, with no repay when the credit allows
+  it; repaying first frees more. "Clear" takes every tick off. The button reads Repay, Free up, or Repay & free up.
 - Ticked stocks share one limit that stops at 1.12. A chip shows the % of the shares held (25%, 50%, Max, All); the
   line under the stock shows the shares, "0.60 of 2.40 shares". All carries a padlock until the repay covers it.
 - Repay and free up go in one signature: repay first, then take each ticked stock out.

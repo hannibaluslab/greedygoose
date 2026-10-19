@@ -73,7 +73,6 @@ export function planRepaySheet<H extends RepayHolding & { backingShares: number 
   cfs: Record<string, number> | undefined;
   source: RepaySource | null;
   view: RepayView | null;
-  freeOpen: boolean;
   ticks: readonly FreeUpTick[];
 }) {
   const { data, cfs, source, view } = p;
@@ -97,7 +96,7 @@ export function planRepaySheet<H extends RepayHolding & { backingShares: number 
         repaysAll,
         repayPowerOutUsd: soldPowerOf(source, view, cfs),
         stocks,
-        picks: repaysAll ? freeAll(stocks) : p.freeOpen ? p.ticks : [],
+        picks: repaysAll ? freeAll(stocks) : p.ticks,
       })
     : null;
   const takeOuts = (plan?.frees ?? []).flatMap((f) => {
