@@ -1,7 +1,7 @@
 "use client";
 
 import { EQUITIES } from "@/lib/tokens/registry";
-import { useState } from "react";
+import { useState, type ComponentProps } from "react";
 import { useAccount } from "wagmi";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { AmountArrow, AmountBadge, AmountField, AmountHintLine, YouGetCash, YouGetShares } from "./AmountField";
@@ -56,6 +56,16 @@ const pickerRows = (options: AssetOption[]): PickerRow[] =>
     disabled: o.disabled,
   }));
 
+/** With nothing to trade, the legs read as cash to cash (no route, nothing quoted). */
+const NO_LEGS = { from: "cash", to: "cash" } as const;
+
+/** A buy or a trade that went to JAW's sheet lands on Home; a sale stays here ("idle" to useBoughtHome). */
+const boughtOf = (signed: Signed | null, phase: ReturnType<typeof useTrade>["phase"]) => ({
+  phase: signed && signed.route !== "sell" ? phase : ("idle" as const),
+  symbol: signed?.to ?? "",
+  from: signed?.route === "swap" ? signed.from : undefined,
+});
+
 /**
  * Trade (Adrian, 2026-10-15): "the same as nym where you can swap between any assets you have". NYM's MoveSheet in
  * the kit: the From card (Cash, or a stock's free shares) over the To card (Cash or any of the seven stocks), the flip
@@ -93,35 +103,15 @@ export function TradeSheet({
   const { menu, setMenu, closeMenu, onOpenChange } = useMenuGuard<"from" | "to" | null>(onClose, null);
   const [signed, setSigned] = useState<Signed | null>(null);
 
-  const from = legs?.from ?? "cash";
-  const to = legs?.to ?? "cash";
-  const input = { from, to, amount, all, data };
-  // The quotes each route needs: the sale's for its shares (debounced), the buy's for the typed dollars (debounced), and
-  // a swap's buy for the sale's floor once the sale's quote is in.
-  const a = tradeAmount(input);
-  const selling = a.route === "sell" || a.route === "swap";
-  const sellQuote = useSellQuote(legs && selling ? a.fromStock : undefined, a.sharesRaw);
-  const swapIn = planTrade({ ...input, sell: sellQuote }).buyInRaw;
-  const cashBuyQuote = useBuyQuote(legs && a.route === "buy" ? a.toStock : undefined, a.amountUsd);
-  const swapBuyQuote = useBuyQuoteRaw(
-    legs && a.route === "swap" ? a.toStock : undefined,
-    a.route === "swap" ? swapIn : 0n,
-  );
-  const view = planTrade({ ...input, sell: sellQuote, buy: a.route === "buy" ? cashBuyQuote : swapBuyQuote });
+  const { from, to } = legs ?? NO_LEGS;
+  const view = useTradeView({ from, to, amount, all, data }, !!legs);
   const feeBlocked = isConnected && fee.state === "unsupported";
   // What the button would sign now, per route, prepared while the sheet is idle so the tap opens JAW's sheet at once.
   const signable = open && !feeBlocked ? tradeSign(view, user, data.debtRaw) : null;
   const { sign: signTrade, phase, error, reset, busy, txHash, checking, blocked } = useTrade(signable);
 
   // Once a buy or a trade lands: Home, with "Bought 0.4554 NVDA" or "Traded NVDA for 0.0086 AAPL" from the receipt.
-  useBoughtHome({
-    phase: signed && signed.route !== "sell" ? phase : "idle",
-    user,
-    symbol: signed?.to ?? "",
-    from: signed?.route === "swap" ? signed.from : undefined,
-    txHash,
-    onClose,
-  });
+  useBoughtHome({ ...boughtOf(signed, phase), user, txHash, onClose });
 
   const fresh = () => {
     if (phase === "failed") reset();
@@ -152,7 +142,6 @@ export function TradeSheet({
     asset === "cash" ? TRADE_COPY.cashName : (data.holdings.find((h) => h.symbol === asset)?.name ?? asset);
   const fromHolding = data.holdings.find((h) => h.symbol === from);
   const toHolding = data.holdings.find((h) => h.symbol === to);
-  const soldHolding = data.holdings.find((h) => h.symbol === signed?.from);
   const picker = (which: "from" | "to") => {
     const asset = which === "from" ? from : to;
     return (
@@ -176,17 +165,7 @@ export function TradeSheet({
     <SheetShell open={open} onOpenChange={onOpenChange} title={TRADE_COPY.title}>
       <SheetSteps stepKey={doneSale ? "done" : "trade"} className="flex flex-col gap-3">
         {doneSale && signed ? (
-          <TxDone
-            title={TRADE_COPY.sold(
-              formatShares(
-                rawToShares(signed.sharesRaw, soldHolding?.multiplier ?? 10n ** 18n, view.fromStock?.decimals ?? 8),
-              ),
-              EQUITIES.find((e) => e.symbol === signed.from)?.name ?? tickerOf(signed.from),
-            )}
-            body={TRADE_COPY.soldBody}
-            txHash={txHash}
-            onDone={onClose}
-          />
+          <SoldDone signed={signed} data={data} decimals={view.fromStock?.decimals} txHash={txHash} onDone={onClose} />
         ) : !legs ? (
           <div className="flex flex-col items-start gap-3 pt-1">
             <h3 className="m-0 text-[17px] font-semibold tracking-[-0.01em]">{TRADE_COPY.emptyTitle}</h3>
@@ -234,48 +213,7 @@ export function TradeSheet({
                 {view.note.text}
               </p>
             )}
-            {view.ready && view.route === "buy" && view.toStock && view.buyQuote && (
-              <SmallPrint
-                data={data}
-                stock={view.toStock}
-                econ={quoteEconomics(view.buyQuote, view.toStock, toHolding?.priceUsd ?? 0)}
-                minShares={Number(minOut(view.buyQuote.amountOut)) / 10 ** view.toStock.decimals}
-                venue={VENUE_LABEL[view.buyQuote.venue]}
-                credit={null}
-              />
-            )}
-            {view.ready &&
-              view.route === "sell" &&
-              view.fromStock &&
-              fromHolding &&
-              view.sellQuote &&
-              view.sellPlan && (
-                <SellSmallPrint
-                  stock={view.fromStock}
-                  holding={fromHolding}
-                  quote={view.sellQuote}
-                  plan={view.sellPlan}
-                />
-              )}
-            {view.ready &&
-              view.route === "swap" &&
-              view.fromStock &&
-              view.toStock &&
-              fromHolding &&
-              view.sellQuote &&
-              view.sellPlan &&
-              view.buyQuote && (
-                <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">
-                  {swapSmallPrint({
-                    from: view.fromStock,
-                    to: view.toStock,
-                    fromHolding,
-                    sellQuote: view.sellQuote,
-                    plan: view.sellPlan,
-                    buyQuote: view.buyQuote,
-                  })}
-                </p>
-              )}
+            <TradeSmallPrint view={view} data={data} fromHolding={fromHolding} toHolding={toHolding} />
             {feeBlocked && (
               <p role="alert" className="m-0 text-[13px] text-act">
                 {TRADE_COPY.feeUnsupported}
@@ -320,4 +258,104 @@ function tradeSign(view: ReturnType<typeof planTrade>, user: `0x${string}`, debt
       feeFromSale: view.feeFromSale,
     };
   return null;
+}
+
+/**
+ * The quotes each route needs and the plan from them: the sale's for its shares (debounced), the buy's for the typed
+ * dollars (debounced), and a swap's buy for the sale's floor once the sale's quote is in. Nothing is quoted without legs.
+ */
+function useTradeView(input: Omit<Parameters<typeof planTrade>[0], "buy" | "sell">, hasLegs: boolean) {
+  const a = tradeAmount(input);
+  const selling = a.route === "sell" || a.route === "swap";
+  const sellQuote = useSellQuote(hasLegs && selling ? a.fromStock : undefined, a.sharesRaw);
+  const swapIn = planTrade({ ...input, sell: sellQuote }).buyInRaw;
+  const cashBuyQuote = useBuyQuote(hasLegs && a.route === "buy" ? a.toStock : undefined, a.amountUsd);
+  const swapBuyQuote = useBuyQuoteRaw(
+    hasLegs && a.route === "swap" ? a.toStock : undefined,
+    a.route === "swap" ? swapIn : 0n,
+  );
+  return planTrade({ ...input, sell: sellQuote, buy: a.route === "buy" ? cashBuyQuote : swapBuyQuote });
+}
+
+/** A sale that landed: what was sold, and that the money is in the cash. */
+function SoldDone({
+  signed,
+  data,
+  decimals,
+  txHash,
+  onDone,
+}: {
+  signed: Signed;
+  data: PositionData;
+  decimals: number | undefined;
+  txHash: ComponentProps<typeof TxDone>["txHash"];
+  onDone: () => void;
+}) {
+  return (
+    <TxDone
+      title={TRADE_COPY.sold(
+        formatShares(
+          rawToShares(
+            signed.sharesRaw,
+            data.holdings.find((h) => h.symbol === signed.from)?.multiplier ?? 10n ** 18n,
+            decimals ?? 8,
+          ),
+        ),
+        EQUITIES.find((e) => e.symbol === signed.from)?.name ?? tickerOf(signed.from),
+      )}
+      body={TRADE_COPY.soldBody}
+      txHash={txHash}
+      onDone={onDone}
+    />
+  );
+}
+
+/** The small print for the route on screen once it's ready (D7): the buy's, the sale's, or both moves of a trade. */
+function TradeSmallPrint({
+  view,
+  data,
+  fromHolding,
+  toHolding,
+}: {
+  view: ReturnType<typeof planTrade>;
+  data: PositionData;
+  fromHolding: PositionData["holdings"][number] | undefined;
+  toHolding: PositionData["holdings"][number] | undefined;
+}) {
+  return (
+    <>
+      {view.ready && view.route === "buy" && view.toStock && view.buyQuote && (
+        <SmallPrint
+          data={data}
+          stock={view.toStock}
+          econ={quoteEconomics(view.buyQuote, view.toStock, toHolding?.priceUsd ?? 0)}
+          minShares={Number(minOut(view.buyQuote.amountOut)) / 10 ** view.toStock.decimals}
+          venue={VENUE_LABEL[view.buyQuote.venue]}
+          credit={null}
+        />
+      )}
+      {view.ready && view.route === "sell" && view.fromStock && fromHolding && view.sellQuote && view.sellPlan && (
+        <SellSmallPrint stock={view.fromStock} holding={fromHolding} quote={view.sellQuote} plan={view.sellPlan} />
+      )}
+      {view.ready &&
+        view.route === "swap" &&
+        view.fromStock &&
+        view.toStock &&
+        fromHolding &&
+        view.sellQuote &&
+        view.sellPlan &&
+        view.buyQuote && (
+          <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">
+            {swapSmallPrint({
+              from: view.fromStock,
+              to: view.toStock,
+              fromHolding,
+              sellQuote: view.sellQuote,
+              plan: view.sellPlan,
+              buyQuote: view.buyQuote,
+            })}
+          </p>
+        )}
+    </>
+  );
 }
