@@ -4,8 +4,17 @@ import { cashBuyPlan } from "@/hooks/useBuy";
 import { contactsPlan } from "@/hooks/useContacts";
 import { convertPlan, type ConvertQuote } from "@/hooks/useConvert";
 import { creditBuyPlan } from "@/hooks/useCreditBuy";
-import { earnPlan, type EarnInput } from "@/hooks/useEarnWithStocks";
-import { repayPlan, sendPlan, swapPlan, type RepayInput, type SendInput, type SwapReads } from "@/lib/tx/plans";
+import {
+  earnPlan,
+  repayPlan,
+  sendPlan,
+  swapPlan,
+  type EarnInput,
+  type RepayInput,
+  type SendInput,
+  type SwapReads,
+  withdrawPlan,
+} from "@/lib/tx/plans";
 import { setMixPlan } from "@/hooks/useManageSave";
 import { keepMixPlan } from "@/hooks/useProtectSave";
 import { salePlan, type SellInput } from "@/hooks/useSell";
@@ -15,7 +24,6 @@ import { FREE_UP_FLOOR } from "@/lib/freeUpPlan";
 import { RISK } from "@/config/risk";
 import type { SellPlan } from "@/lib/sell";
 import type { BuyQuote } from "@/lib/swap/buy";
-import { withdrawPlan } from "@/lib/tx/plans";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 

@@ -6,6 +6,14 @@ import { TRADE_COPY, buildTradeCalls, saleBlockText, swapMinUsd, tradeActivity }
 import { freeRepayActivity, freeRepayRaw, type SellPlan } from "@/lib/sell";
 import { QUOTE_MOVED, quoteKey, type BuyQuote, type Side } from "@/lib/swap/buy";
 import { sellMinOut, type SellQuote } from "@/lib/swap/sell";
+import {
+  EARN_FLOOR,
+  buildEarnCalls,
+  earnActivity,
+  earnStop,
+  type EarnOpen,
+  type EarnQuote,
+} from "@/lib/earnWithStocks";
 import { FREE_UP_FLOOR } from "@/lib/freeUpPlan";
 import { USDC, type ReserveAsset } from "@/lib/tokens/registry";
 import { TxStop, txKey, type TxPlan } from "./prepared";
@@ -19,6 +27,8 @@ import { TxStop, txKey, type TxPlan } from "./prepared";
 type Address = `0x${string}`;
 /** A hook's batch builder, run from fresh reads while the screen is idle (useTx). */
 type Batch<I> = (p: I) => Promise<Call[]>;
+/** The cash read again while a batch is prepared (useSigningCash). */
+type CashToSign = (user: Address, amountRaw: bigint) => Promise<Cash>;
 
 /**
  * Free up: a stock's shares out of backing, an exact amount or all of them. Keyed by the stock, the amount and All. Its
@@ -212,7 +222,7 @@ export type TradeSign =
 /** What the stock → stock batch reads again while it's prepared (useSigningQuote, useSigningCash). */
 export type SwapReads = {
   quoteToSign: (stock: ReserveAsset, shown: BuyQuote, side?: Side) => Promise<BuyQuote>;
-  cashToSign: (user: Address, amountRaw: bigint) => Promise<Cash>;
+  cashToSign: CashToSign;
 };
 
 /**
@@ -257,4 +267,40 @@ export const swapPlan = (p: Extract<TradeSign, { route: "swap" }>, reads: SwapRe
   calls: () => swapBatch(p, reads),
   fallback: TRADE_COPY.swapFallback,
   activity: tradeActivity({ from: p.from, to: p.to, plan: p.plan, buyQuote: p.buyQuote }),
+});
+
+const EARN_REVERT =
+  "This would fail right now. Stock prices may be paused or have moved. Try a smaller amount in a moment.";
+
+/** What the earn step would sign: the quote and offer on screen, and the risk tick. */
+export type EarnInput = { user: `0x${string}`; quote: EarnQuote; offer: EarnOpen; confirmedRisk: boolean };
+
+/**
+ * What Earn with stocks signs (useTx): the screen's stops are checked again (earnStop), the cash is read again for the
+ * network fee (from savings first when the wallet can't pay it), then the batch is built and checked (assertEarn): the
+ * backing, the credit, and exactly that credit put where the cash earns. Keyed by the credit, what goes in use, the
+ * status it ends in, the risk tick and the stop, so another amount or plan is another batch.
+ */
+export const earnPlan = (p: EarnInput, cashToSign: CashToSign): TxPlan => ({
+  key: txKey(
+    "earn",
+    p.user,
+    p.quote.plan.creditRaw,
+    p.quote.plan.backing.map((b) => [b.stock.symbol, b.raw]),
+    p.quote.plan.after,
+    p.quote.plan.extraConfirm,
+    p.confirmedRisk,
+    earnStop(p.quote, p.offer, p.confirmedRisk),
+  ),
+  user: p.user,
+  calls: async () => {
+    const stop = earnStop(p.quote, p.offer, p.confirmedRisk);
+    if (stop) throw new TxStop(stop);
+    const cash = await cashToSign(p.user, 0n);
+    return buildEarnCalls({ user: p.user, backing: p.quote.plan.backing, creditRaw: p.quote.plan.creditRaw, cash });
+  },
+  fallback: EARN_REVERT,
+  // The health on Aave after it, read in its simulation: in Act, it stops (Act is the line).
+  healthFloor: EARN_FLOOR,
+  activity: earnActivity(p.quote.plan),
 });
