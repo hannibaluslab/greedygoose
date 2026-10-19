@@ -4,25 +4,18 @@ import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { buildBackAndCreditCalls, type Call } from "@/lib/aave/tx";
 import type { ActivityItem } from "@/lib/activity/decode";
-import type { AgentStatus } from "@/lib/agents/status";
 import { cashRaw, feeBufferRaw, payFromCash, toUsd, type Cash } from "@/lib/cash";
-import {
-  CREDIT_BLOCKED,
-  planCredit,
-  shortNames,
-  type Backing,
-  type BackingOption,
-  type CreditBlock,
-  type CreditPlan,
-  type CreditPosition,
-} from "@/lib/creditBuy";
-import { formatShares, formatUsdTrim, inWords } from "@/lib/formatting";
+import { planCredit, type Backing, type BackingOption, type CreditPlan, type CreditPosition } from "@/lib/creditBuy";
+import { formatUsdTrim } from "@/lib/formatting";
 import { PROTOCOLS } from "@/lib/protocols/config";
 import { aaveV3PoolAbi } from "@/lib/protocols/abis";
 import { buildAddSavingsCalls } from "@/lib/savings";
 import { STATUS_LABEL, statusFor } from "@/lib/risk/status";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import type { HealthFloor } from "@/lib/tx/prepared";
+import { EARN_BLOCKED, EARN_CLOSED, EARN_COSTS_MORE, type EarnClosed } from "./earnWithStocks/copy";
+
+export * from "./earnWithStocks/copy";
 
 /*
  * Earn with stocks (Adrian, 2026-10-15: "use your stock to add more cash to get yield"; then "the user should be able to
@@ -69,18 +62,6 @@ export function marginalApy(p: { debtUsd: number; amountUsd: number; apyNow: num
 }
 
 // ── The offer ────────────────────────────────────────────────────────────────────────────────────────────────────────
-
-/** Why the card offers nothing, in its one line. */
-export const EARN_CLOSED = {
-  "no-stocks": "Earn with stocks needs stocks that can back credit.",
-  "costs-more": "Credit costs more than your cash earns right now.",
-  paused: "New credit is paused right now. Try again later.",
-  credit: "Your stocks can’t back more credit right now.",
-  "in-act": CREDIT_BLOCKED["in-act"],
-  fee: CREDIT_BLOCKED.fee,
-  unread: "We couldn’t check this right now. Try again in a moment.",
-} as const;
-type EarnClosed = keyof typeof EARN_CLOSED;
 
 /** The smallest amount, the minimum buy's: under $1 a row's cost and earnings round to nothing. */
 /** A cent: no minimum of ours (ruling 2, Oct 17). */
@@ -191,21 +172,8 @@ export function earnQuote(p: {
   return { plan, amountUsd, cost, left, leftUsdYear: Math.max(0, Math.floor((left / 1000) * amountUsd)) };
 }
 
-/** The plan's blocks in the Cash sheet's own words: no protocol names. */
-const EARN_BLOCKED: Record<CreditBlock, string> = {
-  paused: EARN_CLOSED.paused,
-  "no-liquidity": "There isn’t enough credit available right now. Try a smaller amount.",
-  "over-free": CREDIT_BLOCKED["over-free"],
-  "in-act": CREDIT_BLOCKED["in-act"],
-  act: CREDIT_BLOCKED.act,
-  "too-much": "That’s more credit than your stocks can back right now. Try a smaller amount.",
-  fee: CREDIT_BLOCKED.fee,
-};
-
 /** Its batch is stopped if the health on Aave after it, read in its own simulation, is in Act (lib/creditBuy.ts CREDIT_FLOOR). */
 export const EARN_FLOOR: HealthFloor = { minHf: RISK.watchMin, stop: EARN_BLOCKED.act };
-
-export const EARN_COSTS_MORE = "At this amount, credit costs more than your cash earns right now.";
 
 /** Why this amount can't go ahead, in the red line under it; null when it can (the risk tick aside). */
 export function earnBlock(q: EarnQuote, o: EarnOpen): string | null {
@@ -225,55 +193,6 @@ export function earnStop(q: EarnQuote, o: EarnOpen, confirmedRisk: boolean): str
     return `Confirm you understand this puts your credit in ${STATUS_LABEL[q.plan.after]} first.`;
   return null;
 }
-
-// ── Words around the button ──────────────────────────────────────────────────────────────────────────────────────────
-
-/**
- * The one risk line, from what Protect does now: repay from the cash, and sell a little backing stock when that's on
- * (decision 5), only once the credit reaches Act and back to Watch (Act is the line, 2026-10-15). "Protect is off" only
- * when it is.
- */
-export function earnRiskLine(p: { names: readonly string[]; protect: AgentStatus; sell: AgentStatus }): string {
-  const one = p.names.length === 1 ? p.names[0] : null;
-  const falls = one ? `If ${one} falls` : "If your stocks fall";
-  if (p.protect === "on") {
-    return p.sell === "on"
-      ? `${falls}, you can repay from your cash. If your credit reaches Act, Protect repays from it, then sells a little ${one ?? "of them"} to bring it back to Watch.`
-      : `${falls}, you can repay from your cash. If your credit reaches Act, Protect repays from it. Protect won’t sell your ${one ? "stock" : "stocks"}.`;
-  }
-  const off = p.protect === "off" || p.protect === "unconfigured" ? " Protect is off." : "";
-  return `${falls}, repay from your cash. If ${one ? "it falls" : "they fall"} too far, part of ${one ? "it" : "them"} can be sold to repay what you owe.${off}`;
-}
-
-const ticker = (symbol: string) => symbol.replace(/c$/, "");
-
-/**
- * D7: every move in the batch, in small print on the signing screen, with what's owed after it, the risk and the
- * tokenized-stock line (CLAUDE.md › Compliance).
- */
-export function earnSmallPrint(p: {
-  backing: readonly { symbol: string; shares: number }[];
-  amountUsd: number;
-  owedUsd: number;
-  backedBy: readonly string[];
-  risk: string;
-}): string {
-  const moves = [
-    ...p.backing.map((b) => `${formatShares(b.shares)} ${ticker(b.symbol)} goes in use to back credit`),
-    `${formatUsdTrim(p.amountUsd)} of credit comes to your cash and starts earning`,
-  ];
-  // What's owed rounds up, as on Home: never shown as less than it is.
-  return (
-    `In one go: ${inWords(moves)}. You’ll owe ${formatUsdTrim(Math.ceil(p.owedUsd))}, backed by ${shortNames(p.backedBy)}. ` +
-    p.risk
-  );
-}
-
-/** The risk tick (D2), when it ends in Watch (ending in Act is blocked). */
-export const earnTick = (after: CreditPlan["after"]) =>
-  `I understand this puts my credit in ${STATUS_LABEL[after]}. If my stocks fall, part of them can be sold to repay what I owe.`;
-
-export const earnDone = (amountUsd: number) => `${formatUsdTrim(amountUsd)} is in your cash, earning.`;
 
 // ── The batch ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
