@@ -27,21 +27,21 @@ hooks that read and write, and a view that renders the plan. New screens follow 
 - **Tests:** unit tests for every planner and builder (`tests/unit`); Base simulations for every new batch
   (`tests/onchain`, needs an RPC); Foundry tests for the contracts, fork suites included when `BASE_RPC_URL` is set.
 - **Writes:** one path, `useTx`. No screen sends a transaction any other way, and there is no confirm screen of ours.
-- **Size:** files over 400 lines and functions with complexity over 25 warn. 35 warnings today; each goes when its
+- **Size:** files over 400 lines and functions with complexity over 25 warn. 31 warnings today; each goes when its
   screen or engine is rebuilt, then the rule becomes an error.
 
 ## Clean-up ahead (V1 and V2)
 
-Measured on 2026-10-18, on `v2` after V0.
+Measured on 2026-10-19, on `v2` at `391053a` and the Credit Buy split after it.
 
 | Issue                                     | Today                                                                                          | Target                                                                                     |
 | ----------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Two vocabularies                          | Screens say backing, credit, Protect; code says `locked`, `borrow`, `loan`, `guardian` (about 580 lines) | One domain language in code too. Aave's ABIs and the contracts keep their own names        |
-| Comments that cite people and dates       | 141 lines such as "(Adrian, 2026-10-15)"                                                       | Comments say why; who decided and when lives in the decisions log                          |
-| Oversized screens and engines             | `CreditBuySheet` 831 lines, `trade.ts` 575, `send.ts` 530, `Board` 505, `repay.ts` 476         | Under 400 lines each, split by step or concern                                             |
-| One flat component folder                 | 58 files in `components/gg/`                                                                   | Feature folders (kit, home, repay, stock, invest, agents, leaderboard, settings, send)     |
-| Free up outside Repay                     | `UnlockSheet` and the Repay \| Free up toggle                                                  | Gone once the Repay sheet (canvas boards 1–8) is rebuilt                                   |
-| Non-null assertions                       | 109 in the app code                                                                            | Replaced as each module is touched                                                         |
+| Two vocabularies                          | Screens say backing, credit, Protect; code says `locked`, `borrow`, `loan`, `guardian` (about 294 lines) | One domain language in code too. Aave's ABIs and the contracts keep their own names        |
+| Comments that cite people and dates       | 73 lines such as "(Adrian, 2026-10-15)"                                                        | Comments say why; who decided and when lives in the decisions log                          |
+| Oversized screens and engines             | `trade.ts` 669 lines, `Board` 654, `send.ts` 616, `repay.ts` 562, `Send` 481                   | Under 400 lines each, split by step or concern                                             |
+| One flat component folder                 | 58 files in `components/gg/`, plus `agents/`                                                   | Feature folders (kit, home, repay, stock, invest, agents, leaderboard, settings, send)     |
+| Free up outside Repay                     | Done: Free up lives in the rebuilt Repay sheet (`components/repay/`)                           | Done                                                                                       |
+| Non-null assertions                       | 108 in the app code                                                                            | Replaced as each module is touched                                                         |
 
 Each row is done module by module as V1 (engines) and V2 (screens) reach it, never as one big sweep across working
 code.
