@@ -13,7 +13,7 @@ import { salePlan, type SellInput } from "@/hooks/useSell";
 import { swapPlan, type SwapReads } from "@/hooks/useTrade";
 import { CREDIT_FLOOR, type CreditPlan } from "@/lib/creditBuy";
 import { EARN_FLOOR } from "@/lib/earnWithStocks";
-import { FREE_UP_FLOOR } from "@/lib/freeUp";
+import { FREE_UP_FLOOR } from "@/lib/freeUpPlan";
 import { RISK } from "@/config/risk";
 import type { SellPlan } from "@/lib/sell";
 import type { BuyQuote } from "@/lib/swap/buy";

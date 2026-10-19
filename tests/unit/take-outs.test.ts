@@ -3,7 +3,7 @@ import { decodeFunctionData, maxUint256 } from "viem";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { AAVE } from "@/lib/aave/addresses";
 import { buildRepayCalls } from "@/lib/aave/tx";
-import { FREE_UP_FLOOR } from "@/lib/freeUp";
+import { FREE_UP_FLOOR } from "@/lib/freeUpPlan";
 import { EQUITIES } from "@/lib/tokens/registry";
 import { takeOutPlan, withTakeOuts } from "@/lib/tx/plans";
 import { txKey, type TxPlan } from "@/lib/tx/prepared";

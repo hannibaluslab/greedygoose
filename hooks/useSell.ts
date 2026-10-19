@@ -1,6 +1,6 @@
 "use client";
 
-import { FREE_UP_FLOOR } from "@/lib/freeUp";
+import { FREE_UP_FLOOR } from "@/lib/freeUpPlan";
 import { usePublicClient } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
 import { TxStop, txKey, useTx, type TxPlan } from "./useTx";

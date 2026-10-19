@@ -1,5 +1,6 @@
-import { CREDIT_CAP } from "@/config/risk";
+import { CREDIT_CAP, RISK } from "@/config/risk";
 import { statusFor, type Status } from "@/lib/risk/status";
+import type { HealthFloor } from "@/lib/tx/prepared";
 
 /*
  * Repay + free up (canvas boards 1–8): the stocks ticked under "Also free up stocks", and how much of each comes out
@@ -8,6 +9,14 @@ import { statusFor, type Status } from "@/lib/risk/status";
  * share of the shares held (25%, 50%, Max, All). Pure, so it's unit-tested (tests/unit/free-up-plan.test.ts); the batch
  * is checked again on Aave's own health before JAW's sheet (FREE_UP_FLOOR).
  */
+
+/** Free up's line: stock taken out of backing never leaves the credit in Act. */
+export const FREE_UP_BLOCKED = {
+  act: "That would put your credit in Act. Free up less, or repay some first.",
+} as const;
+
+/** A batch that takes stock out of backing is stopped if the health on Aave after it, read in its simulation, is in Act. */
+export const FREE_UP_FLOOR: HealthFloor = { minHf: RISK.watchMin, stop: FREE_UP_BLOCKED.act };
 
 /** Under the limit by a hair when a stock comes out at its most, so a price tick before signing doesn't stop it. */
 const AT_MOST_MARGIN = 0.995;

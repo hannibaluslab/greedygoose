@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { RISK } from "@/config/risk";
-import { FREE_UP_BLOCKED, FREE_UP_FLOOR } from "@/lib/freeUp";
+import { FREE_UP_BLOCKED, FREE_UP_FLOOR } from "@/lib/freeUpPlan";
 
 /* What can come out is lib/freeUpPlan.ts (tests/unit/free-up-plan.test.ts); here, the line every take-out is held to. */
 describe("Free up's line", () => {
