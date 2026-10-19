@@ -269,7 +269,6 @@ export function TurnIntoCash({
     setHeld(null);
     tx.reset();
   };
-  const got = held?.sent.reduce((t, q) => t + q.outRaw, 0n) ?? 0n;
   return (
     <>
       {shown && !landed && (
@@ -296,34 +295,52 @@ export function TurnIntoCash({
           }}
         />
       )}
-      <SheetShell
-        open={landed}
-        onOpenChange={(next) => !next && close()}
-        title={held?.ask ? "Do this automatically next time?" : "Turn into cash"}
-      >
-        <SheetSteps stepKey={held?.ask ? "ask" : "done"} className="flex flex-col gap-3.5">
-          {held?.ask ? (
-            <AutomaticStep
-              landed={cashNowText(held.sent)}
-              grant={setup.automatic}
-              onYes={() =>
-                setup.convertAutomatically(() => {
-                  toast.success("Done. Next time it’s automatic");
-                  close();
-                })
-              }
-              onNo={close}
-            />
-          ) : (
-            <TxDone
-              title="It’s cash now"
-              body={`About ${usd(got)} is in your cash.`}
-              txHash={tx.txHash}
-              onDone={close}
-            />
-          )}
-        </SheetSteps>
-      </SheetShell>
+      <ConvertedSheet open={landed} held={held} setup={setup} txHash={tx.txHash} onClose={close} />
     </>
+  );
+}
+
+/**
+ * Once the conversion lands: "Do this automatically next time?" when it was asked at the tap, else "It's cash now" with
+ * what came in.
+ */
+function ConvertedSheet({
+  open,
+  held,
+  setup,
+  txHash,
+  onClose,
+}: {
+  open: boolean;
+  held: { sent: readonly ConvertQuote[]; ask: boolean } | null;
+  setup: ReturnType<typeof useCashSetup>;
+  txHash: ReturnType<typeof useConvert>["txHash"];
+  onClose: () => void;
+}) {
+  const got = held?.sent.reduce((t, q) => t + q.outRaw, 0n) ?? 0n;
+  return (
+    <SheetShell
+      open={open}
+      onOpenChange={(next) => !next && onClose()}
+      title={held?.ask ? "Do this automatically next time?" : "Turn into cash"}
+    >
+      <SheetSteps stepKey={held?.ask ? "ask" : "done"} className="flex flex-col gap-3.5">
+        {held?.ask ? (
+          <AutomaticStep
+            landed={cashNowText(held.sent)}
+            grant={setup.automatic}
+            onYes={() =>
+              setup.convertAutomatically(() => {
+                toast.success("Done. Next time it’s automatic");
+                onClose();
+              })
+            }
+            onNo={onClose}
+          />
+        ) : (
+          <TxDone title="It’s cash now" body={`About ${usd(got)} is in your cash.`} txHash={txHash} onDone={onClose} />
+        )}
+      </SheetSteps>
+    </SheetShell>
   );
 }
