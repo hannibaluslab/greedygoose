@@ -5,11 +5,9 @@ import type { SellBlock } from "@/lib/sell";
 import { SELL_LIMITS } from "@/lib/swap/sell";
 import { VENUE_LABEL } from "@/lib/swap/venues";
 import { rawToShares } from "@/lib/tokens/b20";
-import type { ReserveAsset } from "@/lib/tokens/registry";
+import { tickerOf, type ReserveAsset } from "@/lib/tokens/registry";
 import type { RepayView } from "./plan";
 import type { RepaySource } from "./sources";
-
-export const tickerOf = (symbol: string) => symbol.replace(/c$/, "");
 
 /** Every main-screen string of the Repay sheet. None names a protocol: "the stock’s price" is Aave's (the small print says so). */
 export const REPAY_COPY = {

@@ -2,10 +2,8 @@ import { formatUnits, getAddress, isAddressEqual, type Address } from "viem";
 import { CASH } from "@/config/risk";
 import { recipientBlock, type RecipientBlock } from "@/lib/contracts";
 import { formatShares, formatUsd, shortAddress } from "@/lib/formatting";
-import { USDC, type ReserveAsset } from "@/lib/tokens/registry";
+import { USDC, tickerOf, type ReserveAsset } from "@/lib/tokens/registry";
 import type { Recipient, RecipientChecks } from "./recipient";
-
-export const tickerOf = (symbol: string) => symbol.replace(/c$/, "");
 
 /** Every main-screen string of Send. None names a protocol or a token standard. */
 export const SEND_COPY = {

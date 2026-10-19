@@ -6,10 +6,8 @@ import { BUY_LIMITS, minOut, type BuyQuote } from "@/lib/swap/buy";
 import { SELL_LIMITS, type SellQuote } from "@/lib/swap/sell";
 import { VENUE_LABEL } from "@/lib/swap/venues";
 import { rawToShares } from "@/lib/tokens/b20";
-import type { ReserveAsset } from "@/lib/tokens/registry";
+import { tickerOf, type ReserveAsset } from "@/lib/tokens/registry";
 import type { TradeHolding } from "./types";
-
-export const tickerOf = (symbol: string) => symbol.replace(/c$/, "");
 
 /** Every main-screen string of the Trade sheet. None names a protocol: "the stock’s price" is Aave's (the small print says so). */
 export const TRADE_COPY = {

@@ -1,3 +1,5 @@
+import { tickerOf } from "@/lib/tokens/registry";
+
 const COLORS: Record<string, string> = {
   NVDA: "#76b900",
   AAPL: "#2c2a25",
@@ -28,7 +30,7 @@ export function StockAvatar({
   font?: number;
   weight?: number;
 }) {
-  const ticker = symbol.replace(/c$/, "");
+  const ticker = tickerOf(symbol);
   if (LOGOS.has(ticker)) {
     return (
       <span
@@ -57,7 +59,7 @@ export function StockAvatar({
   );
 }
 
-export const tickerOf = (symbol: string) => symbol.replace(/c$/, "");
+export { tickerOf };
 
 /** A stock's badge colour, for the pieces that draw it beside its badge (the mix bar). */
 export const stockColor = (symbol: string) => COLORS[tickerOf(symbol)] ?? "#2c2a25";

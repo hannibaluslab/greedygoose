@@ -6,7 +6,8 @@ import { BUY_LIMITS, minOut, quoteEconomics, type BuyQuote } from "@/lib/swap/bu
 import { SELL_LIMITS, sellEconomics, type SellQuote } from "@/lib/swap/sell";
 import { rawToShares } from "@/lib/tokens/b20";
 import { swapBuyInRaw, swapMinUsd } from "./calls";
-import { TRADE_COPY, saleBlockText, tickerOf } from "./copy";
+import { TRADE_COPY, saleBlockText } from "./copy";
+import { tickerOf } from "@/lib/tokens/registry";
 import { legOf, tradeAmount } from "./form";
 import { MIN_BUY_RAW, held } from "./options";
 import type { AmountHint, QuoteState, TradeAsset, TradeData } from "./types";

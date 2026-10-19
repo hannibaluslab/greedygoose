@@ -6,7 +6,8 @@ import { freeRepayRaw, planSell, type SellPlan } from "@/lib/sell";
 import { sellMinOut, type SellQuote } from "@/lib/swap/sell";
 import { legOf, type Leg, type QuoteState } from "@/lib/trade";
 import { rawToShares } from "@/lib/tokens/b20";
-import { REPAY_COPY, blockText, tickerOf } from "./copy";
+import { REPAY_COPY, blockText } from "./copy";
+import { tickerOf } from "@/lib/tokens/registry";
 import type { RepayForm } from "./form";
 import {
   allText,

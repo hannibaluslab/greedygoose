@@ -82,6 +82,9 @@ export const stockRank = (symbol: string) => {
   const i = EQUITIES.findIndex((e) => e.symbol === symbol);
   return i < 0 ? EQUITIES.length : i;
 };
+/** A stock's ticker from its registry symbol: "NVDAc" → "NVDA". */
+export const tickerOf = (symbol: string) => symbol.replace(/c$/, "");
+
 export const byStockOrder = (a: { symbol: string }, b: { symbol: string }) => stockRank(a.symbol) - stockRank(b.symbol);
 
 export const USDC: ReserveAsset = {

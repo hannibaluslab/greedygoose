@@ -5,7 +5,7 @@ import type { AgentEvent } from "@/lib/agents/events";
 import type { AgentMove, MoveContext, Words } from "@/lib/agents/feed";
 import { maxSpendRaw, toUsd, type Cash } from "@/lib/cash";
 import { formatCoin, formatShares, formatUsd, formatUsdTrim, inWords, shortAddress } from "@/lib/formatting";
-import { EQUITIES, USDC } from "@/lib/tokens/registry";
+import { EQUITIES, USDC, tickerOf } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 
 /*
@@ -106,9 +106,8 @@ const earnLine = (usd: number) => `${signedUsd(usd)} from credit, earning`;
 const saveLine = (usd: number) => `${formatUsd(usd)} into savings`;
 const cents = (usd: number) => Math.round(usd * 100) / 100;
 const sum = (xs: readonly number[]) => xs.reduce((a, b) => a + b, 0);
-const ticker = (symbol: string) => symbol.replace(/c$/, "");
-const nameOf = (symbol: string) => EQUITIES.find((e) => e.symbol === symbol)?.name ?? ticker(symbol);
-const shares = (i: ActivityItem) => `${formatShares(i.amount)} ${ticker(i.symbol)}`;
+const nameOf = (symbol: string) => EQUITIES.find((e) => e.symbol === symbol)?.name ?? tickerOf(symbol);
+const shares = (i: ActivityItem) => `${formatShares(i.amount)} ${tickerOf(i.symbol)}`;
 const isStock = (i: ActivityItem) => EQUITIES.some((e) => e.symbol === i.symbol);
 const isUsdc = (i: ActivityItem) => i.symbol === USDC.symbol;
 

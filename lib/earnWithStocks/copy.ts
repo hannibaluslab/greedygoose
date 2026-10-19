@@ -3,6 +3,7 @@ import { CREDIT_BLOCKED, shortNames, type CreditBlock } from "@/lib/creditBuy/co
 import type { CreditPlan } from "@/lib/creditBuy";
 import { formatShares, formatUsdTrim, inWords } from "@/lib/formatting";
 import { STATUS_LABEL } from "@/lib/risk/status";
+import { tickerOf } from "@/lib/tokens/registry";
 
 /** Earn with stocks' words: why the card offers nothing, the plan's blocks in the Cash sheet's words, and the small print. */
 
@@ -50,8 +51,6 @@ export function earnRiskLine(p: { names: readonly string[]; protect: AgentStatus
   return `${falls}, repay from your cash. If ${one ? "it falls" : "they fall"} too far, part of ${one ? "it" : "them"} can be sold to repay what you owe.${off}`;
 }
 
-const ticker = (symbol: string) => symbol.replace(/c$/, "");
-
 /**
  * D7: every move in the batch, in small print on the signing screen, with what's owed after it, the risk and the
  * tokenized-stock line (CLAUDE.md › Compliance).
@@ -64,7 +63,7 @@ export function earnSmallPrint(p: {
   risk: string;
 }): string {
   const moves = [
-    ...p.backing.map((b) => `${formatShares(b.shares)} ${ticker(b.symbol)} goes in use to back credit`),
+    ...p.backing.map((b) => `${formatShares(b.shares)} ${tickerOf(b.symbol)} goes in use to back credit`),
     `${formatUsdTrim(p.amountUsd)} of credit comes to your cash and starts earning`,
   ];
   // What's owed rounds up, as on Home: never shown as less than it is.
