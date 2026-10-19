@@ -147,7 +147,7 @@ contract EntryForkTest is ExecutorForkBase {
         address a = _newJawAccount("a");
         vm.recordLogs();
         _grantThroughAccount(_permission(a, GooseExecutor.Job.Entry, 1_000e6));
-        PM.Permission memory approved = abi.decode(vm.getRecordedLogs()[0].data, (PM.Permission));
+        bytes memory approved = vm.getRecordedLogs()[0].data;
         (bool ok,,,) = x.registrationOf(approved);
         assertTrue(ok, "a JAW grant of the Entry template registers from its event data");
         x.registerApproved(approved);

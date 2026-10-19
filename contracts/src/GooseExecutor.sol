@@ -404,13 +404,15 @@ contract GooseExecutor is AutomationCompatibleInterface {
         _register(job, account, start, end, salt, cap, t);
     }
 
-    /// Switches a job on from the permission exactly as JAW's manager approved it: a runner watching the manager's
-    /// PermissionApproved passes the event's data. Anyone may call it: it moves no money, and `_register` checks
+    /// Switches a job on from the permission exactly as JAW's manager approved it. `approved` is the manager's
+    /// PermissionApproved data as logged, abi.encode(permission): one `bytes` argument, so a runner that can't build a
+    /// nested struct (KeeperHub) passes it through as is. Anyone may call it: it moves no money, and `_register` checks
     /// everything again on-chain.
-    function registerApproved(PM.Permission calldata permission) external nonReentrant {
-        (bool ok, Job job, uint160 cap, uint256 t) = _match(permission);
+    function registerApproved(bytes calldata approved) external nonReentrant {
+        PM.Permission memory p = abi.decode(approved, (PM.Permission));
+        (bool ok, Job job, uint160 cap, uint256 t) = _match(p);
         if (!ok) revert NotApproved();
-        _register(job, permission.account, permission.start, permission.end, permission.salt, cap, t);
+        _register(job, p.account, p.start, p.end, p.salt, cap, t);
     }
 
     /// "Keep my mix" for Protect · sell: sell the same share of each holding instead of the most safety per dollar
@@ -598,13 +600,13 @@ contract GooseExecutor is AutomationCompatibleInterface {
     }
 
     /// Which job a permission the manager approved would switch on, with its cap and terms: what `registerApproved`
-    /// accepts. A runner reads it first, so another app's JAW grant costs it no write.
-    function registrationOf(PM.Permission calldata permission)
+    /// accepts, from the same PermissionApproved data. A runner reads it first, so another app's grant costs no write.
+    function registrationOf(bytes calldata approved)
         external
         view
         returns (bool ok, Job job, uint160 cap, uint256 t)
     {
-        return _match(permission);
+        return _match(abi.decode(approved, (PM.Permission)));
     }
 
     /// The seven stocks, by reserve id.

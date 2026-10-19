@@ -20,8 +20,8 @@ contract ExecutorStub {
         last = abi.encodeCall(GooseExecutor.performUpkeep, (performData));
     }
 
-    function registerApproved(PM.Permission calldata permission) external {
-        last = abi.encodeCall(GooseExecutor.registerApproved, (permission));
+    function registerApproved(bytes calldata approved) external {
+        last = abi.encodeCall(GooseExecutor.registerApproved, (approved));
     }
 
     function pause() external {
@@ -47,7 +47,7 @@ contract GooseReceiverTest is Test {
     function test_a_registration_goes_through_too() public {
         PM.Permission memory p;
         p.account = makeAddr("alice");
-        bytes memory report = abi.encodeCall(GooseExecutor.registerApproved, (p));
+        bytes memory report = abi.encodeCall(GooseExecutor.registerApproved, (abi.encode(p)));
         vm.prank(forwarder);
         r.onReport(_metadata(author, name), report);
         assertEq(executor.last(), report);

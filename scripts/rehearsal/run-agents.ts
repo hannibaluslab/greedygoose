@@ -76,11 +76,13 @@ async function register(fork: Fork, state: State, who: (a: Address) => string) {
   for (const log of logs) {
     const permission = log.args.permission;
     if (!permission) continue;
+    // The event's data as logged, passed on as one bytes argument, as KeeperHub's runner does.
+    const approved = log.data;
     const [ok] = await fork.pub.readContract({
       address: state.executor,
       abi: gooseExecutorAbi,
       functionName: "registrationOf",
-      args: [permission],
+      args: [approved],
     });
     if (!ok) {
       console.log(
@@ -91,7 +93,7 @@ async function register(fork: Fork, state: State, who: (a: Address) => string) {
     const receipt = await fork.send(
       state.forwarder,
       state.executor,
-      encodeFunctionData({ abi: gooseExecutorAbi, functionName: "registerApproved", args: [permission] }),
+      encodeFunctionData({ abi: gooseExecutorAbi, functionName: "registerApproved", args: [approved] }),
       "registerApproved",
       REGISTER_GAS,
     );

@@ -451,12 +451,24 @@ contract GooseExecutorTest is Test {
         p.spender = stranger;
         vm.prank(stranger);
         vm.expectRevert(GooseExecutor.NotApproved.selector);
-        x.registerApproved(p);
+        x.registerApproved(abi.encode(p));
 
         p = _grant(GooseExecutor.Job.Protect, 5e6);
         vm.prank(stranger);
         vm.expectRevert(GooseExecutor.AccountNotAllowed.selector);
-        x.registerApproved(p);
+        x.registerApproved(abi.encode(p));
+    }
+
+    /// Both entries take the PermissionApproved data as logged, one bytes argument; anything that isn't a permission's
+    /// encoding reverts before any check.
+    function test_registration_takes_the_events_data_and_refuses_garbage() public {
+        PM.Permission memory p = _grant(GooseExecutor.Job.Save, 5e6);
+        (bool ok,,,) = x.registrationOf(abi.encode(p));
+        assertTrue(ok);
+        vm.expectRevert();
+        x.registrationOf(hex"00");
+        vm.expectRevert();
+        x.registerApproved(abi.encode(uint256(1)));
     }
 
     /// Protect · sell's grant: NVIDIA and Tesla for sale with their own daily limits, the other five never.
@@ -594,7 +606,7 @@ contract GooseExecutorTest is Test {
     }
 
     function _registers(PM.Permission memory p, GooseExecutor.Job job, uint160 cap, uint256 t) internal view {
-        (bool ok, GooseExecutor.Job got, uint160 gotCap, uint256 gotTerms) = x.registrationOf(p);
+        (bool ok, GooseExecutor.Job got, uint160 gotCap, uint256 gotTerms) = x.registrationOf(abi.encode(p));
         assertTrue(ok);
         assertEq(uint8(got), uint8(job));
         assertEq(gotCap, cap);
@@ -602,7 +614,7 @@ contract GooseExecutorTest is Test {
     }
 
     function _ignored(PM.Permission memory p, string memory what) internal view {
-        (bool ok,,,) = x.registrationOf(p);
+        (bool ok,,,) = x.registrationOf(abi.encode(p));
         assertFalse(ok, what);
     }
 }

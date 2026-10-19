@@ -1291,85 +1291,9 @@ export const gooseExecutorAbi = [
     name: "registerApproved",
     inputs: [
       {
-        name: "permission",
-        type: "tuple",
-        internalType: "struct IJustaPermissionManager.Permission",
-        components: [
-          {
-            name: "account",
-            type: "address",
-            internalType: "address",
-          },
-          {
-            name: "spender",
-            type: "address",
-            internalType: "address",
-          },
-          {
-            name: "start",
-            type: "uint48",
-            internalType: "uint48",
-          },
-          {
-            name: "end",
-            type: "uint48",
-            internalType: "uint48",
-          },
-          {
-            name: "salt",
-            type: "uint256",
-            internalType: "uint256",
-          },
-          {
-            name: "calls",
-            type: "tuple[]",
-            internalType: "struct IJustaPermissionManager.CallPermission[]",
-            components: [
-              {
-                name: "target",
-                type: "address",
-                internalType: "address",
-              },
-              {
-                name: "selector",
-                type: "bytes4",
-                internalType: "bytes4",
-              },
-              {
-                name: "checker",
-                type: "address",
-                internalType: "address",
-              },
-            ],
-          },
-          {
-            name: "spends",
-            type: "tuple[]",
-            internalType: "struct IJustaPermissionManager.SpendLimit[]",
-            components: [
-              {
-                name: "token",
-                type: "address",
-                internalType: "address",
-              },
-              {
-                name: "allowance",
-                type: "uint160",
-                internalType: "uint160",
-              },
-              {
-                name: "unit",
-                type: "uint8",
-                internalType: "enum IJustaPermissionManager.PeriodUnit",
-              },
-              {
-                name: "multiplier",
-                type: "uint16",
-                internalType: "uint16",
-              },
-            ],
-          },
-        ],
+        name: "approved",
+        type: "bytes",
+        internalType: "bytes",
       },
     ],
     outputs: [],
@@ -1380,85 +1304,9 @@ export const gooseExecutorAbi = [
     name: "registrationOf",
     inputs: [
       {
-        name: "permission",
-        type: "tuple",
-        internalType: "struct IJustaPermissionManager.Permission",
-        components: [
-          {
-            name: "account",
-            type: "address",
-            internalType: "address",
-          },
-          {
-            name: "spender",
-            type: "address",
-            internalType: "address",
-          },
-          {
-            name: "start",
-            type: "uint48",
-            internalType: "uint48",
-          },
-          {
-            name: "end",
-            type: "uint48",
-            internalType: "uint48",
-          },
-          {
-            name: "salt",
-            type: "uint256",
-            internalType: "uint256",
-          },
-          {
-            name: "calls",
-            type: "tuple[]",
-            internalType: "struct IJustaPermissionManager.CallPermission[]",
-            components: [
-              {
-                name: "target",
-                type: "address",
-                internalType: "address",
-              },
-              {
-                name: "selector",
-                type: "bytes4",
-                internalType: "bytes4",
-              },
-              {
-                name: "checker",
-                type: "address",
-                internalType: "address",
-              },
-            ],
-          },
-          {
-            name: "spends",
-            type: "tuple[]",
-            internalType: "struct IJustaPermissionManager.SpendLimit[]",
-            components: [
-              {
-                name: "token",
-                type: "address",
-                internalType: "address",
-              },
-              {
-                name: "allowance",
-                type: "uint160",
-                internalType: "uint160",
-              },
-              {
-                name: "unit",
-                type: "uint8",
-                internalType: "enum IJustaPermissionManager.PeriodUnit",
-              },
-              {
-                name: "multiplier",
-                type: "uint16",
-                internalType: "uint16",
-              },
-            ],
-          },
-        ],
+        name: "approved",
+        type: "bytes",
+        internalType: "bytes",
       },
     ],
     outputs: [

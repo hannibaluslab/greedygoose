@@ -168,7 +168,7 @@ contract GooseExecutorForkTest is ExecutorForkBase {
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertEq(logs[0].emitter, address(MANAGER));
         assertEq(logs[0].topics[0], PM.PermissionApproved.selector);
-        PM.Permission memory approved = abi.decode(logs[0].data, (PM.Permission));
+        bytes memory approved = logs[0].data; // the event's data as logged: what a runner passes on as is
 
         (bool ok, GooseExecutor.Job job, uint160 cap,) = x.registrationOf(approved);
         assertTrue(ok, "our grant");
@@ -195,7 +195,7 @@ contract GooseExecutorForkTest is ExecutorForkBase {
         other.spender = attacker;
         vm.recordLogs();
         _grantThroughAccount(other);
-        (ok,,,) = x.registrationOf(abi.decode(vm.getRecordedLogs()[0].data, (PM.Permission)));
+        (ok,,,) = x.registrationOf(vm.getRecordedLogs()[0].data);
         assertFalse(ok, "another spender");
     }
 
@@ -304,12 +304,12 @@ contract GooseExecutorForkTest is ExecutorForkBase {
         address alice = _newJawAccount("alice");
         PM.Permission memory p = _permission(alice, GooseExecutor.Job.Protect, 5e6);
         vm.expectRevert(GooseExecutor.NotApproved.selector);
-        x.registerApproved(p); // Alice never approved it
+        x.registerApproved(abi.encode(p)); // Alice never approved it
 
         vm.prank(owner);
         x.pause();
         _grantThroughAccount(p);
-        x.registerApproved(p);
+        x.registerApproved(abi.encode(p));
         (uint8 jobs,,,,) = x.jobsOf(alice);
         assertEq(jobs, 2, "registered while paused");
     }

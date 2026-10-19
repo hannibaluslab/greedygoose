@@ -16,7 +16,8 @@ interface IReceiver is IERC165 {
 /// @notice Where Chainlink CRE delivers the GreedyGoose workflow's reports (runner switch plan, C3). CRE doesn't call
 ///         contracts directly: its network signs a report, and Base's KeystoneForwarder hands it to a receiver. This one
 ///         is one of GooseExecutor's runners (`isForwarder`), and it does exactly two things with a report: a run
-///         (`performUpkeep`) or a registration (`registerApproved`). The report is that call's calldata. The executor
+///         (`performUpkeep`) or a registration (`registerApproved`, with the PermissionApproved data). The report is that
+///         call's calldata. The executor
 ///         still re-checks everything, as it does for any runner.
 /// @dev Narrower than Chainlink's generic AutomationReceiver: the target and the two functions are fixed here, and the
 ///      workflow's owner and name are checked on every report. Both may be 0 only for `cre workflow simulate`, whose

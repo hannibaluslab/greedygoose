@@ -612,7 +612,7 @@ contract ProtectSellForkTest is SellForkBase {
 
         vm.recordLogs();
         _grantThroughAccount(_sellPermission(a, _limits(NVDA, 4e8)));
-        PM.Permission memory approved = abi.decode(vm.getRecordedLogs()[0].data, (PM.Permission));
+        bytes memory approved = vm.getRecordedLogs()[0].data;
         (bool ok,,,) = x.registrationOf(approved);
         assertTrue(ok, "a JAW grant of the sell template registers from its event data");
         x.registerApproved(approved);

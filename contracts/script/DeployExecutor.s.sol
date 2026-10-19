@@ -34,8 +34,8 @@ interface ISpokeOracle {
 ///   A run is `performUpkeep(performData)` with `checkUpkeep(abi.encode(shard, shards))`'s or
 ///   `checkProtect(shard, shards)`'s answer, at a gas limit of 5,000,000: a sale needs up to about 4.0M (seven stocks,
 ///   six slices: ProtectSellSevenStockGasForkTest); with less, sales are deferred (the accounts after them still run).
-///   A registration is `registerApproved(permission)` with a PermissionApproved event's data, read first through
-///   `registrationOf` (about 480k gas cold for Protect · sell on all seven stocks).
+///   A registration is `registerApproved(data)` with a PermissionApproved event's data as logged, read first through
+///   `registrationOf(data)` (about 480k gas cold for Protect · sell on all seven stocks).
 ///
 /// Base Sepolia has JAW's manager and factory (same code and addresses as Base) but no Aave, no Coinbase USDC, no
 /// equities hub and no stock pools, so a Sepolia deploy only proves the Chainlink plumbing: it takes stand-ins for
