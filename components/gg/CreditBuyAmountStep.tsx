@@ -24,6 +24,22 @@ const backedText = (n: number) => (n < 100 ? formatUsd(Math.ceil(n * 100 - 1e-6)
 /** MAX's amount: the most there is, to the cent, rounded down ("0.69", "417.35"). */
 const maxText = (n: number) => String(Math.floor(Math.max(0, n) * 100 + 1e-6) / 100);
 
+/**
+ * What backs it once it lands: what this buy puts in use (the picked holding first) and what's in use already.
+ * Under the amount: what backs it, "Backed by 1.16 Apple · $290", all of it, or nothing new (Credit ready).
+ */
+function backingLineOf(data: PositionData, chosen: BackingOption | null, pick: BackingPick): string {
+  const chosenHolding = chosen ? (data.holdings.find((h) => h.symbol === chosen.stock.symbol) ?? null) : null;
+  const backedShares =
+    chosen && chosenHolding ? rawToShares(pick.raw, chosenHolding.multiplier, chosen.stock.decimals) : 0;
+  const backedUsd = chosen && chosen.freeRaw > 0n ? (Number(pick.raw) / Number(chosen.freeRaw)) * chosen.freeUsd : 0;
+  return !chosen
+    ? "Nothing new goes in"
+    : pick.raw <= 0n
+      ? `Backed by ${chosen.stock.name}`
+      : `Backed by ${pick.raw >= chosen.freeRaw ? "all " : ""}${formatShares(backedShares)} ${chosen.stock.name} · ${backedText(backedUsd)}`;
+}
+
 /** Step 3 (F2-5): the amount to buy on credit, what backs it, how far it moves the credit, and the Credit Buy button. */
 export function CreditBuyAmountStep({
   data,
@@ -76,27 +92,7 @@ export function CreditBuyAmountStep({
   tx: ReturnType<typeof useCreditBuy>;
 }) {
   const { sign, phase, error, reset, checking, blocked } = tx;
-  const chosenHolding = chosen ? (data.holdings.find((h) => h.symbol === chosen.stock.symbol) ?? null) : null;
-  // What backs it once it lands: what this buy puts in use (the picked holding first) and what's in use already.
-  // Under the amount: what backs it, "Backed by 1.16 Apple · $290", all of it, or nothing new (Credit ready).
-  const backedShares =
-    chosen && chosenHolding ? rawToShares(pick.raw, chosenHolding.multiplier, chosen.stock.decimals) : 0;
-  const backedUsd = chosen && chosen.freeRaw > 0n ? (Number(pick.raw) / Number(chosen.freeRaw)) * chosen.freeUsd : 0;
-  const backingLine = !chosen
-    ? "Nothing new goes in"
-    : pick.raw <= 0n
-      ? `Backed by ${chosen.stock.name}`
-      : `Backed by ${pick.raw >= chosen.freeRaw ? "all " : ""}${formatShares(backedShares)} ${chosen.stock.name} · ${backedText(backedUsd)}`;
-  // What you hold ÷ your own money, now and once the buy lands (the credit comes in as stock): "1.1x → 1.2x".
-  const holdUsd = data.stocksUsd + data.cashUsd;
-  const leverageNow = leverageText(leverageOf({ holdUsd, owedUsd: data.debtUsd }) ?? 1);
-  const leverageAfter = leverageText(leverageOf({ holdUsd: holdUsd + amount, owedUsd: data.debtUsd + amount }) ?? 1);
-  // The bar moves once there's an amount the plan can read.
-  const moved = amount > 0 && Number.isFinite(plan.hfAfter);
-  const lead = chosen?.stock.symbol;
-  const adding = pick.raw > 0n && lead ? [lead] : [];
-  const against = backers(data.holdings, adding, lead);
-  const againstNames = against.map((h) => h.name);
+  const backingLine = backingLineOf(data, chosen, pick);
   const warnPremium = !blocker && econ && econ.premium > BUY_LIMITS.warnPremium;
 
   return (
@@ -139,51 +135,7 @@ export function CreditBuyAmountStep({
         shares={quote.isFetching && amount > 0 ? null : econ ? econ.shares : 0}
         priceUsd={econ ? econ.price : oraclePriceUsd}
       />
-      {/* Board 34 (Adrian: say how much it moves): the bar from now to after, and the status change. */}
-      <div className="flex flex-col gap-2 rounded-[16px] border border-line-field bg-card px-3.5 py-3 leading-[normal]">
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-[13px] font-medium text-ink-mid">My credit</span>
-          {moved && plan.after !== plan.before ? (
-            <StatusChange from={plan.before} to={plan.after} />
-          ) : (
-            <StatusPill status={plan.before} size="sm" />
-          )}
-        </div>
-        <StatusMoveBar
-          now={data.healthFactor}
-          after={moved ? plan.hfAfter : undefined}
-          label={
-            moved
-              ? `Now ${STATUS_LABEL[plan.before]}, after this ${STATUS_LABEL[plan.after]}`
-              : STATUS_LABEL[plan.before]
-          }
-          className={moved ? "mt-5" : "mt-2"}
-        />
-        {/* Cost | Leverage, as the Repay card pairs Cost | Credit available (Adrian: show how leverage moves). */}
-        <div className="num mt-1 grid grid-cols-2 border-t border-line-field pt-2 text-[12.5px]">
-          <span className="flex min-w-0 flex-col gap-0.5">
-            <span className="text-subtle">Cost</span>
-            <span className="truncate font-semibold text-ink-2">
-              {(data.apr * 100).toFixed(1)}% · {monthlyCostText(monthlyCost(amount, data.apr))}
-            </span>
-          </span>
-          <span className="flex min-w-0 flex-col gap-0.5 border-l border-line-field pl-3">
-            <span className="text-subtle">Leverage</span>
-            <span className="truncate whitespace-nowrap font-semibold text-ink-2">
-              {leverageNow}
-              {moved && leverageAfter !== leverageNow && (
-                <>
-                  {" "}
-                  <span aria-hidden className="font-[system-ui] font-normal text-ink-mid">
-                    →
-                  </span>
-                  <span className="sr-only">after this</span> {leverageAfter}
-                </>
-              )}
-            </span>
-          </span>
-        </div>
-      </div>
+      <CreditMove data={data} plan={plan} amount={amount} />
       {(blocker || warnPremium || plan.priceMayMove) && (
         <p role="status" className={`m-0 text-[13px] leading-snug ${blocker ? "text-act" : "text-watch-text"}`}>
           {blocker ??
@@ -192,21 +144,17 @@ export function CreditBuyAmountStep({
               : "Stock markets are closed. You can still buy, but the price can jump when they reopen.")}
         </p>
       )}
-      {ready && (
-        <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">
-          {/* D7: every move in the batch, the stock put in use too. */}
-          In one go:{" "}
-          {inWords([
-            ...plan.backing.map((b) => {
-              const h = data.holdings.find((x) => x.symbol === b.stock.symbol)!;
-              return `${formatShares(rawToShares(b.raw, h.multiplier, b.stock.decimals))} ${tickerOf(b.stock.symbol)} goes in use to back credit`;
-            }),
-            `${formatUsd(amount)} of credit is taken`,
-            `exactly ${formatUsd(econ!.usd)} is approved for the ${VENUE_LABEL[q!.venue]} router and swapped`,
-          ])}
-          . You’ll owe {formatUsd(data.debtUsd + amount)}, backed by {shortNames(againstNames)}.{" "}
-          {riskNote(againstNames, protectOn)}
-        </p>
+      {ready && econ && q && (
+        <BatchNote
+          data={data}
+          plan={plan}
+          chosen={chosen}
+          pick={pick}
+          amount={amount}
+          usd={econ.usd}
+          venue={q.venue}
+          protectOn={protectOn}
+        />
       )}
       {ready && plan.extraConfirm && (
         <label className="flex items-start gap-2.5 rounded-2xl bg-act-bg px-4 py-3 text-[13px] leading-snug text-act">
@@ -242,6 +190,102 @@ export function CreditBuyAmountStep({
         />
       </div>
     </>
+  );
+}
+
+/** Board 34 (Adrian: say how much it moves): the bar from now to after, and the status change. */
+function CreditMove({ data, plan, amount }: { data: PositionData; plan: CreditPlan; amount: number }) {
+  // What you hold ÷ your own money, now and once the buy lands (the credit comes in as stock): "1.1x → 1.2x".
+  const holdUsd = data.stocksUsd + data.cashUsd;
+  const leverageNow = leverageText(leverageOf({ holdUsd, owedUsd: data.debtUsd }) ?? 1);
+  const leverageAfter = leverageText(leverageOf({ holdUsd: holdUsd + amount, owedUsd: data.debtUsd + amount }) ?? 1);
+  // The bar moves once there's an amount the plan can read.
+  const moved = amount > 0 && Number.isFinite(plan.hfAfter);
+
+  return (
+    <div className="flex flex-col gap-2 rounded-[16px] border border-line-field bg-card px-3.5 py-3 leading-[normal]">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-[13px] font-medium text-ink-mid">My credit</span>
+        {moved && plan.after !== plan.before ? (
+          <StatusChange from={plan.before} to={plan.after} />
+        ) : (
+          <StatusPill status={plan.before} size="sm" />
+        )}
+      </div>
+      <StatusMoveBar
+        now={data.healthFactor}
+        after={moved ? plan.hfAfter : undefined}
+        label={
+          moved ? `Now ${STATUS_LABEL[plan.before]}, after this ${STATUS_LABEL[plan.after]}` : STATUS_LABEL[plan.before]
+        }
+        className={moved ? "mt-5" : "mt-2"}
+      />
+      {/* Cost | Leverage, as the Repay card pairs Cost | Credit available (Adrian: show how leverage moves). */}
+      <div className="num mt-1 grid grid-cols-2 border-t border-line-field pt-2 text-[12.5px]">
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <span className="text-subtle">Cost</span>
+          <span className="truncate font-semibold text-ink-2">
+            {(data.apr * 100).toFixed(1)}% · {monthlyCostText(monthlyCost(amount, data.apr))}
+          </span>
+        </span>
+        <span className="flex min-w-0 flex-col gap-0.5 border-l border-line-field pl-3">
+          <span className="text-subtle">Leverage</span>
+          <span className="truncate whitespace-nowrap font-semibold text-ink-2">
+            {leverageNow}
+            {moved && leverageAfter !== leverageNow && (
+              <>
+                {" "}
+                <span aria-hidden className="font-[system-ui] font-normal text-ink-mid">
+                  →
+                </span>
+                <span className="sr-only">after this</span> {leverageAfter}
+              </>
+            )}
+          </span>
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** D7: every move in the batch, the stock put in use too. */
+function BatchNote({
+  data,
+  plan,
+  chosen,
+  pick,
+  amount,
+  usd,
+  venue,
+  protectOn,
+}: {
+  data: PositionData;
+  plan: CreditPlan;
+  chosen: BackingOption | null;
+  pick: BackingPick;
+  amount: number;
+  usd: number;
+  venue: BuyQuote["venue"];
+  protectOn: boolean;
+}) {
+  const lead = chosen?.stock.symbol;
+  const adding = pick.raw > 0n && lead ? [lead] : [];
+  const against = backers(data.holdings, adding, lead);
+  const againstNames = against.map((h) => h.name);
+  return (
+    <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">
+      In one go:{" "}
+      {inWords([
+        ...plan.backing.map((b) => {
+          const h = data.holdings.find((x) => x.symbol === b.stock.symbol)!;
+          return `${formatShares(rawToShares(b.raw, h.multiplier, b.stock.decimals))} ${tickerOf(b.stock.symbol)} goes in use to back credit`;
+        }),
+        `${formatUsd(amount)} of credit is taken`,
+        `exactly ${formatUsd(usd)} is approved for the ${VENUE_LABEL[venue]} router and swapped`,
+      ])}
+      . You’ll owe {formatUsd(data.debtUsd + amount)}, backed by {shortNames(againstNames)}.{" "}
+      {riskNote(againstNames, protectOn)}
+    </p>
   );
 }
 
