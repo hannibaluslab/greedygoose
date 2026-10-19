@@ -42,16 +42,17 @@ const noBatch = vi.fn(async () => []);
 
 describe("a cash buy's key", () => {
   const key = (p: Partial<Parameters<typeof cashBuyPlan>[0]> = {}) =>
-    cashBuyPlan({ user: SAM, stock: nvda, quote, ...p }, noBatch).key;
+    cashBuyPlan({ user: SAM, stock: nvda, quote, oraclePriceUsd: 200, ...p }, noBatch).key;
 
   it("is the same for the same account, stock and quote", () => {
     expect(key()).toBe(key({ quote: { ...quote } }));
   });
 
-  it("changes with the account, the stock, the amount, the quote's output and its pool", () => {
+  it("changes with the account, the stock, the amount, the quote's output, its pool and Aave's price (the floor)", () => {
     const base = key();
     for (const other of [
       key({ user: ANN }),
+      key({ oraclePriceUsd: 201 }),
       key({ stock: aapl }),
       key({ quote: { ...quote, amountIn: 21_000_000n } }),
       key({ quote: { ...quote, amountOut: 10_000_001n } }),
@@ -63,9 +64,9 @@ describe("a cash buy's key", () => {
 
   it("builds from the input it was keyed by", async () => {
     const batch = vi.fn(async () => []);
-    const plan = cashBuyPlan({ user: SAM, stock: nvda, quote }, batch);
+    const plan = cashBuyPlan({ user: SAM, stock: nvda, quote, oraclePriceUsd: 200 }, batch);
     await (plan.calls as () => Promise<unknown>)();
-    expect(batch).toHaveBeenCalledWith({ user: SAM, stock: nvda, quote });
+    expect(batch).toHaveBeenCalledWith({ user: SAM, stock: nvda, quote, oraclePriceUsd: 200 });
   });
 });
 
@@ -83,7 +84,10 @@ describe("a Credit Buy's key", () => {
     priceMayMove: false,
   } as CreditPlan;
   const key = (p: Partial<CreditPlan> = {}, confirmedRisk = true) =>
-    creditBuyPlan({ user: SAM, stock: nvda, quote, plan: { ...plan, ...p }, confirmedRisk }, noBatch).key;
+    creditBuyPlan(
+      { user: SAM, stock: nvda, quote, oraclePriceUsd: 200, plan: { ...plan, ...p }, confirmedRisk },
+      noBatch,
+    ).key;
 
   it("changes with the credit, what goes in use, the stop and the risk tick", () => {
     const base = key();
@@ -102,7 +106,7 @@ describe("a Credit Buy's key", () => {
   });
 
   it("is checked on Aave's own health after it: in Act, it stops (Act is the line)", () => {
-    const p = creditBuyPlan({ user: SAM, stock: nvda, quote, plan, confirmedRisk: true }, noBatch);
+    const p = creditBuyPlan({ user: SAM, stock: nvda, quote, oraclePriceUsd: 200, plan, confirmedRisk: true }, noBatch);
     expect(p.healthFloor).toBe(CREDIT_FLOOR);
     expect(CREDIT_FLOOR).toEqual({
       minHf: RISK.watchMin,
@@ -153,6 +157,7 @@ describe("a stock → stock trade's key", () => {
         plan,
         buyQuote: buy,
         oraclePriceUsd: 0.2,
+        toPriceUsd: 200,
         feeFromSale,
       },
       reads,

@@ -185,6 +185,17 @@ async function simulateCreditBuy(
 
 const swapAmountIn = (calls: { to: Address; data: Address }[]) => swapOf(calls.at(-1)!)!.params.amountIn;
 
+/** Aave's price for a stock, as usePosition reads it (the buy's floor). */
+const aavePrice = async (stock: ReserveAsset) =>
+  priceToUsd(
+    await client.readContract({
+      address: AAVE.SPOKE_ORACLE,
+      abi: aaveOracleAbi,
+      functionName: "getReservePrice",
+      args: [BigInt(stock.reserveId)],
+    }),
+  );
+
 describe("Credit Buy batches simulate on mainnet", () => {
   it("first-time backing: put stock in use → take credit → approve → swap, from an account that never backed credit", async () => {
     const { position, options, cash } = await live(newcomer);
@@ -201,6 +212,7 @@ describe("Credit Buy batches simulate on mainnet", () => {
     const calls = buildCreditBuyCalls({
       user: newcomer,
       stock: aapl,
+      oraclePriceUsd: await aavePrice(aapl),
       quote,
       creditRaw: plan.creditRaw,
       backing: plan.backing,
@@ -235,6 +247,7 @@ describe("Credit Buy batches simulate on mainnet", () => {
     const calls = buildCreditBuyCalls({
       user: newcomer,
       stock: aapl,
+      oraclePriceUsd: await aavePrice(aapl),
       quote,
       creditRaw: plan.creditRaw,
       backing: plan.backing,
@@ -273,6 +286,7 @@ describe("Credit Buy batches simulate on mainnet", () => {
     const calls = buildCreditBuyCalls({
       user: backer,
       stock: aapl,
+      oraclePriceUsd: await aavePrice(aapl),
       quote,
       creditRaw,
       backing: plan.backing,
@@ -324,6 +338,7 @@ describe("Credit Buy batches simulate on mainnet", () => {
     const calls = buildCreditBuyCalls({
       user: newcomer,
       stock: aapl,
+      oraclePriceUsd: await aavePrice(aapl),
       quote,
       creditRaw,
       backing: plan.backing,
@@ -354,6 +369,7 @@ describe("Credit Buy batches simulate on mainnet", () => {
     const calls = buildCreditBuyCalls({
       user: backer,
       stock: aapl,
+      oraclePriceUsd: await aavePrice(aapl),
       quote,
       creditRaw,
       backing: plan.backing,
@@ -384,6 +400,7 @@ describe("Credit Buy batches simulate on mainnet", () => {
     const calls = buildCreditBuyCalls({
       user: backer,
       stock: aapl,
+      oraclePriceUsd: await aavePrice(aapl),
       quote,
       creditRaw,
       backing: plan.backing,
@@ -406,6 +423,7 @@ describe("Credit Buy batches simulate on mainnet", () => {
     const calls = buildCreditBuyCalls({
       user: backer,
       stock: aapl,
+      oraclePriceUsd: await aavePrice(aapl),
       quote,
       creditRaw: usd(5),
       backing: plan.backing,
@@ -429,6 +447,7 @@ describe("Credit Buy batches simulate on mainnet", () => {
     const calls = buildCreditBuyCalls({
       user: backer,
       stock: aapl,
+      oraclePriceUsd: await aavePrice(aapl),
       quote,
       creditRaw,
       backing: plan.backing,
@@ -453,6 +472,7 @@ describe("Credit Buy batches simulate on mainnet", () => {
     const calls = buildCreditBuyCalls({
       user: backer,
       stock: aapl,
+      oraclePriceUsd: await aavePrice(aapl),
       quote,
       creditRaw,
       backing: plan.backing,
@@ -484,6 +504,7 @@ describe("Credit Buy batches simulate on mainnet", () => {
     const calls = buildCreditBuyCalls({
       user: backer,
       stock: aapl,
+      oraclePriceUsd: await aavePrice(aapl),
       quote,
       creditRaw,
       backing: plan.backing,
@@ -517,6 +538,7 @@ describe("Credit Buy batches simulate on mainnet", () => {
     const calls = buildCreditBuyCalls({
       user: newcomer,
       stock: aapl,
+      oraclePriceUsd: await aavePrice(aapl),
       quote,
       creditRaw,
       backing: plan.backing,
@@ -545,7 +567,9 @@ describe("the swap leg on Base", () => {
     const quote = await quotePool(client, nvda, "uniswap", 3000, amountIn);
     const r = await client.simulateCalls({
       account: backer,
-      calls: buildBuyCalls({ user: backer, stock: nvda, quote }).map(({ to, data }) => ({ to, data })),
+      calls: buildBuyCalls({ user: backer, stock: nvda, quote, oraclePriceUsd: await aavePrice(nvda) }).map(
+        ({ to, data }) => ({ to, data }),
+      ),
     });
     expect(r.results.map((x) => x.status)).toEqual(["success", "success"]);
   });
@@ -558,6 +582,7 @@ describe("the swap leg on Base", () => {
       user: backer,
       stock: nvda,
       quote: uni,
+      oraclePriceUsd: await aavePrice(nvda),
       nowSec: Math.floor(Date.now() / 1000) - 3_600,
     });
     const tooLate = (await client.simulateCalls({ account: backer, calls: late.map(({ to, data }) => ({ to, data })) }))
@@ -566,7 +591,12 @@ describe("the swap leg on Base", () => {
     expect(explainRevert(tooLate.data, "fallback", late[1])).toMatch(/took too long/);
 
     const aero = await quotePool(client, nvda, "aerodrome", 10, amountIn);
-    const greedy = buildBuyCalls({ user: backer, stock: nvda, quote: { ...aero, amountOut: aero.amountOut * 2n } });
+    const greedy = buildBuyCalls({
+      user: backer,
+      stock: nvda,
+      quote: { ...aero, amountOut: aero.amountOut * 2n },
+      oraclePriceUsd: await aavePrice(nvda),
+    });
     const tooLittle = (
       await client.simulateCalls({ account: backer, calls: greedy.map(({ to, data }) => ({ to, data })) })
     ).results[1];
@@ -639,11 +669,19 @@ describe("Act is the line on Base (Adrian, 2026-10-15)", () => {
     };
     const quote = await quoteToSign(option.stock, stale.creditRaw);
     const buy = creditBuyPlan(
-      { user: newcomer, stock: option.stock, quote, plan: stale, confirmedRisk: true },
+      {
+        user: newcomer,
+        stock: option.stock,
+        quote,
+        oraclePriceUsd: await aavePrice(option.stock),
+        plan: stale,
+        confirmedRisk: true,
+      },
       async (p) =>
         buildCreditBuyCalls({
           user: p.user,
           stock: p.stock,
+          oraclePriceUsd: p.oraclePriceUsd,
           quote: p.quote,
           creditRaw: p.plan.creditRaw,
           backing: p.plan.backing,
@@ -669,6 +707,7 @@ describe("Act is the line on Base (Adrian, 2026-10-15)", () => {
     const calls1 = buildCreditBuyCalls({
       user: newcomer,
       stock: nvda,
+      oraclePriceUsd: await aavePrice(nvda),
       quote: quote1,
       creditRaw: plan1.creditRaw,
       backing: plan1.backing,
@@ -704,6 +743,7 @@ describe("Act is the line on Base (Adrian, 2026-10-15)", () => {
     const calls2 = buildCreditBuyCalls({
       user: newcomer,
       stock: nvda,
+      oraclePriceUsd: await aavePrice(nvda),
       quote: quote2,
       creditRaw: plan2.creditRaw,
       backing: plan2.backing,

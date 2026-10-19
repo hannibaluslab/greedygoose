@@ -92,7 +92,7 @@ async function main() {
   process.env.NEXT_PUBLIC_GOOSE_BOARD = board;
   console.log(`GooseBoard ${board} (block ${receipt.blockNumber})`);
 
-  const { AAVE } = await import("@/lib/aave/addresses");
+  const { AAVE, ORACLE_DECIMALS } = await import("@/lib/aave/addresses");
   const { aaveOracleAbi } = await import("@/lib/aave/abis/IAaveOracle");
   const { EQUITIES, USDC } = await import("@/lib/tokens/registry");
   const { buildAddSavingsCalls } = await import("@/lib/savings");
@@ -209,11 +209,18 @@ async function main() {
     const quote = (await quoteBuy(client, stock, BigInt(usd * 1e6)))!;
     // The swap's deadline counts from an hour ahead: a fork can take minutes to mine a first swap.
     const nowSec = Number((await client.getBlock()).timestamp) + 3_600;
+    const price = await client.readContract({
+      address: AAVE.SPOKE_ORACLE,
+      abi: aaveOracleAbi,
+      functionName: "getReservePrice",
+      args: [BigInt(stock.reserveId)],
+    });
+    const oraclePriceUsd = Number(price) / 10 ** ORACLE_DECIMALS;
     return payFromCash(
       who,
       quote.amountIn,
       await readCash(client, who),
-      buildBuyCalls({ user: who, stock, quote, nowSec }),
+      buildBuyCalls({ user: who, stock, quote, oraclePriceUsd, nowSec }),
     );
   };
   const addContacts = async (who: Address, contacts: Address[]) =>

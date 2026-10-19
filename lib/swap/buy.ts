@@ -1,6 +1,7 @@
-import { encodeFunctionData, erc20Abi, type Hex, type PublicClient, type Transport } from "viem";
+import { encodeFunctionData, erc20Abi, parseUnits, type Hex, type PublicClient, type Transport } from "viem";
 import { AERODROME, UNISWAP, type Venue } from "./venues";
 import { aeroQuoterAbi, aeroRouterAbi, quoterV2Abi, swapRouter02Abi } from "./abis";
+import { ORACLE_DECIMALS } from "@/lib/aave/addresses";
 import { assertAllowed } from "@/lib/allowlist";
 import type { CHAIN } from "@/lib/chain";
 import { USDC, type ReserveAsset } from "@/lib/tokens/registry";
@@ -223,10 +224,33 @@ export function buildSwapCalls(p: {
   ]);
 }
 
-/** Buy `stock` with USDC: at least the quote less BUY_LIMITS' slippage. */
+/**
+ * Raw shares that `usdRaw` buys at Aave's oracle price plus BUY_LIMITS' cap (10%), rounded down: the fewest a buy may
+ * get. Throws without a price, since the cap can't be worked out.
+ */
+function aaveCapSharesRaw(usdRaw: bigint, stock: Pick<ReserveAsset, "decimals">, oraclePriceUsd: number): bigint {
+  const price = oraclePriceUsd > 0 ? parseUnits(oraclePriceUsd.toFixed(ORACLE_DECIMALS), ORACLE_DECIMALS) : 0n;
+  if (price <= 0n) throw new Error("Blocked: no Aave price for the buy's floor");
+  const capBps = BigInt(10_000 + Math.round(BUY_LIMITS.blockPremium * 10_000));
+  return (usdRaw * 10n ** BigInt(stock.decimals + ORACLE_DECIMALS - USDC.decimals) * 10_000n) / (price * capBps);
+}
+
+/**
+ * The buy's `amountOutMinimum`: the larger of the quote less 1% and the shares the spend buys at Aave's price plus the
+ * 10% cap, so a buy can never fill further over Aave's price than the screen allows (sellMinOut's mirror).
+ */
+function buyMinOut(quote: BuyQuote, stock: Pick<ReserveAsset, "decimals">, oraclePriceUsd: number): bigint {
+  const fromQuote = minOut(quote.amountOut);
+  const fromAave = aaveCapSharesRaw(quote.amountIn, stock, oraclePriceUsd);
+  return fromQuote > fromAave ? fromQuote : fromAave;
+}
+
+/** Buy `stock` with USDC: at least buyMinOut (the quote less 1%, never over Aave's price plus 10%). */
 export const buildBuyCalls = (p: {
   user: `0x${string}`;
   stock: ReserveAsset;
   quote: BuyQuote;
+  /** Aave's price for `stock`, for the buy's floor. */
+  oraclePriceUsd: number;
   nowSec?: number;
-}): Call[] => buildSwapCalls({ ...p, side: "buy", amountOutMinimum: minOut(p.quote.amountOut) });
+}): Call[] => buildSwapCalls({ ...p, side: "buy", amountOutMinimum: buyMinOut(p.quote, p.stock, p.oraclePriceUsd) });

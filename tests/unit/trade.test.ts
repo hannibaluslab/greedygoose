@@ -220,6 +220,7 @@ describe("buildTradeCalls (stock → stock in one batch)", () => {
       sellQuote,
       buyQuote,
       oraclePriceUsd: PRICE.NVDAc,
+      toPriceUsd: PRICE.AAPLc,
       nowSec: 1_000,
       ...over,
     });
@@ -834,6 +835,7 @@ describe("useTrade: the stock → stock batch at signing (swapBatch)", () => {
     plan: pre.sellPlan!,
     buyQuote: bq,
     oraclePriceUsd: PRICE.NVDAc,
+    toPriceUsd: PRICE.AAPLc,
     feeFromSale: false,
     ...over,
   });
@@ -897,6 +899,7 @@ describe("useTrade: the stock → stock batch at signing (swapBatch)", () => {
         sellQuote: sq,
         buyQuote: bq,
         oraclePriceUsd: PRICE.NVDAc,
+        toPriceUsd: PRICE.AAPLc,
         nowSec: 1_800_000_000,
       }),
     );

@@ -58,8 +58,8 @@ describe("assertAllowed (one allowlist for every user batch)", () => {
     const batch = [
       ...buildWithdrawSavingsCalls(user, 1_500_000n, false),
       ...buildWithdrawSavingsCalls(user, 0n, true),
-      ...buildBuyCalls({ user, stock: nvda, quote }),
-      ...buildBuyCalls({ user, stock: nvda, quote: { ...quote, venue: "aerodrome", pool: 10 } }),
+      ...buildBuyCalls({ user, stock: nvda, quote, oraclePriceUsd: 336 }),
+      ...buildBuyCalls({ user, stock: nvda, quote: { ...quote, venue: "aerodrome", pool: 10 }, oraclePriceUsd: 336 }),
       ...buildRepayCalls({ user, amountRaw: 1_000_000n, all: true }),
       ...buildSupplyCalls({ user, stock: nvda, amountRaw: 1n }),
       ...buildWithdrawCalls({ user, stock: nvda, amountRaw: 1n, all: false }),
@@ -106,7 +106,7 @@ describe("assertAllowed (one allowlist for every user batch)", () => {
     // Each builder is valid for its own account; checked against `user`, the other account's batch is refused.
     const other = [
       buildWithdrawSavingsCalls(attacker, 1n, false),
-      buildBuyCalls({ user: attacker, stock: nvda, quote }),
+      buildBuyCalls({ user: attacker, stock: nvda, quote, oraclePriceUsd: 336 }),
       buildRepayCalls({ user: attacker, amountRaw: 1n, all: false }),
       buildSupplyCalls({ user: attacker, stock: nvda, amountRaw: 1n }),
       buildWithdrawCalls({ user: attacker, stock: nvda, amountRaw: 1n, all: false }),
@@ -176,12 +176,12 @@ describe("assertAllowed: Earn with stocks' savings supply (saveTo)", () => {
     // Alone, and in each other flow's batch as its builder hands it to the allowlist.
     expect(() => assertAllowed(user, save())).toThrow(/unexpected (call|spender)/);
     expect(() => assertAllowed(user, [save()[1]])).toThrow(/unexpected call/);
-    const buy = buildBuyCalls({ user, stock: nvda, quote });
+    const buy = buildBuyCalls({ user, stock: nvda, quote, oraclePriceUsd: 336 });
     expect(() => assertAllowed(user, [...buy, ...save()])).toThrow(/unexpected/);
     expect(() => payFromCash(user, quote.amountIn, cash, [...buy, ...save()])).toThrow(/unexpected/);
     const creditBuy = [
       ...backAndCredit,
-      ...buildBuyCalls({ user, stock: nvda, quote: { ...quote, amountIn: amount } }),
+      ...buildBuyCalls({ user, stock: nvda, quote: { ...quote, amountIn: amount }, oraclePriceUsd: 336 }),
     ];
     expect(() => payFromCash(user, 0n, cash, [...creditBuy, ...save()])).toThrow(/unexpected/);
     const aapl = EQUITIES.find((e) => e.symbol === "AAPLc")!;
@@ -192,6 +192,7 @@ describe("assertAllowed: Earn with stocks' savings supply (saveTo)", () => {
       sellQuote: { venue: "aerodrome", pool: 10, amountIn: 100_000_000n, amountOut: 200_000_000n },
       buyQuote: { venue: "uniswap", pool: 3000, amountIn: 150_000_000n, amountOut: 1n },
       oraclePriceUsd: 200,
+      toPriceUsd: 300,
       nowSec: 1_000,
     });
     expect(() => assertAllowed(user, [...trade, ...save()])).toThrow(/unexpected/);

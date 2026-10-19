@@ -12,6 +12,8 @@ type CreditBuyInput = {
   stock: ReserveAsset;
   /** The quote the screen shows; its amountIn is the credit plus what cash pays. */
   quote: BuyQuote;
+  /** Aave's price for `stock`, for the buy's floor (buyMinOut). */
+  oraclePriceUsd: number;
   /** planCredit for the credit the screen shows. */
   plan: CreditPlan;
   /** The extra confirmation when it ends in Watch (D2); ending in Act is blocked (Act is the line). */
@@ -38,6 +40,7 @@ export function useCreditBuyBatch() {
       user: p.user,
       stock: p.stock,
       quote,
+      oraclePriceUsd: p.oraclePriceUsd,
       creditRaw: p.plan.creditRaw,
       backing: p.plan.backing,
       limit: p.plan.limit,
@@ -61,7 +64,14 @@ const creditPlanKey = (plan: CreditPlan, confirmedRisk: boolean) => [
  * credit plan on screen. Its simulation reads the health on Aave after it, and one in Act stops it (CREDIT_FLOOR).
  */
 export const creditBuyPlan = (p: CreditBuyInput, batch: ReturnType<typeof useCreditBuyBatch>): TxPlan => ({
-  key: txKey("creditBuy", p.user, p.stock.symbol, quoteKey(p.quote), creditPlanKey(p.plan, p.confirmedRisk)),
+  key: txKey(
+    "creditBuy",
+    p.user,
+    p.stock.symbol,
+    quoteKey(p.quote),
+    p.oraclePriceUsd,
+    creditPlanKey(p.plan, p.confirmedRisk),
+  ),
   user: p.user,
   calls: () => batch(p),
   fallback: CREDIT_BUY_FALLBACK,

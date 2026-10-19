@@ -400,6 +400,7 @@ describe("assertEarn: the batch is what the screen says", () => {
       user,
       stock: nvda,
       quote: { venue: "aerodrome", pool: 10, amountIn: creditRaw, amountOut: 1n },
+      oraclePriceUsd: 1_000_000,
     });
     expect(() => assertEarn(user, [...calls.slice(0, 4), ...swap], review)).toThrow(/Blocked/);
     const transfer: Call = {

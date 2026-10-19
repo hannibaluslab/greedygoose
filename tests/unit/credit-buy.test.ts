@@ -69,6 +69,7 @@ describe("buildCreditBuyCalls (plan item 3)", () => {
       user,
       stock: aapl,
       quote,
+      oraclePriceUsd: 222,
       creditRaw: quote.amountIn,
       backing: [{ stock: nvda, raw: 336_000_000n }],
       cash: walletCash,
@@ -102,6 +103,7 @@ describe("buildCreditBuyCalls (plan item 3)", () => {
       user,
       stock: aapl,
       quote,
+      oraclePriceUsd: 222,
       creditRaw: quote.amountIn,
       backing: [],
       cash: walletCash,
@@ -115,6 +117,7 @@ describe("buildCreditBuyCalls (plan item 3)", () => {
       user,
       stock: aapl,
       quote,
+      oraclePriceUsd: 222,
       creditRaw: quote.amountIn,
       backing: [],
       cash: { walletRaw: 0n, savingsRaw: usd(100), saveOn: true },
@@ -130,6 +133,7 @@ describe("buildCreditBuyCalls (plan item 3)", () => {
       user,
       stock: aapl,
       quote: uni,
+      oraclePriceUsd: 222,
       creditRaw: uni.amountIn,
       backing: [],
       cash: walletCash,
@@ -139,7 +143,7 @@ describe("buildCreditBuyCalls (plan item 3)", () => {
   });
 
   it("refuses a buy that doesn't spend the credit, no credit, a stock that isn't one of the 7, and cash short of the fee", () => {
-    const base = { user, stock: aapl, quote, backing: [], limit: roomy, cash: walletCash };
+    const base = { user, stock: aapl, quote, oraclePriceUsd: 222, backing: [], limit: roomy, cash: walletCash };
     expect(() => buildCreditBuyCalls({ ...base, creditRaw: quote.amountIn + 1n })).toThrow(
       /Credit must be part of the buy/,
     );
@@ -176,6 +180,7 @@ describe("decision 1: more than your cash", () => {
       user,
       stock: aapl,
       quote,
+      oraclePriceUsd: 222,
       creditRaw,
       backing: [{ stock: nvda, raw: 1n }],
       cash,
@@ -209,6 +214,7 @@ describe("assertCreditBuy (the batch against the review)", () => {
       user,
       stock: aapl,
       quote,
+      oraclePriceUsd: 222,
       creditRaw: quote.amountIn,
       backing: [],
       cash: walletCash,
@@ -231,6 +237,7 @@ describe("assertCreditBuy (the batch against the review)", () => {
       user: attacker,
       stock: aapl,
       quote,
+      oraclePriceUsd: 222,
       creditRaw: quote.amountIn,
       backing: [],
       cash: walletCash,
@@ -246,7 +253,12 @@ describe("assertCreditBuy (the batch against the review)", () => {
     expect(() => assertCreditBuy(user, [creditCall, approve, swap, swap], review)).toThrow(/once/);
     expect(() => assertCreditBuy(user, [creditCall], review)).toThrow(/once/);
     expect(() => assertCreditBuy(user, [approve, creditCall, swap], review)).toThrow(/approval differs/);
-    const [uniApprove] = buildBuyCalls({ user, stock: aapl, quote: { ...quote, venue: "uniswap", pool: 3000 } });
+    const [uniApprove] = buildBuyCalls({
+      user,
+      stock: aapl,
+      quote: { ...quote, venue: "uniswap", pool: 3000 },
+      oraclePriceUsd: 222,
+    });
     expect(() => assertCreditBuy(user, [creditCall, uniApprove, swap], review)).toThrow(/approval differs/);
   });
 });
@@ -804,6 +816,7 @@ describe("the explicit backing in the batch (buildCreditBuyCalls, assertCreditBu
       user,
       stock: aapl,
       quote,
+      oraclePriceUsd: 222,
       creditRaw: plan.creditRaw,
       backing: plan.backing,
       limit: plan.limit,

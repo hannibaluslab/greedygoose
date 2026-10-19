@@ -23,7 +23,13 @@ const buyActivity = (stock: ReserveAsset, quote: BuyQuote): ActivityItem[] => [
   },
 ];
 
-type CashBuyInput = { user: `0x${string}`; stock: ReserveAsset; quote: BuyQuote };
+type CashBuyInput = {
+  user: `0x${string}`;
+  stock: ReserveAsset;
+  quote: BuyQuote;
+  /** Aave's price for `stock`, for the buy's floor (buyMinOut). */
+  oraclePriceUsd: number;
+};
 
 /**
  * A buy paid from cash, built from fresh reads before JAW's sheet: the quote and the cash are read again
@@ -39,14 +45,14 @@ export function useCashBuyBatch() {
       p.user,
       quote.amountIn,
       await cashToSign(p.user, quote.amountIn),
-      buildBuyCalls({ user: p.user, stock: p.stock, quote }),
+      buildBuyCalls({ user: p.user, stock: p.stock, quote, oraclePriceUsd: p.oraclePriceUsd }),
     );
   };
 }
 
-/** What a cash buy signs (useTx): keyed by the account, the stock and the quote on screen. */
+/** What a cash buy signs (useTx): keyed by the account, the stock, the quote on screen and Aave's price (its floor). */
 export const cashBuyPlan = (p: CashBuyInput, batch: ReturnType<typeof useCashBuyBatch>): TxPlan => ({
-  key: txKey("buy", p.user, p.stock.symbol, quoteKey(p.quote)),
+  key: txKey("buy", p.user, p.stock.symbol, quoteKey(p.quote), p.oraclePriceUsd),
   user: p.user,
   calls: () => batch(p),
   fallback: BUY_FALLBACK,

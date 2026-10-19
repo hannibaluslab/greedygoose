@@ -10,7 +10,14 @@ import type { Address, CashToSign } from "./types";
 
 /** What the Trade sheet signs, per route, with the quotes and the plan its screen shows. */
 export type TradeSign =
-  | { route: "buy"; user: Address; stock: ReserveAsset; quote: BuyQuote }
+  | {
+      route: "buy";
+      user: Address;
+      stock: ReserveAsset;
+      quote: BuyQuote;
+      /** Aave's price for `stock`, for the buy's floor. */
+      oraclePriceUsd: number;
+    }
   | {
       route: "sell";
       user: Address;
@@ -32,6 +39,8 @@ export type TradeSign =
       buyQuote: BuyQuote;
       /** Aave's price for `from`, for the sale's floor. */
       oraclePriceUsd: number;
+      /** Aave's price for `to`, for the buy's floor. */
+      toPriceUsd: number;
       /** The cash can't keep the fee buffer, so the sale pays the network fee (swapBuyInRaw). */
       feeFromSale: boolean;
     };
@@ -63,6 +72,7 @@ export async function swapBatch(p: Extract<TradeSign, { route: "swap" }>, reads:
     sellQuote,
     buyQuote,
     oraclePriceUsd: p.oraclePriceUsd,
+    toPriceUsd: p.toPriceUsd,
   });
   return p.feeFromSale ? calls : payFromCash(p.user, 0n, await reads.cashToSign(p.user, 0n), calls);
 }
@@ -77,6 +87,7 @@ export const swapPlan = (p: Extract<TradeSign, { route: "swap" }>, reads: SwapRe
     quoteKey(p.sellQuote),
     sellMinOut(p.sellQuote, p.from, p.oraclePriceUsd),
     quoteKey(p.buyQuote),
+    p.toPriceUsd,
     p.plan.block ?? null,
     p.feeFromSale,
   ),

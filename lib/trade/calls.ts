@@ -40,7 +40,7 @@ export function swapMinUsd(rate: number, fromSale: boolean): number {
 
 /**
  * Stock → stock in one batch: approve A → swap A for USDC to the user, at least `sellMinOut` → approve exactly the
- * buy's USDC → swap it for B to the user, at least the quote less 1%. The buy can't spend more than the sale is sure to
+ * buy's USDC → swap it for B to the user, at least buyMinOut (the quote less 1%, never over Aave's price + 10%). The buy can't spend more than the sale is sure to
  * bring, so the router stops the batch before it would touch the user's own cash. Free shares only: no call reaches
  * the Aave spoke, so credit and backing can't move. Every call passes the allowlist with the user pinned.
  */
@@ -52,6 +52,8 @@ export function buildTradeCalls(p: {
   buyQuote: BuyQuote;
   /** Aave's price for `from`, for the sale's floor. */
   oraclePriceUsd: number;
+  /** Aave's price for `to`, for the buy's floor. */
+  toPriceUsd: number;
   nowSec?: number;
 }): Call[] {
   if (p.from.kind !== "equity" || p.to.kind !== "equity" || p.from.address === p.to.address)
@@ -61,7 +63,7 @@ export function buildTradeCalls(p: {
   const nowSec = p.nowSec ?? Math.floor(Date.now() / 1000);
   return assertAllowed(p.user, [
     ...buildSellCalls({ user: p.user, stock: p.from, quote: p.sellQuote, oraclePriceUsd: p.oraclePriceUsd, nowSec }),
-    ...buildBuyCalls({ user: p.user, stock: p.to, quote: p.buyQuote, nowSec }),
+    ...buildBuyCalls({ user: p.user, stock: p.to, quote: p.buyQuote, oraclePriceUsd: p.toPriceUsd, nowSec }),
   ]);
 }
 

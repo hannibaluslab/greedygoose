@@ -384,6 +384,8 @@ export function buildCreditBuyCalls(p: {
   user: Address;
   stock: ReserveAsset;
   quote: BuyQuote;
+  /** Aave's price for `stock`, for the buy's floor (buyMinOut). */
+  oraclePriceUsd: number;
   creditRaw: bigint;
   /** Exactly what goes in use (the plan's backing: the typed amount on Credit Buy, autoFill's for decision 1). */
   backing: Backing[];

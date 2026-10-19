@@ -107,7 +107,8 @@ export function TradeSheet({
   const view = useTradeView({ from, to, amount, all, data }, !!legs);
   const feeBlocked = isConnected && fee.state === "unsupported";
   // What the button would sign now, per route, prepared while the sheet is idle so the tap opens JAW's sheet at once.
-  const signable = open && !feeBlocked ? tradeSign(view, user, data.debtRaw) : null;
+  const toPriceUsd = data.holdings.find((h) => h.symbol === to)?.priceUsd ?? 0;
+  const signable = open && !feeBlocked ? tradeSign(view, user, data.debtRaw, toPriceUsd) : null;
   const { sign: signTrade, phase, error, reset, busy, txHash, checking, blocked } = useTrade(signable);
 
   // Once a buy or a trade lands: Home, with "Bought 0.4554 NVDA" or "Traded NVDA for 0.0086 AAPL" from the receipt.
@@ -239,10 +240,15 @@ export function TradeSheet({
 }
 
 /** What the Trade sheet signs for the route on screen, once it's ready (the quotes and the plan its screen shows). */
-function tradeSign(view: ReturnType<typeof planTrade>, user: `0x${string}`, debtRaw: bigint): TradeSign | null {
+function tradeSign(
+  view: ReturnType<typeof planTrade>,
+  user: `0x${string}`,
+  debtRaw: bigint,
+  toPriceUsd: number,
+): TradeSign | null {
   if (!view.ready) return null;
   const { route, fromStock, toStock, fromHolding, sellQuote: sq, sellPlan, buyQuote: bq } = view;
-  if (route === "buy" && toStock && bq) return { route, user, stock: toStock, quote: bq };
+  if (route === "buy" && toStock && bq) return { route, user, stock: toStock, quote: bq, oraclePriceUsd: toPriceUsd };
   if (route === "sell" && fromStock && fromHolding && sq && sellPlan)
     return { route, user, stock: fromStock, quote: sq, plan: sellPlan, oraclePriceUsd: fromHolding.priceUsd, debtRaw };
   if (route === "swap" && fromStock && toStock && fromHolding && sq && sellPlan && bq)
@@ -255,6 +261,7 @@ function tradeSign(view: ReturnType<typeof planTrade>, user: `0x${string}`, debt
       plan: sellPlan,
       buyQuote: bq,
       oraclePriceUsd: fromHolding.priceUsd,
+      toPriceUsd,
       feeFromSale: view.feeFromSale,
     };
   return null;

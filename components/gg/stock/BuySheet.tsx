@@ -108,7 +108,7 @@ export function BuySheet({
   // What the button would sign now, prepared while the step is idle so the tap opens JAW's sheet at once.
   const signable =
     open && ready && stock && q && !feeBlocked && !(plan?.extraConfirm && !ack)
-      ? { user, stock, quote: q, credit: plan ? { plan, confirmedRisk: ack } : undefined }
+      ? { user, stock, quote: q, oraclePriceUsd, credit: plan ? { plan, confirmedRisk: ack } : undefined }
       : null;
   const { sign: signBuy, phase, error, reset, busy, txHash, checking, blocked } = useBuy(signable);
   // Once the batch lands: Home, with "Bought 0.1120 NVDA" read from the receipt (F1-6).

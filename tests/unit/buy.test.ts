@@ -24,7 +24,7 @@ describe("minOut", () => {
 
 describe("buildBuyCalls", () => {
   it("approves exactly amountIn to the router, then swaps to the user before a 10-minute deadline", () => {
-    const [approve, swap] = buildBuyCalls({ user, stock: aapl, quote, nowSec: 1_000 });
+    const [approve, swap] = buildBuyCalls({ user, stock: aapl, quote, oraclePriceUsd: 336.65, nowSec: 1_000 });
     expect(approve.to).toBe(USDC.address);
     const a = decodeFunctionData({ abi: erc20Abi, data: approve.data });
     expect(a.functionName).toBe("approve");
@@ -50,14 +50,42 @@ describe("buildBuyCalls", () => {
     expect(params.amountOutMinimum).toBe(minOut(29_554_521n));
   });
   it("refuses non-equity outputs", () => {
-    expect(() => buildBuyCalls({ user, stock: USDC, quote })).toThrow();
+    expect(() => buildBuyCalls({ user, stock: USDC, quote, oraclePriceUsd: 1 })).toThrow();
+  });
+});
+
+describe("the buy's floor against Aave's price (BUY_LIMITS.blockPremium)", () => {
+  // $100 of AAPLc at Aave's $300: 10% over is $330 a share, so $100 buys at least 0.30303030 shares (rounded down).
+  const atCapRaw = 30_303_030n;
+  const floorOf = (q: BuyQuote) => {
+    const [, swap] = buildBuyCalls({ user, stock: aapl, quote: q, oraclePriceUsd: 300, nowSec: 1_000 });
+    const [, inner] = decodeFunctionData({ abi: swapRouter02Abi, data: swap.data }).args as readonly [
+      bigint,
+      readonly `0x${string}`[],
+    ];
+    const params = decodeFunctionData({ abi: swapRouter02Abi, data: inner[0] }).args[0];
+    return (params as { amountOutMinimum: bigint }).amountOutMinimum;
+  };
+
+  it("never lets a quote at the 10% cap fill over it (the quote less 1% would be 11.1% over)", () => {
+    expect(floorOf({ ...quote, amountOut: atCapRaw })).toBe(atCapRaw);
+  });
+  it("keeps the 1% under a quote 5% over Aave's price, and holds one just under the cap to the cap", () => {
+    expect(floorOf({ ...quote, amountOut: 31_746_031n })).toBe(minOut(31_746_031n));
+    expect(floorOf({ ...quote, amountOut: 30_500_000n })).toBe(atCapRaw);
+  });
+  it("keeps the quote less 1% when that is the higher floor", () => {
+    expect(floorOf({ ...quote, amountOut: 33_000_000n })).toBe(minOut(33_000_000n));
+  });
+  it("stops without Aave's price", () => {
+    expect(() => buildBuyCalls({ user, stock: aapl, quote, oraclePriceUsd: 0 })).toThrow();
   });
 });
 
 describe("aerodrome route", () => {
   const aq: BuyQuote = { venue: "aerodrome", pool: 10, amountIn: 1_000_000_000n, amountOut: 296_475_655n };
   it("approves the Aerodrome router and sets tick spacing + deadline", () => {
-    const [approve, swap] = buildBuyCalls({ user, stock: aapl, quote: aq, nowSec: 1_000 });
+    const [approve, swap] = buildBuyCalls({ user, stock: aapl, quote: aq, oraclePriceUsd: 336.65, nowSec: 1_000 });
     expect(decodeFunctionData({ abi: erc20Abi, data: approve.data }).args).toEqual([AERODROME.ROUTER, 1_000_000_000n]);
     expect(swap.to).toBe(AERODROME.ROUTER);
     const p = decodeFunctionData({ abi: aeroRouterAbi, data: swap.data }).args[0];

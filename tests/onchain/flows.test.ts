@@ -26,6 +26,8 @@ import {
 } from "@/lib/aave/tx";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { AAVE } from "@/lib/aave/addresses";
+import { aaveOracleAbi } from "@/lib/aave/abis/IAaveOracle";
+import { priceToUsd } from "@/lib/aave/math";
 import { CASH_STUCK, explainRevert } from "@/lib/aave/errors";
 import { decodeActivity } from "@/lib/activity/decode";
 import { cashRaw, cashShort, payFromCash, type Cash } from "@/lib/cash";
@@ -205,7 +207,18 @@ describe("savings-first batches from a $0 wallet", () => {
       args: [{ tokenIn: USDC.address, tokenOut: stock.address, amountIn, tickSpacing: pool, sqrtPriceLimitX96: 0n }],
     });
     const quote = { venue: "aerodrome" as const, pool, amountIn, amountOut: result[0] };
-    const calls = payFromCash(user, amountIn, await cash(), buildBuyCalls({ user, stock, quote }));
+    const price = await client.readContract({
+      address: AAVE.SPOKE_ORACLE,
+      abi: aaveOracleAbi,
+      functionName: "getReservePrice",
+      args: [BigInt(stock.reserveId)],
+    });
+    const calls = payFromCash(
+      user,
+      amountIn,
+      await cash(),
+      buildBuyCalls({ user, stock, quote, oraclePriceUsd: priceToUsd(price) }),
+    );
     expect(calls.map((c) => c.to)).toEqual([PROTOCOLS.AAVE_V3_POOL, USDC.address, AERODROME.ROUTER]);
     const r = await simulateFromEmptyWallet(calls);
     expect(r.statuses).toEqual(["success", "success", "success"]);

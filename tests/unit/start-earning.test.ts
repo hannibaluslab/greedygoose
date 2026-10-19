@@ -273,7 +273,7 @@ describe("the savings supply stays Earn with stocks', Start earning's and a sale
 
   it("no other flow's batch can carry it", () => {
     const quote: BuyQuote = { venue: "uniswap", pool: 3000, amountIn: usdc(1), amountOut: 295_545n };
-    const buy = buildBuyCalls({ user, stock: nvda, quote });
+    const buy = buildBuyCalls({ user, stock: nvda, quote, oraclePriceUsd: 336 });
     expect(() => payFromCash(user, quote.amountIn, cash, [...buy, ...save])).toThrow(/unexpected/);
     const repay = buildRepayCalls({ user, amountRaw: usdc(5), all: false });
     expect(() => payFromCash(user, usdc(5), cash, [...repay, ...save])).toThrow(/unexpected/);

@@ -95,8 +95,9 @@ async function trade(user: Address, from: ReserveAsset, to: ReserveAsset, shares
   const buyIn = swapBuyInRaw(floor, cash);
   const buyQuote = await quoteToSign(to, buyIn, "buy");
   expect(buyQuote.amountIn).toBe(buyIn);
-  const calls = buildTradeCalls({ user, from, to, sellQuote, buyQuote, oraclePriceUsd });
-  return { oraclePriceUsd, sellQuote, floor, buyIn, buyQuote, calls };
+  const toPriceUsd = await priceOf(to);
+  const calls = buildTradeCalls({ user, from, to, sellQuote, buyQuote, oraclePriceUsd, toPriceUsd });
+  return { oraclePriceUsd, toPriceUsd, sellQuote, floor, buyIn, buyQuote, calls };
 }
 
 /** Simulates `before`, then the batch, and reads the account around the batch. */
@@ -260,6 +261,7 @@ describe("trading one stock for another on Base (the Trade sheet)", () => {
         sellQuote: t.sellQuote,
         buyQuote: over,
         oraclePriceUsd: t.oraclePriceUsd,
+        toPriceUsd: t.toPriceUsd,
       }),
     ).toThrow(/more than the sale is sure to bring/);
   });

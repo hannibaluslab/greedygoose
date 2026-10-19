@@ -86,8 +86,13 @@ describe("explainRevert", () => {
     const revert = (message: string) =>
       `${toFunctionSelector("Error(string)")}${encodeAbiParameters([{ type: "string" }], [message]).slice(2)}` as const;
     const quote = { venue: "aerodrome" as const, pool: 10, amountIn: 1_000_000n, amountOut: 1n };
-    const [approve, aero] = buildBuyCalls({ user, stock: nvda, quote });
-    const [, uni] = buildBuyCalls({ user, stock: nvda, quote: { ...quote, venue: "uniswap", pool: 3000 } });
+    const [approve, aero] = buildBuyCalls({ user, stock: nvda, quote, oraclePriceUsd: 180 });
+    const [, uni] = buildBuyCalls({
+      user,
+      stock: nvda,
+      quote: { ...quote, venue: "uniswap", pool: 3000 },
+      oraclePriceUsd: 180,
+    });
     for (const swap of [aero, uni]) {
       expect(explainRevert(revert("Too little received"), "x", swap)).toMatch(/price moved more than 1%/);
       expect(explainRevert(revert("Transaction too old"), "x", swap)).toMatch(/took too long/);

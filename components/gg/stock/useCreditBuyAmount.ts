@@ -88,7 +88,7 @@ export function useCreditBuyAmount({
   // What Credit Buy would sign now, prepared while the step is idle so the tap opens JAW's sheet at once.
   const signable =
     open && onAmountStep && stock && q && ready && !feeBlocked && !(plan.extraConfirm && !ack)
-      ? { user, stock, quote: q, plan, confirmedRisk: ack }
+      ? { user, stock, quote: q, oraclePriceUsd, plan, confirmedRisk: ack }
       : null;
   const tx = useCreditBuy(signable);
   return {
