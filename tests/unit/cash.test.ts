@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { decodeFunctionData, maxUint256, parseUnits } from "viem";
 import { CASH } from "@/config/risk";
-import { cantRepay, cashShort, maxSpendRaw, payFromCash, readCash, saveRuns, savingsWithdrawal } from "@/lib/cash";
+import { cantRepay, cashShort, maxSpendRaw, payFromCash, saveRuns, savingsWithdrawal } from "@/lib/cash";
+import { readCash } from "@/lib/cash/read";
 import { buildRepayCalls } from "@/lib/aave/tx";
 import { aaveV3PoolAbi } from "@/lib/protocols/abis";
 import { PROTOCOLS } from "@/lib/protocols/config";

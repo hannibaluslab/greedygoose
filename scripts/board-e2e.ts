@@ -97,7 +97,8 @@ async function main() {
   const { EQUITIES, USDC } = await import("@/lib/tokens/registry");
   const { buildAddSavingsCalls } = await import("@/lib/savings");
   const { buildBuyCalls, quoteBuy } = await import("@/lib/swap/buy");
-  const { payFromCash, readCash } = await import("@/lib/cash");
+  const { payFromCash } = await import("@/lib/cash");
+  const { readCash } = await import("@/lib/cash/read");
   const { withBoardJoin } = await import("@/lib/board/join");
   const { gooseBoardAbi } = await import("@/lib/board/abi");
   const { readBoard } = await import("@/lib/board/read");

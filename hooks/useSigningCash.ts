@@ -4,7 +4,8 @@ import { usePublicClient } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
 import { TxStop } from "./useTx";
 import { CHAIN_ID } from "@/lib/chain";
-import { cashShort, readCash, type Cash } from "@/lib/cash";
+import { cashShort, type Cash } from "@/lib/cash";
+import { readCash } from "@/lib/cash/read";
 
 /**
  * The cash to sign with, read again while the batch is prepared (at most 30 s before the tap, lib/tx/prepared.ts), as

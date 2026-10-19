@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { TxStop, txKey, useTx, type TxPlan } from "./useTx";
 import { useDebounced, useSigningQuote } from "./useBuyQuote";
 import { CHAIN_ID } from "@/lib/chain";
-import { readCash } from "@/lib/cash";
+import { readCash } from "@/lib/cash/read";
 import { SELL_BLOCKED, buildSaleCalls, saleActivity, saleRepayRaw, type SellFrom, type SellPlan } from "@/lib/sell";
 import { quoteKey, quoteSwap } from "@/lib/swap/buy";
 import { sellMinOut, type SellQuote } from "@/lib/swap/sell";
