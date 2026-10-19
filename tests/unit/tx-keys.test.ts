@@ -5,7 +5,7 @@ import { contactsPlan } from "@/hooks/useContacts";
 import { convertPlan, type ConvertQuote } from "@/hooks/useConvert";
 import { creditBuyPlan } from "@/hooks/useCreditBuy";
 import { earnPlan, type EarnInput } from "@/hooks/useEarnWithStocks";
-import { repayPlan, type RepayInput } from "@/hooks/useRepay";
+import { repayPlan, type RepayInput } from "@/lib/tx/plans";
 import { sendPlan, type SendInput } from "@/hooks/useSend";
 import { setMixPlan } from "@/hooks/useManageSave";
 import { keepMixPlan } from "@/hooks/useProtectSave";

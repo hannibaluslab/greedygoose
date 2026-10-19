@@ -2,7 +2,7 @@
 
 import { usePublicClient } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
-import { TxStop, txKey, useTx, type TxPlan } from "./useTx";
+import { TxStop, useTx } from "./useTx";
 import { useSigningQuote } from "./useBuyQuote";
 import { salePlan, useSaleBatch, type SellInput } from "./useSell";
 import { useSigningCash } from "./useSigningCash";
@@ -14,24 +14,18 @@ import { CHAIN_ID } from "@/lib/chain";
 import { cantRepay, cashShort, maxSpendRaw, payFromCash } from "@/lib/cash";
 import { readCash } from "@/lib/cash/read";
 import type { RepayView } from "@/lib/repay";
-import { buildFreeRepayCalls, freeRepayActivity, freeRepayRaw, type SellPlan } from "@/lib/sell";
-import { quoteKey } from "@/lib/swap/buy";
-import { sellMinOut, type SellQuote } from "@/lib/swap/sell";
-import { USDC, type ReserveAsset } from "@/lib/tokens/registry";
-import { takeOutPlan, withTakeOuts, type TakeOut } from "@/lib/tx/plans";
-
-/** What Repay would sign: a chip's exact amount, or All (every cent owed when the cash covers it, else all the cash). */
-export type RepayInput = {
-  user: `0x${string}`;
-  /** All, or a chip. */
-  all: boolean;
-  /** All and the cash covers what's owed: it repays everything, whatever the interest added since. */
-  coversAll: boolean;
-  /** The dollars on screen. */
-  amount: number;
-  /** A chip's exact amount, or All's from the position on screen (all the cash, when it doesn't cover what's owed). */
-  amountRaw: bigint;
-};
+import { buildFreeRepayCalls } from "@/lib/sell";
+import { USDC } from "@/lib/tokens/registry";
+import {
+  FREE_REPAY_FALLBACK,
+  freeRepayPlan,
+  repayPlan,
+  takeOutPlan,
+  withTakeOuts,
+  type FreeRepayInput,
+  type RepayInput,
+  type TakeOut,
+} from "@/lib/tx/plans";
 
 /**
  * Repay's batch, built from fresh reads while the screen is idle, paid from the cash as one pot (D20):
@@ -41,7 +35,7 @@ export type RepayInput = {
  *   longer covers it, it stops with the words for that and the screen re-reads;
  * - All that doesn't ("All cash") repays exactly the amount on screen, with the cash read again.
  */
-export function useRepayBatch() {
+function useRepayBatch() {
   const client = usePublicClient({ chainId: CHAIN_ID });
   const queryClient = useQueryClient();
   const cashToSign = useSigningCash();
@@ -77,46 +71,13 @@ export function useRepayBatch() {
 }
 
 /**
- * What Repay signs (useTx), keyed by what shapes its batch: a chip by its exact amount; All by whether it covers
- * what's owed, and, when it doesn't, by the dollars on screen to the cent (the cash it spends), so a batch for other
- * cash is never signed.
- */
-export const repayPlan = (p: RepayInput, batch: ReturnType<typeof useRepayBatch>): TxPlan => ({
-  key: p.all
-    ? txKey("repay", p.user, "all", p.coversAll ? "full" : Math.round(p.amount * 100))
-    : txKey("repay", p.user, p.amountRaw),
-  user: p.user,
-  calls: () => batch(p),
-  activity: [{ kind: "repay", symbol: "USDC", amount: p.amount }],
-});
-
-/** What a repay with free shares signs (Repay's "Pay with" a stock held free). */
-export type FreeRepayInput = {
-  user: `0x${string}`;
-  stock: ReserveAsset;
-  /** The quote the screen shows, for the shares it sells. */
-  quote: SellQuote;
-  /** planSell (free shares) for that quote: its stop, the shares and what the sale pays. */
-  plan: SellPlan;
-  /** Aave's price for the stock, for the swap's floor (the holding's priceUsd). */
-  oraclePriceUsd: number;
-  /** What's owed (the position's debtRaw): the repay is never more than a full repay of it. */
-  debtRaw: bigint;
-  /** The cash can't keep the network-fee buffer, so the sale pays the fee. */
-  feeFromSale: boolean;
-};
-
-const FREE_REPAY_FALLBACK =
-  "This repay would fail right now — the price may have moved or the stock may be paused. Try again in a moment.";
-
-/**
  * A repay with free shares, built from fresh reads before JAW's sheet: the screen's stop still holds, the quote is read
  * again on its pool (QUOTE_MOVED when it fell under the screen's floor), and the batch is the screen's own quote, so what
  * it repays is exactly what the screen said: the sale's floor (less the fee buffer when the sale pays the fee), never
  * more (`buildFreeRepayCalls`). When the cash pays the network fee it is read again too, and a savings withdrawal goes
  * first if the wallet can't be counted on for the fee (`payFromCash`, as the Trade sheet's swap).
  */
-export function useFreeRepayBatch() {
+function useFreeRepayBatch() {
   const quoteToSign = useSigningQuote();
   const cashToSign = useSigningCash();
   return async (p: FreeRepayInput): Promise<Call[]> => {
@@ -133,32 +94,6 @@ export function useFreeRepayBatch() {
     return p.feeFromSale ? calls : payFromCash(p.user, 0n, await cashToSign(p.user, 0n), calls);
   };
 }
-
-/**
- * What a repay with free shares signs (useTx), keyed by what shapes its batch: the account, the stock, the quote and its
- * floor, who pays the fee, the stop, and whether the floor covers what's owed. Not what's owed itself, as a repay by
- * selling: it accrues every block, and the batch only changes when the floor stops (or starts) covering it.
- */
-export const freeRepayPlan = (p: FreeRepayInput, batch: ReturnType<typeof useFreeRepayBatch>): TxPlan => {
-  const floor = sellMinOut(p.quote, p.stock, p.oraclePriceUsd);
-  const repayRaw = freeRepayRaw(floor, p.debtRaw, p.feeFromSale);
-  return {
-    key: txKey(
-      "repay-free",
-      p.user,
-      p.stock.symbol,
-      quoteKey(p.quote),
-      floor,
-      p.feeFromSale,
-      p.plan.block ?? null,
-      repayRaw > p.debtRaw ? "full" : "part",
-    ),
-    user: p.user,
-    calls: () => batch(p),
-    fallback: FREE_REPAY_FALLBACK,
-    activity: freeRepayActivity(p.stock, p.plan, repayRaw),
-  };
-};
 
 /** What the Repay sheet signs, per "Pay with" row. */
 type RepaySign =
