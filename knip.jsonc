@@ -1,0 +1,11 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "scripts/**/*.ts",
+    // The executor's rules as TypeScript: no screen imports them, but they are the contract's test oracles
+    // (scripts/agent-vectors.ts, npm run contracts:vectors), so `knip --production` keeps them.
+    "lib/agents/rules/{entry,protectSell}.ts!",
+  ],
+  "ignoreDependencies": ["@tailwindcss/turbopack", "tailwindcss", "tw-animate-css"],
+  "ignoreBinaries": ["forge"],
+}
