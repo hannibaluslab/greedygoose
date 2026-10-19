@@ -39,31 +39,40 @@ const RISK_TICK = "I understand: if prices fall, part of my stocks can be sold."
  * limit at the 1.12 line. Repay all brings every stock back. A free-up that ends in Watch asks for one tick. The money
  * maths is lib/repay.ts (the repay) and lib/freeUpPlan.ts (the free-up); the batch is useRepayWith with its take-outs.
  */
+/** The amount the sheet opens on: empty, or the cash Stop earning with stocks repays. */
+const openingForm = (amountUsd: number | undefined): RepayForm =>
+  amountUsd !== undefined && amountUsd > 0 ? { ...REPAY_FORM, amount: amountUsd.toFixed(2) } : REPAY_FORM;
+
+/** The stocks the sheet opens with ticked: all each can, held to what the limit allows. */
+const openingTicks = (freeUp: readonly string[] | undefined): FreeUpTick[] =>
+  (freeUp ?? []).map((symbol) => ({ symbol, share: 1, atRepayUsd: Number.NaN }));
+
 export function RepaySheet({
   open,
   address,
   onClose,
   onTopUp,
   freeUp,
+  amountUsd,
 }: {
   open: boolean;
   address: `0x${string}`;
   onClose: () => void;
   /** Nothing to repay with: Add money opens the Top up sheet in this one's place. */
   onTopUp: () => void;
-  /** A stock to start on, ticked under "Free up stocks" (its stock sheet's Free up shares): all it can. */
-  freeUp?: string;
+  /** Stocks to start on, ticked under "Free up stocks" (a stock sheet's Free up shares, Stop earning): all they can. */
+  freeUp?: string[];
+  /** An amount to start on (Stop earning with stocks: the cash that came from credit). */
+  amountUsd?: number;
 }) {
   const { isConnected } = useAccount();
   const { data } = usePosition(address);
   const cfRead = useBackingFactorsRead(data?.holdings);
   const fee = useFeeSupport();
-  const [form, setForm] = useState<RepayForm>(REPAY_FORM);
+  const [form, setForm] = useState<RepayForm>(() => openingForm(amountUsd));
   const { menu, setMenu, closeMenu, onOpenChange } = useMenuGuard(onClose, false);
   // Ticked from the stock sheet: all of it, held to what the limit allows (no "prices moved" for that first cut).
-  const [picks, setPicks] = useState<FreeUpTick[]>(
-    freeUp ? [{ symbol: freeUp, share: 1, atRepayUsd: Number.NaN }] : [],
-  );
+  const [picks, setPicks] = useState<FreeUpTick[]>(() => openingTicks(freeUp));
   const [ack, setAck] = useState(false);
 
   const { sources, source, view } = useRepayView(data, cfRead.cfs, form);

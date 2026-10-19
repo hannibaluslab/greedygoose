@@ -65,16 +65,57 @@ function CashAmount({ data, arrived, split }: { data: PositionData; arrived: Arr
   );
 }
 
+/** The cash that came from credit (cashFromCreditUsd, from Activity), or 0 until Activity is read. */
+function useFromCredit(account: `0x${string}`, data: PositionData) {
+  const history = useActivity(account);
+  const spendable = Math.max(0, data.cashUsd - fuelTankUsd(data.cashUsd));
+  return history.isLoading || history.isError ? 0 : cashFromCreditUsd(history.rows, data.debtUsd, spendable);
+}
+
+/**
+ * The Earn with stocks card with what's earning from credit, mounted only while the sheet is open (it reads Activity).
+ * Stop earning with stocks: this sheet slides out as Repay slides in, with that cash to repay and the stocks that back
+ * credit ticked to free up.
+ */
+function EarnCardLive({
+  account,
+  data,
+  offer,
+  onOpen,
+  onLeave,
+}: {
+  account: `0x${string}`;
+  data: PositionData;
+  offer: EarnOffer;
+  onOpen: () => void;
+  onLeave: () => void;
+}) {
+  const money = useMoneySheets();
+  const usd = useFromCredit(account, data);
+  const backing = data.holdings.filter((h) => h.backingShares > 0);
+  const earning =
+    usd >= 0.01
+      ? {
+          usd,
+          backedBy: backing.map((h) => h.name),
+          onStop: () => {
+            onLeave();
+            money.stopEarning({ amountUsd: usd, free: backing.map((h) => h.symbol) });
+          },
+        }
+      : null;
+  return <EarnCard offer={offer} onOpen={onOpen} earning={earning} />;
+}
+
 /**
  * What the cash is made of: my own cash, the part that came from credit backed by stocks (Earn with stocks,
  * cashFromCreditUsd, read from Activity) and the fuel tank kept for network fees. Mounted only while the sheet is open;
  * until Activity is read (or if it can't be), no credit row, and the rest is my cash.
  */
 function CashSplit({ account, data }: { account: `0x${string}`; data: PositionData }) {
-  const history = useActivity(account);
   const tank = fuelTankUsd(data.cashUsd);
   const spendable = Math.max(0, data.cashUsd - tank);
-  const credit = history.isLoading || history.isError ? 0 : cashFromCreditUsd(history.rows, data.debtUsd, spendable);
+  const credit = useFromCredit(account, data);
   return (
     <dl aria-label="What my cash is" className="m-0 mt-1.5 flex flex-col gap-2 border-t border-line-field pt-3">
       <SplitRow label="My cash" value={spendable - credit} />
@@ -126,6 +167,7 @@ export function CashStep({
   data,
   arrived,
   split,
+  card,
   offer,
   onEarn,
   activity,
@@ -135,6 +177,8 @@ export function CashStep({
   arrived: ArrivedView;
   /** What the cash is made of (CashSplit); none in the dev gallery. */
   split?: ReactNode;
+  /** The Earn with stocks card, live (EarnCardLive) while the sheet is open; the plain card otherwise. */
+  card?: ReactNode;
   offer: EarnOffer;
   onEarn: () => void;
   activity: ReactNode;
@@ -143,7 +187,7 @@ export function CashStep({
   return (
     <>
       <CashAmount data={data} arrived={arrived} split={split} />
-      <EarnCard offer={offer} onOpen={onEarn} />
+      {card ?? <EarnCard offer={offer} onOpen={onEarn} />}
       {activity}
       <CashFooter owes={data.debtUsd > 0} onLeave={onLeave} />
     </>
@@ -252,11 +296,11 @@ export function CashSheet({
             // Prepared only while the sheet is open (it stays mounted while it slides away).
             prep={open ? tx.prep : undefined}
             planFor={tx.planFor}
-            onEarn={(quote, confirmedRisk) => {
+            onEarn={(quote, confirmedRisk, held) => {
               if (tx.phase === "failed") tx.reset();
               setSent(quote.amountUsd);
               setSignedOn(offer);
-              void tx.sign(tx.planFor({ user: account, quote, offer, confirmedRisk }));
+              void tx.sign(tx.planFor({ user: account, quote, offer: held, confirmedRisk }));
             }}
           />
         ) : (
@@ -264,6 +308,17 @@ export function CashSheet({
             data={data}
             arrived={arrived}
             split={open && <CashSplit account={account} data={data} />}
+            card={
+              open && (
+                <EarnCardLive
+                  account={account}
+                  data={data}
+                  offer={earn.offer}
+                  onOpen={() => go("earn")}
+                  onLeave={close}
+                />
+              )
+            }
             offer={earn.offer}
             onEarn={() => go("earn")}
             activity={open && <CashActivity account={account} />}

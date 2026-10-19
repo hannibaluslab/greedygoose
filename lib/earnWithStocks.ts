@@ -125,6 +125,22 @@ export function earnOffer(i: EarnInput): EarnOffer {
 
 export type EarnOpen = Extract<EarnOffer, { kind: "offer" }>;
 
+/**
+ * The offer held to the stocks the user ticked on the earn step (Adrian, 2026-10-19: one, several or all, not always
+ * all): the most credit those and what already backs credit allow, as earnOffer works it out for all of them.
+ */
+export function offerFor(
+  o: EarnOpen,
+  p: { position: CreditPosition; options: BackingOption[]; cash: Cash; now?: Date },
+): EarnOpen {
+  const plan0 = planCredit({ position: p.position, options: p.options, creditRaw: 0n, cash: p.cash, now: p.now });
+  return {
+    ...o,
+    maxUsd: Math.floor(Math.min(plan0.maxUsd, p.position.usdcLiquidity)),
+    maxSafeUsd: plan0.maxSafeUsd,
+  };
+}
+
 /** The cap in words: "Up to $1,000.". */
 const limitText = (o: EarnOpen) => `Up to ${formatUsdTrim(o.maxUsd)}.`;
 

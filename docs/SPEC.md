@@ -97,6 +97,16 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
 - **One stock order** in every list: Home's (Apple, Amazon, Alphabet, Meta, Microsoft, NVIDIA, Tesla). Lists keep
   their groups (what can go before what can't); a default still opens on the cash or the biggest free stock.
 
+## Earn with stocks (Cash sheet)
+
+- The earn step lists the free stocks under "Back it with", all ticked to start; a tap leaves one out or takes it
+  back, and the most it can add follows what's ticked (offerFor). What already backs credit always counts
+  (Adrian, 2026-10-19: one, several or all, not always all).
+- Once some of the cash came from credit, the card says how much and what backs it ("$2.00 from credit is earning,
+  backed by Alphabet."), keeps "Add more" while more is possible, and offers **Stop earning with stocks**: the Cash
+  sheet slides out and Repay opens with that cash to repay and the stocks that back credit ticked to free up, in one
+  signature. "Your stocks can't back more credit right now" no longer shows while it earns.
+
 ## Credit Buy (canvas boards 30–34)
 
 - The stock to buy lists the other stocks first, then My holdings. MAX fills the most to the cent, rounded down.

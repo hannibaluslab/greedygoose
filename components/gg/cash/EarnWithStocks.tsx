@@ -26,9 +26,10 @@ import {
   type EarnOpen,
   type EarnQuote,
   type EarnRates,
+  offerFor,
 } from "@/lib/earnWithStocks";
 import { aprToApy } from "@/lib/aave/math";
-import { formatUsdTrim } from "@/lib/formatting";
+import { formatUsd, formatUsdTrim, inWords } from "@/lib/formatting";
 import { homeStatus } from "@/lib/risk/status";
 import { backingShares } from "@/lib/holding";
 import { USDC } from "@/lib/tokens/registry";
@@ -63,22 +64,45 @@ function Rates({ rates, left }: { rates: EarnRates; left: boolean }) {
 
 /**
  * "Earn with stocks" on the Cash sheet's first step: the live rates side by side and one button to the earn step, or
- * one plain line on why it's not offered now. It needs no agent: the batch puts the credit where the cash earns.
+ * one plain line on why it's not offered now. It needs no agent: the batch puts the credit where the cash earns. Once
+ * some of the cash came from credit (`earning`), it says how much and what backs it, with Stop earning with stocks
+ * (Adrian, 2026-10-19): Repay opens with that cash to repay and those stocks ticked to free up.
  */
-export function EarnCard({ offer, onOpen }: { offer: EarnOffer; onOpen: () => void }) {
-  if (offer.kind === "loading")
+export function EarnCard({
+  offer,
+  onOpen,
+  earning,
+}: {
+  offer: EarnOffer;
+  onOpen: () => void;
+  earning?: { usd: number; backedBy: string[]; onStop: () => void } | null;
+}) {
+  if (offer.kind === "loading" && !earning)
     return (
       <div aria-busy className="h-16 animate-pulse rounded-[22px] bg-chip">
         <span className="sr-only">Loading Earn with stocks</span>
       </div>
     );
+  // Earning already: "can't back more credit" is no news, the earning line says what matters.
+  const line =
+    offer.kind === "offer"
+      ? earning
+        ? "Add more, or stop and free up your stocks."
+        : "Use your stocks to add cash that earns."
+      : offer.kind === "closed" && !(earning && offer.why === "credit")
+        ? offer.text
+        : null;
   return (
     <section aria-label="Earn with stocks" className={CARD}>
       <div className="flex flex-col gap-1">
         <h3 className="m-0 text-[15px] font-semibold">Earn with stocks</h3>
-        <p className="m-0 text-[13px] leading-[1.4] text-ink-mid">
-          {offer.kind === "offer" ? "Use your stocks to add cash that earns." : offer.text}
-        </p>
+        {earning && (
+          <p className="m-0 text-[14px] leading-[1.4] text-ink">
+            <span className="font-semibold">{formatUsd(earning.usd)}</span> from credit is earning
+            {earning.backedBy.length > 0 ? `, backed by ${inWords(earning.backedBy)}.` : "."}
+          </p>
+        )}
+        {line && <p className="m-0 text-[13px] leading-[1.4] text-ink-mid">{line}</p>}
       </div>
       {offer.kind === "offer" ? (
         <>
@@ -87,11 +111,16 @@ export function EarnCard({ offer, onOpen }: { offer: EarnOffer; onOpen: () => vo
             A year, at today’s rates. Both are variable.
           </p>
           <Button variant="soft" onClick={onOpen}>
-            Earn with stocks
+            {earning ? "Add more" : "Earn with stocks"}
           </Button>
         </>
       ) : (
-        offer.rates && <Rates rates={offer.rates} left={false} />
+        offer.kind === "closed" && offer.rates && <Rates rates={offer.rates} left={false} />
+      )}
+      {earning && (
+        <Button variant="soft" onClick={earning.onStop}>
+          Stop earning with stocks
+        </Button>
       )}
     </section>
   );
@@ -134,24 +163,29 @@ export function EarnStep({
   /** The write's store (useEarnWithStocks' `prep`) and its plan, so the batch on screen is prepared before the tap. */
   prep?: TxPrep;
   planFor?: (p: EarnInput) => TxPlan;
-  onEarn: (quote: EarnQuote, confirmedRisk: boolean) => void;
+  /** The quote signed, and the offer as held to the ticked stocks (offerFor). */
+  onEarn: (quote: EarnQuote, confirmedRisk: boolean, held: EarnOpen) => void;
   /** Dev gallery: an amount already typed, and the credit's rate after it instead of reading it from a simulation. */
   initialAmount?: string;
   fixedApyAfter?: number;
 }) {
   const [raw, setRaw] = useState(initialAmount);
   const [ack, setAck] = useState(false);
+  // The stocks that may back it: all of them to start, one tap each to leave one out (Adrian, 2026-10-19).
+  const [left, setLeft] = useState<ReadonlySet<string>>(new Set());
+  const ticked = options.filter((o) => !left.has(o.stock.symbol));
+  const held = offerFor(offer, { position: data, options: ticked, cash: data.cash });
   const amount = Math.max(0, Number(raw) || 0);
   const creditRaw = parseUnits(amount.toFixed(USDC.decimals), USDC.decimals);
-  const quote = useEarnQuote({ user, data, offer, options, creditRaw, fixedApyAfter });
+  const quote = useEarnQuote({ user, data, offer: held, options: ticked, creditRaw, fixedApyAfter });
   const { plan } = quote;
 
-  const block = amount > 0 ? earnBlock(quote, offer) : null;
+  const block = amount > 0 ? earnBlock(quote, held) : null;
   const ready = amount > 0 && !block && quote.left !== null;
   const tick = ready && plan.extraConfirm;
   // What the button would sign now, prepared while the step is idle so the tap opens JAW's sheet at once.
   const allowed = ready && !(tick && !ack) && !feeBlocked;
-  const signable = allowed && planFor ? planFor({ user, quote, offer, confirmedRisk: ack }) : null;
+  const signable = allowed && planFor ? planFor({ user, quote, offer: held, confirmedRisk: ack }) : null;
   const prepared = usePrepare(prep, signable);
 
   // D2's tick is for the status it names: a price refresh that moves the result (Watch to Act) asks again.
@@ -161,13 +195,28 @@ export function EarnStep({
     setAck(false);
   }
 
-  const backedBy = backedByOf(plan, options, data);
-  const hint = earnHint(offer);
+  const backedBy = backedByOf(plan, ticked, data);
+  const hint = earnHint(held);
   const cost = amount > 0 ? quote.cost : offer.rates.cost;
-  const leftText = leftTextOf(amount, quote, offer);
+  const leftText = leftTextOf(amount, quote, held);
 
   return (
     <>
+      {options.length > 1 && (
+        <BackWith
+          options={options}
+          left={left}
+          onToggle={(symbol) => {
+            setLeft((l) => {
+              const next = new Set(l);
+              if (next.has(symbol)) next.delete(symbol);
+              else next.add(symbol);
+              return next;
+            });
+            setAck(false);
+          }}
+        />
+      )}
       <AmountField
         label="Add to my cash"
         source={backedBy.length > 0 && <BackedBySource backedBy={backedBy} />}
@@ -178,7 +227,7 @@ export function EarnStep({
           setAck(false);
         }}
         onMax={() => {
-          setRaw(String(Math.floor(offer.maxUsd)));
+          setRaw(String(Math.floor(held.maxUsd)));
           setAck(false);
         }}
         hint={hint}
@@ -233,10 +282,51 @@ export function EarnStep({
           checking={prepared.checking}
           preview={preview}
           disabled={!allowed || prepared.blocked || phase === "done"}
-          onClick={() => onEarn(quote, ack)}
+          onClick={() => onEarn(quote, ack, held)}
         />
       </div>
     </>
+  );
+}
+
+/**
+ * "Back it with": the free stocks that may back this credit, all ticked to start; a tap leaves one out or takes it back
+ * (Adrian, 2026-10-19: one, several or all). What already backs credit always counts.
+ */
+function BackWith({
+  options,
+  left,
+  onToggle,
+}: {
+  options: BackingOption[];
+  left: ReadonlySet<string>;
+  onToggle: (symbol: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <span className={MONO}>Back it with</span>
+      <div className="flex flex-wrap gap-2">
+        {options.map((o) => {
+          const on = !left.has(o.stock.symbol);
+          return (
+            <button
+              key={o.stock.symbol}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onToggle(o.stock.symbol)}
+              className={`flex h-10 items-center gap-2 rounded-full border-[1.5px] pl-1.5 pr-3 text-[14px] font-semibold ${
+                on ? "border-ink bg-card text-ink" : "border-line-field bg-transparent text-ink-mid"
+              }`}
+            >
+              <span className={on ? "" : "opacity-45"}>
+                <StockAvatar symbol={o.stock.symbol} size={26} />
+              </span>
+              {o.stock.name}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

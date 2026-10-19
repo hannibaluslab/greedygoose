@@ -21,6 +21,7 @@ import {
   earnSmallPrint,
   earnStop,
   marginalApy,
+  offerFor,
   pctText,
   type EarnInput,
   type EarnOpen,
@@ -485,5 +486,23 @@ describe("assertEarn: the batch is what the screen says", () => {
     const [mine] = buildWithdrawSavingsCalls(user, usdc(1), false);
     expect(assertEarn(user, [mine, ...calls], review)).toHaveLength(7);
     expect(() => assertEarn(user, [...calls.slice(0, 4), mine, ...calls.slice(4)], review)).toThrow(/Blocked/);
+  });
+});
+
+describe("offerFor: the offer held to the stocks ticked on the earn step", () => {
+  const all = open(earnOffer(input({ options: [option(1_400)] })));
+  const base = { position: position(), cash, now: new Date(NOW * 1000) };
+
+  it("with every stock ticked, it is the same offer", () => {
+    expect(offerFor(all, { ...base, options: [option(1_400)] })).toEqual(all);
+  });
+
+  it("with fewer stocks ticked, the most it can add is lower; with none, only what already backs credit counts", () => {
+    const less = offerFor(all, { ...base, options: [option(200)] });
+    const none = offerFor(all, { ...base, options: [] });
+    expect(less.maxUsd).toBeLessThan(all.maxUsd);
+    expect(none.maxUsd).toBeLessThan(less.maxUsd);
+    expect(none.maxUsd).toBeGreaterThan(0);
+    expect(less.rates).toEqual(all.rates);
   });
 });
