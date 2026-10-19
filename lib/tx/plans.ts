@@ -1,5 +1,6 @@
 import { isAddressEqual } from "viem";
 import { buildWithdrawCalls, type Call } from "@/lib/aave/tx";
+import { buildSetMixCalls } from "@/lib/agents/settings";
 import { payFromCash, type Cash } from "@/lib/cash";
 import { SEND_COPY, sendActivity, type Recipient } from "@/lib/send";
 import { TRADE_COPY, buildTradeCalls, saleBlockText, swapMinUsd, tradeActivity } from "@/lib/trade";
@@ -303,4 +304,11 @@ export const earnPlan = (p: EarnInput, cashToSign: CashToSign): TxPlan => ({
   // The health on Aave after it, read in its simulation: in Act, it stops (Act is the line).
   healthFloor: EARN_FLOOR,
   activity: earnActivity(p.quote.plan),
+});
+
+/** The mix's `setMix` batch, as useTx signs it: keyed by the account and the weights. */
+export const setMixPlan = (account: `0x${string}`, weights: readonly number[]): TxPlan => ({
+  key: txKey("setMix", account, weights),
+  user: account,
+  calls: () => Promise.resolve(buildSetMixCalls(account, weights)),
 });

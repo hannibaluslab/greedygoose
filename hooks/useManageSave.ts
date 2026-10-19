@@ -5,8 +5,8 @@ import { TAP_AGAIN, txKey, useTx, type TxPhase, type TxPlan } from "@/hooks/useT
 import { runError } from "@/hooks/useAgentRun";
 import type { useAgents } from "@/hooks/useAgents";
 import type { AgentJob, StockLimits } from "@/lib/agents/permissions";
-import { buildSetMixCalls } from "@/lib/agents/settings";
 import { isPopupBlocked } from "@/lib/tx/prepared";
+import { setMixPlan } from "@/lib/tx/plans";
 
 /** A job's new grant: its limit, and each stock's for Protect · sell and the Rebalancer. */
 export type GrantStep = { job: AgentJob; capRaw: bigint; limitsRaw?: StockLimits };
@@ -15,13 +15,6 @@ export type GrantStep = { job: AgentJob; capRaw: bigint; limitsRaw?: StockLimits
 type MixSave = { weights: readonly number[]; mixChanged: boolean; grant: GrantStep | null };
 
 const CANCELLED = /reject|denied|cancel/i;
-
-/** The mix's `setMix` batch, as useTx signs it: keyed by the account and the weights. */
-export const setMixPlan = (account: `0x${string}`, weights: readonly number[]): TxPlan => ({
-  key: txKey("setMix", account, weights),
-  user: account,
-  calls: () => Promise.resolve(buildSetMixCalls(account, weights)),
-});
 
 /** One grant on JAW's own screen; its request is built here, with nothing awaited before JAW is called. */
 const openGrant = (agents: ReturnType<typeof useAgents>, g: GrantStep) => agents.turnOn(g.job, g.capRaw, g.limitsRaw);

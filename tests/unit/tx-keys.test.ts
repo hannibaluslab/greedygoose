@@ -8,6 +8,7 @@ import {
   earnPlan,
   repayPlan,
   sendPlan,
+  setMixPlan,
   swapPlan,
   type EarnInput,
   type RepayInput,
@@ -15,7 +16,6 @@ import {
   type SwapReads,
   withdrawPlan,
 } from "@/lib/tx/plans";
-import { setMixPlan } from "@/hooks/useManageSave";
 import { keepMixPlan } from "@/hooks/useProtectSave";
 import { salePlan, type SellInput } from "@/hooks/useSell";
 import { CREDIT_FLOOR, type CreditPlan } from "@/lib/creditBuy";
