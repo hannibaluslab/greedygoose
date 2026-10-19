@@ -1,18 +1,20 @@
 import { decodeFunctionData, erc20Abi, isAddressEqual, parseUnits } from "viem";
-import { CASH, CREDIT_CAP, RISK } from "@/config/risk";
+import { CREDIT_CAP, RISK } from "@/config/risk";
 import { swapOf } from "@/lib/allowlist";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { autoFill, combinedCredit, fillRaw, type BackingLine } from "@/lib/aave/credit";
 import { buildBackAndCreditCalls, type Call } from "@/lib/aave/tx";
 import { cashRaw, feeBufferRaw, maxSpendRaw, payFromCash, toUsd, type Cash } from "@/lib/cash";
-import { formatUsd } from "@/lib/formatting";
+import { CREDIT_BLOCKED, creditLine, noCreditLine, type CreditBlock, type NoCredit } from "./creditBuy/copy";
 import { marketState } from "@/lib/market-hours";
 import type { ActivityItem } from "@/lib/activity/decode";
 import { STATUS_LABEL, endsInAct, needsExtraConfirm, statusFor, type Status } from "@/lib/risk/status";
 import { BUY_LIMITS, buildBuyCalls, type BuyQuote } from "@/lib/swap/buy";
 import type { HealthFloor } from "@/lib/tx/prepared";
 import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
+
+export * from "./creditBuy/copy";
 
 type Address = `0x${string}`;
 
@@ -62,11 +64,6 @@ export function backers<H extends { symbol: string; backingRaw: bigint }>(
   return backs.sort((a, b) => rank(a) - rank(b));
 }
 
-/** Names for one short line: "NVIDIA", "NVIDIA and Tesla", "NVIDIA and 3 more". */
-export function shortNames(names: readonly string[]): string {
-  return names.length <= 2 ? names.join(" and ") : `${names[0]} and ${names.length - 1} more`;
-}
-
 /** The position fields the plan reads (usePosition's data has them all). */
 export type CreditPosition = {
   totalBackingUsd: number;
@@ -75,22 +72,6 @@ export type CreditPosition = {
   healthFactor: number | null;
   usdcLiquidity: number;
   creditPaused: boolean;
-};
-
-/**
- * Why a plan can't go ahead. "in-act": the credit is in Act already, so no more is taken until it's out. "act": this
- * plan would end in Act (Act is the line, Adrian 2026-10-15): blocked, and no risk tick can let it through.
- */
-export type CreditBlock = "paused" | "no-liquidity" | "over-free" | "in-act" | "act" | "too-much" | "fee";
-
-export const CREDIT_BLOCKED: Record<CreditBlock, string> = {
-  paused: "Aave isn’t giving new USDC credit right now.",
-  "no-liquidity": "Aave doesn’t have enough USDC for this right now. Try a smaller amount.",
-  "over-free": "That’s more than you have free to put in use. Try a smaller amount.",
-  "in-act": "Your credit is in Act. Repay some to use more.",
-  act: "That would put your credit in Act. Try a smaller amount.",
-  "too-much": "That’s more credit than your stocks can back right now. Try a smaller amount.",
-  fee: `The network fee is paid from your cash. Top up ${formatUsd(CASH.feeBufferUsd)} first.`,
 };
 
 /**
@@ -317,39 +298,8 @@ export function planCredit(
   };
 }
 
-/** Why a Credit Buy can use nothing right now (F2-3's zero state, shown at step 1). */
-type NoCredit = "no-stocks" | "cant-back" | "too-small" | "all-in-use" | "in-act" | "paused" | "no-liquidity";
-
-/** F2-3's line under "$0", first half: why. */
-export const NO_CREDIT: Record<NoCredit, string> = {
-  "no-stocks": "Credit comes from your stocks",
-  "cant-back": "Your stocks can’t back credit right now.",
-  "too-small": "Your free stock is too small to back credit yet.",
-  "all-in-use": "Your stocks already back what you owe. Repay some to use more.",
-  "in-act": CREDIT_BLOCKED["in-act"],
-  paused: "New credit is paused right now.",
-  "no-liquidity": "There’s no credit to give out right now.",
-};
-
-/**
- * F2-3's whole line under "$0": why, then that cash still buys (a stock tapped there opens its Buy step with cash), or,
- * with too little cash for the smallest buy and its network fee, to top up first.
- */
-export function noCreditLine(why: NoCredit, canPayCash: boolean): string {
-  // No stocks (rulings 8, 9): the step's title says where credit comes from, so the line only says what to do.
-  if (why === "no-stocks") return canPayCash ? "Buy one with your cash first." : "Top up, then buy one with your cash.";
-  return `${NO_CREDIT[why]} ${canPayCash ? "You can still buy with cash." : "Top up to buy with cash."}`;
-}
-
 /** Whether the cash can pay the smallest buy, the fuel tank kept back. */
 export const canBuyWithCash = (cash: Cash) => toUsd(maxSpendRaw(cash)) >= BUY_LIMITS.minUsd;
-
-/** F2-3's line under the number when there is credit to use. */
-export const CREDIT_FROM = "In credit, backed by the stocks you own.";
-/** …and when there's credit but not the network fee: cash pays it (D4), and F2-5 would block every amount ("fee"). */
-export const FEE_FIRST = `Add ${formatUsd(CASH.feeBufferUsd)} to your cash for the network fee first.`;
-/** The plain line under "You can use up to": cash pays the network fee (D4), so without it the fee comes first. */
-export const creditLine = (cash: Cash) => (cashRaw(cash) < feeBufferRaw ? FEE_FIRST : CREDIT_FROM);
 
 export type CreditAvailable = {
   /** The most one Credit Buy can use right now; 0 with `why`. */
