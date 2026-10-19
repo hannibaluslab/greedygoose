@@ -3,7 +3,7 @@
 import { toast } from "sonner";
 import { CashFeed } from "@/components/gg/cash/CashActivity";
 import { CashStep, cashLead } from "@/components/gg/cash/CashSheet";
-import { EarnStep } from "@/components/gg/cash/EarnWithStocks";
+import { EarnCard, EarnStep } from "@/components/gg/cash/EarnWithStocks";
 import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
 import type { Holding, PositionData } from "@/hooks/usePosition";
 import type { CashFeedError } from "@/lib/cashActivity";
@@ -254,6 +254,12 @@ export function CashSheetDemo({ view, nowSec }: { view: SheetView; nowSec: numbe
           arrived={{ kind: "none" }}
           offer={offer}
           onEarn={noop}
+          // Owed, part of it earning: the card says so, with Stop earning with stocks.
+          card={
+            view === "sheet-owed" ? (
+              <EarnCard offer={offer} onOpen={noop} earning={{ usd: 200, backedBy: ["NVIDIA"], onStop: noop }} />
+            ) : undefined
+          }
           activity={
             <CashFeed
               rows={view === "sheet-error" ? rows.slice(0, 2) : rows}
