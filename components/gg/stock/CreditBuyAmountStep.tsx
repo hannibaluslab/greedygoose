@@ -23,6 +23,7 @@ import {
 import { STATUS_LABEL } from "@/lib/risk/status";
 import { BUY_LIMITS, type BuyQuote, type quoteEconomics } from "@/lib/swap/buy";
 import { VENUE_LABEL } from "@/lib/swap/venues";
+import { backingShares } from "@/lib/holding";
 import { rawToShares } from "@/lib/tokens/b20";
 import type { ReserveAsset } from "@/lib/tokens/registry";
 import { leverageOf, leverageText } from "@/lib/leverage";
@@ -287,14 +288,10 @@ function BatchNote({
     <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">
       In one go:{" "}
       {inWords([
-        ...plan.backing.flatMap((b) => {
-          const h = data.holdings.find((x) => x.symbol === b.stock.symbol);
-          return h
-            ? [
-                `${formatShares(rawToShares(b.raw, h.multiplier, b.stock.decimals))} ${tickerOf(b.stock.symbol)} goes in use to back credit`,
-              ]
-            : [];
-        }),
+        // Every stock the batch puts in use, or a throw: a line of what's signed is never dropped.
+        ...backingShares(plan.backing, data.holdings).map(
+          (b) => `${formatShares(b.shares)} ${tickerOf(b.symbol)} goes in use to back credit`,
+        ),
         `${formatUsd(amount)} of credit is taken`,
         `exactly ${formatUsd(usd)} is approved for the ${VENUE_LABEL[venue]} router and swapped`,
       ])}

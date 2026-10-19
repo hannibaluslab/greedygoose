@@ -1,3 +1,5 @@
+import { rawToShares } from "@/lib/tokens/b20";
+
 /**
  * How one holding splits, for the Home rail's chip, the Invest rows and the stock sheet. Shares that back credit are
  * the ones supplied to Aave; the rest are free.
@@ -22,4 +24,20 @@ export function holdingSplit(h: { freeRaw: bigint; backingRaw: bigint }): { back
 /** The holding's share of the stocks held (Invest's "Portfolio"), 0–1; null with no stocks. */
 export function portfolioShare(valueUsd: number, stocksUsd: number): number | null {
   return stocksUsd > 0 ? Math.min(1, Math.max(0, valueUsd / stocksUsd)) : null;
+}
+
+/**
+ * The shares each stock in a batch puts in use, in the batch's order, for the note of what the user signs (Credit
+ * Buy's "In one go", Earn with stocks' small print). Throws when a stock's holding isn't read: a line of what is
+ * signed is never dropped.
+ */
+export function backingShares(
+  backing: readonly { stock: { symbol: string; decimals: number }; raw: bigint }[],
+  holdings: readonly { symbol: string; multiplier: bigint }[],
+): { symbol: string; shares: number }[] {
+  return backing.map((b) => {
+    const h = holdings.find((x) => x.symbol === b.stock.symbol);
+    if (!h) throw new Error(`No holding read for ${b.stock.symbol}: the note would leave out what goes in use`);
+    return { symbol: b.stock.symbol, shares: rawToShares(b.raw, h.multiplier, b.stock.decimals) };
+  });
 }

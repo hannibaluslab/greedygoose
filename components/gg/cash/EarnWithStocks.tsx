@@ -30,7 +30,7 @@ import {
 import { aprToApy } from "@/lib/aave/math";
 import { formatUsdTrim } from "@/lib/formatting";
 import { homeStatus } from "@/lib/risk/status";
-import { rawToShares } from "@/lib/tokens/b20";
+import { backingShares } from "@/lib/holding";
 import { USDC } from "@/lib/tokens/registry";
 
 const CARD = "flex flex-col gap-3 rounded-[22px] bg-card p-4 shadow-card-elev";
@@ -199,7 +199,8 @@ export function EarnStep({
       {ready && (
         <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">
           {earnSmallPrint({
-            backing: backingSharesOf(plan, data),
+            // Every stock the batch puts in use, or a throw: a line of what's signed is never dropped.
+            backing: backingShares(plan.backing, data.holdings),
             amountUsd: amount,
             owedUsd: data.debtUsd + amount,
             backedBy: backedBy.map((h) => h.name),
@@ -287,13 +288,6 @@ function leftTextOf(amount: number, quote: EarnQuote, offer: EarnOpen): string {
     return `about ${pctText(left)} · ${quote.leftUsdYear >= 1 ? formatUsdTrim(quote.leftUsdYear) : "under $1"} a year`;
   return `about ${pctText(left)} a year`;
 }
-
-/** The shares each stock puts in use, for the small print. */
-const backingSharesOf = (plan: EarnQuote["plan"], data: PositionData) =>
-  plan.backing.flatMap((b) => {
-    const h = data.holdings.find((x) => x.symbol === b.stock.symbol);
-    return h ? [{ symbol: b.stock.symbol, shares: rawToShares(b.raw, h.multiplier, b.stock.decimals) }] : [];
-  });
 
 /** The amount card's source: the stock that backs it, and how many more. */
 function BackedBySource({ backedBy }: { backedBy: { symbol: string; name: string }[] }) {

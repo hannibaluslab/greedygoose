@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseUnits } from "viem";
-import { holdingSplit, portfolioShare, wholePct } from "@/lib/holding";
+import { backingShares, holdingSplit, portfolioShare, wholePct } from "@/lib/holding";
 
 const shares = (n: number) => parseUnits(n.toFixed(8), 8);
 
@@ -70,5 +70,27 @@ describe("portfolioShare", () => {
   it("is null with no stocks, and stays within 0–1", () => {
     expect(portfolioShare(0, 0)).toBeNull();
     expect(portfolioShare(10, 9.99)).toBe(1);
+  });
+});
+
+describe("backingShares (the shares each stock puts in use, in the note of what you sign)", () => {
+  const nvda = { symbol: "NVDAc", decimals: 8 };
+  const aapl = { symbol: "AAPLc", decimals: 8 };
+  const holdings = [{ symbol: "NVDAc", multiplier: 10n ** 18n }];
+
+  it("lists every stock the batch puts in use, in the batch's order", () => {
+    expect(backingShares([{ stock: nvda, raw: 150_000_000n }], holdings)).toEqual([{ symbol: "NVDAc", shares: 1.5 }]);
+  });
+
+  it("never drops a line: a stock whose holding isn't read throws", () => {
+    expect(() =>
+      backingShares(
+        [
+          { stock: nvda, raw: 1n },
+          { stock: aapl, raw: 1n },
+        ],
+        holdings,
+      ),
+    ).toThrow(/AAPLc/);
   });
 });
