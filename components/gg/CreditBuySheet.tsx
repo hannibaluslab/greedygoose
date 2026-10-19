@@ -7,7 +7,7 @@ import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { Button } from "./Button";
 import { useMoneySheets } from "./MoneySheets";
 import { BackingRow, CantBack, LeaveForRepay, ReadyRow, optionOf, unavailable, wholeUsd } from "./CreditBuyBacking";
-import { CantCheck, CreditHero, StockLists } from "./CreditBuyStocks";
+import { CashStockLists, CreditHero, CreditPending, StockLists } from "./CreditBuyStocks";
 import { CreditBuyAmountStep } from "./CreditBuyAmountStep";
 import { useAgents } from "@/hooks/useAgents";
 import { useBoughtHome } from "@/hooks/useBoughtHome";
@@ -237,11 +237,7 @@ export function CreditBuySheet({
         <SheetSteps stepKey={step} direction={direction} className="flex flex-col gap-3">
           {step === "back" ? (
             !available ? (
-              cfRead.failed ? (
-                <CantCheck onRetry={cfRead.retry} />
-              ) : (
-                <div aria-busy className="h-[220px] animate-pulse rounded-[16px] bg-chip" />
-              )
+              <CreditPending failed={cfRead.failed} onRetry={cfRead.retry} />
             ) : available.why === "no-stocks" ? (
               // No stocks at all (Adrian: step 1 always shows; rulings 8, 9): where credit comes from, what to do first
               // and, with no cash to buy one, Top up; then the stocks, which buy with cash. Holding any stock shows it
@@ -264,13 +260,7 @@ export function CreditBuySheet({
                     </Button>
                   )}
                 </div>
-                <StockLists
-                  held={preset ? held.filter((h) => h.symbol === preset.symbol) : held}
-                  others={preset ? others.filter((e) => e.symbol === preset.symbol) : others}
-                  priceOf={priceOf}
-                  withCash
-                  onPick={(s) => onBuyWithCash(s.symbol)}
-                />
+                <CashStockLists held={held} others={others} preset={preset} priceOf={priceOf} onPick={onBuyWithCash} />
               </div>
             ) : (
               <>
@@ -332,12 +322,12 @@ export function CreditBuySheet({
                     <p role="status" className="m-0 px-1 text-[13px] leading-[1.4] text-ink-mid">
                       {available.line}
                     </p>
-                    <StockLists
-                      held={preset ? held.filter((h) => h.symbol === preset.symbol) : held}
-                      others={preset ? others.filter((e) => e.symbol === preset.symbol) : others}
+                    <CashStockLists
+                      held={held}
+                      others={others}
+                      preset={preset}
                       priceOf={priceOf}
-                      withCash
-                      onPick={(s) => onBuyWithCash(s.symbol)}
+                      onPick={onBuyWithCash}
                     />
                   </>
                 ) : (
@@ -366,11 +356,7 @@ export function CreditBuySheet({
           ) : lostPick ? (
             // The holding picked on step 1 can't back credit any more (see `lostPick`): say so, and pick again.
             !cfs ? (
-              cfRead.failed ? (
-                <CantCheck onRetry={cfRead.retry} />
-              ) : (
-                <div aria-busy className="h-[220px] animate-pulse rounded-[16px] bg-chip" />
-              )
+              <CreditPending failed={cfRead.failed} onRetry={cfRead.retry} />
             ) : (
               <>
                 <p role="status" className="m-0 px-1 pt-1 text-[15px] leading-snug text-ink">

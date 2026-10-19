@@ -120,8 +120,41 @@ export function CreditHero({
   );
 }
 
+/**
+ * The $0 state's stocks, which buy with cash (a tap opens the stock's Buy step): only the stock picked already, when
+ * the sheet opened on one.
+ */
+export function CashStockLists({
+  held,
+  others,
+  preset,
+  priceOf,
+  onPick,
+}: {
+  held: Holding[];
+  others: ReserveAsset[];
+  preset: ReserveAsset | null;
+  priceOf: (symbol: string) => number;
+  onPick: (symbol: string) => void;
+}) {
+  const only = <T extends { symbol: string }>(list: T[]) =>
+    preset ? list.filter((s) => s.symbol === preset.symbol) : list;
+  return (
+    <StockLists held={only(held)} others={only(others)} priceOf={priceOf} withCash onPick={(s) => onPick(s.symbol)} />
+  );
+}
+
+/** The collateral factors are loading (a pulse), or couldn't be read (CantCheck). */
+export function CreditPending({ failed, onRetry }: { failed: boolean; onRetry: () => void }) {
+  return failed ? (
+    <CantCheck onRetry={onRetry} />
+  ) : (
+    <div aria-busy className="h-[220px] animate-pulse rounded-[16px] bg-chip" />
+  );
+}
+
 /** The collateral factors couldn't be read: say so, with Try again (ValueLine's pattern), instead of pulsing on. */
-export function CantCheck({ onRetry }: { onRetry: () => void }) {
+function CantCheck({ onRetry }: { onRetry: () => void }) {
   return (
     <p role="status" className="m-0 flex items-center justify-between gap-3 text-[13px] leading-[normal] text-ink-mid">
       Your credit can’t be checked right now.
