@@ -21,7 +21,7 @@ export function owedBeside(debtUsd: number, cash: Cash): { owed: string; line: s
   if (debtUsd <= 0) return null;
   return {
     owed: formatUsdTrim(Math.ceil(debtUsd)),
-    line: maxSpendRaw(cash) > 0n ? "Repay from your cash any time." : "Add money to your cash to repay.",
+    line: maxSpendRaw(cash) > 0n ? "Repay from your cash any time." : "Top up your cash to repay.",
   };
 }
 
@@ -103,7 +103,7 @@ export const signedUsd = (usd: number) => `${usd < 0 ? "−" : "+"}${formatUsd(M
 /** Earn with stocks' line, here and in Activity: "+$500.00 from credit, earning". */
 const earnLine = (usd: number) => `${signedUsd(usd)} from credit, earning`;
 /** Start earning's line, here and in Activity: "$40.00 into savings" (the cash stayed the user's: no sign). */
-const saveLine = (usd: number) => `${formatUsd(usd)} into savings`;
+const saveLine = (usd: number) => `${formatUsd(usd)} earning`;
 const cents = (usd: number) => Math.round(usd * 100) / 100;
 const sum = (xs: readonly number[]) => xs.reduce((a, b) => a + b, 0);
 const nameOf = (symbol: string) => EQUITIES.find((e) => e.symbol === symbol)?.name ?? tickerOf(symbol);

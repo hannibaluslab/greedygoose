@@ -249,7 +249,7 @@ function saleLines(p: {
   const warning =
     blocker ??
     (plan?.warn
-      ? `You’d get ${(plan.discount * 100).toFixed(1)}% under Aave’s price — the market for ${name} is small.`
+      ? `You’d get ${(plan.discount * 100).toFixed(1)}% under Aave’s price. The market for ${name} is small.`
       : null);
   const note =
     warning ??

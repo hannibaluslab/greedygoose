@@ -225,7 +225,7 @@ export const EARN_FLOOR: HealthFloor = { minHf: RISK.watchMin, stop: EARN_BLOCKE
 /** Why this amount can't go ahead, in the red line under it; null when it can (the risk tick aside). */
 export function earnBlock(q: EarnQuote, o: EarnOpen): string | null {
   if (q.plan.block) return EARN_BLOCKED[q.plan.block];
-  if (q.amountUsd < o.minUsd) return `The smallest amount is ${formatUsdTrim(o.minUsd)}.`;
+  if (q.amountUsd < o.minUsd) return `Minimum amount is ${formatUsdTrim(o.minUsd)}.`;
   if (q.amountUsd > o.maxUsd) return limitText(o);
   if (q.left !== null && q.left <= 0) return EARN_COSTS_MORE;
   return null;

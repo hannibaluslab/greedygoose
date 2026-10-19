@@ -15,7 +15,7 @@ export function MarketBanner() {
   if (!state || state.open) return null;
   return (
     <p role="status" className="rounded-2xl bg-chip px-4 py-3 text-[13px] leading-snug text-ink-mid">
-      Markets closed — stock prices update {state.reopensLabel}. Interest still accrues.
+      Markets closed. Stock prices update {state.reopensLabel}. Interest still accrues.
     </p>
   );
 }

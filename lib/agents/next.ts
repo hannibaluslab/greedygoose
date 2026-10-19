@@ -192,7 +192,7 @@ function protectNext(i: NextInput): Next {
     const a = formatUsdTrim(Math.ceil(d.amountUsd * 100) / 100);
     return move(`repays ${a} from your cash`, `Would repay ${a} from your cash`);
   }
-  if (d.reason === "no-debt") return { idle: "Nothing owed. Nothing to do." };
+  if (d.reason === "no-debt") return { idle: "Nothing owed, nothing to do." };
   const status = statusFor(d.hf);
   // Act is never healthy for the rule: the executor pins its trigger to the Act line (D13's was higher). A fallback line.
   if (d.reason === "healthy") {

@@ -111,7 +111,7 @@ export function EarnCard({
       {earning ? (
         <>
           <Rates rates={earning.rates} left cost="Credit costs" />
-          <p className="m-0 -mt-1 text-[12.5px] leading-[1.4] text-subtle">Live, a year. Both are variable.</p>
+          <p className="m-0 -mt-1 text-[12.5px] leading-[1.4] text-subtle">Live yearly rates. Both vary.</p>
           {earning.used.length > 0 && <UsedForThis used={earning.used} />}
         </>
       ) : (

@@ -137,7 +137,7 @@ const JOB: Partial<Record<AgentJob, { agent: AgentName; on: (cap: string) => str
   sell: {
     agent: "Protect",
     on: (cap) => `Protect can sell backing stock, up to ${cap} a day.`,
-    off: "Protect won't sell",
+    off: "Protect won’t sell",
   },
   rebalance: { agent: "Rebalance", on: (cap) => `Rebalance is on, up to ${cap} a week.`, off: "Rebalance is off" },
 };
@@ -147,7 +147,7 @@ export const OFF_WHY = {
   revoked: ".",
   expired: ": a year has passed since you switched it on.",
   "not-owner": ": it can no longer act on your account.",
-  stuck: ": its last runs didn't go through.",
+  stuck: ": its last runs didn’t go through.",
 } as const;
 
 /** A failed run's reason in GooseExecutor's own words (its error's name), or the raw code. */
@@ -243,7 +243,7 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
         by: "Protect",
         line: ["Credit reached ", ...word(e.hf), ". Asked you to repay or add more."],
         details: [
-          { label: "Why", value: ["Your cash couldn't bring it back to ", { status: "watch" }, "."] },
+          { label: "Why", value: ["Your cash couldn’t bring it back to ", { status: "watch" }, "."] },
           { label: "Would sell", value: [`${usd(e.sellValueRaw)} of backing stock`] },
           // A wait that ends while prices are held gives their reopening as the sale time: the second before is closed.
           {
@@ -291,9 +291,9 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
     case "rebalance-skipped":
       return {
         by: "Rebalance",
-        line: ["Prices were off today, so it didn't trade."],
+        line: ["Prices were off today, so it didn’t trade."],
         details: [
-          { label: "Why", value: ["Each trade must get close to Aave's price. It tries again next market day."] },
+          { label: "Why", value: ["Each trade must get close to Aave’s price. It tries again next market day."] },
         ],
       };
     case "converted": {
@@ -316,7 +316,7 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
     case "run-failed":
       return {
         by: "Agents",
-        line: ["A run didn't go through. Nothing moved."],
+        line: ["A run didn’t go through. Nothing moved."],
         details: [
           ...(e.fails < MAX_FAILS
             ? [{ label: "Tries again", value: [at(time + (FIRST_COOLDOWN_SEC << (e.fails - 1)))] }]

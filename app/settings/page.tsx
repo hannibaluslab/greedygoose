@@ -63,8 +63,7 @@ function Settings({ address }: { address: `0x${string}` }) {
           }
         />
         <p className="m-0 text-[13px] leading-snug text-ink-mid">
-          {formatUsd(tank)} of your cash stays here for network fees. Whatever you spend from your cash leaves it in
-          place.
+          {formatUsd(tank)} of your cash stays here for network fees. Spending from your cash leaves it in place.
         </p>
       </WhiteCard>
       <WhiteCard className="p-4 text-[13px] leading-snug text-ink-mid">

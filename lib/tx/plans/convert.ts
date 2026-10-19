@@ -40,7 +40,7 @@ export function convertQuote(p: {
 }
 
 /** Shown when no coin can be converted at 99.5% of face value or better right now. */
-export const NOT_FAIR = "Not at a fair price right now: it needs 99.5% of face value or better. Try again in a while.";
+export const NOT_FAIR = "Not at a fair price right now. It needs 99.5% of face value or better. Try again in a while.";
 const CHANGED = "What’s in your account changed since you looked. Check the amounts and try again.";
 
 /**

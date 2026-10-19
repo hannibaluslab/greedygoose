@@ -61,16 +61,12 @@ function AddMoneyBody({ address, name, rate, arrived, onCopy }: AddMoneyProps) {
           {ACCEPTED_COINS_TEXT} on Base. {rate ? `They arrive as cash and earn ${rate}.` : "They arrive as cash."}
         </p>
         {/* Ruling 11. */}
-        <p className="m-0 text-sm font-semibold leading-[1.45] text-ink">
-          Send on Base only. Other networks can lose it.
-        </p>
+        <p className="m-0 text-sm font-semibold leading-[1.45] text-ink">Send on Base only, or it can be lost.</p>
       </div>
 
       <div className="flex flex-col gap-1.5 rounded-[22px] bg-card-bone px-5 py-[18px]">
-        <span className="text-[15px] font-semibold">Already hold stocks in this account?</span>
-        <p className="m-0 text-sm leading-[1.45] text-ink-2">
-          They are already here. Every supported stock in it shows up on Home, ready to back credit.
-        </p>
+        <span className="text-[15px] font-semibold">Stocks already in this account</span>
+        <p className="m-0 text-sm leading-[1.45] text-ink-2">Supported ones show up on Home, ready to back credit.</p>
       </div>
     </div>
   );
@@ -79,7 +75,7 @@ function AddMoneyBody({ address, name, rate, arrived, onCopy }: AddMoneyProps) {
 /** The Top up sheet, plain values in, so the dev gallery draws it with fixtures. */
 export function TopUpSheetView({ open, onClose, ...body }: AddMoneyProps & { open: boolean; onClose: () => void }) {
   return (
-    <SheetShell open={open} onOpenChange={(next) => !next && onClose()} title="Add money">
+    <SheetShell open={open} onOpenChange={(next) => !next && onClose()} title="Top up">
       <AddMoneyBody {...body} />
     </SheetShell>
   );

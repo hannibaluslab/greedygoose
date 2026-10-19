@@ -52,7 +52,7 @@ const byJob = <T,>(f: (job: AgentJob) => T) =>
   Object.fromEntries(JOBS.map((job) => [job, f(job)])) as Record<AgentJob, T>;
 const LOADING = Object.fromEntries(AGENTS.map((a) => [a, { idle: "…" }])) as Record<Agent, Next>;
 
-const PREVIEW = "Preview mode — sign in to do this.";
+const PREVIEW = "Preview mode. Sign in to do this.";
 
 /**
  * The Agents tab (Adrian, 2026-10-15): Protect and Rebalance. Each agent's state is the executor's registry and JAW's
@@ -292,7 +292,7 @@ function Agents({ address }: { address: `0x${string}` }) {
         ))}
         feed={
           <AgentsFeed
-            empty="Nothing yet. What your agents do shows up here, with why."
+            empty="Nothing yet. What your agents do, and why, shows up here."
             nowMs={nowSec * 1000}
             rows={feed.rows}
             loading={feed.isLoading}

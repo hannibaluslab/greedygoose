@@ -29,8 +29,8 @@ const SCALE: { status: Exclude<Status, "none">; range: string; line: string }[] 
 function marginLine(health: number): string {
   const m = healthMargins(health);
   if (health <= AAVE_LINE_HF)
-    return "Under Aave’s line: part of your stocks can be sold now. Repay to get back over it.";
-  if (health < RISK.watchMin) return `In Act: ${pct(m.toAave)} more of a fall and Aave can sell part of your stocks.`;
+    return "Under Aave’s line. Part of your stocks can be sold now. Repay to get back over it.";
+  if (health < RISK.watchMin) return `In Act. If your stocks fall ${pct(m.toAave)} more, Aave can sell part of them.`;
   return `Your stocks can fall ${pct(m.toAave)} before Aave’s line, ${pct(m.toAct)} before Act.`;
 }
 
@@ -99,7 +99,7 @@ export function StatusSheet({
                   <Line label="= Health" value={health === null ? "–" : hf(health)} strong />
                 </dl>
                 <p className="m-0 text-[12px] leading-snug text-subtle">
-                  Aave counts a share of each stock’s value: the % beside it.
+                  Aave counts a share of each stock’s value, the % beside it.
                 </p>
               </>
             ) : (

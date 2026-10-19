@@ -49,7 +49,7 @@ export type FreeRepayInput = {
 };
 
 export const FREE_REPAY_FALLBACK =
-  "This repay would fail right now — the price may have moved or the stock may be paused. Try again in a moment.";
+  "This repay would fail right now. The price may have moved or the stock may be paused. Try again in a moment.";
 
 /**
  * What a repay with free shares signs (useTx), keyed by what shapes its batch: the account, the stock, the quote and its

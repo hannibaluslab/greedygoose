@@ -105,7 +105,7 @@ export function CreditBuyAmountStep({
   // A small market: what the buy pays over Aave's price, once nothing blocks it.
   const warnPremium =
     !blocker && econ && econ.premium > BUY_LIMITS.warnPremium
-      ? `You’d pay ${(econ.premium * 100).toFixed(1)}% over Aave’s price — the market for ${stock.name} is small.`
+      ? `You’d pay ${(econ.premium * 100).toFixed(1)}% over Aave’s price. The market for ${stock.name} is small.`
       : null;
 
   return (

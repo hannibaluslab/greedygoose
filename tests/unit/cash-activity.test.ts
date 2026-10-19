@@ -65,7 +65,7 @@ describe("the credit beside the cash (no split of the cash)", () => {
   it("asks for money first when the cash can't repay (the fee buffer stays for the network fee)", () => {
     // Exactly the buffer: none of it can repay.
     expect(owedBeside(300, { walletRaw: feeBufferRaw, savingsRaw: 0n, saveOn: false })?.line).toBe(
-      "Add money to your cash to repay.",
+      "Top up your cash to repay.",
     );
     expect(owedBeside(300, { walletRaw: feeBufferRaw + 1n, savingsRaw: 0n, saveOn: false })?.line).toBe(
       "Repay from your cash any time.",

@@ -266,7 +266,7 @@ describe("Start earning in Activity and the Cash sheet: one row, not money leavi
   it("decodes as one 'save' move: no send, no receive", () => {
     const items = decodeActivity(receipt(usdc(41.751674)), user);
     expect(items).toEqual([{ kind: "save", symbol: "USDC", amount: 41.751674 }]);
-    expect(describeActivity(items[0])).toEqual({ title: "Started earning", amount: "$41.75 into savings", sign: "" });
+    expect(describeActivity(items[0])).toEqual({ title: "Started earning", amount: "$41.75 earning", sign: "" });
     // The same as what Activity shows while it confirms.
     expect(startEarningActivity(usdc(41.751674))).toEqual(items);
   });
@@ -297,8 +297,8 @@ describe("Start earning in Activity and the Cash sheet: one row, not money leavi
       ...over,
     });
     const row = ownCashRow(move())!;
-    expect([row.title, row.line, row.usd]).toEqual(["Started earning", "$41.75 into savings", 0]);
-    expect(ownCashRow(move({ status: "pending" }))!.line).toBe("$41.75 into savings · Confirming");
+    expect([row.title, row.line, row.usd]).toEqual(["Started earning", "$41.75 earning", 0]);
+    expect(ownCashRow(move({ status: "pending" }))!.line).toBe("$41.75 earning · Confirming");
     expect(ownCashRow(move({ status: "failed" }))).toBeNull();
     expect(cashRows({ own: [move()], executor: [], arrivals: [], since: 0 }).map((r) => r.title)).toEqual([
       "Started earning",

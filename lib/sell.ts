@@ -62,10 +62,10 @@ export const SELL_BLOCKED: Record<SellBlock, string> = {
   "nothing-owed": "You don’t owe anything, so there’s nothing to repay.",
   "past-line": "That’s more than you can sell right now. Repay some first to sell more.",
   "near-limit":
-    "Your credit is too close to Aave’s limit to take these shares out before they repay it. Sell fewer, or repay from cash.",
-  "too-small": `The smallest sale is ${formatUsdTrim(SELL_LIMITS.minUsd)}.`,
+    "Your credit is too close to Aave’s limit to free these shares before the repay lands. Sell fewer, or repay from cash.",
+  "too-small": `Minimum sale is ${formatUsdTrim(SELL_LIMITS.minUsd)}.`,
   act: "That would put your credit in Act. Sell more, or repay from cash.",
-  price: `Too big for the market right now: you’d get more than ${SELL_LIMITS.floorBps / 100}% under Aave’s price. Try a smaller amount.`,
+  price: `Too big for the market right now. You’d get more than ${SELL_LIMITS.floorBps / 100}% under Aave’s price. Try a smaller amount.`,
 };
 
 /**

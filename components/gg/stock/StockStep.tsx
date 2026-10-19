@@ -42,8 +42,8 @@ export function StockStep({
       {(holding.paused || holding.frozen) && (
         <p role="status" className="m-0 text-[13px] leading-snug text-act">
           {holding.paused
-            ? `Aave has paused ${stock.name} for now: it can’t come out of backing or back new credit.`
-            : `Aave has frozen ${stock.name} for now: it can’t back new credit.`}
+            ? `Aave has paused ${stock.name} for now. It can’t come out of backing or back new credit.`
+            : `Aave has frozen ${stock.name} for now. It can’t back new credit.`}
         </p>
       )}
       {owned && <StockPosition holding={holding} />}

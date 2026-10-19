@@ -21,7 +21,7 @@ type CreditBuyInput = {
 };
 
 const CREDIT_BUY_FALLBACK =
-  "This Credit Buy would fail right now — the price or Aave’s limits may have moved. Try a smaller amount in a moment.";
+  "This Credit Buy would fail right now. The price or Aave’s limits may have moved. Try a smaller amount in a moment.";
 
 /**
  * The Credit Buy batch, built from fresh reads before JAW's sheet: the screen's blocks and risk tick still hold, and

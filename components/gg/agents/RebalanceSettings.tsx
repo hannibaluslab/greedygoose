@@ -380,7 +380,7 @@ function NextTrades({
       )}
       {backingUsd >= 0.01 && (
         <span className="text-xs leading-[1.4] text-subtle">
-          Counts only free shares: the {formatUsdShort(backingUsd)} backing your credit stays put.
+          Counts only free shares. The {formatUsdShort(backingUsd)} backing your credit stays put.
         </span>
       )}
     </ManageCard>

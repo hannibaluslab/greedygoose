@@ -99,7 +99,7 @@ export function BuySheet({
   else if (stock && amount > 0 && quote.isSuccess && q === null)
     blocker = `There’s no market for ${stock.name} right now.`;
   else if (econ && econ.premium > BUY_LIMITS.blockPremium)
-    blocker = `Too big for the market right now: you’d pay ${(econ.premium * 100).toFixed(1)}% over Aave’s price. Try a smaller amount.`;
+    blocker = `Too big for the market right now. You’d pay ${(econ.premium * 100).toFixed(1)}% over Aave’s price. Try a smaller amount.`;
   else if (plan?.block) blocker = CREDIT_BLOCKED[plan.block];
   const warnPremium = !!econ && econ.premium > BUY_LIMITS.warnPremium && !blocker;
   const feeBlocked = isConnected && fee.state === "unsupported";
@@ -116,7 +116,7 @@ export function BuySheet({
   const note =
     blocker ??
     (warnPremium && stock
-      ? `You’d pay ${(econ!.premium * 100).toFixed(1)}% over Aave’s price — the market for ${stock.name} is small.`
+      ? `You’d pay ${(econ!.premium * 100).toFixed(1)}% over Aave’s price. The market for ${stock.name} is small.`
       : closed
         ? "Stock markets are closed. You can still buy, but the price can jump when they reopen."
         : null);
@@ -306,7 +306,7 @@ export function SmallPrint({
   ];
   return (
     <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">
-      In one go: {inWords(moves)}. You get at least {minShares.toFixed(4)} {ticker}: if the price moves more than{" "}
+      In one go: {inWords(moves)}. You get at least {minShares.toFixed(4)} {ticker}. If the price moves more than{" "}
       {BUY_LIMITS.slippageBps / 100}%, the buy is cancelled.{" "}
       {plan &&
         `Credit costs ${(data.apr * 100).toFixed(2)}% a year (variable). If your stocks fall too far, part of them can be sold to repay what you owe. `}

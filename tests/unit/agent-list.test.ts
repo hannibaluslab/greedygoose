@@ -126,7 +126,7 @@ describe("agentCards: only when something needs the user", () => {
       text: "Your credit hit Act. Add $120, or Protect sells $180 at 3:42 PM.",
     });
     expect(c.actions).toEqual([
-      { kind: "sheet", label: "Add cash", sheet: "top-up" },
+      { kind: "sheet", label: "Top up", sheet: "top-up" },
       { kind: "sheet", label: "Repay", sheet: "repay" },
     ]);
     expect(agentCards({ ...calm, headsUp: { addUsd: 5, sellUsd: 9, when: "when prices reopen" } })[0].text).toBe(
@@ -144,7 +144,7 @@ describe("agentCards: only when something needs the user", () => {
       sub: "Repaying $129 now keeps it in Watch. Protect does nothing before Act.",
     });
     expect(c.actions).toEqual([
-      { kind: "sheet", label: "Add cash", sheet: "top-up" },
+      { kind: "sheet", label: "Top up", sheet: "top-up" },
       { kind: "sheet", label: "Repay", sheet: "repay" },
     ]);
   });

@@ -198,7 +198,7 @@ export function agentCards(i: CardsInput): AgentCard[] {
       agent: "Protect",
       text: `Your credit hit Act. Add ${formatUsdTrim(h.addUsd)}, or Protect sells ${formatUsdTrim(h.sellUsd)} ${h.when}.`,
       actions: [
-        { kind: "sheet", label: "Add cash", sheet: "top-up" },
+        { kind: "sheet", label: "Top up", sheet: "top-up" },
         { kind: "sheet", label: "Repay", sheet: "repay" },
       ],
     });
@@ -213,7 +213,7 @@ export function agentCards(i: CardsInput): AgentCard[] {
       sub: `Repaying ${formatUsdTrim(w.addUsd)} now keeps it in Watch. Protect does nothing before Act.`,
       // As the heads-up's: the last action is the lime one, and here it is the repay the line names.
       actions: [
-        { kind: "sheet", label: "Add cash", sheet: "top-up" },
+        { kind: "sheet", label: "Top up", sheet: "top-up" },
         { kind: "sheet", label: "Repay", sheet: "repay" },
       ],
     });

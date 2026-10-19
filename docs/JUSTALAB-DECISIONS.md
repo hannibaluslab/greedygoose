@@ -480,3 +480,22 @@ Three changes Adrian approved. This replaces, in "Repay is one choice: pay with"
 - **An executor account with Save off and all its cash in savings** sees no card, so the Save grant isn't asked until new cash sits idle (the rule as asked).
 - **The Cash sheet's lead still follows the Save grant** (`cashLead`: "Ready to spend." without "earning X% a year" on the public link, even once Start earning put the cash in savings); not changed, as it wasn't named. The Yield sheet already counts savings.
 
+
+## Copy clean-up: no AI slop, never longer (Adrian, 2026-10-19)
+
+The no-ai-slop pass on every on-screen string (report: ~/Marketing Claude/greedygoose-copy-slop-report-2026-10-19.md). Adrian: "as long as we are not making a copy longer i'm good to move forward". Every change keeps a string the same length or shorter.
+
+- **No em dashes in copy.** A dash joining two sentences becomes a period ("Preview mode. Sign in to do this.", "You’d pay 1.2% over Aave’s price. The market for Apple is small."). A lone "—" for an empty value stays.
+- **A colon is for labels and lists,** not for joining two sentences ("Too big for the market right now. You’d pay…"). "In one go: …" stays: it lists what the signature moves.
+- **Top up is the one name for adding money.** This replaces, in "Top up and Repay are sheets", "Top up's title is 'Add money'": the sheet is titled Top up, Protect's heads-up button says Top up, and "Top up your cash to repay." replaces "Add money to your cash to repay."
+- **Minimums read "Minimum X is $Y."** (buy, sale, trade, repay, amount).
+- **No "savings" on screen:** Start earning's row reads "$X earning", and "Nothing earning yet, so nothing earned."
+- **No "lend":** "Aave doesn’t have enough USDC right now."
+- **Curly apostrophes everywhere,** including the eligibility attestation and the Agents feed.
+
+**Not changed, and why.**
+
+- **"Credit ready", "Credit available" and "Credit you can use" stay.** They are different numbers in the spec (Credit Buy's step 1 is the credit on what already backs it).
+- **Trade and Repay keep "the stock’s price".** The Trade sheet's main screen names no protocol (see "the Trade sheet").
+- **"Interest still accrues." and "Prices were off today" stay.** The clearer wording is longer.
+- **"Finish in JAW" stays** until Adrian decides: the spec keeps JAW to the trust mark.

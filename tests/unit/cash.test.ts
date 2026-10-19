@@ -127,7 +127,7 @@ describe("cashShort (the cash read again right before Face ID)", () => {
 
   it("stops a spend the cash no longer covers, saying what's there now", () => {
     expect(cashShort(usd(10) - fee + 1n, c)).toBe(
-      "Your cash moved since you started. You have $10.00 now: check the amount and try again.",
+      "Your cash moved since you started. You have $10.00 now. Check the amount and try again.",
     );
     expect(cashShort(usd(300), { walletRaw: 0n, savingsRaw: usd(120.5), saveOn: false })).toMatch(
       /You have \$120\.50 now/,
@@ -142,11 +142,11 @@ describe("cashShort (the cash read again right before Face ID)", () => {
 
 describe("cantRepay (the Repay screen with no amount to offer)", () => {
   it("asks for money when there's no cash", () => {
-    expect(cantRepay({ walletRaw: 0n, savingsRaw: 0n, saveOn: false })).toBe("Add money to your cash to repay.");
+    expect(cantRepay({ walletRaw: 0n, savingsRaw: 0n, saveOn: false })).toBe("Top up your cash to repay.");
   });
 
   it("says the fee buffer stays for the network fee when cash is no more than it, in savings or the wallet", () => {
-    const words = `Repaying needs more than $${CASH.feeBufferUsd.toFixed(2)} in your cash: that much stays for the network fee.`;
+    const words = `Repaying needs more than $${CASH.feeBufferUsd.toFixed(2)} in your cash. That much stays for the network fee.`;
     expect(cantRepay({ walletRaw: fee / 2n, savingsRaw: 0n, saveOn: false })).toBe(words);
     expect(cantRepay({ walletRaw: 0n, savingsRaw: fee, saveOn: true })).toBe(words);
     expect(maxSpendRaw({ walletRaw: 0n, savingsRaw: fee, saveOn: true })).toBe(0n);

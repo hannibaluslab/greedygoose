@@ -223,7 +223,7 @@ describe("earnQuote: one amount", () => {
     const over = quote(capped.maxUsd + 1, { offer: capped });
     expect(earnBlock(over.q, over.offer)).toBe(`Up to $${capped.maxUsd}.`);
     const under = quote(0.005);
-    expect(earnBlock(under.q, under.offer)).toBe("The smallest amount is $0.01.");
+    expect(earnBlock(under.q, under.offer)).toBe("Minimum amount is $0.01.");
     const ok = quote(500);
     expect(earnBlock(ok.q, ok.offer)).toBeNull();
     expect(ok.q).toMatchObject({ cost: 22, left: 19, leftUsdYear: 9 });

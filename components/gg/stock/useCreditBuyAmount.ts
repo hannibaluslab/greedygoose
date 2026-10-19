@@ -40,7 +40,7 @@ function amountBlocker({
   if (stock && amount > 0 && quote.isSuccess && (quote.data ?? null) === null)
     return `There’s no market for ${stock.name} right now.`;
   if (econ && econ.premium > BUY_LIMITS.blockPremium)
-    return `Too big for the market right now: you’d pay ${(econ.premium * 100).toFixed(1)}% over Aave’s price. Try a smaller amount.`;
+    return `Too big for the market right now. You’d pay ${(econ.premium * 100).toFixed(1)}% over Aave’s price. Try a smaller amount.`;
   return null;
 }
 

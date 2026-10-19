@@ -14,7 +14,7 @@ const PLAIN: Record<string, string> = {
   ReserveFrozen: "Aave isn’t accepting new activity in this market right now.",
   ReserveNotBorrowable: "Aave isn’t giving new USDC credit right now.",
   ReserveNotEnabledAsCollateral: "This stock doesn’t back your credit yet.",
-  InsufficientLiquidity: "Aave doesn’t have enough USDC to lend right now. Try a smaller amount.",
+  InsufficientLiquidity: "Aave doesn’t have enough USDC right now. Try a smaller amount.",
   MustNotLeaveDust: "That would leave a tiny amount behind. Repay all, or a little less.",
   MaximumUserReservesExceeded: "You’ve reached Aave’s limit on how many markets one account can use.",
 };

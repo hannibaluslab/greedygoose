@@ -56,8 +56,8 @@ export function savingsWithdrawal(amountRaw: bigint, c: Cash): { raw: bigint; al
  */
 export function cantRepay(c: Cash): string {
   return cashRaw(c) === 0n
-    ? "Add money to your cash to repay."
-    : `Repaying needs more than ${formatUsd(CASH.feeBufferUsd)} in your cash: that much stays for the network fee.`;
+    ? "Top up your cash to repay."
+    : `Repaying needs more than ${formatUsd(CASH.feeBufferUsd)} in your cash. That much stays for the network fee.`;
 }
 
 /**
@@ -66,7 +66,7 @@ export function cantRepay(c: Cash): string {
  */
 export function cashShort(amountRaw: bigint, c: Cash): string | null {
   if (amountRaw + feeBufferRaw <= cashRaw(c)) return null;
-  return `Your cash moved since you started. You have ${formatUsd(toUsd(cashRaw(c)))} now: check the amount and try again.`;
+  return `Your cash moved since you started. You have ${formatUsd(toUsd(cashRaw(c)))} now. Check the amount and try again.`;
 }
 
 /**

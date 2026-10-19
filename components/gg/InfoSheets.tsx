@@ -140,7 +140,7 @@ export function YieldSheet({
               (earning
                 ? ` ${formatUsd(wallet)} arrived recently and starts earning soon.`
                 : ` ${formatUsd(wallet)} of your cash isn’t earning yet.`)}{" "}
-            What credit costs isn’t taken off; you see it on your Credit card.
+            What credit costs isn’t taken off. It shows under Credit on Home.
           </p>
         </div>
         <Button variant="dark" size="lg" onClick={onClose}>

@@ -75,7 +75,7 @@ export function PersonSheet({
                   : "Remove from contacts"}
             </button>
             {preview ? (
-              <p className="m-0 text-center text-xs text-subtle">Preview mode — sign in to do this.</p>
+              <p className="m-0 text-center text-xs text-subtle">Preview mode. Sign in to do this.</p>
             ) : (
               note && <p className="m-0 text-center text-xs text-subtle">{note}</p>
             )}

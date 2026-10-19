@@ -10,7 +10,7 @@ export const ELIGIBILITY_MODE: EligibilityMode =
   (process.env.NEXT_PUBLIC_ELIGIBILITY_MODE as EligibilityMode | undefined) ?? "geo+attest";
 
 export const ATTESTATION_TEXT =
-  "I am not a US person, I don't live in a sanctioned country, and I'm allowed to hold tokenized stocks where I live.";
+  "I am not a US person, I don’t live in a sanctioned country, and I’m allowed to hold tokenized stocks where I live.";
 
 const KEY = "gg.eligibility.attested.v1";
 

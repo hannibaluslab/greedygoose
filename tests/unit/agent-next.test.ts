@@ -53,7 +53,7 @@ describe("agentNexts: each agent's rule on live data", () => {
 
   it("Protect repays from savings only in Act, back to Watch, and says why it doesn't otherwise", () => {
     expect(agentNexts(input()).protect).toEqual({ idle: "Safe. Nothing to do." });
-    expect(agentNexts(input({ debtUsd: 0 })).protect).toEqual({ idle: "Nothing owed. Nothing to do." });
+    expect(agentNexts(input({ debtUsd: 0 })).protect).toEqual({ idle: "Nothing owed, nothing to do." });
     // $1,400 of power against $1,000 owed is 1.4: Watch is fine (Act is the line, 2026-10-15).
     expect(agentNexts(input({ debtUsd: 1_000 })).protect).toEqual({ idle: "Watch. Steps in only at Act" });
     // Against $1,300 it's 1.077 (Act); back to 1.2 needs $133.34, rounded up to the cent.

@@ -212,7 +212,7 @@ export function LeaderboardScreen({ address }: { address: Address }) {
                 !!note || (tx.busy && from !== "pick") || (pickChange !== null && pickChange === front && tx.blocked)
               }
               onAdd={() => {
-                if (preview) return void toast("Preview mode — sign in to do this.");
+                if (preview) return void toast("Preview mode. Sign in to do this.");
                 if (!pickChange) return;
                 start("pick", "add");
                 void tx.sign(tx.planOf(pickChange));

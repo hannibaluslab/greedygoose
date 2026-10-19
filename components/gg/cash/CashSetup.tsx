@@ -68,7 +68,7 @@ export function StartEarningCard({
   const waiting = checking && !busy && phase !== "done";
   const label =
     phase === "simulating" || waiting ? "Checking…" : phase === "pending" ? "Confirming on Base…" : "Start earning";
-  const small = preview ? "Preview mode — sign in to do this." : (note ?? stepsNote(steps));
+  const small = preview ? "Preview mode. Sign in to do this." : (note ?? stepsNote(steps));
   return (
     <section aria-label="Start earning" className={SMALL_CARD}>
       <div className="flex items-center gap-2.5">
@@ -159,8 +159,7 @@ export function ArrivedCard({
       {waiting.length > 0 && (
         <p className="m-0 text-[13px] leading-[1.4] text-ink-mid">
           {inWords(waiting.map((q) => q.coin.symbol))} {waiting.length === 1 ? "isn’t" : "aren’t"} at a fair price right
-          now, so {waiting.length === 1 ? "it stays" : "they stay"} as {waiting.length === 1 ? "it is" : "they are"} for
-          now.
+          now, so {waiting.length === 1 ? "it stays" : "they stay"} as {waiting.length === 1 ? "it is" : "they are"}.
         </p>
       )}
       {fair.length > 0 && (

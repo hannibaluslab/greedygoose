@@ -129,7 +129,7 @@ function CashSplit({ account, data }: { account: `0x${string}`; data: PositionDa
   return (
     <dl aria-label="What my cash is" className="m-0 mt-1.5 flex flex-col gap-2 border-t border-line-field pt-3">
       <SplitRow label="My cash" value={spendable - credit} />
-      {credit >= 0.01 && <SplitRow label="From credit" sub="Earn with stocks, backed by my stocks" value={credit} />}
+      {credit >= 0.01 && <SplitRow label="From credit" sub="Earn with stocks" value={credit} />}
       <SplitRow label="Fuel tank" sub="Kept for network fees" value={tank} />
     </dl>
   );

@@ -52,7 +52,7 @@ describe("describeAgentEvent: the Agents board's rows", () => {
   it("draws the board's heads-up: credit in Act, asked to repay or add more", () => {
     const r = row({ kind: "heads-up", hf: hf(1.08), sellValueRaw: usdc(180), sellAfter: 1_760_635_800 });
     expect(r.line).toBe("Credit reached Act. Asked you to repay or add more.");
-    expect(r.details.Why).toBe("Your cash couldn't bring it back to Watch.");
+    expect(r.details.Why).toBe("Your cash couldn’t bring it back to Watch.");
     expect(r.details["Would sell"]).toBe("$180 of backing stock");
     expect(r.details["Sells at"]).toMatch(/^\d{1,2}:\d{2} [AP]M$/);
   });
@@ -186,7 +186,7 @@ describe("describeAgentEvent: the Agents board's rows", () => {
       "Rebalance is on, up to $500 a week.",
     );
     expect(row({ kind: "job-off", job: "protect", reason: "stuck" }).line).toBe(
-      "Protect is off: its last runs didn't go through.",
+      "Protect is off: its last runs didn’t go through.",
     );
     expect(row({ kind: "job-off", job: "rebalance", reason: "revoked" }).line).toBe("Rebalance is off.");
     // Earning and converting are switched on once, where they matter: their switches make no row (D20).
@@ -199,7 +199,7 @@ describe("describeAgentEvent: the Agents board's rows", () => {
     );
     expect(row({ kind: "mix", weightsBps: [0, 0, 0, 0, 0, 0, 0] }).line).toBe("Your mix is cleared.");
     const failed = row({ kind: "run-failed", reason: "0x122158cf", fails: 2 });
-    expect(failed).toMatchObject({ by: "Agents", line: "A run didn't go through. Nothing moved." });
+    expect(failed).toMatchObject({ by: "Agents", line: "A run didn’t go through. Nothing moved." });
     expect(failed.details).toMatchObject({ "In a row": "2", Code: "DebtNotLower" });
     expect(failed.details["Tries again"]).toBe(
       new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format((at + 1200) * 1000),

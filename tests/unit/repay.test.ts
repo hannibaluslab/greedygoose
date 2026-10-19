@@ -176,7 +176,7 @@ describe("Pay with: the rows, their order and who's listed", () => {
     expect(repaySources(empty, cfs)).toEqual([]);
     expect(noSourceLine(empty)).toBe(REPAY_COPY.noCash);
     expect(noSourceLine(data({ wallet: B - 0.01, holdings: [holding("AAPLc", "Apple", 200, 0.00004, 0)] }))).toBe(
-      `You need ${formatUsd(0.01 + B)} in your cash to repay: ${formatUsd(B)} of it stays for the network fee.`,
+      `You need ${formatUsd(0.01 + B)} in your cash to repay. ${formatUsd(B)} of it stays for the network fee.`,
     );
   });
 
@@ -327,7 +327,7 @@ describe("Amount: 0 to start, All in the field, quick picks, never more than owe
     expect(v.oweAfterUsd).toBe(275);
     expect(v.done).toBe("Repaid $25");
     const small = planRepay({ data: d, source: cashOf(d), form: { source: null, amount: "0.005", all: false } });
-    expect(small.note?.text).toBe("The smallest repay is $0.01.");
+    expect(small.note?.text).toBe("Minimum repay is $0.01.");
     expect(small.ready).toBe(false);
   });
 
@@ -471,7 +471,7 @@ describe("Pay with a stock held free: the plan", () => {
       now: tuesday,
     });
     expect(v.max.usd).toBeLessThan(0.01);
-    expect(v.note?.text).toBe("The smallest repay is $0.01.");
+    expect(v.note?.text).toBe("Minimum repay is $0.01.");
     expect(v.ready).toBe(false);
   });
 
@@ -497,7 +497,7 @@ describe("Pay with a stock held free: the plan", () => {
     expect(v.sellPlan!.block).toBeUndefined();
     expect(v.sellPlan!.minOutRaw).toBeLessThanOrEqual(fee);
     expect(v.repayRaw).toBe(0n);
-    expect(v.note?.text).toBe("The smallest repay is $0.01.");
+    expect(v.note?.text).toBe("Minimum repay is $0.01.");
     expect(v.ready).toBe(false);
   });
 

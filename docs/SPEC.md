@@ -183,6 +183,8 @@ the free shares' value. A stock whose shares all back credit is listed but can't
 - Try again is a refresh icon (its name stays "Try again" for screen readers).
 - Buttons name the intent only ("Repay", "Repay & free up"). No confirm screens of ours: JAW's sheet is the
   confirmation.
+- No em dashes, and no colon joining two sentences. Top up is the only name for adding money. Copy edits never make a
+  string longer (Adrian, 2026-10-19).
 
 ## Working rules
 

@@ -611,13 +611,13 @@ describe("planTrade: cash → stock", () => {
     const warn = planTrade({ ...base, amount: "100", buy: ready(buyQuoteFor("NVDAc", usd(100), 0.024)) });
     expect(warn.note).toEqual({
       tone: "watch",
-      text: "You’d pay 2.4% over the stock’s price — the market for NVIDIA is small.",
+      text: "You’d pay 2.4% over the stock’s price. The market for NVIDIA is small.",
     });
     expect(warn.ready).toBe(true);
     const block = planTrade({ ...base, amount: "100", buy: ready(buyQuoteFor("NVDAc", usd(100), 0.123)) });
     expect(block.note).toEqual({
       tone: "act",
-      text: "Too big for the market right now: you’d pay 12.3% over the stock’s price. Try a smaller amount.",
+      text: "Too big for the market right now. You’d pay 12.3% over the stock’s price. Try a smaller amount.",
     });
     expect(block.ready).toBe(false);
   });
@@ -674,15 +674,15 @@ describe("planTrade: stock → cash", () => {
   });
 
   it("blocks under a cent, more than 10% under the stock's price, more than is free, and with no market", () => {
-    expect(planTrade({ ...base, amount: "0.005" }).blocker).toBe("The smallest sale is $0.01.");
+    expect(planTrade({ ...base, amount: "0.005" }).blocker).toBe("Minimum sale is $0.01.");
     const far = planTrade({ ...base, amount: "50", sell: ready(sellQuoteFor("NVDAc", 25_000_000n, 0.12)) });
     expect(far.blocker).toBe(
-      "Too big for the market right now: you’d get more than 10% under the stock’s price. Try a smaller amount.",
+      "Too big for the market right now. You’d get more than 10% under the stock’s price. Try a smaller amount.",
     );
     const warn = planTrade({ ...base, amount: "50", sell: ready(sellQuoteFor("NVDAc", 25_000_000n, 0.024)) });
     expect(warn.note).toEqual({
       tone: "watch",
-      text: "You’d get 2.4% under the stock’s price — the market for NVIDIA is small.",
+      text: "You’d get 2.4% under the stock’s price. The market for NVIDIA is small.",
     });
     // Free shares moved after the amount was typed.
     const fewer = {
@@ -753,14 +753,14 @@ describe("planTrade: stock → stock", () => {
     // $0.11 can't make a one-cent buy once the fee comes out of the sale.
     const small = sellQuoteFor("NVDAc", sharesForUsdRaw(usd(0.11), parseUnits("200", 8), 8));
     expect(planTrade({ ...base, data: short, amount: "0.11", sell: ready(small) }).blocker).toBe(
-      `The smallest trade is ${formatUsd(swapMinUsd(0.998, true))}.`,
+      `Minimum trade is ${formatUsd(swapMinUsd(0.998, true))}.`,
     );
     // With the fee from cash it can.
     expect(planTrade({ ...base, amount: "0.11", sell: ready(small) }).blocker).toBeNull();
   });
 
   it("blocks under the smallest trade, with no market for either stock, or far over the stock's price", () => {
-    expect(planTrade({ ...base, amount: "0.005" }).blocker).toBe("The smallest trade is $0.02.");
+    expect(planTrade({ ...base, amount: "0.005" }).blocker).toBe("Minimum trade is $0.02.");
     expect(planTrade({ ...base, amount: "3", sell: noPool }).blocker).toBe("There’s no market for NVIDIA right now.");
     expect(planTrade({ ...base, amount: "3", sell: ready(sq), buy: noPool }).blocker).toBe(
       "There’s no market for Apple right now.",
@@ -768,7 +768,7 @@ describe("planTrade: stock → stock", () => {
     const floor = sellMinOut(sq, nvda, PRICE.NVDAc);
     const far = planTrade({ ...base, amount: "3", sell: ready(sq), buy: ready(buyQuoteFor("AAPLc", floor, 0.2)) });
     expect(far.blocker).toBe(
-      "Too big for the market right now: you’d pay 20.0% over the stock’s price. Try a smaller amount.",
+      "Too big for the market right now. You’d pay 20.0% over the stock’s price. Try a smaller amount.",
     );
     expect(far.ready).toBe(false);
   });
@@ -855,7 +855,7 @@ describe("useTrade: the stock → stock batch at signing (swapBatch)", () => {
     const r = reads(rich);
     const blocked = swapBatch(sign({ plan: { ...pre.sellPlan!, block: "too-small" } }), r);
     await expect(blocked).rejects.toBeInstanceOf(TxStop);
-    await expect(blocked).rejects.toThrow(/The smallest trade is \$0\.0\d\./);
+    await expect(blocked).rejects.toThrow(/Minimum trade is \$0\.0\d\./);
     await expect(swapBatch(sign({ plan: { ...pre.sellPlan!, block: "price" } }), r)).rejects.toThrow(
       /Too big for the market right now/,
     );

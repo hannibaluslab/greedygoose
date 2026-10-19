@@ -38,7 +38,7 @@ export function describeActivity(
       return { title: "Earn with stocks", amount: `${formatUsd(i.amount)} from credit, earning`, sign: "+" };
     case "save":
       // Start earning (lib/activity/decode.ts): the cash went into savings. It stayed the user's cash, so no sign.
-      return { title: "Started earning", amount: `${formatUsd(i.amount)} into savings`, sign: "" };
+      return { title: "Started earning", amount: `${formatUsd(i.amount)} earning`, sign: "" };
     case "repay":
       return { title: "Repaid credit", amount: formatUsd(i.amount), sign: "−" };
     case "receive":

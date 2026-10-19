@@ -40,7 +40,7 @@ export function EarnedPeriods({ earned, savingsUsd, apr }: { earned: TotalEarned
     <div className="flex flex-col gap-3 rounded-[22px] bg-card p-4 shadow-card-elev">
       <SegmentedControl label="Earned over" options={PERIODS} value={period} onChange={setPeriod} />
       {p.fromSec === null ? (
-        <p className="m-0 py-2 text-center text-[14px] text-ink-mid">Nothing in savings yet, so nothing earned.</p>
+        <p className="m-0 py-2 text-center text-[14px] text-ink-mid">Nothing earning yet, so nothing earned.</p>
       ) : (
         <>
           <div className="flex items-center justify-between">

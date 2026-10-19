@@ -50,7 +50,7 @@ export function noCreditLine(why: NoCredit, canPayCash: boolean): string {
 }
 
 /** F2-3's line under the number when there is credit to use. */
-export const CREDIT_FROM = "In credit, backed by the stocks you own.";
+export const CREDIT_FROM = "Credit, backed by the stocks you own.";
 /** …and when there's credit but not the network fee: cash pays it (D4), and F2-5 would block every amount ("fee"). */
 export const FEE_FIRST = `Add ${formatUsd(CASH.feeBufferUsd)} to your cash for the network fee first.`;
 /** The plain line under "You can use up to": cash pays the network fee (D4), so without it the fee comes first. */
