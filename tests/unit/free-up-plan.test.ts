@@ -179,10 +179,13 @@ describe("planFreeUp: the rules", () => {
 });
 
 describe("the line under a stock in Free up stocks", () => {
-  it("is what comes out over what backs credit, then about how much, with no unit", () => {
-    expect(freeUpLine(0.0047, 0.0147, 1.63)).toBe("0.0047 / 0.0147 ≈ $1.63");
-    expect(freeUpLine(0.0029, 0.0029, 0.99)).toBe("0.0029 / 0.0029 ≈ $0.99");
-    expect(freeUpLine(0, 0.0147, 0)).toBe("0 / 0.0147 ≈ $0.00");
-    expect(freeUpLine(2.5, 4, 500)).toBe("2.5 / 4 ≈ $500.00");
+  it("is what comes out with its value beside it, of what backs credit, with no unit", () => {
+    expect(freeUpLine(0.0047, 0.0147, 1.63)).toBe("0.0047 ($1.63) of 0.0147");
+    expect(freeUpLine(0.0029, 0.0029, 0.99)).toBe("0.0029 ($0.99) of 0.0029");
+    expect(freeUpLine(2.5, 4, 500)).toBe("2.5 ($500.00) of 4");
+  });
+
+  it("says only 0 of what backs credit when nothing can come out", () => {
+    expect(freeUpLine(0, 0.0147, 0)).toBe("0 of 0.0147");
   });
 });

@@ -162,9 +162,11 @@ export const freeAll = (stocks: readonly FreeUpStock[]): FreeUpPick[] =>
   stocks.filter((s) => !s.paused && s.backingRaw > 0n).map((s) => ({ symbol: s.symbol, share: 1 }));
 
 /**
- * The line under a stock in "Free up stocks", the same on every row (Adrian, 2026-10-19): what comes out of what backs
- * credit, then about how much it's worth: "0.0047 / 0.0147 ≈ $1.63". No unit: the stock's name sits right above it.
- * A row that can free nothing reads "0 / 0.0147 ≈ $0.00".
+ * The line under a stock in "Free up stocks", the same on every row (Adrian, 2026-10-19): what comes out, its value
+ * right beside it so it can't be read as the total's, then of what backs credit: "0.0047 ($1.63) of 0.0147". No unit:
+ * the stock's name sits right above it. A row that can free nothing reads "0 of 0.0147".
  */
 export const freeUpLine = (outShares: number, backingShares: number, outUsd: number) =>
-  `${formatShares(outShares)} / ${formatShares(backingShares)} ≈ ${formatUsd(outUsd)}`;
+  outShares > 0
+    ? `${formatShares(outShares)} (${formatUsd(outUsd)}) of ${formatShares(backingShares)}`
+    : `0 of ${formatShares(backingShares)}`;

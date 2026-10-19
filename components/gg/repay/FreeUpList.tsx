@@ -265,8 +265,8 @@ function selectedId(row: Row): string {
  * most the limit lets out, with its share; the quick picks under it; Custom, to type the shares.
  */
 function shareRows(item: FreeUpItem, row: Row): PickerRow[] {
-  // The same "out / backing" as the row's line, so no "shares" word here either.
-  const shares = (share: number) => `${formatShares(share * item.shares)} / ${formatShares(item.shares)}`;
+  // The same "out of backing" as the row's line, so no "shares" word here either.
+  const shares = (share: number) => `${formatShares(share * item.shares)} of ${formatShares(item.shares)}`;
   return [
     {
       id: "all",
