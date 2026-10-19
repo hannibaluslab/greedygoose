@@ -4,11 +4,10 @@ import { useState } from "react";
 import { parseUnits } from "viem";
 import { useAccount } from "wagmi";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
-import { Button } from "./Button";
 import { useMoneySheets } from "./MoneySheets";
 import { LeaveForRepay } from "./CreditBuyBacking";
-import { CreditHero, CreditPending, StockLists } from "./CreditBuyStocks";
-import { CreditBuyBackStep, useBackingPick } from "./CreditBuyBackStep";
+import { CreditHero, StockLists } from "./CreditBuyStocks";
+import { CreditBuyBackStep, LostPick, useBackingPick } from "./CreditBuyBackStep";
 import { CreditBuyAmountStep, amountBlocker } from "./CreditBuyAmountStep";
 import { useAgents } from "@/hooks/useAgents";
 import { useBoughtHome } from "@/hooks/useBoughtHome";
@@ -27,6 +26,16 @@ import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
  */
 type Step = "back" | "pick" | "amount";
 const ORDER: Step[] = ["back", "pick", "amount"];
+
+/**
+ * The sheet's title and the step Back goes to: the stock being bought names it once it's known, from step 3, or from
+ * the start when it was preset (then Back skips the stock picker).
+ */
+function navOf(step: Step, stock: ReserveAsset | null, preset: ReserveAsset | null) {
+  const named = step === "amount" ? stock : preset;
+  const back: Step | null = step === "pick" ? "back" : step === "amount" ? (preset ? "back" : "pick") : null;
+  return { title: named ? `Credit Buy ${named.name}` : "Credit Buy", back };
+}
 
 /**
  * Design boards "F2 · 3–5", reordered backing first (Adrian, 2026-10-15: "selecting and typing the amount of an asset
@@ -148,10 +157,7 @@ export function CreditBuySheet({
     go("amount");
   };
 
-  // The stock being bought names the sheet once it's known: from step 4, or from the start when it was preset.
-  const named = step === "amount" ? stock : preset;
-  const title = named ? `Credit Buy ${named.name}` : "Credit Buy";
-  const back: Step | null = step === "pick" ? "back" : step === "amount" ? (preset ? "back" : "pick") : null;
+  const { title, back } = navOf(step, stock, preset);
   const leave = step === "back" && preset ? onBack : undefined;
   // The plain line under "You can use up to": cash pays the network fee (D4), so without it the fee comes first.
   const creditLine = cashRaw(data.cash) < feeBufferRaw ? FEE_FIRST : CREDIT_FROM;
@@ -196,18 +202,13 @@ export function CreditBuySheet({
             />
           ) : lostPick ? (
             // The holding picked on step 1 can't back credit any more (see `lostPick`): say so, and pick again.
-            !cfs ? (
-              <CreditPending failed={cfRead.failed} onRetry={cfRead.retry} />
-            ) : (
-              <>
-                <p role="status" className="m-0 px-1 pt-1 text-[15px] leading-snug text-ink">
-                  {EQUITIES.find((e) => e.symbol === picked)?.name ?? "That stock"} can’t back credit right now.
-                </p>
-                <Button variant="dark" onClick={() => go("back")} className="mt-1">
-                  Pick again
-                </Button>
-              </>
-            )
+            <LostPick
+              symbol={picked}
+              read={!!cfs}
+              cfFailed={cfRead.failed}
+              onRetry={cfRead.retry}
+              onPickAgain={() => go("back")}
+            />
           ) : step === "pick" ? (
             <div className="flex flex-col gap-4 pt-1">
               <CreditHero available={{ usd: reachUsd, line: creditLine }} failed={false} onRetry={cfRead.retry} />

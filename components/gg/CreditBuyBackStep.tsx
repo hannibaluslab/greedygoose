@@ -241,3 +241,30 @@ export function CreditBuyBackStep({
     </>
   );
 }
+
+/** Past step 1, the holding picked there can't back credit any more: say so, and pick again (a pulse while it's read). */
+export function LostPick({
+  symbol,
+  read,
+  cfFailed,
+  onRetry,
+  onPickAgain,
+}: {
+  symbol: string | null;
+  read: boolean;
+  cfFailed: boolean;
+  onRetry: () => void;
+  onPickAgain: () => void;
+}) {
+  if (!read) return <CreditPending failed={cfFailed} onRetry={onRetry} />;
+  return (
+    <>
+      <p role="status" className="m-0 px-1 pt-1 text-[15px] leading-snug text-ink">
+        {EQUITIES.find((e) => e.symbol === symbol)?.name ?? "That stock"} can’t back credit right now.
+      </p>
+      <Button variant="dark" onClick={onPickAgain} className="mt-1">
+        Pick again
+      </Button>
+    </>
+  );
+}
