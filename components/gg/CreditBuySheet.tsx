@@ -4,22 +4,17 @@ import { useMemo, useState } from "react";
 import { parseUnits } from "viem";
 import { useAccount } from "wagmi";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
-import { AmountArrow, AmountBadge, AmountField, AmountSource, YouGet } from "./AmountField";
 import { Button } from "./Button";
 import { useMoneySheets } from "./MoneySheets";
-import { StockAvatar, tickerOf } from "./StockAvatar";
 import { BackingRow, CantBack, LeaveForRepay, ReadyRow, optionOf, unavailable, wholeUsd } from "./CreditBuyBacking";
 import { CantCheck, CreditHero, StockLists } from "./CreditBuyStocks";
-import { TxButton, TxError } from "./TxUi";
-import { StatusChange, StatusMoveBar, StatusPill } from "./Status";
-import { BacksIcon } from "./icons";
+import { CreditBuyAmountStep } from "./CreditBuyAmountStep";
 import { useAgents } from "@/hooks/useAgents";
 import { useBoughtHome } from "@/hooks/useBoughtHome";
 import { useBuyQuote } from "@/hooks/useBuyQuote";
 import { useCreditBuy } from "@/hooks/useCreditBuy";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { useBackingFactorsRead, type PositionData } from "@/hooks/usePosition";
-import { monthlyCost } from "@/lib/aave/math";
 import { cashRaw, feeBufferRaw } from "@/lib/cash";
 import {
   CREDIT_BLOCKED,
@@ -35,17 +30,12 @@ import {
   creditWith,
   ownCreditUsd,
   planCredit,
-  shortNames,
   type BackingOption,
   type BackingPick,
 } from "@/lib/creditBuy";
-import { formatShares, formatUsd, formatUsdTrim, inWords, monthlyCostText } from "@/lib/formatting";
-import { STATUS_LABEL } from "@/lib/risk/status";
+import { formatUsd } from "@/lib/formatting";
 import { BUY_LIMITS, quoteEconomics } from "@/lib/swap/buy";
-import { VENUE_LABEL } from "@/lib/swap/venues";
-import { rawToShares } from "@/lib/tokens/b20";
 import { EQUITIES, USDC, byStockOrder, type ReserveAsset } from "@/lib/tokens/registry";
-import { leverageOf, leverageText } from "@/lib/leverage";
 
 /**
  * Three steps (boards 30–34, Adrian 2026-10-18): what backs it (Credit ready, or a stock to back new credit) → pick a
@@ -55,11 +45,6 @@ type Step = "back" | "pick" | "amount";
 const ORDER: Step[] = ["back", "pick", "amount"];
 /** Step 1's Credit ready: the credit left on what already backs credit; nothing new goes in. */
 const EXISTING = "existing";
-
-/** What a backing is worth, rounded up so it's never shown as less than goes in: cents under $100, dollars above. */
-const backedText = (n: number) => (n < 100 ? formatUsd(Math.ceil(n * 100 - 1e-6) / 100) : formatUsdTrim(Math.ceil(n)));
-/** MAX's amount: the most there is, to the cent, rounded down ("0.69", "417.35"). */
-const maxText = (n: number) => String(Math.floor(Math.max(0, n) * 100 + 1e-6) / 100);
 
 /**
  * Design boards "F2 · 3–5", reordered backing first (Adrian, 2026-10-15: "selecting and typing the amount of an asset
@@ -155,7 +140,6 @@ export function CreditBuySheet({
   const fallbackKey = canUseExisting ? EXISTING : (mostOwn?.stock.symbol ?? null);
   const pickedKey = (step === "back" && picked && !canPick(picked) ? null : picked) ?? fallbackKey;
   const chosen = options.find((o) => o.stock.symbol === pickedKey) ?? null;
-  const chosenHolding = chosen ? (data.holdings.find((h) => h.symbol === chosen.stock.symbol) ?? null) : null;
   // Past step 1, a picked holding that dropped out of the list: the buy can't quietly fall back to what already backs
   // credit, so nothing is prepared for it, and the next steps say so and send Sam back to pick again (`lostPick`, below:
   // not once the batch is on its way or has landed).
@@ -183,27 +167,6 @@ export function CreditBuySheet({
   const oraclePriceUsd = stock ? priceOf(stock.symbol) : 0;
   const econ = q && stock ? quoteEconomics(q, stock, oraclePriceUsd) : null;
 
-  // What backs it once it lands: what this buy puts in use (the picked holding first) and what's in use already.
-  // Under the amount: what backs it, "Backed by 1.16 Apple · $290", all of it, or nothing new (Credit ready).
-  const backedShares =
-    chosen && chosenHolding ? rawToShares(pick.raw, chosenHolding.multiplier, chosen.stock.decimals) : 0;
-  const backedUsd = chosen && chosen.freeRaw > 0n ? (Number(pick.raw) / Number(chosen.freeRaw)) * chosen.freeUsd : 0;
-  const backingLine = !chosen
-    ? "Nothing new goes in"
-    : pick.raw <= 0n
-      ? `Backed by ${chosen.stock.name}`
-      : `Backed by ${pick.raw >= chosen.freeRaw ? "all " : ""}${formatShares(backedShares)} ${chosen.stock.name} · ${backedText(backedUsd)}`;
-  // What you hold ÷ your own money, now and once the buy lands (the credit comes in as stock): "1.1x → 1.2x".
-  const holdUsd = data.stocksUsd + data.cashUsd;
-  const leverageNow = leverageText(leverageOf({ holdUsd, owedUsd: data.debtUsd }) ?? 1);
-  const leverageAfter = leverageText(leverageOf({ holdUsd: holdUsd + amount, owedUsd: data.debtUsd + amount }) ?? 1);
-  // The bar moves once there's an amount the plan can read.
-  const moved = amount > 0 && Number.isFinite(plan.hfAfter);
-  const lead = chosen?.stock.symbol;
-  const adding = pick.raw > 0n && lead ? [lead] : [];
-  const against = backers(data.holdings, adding, lead);
-  const againstNames = against.map((h) => h.name);
-
   let blocker: string | null = null;
   if (pickGone) blocker = "That stock can’t back credit right now.";
   else if (amount > 0 && amount < BUY_LIMITS.minUsd) blocker = `Minimum buy is ${formatUsd(BUY_LIMITS.minUsd)}.`;
@@ -216,7 +179,6 @@ export function CreditBuySheet({
     blocker = `There’s no market for ${stock.name} right now.`;
   else if (econ && econ.premium > BUY_LIMITS.blockPremium)
     blocker = `Too big for the market right now: you’d pay ${(econ.premium * 100).toFixed(1)}% over Aave’s price. Try a smaller amount.`;
-  const warnPremium = !blocker && econ && econ.premium > BUY_LIMITS.warnPremium;
   const ready = amount >= BUY_LIMITS.minUsd && !!econ && q?.amountIn === creditRaw && !blocker && !quote.isFetching;
   const feeBlocked = isConnected && fee.state === "unsupported";
   // What Credit Buy would sign now, prepared while the step is idle so the tap opens JAW's sheet at once.
@@ -224,7 +186,8 @@ export function CreditBuySheet({
     open && step === "amount" && stock && q && ready && !feeBlocked && !(plan.extraConfirm && !ack)
       ? { user, stock, quote: q, plan, confirmedRisk: ack }
       : null;
-  const { sign, phase, error, reset, busy, txHash, checking, blocked } = useCreditBuy(signable);
+  const tx = useCreditBuy(signable);
+  const { phase, reset, busy, txHash } = tx;
   const lostPick = pickGone && !busy && phase !== "done";
   const close = () => {
     onClose();
@@ -431,148 +394,31 @@ export function CreditBuySheet({
               />
             </div>
           ) : step === "amount" && stock ? (
-            <>
-              <AmountField
-                label="On credit"
-                source={
-                  chosen ? (
-                    <AmountSource mark={<StockAvatar symbol={chosen.stock.symbol} size={16} />}>
-                      Back: {chosen.stock.name}
-                    </AmountSource>
-                  ) : (
-                    <AmountSource mark={<BacksIcon size={12} />}>Credit ready</AmountSource>
-                  )
-                }
-                badge={<AmountBadge kind="credit" />}
-                value={raw}
-                onValue={(v) => {
-                  setRaw(v);
-                  setAck(false);
-                }}
-                onMax={() => {
-                  // To the cent, rounded down: a small account's $0.69 fills $0.69, not $0.
-                  setRaw(maxText(reachUsd));
-                  setAck(false);
-                }}
-                hint={
-                  <span className="flex justify-between gap-2 text-[12.5px] text-ink-mid">
-                    <span className="num truncate font-medium text-ink">{backingLine}</span>
-                    <span className="shrink-0 whitespace-nowrap">
-                      Up to <b className="num font-semibold text-ink">{wholeUsd(reachUsd)}</b>
-                    </span>
-                  </span>
-                }
-                autoFocus
-              />
-              <AmountArrow />
-              <YouGet
-                symbol={stock.symbol}
-                shares={quote.isFetching && amount > 0 ? null : econ ? econ.shares : 0}
-                priceUsd={econ ? econ.price : oraclePriceUsd}
-              />
-              {/* Board 34 (Adrian: say how much it moves): the bar from now to after, and the status change. */}
-              <div className="flex flex-col gap-2 rounded-[16px] border border-line-field bg-card px-3.5 py-3 leading-[normal]">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-[13px] font-medium text-ink-mid">My credit</span>
-                  {moved && plan.after !== plan.before ? (
-                    <StatusChange from={plan.before} to={plan.after} />
-                  ) : (
-                    <StatusPill status={plan.before} size="sm" />
-                  )}
-                </div>
-                <StatusMoveBar
-                  now={data.healthFactor}
-                  after={moved ? plan.hfAfter : undefined}
-                  label={
-                    moved
-                      ? `Now ${STATUS_LABEL[plan.before]}, after this ${STATUS_LABEL[plan.after]}`
-                      : STATUS_LABEL[plan.before]
-                  }
-                  className={moved ? "mt-5" : "mt-2"}
-                />
-                {/* Cost | Leverage, as the Repay card pairs Cost | Credit available (Adrian: show how leverage moves). */}
-                <div className="num mt-1 grid grid-cols-2 border-t border-line-field pt-2 text-[12.5px]">
-                  <span className="flex min-w-0 flex-col gap-0.5">
-                    <span className="text-subtle">Cost</span>
-                    <span className="truncate font-semibold text-ink-2">
-                      {(data.apr * 100).toFixed(1)}% · {monthlyCostText(monthlyCost(amount, data.apr))}
-                    </span>
-                  </span>
-                  <span className="flex min-w-0 flex-col gap-0.5 border-l border-line-field pl-3">
-                    <span className="text-subtle">Leverage</span>
-                    <span className="truncate whitespace-nowrap font-semibold text-ink-2">
-                      {leverageNow}
-                      {moved && leverageAfter !== leverageNow && (
-                        <>
-                          {" "}
-                          <span aria-hidden className="font-[system-ui] font-normal text-ink-mid">
-                            →
-                          </span>
-                          <span className="sr-only">after this</span> {leverageAfter}
-                        </>
-                      )}
-                    </span>
-                  </span>
-                </div>
-              </div>
-              {(blocker || warnPremium || plan.priceMayMove) && (
-                <p role="status" className={`m-0 text-[13px] leading-snug ${blocker ? "text-act" : "text-watch-text"}`}>
-                  {blocker ??
-                    (warnPremium
-                      ? `You’d pay ${(econ!.premium * 100).toFixed(1)}% over Aave’s price — the market for ${stock.name} is small.`
-                      : "Stock markets are closed. You can still buy, but the price can jump when they reopen.")}
-                </p>
-              )}
-              {ready && (
-                <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">
-                  {/* D7: every move in the batch, the stock put in use too. */}
-                  In one go:{" "}
-                  {inWords([
-                    ...plan.backing.map((b) => {
-                      const h = data.holdings.find((x) => x.symbol === b.stock.symbol)!;
-                      return `${formatShares(rawToShares(b.raw, h.multiplier, b.stock.decimals))} ${tickerOf(b.stock.symbol)} goes in use to back credit`;
-                    }),
-                    `${formatUsd(amount)} of credit is taken`,
-                    `exactly ${formatUsd(econ!.usd)} is approved for the ${VENUE_LABEL[q!.venue]} router and swapped`,
-                  ])}
-                  . You’ll owe {formatUsd(data.debtUsd + amount)}, backed by {shortNames(againstNames)}.{" "}
-                  {riskNote(againstNames, protect === "on")}
-                </p>
-              )}
-              {ready && plan.extraConfirm && (
-                <label className="flex items-start gap-2.5 rounded-2xl bg-act-bg px-4 py-3 text-[13px] leading-snug text-act">
-                  <input
-                    type="checkbox"
-                    checked={ack}
-                    onChange={(e) => setAck(e.target.checked)}
-                    className="mt-px size-[18px] shrink-0 accent-[#8e2a1d]"
-                  />
-                  I understand this puts my credit in {STATUS_LABEL[plan.after]}. If my stocks fall too far, part of
-                  them can be sold to repay what I owe.
-                </label>
-              )}
-              {feeBlocked && (
-                <p role="alert" className="m-0 text-[13px] text-act">
-                  Your account can’t pay network fees from your cash right now, so this Credit Buy can’t go through.
-                </p>
-              )}
-              <TxError error={error} />
-              <div className="mt-1">
-                <TxButton
-                  label="Credit Buy"
-                  size="md"
-                  phase={phase}
-                  checking={checking}
-                  preview={!isConnected}
-                  disabled={!signable || fee.loading || blocked || phase === "done"}
-                  onClick={() => {
-                    if (!signable) return;
-                    if (phase !== "idle") reset();
-                    void sign();
-                  }}
-                />
-              </div>
-            </>
+            <CreditBuyAmountStep
+              data={data}
+              stock={stock}
+              chosen={chosen}
+              pick={pick}
+              reachUsd={reachUsd}
+              raw={raw}
+              setRaw={setRaw}
+              ack={ack}
+              setAck={setAck}
+              amount={amount}
+              quote={quote}
+              q={q}
+              econ={econ}
+              oraclePriceUsd={oraclePriceUsd}
+              plan={plan}
+              blocker={blocker}
+              ready={ready}
+              protectOn={protect === "on"}
+              feeBlocked={feeBlocked}
+              feeLoading={fee.loading}
+              isConnected={isConnected}
+              signable={!!signable}
+              tx={tx}
+            />
           ) : (
             <div aria-busy className="h-[320px] animate-pulse rounded-[16px] bg-chip" />
           )}
@@ -580,21 +426,4 @@ export function CreditBuySheet({
       </SheetShell>
     </LeaveForRepay.Provider>
   );
-}
-
-/**
- * The risk line (F2-6's, now in the amount step's small print). The board's "Your cash is never touched" is left out:
- * the network fee comes from cash, and Protect repays from savings first (D11).
- */
-function riskNote(backers: string[], protectOn: boolean): string {
-  const one = backers.length === 1 ? backers[0] : null;
-  // Act is the line (2026-10-15): Protect steps in only at Act, and brings the credit back to Watch.
-  if (protectOn) {
-    return one
-      ? `If ${one} falls, you can repay. If your credit reaches Act, Protect repays from your cash or sells a little ${one} to bring it back to Watch.`
-      : "If your stocks fall, you can repay. If your credit reaches Act, Protect repays from your cash or sells a little of them to bring it back to Watch.";
-  }
-  return one
-    ? `If ${one} falls, you can repay. If it falls too far, part of it can be sold to repay what you owe.`
-    : "If your stocks fall, you can repay. If they fall too far, part of them can be sold to repay what you owe.";
 }
