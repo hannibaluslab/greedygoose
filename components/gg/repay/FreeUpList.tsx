@@ -4,9 +4,9 @@ import { useState } from "react";
 import { StockAvatar } from "@/components/gg/kit/StockAvatar";
 import { AssetPicker, type PickerRow } from "@/components/gg/kit/AssetPicker";
 import { LockIcon } from "@/components/gg/kit/icons";
-import { formatShares, formatUsd, formatUsdTrim } from "@/lib/formatting";
+import { formatShares, formatUsdTrim } from "@/lib/formatting";
 import { wholePct } from "@/lib/holding";
-import type { planFreeUp } from "@/lib/freeUpPlan";
+import { freeUpLine, type planFreeUp } from "@/lib/freeUpPlan";
 
 type Plan = ReturnType<typeof planFreeUp>;
 type Row = Plan["rows"][number];
@@ -16,8 +16,6 @@ export type FreeUpItem = { symbol: string; name: string; shares: number; usd: nu
 
 /** The quick picks, as a share of the shares held; Max and All come from the limit. */
 const PICKS = [0.5, 0.25] as const;
-
-const sharesText = (share: number, held: number) => `${formatShares(share * held)}`;
 
 /**
  * "Free up stocks" (canvas boards 2–6, open from the start): one row per stock that backs credit. Unticked, a row says what can
@@ -239,22 +237,15 @@ function StockRow({
 }
 
 /**
- * The line under a stock's name: what comes out, in shares and about how much (Adrian, 2026-10-18), what a tick would
- * free or what the pick frees. One line: a second one broke the row's balance. A row that can't free anything says
- * what backs credit.
+ * The line under a stock's name, one format on every row (lib/freeUpPlan freeUpLine): what a tick would free, what the
+ * pick frees, or 0 when nothing can come out, over what backs credit, and about how much. One line: a second one broke
+ * the row's balance.
  */
 function RowLines({ item, row, blocked }: { item: FreeUpItem; row: Row; blocked: boolean }) {
-  if (blocked)
-    return (
-      <span className="num truncate text-[12.5px] text-ink-mid">
-        {formatShares(item.shares)} backing · {formatUsdTrim(Math.round(item.usd))}
-      </span>
-    );
-  const out = row.picked ? row.share : row.canAll ? 1 : row.maxShare;
+  const out = blocked ? 0 : row.picked ? row.share : row.canAll ? 1 : row.maxShare;
   return (
     <span className={`num truncate text-[12.5px] ${row.picked ? "font-medium text-ink" : "text-ink-mid"}`}>
-      {row.all ? "All " : ""}
-      {sharesText(out, item.shares)} shares ≈ {formatUsd(out * item.usd)}
+      {freeUpLine(out * item.shares, item.shares, out * item.usd)}
     </span>
   );
 }
@@ -274,7 +265,8 @@ function selectedId(row: Row): string {
  * most the limit lets out, with its share; the quick picks under it; Custom, to type the shares.
  */
 function shareRows(item: FreeUpItem, row: Row): PickerRow[] {
-  const shares = (share: number) => `${sharesText(share, item.shares)} shares`;
+  // The same "out / backing" as the row's line, so no "shares" word here either.
+  const shares = (share: number) => `${formatShares(share * item.shares)} / ${formatShares(item.shares)}`;
   return [
     {
       id: "all",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CREDIT_CAP } from "@/config/risk";
-import { freeAll, planFreeUp, type FreeUpStock } from "@/lib/freeUpPlan";
+import { freeAll, freeUpLine, planFreeUp, type FreeUpStock } from "@/lib/freeUpPlan";
 
 /*
  * The canvas's own account (Repay + free up, boards 1–8): $500 owed, Amazon 2.17 shares ($500, collateral factor 73%)
@@ -175,5 +175,14 @@ describe("planFreeUp: the rules", () => {
     });
     expect(some.rows[0].share).toBeGreaterThan(0);
     expect(some.hfAfter! + 1e-9).toBeGreaterThanOrEqual(CREDIT_CAP.minHf);
+  });
+});
+
+describe("the line under a stock in Free up stocks", () => {
+  it("is what comes out over what backs credit, then about how much, with no unit", () => {
+    expect(freeUpLine(0.0047, 0.0147, 1.63)).toBe("0.0047 / 0.0147 ≈ $1.63");
+    expect(freeUpLine(0.0029, 0.0029, 0.99)).toBe("0.0029 / 0.0029 ≈ $0.99");
+    expect(freeUpLine(0, 0.0147, 0)).toBe("0 / 0.0147 ≈ $0.00");
+    expect(freeUpLine(2.5, 4, 500)).toBe("2.5 / 4 ≈ $500.00");
   });
 });

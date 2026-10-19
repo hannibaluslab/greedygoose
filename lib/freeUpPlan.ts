@@ -1,6 +1,7 @@
 import { CREDIT_CAP, RISK } from "@/config/risk";
 import { statusFor, type Status } from "@/lib/risk/status";
 import type { HealthFloor } from "@/lib/tx/prepared";
+import { formatShares, formatUsd } from "@/lib/formatting";
 
 /*
  * Repay + free up (canvas boards 1–8): the stocks ticked under "Also free up stocks", and how much of each comes out
@@ -159,3 +160,11 @@ export function planFreeUp(p: {
 /** Repay all: every stock comes back, so every one that backs credit is taken out in full. */
 export const freeAll = (stocks: readonly FreeUpStock[]): FreeUpPick[] =>
   stocks.filter((s) => !s.paused && s.backingRaw > 0n).map((s) => ({ symbol: s.symbol, share: 1 }));
+
+/**
+ * The line under a stock in "Free up stocks", the same on every row (Adrian, 2026-10-19): what comes out of what backs
+ * credit, then about how much it's worth: "0.0047 / 0.0147 ≈ $1.63". No unit: the stock's name sits right above it.
+ * A row that can free nothing reads "0 / 0.0147 ≈ $0.00".
+ */
+export const freeUpLine = (outShares: number, backingShares: number, outUsd: number) =>
+  `${formatShares(outShares)} / ${formatShares(backingShares)} ≈ ${formatUsd(outUsd)}`;
