@@ -8,7 +8,7 @@ vi.mock("@/lib/allowlist", async (importOriginal) => {
 });
 
 import { TxStop } from "@/hooks/useTx";
-import { swapBatch, type SwapReads } from "@/hooks/useTrade";
+import { swapBatch, type SwapReads } from "@/lib/tx/plans";
 import { AAVE } from "@/lib/aave/addresses";
 import { assertAllowed, swapOf } from "@/lib/allowlist";
 import { feeBufferRaw, feeFromSale, payFromCash, type Cash } from "@/lib/cash";
