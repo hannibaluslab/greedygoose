@@ -2,9 +2,9 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { isAddressEqual, type Address } from "viem";
+import { isAddressEqual } from "viem";
 import { usePublicClient } from "wagmi";
-import { TxStop, txKey, useTx, type TxPlan } from "./useTx";
+import { TxStop, useTx } from "./useTx";
 import { useSigningCash } from "./useSigningCash";
 import { CHAIN_ID } from "@/lib/chain";
 import { accountName, addressOfName, hasEthereumCode } from "@/lib/jaw/name";
@@ -13,23 +13,11 @@ import {
   SendStop,
   buildSendCalls,
   readRecipient,
-  sendActivity,
   toLookups,
-  type Recipient,
   type RecipientChecks,
   type ToState,
 } from "@/lib/send";
-import { USDC, type ReserveAsset } from "@/lib/tokens/registry";
-
-/** What a Send signs: from the account, the token, the recipient on screen and the exact amount (raw units). */
-export type SendInput = {
-  user: Address;
-  token: ReserveAsset;
-  recipient: Recipient;
-  amountRaw: bigint;
-};
-
-const isCashToken = (token: ReserveAsset) => isAddressEqual(token.address, USDC.address);
+import { isCashToken, sendPlan, type SendInput } from "@/lib/tx/plans";
 
 /**
  * Send's batch, built from fresh reads while the screen is idle (lib/tx/prepared.ts): the cash is read again
@@ -37,7 +25,7 @@ const isCashToken = (token: ReserveAsset) => isAddressEqual(token.address, USDC.
  * counted on for them, a savings withdrawal goes first (buildSendCalls → payFromCash). The recipient is the one on
  * screen, never looked up again: what the user saw is what is sent.
  */
-export function useSendBatch() {
+function useSendBatch() {
   const cashToSign = useSigningCash();
   return async (p: SendInput) => {
     const cash = await cashToSign(p.user, isCashToken(p.token) ? p.amountRaw : 0n);
@@ -54,25 +42,6 @@ export function useSendBatch() {
     }
   };
 }
-
-/**
- * What a Send signs (useTx), keyed by the account, the token, the recipient's address as resolved and the amount: a
- * batch prepared for one recipient is never signed for another (a name that resolved late can't take its place). The
- * recipient's name only labels Activity, so it isn't in the key.
- */
-export const sendPlan = (p: SendInput, batch: ReturnType<typeof useSendBatch>): TxPlan => ({
-  key: txKey(
-    "send",
-    p.user.toLowerCase(),
-    p.token.address.toLowerCase(),
-    p.recipient.address.toLowerCase(),
-    p.amountRaw,
-  ),
-  user: p.user,
-  calls: () => batch(p),
-  fallback: isCashToken(p.token) ? SEND_COPY.fallback : SEND_COPY.stockFallback,
-  activity: sendActivity(p.token, p.amountRaw, p.recipient),
-});
 
 /**
  * Send's one write path: one useTx, one batch. `input` is what the screen would send now (null while it can't): its
