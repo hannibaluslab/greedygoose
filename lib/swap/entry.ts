@@ -115,7 +115,8 @@ export type Conversion = { coin: EntryCoinAsset; amountIn: bigint; minOut: bigin
 /**
  * The batch for `conversions`: for each coin an exact approve to its venue, then its swap paying the user at least its
  * `minOut`, never under its floor (at its rate as of `nowSec`). Uniswap and Aerodrome carry a deadline, PSM3 swaps at
- * its fixed rate. Every call passes the allowlist.
+ * its fixed rate. Every call passes the allowlist. A conversion's `rate` must be read from its feed right before (as
+ * convertPlan does, with `nowSec` the latest block's time): the floor is only as good as the rate it's given.
  */
 export function buildConvertCalls(p: {
   user: `0x${string}`;

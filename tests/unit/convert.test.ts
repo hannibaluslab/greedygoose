@@ -21,7 +21,7 @@ import {
   type UsdRate,
 } from "@/lib/swap/entry";
 import { AERODROME, AERODROME_V1, SPARK_PSM3, UNISWAP } from "@/lib/swap/venues";
-import { USDC } from "@/lib/tokens/registry";
+import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { CASH_COINS, ENTRY_COINS, OTHER_COINS } from "@/lib/tokens/stables";
 import { convertPlan, convertQuote, NOT_FAIR } from "@/lib/tx/plans";
 import { TxStop } from "@/lib/tx/prepared";
@@ -346,6 +346,20 @@ describe("the allowlist for conversions", () => {
     no(aeroSwap(AERODROME_V1.ROUTER, USDT.address, USDC.address, user, 50), /unexpected arguments/);
   });
 
+  it("never swaps a stock or USDC at a conversion venue", () => {
+    const stock = EQUITIES[0].address;
+    expect(() => assertAllowed(user, [aeroSwap(AERODROME_V1.ROUTER, stock, USDC.address, user)])).toThrow(
+      /unexpected arguments/,
+    );
+    expect(() => assertAllowed(user, [aeroSwap(AERODROME_V1.ROUTER, USDC.address, stock, user)])).toThrow(
+      /unexpected arguments/,
+    );
+    expect(() => assertAllowed(user, [psm(stock, USDC.address, user)])).toThrow(/unexpected arguments/);
+    expect(() => assertAllowed(user, [psm(USDC.address, USDS.address, user)])).toThrow(/unexpected arguments/);
+    expect(() => assertAllowed(user, [approve(stock, AERODROME_V1.ROUTER)])).toThrow(/unexpected spender/);
+    expect(() => assertAllowed(user, [approve(USDC.address, SPARK_PSM3.PSM3)])).toThrow(/unexpected spender/);
+  });
+
   it("no longer converts USDbC for the user", () => {
     expect(() => assertAllowed(user, [approve(USDBC.address, AERODROME_V1.ROUTER)])).toThrow(/unexpected target/);
     expect(() => assertAllowed(user, [aeroSwap(AERODROME_V1.ROUTER, USDBC.address, USDC.address, user)])).toThrow(
@@ -451,8 +465,9 @@ describe("convertQuote: a coin's floor and whether its venue pays it", () => {
 describe("convertPlan at signing: the euro rate read again", () => {
   afterEach(() => vi.useRealTimers());
   /** Base as the plan reads it: the coin's balance, what the venue pays, and the feed's latest round (or none). */
-  const base = (p: { balance: bigint; out: bigint; rate?: UsdRate }) =>
+  const base = (p: { balance: bigint; out: bigint; rate?: UsdRate; blockSec?: number }) =>
     ({
+      getBlock: async () => ({ timestamp: BigInt(p.blockSec ?? NOW) }),
       readContract: async ({ functionName }: { functionName: string }) => {
         if (functionName === "balanceOf") return p.balance;
         if (!p.rate) throw new Error("feed down");
@@ -467,9 +482,9 @@ describe("convertPlan at signing: the euro rate read again", () => {
     rate: RATE,
     nowSec: NOW,
   });
-  const sign = (client: never) => {
+  const sign = (client: never, phoneSec = NOW) => {
     const invalidateQueries = vi.fn();
-    vi.useFakeTimers({ now: NOW * 1000 });
+    vi.useFakeTimers({ now: phoneSec * 1000 });
     const { calls } = convertPlan(user, [quoted], client, { invalidateQueries } as never)!;
     return { calls: typeof calls === "function" ? calls() : Promise.resolve(calls), invalidateQueries };
   };
@@ -498,6 +513,16 @@ describe("convertPlan at signing: the euro rate read again", () => {
     expect(down.invalidateQueries).toHaveBeenCalledWith({ queryKey: ["convertQuote"] });
     const old = sign(base({ balance: units(EURC, 120), out: 135_000_000n, rate: { ...RATE, updatedAt: NOW - 7_201 } }));
     await expect(old.calls).rejects.toThrow(/euro rate/);
+  });
+
+  it("measures the rate's age by the latest block's time, not the phone's clock", async () => {
+    const stopped = { ...RATE, updatedAt: NOW - 7_201 };
+    // The phone's clock runs 3 hours slow: by it, the feed that stopped looks fresh.
+    const slow = sign(base({ balance: units(EURC, 120), out: 135_000_000n, rate: stopped }), NOW - 10_800);
+    await expect(slow.calls).rejects.toThrow(/euro rate/);
+    // And a phone 3 hours fast doesn't refuse a feed that's fresh on Base.
+    const fast = sign(base({ balance: units(EURC, 120), out: 135_000_000n, rate: RATE }), NOW + 10_800);
+    expect(await signedFloor(fast.calls)).toBe(133_855_161n);
   });
 
   it("stops when the venue no longer pays the raised floor", async () => {
