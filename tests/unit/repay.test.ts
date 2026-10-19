@@ -475,6 +475,32 @@ describe("Pay with a stock held free: the plan", () => {
     expect(v.ready).toBe(false);
   });
 
+  it("a sale whose floor repays nothing (all of it is the fee buffer it pays) says the smallest repay", () => {
+    // No cash for the fee and $0.20 of Apple free. The quote for all of it pays well over Aave's price ($250 a share),
+    // so $0.01 is sized as a small sale; its own quote pays $181 (9.5% under Aave's $200: allowed), so its floor is
+    // Aave's less 10%, about $0.08, all of it the $0.10 buffer: the sale would repay nothing.
+    const poor = data({ wallet: underB, holdings: [holding("AAPLc", "Apple", 200, 0.001, 0)] });
+    const src = repaySources(poor, cfs).find((x) => x.id === "free:AAPLc")!;
+    expect(src.feeFromSale).toBe(true);
+    const form = { source: src.id, amount: "0.01", all: false };
+    const maxQuote = ready(quoteAt(src.maxSharesRaw, 250));
+    const sized = planRepay({ data: poor, source: src, form, maxQuote, now: tuesday });
+    const v = planRepay({
+      data: poor,
+      source: src,
+      form,
+      maxQuote,
+      quote: ready(quoteAt(sized.sharesRaw, 181)),
+      now: tuesday,
+    });
+    expect(v.sellPlan).not.toBeNull();
+    expect(v.sellPlan!.block).toBeUndefined();
+    expect(v.sellPlan!.minOutRaw).toBeLessThanOrEqual(fee);
+    expect(v.repayRaw).toBe(0n);
+    expect(v.note?.text).toBe("The smallest repay is $0.01.");
+    expect(v.ready).toBe(false);
+  });
+
   it("waits for its quotes, says when there's no market, and warns on a thin one", () => {
     const quoting = planRepay({ data: d, source: apple, form: ALL, now: tuesday });
     expect(quoting.ready).toBe(false);
