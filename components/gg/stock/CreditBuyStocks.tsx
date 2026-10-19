@@ -81,7 +81,7 @@ export function StockLists({
 
 /**
  * F2-3's head (Adrian, 2026-10-15): the most one Credit Buy can use, in whole dollars as the sheet's credit figures,
- * drawn like the balance hero's figure, read out as one amount; a pulse while the collateral factors load, and a plain
+ * drawn like the balance hero's figure, read out as one amount; a pulse while the backing factors load, and a plain
  * line with Try again if they can't be read. One plain line under it. At $0 the label drops "up to".
  */
 export function CreditHero({
@@ -147,7 +147,7 @@ export function CashStockLists({
   );
 }
 
-/** The collateral factors are loading (a pulse), or couldn't be read (CantCheck). */
+/** The backing factors are loading (a pulse), or couldn't be read (CantCheck). */
 export function CreditPending({ failed, onRetry }: { failed: boolean; onRetry: () => void }) {
   return failed ? (
     <CantCheck onRetry={onRetry} />
@@ -156,7 +156,7 @@ export function CreditPending({ failed, onRetry }: { failed: boolean; onRetry: (
   );
 }
 
-/** The collateral factors couldn't be read: say so, with Try again (ValueLine's pattern), instead of pulsing on. */
+/** The backing factors couldn't be read: say so, with Try again (ValueLine's pattern), instead of pulsing on. */
 function CantCheck({ onRetry }: { onRetry: () => void }) {
   return (
     <p role="status" className="m-0 flex items-center justify-between gap-3 text-[13px] leading-[normal] text-ink-mid">
