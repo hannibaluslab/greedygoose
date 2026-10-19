@@ -73,3 +73,48 @@ The script prints the address and the block. Optionally verify the source (`forg
 | GooseBoard | not deployed |
 | Bytecode | about 1.9 KB (`forge inspect GooseBoard deployedBytecode`) |
 | Rehearsed | Base fork: `GooseBoardForkTest` (JAW account batch: EFP mint + follow + join), `scripts/board-e2e.ts` (anvil) |
+
+## KeeperHub runner (2026-10-19)
+
+KeeperHub (app.keeperhub.com) runs GooseExecutor without waiting for Chainlink: Automation's two upkeep requests above have waited for manual approval since 2026-10-15, and the CRE runner (`GooseReceiver`) waits for Chainlink to enable deploy access. KeeperHub's wallet only wakes the executor. It holds no user money, sits in no JAW permission, and every run is re-checked on-chain. KeeperHub signs only with its own wallet (Turnkey) or a Safe, so the runner can't be a JAW account: acting through a JAW permission would put the run inside the manager's `nonReentrant` call, and the run calls the manager again for each user (MANAGER-NOTES.md §4).
+
+| What | Value |
+|---|---|
+| Account | KeeperHub organization `fcafd72a-4364-412f-b6c2-d4cfec96abbb`, Free plan (Adrian, 2026-10-19) |
+| Runner wallet | `0x9c74d428Ff2707e0E9cB576AFFFD87c1b1eF3E93` (KeeperHub's Turnkey wallet): the address for `bootstrap` |
+| Plan | 5,000 runs a month, and one run counts once whatever it does (read, condition and write together). $1 of sponsored gas a month, then the wallet pays its own ETH |
+| Spend caps | Pay-as-you-go daily and monthly caps set to 0 USDC, so runs past 5,000 are blocked and nothing is ever charged |
+
+### Sender check (Base Sepolia, 2026-10-19)
+
+A sponsored KeeperHub write is a type-4 (EIP-7702) transaction: relayer `0x6331eb4571DE9284f7E9eAD98ac7b0661a091E99` → Turnkey's gas station `0x5aF5194B4b0909eB978e3Cf1e25333852277f07D` → the wallet (delegated to `0x955d84139e7621bc571b117d8eb5d28a4a222c6f`) → the target. In tx `0x0ffbab34f60c1beacc6f84a9925ff462e6d324cfd8f1bc9a3e6af23c5324f7a6` (WETH `deposit()`, value 0), WETH's `Deposit` names the wallet, so **`msg.sender` at the target is the wallet** and `bootstrap` takes its address. The wrapper costs about 60k gas, and KeeperHub's gas limit is the outer transaction's, so writes carry a fixed 5,500,000 to leave `performUpkeep` its 5M.
+
+### Workflows (both off)
+
+| Workflow | Id | What it does | State |
+|---|---|---|---|
+| GreedyGoose round (Base) | `q5vdv47dieyabhg4toiue` | Every 10 min (`*/10 * * * *`): `checkUpkeep(abi.encode(0, 1))` → if `upkeepNeeded`, `performUpkeep(performData)`, then the same check and run once more (a rescue left unfinished goes on in the same run). Gas 5,500,000 on each write, sponsored | Built, off. Its executor address is the old test deploy as a placeholder: point it at the new executor before switching it on |
+| GreedyGoose registration (Base) | `a0t6mjkoezs3k5fdm2k03` | On JAW's manager `PermissionApproved` (`0xf1b40E3D5701C04d86F7828f0EB367B9C90901D8`): `registrationOf(permission)` → if ok, `registerApproved(permission)` | Draft, off, **blocked**: KeeperHub's form can't fill the permission's `calls[]` and `spends[]` from the event (they take only fixed objects). Unblocked by an executor entry that takes the permission as one `bytes` value, fed by a KeeperHub "Run Code" step, or by CRE |
+
+Budget: the round runs 4,464 times in a 31-day month. Each `PermissionApproved` on Base adds one run, from any JAW app (measured 0 in 6 hours on 2026-10-19). That leaves about 536 runs a month. If registrations grow, move the round to every 12 minutes (3,720 runs). Gas: a Protect repay costs about 1 cent, a seven-stock sale about 7 cents, and a check that finds nothing costs nothing.
+
+Protect timing with the round alone: Protect acts below 1.03 and Aave liquidates at 1.0, a further fall of about 2.9%, or about 6 feed steps of 0.5% (the largest step measured was −2.13%). A 10-minute round is usually in time, but it can be late on a very fast drop. The price-feed triggers come with CRE.
+
+### Go-live checklist
+
+| # | Step | Who | State |
+|---|---|---|---|
+| 1 | KeeperHub account, wallet, caps at 0, sender check | Adrian, Claude | Done |
+| 2 | `jl/runner-switch` lands on v2: money-safety review, fork tests on a public RPC (never the app's Alchemy key) | Runner session, Adrian's OK | Fork suites 13/13 green, review fixes in; waiting for Adrian |
+| 3 | Registration route for KeeperHub (the registration workflow above) | Runner session | Asked |
+| 4 | Pre-launch values: pin the executor's address and code hash in the app; production `CAP_MAX` (`EXECUTOR_CAPS=none`); EntryJob's coins = `CASH_COINS` (USDT, USDe, USDS, DAI, EURC; USDbC out); Protect below 1.03 → 1.12, selling at once, the rescue going on to the target | Runner session | EntryJob still lists USDbC and no DAI/EURC on `jl/runner-switch` |
+| 5 | Top up the deployer if needed (it holds 0.0011 ETH; the redeploy is about 26M gas, about 0.00016 ETH at 0.006 gwei plus the L1 fee) | Adrian | Open |
+| 6 | Deploy the executor | Adrian signs | Open |
+| 7 | `GooseReceiver`: needs the CRE workflow's owner address, known once CRE deploy access lands. If it's not known by then, bootstrap KeeperHub alone and add the receiver later through the 7-day `AddForwarder` | Adrian signs | Waiting on Chainlink |
+| 8 | `bootstrap([KeeperHub wallet(, receiver)])`, once | Adrian signs | Open |
+| 9 | Queue the NYSE holidays (`SetHoliday`, 7 days each), then apply them | Adrian signs | Open |
+| 10 | Cancel the two Automation requests above (0.0008 WETH back to the deployer) | Adrian signs | Open |
+| 11 | Optional gas backup: a little ETH (or USDC, which KeeperHub converts) in the runner wallet for when the $1 credit runs out | Adrian | Open |
+| 12 | Point both workflows at the new executor, then switch them on | Claude, with Adrian's OK | Open |
+| 13 | Vercel: `NEXT_PUBLIC_GOOSE_EXECUTOR` (and `_BLOCK`) and `NEXT_PUBLIC_AGENTS_LIVE=1`; `NEXT_PUBLIC_ALCHEMY_KEY` added in the dashboard by Adrian (or `--build-env`); deploy per HANDOVER-2026-10-19.md | Adrian's OK | Open |
+| 14 | Check: read `planOf` and `checkUpkeep` for a test account, then a first real run while Adrian watches (KeeperHub's run log and Basescan) | Adrian, Claude | Open |
