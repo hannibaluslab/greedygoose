@@ -58,6 +58,34 @@ export function pnlSeries(
   return points;
 }
 
+/** The stocks at the end of a day (unix second `t`), by reserve id: units held (wallet and Aave) and Aave's price. */
+export type StockDay = { t: number; units: readonly number[]; prices: readonly number[] };
+
+/**
+ * Investments' line (Adrian, 2026-10-19: drawing today's stocks back over the week "falsifies the result"): what the
+ * stocks gained or lost from price moves alone, on what was actually held at each day's end. It starts at $0 on the
+ * first day's end; each later point adds what that day's holdings made as prices moved to the next day's end, and the
+ * last adds the move from the last day's end to `nowPrices`. A buy or a sale moves nothing by itself: the shares only
+ * count from the end of the day they were bought, and stop at the end of the day before they were sold.
+ */
+export function stockGainSeries(days: readonly StockDay[], nowPrices: readonly number[]): number[] {
+  const sorted = [...days].sort((a, b) => a.t - b.t);
+  if (sorted.length === 0) return [];
+  const moved = (held: StockDay, prices: readonly number[]) =>
+    held.units.reduce((sum, units, i) => sum + units * ((prices[i] ?? held.prices[i]) - held.prices[i]), 0);
+  const points = [0];
+  for (let k = 1; k < sorted.length; k++) points.push(points[k - 1] + moved(sorted[k - 1], sorted[k].prices));
+  points.push(points[points.length - 1] + moved(sorted[sorted.length - 1], nowPrices));
+  return points;
+}
+
+/** The ends of the last `n` UTC days before the one `nowSec` falls in, oldest first (unix seconds). */
+export function lastDayEnds(n: number, nowSec: number): number[] {
+  const DAY = 86_400;
+  const today = Math.floor(nowSec / DAY) * DAY;
+  return Array.from({ length: n }, (_, i) => today - (n - i - 1) * DAY - 1);
+}
+
 /** The ends of the UTC days from the one `fromSec` falls in to the last one before `nowSec` (unix seconds). */
 export function dayEnds(fromSec: number, nowSec: number): number[] {
   const DAY = 86_400;

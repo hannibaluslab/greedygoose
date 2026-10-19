@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { blockAt, dayEnds, pnlAllTime, pnlSeries } from "@/lib/pnl";
+import { blockAt, dayEnds, lastDayEnds, pnlAllTime, pnlSeries, stockGainSeries } from "@/lib/pnl";
 
 const DAY = 86_400;
 
@@ -64,5 +64,34 @@ describe("the P&L line", () => {
     expect(dayEnds(100, 2 * DAY + 5)).toEqual([DAY - 1, 2 * DAY - 1]);
     expect(blockAt(1_000, 5_000n, 1_100)).toBe(4_950n);
     expect(blockAt(2_000, 5_000n, 1_100)).toBe(5_000n);
+  });
+});
+
+describe("Investments' gain line", () => {
+  // Two stocks by reserve id: 10 units of the first all week; 5 of the second bought during day 2.
+  const days = [
+    { t: DAY - 1, units: [10, 0], prices: [100, 50] },
+    { t: 2 * DAY - 1, units: [10, 5], prices: [101, 60] },
+    { t: 3 * DAY - 1, units: [10, 5], prices: [99, 62] },
+  ];
+
+  it("starts at $0 and counts only price moves on what was held at each day's end", () => {
+    // Day 2: +$10 on the first stock; the second was bought that day, so its jump from $50 to $60 isn't counted.
+    // Day 3: −$20 on the first, +$10 on the second. Since then: +$10 on the first, −$5 on the second.
+    expect(stockGainSeries(days, [100, 61])).toEqual([0, 10, 0, 5]);
+  });
+
+  it("never reads a buy as a gain: shares bought today don't count until the day ends", () => {
+    const flat = [{ t: DAY - 1, units: [0, 0], prices: [100, 50] }];
+    expect(stockGainSeries(flat, [120, 70])).toEqual([0, 0]);
+  });
+
+  it("keeps the last price for a stock with no price now, and is empty with no days", () => {
+    expect(stockGainSeries(days.slice(0, 1), [110])).toEqual([0, 100]);
+    expect(stockGainSeries([], [1])).toEqual([]);
+  });
+
+  it("takes the ends of the last n UTC days before today, oldest first", () => {
+    expect(lastDayEnds(3, 5 * DAY + 100)).toEqual([3 * DAY - 1, 4 * DAY - 1, 5 * DAY - 1]);
   });
 });

@@ -13,11 +13,12 @@ import { ValueLine } from "@/components/gg/ValueLine";
 import { CreditIcon, MarketIcon, TradeIcon } from "@/components/gg/kit/icons";
 import { MarketBanner } from "@/components/ui/MarketBanner";
 import { useMarketPrices } from "@/hooks/useMarketPrices";
+import { useStockGain } from "@/hooks/useStockGain";
 import { useBackingFactorsRead, usePosition, type PositionData } from "@/hooks/usePosition";
 import { floorCents, formatUsd, formatUsdTrim } from "@/lib/formatting";
 import { MIN_BACKING_USD, backingOptions, creditAvailable } from "@/lib/creditBuy";
 import { maxSpendRaw, toUsd } from "@/lib/cash";
-import { dayChange, weekValue } from "@/lib/prices/market";
+import { dayChange } from "@/lib/prices/market";
 import { RetryButton } from "@/components/gg/kit/RetryButton";
 
 export default function PortfolioPage() {
@@ -30,8 +31,9 @@ export default function PortfolioPage() {
  * step. Trade, between Market and Credit Buy (Adrian), opens the Trade sheet, as Home's Trade does. Credit Buy opens
  * Flow 2's sheet (F2-2 → F2-3 … F2-6). A holding row opens its stock's sheet. The status pill opens the Repay sheet,
  * the one credit sheet (Adrian, 2026-10-15; the board's Credit sheet, HomeCreditSlide, is gone).
- * Today's change, the value line and each row's day come from market prices (plan item 8), with the
- * markets-closed banner under the line at weekends. Not drawn yet: "Your mix" (the Rebalancer, item 9).
+ * Today's change and each row's day come from market prices (plan item 8); the gain line under the hero from Aave's
+ * prices on what was held at each day's end (useStockGain), with the markets-closed banner under it at weekends. Not
+ * drawn yet: "Your mix" (the Rebalancer, item 9).
  */
 function Portfolio({ address }: { address: `0x${string}` }) {
   const { data, isError, refetch } = usePosition(address);
@@ -59,6 +61,7 @@ function Portfolio({ address }: { address: `0x${string}` }) {
           <div aria-busy className="h-[300px] animate-pulse rounded-[22px] bg-chip" />
         ) : (
           <Loaded
+            address={address}
             data={data}
             openMarket={stocks.openMarket}
             openTrade={() => stocks.openTrade()}
@@ -74,12 +77,14 @@ function Portfolio({ address }: { address: `0x${string}` }) {
 }
 
 function Loaded({
+  address,
   data,
   openMarket,
   openTrade,
   openCreditBuy,
   openStock,
 }: {
+  address: `0x${string}`;
   data: PositionData;
   openMarket: () => void;
   openTrade: () => void;
@@ -91,6 +96,7 @@ function Loaded({
   const market = useMarketPrices(held);
   const priced = held.map((h) => ({ valueUsd: h.freeUsd + h.backingUsd, ...market.bySymbol[h.symbol] }));
   const today = dayChange(priced, data.stocksUsd);
+  const gain = useStockGain(address, data.holdings);
   return (
     <>
       <section className="flex flex-col gap-2.5">
@@ -122,7 +128,19 @@ function Loaded({
           }}
         />
         {held.length > 0 && (
-          <ValueLine points={weekValue(priced)} height={34} loading={market.loading} onRetry={market.retry} />
+          // The gain line (Adrian, 2026-10-19): price moves only, on what was held at each day's end, so a buy never
+          // reads as a gain and today's stocks are never drawn back over the week.
+          <ValueLine
+            points={gain.series}
+            height={34}
+            loading={gain.loading}
+            onRetry={gain.retry}
+            label="What your stocks gained or lost over the last 7 days, from price moves on what you held at each day's end"
+            caption="Gain or loss · 7 days"
+            neutral={!!gain.series && gain.series.every((v) => v === 0)}
+            zero
+            unavailable="Your stocks’ week isn’t available right now."
+          />
         )}
         <MarketBanner />
       </section>

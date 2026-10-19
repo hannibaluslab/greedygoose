@@ -17,6 +17,7 @@ export function ValueLine({
   caption = "Market prices · 7 days",
   neutral = false,
   zero = false,
+  unavailable = "Market prices aren’t available right now.",
 }: {
   points: number[] | null;
   height: number;
@@ -27,6 +28,8 @@ export function ValueLine({
   neutral?: boolean;
   /** The P&L line: a dashed $0 line (Sparkline's `zero`). */
   zero?: boolean;
+  /** What the line says when it can't be drawn. */
+  unavailable?: string;
 }) {
   if (loading) return <div aria-busy className="animate-pulse rounded-[14px] bg-chip" style={{ height }} />;
   if (!points) {
@@ -35,7 +38,7 @@ export function ValueLine({
         role="status"
         className="m-0 flex items-center justify-between gap-3 px-1 text-[13px] leading-[normal] text-ink-mid"
       >
-        Market prices aren’t available right now.
+        {unavailable}
         <RetryButton look="inline" onClick={onRetry} />
       </p>
     );
