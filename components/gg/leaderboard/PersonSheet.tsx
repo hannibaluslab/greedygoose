@@ -1,5 +1,6 @@
 "use client";
 
+import type { ComponentProps } from "react";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { buttonClass } from "../Button";
 import { WhiteCard } from "../Screen";
@@ -43,7 +44,6 @@ export function PersonSheet({
   onRemove: () => void;
 }) {
   if (!person) return null;
-  const onBoard = "rank" in person;
   const busy = phase === "simulating" || phase === "signing" || phase === "pending";
   return (
     <SheetShell
@@ -55,26 +55,7 @@ export function PersonSheet({
       <SheetSteps stepKey={person.account} className="flex flex-col gap-3.5">
         <WhiteCard className="flex flex-col gap-1 px-4 py-3.5">
           <span className="label">Return since joining</span>
-          {!onBoard ? (
-            <>
-              <span className="text-[17px] font-semibold">{BOARD_COPY.offBoard}</span>
-              <span className="text-[13px] leading-[1.4] text-ink-mid">{BOARD_COPY.offBoardLine}</span>
-            </>
-          ) : person.pct === null ? (
-            <>
-              <span className="text-[17px] font-semibold">{BOARD_COPY.notRanked}</span>
-              <span className="text-[13px] leading-[1.4] text-ink-mid">
-                {person.you ? BOARD_COPY.notRankedYou : BOARD_COPY.notRankedLine}
-              </span>
-            </>
-          ) : (
-            <>
-              <span className={`num text-[32px] font-semibold leading-[1.15] tracking-[-0.02em] ${tone(person.pct)}`}>
-                {boardPct(person.pct)}
-              </span>
-              <span className="text-[13px] text-ink-mid">Rank {person.rank} on the board</span>
-            </>
-          )}
+          <PersonReturn person={person} />
         </WhiteCard>
         {person.you ? (
           <p className="m-0 px-1 text-[13px] leading-[1.4] text-ink-mid">This is you. {BOARD_COPY.foot}</p>
@@ -115,5 +96,30 @@ export function PersonSheet({
         {!person.you && <p className="m-0 px-1 text-xs leading-[1.45] text-subtle">{BOARD_COPY.contactsFoot}</p>}
       </SheetSteps>
     </SheetShell>
+  );
+}
+
+/** Their percent and rank, or why there isn't one: not on the board yet, or not ranked yet. */
+function PersonReturn({ person }: { person: NonNullable<ComponentProps<typeof PersonSheet>["person"]> }) {
+  const onBoard = "rank" in person;
+  return !onBoard ? (
+    <>
+      <span className="text-[17px] font-semibold">{BOARD_COPY.offBoard}</span>
+      <span className="text-[13px] leading-[1.4] text-ink-mid">{BOARD_COPY.offBoardLine}</span>
+    </>
+  ) : person.pct === null ? (
+    <>
+      <span className="text-[17px] font-semibold">{BOARD_COPY.notRanked}</span>
+      <span className="text-[13px] leading-[1.4] text-ink-mid">
+        {person.you ? BOARD_COPY.notRankedYou : BOARD_COPY.notRankedLine}
+      </span>
+    </>
+  ) : (
+    <>
+      <span className={`num text-[32px] font-semibold leading-[1.15] tracking-[-0.02em] ${tone(person.pct)}`}>
+        {boardPct(person.pct)}
+      </span>
+      <span className="text-[13px] text-ink-mid">Rank {person.rank} on the board</span>
+    </>
   );
 }

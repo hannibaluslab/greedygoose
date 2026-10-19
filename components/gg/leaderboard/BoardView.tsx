@@ -105,64 +105,15 @@ export function BoardView({
       </Note>
     );
   } else if (s && ready) {
-    const nobody = ready.people.length === 0;
-    const noContacts = filter === "contacts" && s.offBoard.length === 0 && !ready.people.some((p) => p.contact);
     body = (
-      <>
-        {filter === "all" && nobody ? (
-          <Note icon={<BoardIcon />} title={BOARD_COPY.empty} line={BOARD_COPY.emptyLine} />
-        ) : noContacts ? (
-          <Note title={BOARD_COPY.noContacts} line={BOARD_COPY.noContactsLine}>
-            <button type="button" onClick={onAddByName} className={buttonClass("dark", "md")}>
-              <PlusIcon size={18} />
-              Add by name
-            </button>
-          </Note>
-        ) : null}
-        {s.ranked.length > 0 && (
-          <List label={filter === "all" ? "Everyone, ranked" : "My contacts, ranked"}>
-            {s.ranked.map((l) => (l.kind === "gap" ? <Gap key={l.key} /> : row(l.person)))}
-          </List>
-        )}
-        {(s.unranked.length > 0 || s.unrankedOthers > 0) && !(noContacts && s.unranked.every((p) => p.you)) && (
-          <Section title={BOARD_COPY.notRanked} line={BOARD_COPY.notRankedLine}>
-            {s.unranked.length > 0 && <List label={BOARD_COPY.notRanked}>{s.unranked.map(row)}</List>}
-            {s.unrankedOthers > 0 && (
-              <p className="m-0 px-1 text-[13px] text-ink-mid">{othersLine(s.unrankedOthers, s.unranked.length > 0)}</p>
-            )}
-          </Section>
-        )}
-        {s.offBoard.length > 0 && (
-          <Section title={BOARD_COPY.offBoard} line={BOARD_COPY.offBoardLine}>
-            <List label={BOARD_COPY.offBoard}>
-              {s.offBoard.map((o) => (
-                <li key={o.account}>
-                  <button
-                    type="button"
-                    onClick={() => onOpen(o)}
-                    className="flex min-h-[56px] w-full items-center gap-3 px-3.5 py-2 text-left"
-                  >
-                    <span aria-hidden className="w-[22px] shrink-0 text-right font-mono text-[12px] text-ink-mid">
-                      –
-                    </span>
-                    <Initial person={o} />
-                    <span className="min-w-0 grow truncate text-[15px] font-semibold">{personLabel(o)}</span>
-                  </button>
-                </li>
-              ))}
-            </List>
-          </Section>
-        )}
-        {filter === "contacts" && !noContacts && (
-          <button type="button" onClick={onAddByName} className={buttonClass("soft", "md")}>
-            <PlusIcon size={18} />
-            Add by name
-          </button>
-        )}
-        <p className="m-0 px-1 text-xs leading-[1.45] text-subtle">
-          {BOARD_COPY.foot} {BOARD_COPY.contactsFoot}
-        </p>
-      </>
+      <ReadyBoard
+        sections={s}
+        people={ready.people}
+        filter={filter}
+        row={row}
+        onOpen={onOpen}
+        onAddByName={onAddByName}
+      />
     );
   }
 
@@ -195,6 +146,89 @@ export function BoardView({
       )}
       <TabBar />
     </div>
+  );
+}
+
+/**
+ * The board once it's read: why it's empty (nobody yet, or no contacts, with Add by name), the ranked list (with gaps),
+ * the people not ranked yet, the contacts not on the board, Add by name on Contacts, and the foot.
+ */
+function ReadyBoard({
+  sections,
+  people,
+  filter,
+  row,
+  onOpen,
+  onAddByName,
+}: {
+  sections: ReturnType<typeof boardSections>;
+  people: BoardPerson[];
+  filter: BoardFilter;
+  row: (p: BoardPerson) => ReactNode;
+  onOpen: (p: BoardPerson | OffBoard) => void;
+  onAddByName: () => void;
+}) {
+  const nobody = people.length === 0;
+  const noContacts = filter === "contacts" && sections.offBoard.length === 0 && !people.some((p) => p.contact);
+  return (
+    <>
+      {filter === "all" && nobody ? (
+        <Note icon={<BoardIcon />} title={BOARD_COPY.empty} line={BOARD_COPY.emptyLine} />
+      ) : noContacts ? (
+        <Note title={BOARD_COPY.noContacts} line={BOARD_COPY.noContactsLine}>
+          <button type="button" onClick={onAddByName} className={buttonClass("dark", "md")}>
+            <PlusIcon size={18} />
+            Add by name
+          </button>
+        </Note>
+      ) : null}
+      {sections.ranked.length > 0 && (
+        <List label={filter === "all" ? "Everyone, ranked" : "My contacts, ranked"}>
+          {sections.ranked.map((l) => (l.kind === "gap" ? <Gap key={l.key} /> : row(l.person)))}
+        </List>
+      )}
+      {(sections.unranked.length > 0 || sections.unrankedOthers > 0) &&
+        !(noContacts && sections.unranked.every((p) => p.you)) && (
+          <Section title={BOARD_COPY.notRanked} line={BOARD_COPY.notRankedLine}>
+            {sections.unranked.length > 0 && <List label={BOARD_COPY.notRanked}>{sections.unranked.map(row)}</List>}
+            {sections.unrankedOthers > 0 && (
+              <p className="m-0 px-1 text-[13px] text-ink-mid">
+                {othersLine(sections.unrankedOthers, sections.unranked.length > 0)}
+              </p>
+            )}
+          </Section>
+        )}
+      {sections.offBoard.length > 0 && (
+        <Section title={BOARD_COPY.offBoard} line={BOARD_COPY.offBoardLine}>
+          <List label={BOARD_COPY.offBoard}>
+            {sections.offBoard.map((o) => (
+              <li key={o.account}>
+                <button
+                  type="button"
+                  onClick={() => onOpen(o)}
+                  className="flex min-h-[56px] w-full items-center gap-3 px-3.5 py-2 text-left"
+                >
+                  <span aria-hidden className="w-[22px] shrink-0 text-right font-mono text-[12px] text-ink-mid">
+                    –
+                  </span>
+                  <Initial person={o} />
+                  <span className="min-w-0 grow truncate text-[15px] font-semibold">{personLabel(o)}</span>
+                </button>
+              </li>
+            ))}
+          </List>
+        </Section>
+      )}
+      {filter === "contacts" && !noContacts && (
+        <button type="button" onClick={onAddByName} className={buttonClass("soft", "md")}>
+          <PlusIcon size={18} />
+          Add by name
+        </button>
+      )}
+      <p className="m-0 px-1 text-xs leading-[1.45] text-subtle">
+        {BOARD_COPY.foot} {BOARD_COPY.contactsFoot}
+      </p>
+    </>
   );
 }
 
