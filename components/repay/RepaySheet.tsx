@@ -7,6 +7,7 @@ import { Button } from "@/components/gg/Button";
 import { TxButton, TxError } from "@/components/gg/TxUi";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
+import { useMenuGuard } from "@/hooks/useMenuGuard";
 import { useBackingFactorsRead, usePosition } from "@/hooks/usePosition";
 import { repaySign, useRepayWith } from "@/hooks/useRepay";
 import { useSellQuote } from "@/hooks/useSell";
@@ -30,8 +31,6 @@ import { OweCard } from "./OweCard";
 import { PayBox } from "./PayBox";
 import { RiskTick } from "./RiskTick";
 
-/** A tap on the dim that just closed the Pay with list doesn't also close the sheet (the dim reports it after the list). */
-const MENU_TAP_MS = 500;
 const RISK_TICK = "I understand: if prices fall, part of my stocks can be sold.";
 
 /**
@@ -60,7 +59,7 @@ export function RepaySheet({
   const cfRead = useBackingFactorsRead(data?.holdings);
   const fee = useFeeSupport();
   const [form, setForm] = useState<RepayForm>(REPAY_FORM);
-  const { menu, setMenu, closeMenu, onOpenChange } = useMenuGuard(onClose);
+  const { menu, setMenu, closeMenu, onOpenChange } = useMenuGuard(onClose, false);
   const [freeOpen, setFreeOpen] = useState(!!freeUp);
   // Ticked from the stock sheet: all of it, held to what the limit allows (no "prices moved" for that first cut).
   const [picks, setPicks] = useState<FreeUpTick[]>(
@@ -240,27 +239,6 @@ function AllBack() {
       All your stocks come back
     </p>
   );
-}
-
-/**
- * The Pay with list inside the sheet: a tap on the dim that just closed it doesn't also close the sheet (the dim
- * reports it after the list); with the list open, closing the sheet closes the list first.
- */
-function useMenuGuard(onClose: () => void) {
-  const [menu, setMenu] = useState(false);
-  const menuClosedAt = useRef(0);
-  const closeMenu = (e?: Event) => {
-    const inSheet = e?.target instanceof Element && !!e.target.closest('[role="dialog"]');
-    if (!inSheet) menuClosedAt.current = Date.now();
-    setMenu(false);
-  };
-  const onOpenChange = (next: boolean) => {
-    if (next) return;
-    if (menu) return setMenu(false);
-    if (Date.now() - menuClosedAt.current < MENU_TAP_MS) return;
-    onClose();
-  };
-  return { menu, setMenu, closeMenu, onOpenChange };
 }
 
 /** "Also free up stocks": closed until asked for, the list once open, or, on Repay all, every stock coming back. */

@@ -1,7 +1,7 @@
 "use client";
 
 import { EQUITIES } from "@/lib/tokens/registry";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useAccount } from "wagmi";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { AmountArrow, AmountBadge, AmountField, AmountHintLine, YouGetCash, YouGetShares } from "./AmountField";
@@ -16,6 +16,7 @@ import { TxButton, TxDone, TxError } from "./TxUi";
 import { useBoughtHome } from "@/hooks/useBoughtHome";
 import { useBuyQuote, useBuyQuoteRaw } from "@/hooks/useBuyQuote";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
+import { useMenuGuard } from "@/hooks/useMenuGuard";
 import type { PositionData } from "@/hooks/usePosition";
 import { useSellQuote } from "@/hooks/useSell";
 import { useTrade } from "@/hooks/useTrade";
@@ -43,9 +44,6 @@ import {
 
 /** What went to JAW's sheet, for what the sheet says once it lands. */
 type Signed = { route: TradeRoute; from: TradeAsset; to: TradeAsset; sharesRaw: bigint };
-
-/** A tap on the dim that just closed a picker's list doesn't also close the sheet (the dim reports it after the list). */
-const MENU_TAP_MS = 500;
 
 const pickerRows = (options: AssetOption[]): PickerRow[] =>
   options.map((o) => ({
@@ -92,8 +90,7 @@ export function TradeSheet({
   // Opened with nothing to trade: the legs appear once there is something (money arrives while it's open).
   const legs = form.legs ?? defaultLegs(data, { from: seedFrom, to: seedTo });
   const { amount, all } = form;
-  const [menu, setMenu] = useState<"from" | "to" | null>(null);
-  const menuClosedAt = useRef(0);
+  const { menu, setMenu, closeMenu, onOpenChange } = useMenuGuard<"from" | "to" | null>(onClose, null);
   const [signed, setSigned] = useState<Signed | null>(null);
 
   const from = legs?.from ?? "cash";
@@ -141,21 +138,7 @@ export function TradeSheet({
   };
   const onValue = (value: string) => dispatch({ type: "amount", value });
   const onMax = () => dispatch({ type: "max" });
-  /** A tap away closed the list. Only a tap on the dim (outside the sheet) is swallowed; Close, in the sheet, still closes it. */
-  const closeMenu = (e?: Event) => {
-    const inSheet = e?.target instanceof Element && !!e.target.closest('[role="dialog"]');
-    if (!inSheet) menuClosedAt.current = Date.now();
-    setMenu(null);
-  };
   const toggle = (which: "from" | "to") => setMenu((m) => (m === which ? null : which));
-  // Escape, the dim and Close come here. Escape with a list open closes the list; the dim's tap that just closed one
-  // closes nothing else; Close closes the sheet (its press already closed the list).
-  const onOpenChange = (next: boolean) => {
-    if (next) return;
-    if (menu) return setMenu(null);
-    if (Date.now() - menuClosedAt.current < MENU_TAP_MS) return;
-    onClose();
-  };
 
   const doneSale = phase === "done" && signed?.route === "sell";
   const sign = () => {
