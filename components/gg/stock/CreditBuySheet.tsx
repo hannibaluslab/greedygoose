@@ -23,12 +23,13 @@ type Step = "back" | "pick" | "amount";
 const ORDER: Step[] = ["back", "pick", "amount"];
 
 /**
- * The sheet's title and the step Back goes to: the stock being bought names it once it's known, from step 3, or from
- * the start when it was preset (then Back skips the stock picker).
+ * The sheet's title and the step Back goes to: the stock being bought names it from step 3. The stock picker is never
+ * skipped, even from a stock's sheet (Adrian, 2026-10-19: a stock put in use buys any stock, chosen on the market
+ * list), so Back from the amount always returns to it.
  */
-function navOf(step: Step, stock: ReserveAsset | null, preset: ReserveAsset | null) {
-  const named = step === "amount" ? stock : preset;
-  const back: Step | null = step === "pick" ? "back" : step === "amount" ? (preset ? "back" : "pick") : null;
+function navOf(step: Step, stock: ReserveAsset | null) {
+  const named = step === "amount" ? stock : null;
+  const back: Step | null = step === "pick" ? "back" : step === "amount" ? "pick" : null;
   return { title: named ? `Credit Buy ${named.name}` : "Credit Buy", back };
 }
 
@@ -42,8 +43,8 @@ function navOf(step: Step, stock: ReserveAsset | null, preset: ReserveAsset | nu
  *  4. F2-5's amount to buy, up to $X. Credit Buy opens JAW's own sheet: put exactly the typed backing in use, take the
  *     credit and buy, in one batch (useCreditBuy). F2-6's confirm is folded in (small print, the D2 risk tick).
  * Picking what already backs credit skips step 2. With $0 to use, step 1 says why, and a stock tapped there opens its
- * Buy step with cash (`onBuyWithCash`). Opened from a stock's sheet, the stock is remembered and step 3 is skipped;
- * Back from step 1 returns to that sheet. Once it lands it goes Home with the "Bought" toast (F2-7).
+ * Buy step with cash (`onBuyWithCash`). Opened from a stock's sheet, step 3 still lists every stock (that one
+ * included, in its usual place); Back from step 1 returns to that sheet. Once it lands it goes Home with the "Bought" toast (F2-7).
  */
 export function CreditBuySheet({
   open,
@@ -151,7 +152,7 @@ export function CreditBuySheet({
     go("amount");
   };
 
-  const { title, back } = navOf(step, stock, preset);
+  const { title, back } = navOf(step, stock);
   const leave = step === "back" && preset ? onBack : undefined;
 
   return (
@@ -184,7 +185,7 @@ export function CreditBuySheet({
               onContinue={() => {
                 // Hold the pick from here on: the default must not move to another holding when prices tick.
                 choose(pickedKey);
-                go(preset ? "amount" : "pick");
+                go("pick");
               }}
               onTopUp={() => {
                 close();
