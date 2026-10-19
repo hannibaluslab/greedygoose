@@ -2,22 +2,18 @@
 
 import { useState } from "react";
 import { parseUnits } from "viem";
-import { useAccount } from "wagmi";
 import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { useMoneySheets } from "./MoneySheets";
 import { LeaveForRepay } from "./CreditBuyBacking";
 import { CreditHero, StockLists } from "./CreditBuyStocks";
 import { CreditBuyBackStep, LostPick, useBackingPick } from "./CreditBuyBackStep";
-import { CreditBuyAmountStep, amountBlocker } from "./CreditBuyAmountStep";
+import { CreditBuyAmountStep } from "./CreditBuyAmountStep";
+import { useCreditBuyAmount } from "./useCreditBuyAmount";
 import { useAgents } from "@/hooks/useAgents";
 import { useBoughtHome } from "@/hooks/useBoughtHome";
-import { useBuyQuote } from "@/hooks/useBuyQuote";
-import { useCreditBuy } from "@/hooks/useCreditBuy";
-import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { useBackingFactorsRead, type PositionData } from "@/hooks/usePosition";
 import { cashRaw, feeBufferRaw } from "@/lib/cash";
 import { CREDIT_FROM, FEE_FIRST, backingForBuy, planCredit, type BackingPick } from "@/lib/creditBuy";
-import { BUY_LIMITS, quoteEconomics } from "@/lib/swap/buy";
 import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
 
 /**
@@ -71,11 +67,9 @@ export function CreditBuySheet({
   onBuyWithCash: (symbol: string) => void;
 }) {
   const preset = EQUITIES.find((e) => e.symbol === symbol) ?? null;
-  const { isConnected } = useAccount();
   const cfRead = useBackingFactorsRead(data.holdings);
   const cfs = cfRead.cfs;
   const protect = useAgents(user).status.protect;
-  const fee = useFeeSupport();
 
   const [step, setStep] = useState<Step>("back");
   const [direction, setDirection] = useState<"forward" | "back">("forward");
@@ -117,20 +111,21 @@ export function CreditBuySheet({
     setAck(false);
   }
 
-  const quote = useBuyQuote(stock ?? undefined, amount);
-  const q = quote.data ?? null;
-  const oraclePriceUsd = stock ? priceOf(stock.symbol) : 0;
-  const econ = q && stock ? quoteEconomics(q, stock, oraclePriceUsd) : null;
-
-  const blocker = amountBlocker({ pickGone, amount, reachUsd, chosen, plan, stock, quote, econ });
-  const ready = amount >= BUY_LIMITS.minUsd && !!econ && q?.amountIn === creditRaw && !blocker && !quote.isFetching;
-  const feeBlocked = isConnected && fee.state === "unsupported";
-  // What Credit Buy would sign now, prepared while the step is idle so the tap opens JAW's sheet at once.
-  const signable =
-    open && step === "amount" && stock && q && ready && !feeBlocked && !(plan.extraConfirm && !ack)
-      ? { user, stock, quote: q, plan, confirmedRisk: ack }
-      : null;
-  const tx = useCreditBuy(signable);
+  const buy = useCreditBuyAmount({
+    open,
+    onAmountStep: step === "amount",
+    user,
+    stock,
+    amount,
+    creditRaw,
+    plan,
+    ack,
+    pickGone,
+    reachUsd,
+    chosen,
+    priceOf,
+  });
+  const { tx } = buy;
   const { phase, reset, busy, txHash } = tx;
   const lostPick = pickGone && !busy && phase !== "done";
   const close = () => {
@@ -223,6 +218,7 @@ export function CreditBuySheet({
             </div>
           ) : step === "amount" && stock ? (
             <CreditBuyAmountStep
+              {...buy}
               data={data}
               stock={stock}
               chosen={chosen}
@@ -233,19 +229,8 @@ export function CreditBuySheet({
               ack={ack}
               setAck={setAck}
               amount={amount}
-              quote={quote}
-              q={q}
-              econ={econ}
-              oraclePriceUsd={oraclePriceUsd}
               plan={plan}
-              blocker={blocker}
-              ready={ready}
               protectOn={protect === "on"}
-              feeBlocked={feeBlocked}
-              feeLoading={fee.loading}
-              isConnected={isConnected}
-              signable={!!signable}
-              tx={tx}
             />
           ) : (
             <div aria-busy className="h-[320px] animate-pulse rounded-[16px] bg-chip" />
