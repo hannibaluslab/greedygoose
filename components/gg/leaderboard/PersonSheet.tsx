@@ -1,8 +1,8 @@
 "use client";
 
 import type { ComponentProps } from "react";
-import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
-import { buttonClass } from "../Button";
+import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
+import { buttonClass } from "../kit/Button";
 import { WhiteCard } from "../Screen";
 import { TxButton, TxError } from "../TxUi";
 import type { TxPhase } from "@/hooks/useTx";

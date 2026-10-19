@@ -3,14 +3,14 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ActivityAvatar, AgentMark, FeedCard, FeedItem, dayLabel } from "../activity/Activity";
-import { StockAvatar } from "../StockAvatar";
-import { ChevronRight } from "../icons";
+import { StockAvatar } from "../kit/StockAvatar";
+import { ChevronRight } from "../kit/icons";
 import { useCashActivity } from "@/hooks/useCashActivity";
 import type { CashFeedError } from "@/lib/cashActivity";
 import { useNowSec } from "@/hooks/useNowSec";
 import type { CashMark, CashRow } from "@/lib/cashActivity";
 import { USDC } from "@/lib/tokens/registry";
-import { RetryButton } from "../RetryButton";
+import { RetryButton } from "../kit/RetryButton";
 
 const NOTICE: Record<Exclude<CashFeedError, null>, string> = {
   all: "We couldn’t load your activity.",

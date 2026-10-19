@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { toast } from "sonner";
-import { GooseMark } from "../GooseMark";
+import { GooseMark } from "../kit/GooseMark";
 import { MenuButton } from "../MenuButton";
 import { useAccountName } from "@/hooks/useAccountName";
 import { firstName } from "@/lib/jaw/name";

@@ -1,9 +1,9 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { StockAvatar } from "../StockAvatar";
-import { ChevronRight } from "../icons";
-import { RetryButton } from "../RetryButton";
+import { StockAvatar } from "../kit/StockAvatar";
+import { ChevronRight } from "../kit/icons";
+import { RetryButton } from "../kit/RetryButton";
 import { wholeUsd } from "./CreditBuyBacking";
 import type { Holding } from "@/hooks/usePosition";
 import type { CreditAvailable } from "@/lib/creditBuy";

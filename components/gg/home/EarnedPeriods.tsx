@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { LiveEarning } from "./LiveEarning";
-import { SegmentedControl } from "../SegmentedControl";
+import { SegmentedControl } from "../kit/SegmentedControl";
 import type { TotalEarned } from "@/hooks/useTotalEarned";
 import { earnedPeriod } from "@/lib/earned";
 import { formatUsd } from "@/lib/formatting";

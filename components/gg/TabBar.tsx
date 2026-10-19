@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { AgentsIcon, BoardIcon, HomeIcon, InvestIcon, SendIcon } from "./icons";
+import { AgentsIcon, BoardIcon, HomeIcon, InvestIcon, SendIcon } from "./kit/icons";
 import { LEADERBOARD_ENABLED } from "@/lib/features";
 
 /**

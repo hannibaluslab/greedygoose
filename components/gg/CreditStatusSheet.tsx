@@ -1,8 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
-import { Button } from "./Button";
+import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
+import { Button } from "./kit/Button";
 import { StatusBar, StatusPill } from "./Status";
 import { AAVE_LINE_HF, CREDIT_CAP, RISK } from "@/config/risk";
 import { useBackingFactorsRead, type PositionData } from "@/hooks/usePosition";

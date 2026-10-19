@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { StockAvatar } from "@/components/gg/StockAvatar";
-import { AssetPicker, type PickerRow } from "@/components/gg/AssetPicker";
-import { LockIcon } from "@/components/gg/icons";
+import { StockAvatar } from "@/components/gg/kit/StockAvatar";
+import { AssetPicker, type PickerRow } from "@/components/gg/kit/AssetPicker";
+import { LockIcon } from "@/components/gg/kit/icons";
 import { formatShares, formatUsd, formatUsdTrim } from "@/lib/formatting";
 import { wholePct } from "@/lib/holding";
 import type { planFreeUp } from "@/lib/freeUpPlan";

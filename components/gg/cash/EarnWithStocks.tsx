@@ -2,10 +2,10 @@
 
 import { useState, type ReactNode } from "react";
 import { parseUnits } from "viem";
-import { AmountBadge, AmountField, AmountSource } from "../AmountField";
-import { Button } from "../Button";
+import { AmountBadge, AmountField, AmountSource } from "../kit/AmountField";
+import { Button } from "../kit/Button";
 import { StatusChange } from "../Status";
-import { StockAvatar } from "../StockAvatar";
+import { StockAvatar } from "../kit/StockAvatar";
 import { Summary } from "../home/Summary";
 import { TxButton, TxError } from "../TxUi";
 import { usePrepare, type TxPhase, type TxPlan, type TxPrep } from "@/hooks/useTx";

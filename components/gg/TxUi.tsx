@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { txUrl } from "@/lib/chain";
 import { TAP_AGAIN, type TxPhase } from "@/lib/tx/prepared";
 import { stepsNote } from "@/lib/formatting";
-import { buttonClass, type ButtonSize } from "./Button";
+import { buttonClass, type ButtonSize } from "./kit/Button";
 
 /**
  * The one button that opens JAW's own sheet (its Review and Face ID), lime, named for the action only: "Buy", "Repay",

@@ -3,12 +3,12 @@
 import { useState } from "react";
 import { parseUnits } from "viem";
 import { useAccount } from "wagmi";
-import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
-import { AmountArrow, AmountBadge, AmountField, AmountSource, YouGet } from "../AmountField";
-import { Button } from "../Button";
+import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
+import { AmountArrow, AmountBadge, AmountField, AmountSource, YouGet } from "../kit/AmountField";
+import { Button } from "../kit/Button";
 import { MarketList, MarketRow } from "./Market";
 import { StatusChange } from "../Status";
-import { tickerOf } from "../StockAvatar";
+import { tickerOf } from "../kit/StockAvatar";
 import { Summary, type SummaryRow } from "../home/Summary";
 import { TxButton, TxError } from "../TxUi";
 import { useBoughtHome } from "@/hooks/useBoughtHome";

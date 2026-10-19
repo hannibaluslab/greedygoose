@@ -2,18 +2,18 @@
 
 import type { ReactNode } from "react";
 import { AgentMark, FeedCard, FeedDays, type FeedRow } from "./activity/Activity";
-import { Button } from "./Button";
+import { Button } from "./kit/Button";
 import { useMoneySheets } from "./cash/MoneySheets";
 import { TabHeader } from "./Screen";
-import { stockColor } from "./StockAvatar";
-import { Switch } from "./Switch";
+import { stockColor } from "./kit/StockAvatar";
+import { Switch } from "./kit/Switch";
 import { TabBar } from "./TabBar";
-import { ChevronRight, PadlockIcon, PlugIcon, PlusIcon, RepeatIcon } from "./icons";
+import { ChevronRight, PadlockIcon, PlugIcon, PlusIcon, RepeatIcon } from "./kit/icons";
 import { NOT_LIVE, type Agent, type AgentCard, type AgentItem, type CardAction } from "@/lib/agents/list";
 import type { AgentJob } from "@/lib/agents/permissions";
 import { stepsNote } from "@/lib/formatting";
 import { EQUITIES } from "@/lib/tokens/registry";
-import { RetryButton } from "./RetryButton";
+import { RetryButton } from "./kit/RetryButton";
 
 /*
  * The Agents tab (Adrian, 2026-10-15): cards only when something needs the user, the two agents with their

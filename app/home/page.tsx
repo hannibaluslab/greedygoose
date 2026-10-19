@@ -19,8 +19,8 @@ import { StockSheets, useStockSheets } from "@/components/gg/stock/StockSheets";
 import { HeroLine } from "@/components/gg/home/HeroLine";
 import { StatusSheet } from "@/components/gg/CreditStatusSheet";
 import { LeverageSheet, TotalBalanceSheet, YieldSheet } from "@/components/gg/InfoSheets";
-import { StockAvatar } from "@/components/gg/StockAvatar";
-import { ChevronRight, CreditIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/icons";
+import { StockAvatar } from "@/components/gg/kit/StockAvatar";
+import { ChevronRight, CreditIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/kit/icons";
 import { useCashSetup } from "@/hooks/useCashSetup";
 import { useStartEarning } from "@/hooks/useStartEarning";
 import { useEntryBalances } from "@/hooks/useEntryBalances";
@@ -36,7 +36,7 @@ import { fuelTankUsd } from "@/lib/cash";
 import { formatUsd, formatUsdTrim, monthlyCostText } from "@/lib/formatting";
 import { EQUITIES } from "@/lib/tokens/registry";
 import { dayChange, weekValue } from "@/lib/prices/market";
-import { RetryButton } from "@/components/gg/RetryButton";
+import { RetryButton } from "@/components/gg/kit/RetryButton";
 
 export default function HomePage() {
   return <RequireAccount>{(address) => <Home address={address} />}</RequireAccount>;

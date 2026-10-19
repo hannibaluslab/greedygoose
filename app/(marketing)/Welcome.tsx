@@ -4,9 +4,9 @@ import { useEffect, useLayoutEffect, useState, useSyncExternalStore, type ReactN
 import { useRouter } from "next/navigation";
 import { useAccount, useConnect } from "wagmi";
 import { Check } from "lucide-react";
-import { Button } from "@/components/gg/Button";
-import { GooseMark } from "@/components/gg/GooseMark";
-import { CreditIcon, InvestIcon, SaveIcon } from "@/components/gg/icons";
+import { Button } from "@/components/gg/kit/Button";
+import { GooseMark } from "@/components/gg/kit/GooseMark";
+import { CreditIcon, InvestIcon, SaveIcon } from "@/components/gg/kit/icons";
 import { useCashRate } from "@/hooks/useCashRate";
 import { ATTESTATION_TEXT, ELIGIBILITY_MODE, hasAttested, recordAttestation } from "@/lib/eligibility";
 import { SIGN_IN_CONNECTOR_TYPE } from "@/lib/jaw/config";

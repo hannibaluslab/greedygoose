@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useRef, type CSSProperties, type ReactNode } from "react";
-import { ArrowLeftIcon, CloseIcon } from "@/components/gg/icons";
+import { ArrowLeftIcon, CloseIcon } from "@/components/gg/kit/icons";
 import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
 import { useBodyScrollLock, useKeyboardLift } from "@/hooks/useSheetViewport";
 

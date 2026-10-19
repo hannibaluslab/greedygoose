@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState, type ComponentProps } from "react";
 import { useAccount } from "wagmi";
 import { toast } from "sonner";
-import { Button } from "@/components/gg/Button";
+import { Button } from "@/components/gg/kit/Button";
 import { TxButton, TxError } from "@/components/gg/TxUi";
-import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
+import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { useMenuGuard } from "@/hooks/useMenuGuard";
 import { useBackingFactorsRead, usePosition } from "@/hooks/usePosition";

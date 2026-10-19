@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
+import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
 import { ActivityAvatar } from "../activity/Activity";
 import { Summary, type SummaryRow } from "../home/Summary";
 import { TxButton, TxDone, TxError } from "../TxUi";
-import { TrendUpIcon } from "../icons";
+import { TrendUpIcon } from "../kit/icons";
 import { useConvert, useConvertQuotes } from "@/hooks/useConvert";
 import { NOT_FAIR, type ConvertQuote } from "@/lib/tx/plans";
 import type { GrantView, useCashSetup } from "@/hooks/useCashSetup";

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { cleanAmount } from "@/components/gg/AmountInput";
-import { amountFontSize } from "@/components/gg/AmountField";
+import { cleanAmount } from "@/components/gg/kit/AmountInput";
+import { amountFontSize } from "@/components/gg/kit/AmountField";
 
 describe("cleanAmount", () => {
   it("keeps digits and one dot, trims decimals", () => {

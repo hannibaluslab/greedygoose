@@ -1,8 +1,8 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { InfoIcon } from "../icons";
-import { Money } from "../Money";
+import { InfoIcon } from "../kit/icons";
+import { Money } from "../kit/Money";
 import { formatSignedPct, formatSignedUsd } from "@/lib/formatting";
 
 type Info = { label: string; onClick: () => void };

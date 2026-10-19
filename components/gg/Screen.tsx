@@ -1,9 +1,9 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { BackIcon } from "./icons";
+import { BackIcon } from "./kit/icons";
 import { MenuButton } from "./MenuButton";
 import { StatusPill } from "./Status";
-import { Tap } from "./Tap";
+import { Tap } from "./kit/Tap";
 import { STATUS_LABEL, type Status } from "@/lib/risk/status";
 
 /**

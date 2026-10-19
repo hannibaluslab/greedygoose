@@ -1,8 +1,8 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
-import { StockAvatar, tickerOf } from "../StockAvatar";
-import { BacksIcon } from "../icons";
+import { StockAvatar, tickerOf } from "../kit/StockAvatar";
+import { BacksIcon } from "../kit/icons";
 import type { Holding } from "@/hooks/usePosition";
 import { MIN_BACKING_USD, shortNames, type BackingOption } from "@/lib/creditBuy";
 import { floorCents, formatShares, formatUsd, formatUsdTrim } from "@/lib/formatting";

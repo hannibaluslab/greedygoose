@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
-import { ActivityIcon, ChevronRight, GearIcon, GuideIcon, MenuIcon } from "./icons";
+import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
+import { ActivityIcon, ChevronRight, GearIcon, GuideIcon, MenuIcon } from "./kit/icons";
 
 const ITEMS = [
   { href: "/activity", label: "Activity", Icon: ActivityIcon },

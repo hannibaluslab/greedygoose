@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Initial } from "../Initial";
+import { Initial } from "../kit/Initial";
 import { WhiteCard } from "../Screen";
 import { boardPct, personLabel, type BoardPerson } from "@/lib/board/view";
 import { BOARD_COPY } from "@/lib/board/copy";

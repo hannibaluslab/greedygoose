@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { parseUnits } from "viem";
-import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
+import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
 import { useMoneySheets } from "../cash/MoneySheets";
 import { LeaveForRepay } from "./CreditBuyBacking";
 import { CreditHero, StockLists } from "./CreditBuyStocks";

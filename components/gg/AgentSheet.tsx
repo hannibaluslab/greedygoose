@@ -1,10 +1,10 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
+import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
 import { AgentPill } from "./Status";
 import { TxError } from "./TxUi";
-import { ShieldIcon } from "./icons";
+import { ShieldIcon } from "./kit/icons";
 import { AGENT_COPY, type AgentItem, type SheetAction } from "@/lib/agents/list";
 import type { AgentStatus } from "@/lib/agents/status";
 import { stepsNote } from "@/lib/formatting";

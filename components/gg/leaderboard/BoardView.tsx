@@ -1,12 +1,12 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { buttonClass } from "../Button";
-import { Initial } from "../Initial";
-import { SegmentedControl } from "../SegmentedControl";
+import { buttonClass } from "../kit/Button";
+import { Initial } from "../kit/Initial";
+import { SegmentedControl } from "../kit/SegmentedControl";
 import { TabHeader } from "../Screen";
 import { TabBar } from "../TabBar";
-import { BoardIcon, PlusIcon } from "../icons";
+import { BoardIcon, PlusIcon } from "../kit/icons";
 import type { TxPhase } from "@/hooks/useTx";
 import {
   boardSections,
@@ -17,7 +17,7 @@ import {
   type BoardState,
   type OffBoard,
 } from "@/lib/board/view";
-import { RetryButton } from "../RetryButton";
+import { RetryButton } from "../kit/RetryButton";
 import { BOARD_COPY } from "@/lib/board/copy";
 import { BoardRowItem, Gap, List, Note, Section, Skeleton } from "./BoardRow";
 

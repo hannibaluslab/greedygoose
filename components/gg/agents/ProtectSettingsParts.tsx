@@ -1,7 +1,7 @@
 "use client";
 
-import { StockAvatar } from "@/components/gg/StockAvatar";
-import { Switch } from "@/components/gg/Switch";
+import { StockAvatar } from "@/components/gg/kit/StockAvatar";
+import { Switch } from "@/components/gg/kit/Switch";
 import type { ProtectChoice } from "@/lib/agents/protect";
 import { formatUsdShort } from "@/lib/formatting";
 import type { EQUITIES } from "@/lib/tokens/registry";

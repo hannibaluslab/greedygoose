@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Button } from "../Button";
+import { Button } from "../kit/Button";
 import { BackingRow, CantBack, ReadyRow, optionOf, unavailable, wholeUsd } from "./CreditBuyBacking";
 import { CashStockLists, CreditPending } from "./CreditBuyStocks";
 import type { Holding, PositionData } from "@/hooks/usePosition";

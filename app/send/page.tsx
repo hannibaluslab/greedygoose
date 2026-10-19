@@ -4,7 +4,7 @@ import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { SendHeader, SendScreen } from "@/components/gg/send/Send";
 import { TabBar } from "@/components/gg/TabBar";
 import { usePosition } from "@/hooks/usePosition";
-import { RetryButton } from "@/components/gg/RetryButton";
+import { RetryButton } from "@/components/gg/kit/RetryButton";
 
 /** The Send tab (D16: it replaced Pay, 2026-10-15). Receive, which Pay was, opens from its header and from Home's Top up. */
 export default function SendPage() {

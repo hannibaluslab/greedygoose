@@ -1,6 +1,6 @@
 import { Sparkline } from "./home/Sparkline";
 import { LINE_POINTS, downsample } from "@/lib/prices/market";
-import { RetryButton } from "./RetryButton";
+import { RetryButton } from "./kit/RetryButton";
 
 /**
  * The line under the balance hero (HomeUpliftRail draws it 68px tall, PortfolioPage 34px): what the stocks held now

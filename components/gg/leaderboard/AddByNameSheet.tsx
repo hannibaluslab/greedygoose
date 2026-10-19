@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
-import { Initial } from "../Initial";
+import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
+import { Initial } from "../kit/Initial";
 import { WhiteCard } from "../Screen";
 import { TxButton, TxError } from "../TxUi";
-import { CloseIcon } from "../icons";
+import { CloseIcon } from "../kit/icons";
 import type { TxPhase } from "@/hooks/useTx";
 import { shortAddress } from "@/lib/formatting";
 import { BOARD_COPY } from "@/lib/board/copy";

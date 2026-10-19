@@ -1,8 +1,8 @@
 "use client";
 
 import { useId } from "react";
-import { AmountInput } from "@/components/gg/AmountInput";
-import { AssetPicker, assetMark, type PickerRow } from "@/components/gg/AssetPicker";
+import { AmountInput } from "@/components/gg/kit/AmountInput";
+import { AssetPicker, assetMark, type PickerRow } from "@/components/gg/kit/AssetPicker";
 import { StatusPill } from "@/components/gg/Status";
 import type { PositionData } from "@/hooks/usePosition";
 import { formatUsd } from "@/lib/formatting";

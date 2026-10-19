@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import { useAccount } from "wagmi";
-import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
-import { AmountArrow, AmountField, AmountHintLine, AmountSource, YouGetCash } from "../AmountField";
-import { Button } from "../Button";
-import { StockAvatar, tickerOf } from "../StockAvatar";
+import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
+import { AmountArrow, AmountField, AmountHintLine, AmountSource, YouGetCash } from "../kit/AmountField";
+import { Button } from "../kit/Button";
+import { StockAvatar, tickerOf } from "../kit/StockAvatar";
 import { StatCard, StockActivity, StockChart, StockHeader, StockPosition } from "./StockOverview";
 import { Summary } from "../home/Summary";
 import { TxButton, TxDone, TxError } from "../TxUi";
-import { CreditIcon } from "../icons";
+import { CreditIcon } from "../kit/icons";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { useMarketPrices } from "@/hooks/useMarketPrices";
 import type { Holding, PositionData } from "@/hooks/usePosition";

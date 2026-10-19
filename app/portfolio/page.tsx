@@ -5,12 +5,12 @@ import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { TabBar } from "@/components/gg/TabBar";
 import { TabHeader } from "@/components/gg/Screen";
 import { BalanceHero, TodayChange, TodayPending } from "@/components/gg/home/BalanceHero";
-import { Button } from "@/components/gg/Button";
+import { Button } from "@/components/gg/kit/Button";
 import { useMoneySheets } from "@/components/gg/cash/MoneySheets";
 import { StockSheets, useStockSheets } from "@/components/gg/stock/StockSheets";
 import { HoldingList, HoldingRow } from "@/components/gg/stock/Holding";
 import { ValueLine } from "@/components/gg/ValueLine";
-import { CreditIcon, MarketIcon, TradeIcon } from "@/components/gg/icons";
+import { CreditIcon, MarketIcon, TradeIcon } from "@/components/gg/kit/icons";
 import { MarketBanner } from "@/components/ui/MarketBanner";
 import { useMarketPrices } from "@/hooks/useMarketPrices";
 import { useBackingFactorsRead, usePosition, type PositionData } from "@/hooks/usePosition";
@@ -18,7 +18,7 @@ import { floorCents, formatUsd, formatUsdTrim } from "@/lib/formatting";
 import { MIN_BACKING_USD, backingOptions, creditAvailable } from "@/lib/creditBuy";
 import { maxSpendRaw, toUsd } from "@/lib/cash";
 import { dayChange, weekValue } from "@/lib/prices/market";
-import { RetryButton } from "@/components/gg/RetryButton";
+import { RetryButton } from "@/components/gg/kit/RetryButton";
 
 export default function PortfolioPage() {
   return <RequireAccount>{(address) => <Portfolio address={address} />}</RequireAccount>;

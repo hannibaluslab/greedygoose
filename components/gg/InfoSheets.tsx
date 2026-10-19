@@ -1,8 +1,8 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
-import { Button } from "./Button";
+import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
+import { Button } from "./kit/Button";
 import { EarnedPeriods } from "./home/EarnedPeriods";
 import type { TotalEarned } from "@/hooks/useTotalEarned";
 import { CASH } from "@/config/risk";
