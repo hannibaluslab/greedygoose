@@ -5,10 +5,14 @@ import { TAP_AGAIN, txKey, useTx, type TxPhase, type TxPlan } from "@/hooks/useT
 import { runError } from "@/hooks/useAgentRun";
 import type { useAgents } from "@/hooks/useAgents";
 import type { ProtectStep } from "@/lib/agents/protect";
+import { OFF_UNREADABLE } from "@/lib/agents/status";
 import { isPopupBlocked } from "@/lib/tx/prepared";
 import { keepMixPlan } from "@/lib/tx/plans";
 
 const CANCELLED = /reject|denied|cancel/i;
+
+/** A stop useAgents doesn't keep as its own error (no JAW sheet opened): turning selling off with the list unreadable. */
+const stopOf = (error: unknown) => (error instanceof Error && error.message === OFF_UNREADABLE ? OFF_UNREADABLE : null);
 
 /**
  * Each grant or revoke in order, on JAW's own screen; the first that fails stops the rest. Each request is built as
@@ -46,6 +50,7 @@ export function useProtectSave(account: `0x${string}`, agents: ReturnType<typeof
   // What's left after a step JAW couldn't open, for the next Save (`asked` is what that Save asked for; `done` of `of`
   // JAW sheets went through).
   const [pending, setPending] = useState<{ asked: string; rest: ProtectStep[]; done: number; of: number } | null>(null);
+  const [stopped, setStopped] = useState<string | null>(null);
   const rest = useRef<ProtectStep[]>([]);
   const asked = useRef("");
   const launched = useRef(false);
@@ -70,7 +75,7 @@ export function useProtectSave(account: `0x${string}`, agents: ReturnType<typeof
           live.current.onSaved();
         } else if (isPopupBlocked(r.error)) {
           setPending({ asked: ask, rest: r.rest, done: of - r.rest.length, of });
-        } // otherwise useAgents keeps the error for the screen
+        } else setStopped(stopOf(r.error)); // otherwise useAgents keeps the error for the screen
       })
       .finally(() => {
         setStep("idle");
@@ -87,18 +92,21 @@ export function useProtectSave(account: `0x${string}`, agents: ReturnType<typeof
         if (r.rest.length === 0) {
           setPending(null);
           onSaved();
-        } else
+        } else {
+          setStopped(stopOf(r.error));
           setPending(
             isPopupBlocked(r.error)
               ? { asked: ask, rest: r.rest, done: count.done + steps.length - r.rest.length, of: count.of }
               : null,
           );
+        }
       })
       .finally(() => setStep("idle"));
   };
 
   function save(steps: readonly ProtectStep[]) {
     const key = txKey(steps);
+    setStopped(null);
     // Steps were left after one JAW couldn't open: go on with them (or with the screen's newest steps once it re-read).
     if (pending && (pending.asked === key || !steps.some((s) => s.kind === "keepMix"))) {
       if (pending.asked === key) grantNow(pending.rest, key, { done: pending.done, of: pending.of });
@@ -126,15 +134,17 @@ export function useProtectSave(account: `0x${string}`, agents: ReturnType<typeof
       : step === "setting"
         ? tx.phase
         : "idle";
-  const grantError = agents.error
-    ? isPopupBlocked(agents.error)
-      ? pending && pending.done > 0
-        ? runError(pending.done, pending.of, agents.error)
-        : TAP_AGAIN
-      : CANCELLED.test(agents.error.message)
-        ? "You cancelled. Nothing after it changed."
-        : "We couldn’t save this right now. Try again."
-    : null;
+  const grantError = stopped
+    ? stopped
+    : agents.error
+      ? isPopupBlocked(agents.error)
+        ? pending && pending.done > 0
+          ? runError(pending.done, pending.of, agents.error)
+          : TAP_AGAIN
+        : CANCELLED.test(agents.error.message)
+          ? "You cancelled. Nothing after it changed."
+          : "We couldn’t save this right now. Try again."
+      : null;
   return {
     save,
     phase,

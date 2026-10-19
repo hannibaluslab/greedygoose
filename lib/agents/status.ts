@@ -30,3 +30,30 @@ export function jobStatus(
   if (registered && stillGranted) return "on";
   return live.length > 0 ? "starting" : "off";
 }
+
+/**
+ * Said when a job shows on but the list of what the account has switched on can't be read, so there's nothing known
+ * to revoke: turning it off can't go ahead, and saying nothing would leave the agent running while the screen moved on.
+ */
+export const OFF_UNREADABLE = "We couldn’t check what’s switched on right now, so nothing was turned off. Try again.";
+
+/**
+ * Turning `jobs` off: one revoke step for each job with a grant to revoke (`faceIds`, one JAW sheet each), or, when the
+ * list can't be read and a job still shows on or starting, no steps and OFF_UNREADABLE. A job already off needs none.
+ * `on`: something shows on, so a "turn off" control stays (it says OFF_UNREADABLE when it can't go ahead).
+ */
+export function offSteps(
+  jobs: readonly AgentJob[],
+  statusOf: (job: AgentJob) => AgentStatus,
+  faceIds: (job: AgentJob) => number,
+  listUnreadable: boolean,
+): { steps: { off: AgentJob }[]; error: string | null; on: boolean } {
+  const stuck = jobs.some((j) => offUnreadable(statusOf(j), faceIds(j), listUnreadable));
+  if (stuck) return { steps: [], error: OFF_UNREADABLE, on: true };
+  const steps = jobs.filter((j) => faceIds(j) > 0).map((j) => ({ off: j }));
+  return { steps, error: null, on: steps.length > 0 };
+}
+
+/** A job that shows on or starting, with nothing known to revoke because the list can't be read. */
+export const offUnreadable = (status: AgentStatus, toRevoke: number, listUnreadable: boolean) =>
+  listUnreadable && toRevoke === 0 && (status === "on" || status === "starting");

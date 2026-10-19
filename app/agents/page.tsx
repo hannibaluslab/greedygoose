@@ -41,6 +41,7 @@ import {
 import { rebalanceOptions } from "@/lib/agents/mix";
 import { agentNexts, defaultNumbers, weekendCard } from "@/lib/agents/next";
 import { JOBS, LIMIT_USD, limitRaw, stockLimitsRaw, type AgentJob } from "@/lib/agents/permissions";
+import { offSteps } from "@/lib/agents/status";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
 export default function AgentsPage() {
@@ -154,10 +155,19 @@ function Agents({ address }: { address: `0x${string}` }) {
   const renewCapRaw = (job: AgentJob) =>
     agents.terms[job]?.capRaw ?? agents.lastTerms[job]?.capRaw ?? capOf(LIMIT_USD[job].start);
 
+  /** Turning `jobs` off: a revoke for each with a grant to revoke, or why it can't go ahead (the list is unreadable). */
+  const offFor = (jobs: readonly AgentJob[]) =>
+    offSteps(
+      jobs,
+      (j) => agents.status[j],
+      (j) => agents.faceIdsOff([j]),
+      agents.listUnreadable,
+    );
+
   /** The JAW sheets a change takes. */
   const stepsFor = (agent: Agent, action: SheetAction, jobs?: AgentJob[]): AgentStep[] => {
     const main = AGENT_JOBS[agent][0];
-    if (action === "off") return AGENT_JOBS[agent].filter((j) => agents.faceIdsOff([j]) > 0).map((j) => ({ off: j }));
+    if (action === "off") return offFor(AGENT_JOBS[agent]).steps;
     if (!position || capMax === null) return [];
     if (action === "renew")
       return (jobs ?? AGENT_JOBS[agent].filter((j) => agents.terms[j])).map((j) => ({
@@ -178,9 +188,13 @@ function Agents({ address }: { address: `0x${string}` }) {
           ? PREVIEW
           : null;
 
-  /** Runs `steps` on JAW's own sheets; an error shows in the open sheet, or as a toast from a row, a card or the tab. */
-  const start = (key: string, agent: Agent | null, steps: AgentStep[], message: string) => {
+  /**
+   * Runs `steps` on JAW's own sheets; an error shows in the open sheet, or as a toast from a row, a card or the tab.
+   * `stop`: why the change can't go ahead at all (turning off while the list can't be read), said instead of nothing.
+   */
+  const start = (key: string, agent: Agent | null, steps: AgentStep[], message: string, stop?: string | null) => {
     if (blocked) return void toast(blocked);
+    if (stop) return void toast.error(stop);
     if (steps.length === 0) return;
     void runner
       .run(key, steps, () => toast.success(message))
@@ -199,7 +213,8 @@ function Agents({ address }: { address: `0x${string}` }) {
       off: `${name} is off`,
       renew: `${name} runs until ${longDateText(nowSec + GRANT_SECONDS)}`,
     }[action];
-    start(`${agent}:${action}`, agent, stepsFor(agent, action, jobs), message);
+    const stop = action === "off" ? offFor(AGENT_JOBS[agent]).error : null;
+    start(`${agent}:${action}`, agent, stepsFor(agent, action, jobs), message, stop);
   };
 
   const openSheet = (agent: Agent) => {
@@ -248,7 +263,7 @@ function Agents({ address }: { address: `0x${string}` }) {
   }
 
   // "Turn off all agents" is Protect and Rebalance: earning and converting other dollars stay on (D20).
-  const allOffSteps: AgentStep[] = TAB_JOBS.filter((j) => agents.faceIdsOff([j]) > 0).map((j) => ({ off: j }));
+  const allOff = offFor(TAB_JOBS);
   const allOffIds = agents.faceIdsOff(TAB_JOBS);
 
   return (
@@ -289,11 +304,12 @@ function Agents({ address }: { address: `0x${string}` }) {
         }
         turnOffAll={
           live &&
-          allOffIds > 0 && (
+          // While one is on: with the list unreadable it stays, and its tap says why nothing can be turned off.
+          allOff.on && (
             <TurnOffAll
               steps={allOffIds}
               disabled={agents.busy || runner.running}
-              onClick={() => start("all:off", null, allOffSteps, "Your agents are off")}
+              onClick={() => start("all:off", null, allOff.steps, "Your agents are off", allOff.error)}
             />
           )
         }

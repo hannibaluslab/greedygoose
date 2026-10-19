@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { useAgents } from "@/hooks/useAgents";
 import type { GrantStep } from "@/hooks/useManageSave";
 import type { AgentJob } from "@/lib/agents/permissions";
+import { OFF_UNREADABLE } from "@/lib/agents/status";
 import { TAP_AGAIN, isPopupBlocked } from "@/lib/tx/prepared";
 
 /** One JAW screen: a job's new grant, or turning a job off (each of its grants revoked). */
@@ -36,6 +37,8 @@ export async function runSteps(
  */
 export function runError(done: number, of: number, error: unknown): string {
   if (isPopupBlocked(error)) return done > 0 ? `${done} of ${of} went through. ${TAP_AGAIN}` : TAP_AGAIN;
+  if (error instanceof Error && error.message === OFF_UNREADABLE)
+    return done > 0 ? `${done} of ${of} went through. ${OFF_UNREADABLE}` : OFF_UNREADABLE;
   const cancelled = error instanceof Error && CANCELLED.test(error.message);
   if (done > 0)
     return `${done} of ${of} went through, then ${cancelled ? "you cancelled" : "the next one didn’t"}. Try again for the rest.`;

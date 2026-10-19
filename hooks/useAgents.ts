@@ -17,7 +17,7 @@ import {
   type AgentJob,
   type StockLimits,
 } from "@/lib/agents/permissions";
-import { jobStatus, type AgentStatus, type Stored } from "@/lib/agents/status";
+import { OFF_UNREADABLE, jobStatus, offUnreadable, type AgentStatus, type Stored } from "@/lib/agents/status";
 import { PROTOCOLS } from "@/lib/protocols/config";
 import { permissionManagerAbi } from "@/lib/protocols/abis";
 import { useNowSec } from "@/hooks/useNowSec";
@@ -234,6 +234,9 @@ export function useAgents(account: `0x${string}`) {
    */
   async function turnOff(job: AgentJob) {
     ownAccount();
+    // Shown on, but the list can't be read: nothing known to revoke. Say so rather than return as if it were off.
+    const toRevoke = live[job].filter((g) => !revoked.has(g.permissionId)).length;
+    if (offUnreadable(status[job], toRevoke, listed.isError)) throw new Error(OFF_UNREADABLE);
     try {
       for (const g of live[job]) {
         if (revoked.has(g.permissionId)) continue;
@@ -253,6 +256,8 @@ export function useAgents(account: `0x${string}`) {
     left,
     /** What's left of the running jobs' limits couldn't be read (`left` stays null until it is). */
     leftUnreadable: periods.isError && !periods.data,
+    /** JAW's list of the account's grants couldn't be read (jobStatus then trusts the registry alone). */
+    listUnreadable: listed.isError,
     /** JAW sheets it takes to turn `jobs` off: one per grant JAW lists for them that hasn't ended. */
     faceIdsOff: (jobs: readonly AgentJob[]) =>
       jobs.reduce((n, job) => n + live[job].filter((g) => !revoked.has(g.permissionId)).length, 0),
