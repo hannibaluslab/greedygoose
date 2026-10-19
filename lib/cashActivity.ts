@@ -134,16 +134,13 @@ function row(
 }
 
 /**
- * One of the user's own moves as a cash row, or null when the cash didn't change by a cent (backing put in use or freed,
- * a pure Credit Buy) or it failed (nothing moved). In: credit that came to the cash (none when a buy spent it in the same
- * batch; Earn with stocks' credit, which went in to earn in the same batch, too), USDC received, what a sale brought,
- * what other dollars became. Out: USDC sent, repaid, and what a buy cost past its credit. Cash put into savings (Start
- * earning) is neither: it stays in the one pot, and is a row of its own. Titled by what matters most: a conversion, a
- * buy, a sale, a repay, Earn with stocks, credit, Start earning, money in, money out.
+ * What one batch did to the cash: the buys, sales, conversions, repays and sends in it, the USDC credit it took, what
+ * Earn with stocks put in to earn and Start earning put into savings, and the cash's change to the cent. In: credit
+ * that came to the cash (none when a buy spent it in the same batch), what went in to earn, USDC received, what a sale
+ * brought, what other dollars became. Out: USDC sent, repaid, and what a buy cost past its credit.
  */
-export function ownCashRow(m: OwnMove): CashRow | null {
-  if (m.status === "failed") return null;
-  const of = (kind: ActivityItem["kind"]) => m.items.filter((i) => i.kind === kind);
+function cashMoved(items: readonly ActivityItem[]) {
+  const of = (kind: ActivityItem["kind"]) => items.filter((i) => i.kind === kind);
   const buys = of("buy");
   const sells = of("sell");
   const converts = of("convert");
@@ -169,7 +166,21 @@ export function ownCashRow(m: OwnMove): CashRow | null {
     sum(repays.map((i) => i.amount)) +
     sum(buys.map((i) => i.paidUsd ?? 0)) -
     (buys.length ? credit : 0);
-  const usd = cents(into - out);
+  return { buys, sells, converts, repays, sends, credit, earned, saved, usd: cents(into - out) };
+}
+
+/**
+ * One of the user's own moves as a cash row, or null when the cash didn't change by a cent (backing put in use or freed,
+ * a pure Credit Buy) or it failed (nothing moved). In: credit that came to the cash (none when a buy spent it in the same
+ * batch; Earn with stocks' credit, which went in to earn in the same batch, too), USDC received, what a sale brought,
+ * what other dollars became. Out: USDC sent, repaid, and what a buy cost past its credit. Cash put into savings (Start
+ * earning) is neither: it stays in the one pot, and is a row of its own. Titled by what matters most: a conversion, a
+ * buy, a sale, a repay, Earn with stocks, credit, Start earning, money in, money out.
+ */
+export function ownCashRow(m: OwnMove): CashRow | null {
+  if (m.status === "failed") return null;
+  const of = (kind: ActivityItem["kind"]) => m.items.filter((i) => i.kind === kind);
+  const { buys, sells, converts, repays, sends, credit, earned, saved, usd } = cashMoved(m.items);
   // A Credit Buy paid with credit leaves the cash as it was, but it's still the cash's story (Adrian: "I don't see the
   // credit buys"): it stays, its line saying what the credit paid.
   const creditBuy = buys.length > 0 && credit > 0;
