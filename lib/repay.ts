@@ -13,7 +13,7 @@ import {
   type SellPlan,
   type SellPosition,
 } from "@/lib/sell";
-import { BUY_LIMITS } from "@/lib/swap/buy";
+import { SLIP_KEEP } from "@/lib/swap/buy";
 import { SELL_LIMITS, sellMinOut, type SellQuote } from "@/lib/swap/sell";
 import { VENUE_LABEL } from "@/lib/swap/venues";
 import { legOf, type Leg, type QuoteState } from "@/lib/trade";
@@ -116,8 +116,6 @@ export const REPAY_COPY = {
   doneAll: "Repaid all your credit",
 } as const;
 
-/** What a sale's floor keeps of its quote (the swap's 1% slippage). */
-const SLIP = 1 - BUY_LIMITS.slippageBps / 10_000;
 /**
  * A row is listed only if it can still repay $1 when its pool pays up to this much under Aave's price, so a stock that
  * only just reaches $1 at Aave's price isn't offered and then quoted under it.
@@ -176,7 +174,7 @@ export function repaySources(data: RepayData, cfs: Record<string, number> | unde
         maxSharesRaw: h.freeRaw,
         valueUsd: h.freeUsd,
         feeFromSale,
-        estUsd: cap(h.freeUsd * SLIP - (feeFromSale ? fee : 0)),
+        estUsd: cap(h.freeUsd * SLIP_KEEP - (feeFromSale ? fee : 0)),
       },
     ];
   });
@@ -199,7 +197,7 @@ export function repaySources(data: RepayData, cfs: Record<string, number> | unde
         maxSharesRaw,
         valueUsd,
         feeFromSale: true,
-        estUsd: cap(valueUsd * SLIP - fee),
+        estUsd: cap(valueUsd * SLIP_KEEP - fee),
       },
     ];
   });
@@ -208,7 +206,7 @@ export function repaySources(data: RepayData, cfs: Record<string, number> | unde
   const min = minRepayUsd(data.debtUsd);
   // A stock's estimate with its pool paying up to 1% under Aave's price (LIST_POOL_ALLOWANCE); the cash is exact.
   const canRepay = (s: RepaySource) =>
-    s.kind === "cash" ? s.estUsd : cap(s.valueUsd * SLIP * LIST_POOL_ALLOWANCE - (s.feeFromSale ? fee : 0));
+    s.kind === "cash" ? s.estUsd : cap(s.valueUsd * SLIP_KEEP * LIST_POOL_ALLOWANCE - (s.feeFromSale ? fee : 0));
   return [cash, ...free.sort(inOrder), ...backing.sort(inOrder)].filter(
     (s) => s.estUsd > 0 && canRepay(s) >= min - 1e-9,
   );
@@ -301,7 +299,7 @@ export function statusAfter(
   if (r >= data.debtUsd - 0.005) return "safe";
   const weighted = data.totalBackingUsd * data.avgCf;
   // A backing stock takes out the shares that bring r and the fee: (r + fee) at Aave's price less the swap's 1%.
-  const removed = source.kind === "backing" ? ((r + CASH.feeBufferUsd) / SLIP) * source.cf : 0;
+  const removed = source.kind === "backing" ? ((r + CASH.feeBufferUsd) / SLIP_KEEP) * source.cf : 0;
   return homeStatus(statusFor((weighted - removed) / (data.debtUsd - r)));
 }
 

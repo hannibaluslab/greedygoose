@@ -7,7 +7,7 @@ import { feeBufferRaw, maxSpendRaw, toUsd, type Cash } from "@/lib/cash";
 import { formatShares, formatUsd } from "@/lib/formatting";
 import { marketState } from "@/lib/market-hours";
 import { NO_DUST_USD, SELL_BLOCKED, planSell, type SellBlock, type SellPlan, type SellPosition } from "@/lib/sell";
-import { BUY_LIMITS, buildBuyCalls, minOut, quoteEconomics, type BuyQuote, type Call } from "@/lib/swap/buy";
+import { BUY_LIMITS, SLIP_KEEP, buildBuyCalls, minOut, quoteEconomics, type BuyQuote, type Call } from "@/lib/swap/buy";
 import { SELL_LIMITS, buildSellCalls, sellEconomics, sellMinOut, type SellQuote } from "@/lib/swap/sell";
 import { VENUE_LABEL } from "@/lib/swap/venues";
 import { rawToShares } from "@/lib/tokens/b20";
@@ -106,7 +106,7 @@ export function swapBuyInRaw(sellFloorRaw: bigint, cash: Cash): bigint {
 export function swapMinUsd(rate: number, fromSale: boolean): number {
   const need = BUY_LIMITS.minUsd + (fromSale ? CASH.feeBufferUsd : 0);
   const r = rate > 0 ? rate : 1;
-  const usd = need / (r * (1 - BUY_LIMITS.slippageBps / 10_000));
+  const usd = need / (r * SLIP_KEEP);
   return Math.max(SELL_LIMITS.minUsd, Math.ceil(usd * 100 - 1e-9) / 100);
 }
 

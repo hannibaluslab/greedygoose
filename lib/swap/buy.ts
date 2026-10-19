@@ -19,6 +19,9 @@ export const BUY_LIMITS = {
   deadlineSec: 600,
 } as const;
 
+/** What a swap's floor keeps of its quote (the 1% slippage). */
+export const SLIP_KEEP = 1 - BUY_LIMITS.slippageBps / 10_000;
+
 /**
  * `pool` is the Uniswap fee tier or the Aerodrome tick spacing. A buy spends USDC for shares; a sell
  * (lib/swap/sell.ts) spends shares for USDC, so its amountIn is shares and its amountOut USDC.
