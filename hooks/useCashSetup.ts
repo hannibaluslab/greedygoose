@@ -5,6 +5,7 @@ import { useAccount } from "wagmi";
 import { useAgentRun } from "@/hooks/useAgentRun";
 import { useAgents } from "@/hooks/useAgents";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
+import { AGENTS_LIVE } from "@/lib/agents/config";
 import { LIMIT_USD, limitRaw } from "@/lib/agents/permissions";
 
 /** Why a grant can't be signed now; null when it can. */
@@ -44,6 +45,8 @@ export function useCashSetup(account: `0x${string}`) {
     onDone: () => void,
     prior = 0,
   ): Promise<string | null> => {
+    // Never before the agents are live: the screens don't offer it, and this holds if one ever did.
+    if (!AGENTS_LIVE) return Promise.resolve("Coming soon.");
     if (capMax === null) return Promise.resolve("One moment…");
     return run.run(job, [{ grant: { job, capRaw: limitRaw(LIMIT_USD[job].start, capMax) } }], onDone, prior);
   };

@@ -31,10 +31,17 @@ export function startEarningShown(save: AgentStatus, walletRaw: bigint): boolean
 }
 
 /**
- * JAW sheets one Start earning tap opens: the batch, then, with an executor and no Save grant yet, JAW's own screen for
- * the Save grant (D14: a grant can't ride in a batch). The button's "2 steps".
+ * Whether Start earning's batch is followed by the Save grant on JAW's own screen: only once the agents are live
+ * (`live`: AGENTS_LIVE, Chainlink approved the automation; until then SPEC has "Coming soon" where Save is), with an
+ * executor and no Save grant yet. Otherwise the user would sign a grant to an executor that doesn't run.
  */
-export const startEarningSteps = (save: AgentStatus) => (save === "off" ? 2 : 1);
+export const saveGrantFollows = (save: AgentStatus, live: boolean) => live && save === "off";
+
+/**
+ * JAW sheets one Start earning tap opens: the batch, then, when the Save grant follows (saveGrantFollows), JAW's own
+ * screen for it (D14: a grant can't ride in a batch). The button's "2 steps".
+ */
+export const startEarningSteps = (save: AgentStatus, live: boolean) => (saveGrantFollows(save, live) ? 2 : 1);
 
 /**
  * The card's words (board 2g): money that just arrived, "Your $100 arrived · Start earning 4.6% on it."; with savings
@@ -90,8 +97,11 @@ export function arrivedView(list: readonly Arrived[], entry: AgentStatus): Arriv
     : { kind: "ask", text: arrivedText(coins), coins };
 }
 
-/** After a conversion, whether to ask "Do this automatically next time?": only with an executor, and no Entry grant yet. */
-export const askAutomatic = (entry: AgentStatus) => entry === "off";
+/**
+ * After a conversion, whether to ask "Do this automatically next time?" (the Entry grant): only once the agents are
+ * live (`live`: AGENTS_LIVE), with an executor, and no Entry grant yet.
+ */
+export const askAutomatic = (entry: AgentStatus, live: boolean) => live && entry === "off";
 
 /**
  * The Cash card's line: "Always earning" with the Save agent on; otherwise what's in savings does earn (Earn with

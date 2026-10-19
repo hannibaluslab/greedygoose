@@ -8,7 +8,14 @@ import { usePrepare, useTx } from "@/hooks/useTx";
 import { toUsd, type Cash } from "@/lib/cash";
 import { readCash } from "@/lib/cash/read";
 import { CHAIN_ID } from "@/lib/chain";
-import { startedEarningText, startEarningShown, startEarningSteps, startEarningText } from "@/lib/cashSetup";
+import { AGENTS_LIVE } from "@/lib/agents/config";
+import {
+  saveGrantFollows,
+  startedEarningText,
+  startEarningShown,
+  startEarningSteps,
+  startEarningText,
+} from "@/lib/cashSetup";
 import { startEarningFlow, startEarningPlan, type StartEarningStage } from "@/lib/startEarning";
 
 /** What the card said at the tap, and whether the Save grant follows: kept while JAW's sheets are open. */
@@ -64,7 +71,9 @@ export function useStartEarning(p: {
       : cash
         ? startEarningText({ walletUsd: toUsd(cash.walletRaw), savingsUsd: p.savingsUsd, rate })
         : null;
-  const steps = pinned && held ? held.steps : startEarningSteps(setup.save);
+  const steps = pinned && held ? held.steps : startEarningSteps(setup.save, AGENTS_LIVE);
+  // The Save grant follows the batch only once the agents are live (SPEC: "Coming soon" stands where Save is).
+  const grantFollows = saveGrantFollows(setup.save, AGENTS_LIVE);
   // Nothing to prepare mid-tap: the batch is on JAW's sheet or landed, or only the grant is left.
   // Its batch reads the wallet again while it's prepared (readCash), as every flow that spends cash does.
   const readWallet = async (user: `0x${string}`) => (await readCash(client!, user)).walletRaw;
@@ -102,13 +111,13 @@ export function useStartEarning(p: {
     if (!plan || !cash || !words) return;
     if (tx.phase === "failed") tx.reset();
     launched.current = false;
-    setHeld({ title: words.title, line: words.line, steps, walletRaw: cash.walletRaw, grant: setup.save === "off" });
+    setHeld({ title: words.title, line: words.line, steps, walletRaw: cash.walletRaw, grant: grantFollows });
     setStage("deposit");
     void tx.sign(plan);
   }
 
   // With a grant to follow, it needs the executor's limit read too ("One moment…"); the batch alone, only the fee.
-  const blocked = setup.save === "off" || stage === "grant-left" ? setup.earning.blocked : setup.feeBlocked;
+  const blocked = grantFollows || stage === "grant-left" ? setup.earning.blocked : setup.feeBlocked;
   const { title, line } = words ?? { title: "", line: "" };
   // The grant's own error once only it is left; none while it's on JAW's screen; else the batch's, or its preparing's.
   const error = () =>

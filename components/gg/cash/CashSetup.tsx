@@ -11,6 +11,7 @@ import { useConvert, useConvertQuotes } from "@/hooks/useConvert";
 import { NOT_FAIR, type ConvertQuote } from "@/lib/tx/plans";
 import type { GrantView, useCashSetup } from "@/hooks/useCashSetup";
 import { usePrepare, type TxPhase } from "@/hooks/useTx";
+import { AGENTS_LIVE } from "@/lib/agents/config";
 import { askAutomatic, arrivedText, type Arrived, type ArrivedView } from "@/lib/cashSetup";
 import { formatCoin, formatUsd, inWords, stepsNote } from "@/lib/formatting";
 import { USDC } from "@/lib/tokens/registry";
@@ -289,7 +290,7 @@ export function TurnIntoCash({
               text: shown.text,
               coins: shown.coins,
               sent: all.filter((q) => q.fair),
-              ask: askAutomatic(setup.entry),
+              ask: askAutomatic(setup.entry, AGENTS_LIVE),
             });
             void tx.sign(plan);
           }}

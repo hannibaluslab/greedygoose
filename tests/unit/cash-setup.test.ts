@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { AGENTS_LIVE } from "@/lib/agents/config";
 import {
   arrivedCoins,
   arrivedText,
@@ -73,8 +74,12 @@ describe("other dollars in the account", () => {
     expect(arrivedView([], "off")).toEqual({ kind: "none" });
   });
 
-  it("ask 'Do this automatically next time?' only with an executor and no Entry grant", () => {
-    expect(STATUSES.filter(askAutomatic)).toEqual(["off"]);
+  it("ask 'Do this automatically next time?' only once agents are live, with an executor and no Entry grant", () => {
+    expect(STATUSES.filter((s) => askAutomatic(s, true))).toEqual(["off"]);
+    // Until Chainlink approves the automation (NEXT_PUBLIC_AGENTS_LIVE), the Entry grant is never asked for.
+    expect(STATUSES.filter((s) => askAutomatic(s, false))).toEqual([]);
+    expect(AGENTS_LIVE).toBe(false);
+    expect(askAutomatic("off", AGENTS_LIVE)).toBe(false);
   });
 
   it("never name an agent, a limit or a savings pot", () => {
