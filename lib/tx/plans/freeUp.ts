@@ -1,6 +1,6 @@
 import { buildWithdrawCalls } from "@/lib/aave/tx";
 import { FREE_UP_FLOOR } from "@/lib/freeUpPlan";
-import { type ReserveAsset } from "@/lib/tokens/registry";
+import type { ReserveAsset } from "@/lib/tokens/registry";
 import { txKey, type TxPlan } from "../prepared";
 import type { Address } from "./types";
 

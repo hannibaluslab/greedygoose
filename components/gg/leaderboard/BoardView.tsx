@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { buttonClass } from "../Button";
 import { Initial } from "../Initial";
 import { SegmentedControl } from "../SegmentedControl";

@@ -1,10 +1,10 @@
-import { type Call } from "@/lib/aave/tx";
+import type { Call } from "@/lib/aave/tx";
 import { payFromCash } from "@/lib/cash";
 import { TRADE_COPY, buildTradeCalls, saleBlockText, swapMinUsd, tradeActivity } from "@/lib/trade";
-import { type SellPlan } from "@/lib/sell";
+import type { SellPlan } from "@/lib/sell";
 import { QUOTE_MOVED, quoteKey, type BuyQuote, type Side } from "@/lib/swap/buy";
 import { sellMinOut, type SellQuote } from "@/lib/swap/sell";
-import { type ReserveAsset } from "@/lib/tokens/registry";
+import type { ReserveAsset } from "@/lib/tokens/registry";
 import { TxStop, txKey, type TxPlan } from "../prepared";
 import type { Address, CashToSign } from "./types";
 

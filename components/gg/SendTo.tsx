@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useRef, type FormEvent, type ReactNode } from "react";
-import { type Address } from "viem";
+import type { Address } from "viem";
 import { Initial } from "./Initial";
 import { CloseIcon } from "./icons";
-import { type ToState } from "@/hooks/useSend";
+import type { ToState } from "@/hooks/useSend";
 import { shortAddress } from "@/lib/formatting";
 import { SEND_COPY, type Recipient } from "@/lib/send";
 
