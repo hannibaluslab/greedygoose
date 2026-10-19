@@ -52,6 +52,30 @@ const value = (s: RebalanceHolding) => (s.sharesRaw * s.price) / 10n ** 10n;
 const sum = (v: readonly bigint[]) => v.reduce((a, b) => a + b, 0n);
 
 /**
+ * Match the sides, within the USDC limit: the larger one shrinks, and a trade that falls under the minimum goes, until
+ * nothing more drops. Shrinks `sell` and `buy` in place; false when nothing is left to trade.
+ */
+function matchSides(sell: bigint[], buy: bigint[], usdcLeftRaw: bigint, minTradeRaw: bigint): boolean {
+  for (;;) {
+    const flow = min(sum(sell), sum(buy), usdcLeftRaw);
+    if (flow === 0n) return false;
+    let dropped = false;
+    for (const legs of [sell, buy]) {
+      const t = sum(legs);
+      if (t === flow) continue;
+      for (let i = 0; i < legs.length; i++) {
+        legs[i] = (legs[i] * flow) / t;
+        if (legs[i] > 0n && legs[i] < minTradeRaw) {
+          legs[i] = 0n;
+          dropped = true;
+        }
+      }
+    }
+    if (!dropped) return true;
+  }
+}
+
+/**
  * The trades that bring the mix back. A stock breaks its band when it sits further from its target than the smaller of
  * `bandBps` of the target and `bandMaxBps` points; it is traded back to half the band, and only it. The other side of
  * the trade goes to the stocks still in their band that are furthest from their target (to their target, no further),
@@ -112,24 +136,7 @@ export function rebalanceTrades(book: RebalanceBook, o: RebalanceOptions): Rebal
     need -= leg;
   }
 
-  // Match the sides, within the USDC limit: the larger one shrinks, and a trade that falls under the minimum goes.
-  for (;;) {
-    const flow = min(sum(sell), sum(buy), book.usdcLeftRaw);
-    if (flow === 0n) return [];
-    let dropped = false;
-    for (const legs of [sell, buy]) {
-      const t = sum(legs);
-      if (t === flow) continue;
-      for (let i = 0; i < legs.length; i++) {
-        legs[i] = (legs[i] * flow) / t;
-        if (legs[i] > 0n && legs[i] < o.minTradeRaw) {
-          legs[i] = 0n;
-          dropped = true;
-        }
-      }
-    }
-    if (!dropped) break;
-  }
+  if (!matchSides(sell, buy, book.usdcLeftRaw, o.minTradeRaw)) return [];
 
   // The sales' minimums pay for the buys, so the wallet's USDC is never lower.
   const trades: RebalanceTrade[] = [];
