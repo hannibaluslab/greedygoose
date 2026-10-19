@@ -136,6 +136,34 @@ export function repaySaleMaxRaw(
   return part(h.backingRaw, h.backingUsd > 0 ? (maxWithdrawUsd(creditInput) * LIMIT_MARGIN) / h.backingUsd : 0);
 }
 
+/** Why a sale can't go ahead, first match, in this order (planSell). */
+function sellBlock(p: {
+  from: SellFrom;
+  h: SellHolding;
+  pos: SellPosition;
+  sharesRaw: bigint;
+  takeOutRaw: bigint;
+  maxRaw: bigint;
+  repayRaw: bigint;
+  hfAfter: number | null;
+  usd: number;
+  quote: SellQuote;
+  stock: ReserveAsset;
+}): SellBlock | undefined {
+  const { from, h, pos, sharesRaw, maxRaw, repayRaw, hfAfter } = p;
+  if (from !== "free" && p.takeOutRaw > 0n && h.paused) return "paused";
+  if (from === "free" && sharesRaw > h.freeRaw) return "not-free";
+  if (from !== "free" && sharesRaw > h.backingRaw) return "not-backing";
+  if (from === "repay" && pos.debtRaw === 0n) return "nothing-owed";
+  if (from === "backing" && sharesRaw > maxRaw) return "past-line";
+  if (from === "repay" && sharesRaw > maxRaw) return "near-limit";
+  if (p.usd < SELL_LIMITS.minUsd || (from === "repay" && repayRaw === 0n)) return "too-small";
+  if (from === "repay" && hfAfter !== null && endsInAct(statusFor(hfAfter)) && hfAfter < (pos.healthFactor ?? Infinity))
+    return "act";
+  if (p.quote.amountOut < aaveFloorRaw(sharesRaw, p.stock, h.priceUsd)) return "price";
+  return undefined;
+}
+
 /**
  * Plan a sale of `quote.amountIn` shares on Leo's maths. A backing holding comes out only as far as the 1.12 line
  * allows (maxWithdrawUsd at CREDIT_CAP.minHf, Act is the line). Selling to repay takes the shares out first, so the loan must
@@ -182,22 +210,19 @@ export function planSell(p: {
     hfAfter = debtAfter > 0 ? (pos.totalBackingUsd * pos.avgCf - valueUsd * p.cf) / debtAfter : null;
   }
 
-  let block: SellBlock | undefined;
-  if (from !== "free" && takeOutRaw > 0n && h.paused) block = "paused";
-  else if (from === "free" && sharesRaw > h.freeRaw) block = "not-free";
-  else if (from !== "free" && sharesRaw > h.backingRaw) block = "not-backing";
-  else if (from === "repay" && pos.debtRaw === 0n) block = "nothing-owed";
-  else if (from === "backing" && sharesRaw > maxRaw) block = "past-line";
-  else if (from === "repay" && sharesRaw > maxRaw) block = "near-limit";
-  else if (econ.usd < SELL_LIMITS.minUsd || (from === "repay" && repayRaw === 0n)) block = "too-small";
-  else if (
-    from === "repay" &&
-    hfAfter !== null &&
-    endsInAct(statusFor(hfAfter)) &&
-    hfAfter < (pos.healthFactor ?? Infinity)
-  )
-    block = "act";
-  else if (quote.amountOut < aaveFloorRaw(sharesRaw, stock, h.priceUsd)) block = "price";
+  const block = sellBlock({
+    from,
+    h,
+    pos,
+    sharesRaw,
+    takeOutRaw,
+    maxRaw,
+    repayRaw,
+    hfAfter,
+    usd: econ.usd,
+    quote,
+    stock,
+  });
 
   return {
     from,
