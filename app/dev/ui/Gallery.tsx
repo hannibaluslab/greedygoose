@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { FeedCard, FeedDays } from "@/components/gg/Activity";
 import { AmountArrow, AmountBadge, AmountField, AmountSource, YouGet } from "@/components/gg/AmountField";
@@ -13,89 +13,32 @@ import { MarketList, MarketRow } from "@/components/gg/Market";
 import { QuickAction } from "@/components/gg/QuickAction";
 import { TabHeader } from "@/components/gg/Screen";
 import { Sparkline } from "@/components/gg/Sparkline";
-import { StatusChange, StatusPill, type StatusPillSize } from "@/components/gg/Status";
+import { StatusChange, StatusPill } from "@/components/gg/Status";
 import { StockAvatar } from "@/components/gg/StockAvatar";
 import { Summary } from "@/components/gg/Summary";
 import { Switch } from "@/components/gg/Switch";
 import { TxButton } from "@/components/gg/TxUi";
 import { ValueLine } from "@/components/gg/ValueLine";
 import { CreditIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/icons";
-import { SheetShell, SheetSteps } from "@/components/sheets/SheetShell";
 import { useNowSec } from "@/hooks/useNowSec";
 import { RebalanceDemo } from "./RebalanceDemo";
-import type { ActivityRow } from "@/hooks/useActivity";
-import { homeStatus, type Status } from "@/lib/risk/status";
+import { homeStatus } from "@/lib/risk/status";
 import { boughtLine } from "@/lib/activity/bought";
 import { formatUsd, formatUsdTrim } from "@/lib/formatting";
-
-// Sample figures for the gallery only, the boards' own (HomeUpliftRail, PortfolioPage, F1-4, F2-5, F2-6, F2-7).
-// Nothing here reads the chain.
-const CASH = 400;
-const CASH_APY = 0.042;
-// The boards' own lines, read off their SVG paths (height minus y): Home's return, Invest's value,
-// then per stock the rail card's 11 points and the list row's 7.
-const LINE_HOME = [12.1, 16.4, 10, 22.8, 18.5, 29.1, 24.9, 37.6, 33.4, 46.1, 44, 54.6, 61];
-const LINE_INVEST = [7, 6, 10, 8, 13, 11, 16, 14, 19, 18, 23, 25, 28];
-const HOLDINGS = [
-  {
-    symbol: "NVDA",
-    name: "NVIDIA",
-    valueUsd: 2000,
-    shares: 11.2,
-    backs: 0.33,
-    today: 0.0142,
-    card: [5, 4, 8, 7, 11, 9, 13, 12, 15, 14, 18],
-    row: [2, 7, 4.5, 12, 11, 17, 22],
-  },
-  {
-    symbol: "AAPL",
-    name: "Apple",
-    valueUsd: 1200,
-    shares: 5.4,
-    backs: 0,
-    today: -0.0058,
-    card: [15, 16, 13, 14, 11, 13, 10, 11, 8, 9, 7],
-    row: [22, 17, 20, 11, 13, 6, 2],
-  },
-  {
-    symbol: "TSLA",
-    name: "Tesla",
-    valueUsd: 1400,
-    shares: 3.7,
-    backs: 0.33,
-    today: 0.021,
-    card: [3, 6, 4, 9, 7, 12, 10, 15, 13, 17, 19],
-    row: [2, 6.4, 4.7, 13.1, 10.9, 18.9, 22],
-  },
-];
-const NVDA = { symbol: "NVDA", name: "NVIDIA", price: 178.57 };
-// F1-3's rows with a price: Apple and NVIDIA owned, Tesla not.
-const MARKET = [
-  { symbol: "AAPL", name: "Apple", price: 222.22, owned: 1200 },
-  { symbol: "NVDA", name: "NVIDIA", price: 178.57, owned: 2000 },
-  { symbol: "TSLA", name: "Tesla", price: 378.38, owned: 0 },
-];
-const HOUR = 3_600_000;
-/** Activity rows the way useActivity hands them over, timed from now so they group under Today and a weekday. */
-const MOVES = (now: number): ActivityRow[] => [
-  { key: "repay", time: now - HOUR, status: "done", items: [{ kind: "repay", symbol: "USDC", amount: 180 }] },
-  {
-    key: "convert",
-    time: now - 2 * HOUR,
-    status: "pending",
-    items: [{ kind: "convert", symbol: "USDT", amount: 120, receivedUsd: 119.83 }],
-  },
-  {
-    key: "buy",
-    time: now - 50 * HOUR,
-    status: "done",
-    items: [{ kind: "buy", symbol: "NVDAc", amount: 0.112, paidUsd: 20 }],
-  },
-];
-const PILL_SIZES: StatusPillSize[] = ["sm", "row", "header", "md", "lg"];
-const STATUSES: Status[] = ["safe", "watch", "act", "none"];
-
-const noop = () => {};
+import {
+  BuyDemoSheet,
+  CASH,
+  CASH_APY,
+  HOLDINGS,
+  LINE_HOME,
+  LINE_INVEST,
+  MARKET,
+  MOVES,
+  PILL_SIZES,
+  STATUSES,
+  Section,
+  noop,
+} from "./GallerySections";
 
 export function Gallery() {
   const [amount, setAmount] = useState("20");
@@ -442,53 +385,5 @@ export function Gallery() {
 
       <BuyDemoSheet open={open} onOpenChange={setOpen} />
     </div>
-  );
-}
-
-function Section({ title, kit, children }: { title: string; kit: string; children: ReactNode }) {
-  return (
-    <section className="flex flex-col gap-2">
-      <h2 className="label m-0 px-1">{title}</h2>
-      <div data-kit={kit} className="flex flex-col">
-        {children}
-      </div>
-    </section>
-  );
-}
-
-/** F1-4 in a drawer: the amount, what arrives and the fee, then Buy (JAW's own sheet in the app), which closes and toasts. */
-function BuyDemoSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const [amount, setAmount] = useState("20");
-  const usd = Number(amount) || 0;
-  const shares = (usd / NVDA.price).toFixed(4);
-
-  const finish = () => {
-    onOpenChange(false);
-    toast.success(`Bought ${shares} ${NVDA.symbol}`);
-  };
-
-  return (
-    <SheetShell open={open} onOpenChange={onOpenChange} title={`Buy ${NVDA.name}`} onBack={() => onOpenChange(false)}>
-      <SheetSteps stepKey="amount">
-        <div className="flex flex-col gap-3">
-          <AmountField
-            label="You pay"
-            source={<AmountSource>Cash</AmountSource>}
-            badge={<AmountBadge kind="cash" />}
-            value={amount}
-            onValue={setAmount}
-            onMax={() => setAmount(CASH.toFixed(2))}
-            hint={`Cash available: ${formatUsd(CASH)}`}
-          />
-          <Summary rows={[{ label: "Arrives", value: "In seconds" }]} />
-          {usd > CASH && (
-            <Button variant="dark" disabled className="mt-1">
-              That’s more than your cash ({formatUsd(CASH)})
-            </Button>
-          )}
-          <TxButton label="Buy" phase="idle" size="md" disabled={usd <= 0 || usd > CASH} onClick={finish} />
-        </div>
-      </SheetSteps>
-    </SheetShell>
   );
 }
