@@ -4,6 +4,7 @@ pragma solidity 0.8.28;
 import {GooseExecutor} from "../GooseExecutor.sol";
 import {IJustaPermissionManager as PM} from "../IJustaPermissionManager.sol";
 import {IAeroFactory, IAeroPool, IAeroRouter, IJustanAccount} from "../IProtocols.sol";
+import {CashRules} from "../CashRules.sol";
 
 /// @title JobBase
 /// @notice What the executor and every job share: a permission's status, what is left of its limits, the stock
@@ -45,6 +46,18 @@ library JobBase {
     function health(GooseExecutor.Env memory e, address account) internal view returns (uint256) {
         if (e.spoke.getUserTotalDebt(e.usdcReserveId, account) == 0) return type(uint256).max;
         return e.spoke.getUserAccountData(account).healthFactor;
+    }
+
+    /// A Protect move's effect on the rescue (`Account.rescueAt`): kept, or started now, while the move left the credit
+    /// owing short of the target; ended once it reached the target or nothing is owed.
+    function rescueAfter(uint48 rescueAt, bool owes, uint256 hf, uint256 targetHf) internal view returns (uint48) {
+        if (!owes || rescueDone(hf, targetHf)) return 0;
+        return rescueAt != 0 ? rescueAt : uint48(block.timestamp);
+    }
+
+    /// Back at the target, give or take Aave's rounding (CashRules.RESCUE_DONE_GAP).
+    function rescueDone(uint256 hf, uint256 targetHf) internal pure returns (bool) {
+        return hf + CashRules.RESCUE_DONE_GAP >= targetHf;
     }
 
     /// What's left of the current period's limit on spend `i`.

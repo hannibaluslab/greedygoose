@@ -42,6 +42,21 @@ Act is the line (JUSTALAB-DECISIONS.md, "Act is the line (Adrian, 2026-10-15)"):
 
 When it is redeployed: point `NEXT_PUBLIC_GOOSE_EXECUTOR` and `NEXT_PUBLIC_GOOSE_EXECUTOR_BLOCK` at the new address in the developer's `.env.local`, register the two upkeeps again, and record the deploy here. Grants made to this deploy name it as spender and don't carry over: each test account switches its agents on again.
 
+### The next deploy carries Protect's line and the runner switch (2026-10-19)
+
+Supersedes the Act-only table above for the next deploy (JUSTALAB-DECISIONS.md, "2026-10-19 · Protect's line and the runner switch"; GooseExecutor-as-built.md, the same section). Built on branch `jl/runner-switch`; nothing has been deployed for it.
+
+| Number | Act-only plan (2026-10-15) | Next deploy (`script/DeployExecutor.s.sol`, `config/risk.ts`) |
+|---|---|---|
+| Protect: line → target | 1.10 → 1.20 | 1.03 → 1.12, savings first, then selling; the rescue goes on until 1.12 |
+| Protect · sell | heads-up 1.10, 30 min, at once 1.05; floors 1% / 3% | at once below 1.03 or during a rescue; one floor, 3% |
+| Amount limit | the user's daily limit, at most CAP_MAX | none: CAP_MAX = the largest uint160 with `EXECUTOR_CAPS=none` ($5 on a D13 test deploy); a move may not leave the health above target + 0.01 |
+| Weekend card floor | 1.10 | 1.0 (Aave's line) |
+| Runners | two Automation upkeeps | `GooseReceiver` (CRE, `script/DeployReceiver.s.sol`) and KeeperHub's wallet, both in the one `bootstrap` |
+| Registration | Automation's log trigger | `registerApproved` from the PermissionApproved data, after `registrationOf` |
+
+After the deploy, the same day: deploy the receiver, `bootstrap([receiver, KeeperHub wallet])`, queue the NYSE holidays (each waits 7 days), cancel the two pending Automation requests above (Adrian signs; 0.0008 WETH back), and record it all here.
+
 ## GooseBoard — not deployed yet
 
 The leaderboard's member list (`src/GooseBoard.sol`, JUSTALAB-DECISIONS.md "The Leaderboard"). It holds nothing, calls nothing and has no owner: an account only puts itself on (`join()`) or takes itself off (`leave()`, not in the app). The deployer key pays the gas and gets no power over it. Adrian approves and signs the mainnet deploy; nobody else deploys it to Base.

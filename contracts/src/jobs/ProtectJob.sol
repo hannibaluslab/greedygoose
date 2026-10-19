@@ -8,9 +8,10 @@ import {CashRules, ProtectCase, Thresholds} from "../CashRules.sol";
 import {JobBase} from "./JobBase.sol";
 
 /// @title ProtectJob
-/// @notice Protect from savings (GooseExecutor.md §5.2): credit that slips below the trigger, the Act line, is repaid
-///         from the account's Aave V3 savings back to the target, in Watch. Nothing in Safe or Watch, and no weekend
-///         move (Act is the line, 2026-10-15).
+/// @notice Protect from savings (GooseExecutor.md §5.2): credit that slips below Protect's line (1.03) is repaid from
+///         the account's Aave V3 savings back to the target (1.12, in Watch). When savings can't get it there, the
+///         rescue goes on (`Account.rescueAt`): Protect · sell takes over, and savings that arrive meanwhile repay first,
+///         until the credit is back at the target (Adrian, 2026-10-19).
 /// @dev A linked library: its code runs as GooseExecutor, the spender, exactly as if it were inlined there.
 library ProtectJob {
     /// The template the user approved: withdraw savings, approve USDC, repay. Both daily limits use the one cap:
@@ -40,42 +41,53 @@ library ProtectJob {
         if (!CashRules.thresholdsOk(t)) revert GooseExecutor.OutOfBounds();
     }
 
-    /// What a run would do now: repay, prune a dead permission, or nothing.
+    /// What a run would do now: repay, end a finished rescue, prune a dead permission, or nothing.
     function plan(
         GooseExecutor.Env memory e,
         GooseExecutor.Ctx memory c,
-        GooseExecutor.Account storage,
+        GooseExecutor.Account storage acc,
         mapping(uint256 => GooseExecutor.PoolUse) storage
     ) public view returns (GooseExecutor.Plan memory) {
-        return _plan(e, c, permission(e, c.account, c.grant, c.salt, 0));
+        return _plan(e, c, acc.rescueAt != 0, permission(e, c.account, c.grant, c.salt, 0));
     }
 
-    /// Plans, and repays when there is something to repay.
+    /// Plans, and repays when there is something to repay. A repay that leaves the credit under the target starts (or
+    /// keeps) the rescue; one that reaches it ends the rescue.
     function run(
         GooseExecutor.Env memory e,
         GooseExecutor.Ctx memory c,
-        GooseExecutor.Account storage,
+        GooseExecutor.Account storage acc,
         mapping(uint256 => GooseExecutor.PoolUse) storage
     ) external returns (GooseExecutor.Plan memory p) {
         PM.Permission memory perm = permission(e, c.account, c.grant, c.salt, 0);
-        p = _plan(e, c, perm);
-        if (p.action == GooseExecutor.Action.Repay) _repay(e, c.account, perm, p);
+        p = _plan(e, c, acc.rescueAt != 0, perm);
+        if (p.action != GooseExecutor.Action.Repay) return p;
+        (uint256 hfAfter, bool owes) = _repay(e, c.account, perm, p, c.thresholds.targetHf);
+        acc.rescueAt = JobBase.rescueAfter(acc.rescueAt, owes, hfAfter, c.thresholds.targetHf);
     }
 
     /// A port of planGuardian (lib/guardian/plan.ts). Cheap reads first: most accounts owe nothing or are
     /// healthy, and the permission's status is only paid for when there is a move to make.
-    function _plan(GooseExecutor.Env memory e, GooseExecutor.Ctx memory c, PM.Permission memory perm)
+    function _plan(GooseExecutor.Env memory e, GooseExecutor.Ctx memory c, bool rescuing, PM.Permission memory perm)
         internal
         view
         returns (GooseExecutor.Plan memory p)
     {
         p.job = GooseExecutor.Job.Protect;
         p.hf = type(uint256).max; // the health is passed on to the next job, so it needn't read it again
-        if (e.spoke.getUserTotalDebt(e.usdcReserveId, c.account) == 0) return p;
+        if (e.spoke.getUserTotalDebt(e.usdcReserveId, c.account) == 0) {
+            if (rescuing) p.action = GooseExecutor.Action.EndRescue;
+            return p;
+        }
         ISpoke.UserAccountData memory d = e.spoke.getUserAccountData(c.account);
         p.hf = d.healthFactor;
-        (ProtectCase why, uint256 need, uint256 debt) =
-            CashRules.protectNeed(d.totalCollateralValue, d.avgCollateralFactor, d.totalDebtValueRay, c.thresholds);
+        if (rescuing && JobBase.rescueDone(p.hf, c.thresholds.targetHf)) {
+            p.action = GooseExecutor.Action.EndRescue;
+            return p;
+        }
+        (ProtectCase why, uint256 need, uint256 debt) = CashRules.protectNeed(
+            d.totalCollateralValue, d.avgCollateralFactor, d.totalDebtValueRay, c.thresholds, rescuing
+        );
         if (why < ProtectCase.Act) return p;
         uint256 savings = e.aUsdc.balanceOf(c.account);
         if (savings == 0) return p; // NoSavings, before paying for the two limit reads
@@ -102,10 +114,15 @@ library ProtectJob {
         return usdcLeft < savingsLeft ? usdcLeft : savingsLeft;
     }
 
-    /// Savings → loan: withdraw to the account, approve the spoke, repay the account's own loan.
-    function _repay(GooseExecutor.Env memory e, address account, PM.Permission memory perm, GooseExecutor.Plan memory p)
-        internal
-    {
+    /// Savings → loan: withdraw to the account, approve the spoke, repay the account's own loan. Returns the health
+    /// after, and whether anything is still owed.
+    function _repay(
+        GooseExecutor.Env memory e,
+        address account,
+        PM.Permission memory perm,
+        GooseExecutor.Plan memory p,
+        uint256 targetHf
+    ) internal returns (uint256 hfAfter, bool owes) {
         uint256 debtBefore = e.spoke.getUserTotalDebt(e.usdcReserveId, account);
         uint256 savingsBefore = e.aUsdc.balanceOf(account);
         uint256 cashBefore = e.usdc.balanceOf(account);
@@ -118,9 +135,13 @@ library ProtectJob {
         calls[2] = PM.Call(address(e.spoke), 0, abi.encodeCall(ISpoke.repay, (e.usdcReserveId, p.amount, account)));
         e.manager.executeBatch{gas: JobBase.ACCOUNT_GAS}(perm, calls);
 
-        if (e.spoke.getUserTotalDebt(e.usdcReserveId, account) >= debtBefore) revert GooseExecutor.DebtNotLower();
-        uint256 hfAfter = e.spoke.getUserAccountData(account).healthFactor;
+        uint256 debtAfter = e.spoke.getUserTotalDebt(e.usdcReserveId, account);
+        if (debtAfter >= debtBefore) revert GooseExecutor.DebtNotLower();
+        owes = debtAfter != 0;
+        hfAfter = e.spoke.getUserAccountData(account).healthFactor;
         if (hfAfter < p.hf) revert GooseExecutor.HealthLower();
+        // Never more than the rescue needs: back to the target, give or take rounding.
+        if (owes && hfAfter > targetHf + CashRules.OVERSHOOT_HF) revert GooseExecutor.Overshoot();
         if (e.aUsdc.balanceOf(account) + p.amount + JobBase.SAVINGS_ROUNDING < savingsBefore) {
             revert GooseExecutor.SavingsMoved();
         }

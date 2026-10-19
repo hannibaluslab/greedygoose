@@ -2,7 +2,6 @@
 pragma solidity 0.8.28;
 
 import {AutomationCompatibleInterface} from "chainlink/automation/interfaces/AutomationCompatibleInterface.sol";
-import {ILogAutomation, Log} from "chainlink/automation/interfaces/ILogAutomation.sol";
 import {IJustaPermissionManager as PM} from "./IJustaPermissionManager.sol";
 import {IAaveOracle, IAaveV3Pool, IERC20, ISpoke} from "./IProtocols.sol";
 import {Amounts, ProtectCase, Thresholds} from "./CashRules.sol";
@@ -21,14 +20,16 @@ import {SellJob} from "./jobs/SellJob.sol";
 /// @notice The GreedyGoose agent contract (contracts/docs/GooseExecutor.md). It is the spender of every agent
 ///         permission an account grants through JAW's own screen (D14), keeps the on-chain list of which accounts have
 ///         which agent on, runs each agent's rule, builds every call itself, sends it through JAW's permission
-///         manager and checks the result. Chainlink Automation calls it; there is no server (D12).
+///         manager and checks the result. Its runners call it: a Chainlink CRE workflow through GooseReceiver, and
+///         KeeperHub's wallet as backup; there is no server of ours (D12).
 ///
 ///         It runs the Cash Agent: Save (wallet USDC above the keep-back goes to Aave V3 savings), Protect from
-///         savings (credit that slips into Act is repaid from savings back to Watch), and Protect · sell (when savings
-///         can't bring the credit out of Act, some of the stock that backs it is sold to repay, after a heads-up).
-///         Protect never moves in Safe or Watch (Act is the line, 2026-10-15). It also runs the Rebalancer (once a market day, the mix of free
-///         stock is brought back when a stock breaks its band) and the Entry agent (a whitelisted stablecoin in the
-///         wallet becomes USDC at 99.5% of face value or better).
+///         savings (credit that slips below Protect's line, 1.03, is repaid from savings back to the target, 1.12), and
+///         Protect · sell (when savings can't get it there, some of the stock that backs it is sold to repay, at once).
+///         Once Protect steps in, the rescue goes on until the credit is back at the target (Adrian, 2026-10-19). It
+///         also runs the Rebalancer (once a market day, the mix of free stock is brought back when a stock breaks its
+///         band) and the Entry agent (a whitelisted stablecoin in the wallet becomes USDC at 99.5% of face value or
+///         better).
 ///
 ///         JAW's screen grants with every checker set to 0, so the manager only enforces targets, selectors, the
 ///         spender and the daily limits. Every argument is pinned here: each call is built for the account alone, and
@@ -40,7 +41,7 @@ import {SellJob} from "./jobs/SellJob.sol";
 ///         fit under the 24 KB limit (GooseExecutor-as-built.md, "Job modules").
 /// @dev Immutable logic. A new rule is a new contract, so a new spender and a new grant for every user. The job
 ///      libraries' addresses are linked into this bytecode at deploy and their code can't change.
-contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
+contract GooseExecutor is AutomationCompatibleInterface {
     /// A job's bit in `Account.jobs` is `1 << uint8(job)`.
     enum Job {
         Save,
@@ -50,20 +51,13 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         Entry
     }
 
-    /// What a `performUpkeep` call carries: a run over listed accounts, or a registration found by `checkLog`.
-    enum Mode {
-        Run,
-        Register
-    }
-
     enum Action {
         None,
         Prune,
         Repay,
         Save,
         Sell,
-        HeadsUp,
-        ClearHeadsUp,
+        EndRescue, // a rescue that reached the target, or nothing owed: no money moves
         Defer, // a batch that doesn't fit in the gas left waits for the next run
         Rebalance,
         Convert
@@ -92,7 +86,7 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     struct Grant {
         uint48 start;
         uint48 end;
-        uint160 cap; // daily limit in USDC units
+        uint160 cap; // daily limit in USDC units; Protect's is the largest there is (no amount limit)
     }
 
     /// One slot.
@@ -103,10 +97,11 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         uint48 cooldownUntil;
         uint32 savesDay; // New York day of the last Save
         uint8 savesToday;
-        uint48 headsUpAt; // Protect · sell: when the pending heads-up went out; 0 = none. A sale cut short sets it
-        // a full delay back, so the rest goes on without a new wait
+        uint48 rescueAt; // Protect: when the rescue under way started; 0 = none. While it lasts, Protect acts below
+        // the target, not only below its line, until the credit is back at the target
         bool keepMix; // Protect · sell: the same share of each holding, instead of the most safety per dollar first
         uint32 rebalanceDay; // the Rebalancer: the New York day of its last batch, once a market day
+        uint32 protectIndex; // 1 + position in `protectMembers`; 0 = never had Protect on
     }
 
     /// What all accounts sold into one stock's pool in the current window (SellJob.POOL_WINDOW). One slot.
@@ -119,11 +114,10 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     struct Plan {
         Action action;
         Job job;
-        uint256 amount; // USDC units (Repay, Save; Sell and HeadsUp: what the sale repays; Rebalance: what the buys
-        // spend; Convert: the least USDC the swap brings in)
+        uint256 amount; // USDC units (Repay, Save; Sell: what the sale repays; Rebalance: what the buys spend;
+        // Convert: the least USDC the swap brings in)
         uint256 hf; // health factor before the move, WAD, or as the job read it (max: nothing owed)
-        uint8 reason; // Repay: a ProtectCase, Act. Sell, HeadsUp: 1 when the sale is at once (deep in Act).
-        // Convert: the coin's index in EntryJob
+        uint8 reason; // Repay: a ProtectCase, Act. Convert: the coin's index in EntryJob
         OffReason off; // Prune
     }
 
@@ -219,7 +213,7 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     IERC20 public immutable USDC;
     IERC20 public immutable AUSDC;
     uint256 public immutable USDC_RESERVE_ID;
-    /// Most a daily limit may be. $5 on test deploys (D13).
+    /// Most a daily limit may be: $5 on test deploys (D13), the largest uint160 in production (no amount limit).
     uint160 public immutable CAP_MAX;
     /// Accounts per check page, set from a fork measurement of the worst case.
     uint32 public immutable PAGE_SIZE;
@@ -251,6 +245,9 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     mapping(address account => uint256) public entryWaits;
     /// Append-only. Page p is members[p * PAGE_SIZE, (p + 1) * PAGE_SIZE).
     address[] public members;
+    /// Append-only, paged the same way: the accounts that ever had Protect or Protect · sell on. A price update scans
+    /// only these (`checkProtect`), since only they can need a rescue.
+    address[] public protectMembers;
     /// Code an account must run to register: JAW's account proxy, or its EIP-7702 delegation.
     mapping(bytes32 codehash => bool) public allowedCodehash;
 
@@ -279,15 +276,8 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     event JobOff(address indexed account, Job indexed job, OffReason reason);
     event Saved(address indexed account, uint256 amount);
     event ProtectRepaid(address indexed account, uint256 amount, uint256 hfBefore, uint256 hfAfter, ProtectCase reason);
-    /// A sale comes `sellAfter` unless the health is back above the heads-up line by then: the app's "Add $X, or
-    /// Protect sells $Y". `sellValue` is the stock it would sell now, in USDC at Aave's price. When the wait ends while
-    /// prices are held, `sellAfter` is when they reopen.
-    event SellHeadsUp(address indexed account, uint256 hf, uint256 sellValue, uint48 sellAfter);
-    event SellHeadsUpCleared(address indexed account, uint256 hf);
-    /// `shares` by reserve id; `repaid` in USDC units; `atOnce` when it sold without a heads-up, below the Act line.
-    event ProtectSold(
-        address indexed account, uint256[7] shares, uint256 repaid, uint256 hfBefore, uint256 hfAfter, bool atOnce
-    );
+    /// `shares` by reserve id; `repaid` in USDC units.
+    event ProtectSold(address indexed account, uint256[7] shares, uint256 repaid, uint256 hfBefore, uint256 hfAfter);
     event KeepMixSet(address indexed account, bool on);
     event MixSet(address indexed account, uint16[7] weights);
     /// Shares by reserve id: what the sales sold and the buys bought.
@@ -328,6 +318,7 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     error DebtNotLower();
     error HealthLower();
     error HealthNotHigher();
+    error Overshoot();
     error StockMoved();
     error BackingMoved();
     error SavingsMoved();
@@ -411,6 +402,15 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         _register(job, account, start, end, salt, cap, t);
     }
 
+    /// Switches a job on from the permission exactly as JAW's manager approved it: a runner watching the manager's
+    /// PermissionApproved passes the event's data. Anyone may call it: it moves no money, and `_register` checks
+    /// everything again on-chain.
+    function registerApproved(PM.Permission calldata permission) external nonReentrant {
+        (bool ok, Job job, uint160 cap, uint256 t) = _match(permission);
+        if (!ok) revert NotApproved();
+        _register(job, permission.account, permission.start, permission.end, permission.salt, cap, t);
+    }
+
     /// "Keep my mix" for Protect · sell: sell the same share of each holding instead of the most safety per dollar
     /// first. Only the account itself sets it, in one Face ID.
     function setKeepMix(bool on) external nonReentrant {
@@ -437,67 +437,51 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         _jobOff(account, job, off);
     }
 
-    /// Log trigger on the manager's PermissionApproved. The spender is only in the log's data, so every JAW grant on
-    /// the chain is checked here, off-chain, and only an exact GooseExecutor template becomes work. `performUpkeep`
-    /// then registers it through `_register`, which checks everything again on-chain.
-    function checkLog(Log calldata log, bytes memory)
-        external
-        view
-        override
-        returns (bool upkeepNeeded, bytes memory performData)
-    {
-        if (log.source != address(MANAGER) || log.topics.length != 2 || log.topics[0] != PM.PermissionApproved.selector)
-        {
-            return (false, "");
-        }
-        PM.Permission memory p = abi.decode(log.data, (PM.Permission));
-        if (p.spender != address(this) || p.spends.length == 0) return (false, "");
-        uint160 cap = p.spends[0].allowance;
-        if (cap == 0 || cap > CAP_MAX || p.start >= p.end || block.timestamp > p.end) return (false, "");
-        bytes32 signed = keccak256(abi.encode(p));
-        for (uint8 j; j < JOBS; ++j) {
-            Job job = Job(j);
-            uint256 t;
-            if (job == Job.ProtectSell || job == Job.Rebalance) {
-                t = job == Job.ProtectSell ? SellJob.termsFrom(_env(), p) : RebalanceJob.termsFrom(_env(), p);
-                if (!_termsOk(job, t)) continue;
-            }
-            if (keccak256(abi.encode(_permission(job, p.account, Grant(p.start, p.end, cap), p.salt, t))) != signed) {
-                continue;
-            }
-            if (!_isNewer(job, p.account, p.start, p.salt)) return (false, "");
-            return (true, abi.encode(Mode.Register, abi.encode(job, p.account, p.start, p.end, p.salt, cap, t)));
-        }
-    }
-
     // ================================================================== running
 
-    /// Finds accounts with work in one page of `members`. `checkData` = abi.encode(uint256 shard, uint256 shards): this
-    /// upkeep owns the pages p with p % shards == shard and scans one of them per block, in turn, so one upkeep
-    /// serves every page as the list grows. More shards (new upkeeps, each with a forwarder behind the delay) only
-    /// if one can't keep up. Each pass over a page starts one account further on, so a page that runs out of gas or
-    /// fills MAX_WORK early still gets looked at in full over the next passes. Sales are listed first, lowest health
-    /// first, so they have the gas and the pools' room before anything else.
+    /// Finds accounts with work in one page of `members`: the safety-net round over every job. `checkData` =
+    /// abi.encode(uint256 shard, uint256 shards): this caller owns the pages p with p % shards == shard and scans one
+    /// of them per block, in turn, so one caller serves every page as the list grows. A runner that wants every page
+    /// at once passes shards ≥ the page count, one call per page. Each pass over a page starts one account further on,
+    /// so a page that runs out of gas or fills MAX_WORK early still gets looked at in full over the next passes. Sales
+    /// are listed first, lowest health first, so they have the gas and the pools' room before anything else.
     function checkUpkeep(bytes calldata checkData)
         external
         view
         override
         returns (bool upkeepNeeded, bytes memory performData)
     {
-        if (paused) return (false, "");
         (uint256 shard, uint256 shards) = abi.decode(checkData, (uint256, uint256));
-        uint256 pages = (members.length + PAGE_SIZE - 1) / PAGE_SIZE;
+        return _check(members, shard, shards);
+    }
+
+    /// The same as `checkUpkeep`, over `protectMembers` only: what a runner scans on each stock price update.
+    function checkProtect(uint256 shard, uint256 shards)
+        external
+        view
+        returns (bool upkeepNeeded, bytes memory performData)
+    {
+        return _check(protectMembers, shard, shards);
+    }
+
+    function _check(address[] storage list, uint256 shard, uint256 shards)
+        internal
+        view
+        returns (bool, bytes memory)
+    {
+        if (paused) return (false, "");
+        uint256 pages = (list.length + PAGE_SIZE - 1) / PAGE_SIZE;
         if (shard >= shards || shard >= pages) return (false, "");
         uint256 owned = (pages - shard - 1) / shards + 1;
         uint256 from = (shard + shards * (block.number % owned)) * PAGE_SIZE;
-        uint256 size = members.length - from < PAGE_SIZE ? members.length - from : PAGE_SIZE;
+        uint256 size = list.length - from < PAGE_SIZE ? list.length - from : PAGE_SIZE;
         uint256 first = block.number / owned % size;
 
         address[] memory work = new address[](MAX_WORK);
         uint256[] memory order = new uint256[](MAX_WORK);
         uint256 n;
         for (uint256 i; i < size && n < MAX_WORK && gasleft() >= CHECK_RESERVE; ++i) {
-            address account = members[from + (first + i) % size];
+            address account = list[from + (first + i) % size];
             if (!_due(accounts[account])) continue;
             // Any revert (an Aave or oracle read) skips this account only.
             try this.planOf(account) returns (Plan memory p) {
@@ -514,25 +498,15 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         assembly ("memory-safe") {
             mstore(work, n)
         }
-        return (true, abi.encode(Mode.Run, abi.encode(work)));
+        return (true, abi.encode(work));
     }
 
-    /// Only the forwarders. `performData` is never trusted: a registration is checked again in full, and for a run
-    /// only the account addresses are taken from it; every amount is re-read and re-planned.
-    function performUpkeep(bytes calldata performData)
-        external
-        override(AutomationCompatibleInterface, ILogAutomation)
-        nonReentrant
-    {
+    /// Only the runners (`isForwarder`). `performData` is never trusted: only the account addresses are taken from
+    /// it, and every amount is re-read and re-planned.
+    function performUpkeep(bytes calldata performData) external override nonReentrant {
         if (!isForwarder[msg.sender]) revert NotForwarder();
-        (Mode mode, bytes memory data) = abi.decode(performData, (Mode, bytes));
-        if (mode == Mode.Register) {
-            (Job job, address account, uint48 start, uint48 end, uint256 salt, uint160 cap, uint256 t) =
-                abi.decode(data, (Job, address, uint48, uint48, uint256, uint160, uint256));
-            return _register(job, account, start, end, salt, cap, t); // works while paused: it moves no money
-        }
         if (paused) revert RunsPaused();
-        address[] memory list = abi.decode(data, (address[]));
+        address[] memory list = abi.decode(performData, (address[]));
         if (list.length > MAX_WORK) revert TooMuchWork();
         bool frozen_ = NyCalendar.frozen(holiday, block.timestamp);
         for (uint256 i; i < list.length; ++i) {
@@ -579,6 +553,10 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
                 _jobOff(account, job, p.off);
                 continue;
             }
+            if (p.action == Action.EndRescue) {
+                accounts[account].rescueAt = 0; // bookkeeping only: the run goes on to the next job
+                continue;
+            }
             if (p.action == Action.Defer) return true;
             _checkOwnBalances(mine);
             return false;
@@ -616,6 +594,16 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         return _permission(job, account, grants[account][job], salts[account][job], terms[account][job]);
     }
 
+    /// Which job a permission the manager approved would switch on, with its cap and terms: what `registerApproved`
+    /// accepts. A runner reads it first, so another app's JAW grant costs it no write.
+    function registrationOf(PM.Permission calldata permission)
+        external
+        view
+        returns (bool ok, Job job, uint160 cap, uint256 t)
+    {
+        return _match(permission);
+    }
+
     /// The seven stocks, by reserve id.
     function stocks() public view returns (address[7] memory) {
         return [STOCK0, STOCK1, STOCK2, STOCK3, STOCK4, STOCK5, STOCK6];
@@ -623,6 +611,10 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
 
     function memberCount() external view returns (uint256) {
         return members.length;
+    }
+
+    function protectMemberCount() external view returns (uint256) {
+        return protectMembers.length;
     }
 
     /// Whether the stock prices are held at `ts`.
@@ -760,6 +752,10 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
             members.push(account);
             a.index = uint32(members.length);
         }
+        if (a.protectIndex == 0 && (job == Job.Protect || job == Job.ProtectSell)) {
+            protectMembers.push(account);
+            a.protectIndex = uint32(protectMembers.length);
+        }
         emit JobOn(account, job, MANAGER.getHash(p), cap, end);
     }
 
@@ -770,8 +766,34 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
         return salts[account][job] != salt && start >= grants[account][job].start;
     }
 
+    /// Which job, cap and terms a permission approved by the manager is a grant of: the template it matches exactly,
+    /// with GooseExecutor as spender, a cap within CAP_MAX and a window not yet over. `ok` is false for anything else
+    /// (every other app's JAW grants included).
+    function _match(PM.Permission memory p) internal view returns (bool ok, Job job, uint160 cap, uint256 t) {
+        if (p.spender != address(this) || p.spends.length == 0) return (false, job, 0, 0);
+        cap = p.spends[0].allowance;
+        if (cap == 0 || cap > CAP_MAX || p.start >= p.end || block.timestamp > p.end) return (false, job, 0, 0);
+        bytes32 signed = keccak256(abi.encode(p));
+        for (uint8 j; j < JOBS; ++j) {
+            job = Job(j);
+            t = 0;
+            if (job == Job.ProtectSell || job == Job.Rebalance) {
+                t = job == Job.ProtectSell ? SellJob.termsFrom(_env(), p) : RebalanceJob.termsFrom(_env(), p);
+                if (!_termsOk(job, t)) continue;
+            }
+            if (keccak256(abi.encode(_permission(job, p.account, Grant(p.start, p.end, cap), p.salt, t))) == signed) {
+                return (true, job, cap, t);
+            }
+        }
+        return (false, job, 0, 0);
+    }
+
+    /// With neither Protect job left on, a rescue under way ends too: switched back on later, Protect starts from its
+    /// line again, not from the target.
     function _jobOff(address account, Job job, OffReason reason) internal {
-        accounts[account].jobs &= ~_bit(job);
+        Account storage a = accounts[account];
+        a.jobs &= ~_bit(job);
+        if (a.jobs & (_bit(Job.Protect) | _bit(Job.ProtectSell)) == 0) a.rescueAt = 0;
         emit JobOff(account, job, reason);
     }
 
@@ -820,7 +842,7 @@ contract GooseExecutor is AutomationCompatibleInterface, ILogAutomation {
     function _runJob(Job job, Ctx memory c) internal returns (Plan memory) {
         if (job == Job.Save) return SaveJob.run(_env(), c, accounts[c.account], pools);
         if (job == Job.Protect) return ProtectJob.run(_env(), c, accounts[c.account], pools);
-        if (job == Job.ProtectSell) return SellJob.run(_env(), c, accounts[c.account], pools, holiday);
+        if (job == Job.ProtectSell) return SellJob.run(_env(), c, accounts[c.account], pools);
         if (job == Job.Rebalance) return RebalanceJob.run(_env(), c, accounts[c.account], mixes);
         return EntryJob.run(_env(), c, accounts[c.account], entryWaits);
     }

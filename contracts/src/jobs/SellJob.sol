@@ -4,15 +4,16 @@ pragma solidity 0.8.28;
 import {GooseExecutor} from "../GooseExecutor.sol";
 import {IJustaPermissionManager as PM} from "../IJustaPermissionManager.sol";
 import {IAeroRouter, IERC20, ISpoke} from "../IProtocols.sol";
-import {NyCalendar} from "../NyCalendar.sol";
-import {Book, Holding, SellLimits, SellRules, SellTiming, Slice} from "../SellRules.sol";
+import {CashRules} from "../CashRules.sol";
+import {Book, Holding, SellLimits, SellRules, Slice} from "../SellRules.sol";
 import {JobBase} from "./JobBase.sol";
 
 /// @title SellJob
-/// @notice Protect · sell (plan item 1, steps 10–12): when savings can't bring the credit out of Act, sell some of the
-///         stock that backs it on Aerodrome and repay with the proceeds, back to Watch, in slices that keep Aave's
-///         health check happy after every withdrawal. The rule is SellRules; this library reads the account, builds the
-///         batch, sends it through the manager and checks the result.
+/// @notice Protect · sell (plan item 1, steps 10–12): below Protect's line, or during a rescue savings couldn't finish,
+///         sell some of the stock that backs the credit on Aerodrome and repay with the proceeds, back to the target, in
+///         slices that keep Aave's health check happy after every withdrawal. At once, with no heads-up (Adrian,
+///         2026-10-19). The rule is SellRules; this library reads the account, builds the batch, sends it through the
+///         manager and checks the result.
 ///
 ///         The permission lists only the stocks the user lets Protect sell, each with its own daily limit. A never-sell
 ///         stock has no `approve` in `calls`, so the manager refuses any batch that would sell it.
@@ -33,7 +34,6 @@ library SellJob {
         PM.Permission perm;
         Slice[] slices;
         uint256[7] prices;
-        bool atOnce;
     }
 
     // ================================================================== permission
@@ -92,7 +92,7 @@ library SellJob {
 
     // ================================================================== plan and run
 
-    /// What a run would do now: sell, send or clear a heads-up, prune a dead permission, or nothing.
+    /// What a run would do now: sell, end a finished rescue, prune a dead permission, or nothing.
     function plan(
         GooseExecutor.Env memory e,
         GooseExecutor.Ctx memory c,
@@ -102,45 +102,32 @@ library SellJob {
         (p,) = _plan(e, c, acc, pools);
     }
 
-    /// Plans, then makes the move: a sale, a heads-up, or clearing one. A sale that wouldn't fit in the gas left is
-    /// deferred to the next run. `holiday` is the executor's calendar, for the time a heads-up gives.
+    /// Plans, then sells. A sale that wouldn't fit in the gas left is deferred to the next run. A sale that leaves the
+    /// credit under the target starts (or keeps) the rescue, so the next runs go on selling without waiting for the
+    /// line again; one that reaches the target ends it.
     function run(
         GooseExecutor.Env memory e,
         GooseExecutor.Ctx memory c,
         GooseExecutor.Account storage acc,
-        mapping(uint256 => GooseExecutor.PoolUse) storage pools,
-        mapping(uint32 => bool) storage holiday
+        mapping(uint256 => GooseExecutor.PoolUse) storage pools
     ) external returns (GooseExecutor.Plan memory p) {
         Sale memory sale;
         (p, sale) = _plan(e, c, acc, pools);
-        if (p.action == GooseExecutor.Action.ClearHeadsUp) {
-            acc.headsUpAt = 0;
-            emit GooseExecutor.SellHeadsUpCleared(c.account, p.hf);
-        } else if (p.action == GooseExecutor.Action.HeadsUp) {
-            acc.headsUpAt = uint48(block.timestamp);
-            // Sent on time, even just before a price freeze; a sale whose wait ends while prices are held goes when
-            // they reopen, if the health is still below the line (decision, 2026-10-14). The heads-up says when.
-            uint256 sellAfter = NyCalendar.nextOpen(holiday, block.timestamp + c.sellLimits.headsUpDelay);
-            emit GooseExecutor.SellHeadsUp(c.account, p.hf, _value(sale), uint48(sellAfter));
-        } else if (p.action == GooseExecutor.Action.Sell) {
-            if (gasleft() < SELL_GAS + CHECKS_GAS) {
-                p.action = GooseExecutor.Action.Defer;
-                return p;
-            }
-            uint256 hfAfter = _sell(e, c.account, sale, p.hf);
-            // Counted once per stock, as the rule budgets it: a rounding up per slice could pass the cap by a unit.
-            uint256[7] memory sold;
-            for (uint256 i; i < sale.slices.length; ++i) {
-                sold[sale.slices[i].reserveId] += sale.slices[i].shares;
-            }
-            for (uint256 r; r < 7; ++r) {
-                if (sold[r] > 0) _usePool(pools[r], JobBase.ceilDiv(sold[r] * sale.prices[r], 1e10));
-            }
-            // Done once back above the heads-up line, out of Act. A sale cut short (by the slices a run makes, a limit
-            // or the pool cap) goes on in the next runs without a new wait while still in Act: the user was warned, or
-            // it was urgent.
-            acc.headsUpAt = hfAfter >= c.sellLimits.headsUpHf ? 0 : uint48(block.timestamp) - c.sellLimits.headsUpDelay;
+        if (p.action != GooseExecutor.Action.Sell) return p;
+        if (gasleft() < SELL_GAS + CHECKS_GAS) {
+            p.action = GooseExecutor.Action.Defer;
+            return p;
         }
+        (uint256 hfAfter, bool owes) = _sell(e, c.account, sale, p.hf, c.thresholds.targetHf);
+        // Counted once per stock, as the rule budgets it: a rounding up per slice could pass the cap by a unit.
+        uint256[7] memory sold;
+        for (uint256 i; i < sale.slices.length; ++i) {
+            sold[sale.slices[i].reserveId] += sale.slices[i].shares;
+        }
+        for (uint256 r; r < 7; ++r) {
+            if (sold[r] > 0) _usePool(pools[r], JobBase.ceilDiv(sold[r] * sale.prices[r], 1e10));
+        }
+        acc.rescueAt = JobBase.rescueAfter(acc.rescueAt, owes, hfAfter, c.thresholds.targetHf);
     }
 
     function _plan(
@@ -151,22 +138,24 @@ library SellJob {
     ) internal view returns (GooseExecutor.Plan memory p, Sale memory sale) {
         p.job = GooseExecutor.Job.ProtectSell;
         p.hf = c.hf != 0 ? c.hf : JobBase.health(e, c.account);
-        SellTiming t;
-        (t, sale.atOnce) = SellRules.timing(p.hf, acc.headsUpAt, block.timestamp, c.frozen, c.sellLimits);
-        if (t == SellTiming.Wait) return (p, sale);
-        if (t == SellTiming.Clear) {
-            p.action = GooseExecutor.Action.ClearHeadsUp;
+        bool rescuing = acc.rescueAt != 0;
+        // A rescue that's done ends here too, for an account that has Protect · sell without Protect from savings.
+        if (rescuing && JobBase.rescueDone(p.hf, c.thresholds.targetHf)) {
+            p.action = GooseExecutor.Action.EndRescue;
+            return (p, sale);
+        }
+        if (!SellRules.sellsNow(p.hf, rescuing, c.frozen, c.thresholds.triggerHf, c.thresholds.targetHf)) {
             return (p, sale);
         }
 
-        // A heads-up or a sale: only worth it if there is something Protect may sell now.
+        // Only worth it if there is something Protect may sell now.
         sale.perm = permission(e, c.account, c.grant, c.salt, c.terms);
         uint256 usdcLeft = JobBase.capLeft(e.manager, sale.perm, 0);
         if (usdcLeft == 0 || e.spoke.getReserve(e.usdcReserveId).flags & JobBase.PAUSED != 0) return (p, sale);
-        uint256 floor = sale.atOnce ? c.sellLimits.actFloorBps : c.sellLimits.floorBps;
+        uint256 floor = c.sellLimits.floorBps;
         Book memory b = _book(e, c, sale, pools, usdcLeft, floor);
         b.debt = JobBase.ceilDiv(e.spoke.getUserAccountData(c.account).totalDebtValueRay, 1e27);
-        uint256[7] memory take = SellRules.amounts(b, c.sellLimits.targetHf, floor, acc.keepMix);
+        uint256[7] memory take = SellRules.amounts(b, c.thresholds.targetHf, floor, acc.keepMix);
         sale.slices = SellRules.slices(b, take, floor, c.sellLimits.maxSlice);
         for (uint256 i; i < sale.slices.length; ++i) {
             p.amount += sale.slices[i].minOut;
@@ -182,8 +171,7 @@ library SellJob {
             p.amount = 0;
             return (p, sale);
         }
-        p.action = t == SellTiming.HeadsUp ? GooseExecutor.Action.HeadsUp : GooseExecutor.Action.Sell;
-        p.reason = sale.atOnce ? 1 : 0;
+        p.action = GooseExecutor.Action.Sell;
     }
 
     /// The account's backing, read the way Aave counts it after a withdrawal: each collateral reserve at its current
@@ -233,7 +221,7 @@ library SellJob {
 
     /// Whether stock r's pool can fill a sale at `floorBps` under Aave's `price`: it sits no more than the floor, less
     /// POOL_ROOM_BPS, under it. A stock whose pool can't is left out, so the sale moves on to the next one instead of
-    /// failing the run; a pool above Aave's price only pays more. Read before every sale and heads-up.
+    /// failing the run; a pool above Aave's price only pays more. Read before every sale.
     function _fills(GooseExecutor.Env memory e, uint256 r, uint256 price, uint256 floorBps)
         internal
         view
@@ -244,10 +232,10 @@ library SellJob {
 
     /// Takes each slice's stock out of Aave, swaps exactly that on Aerodrome to the account with Aave's price minus the
     /// floor as the minimum, and repays exactly that minimum. Approvals first, each for the whole run; the manager
-    /// resets them after the batch.
-    function _sell(GooseExecutor.Env memory e, address account, Sale memory sale, uint256 hfBefore)
+    /// resets them after the batch. Returns the health after, and whether anything is still owed.
+    function _sell(GooseExecutor.Env memory e, address account, Sale memory sale, uint256 hfBefore, uint256 targetHf)
         internal
-        returns (uint256 hfAfter)
+        returns (uint256 hfAfter, bool owes)
     {
         uint256[7] memory sold;
         uint256 repay;
@@ -257,8 +245,8 @@ library SellJob {
         }
         Before memory b = snapshot(e, account, sold, hfBefore);
         e.manager.executeBatch{gas: SELL_GAS}(sale.perm, _calls(e, account, sale.slices, sold, repay));
-        hfAfter = check(e, account, b);
-        emit GooseExecutor.ProtectSold(account, sold, repay, hfBefore, hfAfter, sale.atOnce);
+        (hfAfter, owes) = check(e, account, b, targetHf);
+        emit GooseExecutor.ProtectSold(account, sold, repay, hfBefore, hfAfter);
     }
 
     /// What a sale's post-checks compare with.
@@ -290,13 +278,22 @@ library SellJob {
         }
     }
 
-    /// A sale's post-checks: the debt is lower and the health higher; exactly what came out of Aave was sold, so no
-    /// stock balance in the wallet moved; nothing else that backs the credit moved, so a never-sell stock is untouched;
-    /// savings didn't move, cash isn't lower, and the executor holds none of the stock. Returns the health after.
-    function check(GooseExecutor.Env memory e, address account, Before memory b) public view returns (uint256 hf) {
-        if (e.spoke.getUserTotalDebt(e.usdcReserveId, account) >= b.debt) revert GooseExecutor.DebtNotLower();
+    /// A sale's post-checks: the debt is lower and the health higher, but no higher than the target allows; exactly
+    /// what came out of Aave was sold, so no stock balance in the wallet moved; nothing else that backs the credit
+    /// moved, so a never-sell stock is untouched; savings didn't move, cash isn't lower, and the executor holds none of
+    /// the stock. Returns the health after, and whether anything is still owed.
+    function check(GooseExecutor.Env memory e, address account, Before memory b, uint256 targetHf)
+        public
+        view
+        returns (uint256 hf, bool owes)
+    {
+        uint256 debt = e.spoke.getUserTotalDebt(e.usdcReserveId, account);
+        if (debt >= b.debt) revert GooseExecutor.DebtNotLower();
+        owes = debt != 0;
         hf = e.spoke.getUserAccountData(account).healthFactor;
         if (hf <= b.hf) revert GooseExecutor.HealthNotHigher();
+        // Never more than the rescue needs: back to the target, give or take rounding.
+        if (owes && hf > targetHf + CashRules.OVERSHOOT_HF) revert GooseExecutor.Overshoot();
         for (uint256 r; r < 7; ++r) {
             if (IERC20(e.stocks[r]).balanceOf(account) != b.wallet[r]) revert GooseExecutor.StockMoved();
             if (b.sold[r] == 0) {
@@ -364,12 +361,4 @@ library SellJob {
         u.sold += uint208(amount);
     }
 
-    // ================================================================== helpers
-
-    /// What the planned slices sell, in USDC at Aave's price.
-    function _value(Sale memory sale) internal pure returns (uint256 v) {
-        for (uint256 i; i < sale.slices.length; ++i) {
-            v += sale.slices[i].shares * sale.prices[sale.slices[i].reserveId] / 1e10;
-        }
-    }
 }

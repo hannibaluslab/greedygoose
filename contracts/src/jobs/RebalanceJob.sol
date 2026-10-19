@@ -26,6 +26,9 @@ library RebalanceJob {
     /// The window, New York time: 30 to 60 minutes after the 9:30 open, on a day prices are live.
     uint256 internal constant FROM = 10 hours;
     uint256 internal constant UNTIL = 10 hours + 30 minutes;
+    /// The Act line (config/risk.ts RISK.watchMin): no rebalancing while the credit is in Act. It is the status line,
+    /// not Protect's (1.03), which acts further down (Adrian, 2026-10-19).
+    uint256 internal constant ACT_HF = 1.1e18;
 
     /// What a planned rebalance carries to its batch.
     struct Batch {
@@ -155,7 +158,7 @@ library RebalanceJob {
         (open, b.day) = _window();
         if (!open || acc.rebalanceDay == b.day) return (p, b);
         if (p.hf == 0) p.hf = JobBase.health(e, c.account);
-        if (p.hf < c.thresholds.triggerHf) return (p, b); // Protect first: wait while the credit is in Act
+        if (p.hf < ACT_HF) return (p, b); // wait while the credit is in Act
 
         b.perm = permission(e, c.account, c.grant, c.salt, c.terms);
         b.trades = _trades(e, c, b.perm, mix);

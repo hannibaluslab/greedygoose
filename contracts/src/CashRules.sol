@@ -2,8 +2,8 @@
 pragma solidity 0.8.28;
 
 /// Protect's health factors, all WAD (1e18 = 1.0). GooseExecutor holds them within hard bounds (D18). `stressDrop` and
-/// `stressFloorHf` are the app's weekend heads-up card's numbers: the executor moves nothing on them (Act is the line,
-/// 2026-10-15), and keeps them here so the card reads the live ones.
+/// `stressFloorHf` are the app's weekend card's numbers: the executor moves nothing on them, and keeps them here so the
+/// card reads the live ones.
 struct Thresholds {
     uint64 triggerHf;
     uint64 targetHf;
@@ -21,8 +21,8 @@ struct Amounts {
     uint8 maxSavesPerDay;
 }
 
-/// What Protect decides for one account. Only `Act` repays. (Executors deployed before 2026-10-15 also had a 6,
-/// WeekendShield, which repaid outside Act; Act is the line now.)
+/// What Protect decides for one account. Only `Act` repays: below Protect's line, or during a rescue below the target.
+/// (Executors deployed before 2026-10-15 also had a 6, WeekendShield, which repaid outside Act.)
 enum ProtectCase {
     NoDebt,
     Healthy,
@@ -51,16 +51,21 @@ library CashRules {
     uint256 internal constant VALUE_PER_USDC_UNIT = 1e20;
 
     // Hard bounds (D18). Nothing can change them.
-    /// Act is the line (Adrian, 2026-10-15): Protect steps in at the Act line (1.10, config/risk.ts RISK) and nowhere
-    /// else. Higher would repay in Watch; lower would leave part of Act without Protect. So the trigger is pinned to it,
-    /// and no threshold change can move it.
-    uint64 internal constant TRIGGER_HF = 1.1e18;
+    /// Protect's line (Adrian, 2026-10-19): Protect acts only below 1.03, as late as is safe before Aave's line at 1.0
+    /// (a 2.9% fall). Act (1.10) is a warning only. The line is pinned, and no threshold change can move it.
+    uint64 internal constant TRIGGER_HF = 1.03e18;
     uint64 internal constant TARGET_GAP_MIN = 0.05e18;
-    /// A repay brings the credit back to Watch, never past it: the target stays under the Safe line (1.50).
+    /// A rescue brings the credit back to Watch, never past it: the target stays under the Safe line (1.50).
     uint64 internal constant TARGET_HF_MAX = 1.4e18;
+    /// The most a move may land above the target, for rounding: Protect is limited by what it does (back to the
+    /// target), not by how much it moves (Adrian, 2026-10-19: no amount limit, as at DeFi Saver).
+    uint64 internal constant OVERSHOOT_HF = 0.01e18;
+    /// A rescue counts as done within this of the target: Aave's rounding can leave a repay or a sale a hair short.
+    uint64 internal constant RESCUE_DONE_GAP = 0.001e18;
     uint64 internal constant STRESS_DROP_MIN = 0.05e18;
     uint64 internal constant STRESS_DROP_MAX = 0.3e18;
-    uint64 internal constant STRESS_FLOOR_HF_MIN = 1.02e18;
+    /// The weekend card warns about Aave's own line (1.0).
+    uint64 internal constant STRESS_FLOOR_HF_MIN = 1e18;
     uint64 internal constant MIN_REPAY_MIN = 0.05e6;
     uint64 internal constant MIN_REPAY_MAX = 50e6;
     uint64 internal constant MIN_SAVE_MIN = 0.1e6;
@@ -85,11 +90,11 @@ library CashRules {
     }
 
     /// Protect, first half (plan.ts `planGuardian`): how much debt, in Value, should go. Needs only the account data,
-    /// so the executor reads savings and limits only when there is something to repay. Only in Act: in Safe or Watch
-    /// there is nothing to repay (Act is the line, 2026-10-15).
+    /// so the executor reads savings and limits only when there is something to repay. Only below Protect's line, or
+    /// below the target while a rescue is under way (`rescuing`): savings first, then selling, back to the target.
     /// @param collateral `totalCollateralValue`; @param avgCf `avgCollateralFactor`; @param debtRay `totalDebtValueRay`.
     /// @return why `NoDebt`, `Healthy` or `Act`. @return need Value to repay. @return debt Value owed.
-    function protectNeed(uint256 collateral, uint256 avgCf, uint256 debtRay, Thresholds memory t)
+    function protectNeed(uint256 collateral, uint256 avgCf, uint256 debtRay, Thresholds memory t, bool rescuing)
         internal
         pure
         returns (ProtectCase why, uint256 need, uint256 debt)
@@ -97,7 +102,7 @@ library CashRules {
         if (debtRay == 0) return (ProtectCase.NoDebt, 0, 0);
         uint256 power = collateral * avgCf / WAD;
         debt = _ceilDiv(debtRay, RAY); // rounds up, like summarize() (lib/aave/math.ts:22)
-        if (power * WAD / debt >= t.triggerHf) return (ProtectCase.Healthy, 0, debt);
+        if (power * WAD / debt >= (rescuing ? t.targetHf : t.triggerHf)) return (ProtectCase.Healthy, 0, debt);
         need = _sub(debt, power * WAD / t.targetHf);
         if (need == 0) return (ProtectCase.Healthy, 0, debt);
         why = ProtectCase.Act;

@@ -2,7 +2,6 @@
 pragma solidity 0.8.28;
 
 import {GooseExecutor} from "../src/GooseExecutor.sol";
-import {NyCalendar} from "../src/NyCalendar.sol";
 import {IJustaPermissionManager as PM} from "../src/IJustaPermissionManager.sol";
 
 /// GooseExecutor with a few internals opened up for tests. Never deployed.
@@ -15,13 +14,6 @@ contract ExecutorHarness is GooseExecutor {
         returns (PM.Permission memory)
     {
         return _permission(job, account, g, salt, t);
-    }
-
-    /// The weekend heads-up card's window on the executor's calendar: prices are live and the next freeze starts within
-    /// `weekendWindow`. The executor makes no move in it (Act is the line, 2026-10-15); the calendar tests keep it
-    /// agreeing with the app's `inWeekendWindow`.
-    function preFreeze(uint256 ts) external view returns (bool) {
-        return !NyCalendar.frozen(holiday, ts) && NyCalendar.nextFreeze(holiday, ts) - ts <= amounts.weekendWindow;
     }
 
     /// The addresses the job libraries are handed, so tests can run a job's post-checks around a batch of their own.

@@ -101,7 +101,7 @@ contract EntryForkTest is ExecutorForkBase {
         _run(_check());
         assertEq(IERC20(EntryJob.USDT).balanceOf(a), 1_000e6, "nothing moved");
         assertEq(USDC.balanceOf(a), 0);
-        (,, uint8 fails,,,,,,) = x.accounts(a);
+        (,, uint8 fails,,,,,,,) = x.accounts(a);
         assertEq(fails, 0, "not a failure");
 
         assertEq(x.planOf(a).reason, 2, "USDbC, while USDT waits");
@@ -143,15 +143,15 @@ contract EntryForkTest is ExecutorForkBase {
         this.convertWith(a, GHO, 100e18, 0, calls);
     }
 
-    function test_registration_through_the_log_trigger() public {
+    function test_registration_from_the_event_data() public {
         address a = _newJawAccount("a");
         vm.recordLogs();
         _grantThroughAccount(_permission(a, GooseExecutor.Job.Entry, 1_000e6));
-        (bool needed, bytes memory performData) = x.checkLog(_chainlinkLog(vm.getRecordedLogs()[0]), "");
-        assertTrue(needed, "a JAW grant of the Entry template registers through the log trigger");
-        vm.prank(forwarder);
-        x.performUpkeep(performData);
-        (uint8 jobs,,,,,,,,) = x.accounts(a);
+        PM.Permission memory approved = abi.decode(vm.getRecordedLogs()[0].data, (PM.Permission));
+        (bool ok,,,) = x.registrationOf(approved);
+        assertTrue(ok, "a JAW grant of the Entry template registers from its event data");
+        x.registerApproved(approved);
+        (uint8 jobs,,,,,,,,,) = x.accounts(a);
         assertEq(jobs, 1 << uint8(GooseExecutor.Job.Entry));
     }
 

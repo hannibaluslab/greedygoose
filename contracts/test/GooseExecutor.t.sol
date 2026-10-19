@@ -2,7 +2,6 @@
 pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
-import {Log} from "chainlink/automation/interfaces/ILogAutomation.sol";
 import {GooseExecutor} from "../src/GooseExecutor.sol";
 import {IJustaPermissionManager as PM} from "../src/IJustaPermissionManager.sol";
 import {IAaveOracle, IAaveV3Pool, IERC20, ISpoke} from "../src/IProtocols.sol";
@@ -15,7 +14,7 @@ import {DeployExecutor} from "../script/DeployExecutor.s.sol";
 import {ExecutorHarness} from "./ExecutorHarness.sol";
 
 /// No fork: construction, admin (product decision 2: pause at once, everything else behind a 7-day public delay),
-/// who may run, and the log trigger's filter. Runs and registration against the real manager are in
+/// who may run, and which permissions register. Runs and registration against the real manager are in
 /// GooseExecutorFork.t.sol.
 contract GooseExecutorTest is Test {
     ExecutorHarness x;
@@ -60,7 +59,7 @@ contract GooseExecutorTest is Test {
         new GooseExecutor(c);
 
         c = _config();
-        c.sellLimits.targetHf = c.sellLimits.headsUpHf; // a sale would stop at the heads-up line
+        c.sellLimits.floorBps = 501; // past Aave's 5.5% liquidation bonus, with room
         vm.expectRevert(GooseExecutor.OutOfBounds.selector);
         new GooseExecutor(c);
 
@@ -94,27 +93,30 @@ contract GooseExecutorTest is Test {
         assertEq(abi.encode(band, bandMax, gap, floor_, minTrade, maxSlice), abi.encode(deploy.rebalanceLimits()));
         (uint16 entryFloor, uint64 minEntry, uint64 maxSwap) = x.entryLimits();
         assertEq(abi.encode(entryFloor, minEntry, maxSwap), abi.encode(deploy.entryLimits()));
+        (uint16 sellFloor, uint64 poolCap, uint64 sellSlice) = x.sellLimits();
+        assertEq(abi.encode(sellFloor, poolCap, sellSlice), abi.encode(deploy.sellLimits()));
+        assertEq(x.memberCount(), 0);
+        assertEq(x.protectMemberCount(), 0);
         assertEq(x.owner(), owner);
         assertFalse(x.isForwarder(forwarder));
         assertFalse(x.bootstrapped());
     }
 
-    /// Act is the line (Adrian, 2026-10-15): with the deploy defaults Protect repays only below the Act line (1.10)
-    /// and back to Watch (1.20), and sells only below it too; the bounds keep any later change there.
-    function test_with_the_defaults_protect_steps_in_only_in_act_and_back_to_watch() public view {
+    /// Protect's line (Adrian, 2026-10-19): with the deploy defaults Protect acts only below 1.03, savings first, then
+    /// selling at 3% under Aave's price at most, back to 1.12; the weekend card warns about Aave's line.
+    function test_with_the_defaults_protect_acts_below_1_03_and_back_to_1_12() public view {
         Thresholds memory t = deploy.thresholds();
-        assertEq(t.triggerHf, 1.1e18, "repays only in Act");
-        assertEq(t.targetHf, 1.2e18, "back to Watch");
-        (uint64 headsUp, uint64 now_, uint64 target,,,,,) = x.sellLimits();
-        assertEq(headsUp, 1.1e18, "no heads-up, and no sale, in Watch");
-        assertEq(now_, 1.05e18, "at once deep in Act");
-        assertEq(target, 1.2e18, "a sale back to Watch too");
+        assertEq(t.triggerHf, 1.03e18, "acts only below Protect's line");
+        assertEq(t.targetHf, 1.12e18, "back to 1.12, the credit cap's line");
+        assertEq(t.stressFloorHf, 1e18, "the weekend card tests Aave's line");
+        (uint16 floor_,,) = x.sellLimits();
+        assertEq(floor_, 300, "every sale is urgent: 3% under Aave's price at most");
     }
 
     // ------------------------------------------------------------------ who may run
 
     function test_only_forwarders_may_perform_and_only_the_executor_may_run_an_account() public {
-        bytes memory run = abi.encode(GooseExecutor.Mode.Run, abi.encode(new address[](0)));
+        bytes memory run = abi.encode(new address[](0));
         vm.prank(stranger);
         vm.expectRevert(GooseExecutor.NotForwarder.selector);
         x.performUpkeep(run);
@@ -132,7 +134,7 @@ contract GooseExecutorTest is Test {
         x.performUpkeep(run);
         vm.prank(forwarder);
         vm.expectRevert(GooseExecutor.TooMuchWork.selector);
-        x.performUpkeep(abi.encode(GooseExecutor.Mode.Run, abi.encode(new address[](9))));
+        x.performUpkeep(abi.encode(new address[](9)));
     }
 
     function test_pause_is_immediate_and_stops_runs_and_checks() public {
@@ -145,14 +147,16 @@ contract GooseExecutorTest is Test {
         x.pause();
         vm.prank(forwarder);
         vm.expectRevert(GooseExecutor.RunsPaused.selector);
-        x.performUpkeep(abi.encode(GooseExecutor.Mode.Run, abi.encode(new address[](0))));
+        x.performUpkeep(abi.encode(new address[](0)));
         (bool needed,) = x.checkUpkeep(abi.encode(uint256(0), uint256(1)));
+        assertFalse(needed);
+        (needed,) = x.checkProtect(0, 1);
         assertFalse(needed);
 
         vm.prank(owner);
         x.unpause();
         vm.prank(forwarder);
-        x.performUpkeep(abi.encode(GooseExecutor.Mode.Run, abi.encode(new address[](0))));
+        x.performUpkeep(abi.encode(new address[](0)));
     }
 
     function test_bootstrap_works_once() public {
@@ -171,7 +175,7 @@ contract GooseExecutorTest is Test {
         x.removeForwarder(forwarder);
         vm.prank(forwarder);
         vm.expectRevert(GooseExecutor.NotForwarder.selector);
-        x.performUpkeep(abi.encode(GooseExecutor.Mode.Run, abi.encode(new address[](0))));
+        x.performUpkeep(abi.encode(new address[](0)));
     }
 
     // ------------------------------------------------------------------ the 7-day delay
@@ -204,7 +208,7 @@ contract GooseExecutorTest is Test {
     }
 
     function test_thresholds_amounts_and_owner_change_after_the_delay() public {
-        Thresholds memory t = Thresholds(1.1e18, 1.15e18, 0.2e18, 1.05e18);
+        Thresholds memory t = Thresholds(1.03e18, 1.1e18, 0.2e18, 1.02e18);
         Amounts memory a = Amounts(1e6, 2e6, 0, 3 hours, 4);
         address newOwner = makeAddr("new owner");
         vm.startPrank(owner);
@@ -218,9 +222,9 @@ contract GooseExecutorTest is Test {
         vm.stopPrank();
 
         (uint64 trigger, uint64 target,, uint64 floor) = x.thresholds();
-        assertEq(trigger, 1.1e18);
-        assertEq(target, 1.15e18);
-        assertEq(floor, 1.05e18);
+        assertEq(trigger, 1.03e18);
+        assertEq(target, 1.1e18);
+        assertEq(floor, 1.02e18);
         (,, uint64 keepBack, uint32 window,) = x.amounts();
         assertEq(keepBack, 0);
         assertEq(window, 3 hours);
@@ -228,14 +232,15 @@ contract GooseExecutorTest is Test {
     }
 
     function test_bounds_are_checked_at_queue() public {
-        Thresholds[7] memory bad = [
-            Thresholds(1.05e18, 1.2e18, 0.15e18, 1.05e18), // trigger under the Act line: part of Act without Protect
-            Thresholds(1.11e18, 1.2e18, 0.15e18, 1.1e18), // trigger above the Act line: a repay in Watch
-            Thresholds(1.5e18, 1.65e18, 0.15e18, 1.1e18), // the old Safe-line trigger
-            Thresholds(1.1e18, 1.14e18, 0.15e18, 1.1e18), // target less than 0.05 above the trigger
-            Thresholds(1.1e18, 1.41e18, 0.15e18, 1.1e18), // target past Watch toward Safe
-            Thresholds(1.1e18, 1.2e18, 0.31e18, 1.1e18), // stress drop above 30%
-            Thresholds(1.1e18, 1.2e18, 0.15e18, 1.11e18) // floor above the trigger
+        Thresholds[8] memory bad = [
+            Thresholds(1.02e18, 1.12e18, 0.15e18, 1e18), // trigger under Protect's line: closer to Aave's
+            Thresholds(1.1e18, 1.2e18, 0.15e18, 1e18), // the old Act-line trigger
+            Thresholds(1.5e18, 1.65e18, 0.15e18, 1e18), // the old Safe-line trigger
+            Thresholds(1.03e18, 1.07e18, 0.15e18, 1e18), // target less than 0.05 above the trigger
+            Thresholds(1.03e18, 1.41e18, 0.15e18, 1e18), // target past Watch toward Safe
+            Thresholds(1.03e18, 1.12e18, 0.31e18, 1e18), // stress drop above 30%
+            Thresholds(1.03e18, 1.12e18, 0.15e18, 1.04e18), // floor above the trigger
+            Thresholds(1.03e18, 1.12e18, 0.15e18, 0.99e18) // floor under Aave's line
         ];
         vm.startPrank(owner);
         for (uint256 i; i < bad.length; ++i) {
@@ -260,28 +265,19 @@ contract GooseExecutorTest is Test {
         vm.stopPrank();
     }
 
-    /// Act is the line (Adrian, 2026-10-15): Protect's trigger and the sale's heads-up line are both pinned to the Act
-    /// line, so no change through the delay can leave part of Act without Protect, or put the sale's line above the cash
-    /// line (a sale at 1.08 with cash still in savings, the Rebalancer trading in Act), or hold the at-once sale back
-    /// past 1.05.
-    function test_protect_and_the_sale_share_the_act_line_and_no_change_moves_it() public {
-        // The inverted pair: cash repays from 1.05 while the sale warns from 1.10.
+    /// Protect's line (Adrian, 2026-10-19) is pinned for the repay and the sale alike, which both read it: no deploy and
+    /// no change through the delay can move it, so a sale can never start above the cash line.
+    function test_protects_line_is_pinned_and_no_change_moves_it() public {
         GooseExecutor.Config memory c = _config();
-        (c.thresholds.triggerHf, c.thresholds.stressFloorHf) = (1.05e18, 1.05e18);
+        c.thresholds.triggerHf = 1.05e18;
         vm.expectRevert(GooseExecutor.OutOfBounds.selector);
         new GooseExecutor(c);
 
-        SellLimits[3] memory bad = [deploy.sellLimits(), deploy.sellLimits(), deploy.sellLimits()];
-        (bad[0].headsUpHf, bad[0].nowHf) = (1.08e18, 1.05e18); // a heads-up only from 1.08: Act from 1.10 unwarned
-        bad[1].headsUpHf = 1.12e18; // a heads-up in Watch
-        bad[2].nowHf = 1.04e18; // the at-once sale held back past 1.05
         vm.startPrank(owner);
         vm.expectRevert(GooseExecutor.OutOfBounds.selector);
-        x.queueChange(GooseExecutor.Change.SetThresholds, abi.encode(Thresholds(1.05e18, 1.2e18, 0.15e18, 1.05e18)));
-        for (uint256 i; i < bad.length; ++i) {
-            vm.expectRevert(GooseExecutor.OutOfBounds.selector);
-            x.queueChange(GooseExecutor.Change.SetSellLimits, abi.encode(bad[i]));
-        }
+        x.queueChange(GooseExecutor.Change.SetThresholds, abi.encode(Thresholds(1.05e18, 1.12e18, 0.15e18, 1e18)));
+        vm.expectRevert(GooseExecutor.OutOfBounds.selector);
+        x.queueChange(GooseExecutor.Change.SetThresholds, abi.encode(Thresholds(1.01e18, 1.12e18, 0.15e18, 1e18)));
         vm.stopPrank();
     }
 
@@ -306,26 +302,20 @@ contract GooseExecutorTest is Test {
 
     function test_sell_limits_change_after_the_delay_within_bounds() public {
         SellLimits memory l = deploy.sellLimits();
-        l.headsUpDelay = 1 hours;
-        l.actFloorBps = 250;
+        l.floorBps = 250;
         SellLimits memory bad = deploy.sellLimits();
-        bad.actFloorBps = 501; // past Aave's 5.5% liquidation bonus, with room
-        SellLimits memory inWatch = deploy.sellLimits();
-        (inWatch.headsUpHf, inWatch.nowHf, inWatch.targetHf) = (1.25e18, 1.1e18, 1.4e18); // the old lines: Watch
+        bad.floorBps = 501; // past Aave's 5.5% liquidation bonus, with room
         vm.startPrank(owner);
         vm.expectRevert(GooseExecutor.OutOfBounds.selector);
         x.queueChange(GooseExecutor.Change.SetSellLimits, abi.encode(bad));
-        vm.expectRevert(GooseExecutor.OutOfBounds.selector);
-        x.queueChange(GooseExecutor.Change.SetSellLimits, abi.encode(inWatch));
         x.queueChange(GooseExecutor.Change.SetSellLimits, abi.encode(l));
         vm.expectRevert(abi.encodeWithSelector(GooseExecutor.TooEarly.selector, vm.getBlockTimestamp() + 7 days));
         x.applyChange(GooseExecutor.Change.SetSellLimits, abi.encode(l), 0);
         vm.warp(vm.getBlockTimestamp() + 7 days);
         x.applyChange(GooseExecutor.Change.SetSellLimits, abi.encode(l), 0);
         vm.stopPrank();
-        (,,, uint32 delay,, uint16 actFloor,,) = x.sellLimits();
-        assertEq(delay, 1 hours);
-        assertEq(actFloor, 250);
+        (uint16 floor_,,) = x.sellLimits();
+        assertEq(floor_, 250);
     }
 
     function test_rebalance_and_entry_limits_change_after_the_delay_within_bounds() public {
@@ -414,11 +404,11 @@ contract GooseExecutorTest is Test {
         emit GooseExecutor.KeepMixSet(account, true);
         vm.prank(account);
         x.setKeepMix(true);
-        (,,,,,,, bool keepMix,) = x.accounts(account);
+        (,,,,,,, bool keepMix,,) = x.accounts(account);
         assertTrue(keepMix);
         vm.prank(stranger);
         x.setKeepMix(false);
-        (,,,,,,, keepMix,) = x.accounts(account);
+        (,,,,,,, keepMix,,) = x.accounts(account);
         assertTrue(keepMix, "a stranger only sets its own");
     }
 
@@ -444,123 +434,114 @@ contract GooseExecutorTest is Test {
         assertFalse(x.allowedCodehash(h));
     }
 
-    // ------------------------------------------------------------------ log trigger filter
+    // ------------------------------------------------------------------ which permissions register
 
-    function test_checkLog_turns_an_exact_grant_into_a_registration() public view {
+    function test_registrationOf_names_the_job_of_an_exact_grant() public view {
         for (uint8 j; j < 2; ++j) {
             GooseExecutor.Job job = GooseExecutor.Job(j);
             PM.Permission memory p = _grant(job, 5e6);
-            (bool needed, bytes memory performData) = x.checkLog(_log(p), "");
-            assertTrue(needed);
-            (GooseExecutor.Mode mode, bytes memory data) = abi.decode(performData, (GooseExecutor.Mode, bytes));
-            assertEq(uint8(mode), uint8(GooseExecutor.Mode.Register));
-            assertEq(data, abi.encode(job, account, p.start, p.end, p.salt, uint160(5e6), uint256(0)));
-            assertLe(performData.length, 2000);
+            _registers(p, job, 5e6, 0);
         }
     }
 
+    /// Anyone may hand registerApproved a permission: one that isn't an exact grant is refused before anything else,
+    /// and one that is goes on to `_register`'s full checks (here an EOA, which isn't a JAW account).
+    function test_registerApproved_refuses_what_registrationOf_refuses_and_checks_the_rest() public {
+        PM.Permission memory p = _grant(GooseExecutor.Job.Protect, 5e6);
+        p.spender = stranger;
+        vm.prank(stranger);
+        vm.expectRevert(GooseExecutor.NotApproved.selector);
+        x.registerApproved(p);
+
+        p = _grant(GooseExecutor.Job.Protect, 5e6);
+        vm.prank(stranger);
+        vm.expectRevert(GooseExecutor.AccountNotAllowed.selector);
+        x.registerApproved(p);
+    }
+
     /// Protect · sell's grant: NVIDIA and Tesla for sale with their own daily limits, the other five never.
-    function test_checkLog_turns_an_exact_sell_grant_into_a_registration() public {
+    function test_registrationOf_names_an_exact_sell_grant() public {
         _mockPrices(200e8);
         uint256 t = _terms(0.02e8, 0.03e8); // $4 and $6 a day at $200: within two $5 caps
         PM.Permission memory p = _sellGrant(5e6, t);
         assertEq(p.calls.length, 6, "withdraw, two approves, swap, approve, repay");
         assertEq(p.spends.length, 4, "USDC, aUSDC and the two stocks");
-        (bool needed, bytes memory performData) = x.checkLog(_log(p), "");
-        assertTrue(needed);
-        (, bytes memory data) = abi.decode(performData, (GooseExecutor.Mode, bytes));
-        assertEq(data, abi.encode(GooseExecutor.Job.ProtectSell, account, p.start, p.end, p.salt, uint160(5e6), t));
-        assertLe(performData.length, 2000);
+        _registers(p, GooseExecutor.Job.ProtectSell, 5e6, t);
     }
 
     /// The Rebalancer's grant: NVIDIA and Tesla it may sell, each with a weekly limit, and USDC for the buys.
-    function test_checkLog_turns_an_exact_rebalance_grant_into_a_registration() public {
+    function test_registrationOf_names_an_exact_rebalance_grant() public {
         _mockPrices(200e8);
         uint256 t = _terms(0.02e8, 0.03e8);
         PM.Permission memory p = _grantWith(GooseExecutor.Job.Rebalance, 5e6, t);
         assertEq(p.calls.length, 4, "two approves, USDC's approve, swap");
         assertEq(p.spends.length, 3, "USDC and the two stocks");
         assertEq(uint8(p.spends[0].unit), uint8(PM.PeriodUnit.Week));
-        (bool needed, bytes memory performData) = x.checkLog(_log(p), "");
-        assertTrue(needed);
-        (, bytes memory data) = abi.decode(performData, (GooseExecutor.Mode, bytes));
-        assertEq(data, abi.encode(GooseExecutor.Job.Rebalance, account, p.start, p.end, p.salt, uint160(5e6), t));
+        _registers(p, GooseExecutor.Job.Rebalance, 5e6, t);
 
-        _ignored(_log(_grantWith(GooseExecutor.Job.Rebalance, 5e6, _terms(0.06e8, 0))), "a stock limit over two caps");
+        _ignored(_grantWith(GooseExecutor.Job.Rebalance, 5e6, _terms(0.06e8, 0)), "a stock limit over two caps");
         p.spends[0].unit = PM.PeriodUnit.Day;
-        _ignored(_log(p), "a daily limit");
+        _ignored(p, "a daily limit");
     }
 
     /// Entry's grant: four coins, each with a daily limit at the same face value, and the three venues' swaps.
-    function test_checkLog_turns_an_exact_entry_grant_into_a_registration() public {
+    function test_registrationOf_names_an_exact_entry_grant() public {
         PM.Permission memory p = _grant(GooseExecutor.Job.Entry, 5e6);
         assertEq(p.calls.length, 7, "four approves and three swaps");
         assertEq(p.spends[1].allowance, 5e18, "USDe's limit: $5 at 18 decimals");
-        (bool needed, bytes memory performData) = x.checkLog(_log(p), "");
-        assertTrue(needed);
-        (, bytes memory data) = abi.decode(performData, (GooseExecutor.Mode, bytes));
-        assertEq(data, abi.encode(GooseExecutor.Job.Entry, account, p.start, p.end, p.salt, uint160(5e6), uint256(0)));
+        _registers(p, GooseExecutor.Job.Entry, 5e6, 0);
 
         p.spends[1].allowance = 5e6;
-        _ignored(_log(p), "a limit not adjusted for decimals");
+        _ignored(p, "a limit not adjusted for decimals");
         p = _grant(GooseExecutor.Job.Entry, 5e6);
         p.calls[5].target = stranger;
-        _ignored(_log(p), "another venue");
+        _ignored(p, "another venue");
     }
 
-    function test_checkLog_ignores_a_sell_grant_it_would_not_register() public {
+    function test_registrationOf_refuses_a_sell_grant_it_would_not_register() public {
         _mockPrices(200e8);
-        _ignored(_log(_sellGrant(5e6, _terms(0.06e8, 0.03e8))), "a stock limit worth $12, over two $5 caps");
+        _ignored(_sellGrant(5e6, _terms(0.06e8, 0.03e8)), "a stock limit worth $12, over two $5 caps");
 
         PM.Permission memory p = _sellGrant(5e6, _terms(0.02e8, 0.03e8));
         (p.spends[2], p.spends[3]) = (p.spends[3], p.spends[2]);
-        _ignored(_log(p), "stock limits out of reserve order");
+        _ignored(p, "stock limits out of reserve order");
 
         p = _sellGrant(5e6, _terms(0.02e8, 0.03e8));
         p.spends[2].allowance += 1;
-        _ignored(_log(p), "a stock limit that isn't whole units of 1e-4 share");
+        _ignored(p, "a stock limit that isn't whole units of 1e-4 share");
 
         p = _sellGrant(5e6, _terms(0.02e8, 0.03e8));
         p.calls[1].target = x.stocks()[0];
-        _ignored(_log(p), "an approve for a stock with no limit");
+        _ignored(p, "an approve for a stock with no limit");
     }
 
-    function test_checkLog_ignores_everything_else() public view {
+    function test_registrationOf_refuses_everything_else() public view {
         PM.Permission memory p = _grant(GooseExecutor.Job.Protect, 5e6);
-
-        Log memory l = _log(p);
-        l.source = stranger;
-        _ignored(l, "another emitter");
-
-        l = _log(p);
-        l.topics[0] = keccak256("PermissionRevoked(bytes32)");
-        _ignored(l, "another event");
-
         p.spender = stranger;
-        _ignored(_log(p), "another spender");
+        _ignored(p, "another spender");
 
         p = _grant(GooseExecutor.Job.Protect, 5e6);
         p.calls[2].checker = stranger;
-        _ignored(_log(p), "a checker");
+        _ignored(p, "a checker");
 
         p = _grant(GooseExecutor.Job.Protect, 5e6);
         p.spends[1].allowance = 4e6;
-        _ignored(_log(p), "Protect's two limits differ");
+        _ignored(p, "Protect's two limits differ");
 
         p = _grant(GooseExecutor.Job.Save, 5e6);
         p.calls[1].target = stranger;
-        _ignored(_log(p), "another target");
+        _ignored(p, "another target");
 
         p = _grant(GooseExecutor.Job.Save, 5e6);
         p.spends[0].unit = PM.PeriodUnit.Week;
-        _ignored(_log(p), "another period");
+        _ignored(p, "another period");
 
-        _ignored(_log(_grant(GooseExecutor.Job.Save, 5e6 + 1)), "a limit above CAP_MAX");
+        _ignored(_grant(GooseExecutor.Job.Save, 5e6 + 1), "a limit above CAP_MAX");
 
         p = _grant(GooseExecutor.Job.Save, 5e6);
         p.start = uint48(vm.getBlockTimestamp() - 30 days);
         p.end = uint48(vm.getBlockTimestamp() - 1);
-        _ignored(_log(p), "an expired grant");
+        _ignored(p, "an expired grant");
     }
 
     // ------------------------------------------------------------------ helpers
@@ -612,17 +593,16 @@ contract GooseExecutorTest is Test {
             );
     }
 
-    function _log(PM.Permission memory p) internal view returns (Log memory l) {
-        l.source = manager;
-        l.topics = new bytes32[](2);
-        l.topics[0] = PM.PermissionApproved.selector;
-        l.topics[1] = keccak256(abi.encode(p));
-        l.data = abi.encode(p);
+    function _registers(PM.Permission memory p, GooseExecutor.Job job, uint160 cap, uint256 t) internal view {
+        (bool ok, GooseExecutor.Job got, uint160 gotCap, uint256 gotTerms) = x.registrationOf(p);
+        assertTrue(ok);
+        assertEq(uint8(got), uint8(job));
+        assertEq(gotCap, cap);
+        assertEq(gotTerms, t);
     }
 
-    function _ignored(Log memory l, string memory what) internal view {
-        (bool needed, bytes memory performData) = x.checkLog(l, "");
-        assertFalse(needed, what);
-        assertEq(performData.length, 0, what);
+    function _ignored(PM.Permission memory p, string memory what) internal view {
+        (bool ok,,,) = x.registrationOf(p);
+        assertFalse(ok, what);
     }
 }

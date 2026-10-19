@@ -99,8 +99,8 @@ contract NyCalendarTest is Test {
         assertTrue(x.frozen(wed20 + 1 days - 1));
         assertFalse(x.frozen(wed20 + 1 days), "Thursday 20:00 reopens for Friday");
         assertEq(x.nextFreeze(wed20 - 6 hours), wed20);
-        assertTrue(x.preFreeze(wed20 - 6 hours));
-        assertFalse(x.preFreeze(wed20 - 6 hours - 1));
+        assertTrue(_preFreeze(wed20 - 6 hours));
+        assertFalse(_preFreeze(wed20 - 6 hours - 1));
     }
 
     /// A Monday holiday (MLK, 2027-01-18) keeps the weekend freeze going until Monday 20:00; a Friday one (Good
@@ -117,8 +117,8 @@ contract NyCalendarTest is Test {
         x.setHolidayNow(uint32(goodFriday / 1 days), true);
         uint256 thu20 = goodFriday - 1 days + 20 hours + 4 hours;
         assertEq(x.nextFreeze(thu20 - 1 hours), thu20);
-        assertTrue(x.preFreeze(thu20 - 1 hours), "the weekend heads-up's window moves to Thursday");
-        assertFalse(x.preFreeze(goodFriday + 15 hours + 4 hours), "and is over by Friday");
+        assertTrue(_preFreeze(thu20 - 1 hours), "the weekend heads-up's window moves to Thursday");
+        assertFalse(_preFreeze(goodFriday + 15 hours + 4 hours), "and is over by Friday");
         assertTrue(x.frozen(goodFriday + 2 days + 20 hours + 4 hours - 1), "until Sunday 20:00");
     }
 
@@ -177,7 +177,7 @@ contract NyCalendarTest is Test {
         for (uint256 i; i < 10_000; ++i) {
             uint256 ts = Vectors.calendarTime(i);
             string memory at = string.concat("t = ", vm.toString(ts));
-            assertEq(x.preFreeze(ts), Vectors.bit(window, i), at);
+            assertEq(_preFreeze(ts), Vectors.bit(window, i), at);
             assertEq(x.frozen(ts), Vectors.bit(closed, i), at);
         }
     }
@@ -185,12 +185,19 @@ contract NyCalendarTest is Test {
     function _fridayEdges(uint256 fridayUtc, uint256 offset) internal view {
         uint256 at14 = fridayUtc + 14 hours + offset;
         uint256 at20 = fridayUtc + 20 hours + offset;
-        assertFalse(x.preFreeze(at14 - 1), "13:59:59");
-        assertTrue(x.preFreeze(at14), "14:00");
-        assertTrue(x.preFreeze(at20 - 1), "19:59:59");
+        assertFalse(_preFreeze(at14 - 1), "13:59:59");
+        assertTrue(_preFreeze(at14), "14:00");
+        assertTrue(_preFreeze(at20 - 1), "19:59:59");
         assertFalse(x.frozen(at20 - 1));
-        assertFalse(x.preFreeze(at20), "20:00 is frozen, not before it");
+        assertFalse(_preFreeze(at20), "20:00 is frozen, not before it");
         assertTrue(x.frozen(at20), "20:00");
         assertEq(x.nextFreeze(at14), at20);
+    }
+
+    /// The weekend card's window on the executor's calendar: prices are live and the next freeze starts within
+    /// `weekendWindow`. The executor makes no move in it; this keeps it agreeing with the app's `inWeekendWindow`.
+    function _preFreeze(uint256 ts) internal view returns (bool) {
+        (,,, uint32 weekendWindow,) = x.amounts();
+        return !x.frozen(ts) && x.nextFreeze(ts) - ts <= weekendWindow;
     }
 }

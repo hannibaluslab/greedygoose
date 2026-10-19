@@ -138,12 +138,7 @@ contract DeployExecutorTest is ForkBase {
         assertEq(a.weekendWindow, vm.parseJsonUint(json, ".weekendWindow"));
         assertEq(a.maxSavesPerDay, vm.parseJsonUint(json, ".maxSavesPerDay"));
         SellLimits memory l = deploy.sellLimits();
-        assertEq(l.headsUpHf, vm.parseJsonUint(json, ".sell.headsUpHf"));
-        assertEq(l.nowHf, vm.parseJsonUint(json, ".sell.nowHf"));
-        assertEq(l.targetHf, vm.parseJsonUint(json, ".sell.targetHf"));
-        assertEq(l.headsUpDelay, vm.parseJsonUint(json, ".sell.headsUpDelay"));
         assertEq(l.floorBps, vm.parseJsonUint(json, ".sell.floorBps"));
-        assertEq(l.actFloorBps, vm.parseJsonUint(json, ".sell.actFloorBps"));
         assertEq(l.poolCap, vm.parseJsonUint(json, ".sell.poolCap"));
         assertEq(l.maxSlice, vm.parseJsonUint(json, ".sell.maxSlice"));
         RebalanceLimits memory r = deploy.rebalanceLimits();
@@ -178,6 +173,15 @@ contract DeployExecutorTest is ForkBase {
         c.oracle = IAaveOracle(address(USDC)); // code, but not the spoke's oracle
         vm.expectRevert("the oracle isn't the spoke's");
         deploy.checkCode(c);
+    }
+
+    /// A test deploy caps every limit at $5 (D13); EXECUTOR_CAPS=none deploys with no amount limit (Adrian, 2026-10-19).
+    function test_test_deploys_cap_at_5_dollars_and_production_has_no_amount_limit() public {
+        assertEq(deploy.capMax(), 5e6);
+        vm.setEnv("EXECUTOR_CAPS", "none");
+        assertEq(deploy.capMax(), type(uint160).max);
+        vm.setEnv("EXECUTOR_CAPS", "test");
+        assertEq(deploy.capMax(), 5e6);
     }
 
     function test_only_base_and_base_sepolia() public {

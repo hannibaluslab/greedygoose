@@ -16,25 +16,26 @@ interface ISpokeOracle {
     function ORACLE() external view returns (address);
 }
 
-/// Deploys GooseExecutor as a D13 test deploy: daily limits of at most $5, for throwaway accounts, never wired into the
-/// production app config. Production waits for the audit (plan item 6).
+/// Deploys GooseExecutor. By default a D13 test deploy: daily limits of at most $5, for throwaway accounts, never wired
+/// into the production app config. EXECUTOR_CAPS=none deploys with no amount limit (CAP_MAX = the largest uint160),
+/// as production will once the audit is done (plan item 6; Adrian, 2026-10-19: Protect is limited by what it does).
 ///
 ///   EXECUTOR_OWNER=<multisig> forge script script/DeployExecutor.s.sol --rpc-url <base or base sepolia> --broadcast
 ///
 /// forge deploys each job library in src/jobs first and links its address into the executor (GooseExecutor-as-built.md,
 /// "Job modules").
 ///
-/// Then, in one session (contracts/docs/GooseExecutor.md §9):
-///   1. register the run upkeep on automation.chain.link: custom logic, target = the executor, checkData =
-///      abi.encode(uint256(0), uint256(1)) (shard 0 of 1), gas limit 5,000,000 (Base's most). A sale needs up to
-///      about 4.0M of it (seven stocks, six slices: ProtectSellSevenStockGasForkTest); with less, sales are deferred
-///      (the accounts after them still run);
-///   2. register the registration upkeep: log trigger, emitter = the manager, topic0 = PermissionApproved
-///      (0x84b07255c6c3e177513e059044c77d305a6aecf39fbe512d64dcd3cebb59d5ea), target = the executor, gas limit
-///      1,000,000 (the largest registration, Protect · sell on all seven stocks, costs about 480k cold);
-///   3. read each upkeep's forwarder from the registry (getForwarder(upkeepId)), then the owner calls
-///      bootstrap([run upkeep forwarder, registration upkeep forwarder]) once, with both: bootstrap closes for good, and
-///      any later forwarder waits the 7-day delay.
+/// Then the runners (runner switch plan, step 5), in one session:
+///   1. deploy GooseReceiver for the CRE workflow (script/DeployReceiver.s.sol);
+///   2. read the KeeperHub workflow wallet's address;
+///   3. the owner calls bootstrap([receiver, KeeperHub wallet]) once, with both: bootstrap closes for good, and any
+///      later runner waits the 7-day delay;
+///   4. queue the NYSE holidays (each waits 7 days, so the same day).
+///   A run is `performUpkeep(performData)` with `checkUpkeep(abi.encode(shard, shards))`'s or
+///   `checkProtect(shard, shards)`'s answer, at a gas limit of 5,000,000: a sale needs up to about 4.0M (seven stocks,
+///   six slices: ProtectSellSevenStockGasForkTest); with less, sales are deferred (the accounts after them still run).
+///   A registration is `registerApproved(permission)` with a PermissionApproved event's data, read first through
+///   `registrationOf` (about 480k gas cold for Protect · sell on all seven stocks).
 ///
 /// Base Sepolia has JAW's manager and factory (same code and addresses as Base) but no Aave, no Coinbase USDC, no
 /// equities hub and no stock pools, so a Sepolia deploy only proves the Chainlink plumbing: it takes stand-ins for
@@ -61,6 +62,8 @@ contract DeployExecutor is Script {
 
     /// D13: test deploys cap every daily limit at $5.
     uint160 internal constant TEST_CAP_MAX = 5e6;
+    /// No amount limit: Protect is limited by what it does, back to its target (Adrian, 2026-10-19).
+    uint160 internal constant NO_CAP_MAX = type(uint160).max;
     /// Accounts per check page, from the worst case measured on a Base fork (ExecutorPageForkTest): accounts that each
     /// owe against all seven stocks, sit in Watch with too little savings to repay from, and have Protect · sell and
     /// Save on too, cost about 251k gas each to check, cold, so 32 of them fit under 8.5M of Base's 10M check limit.
@@ -142,7 +145,7 @@ contract DeployExecutor is Script {
         }
         c.manager = IJustaPermissionManager(MANAGER);
         c.usdcReserveId = USDC_RESERVE_ID;
-        c.capMax = TEST_CAP_MAX;
+        c.capMax = capMax();
         c.pageSize = PAGE_SIZE;
         c.owner = owner;
         c.codehashes = jawCodehashes();
@@ -151,6 +154,11 @@ contract DeployExecutor is Script {
         c.sellLimits = sellLimits();
         c.rebalanceLimits = rebalanceLimits();
         c.entryLimits = entryLimits();
+    }
+
+    /// $5 (D13) unless EXECUTOR_CAPS=none.
+    function capMax() public view returns (uint160) {
+        return keccak256(bytes(vm.envOr("EXECUTOR_CAPS", string("test")))) == keccak256("none") ? NO_CAP_MAX : TEST_CAP_MAX;
     }
 
     /// The seven stocks on Base, by reserve id (lib/tokens/registry.ts, verified against spoke.getReserve(r)).
@@ -174,10 +182,11 @@ contract DeployExecutor is Script {
         h[1] = keccak256(abi.encodePacked(hex"ef0100", JAW_ACCOUNT));
     }
 
-    /// config/risk.ts CASH_AGENT (checked by test/DeployExecutor.t.sol). Act is the line (Adrian, 2026-10-15): Protect
-    /// repays from savings only below 1.10 (Act), back to 1.20 (Watch). Before, 1.50 back to 1.65.
+    /// config/risk.ts CASH_AGENT (checked by test/DeployExecutor.t.sol). Protect acts below 1.03 (its line), savings
+    /// first, then selling, back to 1.12 (Adrian, 2026-10-19). The weekend card tests a 15% drop against Aave's line
+    /// (1.0). Before, 1.10 back to 1.20 (2026-10-15), and 1.50 back to 1.65.
     function thresholds() public pure returns (Thresholds memory) {
-        return Thresholds({triggerHf: 1.1e18, targetHf: 1.2e18, stressDrop: 0.15e18, stressFloorHf: 1.1e18});
+        return Thresholds({triggerHf: 1.03e18, targetHf: 1.12e18, stressDrop: 0.15e18, stressFloorHf: 1e18});
     }
 
     /// config/risk.ts CASH_AGENT and CASH.keepBackUsd (checked by test/DeployExecutor.t.sol).
@@ -185,19 +194,10 @@ contract DeployExecutor is Script {
         return Amounts({minRepay: 0.05e6, minSave: 1e6, keepBack: 1e6, weekendWindow: 6 hours, maxSavesPerDay: 6});
     }
 
-    /// config/risk.ts PROTECT_SELL (checked by test/DeployExecutor.t.sol). Act is the line (Adrian, 2026-10-15): a
-    /// heads-up below 1.10 (Act), at once below 1.05, back to 1.20 (Watch). Before, 1.25, 1.10 and 1.40.
+    /// config/risk.ts PROTECT_SELL (checked by test/DeployExecutor.t.sol). Every sale is at once now, so it takes the
+    /// urgent floor, 3% under Aave's price (Adrian, 2026-10-19); before, 1% after a heads-up and 3% at once.
     function sellLimits() public pure returns (SellLimits memory) {
-        return SellLimits({
-            headsUpHf: 1.1e18,
-            nowHf: 1.05e18,
-            targetHf: 1.2e18,
-            headsUpDelay: 30 minutes,
-            floorBps: 100,
-            actFloorBps: 300,
-            poolCap: 10_000e6,
-            maxSlice: 5_000e6
-        });
+        return SellLimits({floorBps: 300, poolCap: 10_000e6, maxSlice: 5_000e6});
     }
 
     /// config/risk.ts REBALANCER (checked by test/DeployExecutor.t.sol).

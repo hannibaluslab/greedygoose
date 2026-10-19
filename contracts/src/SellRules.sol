@@ -1,15 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-/// Protect · sell's numbers. Health factors WAD, floors in BPS, USDC amounts in units (1e6 = $1). GooseExecutor holds
-/// them within hard bounds (D18, `checkLimits`); a change waits the public delay.
+/// Protect · sell's numbers. Floors in BPS, USDC amounts in units (1e6 = $1). The lines are Protect's own (CashRules
+/// Thresholds): a sale starts below its trigger and brings the health back to its target. GooseExecutor holds these
+/// within hard bounds (D18, `checkLimits`); a change waits the public delay.
 struct SellLimits {
-    uint64 headsUpHf; // below this on a weekday (the Act line): a heads-up, then a sale
-    uint64 nowHf; // below this, deep in Act: a sale at once
-    uint64 targetHf; // a sale brings the health back to this
-    uint32 headsUpDelay; // seconds from the heads-up to the sale
-    uint16 floorBps; // most a sale after a heads-up may get under Aave's price
-    uint16 actFloorBps; // the same, for a sale at once (below nowHf)
+    uint16 floorBps; // most a sale may get under Aave's price
     uint64 poolCap; // USDC, at Aave's price, all accounts may sell into one stock's pool per POOL_WINDOW
     uint64 maxSlice; // USDC, at Aave's price, per swap
 }
@@ -38,13 +34,6 @@ struct Slice {
     uint256 minOut; // USDC units: the swap's minimum output, and exactly what this slice repays
 }
 
-enum SellTiming {
-    Wait,
-    HeadsUp,
-    Clear,
-    Sell
-}
-
 /// @title SellRules
 /// @notice Protect · sell's rule, ported from the TypeScript reference (lib/guardian/sell.ts) line for line:
 ///         test/SellRules.t.sol runs both on the vectors scripts/agent-vectors.ts exports, and they must agree exactly.
@@ -60,21 +49,8 @@ library SellRules {
     /// Most slices in one run (one batch, within its gas cap). The rest waits for the next run.
     uint256 internal constant MAX_SLICES = 6;
 
-    // Hard bounds (D18). Nothing can change them.
-    /// Act is the line (Adrian, 2026-10-15): the heads-up line is the Act line (1.10, config/risk.ts RISK), the same as
-    /// Protect's trigger (CashRules.TRIGGER_HF), and pinned there. No heads-up, and so no sale, in Watch; none of Act
-    /// left without one; and never a sale line above the cash line, which would sell stock while cash sits in savings.
-    uint64 internal constant HEADS_UP_HF = 1.1e18;
-    /// A sale at once only deep in Act: 1.05 (halfway to Aave's limit at 1.0) at the lowest, so no change can hold
-    /// the at-once sale back further.
-    uint64 internal constant NOW_HF_MIN = 1.05e18;
-    /// The heads-up keeps a band of its own above the at-once line, so a heads-up still goes out before most sales.
-    uint64 internal constant NOW_GAP_MIN = 0.02e18;
-    uint64 internal constant TARGET_GAP_MIN = 0.05e18;
-    /// A sale brings the credit back to Watch, never past it: the target stays under the Safe line (1.50).
-    uint64 internal constant TARGET_HF_MAX = 1.4e18;
-    uint32 internal constant HEADS_UP_DELAY_MIN = 10 minutes;
-    uint32 internal constant HEADS_UP_DELAY_MAX = 2 hours;
+    // Hard bounds (D18). Nothing can change them. The sale line and target are Protect's (CashRules), so a sale can
+    // never start above the cash line and sell stock while cash sits in savings.
     uint16 internal constant FLOOR_BPS_MIN = 25;
     /// Under Aave's largest liquidation bonus (5.5%): Protect never pays more to avoid a liquidation than one costs.
     uint16 internal constant FLOOR_BPS_MAX = 500;
@@ -84,29 +60,20 @@ library SellRules {
     uint64 internal constant MAX_SLICE_MAX = 50_000e6;
 
     function limitsOk(SellLimits memory l) internal pure returns (bool) {
-        return l.headsUpHf == HEADS_UP_HF && l.nowHf >= NOW_HF_MIN && l.nowHf + NOW_GAP_MIN <= HEADS_UP_HF
-            && l.targetHf >= HEADS_UP_HF + TARGET_GAP_MIN && l.targetHf <= TARGET_HF_MAX
-            && l.headsUpDelay >= HEADS_UP_DELAY_MIN && l.headsUpDelay <= HEADS_UP_DELAY_MAX
-            && l.floorBps >= FLOOR_BPS_MIN && l.actFloorBps >= l.floorBps && l.actFloorBps <= FLOOR_BPS_MAX
-            && l.poolCap >= POOL_CAP_MIN && l.poolCap <= POOL_CAP_MAX && l.maxSlice >= MAX_SLICE_MIN
-            && l.maxSlice <= MAX_SLICE_MAX;
+        return l.floorBps >= FLOOR_BPS_MIN && l.floorBps <= FLOOR_BPS_MAX && l.poolCap >= POOL_CAP_MIN
+            && l.poolCap <= POOL_CAP_MAX && l.maxSlice >= MAX_SLICE_MIN && l.maxSlice <= MAX_SLICE_MAX;
     }
 
-    /// When Protect sells (decision 3; Act is the line, 2026-10-15): below `headsUpHf` (the Act line) on a weekday a
-    /// heads-up, then the sale `headsUpDelay` later if the health is still below; below `nowHf`, deep in Act, at once.
-    /// Never in Safe or Watch, and never while prices are held (weekends and holidays). Back above `headsUpHf`, a
-    /// pending heads-up is cleared, so a later fall gets a new one. `headsUpAt` is 0 when none is pending. `atOnce`
-    /// sales use the wider Act floor.
-    function timing(uint256 hf, uint256 headsUpAt, uint256 nowTs, bool frozen, SellLimits memory l)
+    /// Whether Protect sells now (Adrian, 2026-10-19): at once below Protect's line (`triggerHf`), and, while a rescue
+    /// is under way, below its target, so a rescue that savings couldn't finish ends back at the target. Never while
+    /// prices are held (weekends and holidays): a sale can't help while they don't move.
+    function sellsNow(uint256 hf, bool rescuing, bool frozen, uint256 triggerHf, uint256 targetHf)
         internal
         pure
-        returns (SellTiming, bool atOnce)
+        returns (bool)
     {
-        if (hf >= l.headsUpHf) return (headsUpAt != 0 ? SellTiming.Clear : SellTiming.Wait, false);
-        if (frozen) return (SellTiming.Wait, false);
-        if (hf < l.nowHf) return (SellTiming.Sell, true);
-        if (headsUpAt == 0) return (SellTiming.HeadsUp, false);
-        return (nowTs >= headsUpAt + l.headsUpDelay ? SellTiming.Sell : SellTiming.Wait, false);
+        if (frozen) return false;
+        return hf < triggerHf || (rescuing && hf < targetHf);
     }
 
     /// Sell order: lowest collateral factor first (the most safety per dollar sold), near-ties to the larger holding.

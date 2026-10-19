@@ -122,13 +122,13 @@ contract RebalanceForkTest is RebalanceForkBase {
         assertEq(_check().length, 0, "not while prices are held");
     }
 
-    /// Protect first: free stock drifted, but the credit is in Act, so the Rebalancer waits. Watch is fine (Act is the
-    /// line, 2026-10-15): once the credit is out of Act it trades, as it only touches free stock.
+    /// Free stock drifted, but the credit is in Act (under 1.10), so the Rebalancer waits, even above Protect's line
+    /// (1.03): it follows the Act line. Once the credit is out of Act it trades, as it only touches free stock.
     function test_it_waits_while_the_credit_is_in_act() public {
         (address a,) = _holder("a", _list(NVDA, AAPL), _list(5_600e6, 4_400e6), fiftyFifty);
         _backWith(a, TSLA, 5e8);
         _drawTo(a, 1.05e18);
-        assertEq(uint8(x.planOf(a).action), uint8(GooseExecutor.Action.None), "Act: waits");
+        assertEq(uint8(x.planOf(a).action), uint8(GooseExecutor.Action.None), "Act, above Protect's line: waits");
         _backWith(a, TSLA, 1e8); // the account adds backing: 1.26, Watch
         assertLt(SPOKE.getUserAccountData(a).healthFactor, 1.5e18);
         assertEq(uint8(x.planOf(a).action), uint8(GooseExecutor.Action.Rebalance), "Watch: trades");
@@ -153,7 +153,7 @@ contract RebalanceForkTest is RebalanceForkBase {
         emit GooseExecutor.RebalanceSkipped(a);
         _run(_check());
         assertEq(IERC20(STOCKS[NVDA]).balanceOf(a), nvda, "nothing moved");
-        (,, uint8 fails,,,,,, uint32 day) = x.accounts(a);
+        (,, uint8 fails,,,,,, uint32 day,) = x.accounts(a);
         assertEq(fails, 0, "not a failure");
         assertGt(day, 0, "done for the day");
         assertEq(_check().length, 0);

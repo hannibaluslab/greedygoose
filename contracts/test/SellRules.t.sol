@@ -2,7 +2,7 @@
 pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
-import {Book, Holding, SellLimits, SellRules, SellTiming, Slice} from "../src/SellRules.sol";
+import {Book, Holding, SellLimits, SellRules, Slice} from "../src/SellRules.sol";
 import {Vectors} from "./Vectors.sol";
 
 /// Protect · sell's rule against the TypeScript reference (planSell and sellTiming in lib/guardian/sell.ts), on the
@@ -11,7 +11,9 @@ import {Vectors} from "./Vectors.sol";
 contract SellRulesTest is Test {
     uint256 constant WAD = 1e18;
     uint256 constant FLOOR = 100; // 1%
-    uint256 constant TARGET = 1.2e18; // back to Watch (Act is the line, 2026-10-15)
+    uint256 constant TARGET = 1.2e18; // the worked examples' target (2026-10-15); `amounts` takes any target
+    uint256 constant LINE = 1.03e18; // Protect's line (CashRules.TRIGGER_HF)
+    uint256 constant TARGET_NOW = 1.12e18; // Protect's target (config/risk.ts CASH_AGENT)
     uint256 constant NONE = 0;
     uint256 constant ALL = 1e13; // a limit, pool window or USDC limit that never binds
 
@@ -51,53 +53,42 @@ contract SellRulesTest is Test {
         assertGt(sold, 300, "most vectors sell");
     }
 
-    function test_timing_agrees_with_sellTiming() public view {
+    function test_timing_agrees_with_sellsNow() public view {
         bytes memory timings = vm.parseJsonBytes(vm.readFile("test/vectors/sell.json"), ".timings");
         assertEq(timings.length, 1000);
-        uint256[4] memory seen;
+        uint256[2] memory seen;
         for (uint256 i; i < timings.length; ++i) {
             Vectors.Timing memory v = Vectors.timingInput(i);
-            SellLimits memory l;
-            (l.headsUpHf, l.nowHf, l.headsUpDelay) = (v.headsUpHf, v.nowHf, v.headsUpDelay);
-            (SellTiming t, bool atOnce) = SellRules.timing(v.hf, v.headsUpAt, v.now_, v.frozen, l);
-            assertEq(uint8(t) * 2 + (atOnce ? 1 : 0), uint8(timings[i]), string.concat("vector ", vm.toString(i)));
-            ++seen[uint8(t)];
+            bool sells = SellRules.sellsNow(v.hf, v.rescuing, v.frozen, v.triggerHf, v.targetHf);
+            assertEq(sells ? 1 : 0, uint8(timings[i]), string.concat("vector ", vm.toString(i)));
+            ++seen[sells ? 1 : 0];
         }
-        for (uint256 t; t < 4; ++t) {
-            assertGt(seen[t], 50, "every timing is covered");
-        }
+        assertGt(seen[0], 200, "waits are covered");
+        assertGt(seen[1], 200, "sales are covered");
     }
 
-    // ================================================================== timing (decision 3)
+    // ================================================================== timing (Adrian, 2026-10-19)
 
-    /// Act is the line (Adrian, 2026-10-15): in Act a heads-up, then the sale 30 minutes later; deep in Act (under
-    /// 1.05) at once; in Watch nothing, not even a heads-up.
-    function test_heads_up_in_act_then_a_sale_30_minutes_later_and_at_once_below_1_05() public pure {
-        SellLimits memory l = _defaults();
-        uint256 t0 = 1_792_000_000;
-        _timing(1.08e18, 0, t0, false, l, SellTiming.HeadsUp, false);
-        _timing(1.08e18, t0, t0 + 30 minutes - 1, false, l, SellTiming.Wait, false);
-        _timing(1.08e18, t0, t0 + 30 minutes, false, l, SellTiming.Sell, false);
-        _timing(1.05e18, 0, t0, false, l, SellTiming.HeadsUp, false); // the at-once line itself still warns first
-        _timing(1.049e18, 0, t0, false, l, SellTiming.Sell, true);
-        _timing(1.1e18, t0, t0, false, l, SellTiming.Clear, false); // back at the line: a later fall gets a new heads-up
+    /// At once below Protect's line (1.03), with no heads-up; nothing between it and Act (1.1) or above.
+    function test_sells_at_once_below_1_03_and_nothing_above() public pure {
+        assertTrue(SellRules.sellsNow(1.029e18, false, false, LINE, TARGET_NOW));
+        assertTrue(SellRules.sellsNow(0.98e18, false, false, LINE, TARGET_NOW));
+        assertFalse(SellRules.sellsNow(1.03e18, false, false, LINE, TARGET_NOW), "the line itself waits");
+        assertFalse(SellRules.sellsNow(1.08e18, false, false, LINE, TARGET_NOW), "Act is a warning only");
+        assertFalse(SellRules.sellsNow(1.3e18, false, false, LINE, TARGET_NOW), "Watch");
     }
 
-    function test_watch_is_fine_no_heads_up_and_no_sale() public pure {
-        SellLimits memory l = _defaults();
-        uint256 t0 = 1_792_000_000;
-        _timing(1.1e18, 0, t0, false, l, SellTiming.Wait, false);
-        _timing(1.3e18, 0, t0, false, l, SellTiming.Wait, false);
-        _timing(1.49e18, 0, t0, false, l, SellTiming.Wait, false);
-        _timing(1.3e18, t0 - 1 hours, t0, false, l, SellTiming.Clear, false); // a heads-up from Act is cleared, not sold
+    /// A rescue Protect started goes on below the target, so it ends back at 1.12, not at the line.
+    function test_a_rescue_sells_on_until_the_target() public pure {
+        assertTrue(SellRules.sellsNow(1.05e18, true, false, LINE, TARGET_NOW));
+        assertTrue(SellRules.sellsNow(1.119e18, true, false, LINE, TARGET_NOW));
+        assertFalse(SellRules.sellsNow(1.12e18, true, false, LINE, TARGET_NOW), "the target ends it");
+        assertFalse(SellRules.sellsNow(1.3e18, true, false, LINE, TARGET_NOW));
     }
 
-    function test_nothing_while_prices_are_held_but_a_heads_up_can_clear() public pure {
-        SellLimits memory l = _defaults();
-        _timing(1.04e18, 0, 1, true, l, SellTiming.Wait, false);
-        _timing(1.08e18, 0, 1, true, l, SellTiming.Wait, false);
-        _timing(1.08e18, 1, 1 days, true, l, SellTiming.Wait, false);
-        _timing(1.15e18, 1, 1 days, true, l, SellTiming.Clear, false);
+    function test_nothing_while_prices_are_held() public pure {
+        assertFalse(SellRules.sellsNow(0.99e18, false, true, LINE, TARGET_NOW));
+        assertFalse(SellRules.sellsNow(1.05e18, true, true, LINE, TARGET_NOW));
     }
 
     // ================================================================== which stock, how much
@@ -268,21 +259,16 @@ contract SellRulesTest is Test {
 
     function test_limits_bounds() public pure {
         assertTrue(SellRules.limitsOk(_defaults()));
-        SellLimits[11] memory bad;
+        SellLimits[6] memory bad;
         for (uint256 i; i < bad.length; ++i) {
             bad[i] = _defaults(); // each its own copy
         }
-        bad[0].headsUpHf = 1.11e18; // above the Act line: a heads-up, and so a sale, in Watch
-        bad[1].nowHf = 1.081e18; // less than 0.02 under the heads-up line
-        bad[2].targetHf = 1.14e18; // less than 0.05 above it
-        bad[3].headsUpDelay = 5 minutes;
-        bad[4].floorBps = 20;
-        bad[5].actFloorBps = 501; // past Aave's 5.5% liquidation bonus, with room
-        bad[6].poolCap = 999e6;
-        bad[7].maxSlice = 50_001e6;
-        bad[8].targetHf = 1.41e18; // back past Watch toward Safe: more stock sold than Act asks for
-        bad[9].headsUpHf = 1.09e18; // a heads-up line under the Act line: part of Act unwarned, and under the cash line
-        bad[10].nowHf = 1.049e18; // the at-once sale held back past 1.05
+        bad[0].floorBps = 20;
+        bad[1].floorBps = 501; // past Aave's 5.5% liquidation bonus, with room
+        bad[2].poolCap = 999e6;
+        bad[3].poolCap = 250_001e6;
+        bad[4].maxSlice = 99e6;
+        bad[5].maxSlice = 50_001e6;
         for (uint256 i; i < bad.length; ++i) {
             assertFalse(SellRules.limitsOk(bad[i]), vm.toString(i));
         }
@@ -292,30 +278,7 @@ contract SellRulesTest is Test {
 
     /// config/risk.ts PROTECT_SELL.
     function _defaults() internal pure returns (SellLimits memory) {
-        return SellLimits({
-            headsUpHf: 1.1e18,
-            nowHf: 1.05e18,
-            targetHf: 1.2e18,
-            headsUpDelay: 30 minutes,
-            floorBps: 100,
-            actFloorBps: 300,
-            poolCap: 10_000e6,
-            maxSlice: 5_000e6
-        });
-    }
-
-    function _timing(
-        uint256 hf,
-        uint256 headsUpAt,
-        uint256 nowTs,
-        bool frozen,
-        SellLimits memory l,
-        SellTiming want,
-        bool wantAtOnce
-    ) internal pure {
-        (SellTiming t, bool atOnce) = SellRules.timing(hf, headsUpAt, nowTs, frozen, l);
-        assertEq(uint8(t), uint8(want));
-        assertEq(atOnce, wantAtOnce);
+        return SellLimits({floorBps: 300, poolCap: 10_000e6, maxSlice: 5_000e6});
     }
 
     function _book() internal pure returns (Book memory b) {

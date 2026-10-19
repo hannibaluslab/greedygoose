@@ -25,6 +25,7 @@ library Vectors {
         uint256 capLeft;
         Thresholds t;
         uint256 minRepay;
+        bool rescuing;
     }
 
     struct Save {
@@ -55,12 +56,10 @@ library Vectors {
 
     struct Timing {
         uint256 hf;
-        uint256 headsUpAt;
-        uint256 now_;
+        bool rescuing;
         bool frozen;
-        uint64 headsUpHf;
-        uint64 nowHf;
-        uint32 headsUpDelay;
+        uint256 triggerHf;
+        uint256 targetHf;
     }
 
     struct SellHash {
@@ -106,18 +105,19 @@ library Vectors {
         return (1 + r1 % 9) * 10 ** between(r2, lo, hi);
     }
 
-    /// Thresholds within the executor's Act-only bounds (2026-10-15): the trigger pinned to the Act line (1.10), the
-    /// target from 1.15 to 1.40. Half the healths are in Act (0.80 to 1.10), the rest from the Act line through Watch
-    /// into Safe (1.10 to 2.00). The weekend numbers are the card's, unused.
+    /// Thresholds within the executor's bounds (2026-10-19): the trigger pinned to Protect's line (1.03), the target
+    /// from 1.08 to 1.40. Half the healths are under the line (0.80 to 1.03), the rest from the line through Watch into
+    /// Safe (1.03 to 2.00), and half the accounts are in a rescue. The weekend numbers are the card's, unused.
     function protectInput(uint256 i) internal pure returns (Protect memory v) {
-        uint256[19] memory r;
-        for (uint256 f; f < 19; ++f) {
+        uint256[20] memory r;
+        for (uint256 f; f < 20; ++f) {
             r[f] = rand("protect", i, f);
         }
-        uint256 trigger = 1.1e18;
+        uint256 trigger = 1.03e18;
         uint256 target = between(r[15], trigger + 0.05e18, 1.4e18);
-        uint256 hf = r[14] % 2 == 0 ? between(r[4], 0.8e18, 1.1e18) : between(r[4], 1.1e18, 2e18);
-        v.t = Thresholds(uint64(trigger), uint64(target), 0.15e18, uint64(trigger));
+        uint256 hf = r[14] % 2 == 0 ? between(r[4], 0.8e18, 1.03e18) : between(r[4], 1.03e18, 2e18);
+        v.t = Thresholds(uint64(trigger), uint64(target), 0.15e18, 1e18);
+        v.rescuing = r[19] % 2 == 0;
 
         v.collateral = spread(r[0], r[1], 1, 6) * VALUE_PER_USD + r[2] % VALUE_PER_USD;
         v.avgCf = between(r[3], 0.5e18, 0.85e18);
@@ -149,8 +149,8 @@ library Vectors {
         return friday * 1 days + 15 hours + rand("calendar", i, 2) % 12 hours;
     }
 
-    /// Holdings from 0.01 to 10,000 shares at $100–1,000, health from 0.95 to 1.3, a target from 1.15 to 1.4 (the
-    /// executor's Act-only bounds, 2026-10-15), and limits, pool windows and the USDC limit that bind a fifth of the time.
+    /// Holdings from 0.01 to 10,000 shares at $100–1,000, health from 0.95 to 1.3, a target from 1.08 to 1.4 (the
+    /// executor's bounds, 2026-10-19), and limits, pool windows and the USDC limit that bind a fifth of the time.
     function sellInput(uint256 i) internal pure returns (Sell memory v) {
         uint256 power;
         for (uint256 k; k < 7; ++k) {
@@ -169,22 +169,20 @@ library Vectors {
         uint256 hf = between(rand("sell", i, 1), 0.95e18, 1.3e18);
         v.book.debt = (power * 1e14 + hf - 1) / hf;
         v.book.usdcLeft = rand("sell", i, 2) % 5 == 0 ? spread(rand("sell", i, 3), rand("sell", i, 4), 5, 9) : 1e13;
-        v.targetHf = between(rand("sell", i, 5), 1.15e18, 1.4e18);
+        v.targetHf = between(rand("sell", i, 5), 1.08e18, 1.4e18);
         v.floorBps = between(rand("sell", i, 6), 25, 500);
         v.keepMix = rand("sell", i, 7) % 3 == 0;
         v.maxSlice = between(rand("sell", i, 8), 100e6, 50_000e6);
     }
 
-    /// Within the executor's Act-only bounds (2026-10-15): the heads-up line pinned to the Act line (1.10), the at-once
-    /// line from 1.05 to 1.08; the health from 0.98 to 1.16, so Act, Watch and both lines are all well covered.
+    /// Within the executor's bounds (2026-10-19): the line pinned at 1.03, the target from 1.08 to 1.20, the health from
+    /// 0.98 to 1.20, so both lines and the rescue band between them are all well covered; half are in a rescue.
     function timingInput(uint256 i) internal pure returns (Timing memory v) {
-        v.now_ = 1_792_000_000;
-        v.headsUpHf = 1.1e18;
-        v.hf = between(rand("timing", i, 1), 0.98e18, 1.16e18);
-        v.headsUpAt = rand("timing", i, 2) % 2 == 0 ? 0 : v.now_ - rand("timing", i, 3) % 7_200;
+        v.triggerHf = 1.03e18;
+        v.hf = between(rand("timing", i, 1), 0.98e18, 1.2e18);
+        v.rescuing = rand("timing", i, 2) % 2 == 0;
         v.frozen = rand("timing", i, 4) % 4 == 0;
-        v.nowHf = uint64(between(rand("timing", i, 5), 1.05e18, v.headsUpHf - 0.02e18));
-        v.headsUpDelay = uint32(between(rand("timing", i, 6), 600, 7_200));
+        v.targetHf = between(rand("timing", i, 5), 1.08e18, 1.2e18);
     }
 
     /// A third of the stocks never-sell, at least one for sale.
