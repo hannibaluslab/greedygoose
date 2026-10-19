@@ -6,7 +6,7 @@ import { feeBufferRaw, toUsd } from "@/lib/cash";
 import { PROTOCOLS } from "@/lib/protocols/config";
 import { aaveV3PoolAbi } from "@/lib/protocols/abis";
 import { buildAddSavingsCalls } from "@/lib/savings";
-import { txKey, type TxPlan } from "@/lib/tx/prepared";
+import { txKey, type TxPhase, type TxPlan } from "@/lib/tx/prepared";
 import { USDC } from "@/lib/tokens/registry";
 
 /*
@@ -107,4 +107,39 @@ export function startEarningPlan(user: Address, walletRaw: bigint): TxPlan | nul
     calls: () => Promise.resolve(buildStartEarningCalls({ user, walletRaw })),
     activity: startEarningActivity(amountRaw),
   };
+}
+
+/**
+ * Where a tap is, as far as it isn't read off the batch itself (useTx's phase): its batch on JAW's sheet or confirming,
+ * then, once it lands, the Save grant when one follows ("deposit"); the grant still to open ("grant-left": JAW couldn't
+ * open it, or it was cancelled), or opened again from a tap ("grant"); all through ("landed") until Home reads the
+ * wallet again.
+ */
+export type StartEarningStage = "deposit" | "grant" | "grant-left" | "landed";
+
+/**
+ * A tap's progress from its stage and the batch's phase: the batch landed (`deposited`), the Save grant on JAW's screen
+ * (`granting`: from the landed batch, or again from a tap), all through (`landed`), the card held as it was signed for
+ * (`pinned`), and the phase the button shows. `grantFollows`: null before a tap, else whether the grant follows it.
+ */
+export function startEarningFlow(p: {
+  stage: StartEarningStage | null;
+  phase: TxPhase;
+  busy: boolean;
+  grantFollows: boolean | null;
+}) {
+  const { stage } = p;
+  const deposited = stage === "deposit" && p.phase === "done" && p.grantFollows !== null;
+  const granting = (deposited && !!p.grantFollows) || stage === "grant";
+  const landed = stage === "landed" || (deposited && !p.grantFollows);
+  // Mid-tap the card stays as it was signed for, so it doesn't change under the user as balances re-read.
+  const pinned = granting || stage === "grant-left" || (stage === "deposit" && p.busy);
+  const phase: TxPhase = granting
+    ? "signing"
+    : stage === "deposit"
+      ? p.phase
+      : stage === "grant-left" || landed
+        ? "idle"
+        : p.phase;
+  return { deposited, granting, landed, pinned, phase };
 }

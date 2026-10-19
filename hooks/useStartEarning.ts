@@ -3,21 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { useCashSetup } from "@/hooks/useCashSetup";
-import { usePrepare, useTx, type TxPhase } from "@/hooks/useTx";
+import { usePrepare, useTx } from "@/hooks/useTx";
 import { toUsd, type Cash } from "@/lib/cash";
 import { startedEarningText, startEarningShown, startEarningSteps, startEarningText } from "@/lib/cashSetup";
-import { startEarningPlan } from "@/lib/startEarning";
+import { startEarningFlow, startEarningPlan, type StartEarningStage } from "@/lib/startEarning";
 
 /** What the card said at the tap, and whether the Save grant follows: kept while JAW's sheets are open. */
 type Held = { title: string; line: string; steps: number; walletRaw: bigint; grant: boolean };
-
-/**
- * Where a tap is, as far as it isn't read off the batch itself (useTx's phase): its batch on JAW's sheet or confirming,
- * then, once it lands, the Save grant when one follows ("deposit"); the grant still to open ("grant-left": JAW couldn't
- * open it, or it was cancelled), or opened again from a tap ("grant"); all through ("landed") until Home reads the
- * wallet again.
- */
-type Stage = "deposit" | "grant" | "grant-left" | "landed";
 
 /**
  * Home's Start earning (Adrian, 2026-10-15): one tap moves the wallet's idle USDC into savings in one user-signed batch
@@ -39,7 +31,7 @@ export function useStartEarning(p: {
   const { account, cash, setup, rate } = p;
   const tx = useTx("This didn’t go through on Base. Your cash didn’t move, except any network fee.");
   const [held, setHeld] = useState<Held | null>(null);
-  const [stage, setStage] = useState<Stage | null>(null);
+  const [stage, setStage] = useState<StartEarningStage | null>(null);
   // The grant after a landed batch starts once; the toast is said once.
   const launched = useRef(false);
   const live = useRef({ setup, rate, resetTx: tx.reset });
@@ -47,10 +39,13 @@ export function useStartEarning(p: {
     live.current = { setup, rate, resetTx: tx.reset };
   });
 
-  const deposited = stage === "deposit" && tx.phase === "done" && !!held;
   // The batch landed and the Save grant follows, on JAW's own screen: from the effect below, or again from a tap.
-  const granting = (deposited && held.grant) || stage === "grant";
-  const landed = stage === "landed" || (deposited && !held.grant);
+  const { deposited, granting, landed, pinned, phase } = startEarningFlow({
+    stage,
+    phase: tx.phase,
+    busy: tx.busy,
+    grantFollows: held ? held.grant : null,
+  });
   // Done, and Home read the wallet again (the batch moved it): the card follows the rule again, for new money.
   if (landed && held && cash && cash.walletRaw !== held.walletRaw) {
     setStage(null);
@@ -58,8 +53,6 @@ export function useStartEarning(p: {
   }
 
   const shown = !!cash && startEarningShown(setup.save, cash.walletRaw);
-  // Mid-tap the card stays as it was signed for, so it doesn't change under the user as balances re-read.
-  const pinned = granting || stage === "grant-left" || (stage === "deposit" && tx.busy);
   const visible = pinned || (!landed && shown);
   const words =
     pinned && held
@@ -108,24 +101,21 @@ export function useStartEarning(p: {
     void tx.sign(plan);
   }
 
-  const phase: TxPhase = granting
-    ? "signing"
-    : stage === "deposit"
-      ? tx.phase
-      : stage === "grant-left" || landed
-        ? "idle"
-        : tx.phase;
   // With a grant to follow, it needs the executor's limit read too ("One moment…"); the batch alone, only the fee.
   const blocked = setup.save === "off" || stage === "grant-left" ? setup.earning.blocked : setup.feeBlocked;
+  const { title, line } = words ?? { title: "", line: "" };
+  // The grant's own error once only it is left; none while it's on JAW's screen; else the batch's, or its preparing's.
+  const error = () =>
+    stage === "grant-left" ? setup.earning.error : granting ? null : (tx.error ?? (plan ? prep.error : null));
   return {
     visible,
-    title: words?.title ?? "",
-    line: words?.line ?? "",
+    title,
+    line,
     steps,
     phase,
     checking: plan ? prep.checking : false,
     blocked: plan ? prep.blocked : false,
-    error: stage === "grant-left" ? setup.earning.error : granting ? null : (tx.error ?? (plan ? prep.error : null)),
+    error: error(),
     note: blocked,
     preview: setup.preview,
     start,
