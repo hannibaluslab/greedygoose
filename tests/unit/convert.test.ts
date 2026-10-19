@@ -7,7 +7,7 @@ import {
   erc20Abi,
   type Log,
 } from "viem";
-import { describeActivity } from "@/components/gg/Activity";
+import { describeActivity } from "@/lib/activity/describe";
 import { decodeActivity } from "@/lib/activity/decode";
 import { explainRevert } from "@/lib/aave/errors";
 import { assertAllowed } from "@/lib/allowlist";

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { encodeAbiParameters, encodeEventTopics, erc20Abi, getAbiItem, getAddress, parseAbi, type Log } from "viem";
 import { entryPoint08Abi, entryPoint08Address } from "viem/account-abstraction";
-import { describeActivity } from "@/components/gg/Activity";
+import { describeActivity } from "@/lib/activity/describe";
 import { decodeActivity } from "@/lib/activity/decode";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";

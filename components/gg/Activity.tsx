@@ -1,71 +1,18 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { StockAvatar, tickerOf } from "./StockAvatar";
+import { StockAvatar } from "./StockAvatar";
 import { AgentsIcon, ChevronDown, ChevronRight, RebalanceIcon, ShieldIcon } from "./icons";
 import type { ActivityRow } from "@/hooks/useActivity";
 import { useNames } from "@/hooks/useContacts";
 import type { AgentRow } from "@/hooks/useAgentFeed";
-import type { ActivityItem } from "@/lib/activity/decode";
 import type { MoveBy, Words } from "@/lib/agents/feed";
+import { describeActivity, moveLine, moveStatus } from "@/lib/activity/describe";
 import { STATUS_LABEL } from "@/lib/risk/status";
 import { txUrl } from "@/lib/chain";
-import { ALL_RESERVES, USDC, findByAddress } from "@/lib/tokens/registry";
+import { USDC } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
-import { formatCoin, formatShares, formatUsd, shortAddress } from "@/lib/formatting";
-
-/**
- * One decoded move in words: what happened, then its amount and sign. Dollars are "Cash" (ruling 26); a send names who
- * it went to, `to` (ruling 25: "Sent Cash to ana.eth").
- */
-export function describeActivity(
-  i: ActivityItem,
-  to?: string,
-): { title: string; amount: string; sign: "+" | "−" | "" } {
-  const r = ALL_RESERVES.find((x) => x.symbol === i.symbol) ?? findByAddress(i.symbol);
-  const name = r?.kind === "equity" ? r.name : "Cash";
-  const shares = `${formatShares(i.amount)} ${tickerOf(i.symbol)}`;
-  // What moved: shares of a stock, else dollars.
-  const moved = r?.kind === "equity" ? shares : formatUsd(i.amount);
-  switch (i.kind) {
-    case "buy":
-      return { title: `Bought ${name}`, amount: `${shares} · ${formatUsd(i.paidUsd ?? 0)}`, sign: "" };
-    case "sell":
-      return { title: `Sold ${name}`, amount: `${shares} · ${formatUsd(i.receivedUsd ?? 0)}`, sign: "" };
-    case "supply":
-      return {
-        title: `Backed credit with ${name}`,
-        amount: moved,
-        sign: "",
-      };
-    case "withdraw":
-      return { title: `Freed up ${name}`, amount: moved, sign: "" };
-    case "borrow":
-      return { title: "Used credit", amount: formatUsd(i.amount), sign: "+" };
-    case "earn":
-      // One move (lib/activity/decode.ts): the credit that came to the cash and went in to earn, as the Cash sheet says.
-      return { title: "Earn with stocks", amount: `${formatUsd(i.amount)} from credit, earning`, sign: "+" };
-    case "save":
-      // Start earning (lib/activity/decode.ts): the cash went into savings. It stayed the user's cash, so no sign.
-      return { title: "Started earning", amount: `${formatUsd(i.amount)} into savings`, sign: "" };
-    case "repay":
-      return { title: "Repaid credit", amount: formatUsd(i.amount), sign: "−" };
-    case "receive":
-      return { title: `Received ${name}`, amount: moved, sign: "+" };
-    case "send":
-      return {
-        title: to ? `Sent ${name} to ${to}` : `Sent ${name}`,
-        amount: moved,
-        sign: "−",
-      };
-    case "convert":
-      return {
-        title: `Turned ${i.symbol} into cash`,
-        amount: `${formatCoin(i.amount)} ${i.symbol} · ${formatUsd(i.receivedUsd ?? 0)}`,
-        sign: "",
-      };
-  }
-}
+import { shortAddress } from "@/lib/formatting";
 
 /** The round mark beside a move: the stock's badge, or a green $ for USDC and the other dollars that become cash. */
 export function ActivityAvatar({ symbol, size }: { symbol: string; size: number }) {
@@ -192,12 +139,7 @@ function Move({ row, last, open, onToggle }: { row: ActivityRow; last: boolean; 
   const looked = useNames(sentTo && !main?.toName ? [sentTo] : []);
   const who = sentTo ? (main?.toName ?? looked.get(sentTo.toLowerCase()) ?? shortAddress(sentTo)) : undefined;
   const d = main ? describeActivity(main, who) : null;
-  const status = row.status === "pending" ? "Confirming" : row.status === "failed" ? "Failed" : null;
-  // Earn with stocks reads as one move: the backing it put in use is in its details, not "1 more".
-  const more = main?.kind !== "earn" && row.items.length > 1;
-  const line = [d && `${d.sign}${d.amount}`, more && `${row.items.length - 1} more`, status]
-    .filter(Boolean)
-    .join(" · ");
+  const line = moveLine(row, d);
 
   return (
     <li className={`py-2 ${last ? "" : "border-b border-hairline"}`}>
@@ -218,41 +160,48 @@ function Move({ row, last, open, onToggle }: { row: ActivityRow; last: boolean; 
         </span>
         <ChevronDown className={`mt-0.5 shrink-0 text-subtle ${open ? "rotate-180" : ""}`} />
       </button>
-      {open && (
-        <div className="mt-2 rounded-[16px] bg-card-bone px-3 pt-2.5 text-[13px] leading-[1.35]">
-          <dl className="num m-0 grid grid-cols-[82px_minmax(0,1fr)] gap-y-[5px]">
-            {row.items.map((item, i) => {
-              const x = describeActivity(item, i === 0 ? who : undefined);
-              return (
-                <Detail key={i} label={i === 0 ? "What" : ""}>
-                  {x.title}, {x.sign}
-                  {x.amount}
-                </Detail>
-              );
-            })}
-            {main?.kind === "send" && main.to && (
-              <Detail label="To">
-                {main.toName ? `${main.toName} · ${shortAddress(main.to)}` : shortAddress(main.to)}
-              </Detail>
-            )}
-            <Detail label="When">{WHEN.format(row.time)}</Detail>
-            {status && <Detail label="Status">{status}</Detail>}
-          </dl>
-          {row.hash ? (
-            <a
-              href={txUrl(row.hash)}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-1.5 flex h-10 items-center justify-between border-t border-hairline text-[13px] font-semibold text-ink no-underline"
-            >
-              View on Base <ChevronRight size={15} />
-            </a>
-          ) : (
-            <div className="h-2.5" />
-          )}
-        </div>
-      )}
+      {open && <MoveDetails row={row} who={who} />}
     </li>
+  );
+}
+
+/** A move's details on tap: each move in its batch, who a send went to, when, its status, and the transaction on Base. */
+function MoveDetails({ row, who }: { row: ActivityRow; who: string | undefined }) {
+  const main = row.items[0];
+  const status = moveStatus(row.status);
+  return (
+    <div className="mt-2 rounded-[16px] bg-card-bone px-3 pt-2.5 text-[13px] leading-[1.35]">
+      <dl className="num m-0 grid grid-cols-[82px_minmax(0,1fr)] gap-y-[5px]">
+        {row.items.map((item, i) => {
+          const x = describeActivity(item, i === 0 ? who : undefined);
+          return (
+            <Detail key={i} label={i === 0 ? "What" : ""}>
+              {x.title}, {x.sign}
+              {x.amount}
+            </Detail>
+          );
+        })}
+        {main?.kind === "send" && main.to && (
+          <Detail label="To">
+            {main.toName ? `${main.toName} · ${shortAddress(main.to)}` : shortAddress(main.to)}
+          </Detail>
+        )}
+        <Detail label="When">{WHEN.format(row.time)}</Detail>
+        {status && <Detail label="Status">{status}</Detail>}
+      </dl>
+      {row.hash ? (
+        <a
+          href={txUrl(row.hash)}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-1.5 flex h-10 items-center justify-between border-t border-hairline text-[13px] font-semibold text-ink no-underline"
+        >
+          View on Base <ChevronRight size={15} />
+        </a>
+      ) : (
+        <div className="h-2.5" />
+      )}
+    </div>
   );
 }
 

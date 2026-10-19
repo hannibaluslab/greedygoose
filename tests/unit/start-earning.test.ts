@@ -10,7 +10,7 @@ import {
   parseAbi,
   type Log,
 } from "viem";
-import { describeActivity } from "@/components/gg/Activity";
+import { describeActivity } from "@/lib/activity/describe";
 import { CASH } from "@/config/risk";
 import { buildRepayCalls } from "@/lib/aave/tx";
 import { decodeActivity } from "@/lib/activity/decode";
