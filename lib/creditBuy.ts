@@ -78,7 +78,7 @@ export type CreditPosition = {
 /**
  * Every batch that takes credit (Credit Buy, decision 1, Earn with stocks) is stopped if the health on Aave
  * after it, read in its own simulation, is in Act: the screen's cap is planned on the position as last read, Aave lets
- * credit go down to 1.0, and a cut in a stock's collateral factor lands at the borrow (lib/tx/prepared.ts HealthFloor).
+ * credit go down to 1.0, and a cut in a stock's collateral factor lands when the credit is taken (lib/tx/prepared.ts HealthFloor).
  */
 export const CREDIT_FLOOR: HealthFloor = { minHf: RISK.watchMin, stop: CREDIT_BLOCKED.act };
 
@@ -214,7 +214,7 @@ export function bestBacking(
 }
 
 /**
- * What backs `creditRaw` of credit and the status it ends in, on Leo's loan maths.
+ * What backs `creditRaw` of credit and the status it ends in, on Leo's credit maths.
  *
  * With `backing` (Credit Buy, backing first): exactly that pick goes in use, and the credit it can take is what it and what already
  * backs credit allow (creditCap). More than its free shares is blocked ("over-free"); 0n uses only what already backs

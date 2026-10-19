@@ -118,7 +118,7 @@ const part = (raw: bigint, f: number) =>
 
 /**
  * The most backing shares a repay by selling can take out (planSell's `maxRaw` for "repay"): the shares come out before
- * the repay lands, so the loan must stay within Aave's limit, with LIMIT_MARGIN, in between. All of them when
+ * the repay lands, so the credit must stay within Aave's limit, with LIMIT_MARGIN, in between. All of them when
  * nothing is owed. Repay's "Pay with" offers a backing stock up to this.
  */
 export function repaySaleMaxRaw(
@@ -166,7 +166,7 @@ function sellBlock(p: {
 
 /**
  * Plan a sale of `quote.amountIn` shares on Leo's maths. A backing holding comes out only as far as the 1.12 line
- * allows (maxWithdrawUsd at CREDIT_CAP.minHf, Act is the line). Selling to repay takes the shares out first, so the loan must
+ * allows (maxWithdrawUsd at CREDIT_CAP.minHf, Act is the line). Selling to repay takes the shares out first, so the credit must
  * stay within Aave's limit until the repay lands; it usually ends healthier, and one that would end in Act, lower
  * than it started, is blocked ("act", LIMIT_MARGIN). Plan only: the batch is simulated before JAW's sheet.
  */
