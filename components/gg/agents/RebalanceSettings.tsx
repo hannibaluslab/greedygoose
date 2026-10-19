@@ -236,70 +236,10 @@ export function RebalanceSettingsView({
             </div>
           );
         })}
-        {notInMix.length > 0 && !adding && (
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className="flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-[18px] border-[1.5px] border-dashed border-line-strong text-[13px] font-semibold text-ink"
-          >
-            <PlusIcon size={14} strokeWidth={2.2} />
-            Add a stock
-          </button>
-        )}
-        {adding && (
-          <div role="group" aria-label="Add a stock" className="flex flex-wrap gap-1.5">
-            {notInMix.map((e) => (
-              <button
-                key={e.symbol}
-                type="button"
-                onClick={() => add(e.reserveId)}
-                className="flex h-[34px] items-center gap-1.5 rounded-[17px] bg-pill pl-1 pr-3 text-[13px] font-semibold text-ink"
-              >
-                <StockAvatar symbol={e.symbol} size={26} font={tickerOf(e.symbol).length > 4 ? 6 : 7.5} />
-                {e.name}
-              </button>
-            ))}
-          </div>
-        )}
+        <AddStock notInMix={notInMix} adding={adding} onOpen={() => setAdding(true)} onAdd={add} />
       </ManageCard>
 
-      <ManageCard>
-        <CardTitle title="Its next trades" sub="If it ran today, at today’s prices" />
-        {!whole ? (
-          <p className="m-0 text-[13px] leading-[1.4] text-ink-mid">
-            {rows.length === 0 ? "None until your mix has a stock." : "Make your mix add up to 100% to see its trades."}
-          </p>
-        ) : lines.length === 0 ? (
-          <p className="m-0 text-[13px] leading-[1.4] text-ink-mid">
-            Nothing to trade. Every stock is close to its target.
-          </p>
-        ) : (
-          <ul className="m-0 flex list-none flex-col p-0">
-            {lines.map((l, i) => (
-              <li
-                key={`${l.buy}-${l.reserveId}`}
-                className={`flex items-center gap-2.5 py-2 ${i > 0 ? "border-t border-hairline" : ""}`}
-              >
-                <StockAvatar
-                  symbol={EQUITIES[l.reserveId].symbol}
-                  size={26}
-                  font={tickerOf(EQUITIES[l.reserveId].symbol).length > 4 ? 6 : 7.5}
-                />
-                <span className="grow text-sm">
-                  <span className="text-ink-mid">{l.buy ? "Buys" : "Sells"}</span>{" "}
-                  <span className="font-semibold">{l.name}</span>
-                </span>
-                <span className="num text-[15px] font-semibold">{formatUsdTrim(l.usd)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-        {backingUsd >= 0.01 && (
-          <span className="text-xs leading-[1.4] text-subtle">
-            Counts only free shares: the {formatUsdShort(backingUsd)} backing your credit stays put.
-          </span>
-        )}
-      </ManageCard>
+      <NextTrades whole={whole} empty={rows.length === 0} lines={lines} backingUsd={backingUsd} />
 
       <ManageCard>
         <CardTitle title="Weekly limit" sub={neverMoreThan("Rebalance", "week")} />
@@ -348,5 +288,101 @@ export function RebalanceSettingsView({
         </div>
       )}
     </div>
+  );
+}
+
+/** "Add a stock" under the mix, then the stocks not in it to pick from. */
+function AddStock({
+  notInMix,
+  adding,
+  onOpen,
+  onAdd,
+}: {
+  notInMix: readonly { symbol: string; name: string; reserveId: number }[];
+  adding: boolean;
+  onOpen: () => void;
+  onAdd: (reserveId: number) => void;
+}) {
+  return (
+    <>
+      {notInMix.length > 0 && !adding && (
+        <button
+          type="button"
+          onClick={onOpen}
+          className="flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-[18px] border-[1.5px] border-dashed border-line-strong text-[13px] font-semibold text-ink"
+        >
+          <PlusIcon size={14} strokeWidth={2.2} />
+          Add a stock
+        </button>
+      )}
+      {adding && (
+        <div role="group" aria-label="Add a stock" className="flex flex-wrap gap-1.5">
+          {notInMix.map((e) => (
+            <button
+              key={e.symbol}
+              type="button"
+              onClick={() => onAdd(e.reserveId)}
+              className="flex h-[34px] items-center gap-1.5 rounded-[17px] bg-pill pl-1 pr-3 text-[13px] font-semibold text-ink"
+            >
+              <StockAvatar symbol={e.symbol} size={26} font={tickerOf(e.symbol).length > 4 ? 6 : 7.5} />
+              {e.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+/** What it would trade if it ran today, at today's prices: nothing until the mix adds up, then each buy and sale. */
+function NextTrades({
+  whole,
+  empty,
+  lines,
+  backingUsd,
+}: {
+  whole: boolean;
+  empty: boolean;
+  lines: ReturnType<typeof tradeLines>;
+  backingUsd: number;
+}) {
+  return (
+    <ManageCard>
+      <CardTitle title="Its next trades" sub="If it ran today, at today’s prices" />
+      {!whole ? (
+        <p className="m-0 text-[13px] leading-[1.4] text-ink-mid">
+          {empty ? "None until your mix has a stock." : "Make your mix add up to 100% to see its trades."}
+        </p>
+      ) : lines.length === 0 ? (
+        <p className="m-0 text-[13px] leading-[1.4] text-ink-mid">
+          Nothing to trade. Every stock is close to its target.
+        </p>
+      ) : (
+        <ul className="m-0 flex list-none flex-col p-0">
+          {lines.map((l, i) => (
+            <li
+              key={`${l.buy}-${l.reserveId}`}
+              className={`flex items-center gap-2.5 py-2 ${i > 0 ? "border-t border-hairline" : ""}`}
+            >
+              <StockAvatar
+                symbol={EQUITIES[l.reserveId].symbol}
+                size={26}
+                font={tickerOf(EQUITIES[l.reserveId].symbol).length > 4 ? 6 : 7.5}
+              />
+              <span className="grow text-sm">
+                <span className="text-ink-mid">{l.buy ? "Buys" : "Sells"}</span>{" "}
+                <span className="font-semibold">{l.name}</span>
+              </span>
+              <span className="num text-[15px] font-semibold">{formatUsdTrim(l.usd)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {backingUsd >= 0.01 && (
+        <span className="text-xs leading-[1.4] text-subtle">
+          Counts only free shares: the {formatUsdShort(backingUsd)} backing your credit stays put.
+        </span>
+      )}
+    </ManageCard>
   );
 }
