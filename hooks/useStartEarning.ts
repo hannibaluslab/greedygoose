@@ -2,9 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { usePublicClient } from "wagmi";
 import type { useCashSetup } from "@/hooks/useCashSetup";
 import { usePrepare, useTx } from "@/hooks/useTx";
 import { toUsd, type Cash } from "@/lib/cash";
+import { readCash } from "@/lib/cash/read";
+import { CHAIN_ID } from "@/lib/chain";
 import { startedEarningText, startEarningShown, startEarningSteps, startEarningText } from "@/lib/cashSetup";
 import { startEarningFlow, startEarningPlan, type StartEarningStage } from "@/lib/startEarning";
 
@@ -29,6 +32,7 @@ export function useStartEarning(p: {
   rate: string | null;
 }) {
   const { account, cash, setup, rate } = p;
+  const client = usePublicClient({ chainId: CHAIN_ID });
   const tx = useTx("This didn’t go through on Base. Your cash didn’t move, except any network fee.");
   const [held, setHeld] = useState<Held | null>(null);
   const [stage, setStage] = useState<StartEarningStage | null>(null);
@@ -62,7 +66,9 @@ export function useStartEarning(p: {
         : null;
   const steps = pinned && held ? held.steps : startEarningSteps(setup.save);
   // Nothing to prepare mid-tap: the batch is on JAW's sheet or landed, or only the grant is left.
-  const plan = visible && !pinned && cash ? startEarningPlan(account, cash.walletRaw) : null;
+  // Its batch reads the wallet again while it's prepared (readCash), as every flow that spends cash does.
+  const readWallet = async (user: `0x${string}`) => (await readCash(client!, user)).walletRaw;
+  const plan = visible && !pinned && cash ? startEarningPlan(account, cash.walletRaw, readWallet) : null;
   // Prepared while the card waits (useTx's store), so the tap opens JAW's sheet with nothing awaited first.
   const prep = usePrepare(tx.prep, plan);
 

@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   decodeFunctionData,
   encodeAbiParameters,
@@ -12,7 +12,7 @@ import {
 } from "viem";
 import { describeActivity } from "@/lib/activity/describe";
 import { CASH } from "@/config/risk";
-import { buildRepayCalls } from "@/lib/aave/tx";
+import { buildRepayCalls, type Call } from "@/lib/aave/tx";
 import { decodeActivity } from "@/lib/activity/decode";
 import type { AgentStatus } from "@/lib/agents/status";
 import { assertAllowed } from "@/lib/allowlist";
@@ -33,6 +33,7 @@ import {
 } from "@/lib/startEarning";
 import { buildBuyCalls, type BuyQuote } from "@/lib/swap/buy";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
+import { TxStop } from "@/lib/tx/prepared";
 
 type Address = `0x${string}`;
 const user: Address = "0x000000000000000000000000000000000000dEaD";
@@ -46,6 +47,9 @@ function decodeBatch(calls: { to: Address; data: `0x${string}` }[]) {
   const supply = decodeFunctionData({ abi: aaveV3PoolAbi, data: calls[1].data });
   return { approve, supply };
 }
+
+/** A wallet read at signing that finds what the screen showed. */
+const same = async () => usdc(10);
 
 describe("Start earning's batch: the wallet's cash into savings, the fee buffer kept", () => {
   it("is an exact USDC approve to Aave V3's pool, then its supply of that amount for the user, referral 0", () => {
@@ -75,19 +79,36 @@ describe("Start earning's batch: the wallet's cash into savings, the fee buffer 
     expect(startEarningRaw(startEarningMinRaw - 1n)).toBeNull();
     expect(startEarningRaw(0n)).toBeNull();
     expect(() => buildStartEarningCalls({ user, walletRaw: startEarningMinRaw - 1n })).toThrow(/smallest/);
-    expect(startEarningPlan(user, startEarningMinRaw - 1n)).toBeNull();
+    expect(startEarningPlan(user, startEarningMinRaw - 1n, same)).toBeNull();
   });
 
   it("is keyed by the account and the wallet on screen, and reads in Activity as one move while it confirms", async () => {
-    const a = startEarningPlan(user, usdc(10))!;
-    expect(a.key).toBe(startEarningPlan(user, usdc(10))!.key);
-    expect(a.key).not.toBe(startEarningPlan(user, usdc(10.01))!.key);
-    expect(a.key).not.toBe(startEarningPlan(other, usdc(10))!.key);
+    const a = startEarningPlan(user, usdc(10), async () => usdc(10))!;
+    expect(a.key).toBe(startEarningPlan(user, usdc(10), same)!.key);
+    expect(a.key).not.toBe(startEarningPlan(user, usdc(10.01), same)!.key);
+    expect(a.key).not.toBe(startEarningPlan(other, usdc(10), same)!.key);
     expect(a.user).toBe(user);
     expect(a.healthFloor).toBeUndefined();
     expect(a.activity).toEqual([{ kind: "save", symbol: "USDC", amount: 10 - CASH.feeBufferUsd }]);
     const calls = typeof a.calls === "function" ? await a.calls() : a.calls;
     expect(calls).toEqual(buildStartEarningCalls({ user, walletRaw: usdc(10) }));
+  });
+
+  it("builds from the wallet read again at signing, never more than the screen showed, and stops under the minimum", async () => {
+    const calls = async (fresh: bigint) => {
+      const read = vi.fn(async () => fresh);
+      const plan = startEarningPlan(user, usdc(10), read)!;
+      const built = await (plan.calls as () => Promise<Call[]>)();
+      expect(read).toHaveBeenCalledWith(user);
+      return built;
+    };
+    // The wallet fell since the 15-second read: the batch puts in what's there, and the fee buffer stays.
+    expect(await calls(usdc(4))).toEqual(buildStartEarningCalls({ user, walletRaw: usdc(4) }));
+    // More came in: the batch is still the screen's amount, not more.
+    expect(await calls(usdc(20))).toEqual(buildStartEarningCalls({ user, walletRaw: usdc(10) }));
+    // Under the smallest amount now: stopped with plain words, before JAW's sheet.
+    await expect(calls(startEarningMinRaw - 1n)).rejects.toBeInstanceOf(TxStop);
+    await expect(calls(0n)).rejects.toThrow(/Your cash moved/);
   });
 
   it("refuses a batch that differs from the screen", () => {

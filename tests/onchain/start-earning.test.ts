@@ -112,7 +112,7 @@ describe("Start earning simulates on mainnet: the wallet's cash goes into saving
 
   it("goes through the app's own check (the prepared path): allowlist, then eth_simulateV1 from the account", async () => {
     const walletRaw = await balance(USDC.address, preview);
-    const plan = startEarningPlan(preview, walletRaw)!;
+    const plan = startEarningPlan(preview, walletRaw, (u) => balance(USDC.address, u))!;
     const checked = await checkPlan(plan, {
       join: async (_user, batch) => batch,
       simulate: async (user, batch) =>

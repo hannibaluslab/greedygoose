@@ -6,7 +6,7 @@ import { feeBufferRaw, toUsd } from "@/lib/cash";
 import { PROTOCOLS } from "@/lib/protocols/config";
 import { aaveV3PoolAbi } from "@/lib/protocols/abis";
 import { buildAddSavingsCalls } from "@/lib/savings";
-import { txKey, type TxPhase, type TxPlan } from "@/lib/tx/prepared";
+import { TxStop, txKey, type TxPhase, type TxPlan } from "@/lib/tx/prepared";
 import { USDC } from "@/lib/tokens/registry";
 
 /*
@@ -94,17 +94,31 @@ export const startEarningActivity = (amountRaw: bigint): ActivityItem[] => [
   { kind: "save", symbol: USDC.symbol, amount: toUsd(amountRaw) },
 ];
 
+/** Said when the wallet, read again at signing, no longer holds the smallest amount and the fee buffer. */
+const START_EARNING_MOVED = "Your cash moved since you started. Try again in a moment.";
+
 /**
  * What the tap signs (useTx): keyed by the account and the wallet USDC on screen, so a new balance is a new batch.
- * Null when there's under the minimum to put in.
+ * Null when there's under the minimum to put in. The batch is built from the wallet read again while it's prepared
+ * (`readWallet`, at most 30 s before the tap, as useSigningCash reads it for other flows), since the screen's read is
+ * up to 15 s old: it puts in the lower of the two, less the fee buffer, so the buffer always stays and nothing goes
+ * in that the screen didn't show. Under the smallest amount now, it stops with START_EARNING_MOVED.
  */
-export function startEarningPlan(user: Address, walletRaw: bigint): TxPlan | null {
+export function startEarningPlan(
+  user: Address,
+  walletRaw: bigint,
+  readWallet: (user: Address) => Promise<bigint>,
+): TxPlan | null {
   const amountRaw = startEarningRaw(walletRaw);
   if (amountRaw === null) return null;
   return {
     key: txKey("startEarning", user, walletRaw),
     user,
-    calls: () => Promise.resolve(buildStartEarningCalls({ user, walletRaw })),
+    calls: async () => {
+      const fresh = await readWallet(user);
+      if (startEarningRaw(fresh) === null) throw new TxStop(START_EARNING_MOVED);
+      return buildStartEarningCalls({ user, walletRaw: fresh < walletRaw ? fresh : walletRaw });
+    },
     activity: startEarningActivity(amountRaw),
   };
 }
