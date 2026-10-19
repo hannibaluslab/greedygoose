@@ -174,6 +174,25 @@ function txFlows(me: Address, recs: readonly BoardRecord[], r: FlowRules, out: M
     return false;
   }
 
+  transferFlows(me, recs, r, fees, ownAaveLeg, out);
+  spokeFlows(me, spoke, out);
+  savingsFlows(me, savings, out);
+  creditFlows(me, credit, r, out);
+}
+
+/**
+ * The account's transfers in this transaction: legs with a venue pair up as swaps (one leg alone is a move), its own use
+ * of Aave isn't a move, JAW's fee isn't either (each fee matches one transfer of exactly its amount, once), and every
+ * other transfer is money in or out.
+ */
+function transferFlows(
+  me: Address,
+  recs: readonly BoardRecord[],
+  r: FlowRules,
+  fees: FeeRec[],
+  ownAaveLeg: (token: Address, info: TokenInfo, other: Address, paid: boolean) => boolean,
+  out: MemberFlows,
+) {
   // Each venue's legs in this transaction, by venue.
   type Leg = { block: bigint; amount: Amount };
   const venues = new Map<string, { got: Leg[]; paid: Leg[] }>();
@@ -212,7 +231,10 @@ function txFlows(me: Address, recs: readonly BoardRecord[], r: FlowRules, out: M
       for (const l of [...got, ...paid])
         out.moves.push({ block: l.block, dir: got.length ? "in" : "out", ...l.amount });
   }
+}
 
+/** The account's Spoke events: USDC credit taken, repaid or liquidated; someone else acting on its position is money. */
+function spokeFlows(me: Address, spoke: readonly SpokeRec[], out: MemberFlows) {
   for (const x of spoke) {
     if (x.event === "LiquidationCall") {
       if (x.reserveId === USDC_RESERVE_ID) out.credit.push({ block: x.block, logIndex: x.logIndex, delta: -x.amount });
@@ -227,12 +249,20 @@ function txFlows(me: Address, recs: readonly BoardRecord[], r: FlowRules, out: M
     const dir = x.event === "Supply" || x.event === "Repay" ? "in" : "out";
     out.moves.push({ block: x.block, dir, ...reserveAmount(x.reserveId, x.amount) });
   }
+}
+
+/** Savings moved for the account by someone else, or by it for someone else: money in or out. */
+function savingsFlows(me: Address, savings: readonly SavingsRec[], out: MemberFlows) {
   for (const x of savings) {
     if (eq(x.by, x.for)) continue;
     if (x.event === "Supply" && eq(x.for, me)) out.moves.push({ block: x.block, dir: "in", usd6: x.amount });
     else if (x.event === "Withdraw" && eq(x.by, me)) out.moves.push({ block: x.block, dir: "out", usd6: x.amount });
     else if (x.event === "Withdraw" && eq(x.for, me)) out.moves.push({ block: x.block, dir: "in", usd6: x.amount });
   }
+}
+
+/** The account's USDC savings credit: taken, repaid or liquidated; someone else drawing or repaying it is money. */
+function creditFlows(me: Address, credit: readonly SavingsCreditRec[], r: FlowRules, out: MemberFlows) {
   for (const x of credit) {
     // Only USDC credit is in net worth (lib/board/worth.ts); another asset drawn reaches it only once it is turned into
     // something the board tracks, and then as money put in.
