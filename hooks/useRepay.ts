@@ -42,12 +42,7 @@ function useRepayBatch() {
   return async (p: RepayInput): Promise<Call[]> => {
     if (!p.all || !p.coversAll) {
       const cash = await cashToSign(p.user, p.amountRaw);
-      return payFromCash(
-        p.user,
-        p.amountRaw,
-        cash,
-        buildRepayCalls({ user: p.user, amountRaw: p.amountRaw, all: p.all }),
-      );
+      return payFromCash(p.user, p.amountRaw, cash, buildRepayCalls({ user: p.user, amountRaw: p.amountRaw }));
     }
     const [debtRaw, cash] = await Promise.all([
       client!.readContract({
@@ -66,7 +61,7 @@ function useRepayBatch() {
     }
     const amountRaw = fullRepayAmount(debtRaw, maxSpendRaw(cash));
     if (amountRaw <= 0n) throw new TxStop(cantRepay(cash));
-    return payFromCash(p.user, amountRaw, cash, buildRepayCalls({ user: p.user, amountRaw, all: true }));
+    return payFromCash(p.user, amountRaw, cash, buildRepayCalls({ user: p.user, amountRaw }));
   };
 }
 

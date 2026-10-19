@@ -69,7 +69,7 @@ describe("savingsWithdrawal while Save is off (wallet USDC first, then savings)"
   });
 
   it("leaves a batch alone when the wallet covers it", () => {
-    const repay = buildRepayCalls({ user, amountRaw: usd(10), all: false });
+    const repay = buildRepayCalls({ user, amountRaw: usd(10) });
     expect(payFromCash(user, usd(10), { walletRaw: usd(20), savingsRaw: usd(100), saveOn: false }, repay)).toEqual(
       repay,
     );
@@ -84,11 +84,11 @@ describe("maxSpendRaw", () => {
 });
 
 describe("payFromCash", () => {
-  const repay = buildRepayCalls({ user, amountRaw: usd(1), all: false });
+  const repay = buildRepayCalls({ user, amountRaw: usd(1) });
 
   it("puts the savings withdrawal first, to the user, in the same batch", () => {
     const calls = payFromCash(user, usd(1), { walletRaw: 0n, savingsRaw: usd(100), saveOn: true }, repay);
-    expect(calls.map((c) => c.to)).toEqual([PROTOCOLS.AAVE_V3_POOL, USDC.address, AAVE.SPOKE]);
+    expect(calls.map((c) => c.to)).toEqual([PROTOCOLS.AAVE_V3_POOL, USDC.address, AAVE.SPOKE, USDC.address]);
     expect(decodeFunctionData({ abi: aaveV3PoolAbi, data: calls[0].data })).toMatchObject({
       functionName: "withdraw",
       args: [USDC.address, usd(1) + fee, user],

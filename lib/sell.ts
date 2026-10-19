@@ -261,10 +261,7 @@ export function buildSaleCalls(p: {
     return assertAllowed(p.user, assertSaleCoversSave(p.user, calls, p.walletRaw ?? 0n), { saveTo: p.user });
   }
   const repayRaw = saleRepayRaw(sellMinOut(p.quote, p.stock, p.oraclePriceUsd), p.debtRaw);
-  return assertAllowed(p.user, [
-    ...sale,
-    ...buildRepayCalls({ user: p.user, amountRaw: repayRaw, all: repayRaw > p.debtRaw }),
-  ]);
+  return assertAllowed(p.user, [...sale, ...buildRepayCalls({ user: p.user, amountRaw: repayRaw })]);
 }
 
 /**
@@ -281,7 +278,7 @@ export function freeRepayRaw(minOutRaw: bigint, debtRaw: bigint, feeFromSale: bo
 /**
  * Repay with a stock you hold free (Repay's "Pay with", Adrian 2026-10-15), in one batch: approve exactly the shares to
  * the router → swap them to USDC for the user, at least `sellMinOut` (the quote less 1%, never under Aave's price less
- * 10%) → approve exactly the repay to the spoke → repay it for the user (→ the allowance back to 0 on a full repay). The
+ * 10%) → approve exactly the repay to the spoke → repay it for the user → the allowance back to 0 (buildRepayCalls). The
  * repay is `freeRepayRaw` of that floor, computed here and checked again by `assertSaleCoversRepay`, so it can never be
  * more than the sale guarantees; what the sale brings above it stays as cash. No call takes anything out of backing.
  * When the cash pays the network fee, the caller adds what it needs (`payFromCash`).
@@ -298,10 +295,7 @@ export function buildFreeRepayCalls(p: {
 }): Call[] {
   if (p.debtRaw <= 0n) throw new Error("Nothing owed");
   const repayRaw = freeRepayRaw(sellMinOut(p.quote, p.stock, p.oraclePriceUsd), p.debtRaw, p.feeFromSale);
-  const calls = [
-    ...buildSellCalls(p),
-    ...buildRepayCalls({ user: p.user, amountRaw: repayRaw, all: repayRaw > p.debtRaw }),
-  ];
+  const calls = [...buildSellCalls(p), ...buildRepayCalls({ user: p.user, amountRaw: repayRaw })];
   return assertAllowed(p.user, assertSaleCoversRepay(p.user, calls, p.feeFromSale));
 }
 

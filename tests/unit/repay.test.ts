@@ -587,9 +587,9 @@ describe("buildFreeRepayCalls: sell the free shares, then repay exactly what the
       nowSec: 1_000,
     });
 
-  it("approve the shares → swap to USDC for the user → approve exactly the repay → repay it for the user", () => {
+  it("approve the shares → swap to USDC for the user → approve exactly the repay → repay it for the user → reset", () => {
     const calls = build();
-    expect(steps(calls)).toEqual(["approve", "swap", "approve", "repay"]);
+    expect(steps(calls)).toEqual(["approve", "swap", "approve", "repay", "approve"]);
     const floor = sellMinOut(q, nvda, 250);
     expect(swapOf(calls[1])!.params).toMatchObject({
       tokenIn: nvda.address,

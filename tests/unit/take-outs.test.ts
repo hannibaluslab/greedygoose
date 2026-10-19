@@ -15,7 +15,7 @@ const aapl = EQUITIES.find((e) => e.symbol === "AAPLc")!;
 const repay: TxPlan = {
   key: txKey("repay", SAM, 200_000_000n),
   user: SAM,
-  calls: () => Promise.resolve(buildRepayCalls({ user: SAM, amountRaw: 200_000_000n, all: false })),
+  calls: () => Promise.resolve(buildRepayCalls({ user: SAM, amountRaw: 200_000_000n })),
   activity: [{ kind: "repay", symbol: "USDC", amount: 200 }],
 };
 const spokeCall = (data: `0x${string}`) => decodeFunctionData({ abi: spokeAbi, data });

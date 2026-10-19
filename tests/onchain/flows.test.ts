@@ -49,9 +49,9 @@ describe("write batches simulate on mainnet", () => {
   it("take $1 of credit, then repay $1", async () => {
     const r = await simulate([
       ...buildCreditCalls({ user, amountRaw: 1_000_000n }),
-      ...buildRepayCalls({ user, amountRaw: 1_000_000n, all: false }),
+      ...buildRepayCalls({ user, amountRaw: 1_000_000n }),
     ]);
-    expect(r.results.map((x) => x.status)).toEqual(["success", "success", "success"]);
+    expect(r.results.map((x) => x.status)).toEqual(["success", "success", "success", "success"]);
   });
 
   it("put a free stock balance in as backing", async () => {
@@ -237,10 +237,10 @@ describe("savings-first batches from a $0 wallet", () => {
     });
     expect(owed, "the test account owes nothing to repay").toBeGreaterThan(0n);
     const amountRaw = owed < 1_000_000n ? owed : 1_000_000n;
-    const calls = payFromCash(user, amountRaw, await cash(), buildRepayCalls({ user, amountRaw, all: false }));
-    expect(calls.map((c) => c.to)).toEqual([PROTOCOLS.AAVE_V3_POOL, USDC.address, AAVE.SPOKE]);
+    const calls = payFromCash(user, amountRaw, await cash(), buildRepayCalls({ user, amountRaw }));
+    expect(calls.map((c) => c.to)).toEqual([PROTOCOLS.AAVE_V3_POOL, USDC.address, AAVE.SPOKE, USDC.address]);
     const r = await simulateFromEmptyWallet(calls);
-    expect(r.statuses).toEqual(["success", "success", "success"]);
+    expect(r.statuses).toEqual(["success", "success", "success", "success"]);
     expect(r.walletAfter).toBe(feeBuffer);
     expect(r.activity).toEqual([{ kind: "repay", symbol: "USDC", amount: Number(amountRaw) / 1e6 }]);
   });
@@ -282,7 +282,7 @@ describe("the cash a batch is signed with (readCash)", () => {
     expect(owed, "the test account owes nothing to repay").toBeGreaterThan(0n);
     const amountRaw = owed < 1_000_000n ? owed : 1_000_000n;
     expect(cashShort(amountRaw, c)).toBeNull();
-    const r = await simulate(payFromCash(user, amountRaw, c, buildRepayCalls({ user, amountRaw, all: false })));
+    const r = await simulate(payFromCash(user, amountRaw, c, buildRepayCalls({ user, amountRaw })));
     expect(r.results.every((x) => x.status === "success")).toBe(true);
     expect(cashShort(cashRaw(c), c)).toMatch(/^Your cash moved since you started\. You have \$[\d,]+\.\d\d now/);
   });

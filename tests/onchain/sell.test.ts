@@ -274,7 +274,7 @@ describe("repaying by selling a holding on Base (plan item 7 step 9)", () => {
       console.log(
         `repay in ${status}: repays $${(Number(plan.repayRaw) / 1e6).toFixed(2)}; HF ${r.hfBefore?.toFixed(3)} → ${r.hfAfter?.toFixed(3)}`,
       );
-      expect(r.statuses).toEqual(["success", "success", "success", "success", "success"]);
+      expect(r.statuses).toEqual(["success", "success", "success", "success", "success", "success"]);
       expect(r.suppliedDelta).toBe(-plan.sharesRaw);
       expect(-r.debtDelta).toBeGreaterThanOrEqual(plan.repayRaw - 10n); // interest accrues by the second
       expect(r.usdcDelta).toBeGreaterThanOrEqual(parseUnits("0.5", 6)); // the network fee buffer stays in the wallet

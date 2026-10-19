@@ -50,18 +50,25 @@ describe("buildCreditCalls", () => {
 });
 
 describe("buildRepayCalls", () => {
-  it("partial: approve + repay, no reset", () => {
-    const calls = buildRepayCalls({ user, amountRaw: 10_000_000n, all: false });
-    expect(calls).toHaveLength(2);
+  it("approve exactly the amount → repay it for the user → the allowance back to 0", () => {
+    const calls = buildRepayCalls({ user, amountRaw: 10_000_000n });
+    expect(calls).toHaveLength(3);
+    expect(decodeFunctionData({ abi: erc20Abi, data: calls[0].data }).args).toEqual([AAVE.SPOKE, 10_000_000n]);
     expect(decodeFunctionData({ abi: spokeAbi, data: calls[1].data })).toMatchObject({
       functionName: "repay",
       args: [7n, 10_000_000n, user],
     });
-  });
-  it("all: resets allowance to 0 afterwards", () => {
-    const calls = buildRepayCalls({ user, amountRaw: 10_000_000n, all: true });
-    expect(calls).toHaveLength(3);
     expect(decodeFunctionData({ abi: erc20Abi, data: calls[2].data }).args).toEqual([AAVE.SPOKE, 0n]);
+  });
+  it("a fixed repay over the live debt leaves no allowance: the spoke takes only the debt, the rest is reset", () => {
+    // The screen said $10; Protect repaid meanwhile and $4 is owed. Whatever the spoke pulls, the last call is a 0.
+    const calls = buildRepayCalls({ user, amountRaw: 10_000_000n });
+    const approves = calls.flatMap((c) => {
+      const d = decodeFunctionData({ abi: [...erc20Abi, ...spokeAbi], data: c.data });
+      return d.functionName === "approve" ? [d.args[1]] : [];
+    });
+    expect(approves).toEqual([10_000_000n, 0n]);
+    expect(decodeFunctionData({ abi: erc20Abi, data: calls.at(-1)!.data }).args).toEqual([AAVE.SPOKE, 0n]);
   });
   it("fullRepayAmount adds a small buffer but never exceeds balance", () => {
     expect(fullRepayAmount(1_000_000_000n, 10_000_000_000n)).toBe(1_000_500_001n);

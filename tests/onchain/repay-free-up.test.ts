@@ -82,7 +82,7 @@ async function landing(setup: Call[], batch: Call[]) {
 const repayPlan = (amountRaw: bigint, all: boolean): TxPlan => ({
   key: txKey("repay", newcomer, amountRaw, all),
   user: newcomer,
-  calls: () => Promise.resolve(buildRepayCalls({ user: newcomer, amountRaw, all })),
+  calls: () => Promise.resolve(buildRepayCalls({ user: newcomer, amountRaw })),
 });
 const resolve = async (p: TxPlan) => (typeof p.calls === "function" ? p.calls() : p.calls);
 

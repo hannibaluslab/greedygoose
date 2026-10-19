@@ -87,6 +87,9 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
 - **Swaps are held to Aave's price, in the batch itself.** A sale's minimum is the larger of the quote less 1% and the
   shares at Aave's price less 10%; a buy's minimum is the larger of the quote less 1% and the shares the dollars buy
   at Aave's price plus 10%. So no swap fills more than 10% off Aave's price, even when the quote sits at the limit.
+- **Approvals are exact and never left open.** Every approve is for the exact amount the next call spends (nothing
+  unlimited passes the allowlist), and every repay ends by setting the allowance back to 0, since a repay can be more
+  than is owed by the time it lands (Protect repaid meanwhile).
 - **A sale into cash earns at once** (Adrian, 2026-10-18): Sell and Trade's stock → cash put what the sale is sure to
   bring (the swap's floor) straight into savings, in the same signature. The wallet keeps only what it lacks of the
   fuel tank; what the pool pays over the floor stays in the wallet. A repay by selling and stock → stock don't save.

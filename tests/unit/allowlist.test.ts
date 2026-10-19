@@ -61,7 +61,7 @@ describe("assertAllowed (one allowlist for every user batch)", () => {
       ...buildWithdrawSavingsCalls(user, 0n, true),
       ...buildBuyCalls({ user, stock: nvda, quote, oraclePriceUsd: 336 }),
       ...buildBuyCalls({ user, stock: nvda, quote: { ...quote, venue: "aerodrome", pool: 10 }, oraclePriceUsd: 336 }),
-      ...buildRepayCalls({ user, amountRaw: 1_000_000n, all: true }),
+      ...buildRepayCalls({ user, amountRaw: 1_000_000n }),
       ...buildSupplyCalls({ user, stock: nvda, amountRaw: 1n }),
       ...buildWithdrawCalls({ user, stock: nvda, amountRaw: 1n, all: false }),
       ...buildCreditCalls({ user, amountRaw: 1n }),
@@ -144,7 +144,7 @@ describe("assertAllowed (one allowlist for every user batch)", () => {
     const other = [
       buildWithdrawSavingsCalls(attacker, 1n, false),
       buildBuyCalls({ user: attacker, stock: nvda, quote, oraclePriceUsd: 336 }),
-      buildRepayCalls({ user: attacker, amountRaw: 1n, all: false }),
+      buildRepayCalls({ user: attacker, amountRaw: 1n }),
       buildSupplyCalls({ user: attacker, stock: nvda, amountRaw: 1n }),
       buildWithdrawCalls({ user: attacker, stock: nvda, amountRaw: 1n, all: false }),
       buildCreditCalls({ user: attacker, amountRaw: 1n }),

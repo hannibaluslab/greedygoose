@@ -4,7 +4,7 @@
  * dollars (0 to start, All in the field), what's owed after, who pays the network fee, one Repay button.
  * Everything the sheet shows comes from here; the sheet holds no money maths.
  *
- * - Cash repays as before (useRepayBatch: savings first through payFromCash, exact approve, allowance reset on a full repay).
+ * - Cash repays as before (useRepayBatch: savings first through payFromCash, exact approve, the allowance back to 0 after every repay).
  * - A free stock sells its shares to USDC and repays exactly what the sale is sure to bring (`buildFreeRepayCalls`).
  * - A backing stock is the existing repay by selling (planSell's "repay": out of backing, sold, repaid, near-limit guard).
  */

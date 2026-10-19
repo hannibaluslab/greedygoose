@@ -30,7 +30,7 @@ const clientWith = (joinedAt: bigint | "fail") => {
 };
 
 describe("join on the first move", () => {
-  const move = buildRepayCalls({ user, amountRaw: 1_000_000n, all: false });
+  const move = buildRepayCalls({ user, amountRaw: 1_000_000n });
 
   it("adds join() at the end of an account's first batch", async () => {
     const batch = await withBoardJoin(clientWith(0n), user, move);
@@ -50,8 +50,8 @@ describe("join on the first move", () => {
     // Not joined yet is read again every time: the next move may be the first.
     const fresh = clientWith(0n);
     const other = "0x000000000000000000000000000000000000b0b0" as Address;
-    await withBoardJoin(fresh, other, buildRepayCalls({ user: other, amountRaw: 1_000_000n, all: false }));
-    await withBoardJoin(fresh, other, buildRepayCalls({ user: other, amountRaw: 1_000_000n, all: false }));
+    await withBoardJoin(fresh, other, buildRepayCalls({ user: other, amountRaw: 1_000_000n }));
+    await withBoardJoin(fresh, other, buildRepayCalls({ user: other, amountRaw: 1_000_000n }));
     expect(fresh.reads).toBe(2);
   });
 });

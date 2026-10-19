@@ -110,9 +110,10 @@ describe("buildSaleCalls", () => {
     expect(steps(sale("free"))).toEqual(["approve", "swap"]);
   });
 
-  it("repay by selling: take out → approve → swap → approve → repay what the swap is sure to pay, less the fee", () => {
+  it("repay by selling: take out → approve → swap → approve → repay what the swap is sure to pay, less the fee → reset", () => {
     const calls = sale("repay");
-    expect(steps(calls)).toEqual(["withdraw", "approve", "swap", "approve", "repay"]);
+    expect(steps(calls)).toEqual(["withdraw", "approve", "swap", "approve", "repay", "approve"]);
+    expect(decodeFunctionData({ abi: erc20Abi, data: calls[5].data }).args).toEqual([AAVE.SPOKE, 0n]);
     const repayRaw = minOut(usd(99.5)) - fee;
     expect(decodeFunctionData({ abi: erc20Abi, data: calls[3].data }).args).toEqual([AAVE.SPOKE, repayRaw]);
     expect(decodeFunctionData({ abi: spokeAbi, data: calls[4].data }).args).toEqual([

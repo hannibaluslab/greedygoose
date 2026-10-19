@@ -275,7 +275,7 @@ describe("the savings supply stays Earn with stocks', Start earning's and a sale
     const quote: BuyQuote = { venue: "uniswap", pool: 3000, amountIn: usdc(1), amountOut: 295_545n };
     const buy = buildBuyCalls({ user, stock: nvda, quote, oraclePriceUsd: 336 });
     expect(() => payFromCash(user, quote.amountIn, cash, [...buy, ...save])).toThrow(/unexpected/);
-    const repay = buildRepayCalls({ user, amountRaw: usdc(5), all: false });
+    const repay = buildRepayCalls({ user, amountRaw: usdc(5) });
     expect(() => payFromCash(user, usdc(5), cash, [...repay, ...save])).toThrow(/unexpected/);
     const send = buildSendCalls({ user, token: USDC, to: other, amountRaw: usdc(1), cash });
     expect(() => assertAllowed(user, [...send, ...save], { sendTo: other })).toThrow(/unexpected/);

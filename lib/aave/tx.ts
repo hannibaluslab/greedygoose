@@ -94,19 +94,20 @@ export function buildCreditCalls(p: { user: `0x${string}`; amountRaw: bigint }):
 }
 
 /**
- * Repay USDC. The Spoke caps the amount at the live debt, so "repay all" sends a small buffer over
- * the debt read (interest accrues every second) and then resets the leftover allowance to 0.
+ * Repay USDC: approve exactly the amount → repay it for the user → the allowance back to 0. The Spoke caps a repay at
+ * the live debt, so "repay all" sends a small buffer over the debt read (interest accrues every second), and a fixed
+ * amount can be more than is owed by the time it lands (Protect repaid, another device). Either way, whatever the
+ * Spoke didn't take is never left approved to it.
  */
-export function buildRepayCalls(p: { user: `0x${string}`; amountRaw: bigint; all: boolean }): Call[] {
+export function buildRepayCalls(p: { user: `0x${string}`; amountRaw: bigint }): Call[] {
   if (p.amountRaw <= 0n) throw new Error("Amount must be positive");
-  const calls = [
+  return assertAllowed(p.user, [
     approve(USDC.address, p.amountRaw),
     spoke(
       encodeFunctionData({ abi: spokeAbi, functionName: "repay", args: [BigInt(USDC.reserveId), p.amountRaw, p.user] }),
     ),
-  ];
-  if (p.all) calls.push(approve(USDC.address, 0n));
-  return assertAllowed(p.user, calls);
+    approve(USDC.address, 0n),
+  ]);
 }
 
 /** Amount to send for a full repay: debt + 0.05% + 1 unit, never more than the cash can pay (`maxSpendRaw`). */
