@@ -25,7 +25,11 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
 ## Home
 
 - Quick actions: Top up, Trade, Credit Buy, Repay.
-- The menu: Activity, Guide (Coming soon, at /guide) and Settings.
+- The menu: Activity, Guide (/guide) and Settings.
+- **The Guide** is task first: each row is something a person wants to do ("Buy a stock"), then where it is in the
+  app's own labels (Invest › Market), at most three steps, one line to know and a link that opens that screen. It
+  starts with the app in three lines and where things are, and ends with the words the app uses. Agents and the
+  Leaderboard carry "Coming soon" / "Opens soon" from the same flags the app reads. Readable signed out.
 - Activity also lists money and stocks someone else sent ("Received …"), from Alchemy's Transfers API (USDC's and the
   stocks' transfers to the account), a week at a time with Show earlier, back to the app's first block (2026-09-18).
   Received money is money put in, not profit; under a cent in all is dust and isn't shown. Base's public RPC refuses
