@@ -14,7 +14,7 @@ import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { aprToApy, creditApr } from "@/lib/aave/math";
 import type { Cash } from "@/lib/cash";
 import { CHAIN_ID } from "@/lib/chain";
-import { backingOptions, type Backing } from "@/lib/creditBuy";
+import { backingOptions, type Backing, type CreditLimit } from "@/lib/creditBuy";
 import { buildEarnCalls, earnOffer } from "@/lib/earnWithStocks";
 import { USDC } from "@/lib/tokens/registry";
 import { earnPlan, type EarnInput } from "@/lib/tx/plans";
@@ -49,6 +49,8 @@ export function useEarnRates(p: {
   user: `0x${string}`;
   backing: readonly Backing[];
   creditRaw: bigint;
+  /** The plan's limit (CreditPlan.limit): the batch is held to it. */
+  limit: CreditLimit;
   cash: Cash;
   apyNow: number;
   enabled?: boolean;
@@ -62,7 +64,13 @@ export function useEarnRates(p: {
     staleTime: 15_000,
     retry: false,
     queryFn: async () => {
-      const calls = buildEarnCalls({ user: p.user, backing: p.backing, creditRaw: p.creditRaw, cash: p.cash });
+      const calls = buildEarnCalls({
+        user: p.user,
+        backing: p.backing,
+        creditRaw: p.creditRaw,
+        limit: p.limit,
+        cash: p.cash,
+      });
       const r = await client!.simulateCalls({
         account: p.user,
         calls: [

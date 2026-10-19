@@ -4,7 +4,7 @@ import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { buildCreditCalls, type Call } from "@/lib/aave/tx";
 import { feeBufferRaw, type Cash } from "@/lib/cash";
-import type { BackingOption, CreditPosition } from "@/lib/creditBuy";
+import type { BackingOption, CreditLimit, CreditPosition } from "@/lib/creditBuy";
 import {
   EARN_CLOSED,
   EARN_COSTS_MORE,
@@ -38,6 +38,8 @@ const usdc = (x: number) => BigInt(Math.round(x * 1e6));
 /** Cash split between the wallet and savings, a unit short of the network-fee buffer in all. */
 const underFee: Cash = { walletRaw: feeBufferRaw / 2n, savingsRaw: feeBufferRaw / 2n - 1n, saveOn: false };
 const tsla = EQUITIES.find((e) => e.symbol === "TSLAc")!;
+/** A limit that doesn't bite: for the tests about the batch's shape. */
+const roomy: CreditLimit = { maxCreditRaw: 10n ** 15n, freeRaw: { TSLAc: 10n ** 15n, NVDAc: 10n ** 15n } };
 const nvda = EQUITIES.find((e) => e.symbol === "NVDAc")!;
 
 /** Thursday 2026-10-15, 11:00 New York: markets open. */
@@ -334,7 +336,7 @@ describe("buildEarnCalls: one batch, stocks in use → credit → into savings",
   const creditRaw = usdc(500);
 
   it("puts the stock in use, takes the credit, then approves and supplies exactly that credit for the user", () => {
-    const calls = buildEarnCalls({ user, backing, creditRaw, cash: noAgent });
+    const calls = buildEarnCalls({ user, backing, creditRaw, limit: roomy, cash: noAgent });
     expect(calls).toHaveLength(6);
     expect(calls.every((c) => c.value === 0n)).toBe(true);
     const [approveStock, supply, use, creditCall, approveSave, save] = calls;
@@ -356,20 +358,26 @@ describe("buildEarnCalls: one batch, stocks in use → credit → into savings",
   });
 
   it("with what already backs credit, it's the credit and the savings only; with two stocks, both first", () => {
-    expect(buildEarnCalls({ user, backing: [], creditRaw, cash: noAgent }).map((c) => c.to)).toEqual([
+    expect(buildEarnCalls({ user, backing: [], creditRaw, limit: roomy, cash: noAgent }).map((c) => c.to)).toEqual([
       AAVE.SPOKE,
       USDC.address,
       PROTOCOLS.AAVE_V3_POOL,
     ]);
     expect(
-      buildEarnCalls({ user, backing: [...backing, { stock: nvda, raw: 1_000n }], creditRaw, cash: noAgent }),
+      buildEarnCalls({
+        user,
+        backing: [...backing, { stock: nvda, raw: 1_000n }],
+        creditRaw,
+        limit: roomy,
+        cash: noAgent,
+      }),
     ).toHaveLength(9);
   });
 
   it("pays the network fee from savings first when the wallet can't, and supplies the credit in full", () => {
     // Save on, less than the fee buffer in the wallet: the rest of the buffer comes out of savings so it stays for the fee.
     const thin: Cash = { walletRaw: (feeBufferRaw * 2n) / 5n, savingsRaw: usdc(100), saveOn: true };
-    const calls = buildEarnCalls({ user, backing, creditRaw, cash: thin });
+    const calls = buildEarnCalls({ user, backing, creditRaw, limit: roomy, cash: thin });
     expect(calls).toHaveLength(7);
     expect(calls[0].to).toBe(PROTOCOLS.AAVE_V3_POOL);
     expect(v3(calls[0])).toMatchObject({
@@ -378,24 +386,26 @@ describe("buildEarnCalls: one batch, stocks in use → credit → into savings",
     });
     expect(v3(calls.at(-1)!)).toMatchObject({ functionName: "supply", args: [USDC.address, creditRaw, user, 0] });
     // Enough in the wallet: nothing comes out of savings.
-    expect(buildEarnCalls({ user, backing, creditRaw, cash })[0].to).toBe(tsla.address);
+    expect(buildEarnCalls({ user, backing, creditRaw, limit: roomy, cash })[0].to).toBe(tsla.address);
     // Not even the fee: refused.
-    expect(() => buildEarnCalls({ user, backing, creditRaw, cash: underFee })).toThrow(/More than your cash/);
+    expect(() => buildEarnCalls({ user, backing, creditRaw, limit: roomy, cash: underFee })).toThrow(
+      /More than your cash/,
+    );
   });
 });
 
 describe("assertEarn: the batch is what the screen says", () => {
   const backing = [{ stock: tsla, raw: 50_000_000n }];
   const creditRaw = usdc(500);
-  const calls = buildEarnCalls({ user, backing, creditRaw, cash: noAgent });
-  const review = { creditRaw, backing };
+  const calls = buildEarnCalls({ user, backing, creditRaw, limit: roomy, cash: noAgent });
+  const review = { creditRaw, backing, limit: roomy };
   const swapIn = (k: number, c: Call) => calls.map((x, i) => (i === k ? c : x));
 
   it("rejects a second credit, a different amount, a swap, a transfer and someone else's position", () => {
     expect(() => assertEarn(user, [...calls, ...buildCreditCalls({ user, amountRaw: creditRaw })], review)).toThrow(
       /Blocked/,
     );
-    expect(() => assertEarn(user, calls, { creditRaw: usdc(501), backing })).toThrow(/credit differs/);
+    expect(() => assertEarn(user, calls, { creditRaw: usdc(501), backing, limit: roomy })).toThrow(/credit differs/);
     const swap = buildBuyCalls({
       user,
       stock: nvda,
@@ -420,10 +430,25 @@ describe("assertEarn: the batch is what the screen says", () => {
     };
     expect(() => assertEarn(user, swapIn(3, theirs), review)).toThrow(/credit differs/);
     // The backing must be the plan's, for the user.
-    expect(() => assertEarn(user, calls, { creditRaw, backing: [{ stock: tsla, raw: 49_000_000n }] })).toThrow(
+    expect(() => assertEarn(user, calls, { ...review, backing: [{ stock: tsla, raw: 49_000_000n }] })).toThrow(
       /Blocked/,
     );
     expect(() => assertEarn(other, calls, review)).toThrow(/Blocked/);
+  });
+
+  it("holds the credit to the plan's limit (the 1.12 line Credit Buy checks) and the backing to the free shares", () => {
+    const at = { maxCreditRaw: creditRaw, freeRaw: { TSLAc: 50_000_000n } };
+    expect(assertEarn(user, calls, { ...review, limit: at })).toBe(calls);
+    const under = { ...at, maxCreditRaw: creditRaw - 1n };
+    expect(() => assertEarn(user, calls, { ...review, limit: under })).toThrow(/more credit than the backing allows/);
+    expect(() => buildEarnCalls({ user, backing, creditRaw, limit: under, cash: noAgent })).toThrow(
+      /more credit than the backing allows/,
+    );
+    const fewer = { ...at, freeRaw: { TSLAc: 49_999_999n } };
+    expect(() => assertEarn(user, calls, { ...review, limit: fewer })).toThrow(/more backing than the free shares/);
+    expect(() => assertEarn(user, calls, { ...review, limit: { ...at, freeRaw: {} } })).toThrow(
+      /more backing than the free shares/,
+    );
   });
 
   it("rejects savings that aren't exactly the credit, for the user, in USDC, or a batch without them", () => {

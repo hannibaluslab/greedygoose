@@ -5,7 +5,14 @@ import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { buildBackAndCreditCalls, type Call } from "@/lib/aave/tx";
 import type { ActivityItem } from "@/lib/activity/decode";
 import { cashRaw, feeBufferRaw, payFromCash, toUsd, type Cash } from "@/lib/cash";
-import { planCredit, type Backing, type BackingOption, type CreditPlan, type CreditPosition } from "@/lib/creditBuy";
+import {
+  planCredit,
+  type Backing,
+  type BackingOption,
+  type CreditLimit,
+  type CreditPlan,
+  type CreditPosition,
+} from "@/lib/creditBuy";
 import { formatUsdTrim } from "@/lib/formatting";
 import { PROTOCOLS } from "@/lib/protocols/config";
 import { aaveV3PoolAbi } from "@/lib/protocols/abis";
@@ -225,19 +232,31 @@ const savingsCall = (c: Call | undefined) => {
   }
 };
 
+/** The credit no more than the plan's limit allows (the 1.12 line), and each stock no more than its free shares. */
+function assertWithinLimit(review: { creditRaw: bigint; backing: readonly Backing[]; limit: CreditLimit }) {
+  if (review.creditRaw > review.limit.maxCreditRaw) throw new Error("Blocked: more credit than the backing allows");
+  for (const b of review.backing) {
+    const free = review.limit.freeRaw[b.stock.symbol];
+    if (free === undefined || b.raw > free) throw new Error("Blocked: more backing than the free shares");
+  }
+}
+
 /**
  * Earn with stocks' batch, checked against the screen: first, only when the wallet can't be counted on for the network
  * fee, a savings withdrawal to the user (payFromCash, as every spend from cash); then for each stock the plan puts in
  * use, an exact approve to the spoke, the supply and "use as backing", all for the user; then the credit, once, as USDC
  * to the user; then an approve of exactly that credit to Aave V3's pool and its supply into savings for the user,
- * referral code 0, last. Nothing else: no swap, no transfer, no other savings call.
+ * referral code 0, last. Nothing else: no swap, no transfer, no other savings call. The credit is held to the plan's
+ * limit (`limit.maxCreditRaw`, the 1.12 line, as assertCreditBuy holds Credit Buy) and each stock to its free shares,
+ * so the batch itself never takes more than the screen allowed.
  */
 export function assertEarn(
   user: Address,
   calls: Call[],
-  review: { creditRaw: bigint; backing: readonly Backing[] },
+  review: { creditRaw: bigint; backing: readonly Backing[]; limit: CreditLimit },
 ): Call[] {
   if (review.creditRaw <= 0n) throw new Error("Blocked: Earn with stocks takes credit");
+  assertWithinLimit(review);
   if (calls.some((c) => c.value !== 0n)) throw new Error("Blocked: unexpected value");
   const w = savingsCall(calls[0]);
   const lead = w?.functionName === "withdraw" ? 1 : 0;
@@ -303,13 +322,15 @@ export function buildEarnCalls(p: {
   user: Address;
   backing: readonly Backing[];
   creditRaw: bigint;
+  /** The plan's limit: the free shares it read and the most credit that backing allows (the 1.12 line). */
+  limit: CreditLimit;
   cash: Cash;
 }): Call[] {
   const backAndCredit = buildBackAndCreditCalls({ user: p.user, backing: [...p.backing], creditRaw: p.creditRaw });
   const calls = payFromCash(p.user, 0n, p.cash, [...backAndCredit, ...buildAddSavingsCalls(p.user, p.creditRaw)], {
     saveTo: p.user,
   });
-  return assertEarn(p.user, calls, { creditRaw: p.creditRaw, backing: p.backing });
+  return assertEarn(p.user, calls, { creditRaw: p.creditRaw, backing: p.backing, limit: p.limit });
 }
 
 /**

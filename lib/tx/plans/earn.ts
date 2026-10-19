@@ -37,7 +37,8 @@ export const earnPlan = (p: EarnInput, cashToSign: CashToSign): TxPlan => ({
     const stop = earnStop(p.quote, p.offer, p.confirmedRisk);
     if (stop) throw new TxStop(stop);
     const cash = await cashToSign(p.user, 0n);
-    return buildEarnCalls({ user: p.user, backing: p.quote.plan.backing, creditRaw: p.quote.plan.creditRaw, cash });
+    const { backing, creditRaw, limit } = p.quote.plan;
+    return buildEarnCalls({ user: p.user, backing, creditRaw, limit, cash });
   },
   fallback: EARN_REVERT,
   // The health on Aave after it, read in its simulation: in Act, it stops (Act is the line).

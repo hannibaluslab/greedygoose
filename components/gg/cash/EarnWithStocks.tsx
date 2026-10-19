@@ -259,6 +259,7 @@ function useEarnQuote(p: {
     user,
     backing: draft.plan.backing,
     creditRaw,
+    limit: draft.plan.limit,
     cash: data.cash,
     apyNow,
     enabled: p.fixedApyAfter === undefined,

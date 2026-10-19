@@ -171,7 +171,7 @@ describe("Earn with stocks simulates on mainnet: the credit lands in savings, th
     const creditRaw = usd(25);
     const plan = planCredit({ position, options, creditRaw, cash });
     expect(plan.block).toBeUndefined();
-    const calls = buildEarnCalls({ user: preview, backing: plan.backing, creditRaw, cash });
+    const calls = buildEarnCalls({ user: preview, backing: plan.backing, creditRaw, limit: plan.limit, cash });
     // Enough USDC in the wallet for the fee: no savings withdrawal, so the batch ends borrow → approve → supply.
     expect(calls.slice(-3).map((c) => c.to)).toEqual([AAVE.SPOKE, USDC.address, PROTOCOLS.AAVE_V3_POOL]);
     const r = await simulateEarn(preview, calls);
@@ -197,7 +197,7 @@ describe("Earn with stocks simulates on mainnet: the credit lands in savings, th
     const plan = planCredit({ position, options, creditRaw, cash });
     expect(plan.block).toBeUndefined();
     expect(plan.backing.length).toBeGreaterThan(0);
-    const calls = buildEarnCalls({ user: newcomer, backing: plan.backing, creditRaw, cash });
+    const calls = buildEarnCalls({ user: newcomer, backing: plan.backing, creditRaw, limit: plan.limit, cash });
     expect(calls).toHaveLength(plan.backing.length * 3 + 3);
     const r = await simulateEarn(newcomer, calls);
     console.log(
@@ -218,7 +218,7 @@ describe("Earn with stocks simulates on mainnet: the credit lands in savings, th
     const cash: Cash = { ...shown, walletRaw: 0n };
     const creditRaw = usd(25);
     const plan = planCredit({ position, options, creditRaw, cash });
-    const calls = buildEarnCalls({ user: preview, backing: plan.backing, creditRaw, cash });
+    const calls = buildEarnCalls({ user: preview, backing: plan.backing, creditRaw, limit: plan.limit, cash });
     expect(calls[0].to).toBe(PROTOCOLS.AAVE_V3_POOL);
     const r = await simulateEarn(preview, calls, emptyWallet(preview));
     expect(r.statuses.every((s) => s === "success")).toBe(true);

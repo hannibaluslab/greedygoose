@@ -204,9 +204,10 @@ describe("assertAllowed: Earn with stocks' savings supply (saveTo)", () => {
   it("passes Earn with stocks' batch: stock in use, credit, then an exact approve and a USDC supply for the user", () => {
     const batch = [...backAndCredit, ...save()];
     expect(assertAllowed(user, batch, { saveTo: user })).toBe(batch);
-    expect(buildEarnCalls({ user, backing: [{ stock: nvda, raw: 1_000_000n }], creditRaw: amount, cash })).toHaveLength(
-      6,
-    );
+    const limit = { maxCreditRaw: amount, freeRaw: { NVDAc: 1_000_000n } };
+    expect(
+      buildEarnCalls({ user, backing: [{ stock: nvda, raw: 1_000_000n }], creditRaw: amount, limit, cash }),
+    ).toHaveLength(6);
   });
 
   it("refuses a savings supply in every batch that doesn't declare it, as before", () => {
