@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { encodeFunctionData, erc20Abi } from "viem";
+import { encodeFunctionData, erc20Abi, maxUint256 } from "viem";
 import { assertAllowed } from "@/lib/allowlist";
 import {
   buildCreditCalls,
@@ -20,14 +20,15 @@ import { AAVE } from "@/lib/aave/addresses";
 import { swapRouter02Abi } from "@/lib/swap/abis";
 import { UNISWAP } from "@/lib/swap/venues";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
+import { ENTRY_COINS } from "@/lib/tokens/stables";
 
 const user = "0x000000000000000000000000000000000000dEaD";
 const attacker = "0x00000000000000000000000000000000000000ee";
 const nvda = EQUITIES.find((e) => e.symbol === "NVDAc")!;
 const quote: BuyQuote = { venue: "uniswap", pool: 3000, amountIn: 1_000_000n, amountOut: 295_545n };
-const approve = (token: `0x${string}`, spender: `0x${string}`) => ({
+const approve = (token: `0x${string}`, spender: `0x${string}`, amount = 1n) => ({
   to: token,
-  data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [spender, 1n] }),
+  data: encodeFunctionData({ abi: erc20Abi, functionName: "approve", args: [spender, amount] }),
   value: 0n,
 });
 const exactInputSingle = (tokenOut: `0x${string}`, recipient: `0x${string}`) =>
@@ -100,6 +101,42 @@ describe("assertAllowed (one allowlist for every user batch)", () => {
     ).not.toThrow();
     expect(() => assertAllowed(user, [approve(USDC.address, attacker)])).toThrow(/unexpected spender/);
     expect(() => assertAllowed(user, [approve(USDC.address, PROTOCOLS.AAVE_V3_POOL)])).toThrow(/unexpected spender/);
+  });
+
+  it("refuses an unlimited approve on every approve rule: max uint, and anything from 2^128 up", () => {
+    const unlimited = [maxUint256, 2n ** 128n];
+    for (const amount of unlimited) {
+      expect(() => assertAllowed(user, [approve(USDC.address, AAVE.SPOKE, amount)])).toThrow(/unexpected/);
+      expect(() => assertAllowed(user, [approve(nvda.address, UNISWAP.SWAP_ROUTER_02, amount)])).toThrow(/unexpected/);
+      for (const coin of ENTRY_COINS) {
+        const venue = coin.venue.kind === "psm3" ? coin.venue.psm : coin.venue.router;
+        expect(() => assertAllowed(user, [approve(coin.address, venue, amount)])).toThrow(/unexpected/);
+      }
+      // A savings supply of that much, approved for exactly that much, is just as unlimited.
+      expect(() =>
+        assertAllowed(
+          user,
+          [
+            approve(USDC.address, PROTOCOLS.AAVE_V3_POOL, amount),
+            {
+              to: PROTOCOLS.AAVE_V3_POOL,
+              data: encodeFunctionData({
+                abi: aaveV3PoolAbi,
+                functionName: "supply",
+                args: [USDC.address, amount, user, 0],
+              }),
+              value: 0n,
+            },
+          ],
+          { saveTo: user },
+        ),
+      ).toThrow(/unexpected/);
+    }
+    // Just under the line, as any real balance is, still passes.
+    expect(() => assertAllowed(user, [approve(USDC.address, AAVE.SPOKE, 2n ** 128n - 1n)])).not.toThrow();
+    const [coin] = ENTRY_COINS;
+    const venue = coin.venue.kind === "psm3" ? coin.venue.psm : coin.venue.router;
+    expect(() => assertAllowed(user, [approve(coin.address, venue, 10n ** 24n)])).not.toThrow();
   });
 
   it("keeps the money with the user: every withdrawal, position and swap is the user's own", () => {

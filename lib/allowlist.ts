@@ -298,7 +298,8 @@ function listSlotsOf(calls: readonly { to: Address; data: Hex }[], own?: AllowCo
 
 /**
  * One call's checks, in order: a known target, no value, a known function of it (transfer only in a Send, a savings
- * supply only with `saveTo`), at most one transfer and one savings approval in the batch (`count`), then its arguments.
+ * supply only with `saveTo`), no unlimited approve, at most one transfer and one savings approval in the batch
+ * (`count`), then its arguments.
  */
 function assertCall(
   c: { to: Address; data: Hex; value: bigint },
@@ -325,6 +326,9 @@ function assertCall(
   ) {
     throw new Error(`Blocked: unexpected call to ${c.to}`);
   }
+  if (call.functionName === "approve" && !limitedApprove(call.args?.[1])) {
+    throw new Error(`Blocked: unexpected unlimited approve to ${call.args?.[0]}`);
+  }
   if (call.functionName === "transfer" && ++count.transfers > 1) throw new Error("Blocked: more than one transfer");
   if (call.functionName === "approve" && is(call.args?.[0], PROTOCOLS.AAVE_V3_POOL) && ++count.savingsApproves > 1) {
     throw new Error("Blocked: more than one savings approval");
@@ -333,6 +337,13 @@ function assertCall(
     throw new Error(blockedArgs(call.functionName, call.args?.[0], c.to));
   }
 }
+
+/**
+ * Every approve, on every target (USDC, the stocks, the Entry coins, the savings approve), is for an exact amount:
+ * max uint, or anything from 2^128 up, counts as unlimited and is refused. No balance comes near it.
+ */
+const UNLIMITED_FROM = 2n ** 128n;
+const limitedApprove = (amount: unknown) => typeof amount === "bigint" && amount < UNLIMITED_FROM;
 
 /** Why a call's arguments were refused: an approve's spender, a transfer's recipient, or any other call's arguments. */
 const blockedArgs = (functionName: string, first: unknown, to: Address) =>
