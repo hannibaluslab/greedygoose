@@ -33,7 +33,10 @@ export function AgentsView({
   rows: ReactNode;
   /** Whether the agents can be switched on (AGENTS_LIVE): until then, Coming soon. */
   live: boolean;
-  /** Whether a limit is signed: the foot says so once one is (ruling 16). */
+  /**
+   * Whether the Rebalancer's limit is signed: the foot says so once it is (ruling 16). Protect has no amount limit
+   * (2026-10-19), so the limit the foot names is the Rebalancer's.
+   */
   signed: boolean;
   feed: ReactNode;
   /** "Turn off all agents", only while one is on (ruling 18). */
@@ -57,7 +60,7 @@ export function AgentsView({
       <p className="m-0 flex items-center justify-center gap-1.5 text-xs text-subtle">
         <PadlockIcon />
         <span>
-          {signed ? "Limits you signed with Face ID." : "You approve each agent’s limit with Face ID."} Enforced by{" "}
+          {signed ? "Rebalance’s limit is signed with Face ID." : "You approve each agent with Face ID."} Enforced by{" "}
           <span className="font-bold text-ink">JAW.id</span>.
         </span>
       </p>
@@ -179,8 +182,8 @@ export function ComingSoon() {
 
 /**
  * One agent: its mark, name and what it does, its switch (Coming soon until the agents are live), then what it does
- * next and its limit. The row opens the agent's sheet; the switch opens JAW's own sheet for the grant at the limit
- * shown, or for the revoke.
+ * next and its limit (the Rebalancer's; Protect has none). The row opens the agent's sheet; the switch opens JAW's own
+ * sheet for the grant (at the limit shown, or Protect's at the executor's CAP_MAX), or for the revoke.
  */
 export function AgentRow({
   item,
@@ -228,9 +231,11 @@ export function AgentRow({
       </div>
       <div className="pointer-events-none relative flex items-center gap-2 border-t border-hairline py-2.5 pl-3 pr-2.5">
         <span className="num min-w-0 grow truncate text-[13px] text-ink-2">{item.line}</span>
-        <span className="num flex h-[22px] shrink-0 items-center rounded-[11px] bg-pill px-2 text-xs font-semibold text-ink-mid">
-          {item.limit}
-        </span>
+        {item.limit && (
+          <span className="num flex h-[22px] shrink-0 items-center rounded-[11px] bg-pill px-2 text-xs font-semibold text-ink-mid">
+            {item.limit}
+          </span>
+        )}
         <ChevronRight size={16} className="shrink-0 text-subtle" />
       </div>
     </div>

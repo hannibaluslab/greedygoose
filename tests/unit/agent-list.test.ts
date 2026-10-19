@@ -38,13 +38,15 @@ describe("the two agents", () => {
   it("are Protect and Rebalance, each saying what it does in under six words and what it never does", () => {
     const items = agentItems({ status: jobs("off"), capRaw: none, next: nexts });
     expect(items.map((i) => [i.name, i.does])).toEqual([
-      ["Protect", "Steps in only at Act"],
+      ["Protect", "Steps in under 1.03"],
       ["Rebalance", "Keeps your mix on target"],
     ]);
-    // Act is the line (Adrian, 2026-10-15): Protect steps in only at Act and brings the credit back to Watch.
-    expect(PROTECT_RULE).toBe("Steps in only if your credit reaches Act, and brings it back to Watch.");
+    // Protect's line (Adrian, 2026-10-19): Protect steps in only under 1.03 and brings the credit back to 1.12.
+    expect(PROTECT_RULE).toBe("Steps in only if your credit falls under 1.03, and brings it back to 1.12.");
     expect(AGENT_COPY.protect.lead.startsWith(PROTECT_RULE)).toBe(true);
-    expect(AGENT_COPY.protect.never).toMatch(/nothing while your credit is Safe or in Watch/);
+    expect(AGENT_COPY.protect.never).toBe(
+      "Protect does nothing until your credit falls under 1.03. It never sells a stock that doesn’t back your credit, and never sells on a weekend.",
+    );
     expect(Object.values(AGENT_COPY.protect).join(" ")).not.toMatch(/keeps your credit safe/i);
     for (const a of AGENTS) {
       expect(AGENT_COPY[a].does.split(" ").length).toBeLessThan(6);
@@ -54,15 +56,17 @@ describe("the two agents", () => {
     expect(NOT_LIVE).not.toMatch(ON_SCREEN);
   });
 
-  it("starts each on its limit, reading as a limit, and shows the grant's once it has one", () => {
+  it("starts the Rebalancer on its limit and shows the grant's once it has one; Protect has no amount limit", () => {
     expect(agentItems({ status: jobs("off"), capRaw: none, next: nexts }).map((i) => i.limit)).toEqual([
-      "Limit $100 a day",
+      null,
       "Limit $100 a week",
     ]);
-    const capRaw = { ...none, protect: 25_000_000n, rebalance: 1_234_000_000n };
-    expect(agentItems({ status: jobs("on"), capRaw, next: nexts }).map((i) => i.limit)).toEqual([
-      "Limit $25 a day",
-      "Limit $1,234 a week",
+    // Protect's grant is at the executor's CAP_MAX: no chip, whatever it holds.
+    const capRaw = { ...none, protect: 5_000_000n, rebalance: 1_234_000_000n };
+    const items = agentItems({ status: jobs("on"), capRaw, next: nexts });
+    expect(items.map((i) => [i.limit, i.limitUsd])).toEqual([
+      [null, null],
+      ["Limit $1,234 a week", 1_234],
     ]);
   });
 
@@ -99,7 +103,7 @@ describe("the two agents", () => {
 describe("agentCards: only when something needs the user", () => {
   const calm: CardsInput = {
     nowSec: NOW,
-    headsUp: null,
+    act: null,
     weekend: null,
     status: jobs("on"),
     ends: {
@@ -118,30 +122,32 @@ describe("agentCards: only when something needs the user", () => {
     expect(agentCards(calm)).toEqual([]);
   });
 
-  it("says the heads-up in one sentence, with Add cash and Repay: it only comes in Act", () => {
-    const [c] = agentCards({ ...calm, headsUp: { addUsd: 120, sellUsd: 180, when: "at 3:42 PM" } });
+  it("warns in Act, with Top up and Repay: a warning only, saying whether Protect is on to step in at 1.03", () => {
+    const [c] = agentCards({ ...calm, act: { addUsd: 120, protectOn: true } });
     expect(c).toMatchObject({
+      key: "act",
       tone: "act",
       agent: "Protect",
-      text: "Your credit hit Act. Add $120, or Protect sells $180 at 3:42 PM.",
+      text: "Your credit is in Act.",
+      sub: "Protect steps in at 1.03. Repaying $120 now brings it back to Watch.",
     });
     expect(c.actions).toEqual([
       { kind: "sheet", label: "Top up", sheet: "top-up" },
       { kind: "sheet", label: "Repay", sheet: "repay" },
     ]);
-    expect(agentCards({ ...calm, headsUp: { addUsd: 5, sellUsd: 9, when: "when prices reopen" } })[0].text).toBe(
-      "Your credit hit Act. Add $5, or Protect sells $9 when prices reopen.",
+    expect(agentCards({ ...calm, act: { addUsd: 5, protectOn: false } })[0].sub).toBe(
+      "Protect is off. Repaying $5 now brings it back to Watch.",
     );
   });
 
-  it("says the weekend heads-up as a card, with Repay as its main action: Weekend Shield moves nothing now", () => {
+  it("says the weekend card against Aave's line, with Repay as its main action: Weekend Shield moves nothing now", () => {
     const [c] = agentCards({ ...calm, weekend: { addUsd: 129, dropPct: 15, when: "at 8:00 PM" } });
     expect(c).toMatchObject({
       key: "weekend",
       tone: "watch",
       agent: "Protect",
-      text: "Prices pause at 8:00 PM. If stocks reopen 15% lower, your credit reaches Act.",
-      sub: "Repaying $129 now keeps it in Watch. Protect does nothing before Act.",
+      text: "Prices pause at 8:00 PM. If stocks reopen 15% lower, Aave can sell part of them.",
+      sub: "Repaying $129 now keeps your credit over Aave’s line.",
     });
     expect(c.actions).toEqual([
       { kind: "sheet", label: "Top up", sheet: "top-up" },
@@ -196,10 +202,10 @@ describe("agentCards: only when something needs the user", () => {
     expect(agentCards({ ...cashOnly, fails: 5 })).toEqual([]);
   });
 
-  it("puts the heads-ups first, then failures, stopped and stopping soon", () => {
+  it("puts the warnings first, then failures, stopped and stopping soon", () => {
     const everything: CardsInput = {
       ...calm,
-      headsUp: { addUsd: 1, sellUsd: 1, when: "now" },
+      act: { addUsd: 1, protectOn: true },
       weekend: { addUsd: 1, dropPct: 15, when: "at 8:00 PM" },
       status: { ...jobs("on"), rebalance: "off" },
       ends: { ...calm.ends, rebalance: null, protect: NOW + DAY },
@@ -207,7 +213,7 @@ describe("agentCards: only when something needs the user", () => {
       fails: 4,
     };
     expect(agentCards(everything).map((c) => c.key)).toEqual([
-      "heads-up",
+      "act",
       "weekend",
       "fails",
       "stopped-rebalance",

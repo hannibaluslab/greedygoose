@@ -183,8 +183,8 @@ function activity(nowMs: number) {
     executor(
       "protect",
       at(0, 9, 30),
-      { kind: "repaid", amountRaw: usdc(40), hfBefore: hf(1.05), hfAfter: hf(1.2), reason: "act" },
-      { owedRaw: [usdc(340), usdc(300)], used: { spentRaw: usdc(40), capRaw: usdc(100) } },
+      { kind: "repaid", amountRaw: usdc(40), hfBefore: hf(1.02), hfAfter: hf(1.12) },
+      { owedRaw: [usdc(340), usdc(300)] },
     ),
     // Earning moves nothing in the one pot (D20): no row.
     executor("save", at(0, 9, 40), { kind: "saved", amountRaw: usdc(250) }),

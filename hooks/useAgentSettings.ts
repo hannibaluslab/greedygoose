@@ -13,9 +13,9 @@ const WAD = 1e18;
 
 /**
  * The agents' settings and numbers in GooseExecutor's registry, read from the chain so they survive cleared browser
- * storage: the Rebalancer's mix (`mixes`); the account's slot (`accounts`: Protect · sell's "Keep my mix" and pending
- * heads-up, the Rebalancer's last day); the live numbers Protect's and the Rebalancer's rules run with (D18); and what a
- * run would do now (`planOf`). Null until the executor is configured and read.
+ * storage: the Rebalancer's mix (`mixes`); the account's slot (`accounts`: Protect · sell's "Keep my mix", the rescue
+ * under way, the Rebalancer's last day); the live numbers Protect's and the Rebalancer's rules run with (D18); and what
+ * a run would do now (`planOf`). Null until the executor is configured and read.
  */
 export function useAgentSettings(account: `0x${string}`) {
   const executor = GOOSE_EXECUTOR;
@@ -28,7 +28,6 @@ export function useAgentSettings(account: `0x${string}`) {
       { ...read, functionName: "rebalanceLimits" },
       { ...read, functionName: "amounts" },
       { ...read, functionName: "thresholds" },
-      { ...read, functionName: "sellLimits" },
     ],
     allowFailure: false,
     query: { enabled: !!executor, refetchInterval: 20_000 },
@@ -43,14 +42,8 @@ export function useAgentSettings(account: `0x${string}`) {
 
   return useMemo(() => {
     if (!q.data) return null;
-    const [
-      mix,
-      a,
-      [bandBps, bandMaxBps, , floorBps, minTrade, maxSlice],
-      [minRepay, , , weekendWindow],
-      thresholds,
-      sell,
-    ] = q.data;
+    const [mix, a, [bandBps, bandMaxBps, , floorBps, minTrade, maxSlice], [minRepay, , , weekendWindow], thresholds] =
+      q.data;
     const [triggerHf, targetHf, stressDrop, stressFloorHf] = thresholds;
     const options = rebalanceOptions({ bandBps, bandMaxBps, floorBps, minTrade, maxSlice });
     const numbers: RuleNumbers = {
@@ -66,14 +59,10 @@ export function useAgentSettings(account: `0x${string}`) {
       /** BPS per stock by reserve id; all 0 before a mix is saved. */
       mixBps: unpackMix(mix),
       keepMix: a[7],
-      /** When Protect · sell's pending heads-up went out, in seconds; 0 when none is pending. */
-      headsUpAt: a[6],
+      /** A rescue Protect started is under way (`rescueAt`, when it started, isn't 0): it goes on until the target. */
+      rescuing: a[6] !== 0,
       /** The New York day the Rebalancer last traded. */
       rebalanceDay: a[8],
-      /** Protect · sell's heads-up line, the Act line: no heads-up and no sale at or above it. */
-      sellHeadsUpHf: Number(sell[0]) / WAD,
-      /** Protect · sell's target: the health a sale brings the credit back to (Watch). */
-      sellTargetHf: Number(sell[2]) / WAD,
       options,
       numbers,
       plan: (plan.data ?? null) as Plan | null,

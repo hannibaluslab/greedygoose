@@ -6,9 +6,9 @@
  *   2. Buy $5 of NVIDIA from cash: the buy sheet, Review, Confirm. On-chain: shares received, cash down $5, and the
  *      savings withdrawal the review announced (sam's wallet holds less than the buy).
  *   3. Switch Protect on in its sheet, selling backing stock included: one JAW grant each, on the manager.
- *   4. run-agents: the log trigger registers both grants with GooseExecutor, then a run.
- *   5. With --shock: NVIDIA down 28% on Aave's oracle puts sam in Watch; run-agents: Protect repays from savings.
- *      The price is put back after.
+ *   4. run-agents: registerApproved registers both grants with GooseExecutor, then a run.
+ *   5. With --shock: NVIDIA down on Aave's oracle puts sam under Protect's line (health about 1.02, in Act);
+ *      run-agents: Protect repays from savings, up to the test deploy's CAP_MAX. The price is put back after.
  *
  * Needs the fork, setup and the app running (npm run rehearsal:fork, rehearsal:setup, rehearsal:dev).
  *
@@ -168,31 +168,28 @@ async function main() {
     await shot("agents");
 
     if (shock) {
-      console.log("\n5. NVIDIA down 28% on Aave's oracle, then run-agents");
+      console.log("\n5. NVIDIA down on Aave's oracle to under Protect's line, then run-agents");
       const debtBefore = await debtOf(fork, sam);
       const savingsBefore = (await balances(fork, sam)).savings;
-      script("price-shock.ts", "NVDAc", "-28%");
-      const hf = (
-        await fork.pub.readContract({
-          address: AAVE.SPOKE,
-          abi: spokeAbi,
-          functionName: "getUserAccountData",
-          args: [sam],
-        })
-      ).healthFactor;
-      ok(hf < 1_500_000_000_000_000_000n, `sam in Watch: health ${health(hf)}`);
+      // NVIDIA is all that backs sam's credit, so the health moves with its price: the fall that leaves about 1.02.
+      const hfBefore = await healthOf(fork, sam);
+      const fall = (1.02 / (Number(hfBefore) / 1e18) - 1) * 100;
+      script("price-shock.ts", "NVDAc", `${fall.toFixed(2)}%`);
+      const hf = await healthOf(fork, sam);
+      ok(hf < 1_030_000_000_000_000_000n, `sam under Protect's line: health ${health(hf)}`);
       await page.goto(`${APP}/home`, { waitUntil: "networkidle", timeout: 120_000 });
-      await page.getByText("Watch").first().waitFor({ timeout: 60_000 });
-      await shot("home-watch");
+      await page.getByText("Act").first().waitFor({ timeout: 60_000 });
+      await shot("home-act");
       agents();
       const repaid = debtBefore - (await debtOf(fork, sam));
       const used = savingsBefore - (await balances(fork, sam)).savings;
-      // Within a cent of $5: the debt and the savings both accrue interest between the reads.
-      ok(repaid >= 4_990_000n && repaid <= 5_010_000n, `Protect repaid ${usd(repaid)} (the D13 cap is $5 a day)`);
+      // Within a cent of $5: the debt and the savings both accrue interest between the reads. One run, one move: the
+      // repay from savings, held to the test deploy's CAP_MAX; a sale would follow in the next runs.
+      ok(repaid >= 4_990_000n && repaid <= 5_010_000n, `Protect repaid ${usd(repaid)} (the test CAP_MAX is $5 a day)`);
       ok(used >= 4_990_000n && used <= 5_010_000n, `from savings: ${usd(used)}`);
       await page.goto(`${APP}/agents`, { waitUntil: "networkidle", timeout: 120_000 });
       await page
-        .getByText(/used/)
+        .getByText(/Repaid/)
         .first()
         .waitFor({ timeout: 90_000 })
         .catch(() => {});
@@ -232,6 +229,16 @@ async function balances(fork: Fork, account: Address) {
     }),
   ]);
   return { wallet, savings, nvda, multiplier };
+}
+
+async function healthOf(fork: Fork, account: Address) {
+  const d = await fork.pub.readContract({
+    address: AAVE.SPOKE,
+    abi: spokeAbi,
+    functionName: "getUserAccountData",
+    args: [account],
+  });
+  return d.healthFactor;
 }
 
 function debtOf(fork: Fork, account: Address) {

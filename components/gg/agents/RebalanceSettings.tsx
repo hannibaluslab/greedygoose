@@ -6,7 +6,7 @@ import { useAccount } from "wagmi";
 import { toast } from "sonner";
 import { CardTitle, ManageCard, MixSlider } from "@/components/gg/Manage";
 import { ComingSoon } from "@/components/gg/Agents";
-import { LimitField, neverMoreThan } from "@/components/gg/kit/LimitField";
+import { LimitField, NEVER_MORE_THAN } from "@/components/gg/kit/LimitField";
 import { StockAvatar, tickerOf } from "@/components/gg/kit/StockAvatar";
 import { TxButton, TxError } from "@/components/gg/TxUi";
 import { PlusIcon } from "@/components/gg/kit/icons";
@@ -242,7 +242,7 @@ export function RebalanceSettingsView({
       <NextTrades whole={whole} empty={rows.length === 0} lines={lines} backingUsd={backingUsd} />
 
       <ManageCard>
-        <CardTitle title="Weekly limit" sub={neverMoreThan("Rebalance", "week")} />
+        <CardTitle title="Weekly limit" sub={NEVER_MORE_THAN} />
         <LimitField
           label="Weekly limit"
           value={limitUsd}

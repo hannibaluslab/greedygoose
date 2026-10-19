@@ -20,14 +20,13 @@ function row(e: AgentEvent, ctx?: MoveContext) {
 }
 
 describe("describeAgentEvent: the Agents board's rows", () => {
-  it("draws the board's sale: what sold, why, what's owed, the status, the cash and the day's limit", () => {
+  it("draws the board's sale: what sold, why, what's owed, the status and the cash, with no limit (none for Protect)", () => {
     const sale: AgentEvent = {
       kind: "sold",
       sharesRaw: sevenWith(6, 46_997_389n),
       repaidRaw: usdc(178.2),
-      hfBefore: hf(1.04),
-      hfAfter: hf(1.2),
-      atOnce: true,
+      hfBefore: hf(1.02),
+      hfAfter: hf(1.12),
     };
     expect(
       row(sale, {
@@ -40,46 +39,26 @@ describe("describeAgentEvent: the Agents board's rows", () => {
       by: "Protect",
       line: "Sold $180 of Tesla to repay. Back to Watch.",
       details: {
-        Why: "Your credit fell deep into Act, so Protect sold at once.",
+        Why: "Your credit fell under 1.03.",
         "You owe": "$780 → $600",
         Status: "Act → Watch",
         "My cash": "Not touched",
-        "Used today": "$180 of $300",
       },
     });
+    expect(limitOf(sale)).toBeNull();
   });
 
-  it("draws the board's heads-up: credit in Act, asked to repay or add more", () => {
-    const r = row({ kind: "heads-up", hf: hf(1.08), sellValueRaw: usdc(180), sellAfter: 1_760_635_800 });
-    expect(r.line).toBe("Credit reached Act. Asked you to repay or add more.");
-    expect(r.details.Why).toBe("Your cash couldn’t bring it back to Watch.");
-    expect(r.details["Would sell"]).toBe("$180 of backing stock");
-    expect(r.details["Sells at"]).toMatch(/^\d{1,2}:\d{2} [AP]M$/);
-  });
-
-  it("says a heads-up's sale waits for prices to reopen when its wait ended while they were held", () => {
-    // Sunday 2025-10-12 20:00 New York: the reopening the executor gives a heads-up sent just before Friday's freeze.
-    expect(
-      row({ kind: "heads-up", hf: hf(1.2), sellValueRaw: usdc(50), sellAfter: 1_760_313_600 }).details["Sells at"],
-    ).toBe("When prices reopen");
-    // A minute later the market is open, so a sale due then is given its time.
-    expect(
-      row({ kind: "heads-up", hf: hf(1.2), sellValueRaw: usdc(50), sellAfter: 1_760_313_660 }).details["Sells at"],
-    ).toMatch(/^\d{1,2}:\d{2} [AP]M$/);
-  });
-
-  it("names a sale that comes after the heads-up, and what the swaps left in the wallet", () => {
+  it("names a sale that goes on through a rescue above 1.03, and what the swaps left in the wallet", () => {
     const sale: AgentEvent = {
       kind: "sold",
       sharesRaw: sevenWith(5, 100_000_000n),
       repaidRaw: usdc(178.2),
       hfBefore: hf(1.08),
-      hfAfter: hf(1.2),
-      atOnce: false,
+      hfAfter: hf(1.12),
     };
     const r = row(sale, { cashRaw: [usdc(10), usdc(11.8)], pricesRaw: prices });
     expect(r.line).toBe("Sold $180 of NVIDIA to repay. Back to Watch.");
-    expect(r.details.Why).toBe("Your credit was still in Act after the heads-up.");
+    expect(r.details.Why).toBe("Protect went on until 1.12.");
     // A sale cut short (a run's six slices, a limit, the pool's window) says it's still in Act.
     expect(row({ ...sale, hfAfter: hf(1.07) }, { pricesRaw: prices }).line).toBe(
       "Sold $180 of NVIDIA to repay. Still in Act.",
@@ -94,34 +73,30 @@ describe("describeAgentEvent: the Agents board's rows", () => {
       repaidRaw: 1n,
       hfBefore: hf(1),
       hfAfter: hf(1.6),
-      atOnce: true,
     };
     expect(row(sale).line).toBe("Sold 0.47 shares of Tesla to repay. Back to Safe.");
   });
 
-  it("says a repay from savings used your cash, rounding what's owed up to the cent", () => {
+  it("says a repay from savings used your cash, rounding what's owed up to the cent, with no limit", () => {
     const r = row(
-      { kind: "repaid", amountRaw: usdc(120), hfBefore: hf(1.05), hfAfter: hf(1.2), reason: "act" },
+      { kind: "repaid", amountRaw: usdc(120), hfBefore: hf(1.02), hfAfter: hf(1.12) },
       { owedRaw: [780_000_001n, 660_000_001n], used: { spentRaw: usdc(120), capRaw: usdc(300) } },
     );
     expect(r).toMatchObject({ by: "Protect", line: "Repaid $120 from your cash. Back to Watch." });
     expect(r.details).toEqual({
-      Why: "Your credit reached Act.",
+      Why: "Your credit fell under 1.03.",
       "You owe": "$780.01 → $660.01",
       Status: "Act → Watch",
       "My cash": "$120 used",
-      "Used today": "$120 of $300",
     });
-    const weekend = row({
-      kind: "repaid",
-      amountRaw: usdc(16.58),
-      hfBefore: hf(1.8),
-      hfAfter: maxUint256,
-      reason: "weekend",
-    });
-    expect(weekend.line).toBe("Repaid $16.58 from your cash. Nothing owed now.");
-    expect(weekend.details.Status).toBe("Safe → Nothing owed");
-    expect(weekend.details.Why).toMatch(/weekend/);
+    // A rescue going on above the line, and one that paid off everything.
+    expect(row({ kind: "repaid", amountRaw: usdc(30), hfBefore: hf(1.06), hfAfter: hf(1.12) }).details.Why).toBe(
+      "Protect went on until 1.12.",
+    );
+    const all = row({ kind: "repaid", amountRaw: usdc(16.58), hfBefore: hf(1.02), hfAfter: maxUint256 });
+    expect(all.line).toBe("Repaid $16.58 from your cash. Nothing owed now.");
+    expect(all.details.Status).toBe("Act → Nothing owed");
+    expect(limitOf({ kind: "repaid", amountRaw: 1n, hfBefore: 1n, hfAfter: 1n })).toBeNull();
   });
 
   it("draws a Rebalance row, with the week's limit", () => {
@@ -135,6 +110,7 @@ describe("describeAgentEvent: the Agents board's rows", () => {
       "My cash": "Not touched",
       "Used this week": "$50 of $500",
     });
+    expect(limitOf({ kind: "rebalanced", soldRaw: [], boughtRaw: [] })).toEqual({ job: "rebalance", spend: 0 });
   });
 
   it("reads a Save as money arriving, with no agent and no limit (D20)", () => {
@@ -176,11 +152,12 @@ describe("describeAgentEvent: the Agents board's rows", () => {
   });
 
   it("names switches, the mix and failed runs in plain words, with the executor's own error name", () => {
-    expect(row({ kind: "job-on", job: "protect", capRaw: usdc(300), end: 1_791_984_607 }).line).toBe(
-      "Protect is on. If your credit reaches Act, it repays from your cash, up to $300 a day.",
+    // Protect has no amount limit: its switches name none, whatever cap the grant holds (the executor's CAP_MAX).
+    expect(row({ kind: "job-on", job: "protect", capRaw: usdc(5), end: 1_791_984_607 }).line).toBe(
+      "Protect is on. If your credit falls under 1.03, it repays from your cash.",
     );
-    expect(row({ kind: "job-on", job: "sell", capRaw: usdc(300), end: 1_791_984_607 }).line).toBe(
-      "Protect can sell backing stock, up to $300 a day.",
+    expect(row({ kind: "job-on", job: "sell", capRaw: usdc(5), end: 1_791_984_607 }).line).toBe(
+      "Protect can sell backing stock.",
     );
     expect(row({ kind: "job-on", job: "rebalance", capRaw: usdc(500), end: 1_791_984_607 }).line).toBe(
       "Rebalance is on, up to $500 a week.",
@@ -218,10 +195,8 @@ describe("describeAgentEvent: the Agents board's rows", () => {
         (reason) => ({ kind: "job-off", job: "sell", reason }) as const,
       ),
       { kind: "saved", amountRaw: 1n },
-      { kind: "repaid", amountRaw: 1n, hfBefore: hf(1.2), hfAfter: hf(1.6), reason: "weekend" },
-      { kind: "heads-up", hf: hf(1.2), sellValueRaw: 1n, sellAfter: at },
-      { kind: "heads-up-cleared", hf: hf(1.3) },
-      { kind: "sold", sharesRaw: sevenWith(1, 1n), repaidRaw: 1n, hfBefore: hf(1), hfAfter: hf(1.4), atOnce: false },
+      { kind: "repaid", amountRaw: 1n, hfBefore: hf(1.02), hfAfter: hf(1.12) },
+      { kind: "sold", sharesRaw: sevenWith(1, 1n), repaidRaw: 1n, hfBefore: hf(1), hfAfter: hf(1.4) },
       { kind: "keep-mix", on: true },
       { kind: "keep-mix", on: false },
       { kind: "rebalance-skipped" },
@@ -230,7 +205,9 @@ describe("describeAgentEvent: the Agents board's rows", () => {
     for (const e of events) {
       const m = describeAgentEvent(e, at)!;
       const all = [m.line, ...m.details.map((d) => d.value)].map(text).join(" ");
-      expect(all, e.kind).not.toMatch(/borrow|lock|saving/i);
+      expect(all, e.kind).not.toMatch(/borrow|lock|saving|heads-up/i);
+      if (e.kind === "repaid" || e.kind === "sold" || e.kind === "job-on")
+        expect(all, e.kind).not.toMatch(/limit|a day/);
       if (e.kind === "saved" || e.kind === "converted") expect(all, e.kind).not.toMatch(/agent|save|receive|limit/i);
     }
   });

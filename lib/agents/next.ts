@@ -1,12 +1,22 @@
-import { CASH_AGENT } from "@/config/risk";
+import { CASH_AGENT, RISK } from "@/config/risk";
 import { OFF_REASONS } from "@/lib/agents/events";
 import { OFF_WHY } from "@/lib/agents/feed";
-import { agentOf, AGENTS, timeText, type Agent, type Next, type WeekendCard } from "@/lib/agents/list";
+import {
+  agentOf,
+  AGENTS,
+  hfText,
+  timeText,
+  type ActCard,
+  type Agent,
+  type Next,
+  type WeekendCard,
+} from "@/lib/agents/list";
 import { isMix, previewTrades, type MixHolding } from "@/lib/agents/mix";
 import { JOBS, readStockLimits, type AgentJob } from "@/lib/agents/permissions";
 import { planProtect, weekendHeadsUp } from "@/lib/agents/rules/protect";
 import type { RebalanceOptions } from "@/lib/agents/rules/rebalance";
 import { formatUsdTrim } from "@/lib/formatting";
+import { marketState } from "@/lib/market-hours";
 import { STATUS_LABEL, statusFor } from "@/lib/risk/status";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
@@ -27,7 +37,7 @@ export type RuleNumbers = {
   targetHf: number;
   stressDrop: number;
   stressFloorHf: number;
-  /** How long before a price freeze the weekend heads-up card shows, in seconds (the executor's `amounts`). */
+  /** How long before a price freeze the weekend card shows, in seconds (the executor's `amounts`). */
   weekendWindowSec: number;
   rebalance: RebalanceOptions;
 };
@@ -51,28 +61,18 @@ export function defaultNumbers(rebalance: RebalanceOptions): RuleNumbers {
 export type Plan = { action: number; job: number; amount: bigint; reason: number; off: number };
 
 /** GooseExecutor's Action, in order. */
-const ACTIONS = [
-  "none",
-  "prune",
-  "repay",
-  "save",
-  "sell",
-  "heads-up",
-  "clear-heads-up",
-  "defer",
-  "rebalance",
-  "convert",
-] as const;
+const ACTIONS = ["none", "prune", "repay", "save", "sell", "end-rescue", "defer", "rebalance", "convert"] as const;
 
 /**
- * The plan's move in words, and the agent it's for; null when a run would do nothing, or when it's a job with no agent
- * on screen (Save's and Entry's moves, D20).
+ * The plan's move in words, and the agent it's for; null when a run would do nothing, when it's a job with no agent on
+ * screen (Save's and Entry's moves, D20), or when it only ends a rescue that reached its target (no money moves, so
+ * the agent's own rule says where the credit stands).
  */
 export function planNext(p: Plan): { agent: Agent; next: Next } | null {
   const job: AgentJob | undefined = JOBS[p.job];
   const agent = job ? agentOf(job) : null;
   const action = ACTIONS[p.action];
-  if (!agent || !action || action === "none" || action === "save" || action === "convert") return null;
+  if (!agent || !action || ["none", "save", "convert", "end-rescue"].includes(action)) return null;
   const a = usd(p.amount);
   const next: Next =
     action === "prune"
@@ -81,13 +81,9 @@ export function planNext(p: Plan): { agent: Agent; next: Next } | null {
         ? move(`repays ${a} from your cash`, `Would repay ${a} from your cash`)
         : action === "sell"
           ? move(`sells backing stock to repay ${a}`, `Would sell backing stock to repay ${a}`)
-          : action === "heads-up"
-            ? move("sends you a heads-up before selling", "Would send you a heads-up before selling")
-            : action === "clear-heads-up"
-              ? move("clears the heads-up", "Would clear the heads-up")
-              : action === "defer"
-                ? move("finishes its last move", "Would finish its last move")
-                : move(`trades ${a}`, `Would trade ${a}`);
+          : action === "defer"
+            ? move("finishes its last move", "Would finish its last move")
+            : move(`trades ${a}`, `Would trade ${a}`);
   return { agent, next };
 }
 
@@ -167,14 +163,22 @@ export type NextInput = {
   numbers: RuleNumbers;
   /** The New York day the Rebalancer last traded (the registry's `accounts`). */
   rebalanceDay: number;
+  /** A rescue Protect started is under way (the registry's `rescueAt` isn't 0): it goes on until the target. */
+  rescuing: boolean;
+  /** Protect may sell backing stock (its sell grant is on or starting). */
+  sellOn: boolean;
+  /** Stock prices are held now (a weekend or a holiday): Protect never sells then. */
+  pricesHeld: boolean;
   plan: Plan | null;
 };
 
 const smaller = (a: bigint, b: bigint) => (a < b ? a : b);
 
 /**
- * Protect: repays from savings only in Act, back to its target in Watch (planProtect; Act is the line, 2026-10-15).
- * In Safe or Watch it says it waits for Act.
+ * Protect (planProtect; Protect's line, Adrian 2026-10-19): repays from savings below its line, and on through a rescue
+ * until the target, back in Watch. Above its line it says where it steps in (Act is a warning only). With no cash left,
+ * a sale follows when selling is on, never while prices are held. No amount limit: the grant is at CAP_MAX, so a
+ * limit that is used up can only be a capped test deploy's, and Protect goes on at its next run.
  */
 function protectNext(i: NextInput): Next {
   const left = i.left.protect;
@@ -186,6 +190,7 @@ function protectNext(i: NextInput): Next {
     capLeftUsd: Number(left ? left.map((s) => s.leftRaw).reduce(smaller) : i.capRaw.protect) / 10 ** USDC.decimals,
     triggerHf: i.numbers.triggerHf,
     targetHf: i.numbers.targetHf,
+    rescuing: i.rescuing,
     minRepayUsd: Number(i.numbers.minRepayRaw) / 10 ** USDC.decimals,
   });
   if (d.action === "repay") {
@@ -194,25 +199,45 @@ function protectNext(i: NextInput): Next {
   }
   if (d.reason === "no-debt") return { idle: "Nothing owed, nothing to do." };
   const status = statusFor(d.hf);
-  // Act is never healthy for the rule: the executor pins its trigger to the Act line (D13's was higher). A fallback line.
+  const label = STATUS_LABEL[status];
   if (d.reason === "healthy") {
     return {
-      idle:
-        status === "safe"
-          ? "Safe. Nothing to do."
-          : status === "watch"
-            ? "Watch. Steps in only at Act"
-            : "Act. Nothing to repay yet",
+      idle: status === "safe" ? "Safe. Nothing to do." : `${label}. Protect steps in at ${hfText(i.numbers.triggerHf)}`,
     };
   }
-  const label = STATUS_LABEL[status];
   if (d.reason === "too-small") return { idle: `${label}. Nothing worth repaying yet` };
-  return { idle: d.reason === "no-savings" ? `${label}. No cash to repay with` : `${label}. Today’s limit is used` };
+  if (d.reason === "no-cap") return { idle: `${label}. Repays on its next run` };
+  if (!i.sellOn) return { idle: `${label}. No cash to repay with` };
+  if (i.pricesHeld) return { idle: `${label}. Sells backing stock when prices reopen` };
+  return move("sells backing stock to repay", "Would sell backing stock to repay");
 }
 
 /**
- * The weekend heads-up card (lib/agents/rules/protect.ts `weekendHeadsUp`, on the executor's live numbers): in the window
- * before the next price freeze, credit outside Act that the stress drop would take into it. No move: a card only.
+ * The Act warning (Adrian, 2026-10-19): a plain health check, credit owing in Act (Aave's health factor under
+ * RISK.watchMin, as the status shows it). With Protect on it stops at Protect's line, where Protect itself acts; with
+ * Protect off nothing acts, so it warns all the way down. A card only, with what repaying brings the credit back to
+ * Protect's target, in Watch, rounded up so it's enough. The push for the same warning is sent by the runner, outside
+ * this repo.
+ */
+export function actWarning(i: {
+  /** Aave's health factor; null when nothing is owed. */
+  healthFactor: number | null;
+  totalBackingUsd: number;
+  avgCf: number;
+  debtUsd: number;
+  numbers: Pick<RuleNumbers, "triggerHf" | "targetHf">;
+  protectOn: boolean;
+}): ActCard | null {
+  const hf = i.healthFactor;
+  if (hf === null || i.debtUsd <= 0 || hf >= RISK.watchMin || (i.protectOn && hf < i.numbers.triggerHf)) return null;
+  // Whole dollars, rounded up; a millionth of a dollar of floating-point dust doesn't add one.
+  const addUsd = Math.ceil(i.debtUsd - (i.totalBackingUsd * i.avgCf) / i.numbers.targetHf - 1e-6);
+  return addUsd > 0 ? { addUsd, protectOn: i.protectOn } : null;
+}
+
+/**
+ * The weekend card (lib/agents/rules/protect.ts `weekendHeadsUp`, on the executor's live numbers): in the window
+ * before the next price freeze, credit that the stress drop would take under Aave's line. No move: a card only.
  * `freezeAt` is the executor's `nextFreeze`, its own calendar with the holidays it holds, so the card shows before a
  * freeze that starts mid-week and not while prices are already held (Good Friday); null while it isn't read.
  */
@@ -246,6 +271,14 @@ export function beforeFreeze(nowSec: number, freezeAt: number | null, windowSec:
   return freezeAt !== null && freezeAt > nowSec && freezeAt - nowSec <= windowSec;
 }
 
+/**
+ * Whether stock prices are held at `nowSec`: the executor's own calendar gives the time asked itself as the next freeze
+ * while they are (`nextFreeze`, holidays included). Until it's read, the weekend's hours (`marketState`).
+ */
+export function pricesHeldAt(nowSec: number, freezeAt: number | null): boolean {
+  return freezeAt !== null ? freezeAt <= nowSec : !marketState(new Date(nowSec * 1000)).open;
+}
+
 /** Rebalance: the trades its rule finds for the saved mix on today's free shares, at the next window. */
 function rebalanceNext(i: NextInput): Next {
   if (!i.mixBps || !isMix(i.mixBps) || i.mixBps.every((w) => w === 0)) return { idle: "No mix yet" };
@@ -269,9 +302,10 @@ function rebalanceNext(i: NextInput): Next {
   });
   const when = whenText(rebalanceCheckAt(i.nowSec, i.rebalanceDay), i.nowSec);
   if (trades.length === 0) return { idle: `On target. Checks ${when}` };
-  // GooseExecutor's RebalanceJob waits while Protect may act: below Protect's trigger, the Act line.
+  // GooseExecutor's RebalanceJob waits while the credit is in Act: the status line (RebalanceJob.ACT_HF), not
+  // Protect's, which acts further down (Adrian, 2026-10-19).
   const hf = i.debtUsd > 0 ? (i.totalBackingUsd * i.avgCf) / i.debtUsd : Infinity;
-  if (hf < i.numbers.triggerHf) return { idle: "Waits until your credit is out of Act" };
+  if (hf < RISK.watchMin) return { idle: "Waits until your credit is out of Act" };
   const spend = usd(trades.filter((t) => t.buy).reduce((a, t) => a + t.amountIn, 0n));
   return move(`trades ${spend} ${when}`, `Would trade ${spend}`);
 }

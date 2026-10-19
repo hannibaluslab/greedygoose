@@ -1,6 +1,7 @@
 /**
- * Protect · sell: when cash can't bring the credit out of Act, sell some of the stock that backs it and repay with the
- * proceeds, back to Watch (plan item 1, steps 10–12; Act is the line, 2026-10-15). Integer on-chain units only, so GooseExecutor's port
+ * Protect · sell: below Protect's line, or during a rescue savings couldn't finish, sell some of the stock that backs the
+ * credit and repay with the proceeds, back to the target (plan item 1, steps 10–12; Adrian, 2026-10-19). Integer
+ * on-chain units only, so GooseExecutor's port
  * (contracts/src/SellRules.sol) must agree exactly: test/SellRules.t.sol runs both on the vectors from
  * scripts/agent-vectors.ts.
  *
@@ -180,25 +181,17 @@ export function planSell(
   return { slices, repayRaw: slices.reduce((t, s) => t + s.minOutRaw, 0n) };
 }
 
-type SellTiming = "wait" | "heads-up" | "clear" | "sell";
-
 /**
- * When Protect sells (decision 3, Act is the line, 2026-10-15): below `headsUpHf` (the Act line) on a weekday, a
- * heads-up, then the sale `headsUpDelaySec` later if the health is still below; below `nowHf`, deep in Act, at once.
- * Never in Safe or Watch, and never while prices are held (weekends and holidays). Back above `headsUpHf`, a pending
- * heads-up is cleared, so a later fall gets a new one. `headsUpAt` is 0 when none is pending. A sale below `nowHf`
- * uses the wider Act floor.
+ * Whether Protect sells now (Adrian, 2026-10-19): at once below Protect's line (`triggerHf`), and, while a rescue is
+ * under way, below its target, so a rescue that savings couldn't finish ends back at the target. Never while prices are
+ * held (weekends and holidays): a sale can't help while they don't move. Health factors WAD.
  */
-export function sellTiming(
+export function sellsNow(
   hf: bigint,
-  headsUpAt: bigint,
-  nowSec: bigint,
+  rescuing: boolean,
   frozen: boolean,
-  l: { headsUpHf: bigint; nowHf: bigint; headsUpDelaySec: bigint },
-): { timing: SellTiming; atOnce: boolean } {
-  if (hf >= l.headsUpHf) return { timing: headsUpAt !== 0n ? "clear" : "wait", atOnce: false };
-  if (frozen) return { timing: "wait", atOnce: false };
-  if (hf < l.nowHf) return { timing: "sell", atOnce: true };
-  if (headsUpAt === 0n) return { timing: "heads-up", atOnce: false };
-  return { timing: nowSec >= headsUpAt + l.headsUpDelaySec ? "sell" : "wait", atOnce: false };
+  l: { triggerHf: bigint; targetHf: bigint },
+): boolean {
+  if (frozen) return false;
+  return hf < l.triggerHf || (rescuing && hf < l.targetHf);
 }

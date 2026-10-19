@@ -25,9 +25,6 @@ export type AgentRow = AgentMove & { key: string; time: number; hash: Hex; event
 /** A job's newest switch: on or off, whether the user turned it off, and when (seconds). */
 type Switched = { on: boolean; byUser: boolean; at: number };
 
-/** Protect · sell's latest heads-up: what it would sell (USDC units) and when (seconds), sent at `sentAt`. */
-export type HeadsUp = { sellValueRaw: bigint; sellAfter: number; sentAt: number };
-
 /**
  * What GooseExecutor did for one account, read from the chain with no indexer (D12): its events indexed by the
  * account, with getLogs in chunks, newest first, then each move's block and the reads around it, a week at a time
@@ -102,15 +99,6 @@ export function useAgentFeed(account: Address) {
     [events, moves],
   );
 
-  const headsUp = useMemo<HeadsUp | null>(() => {
-    const i = events.findIndex((e) => e.kind === "heads-up");
-    const e = events[i];
-    const m = moves[i]?.data;
-    return e?.kind === "heads-up" && m
-      ? { sellValueRaw: e.sellValueRaw, sellAfter: e.sellAfter, sentAt: m.time }
-      : null;
-  }, [events, moves]);
-
   // Each job's newest switch: on, or off by the user (revoked) or by the executor (its grant ran out, it can't act, or
   // its runs kept failing).
   const switched = useMemo(() => {
@@ -129,7 +117,6 @@ export function useAgentFeed(account: Address) {
   if (!executor) {
     return {
       rows: [],
-      headsUp: null,
       switched: {} as Partial<Record<AgentJob, Switched>>,
       since: 0,
       more: false,
@@ -141,7 +128,6 @@ export function useAgentFeed(account: Address) {
   }
   return {
     rows,
-    headsUp,
     /** Each job's newest switch in the weeks read so far. */
     switched,
     /** The user's own moves older than this (ms) wait for "Show earlier", so the two lists cover the same days. */

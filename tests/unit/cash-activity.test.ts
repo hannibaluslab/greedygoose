@@ -209,9 +209,8 @@ describe("executorCashRow: the executor's moves in the cash", () => {
       exec({
         kind: "repaid",
         amountRaw: usdc(40),
-        hfBefore: 1_050_000_000_000_000_000n,
-        hfAfter: 1_200_000_000_000_000_000n,
-        reason: "act",
+        hfBefore: 1_020_000_000_000_000_000n,
+        hfAfter: 1_120_000_000_000_000_000n,
       }),
     )!;
     expect([r.title, r.line, r.mark]).toEqual([
@@ -228,7 +227,6 @@ describe("executorCashRow: the executor's moves in the cash", () => {
       repaidRaw: usdc(100),
       hfBefore: 1n,
       hfAfter: 2n,
-      atOnce: true,
     };
     expect(executorCashRow(exec(sold, { cashRaw: [usdc(400), usdc(401.8)] }))).toMatchObject({
       title: "Protect sold backing stock",
@@ -248,10 +246,10 @@ describe("executorCashRow: the executor's moves in the cash", () => {
     });
   });
 
-  it("no row for switches, heads-ups, mixes or runs that didn't go through", () => {
+  it("no row for switches, mixes or runs that didn't go through", () => {
     for (const e of [
       { kind: "job-on", job: "protect", capRaw: usdc(100), end: 1 },
-      { kind: "heads-up", hf: 1n, sellValueRaw: 1n, sellAfter: 1 },
+      { kind: "keep-mix", on: true },
       { kind: "mix", weightsBps: [5_000, 0, 0, 0, 0, 5_000, 0] },
       { kind: "run-failed", reason: "0x", fails: 1 },
     ] as AgentEvent[]) {
@@ -414,7 +412,7 @@ describe("cashRows: the sheet's list", () => {
       ],
       executor: [
         exec(
-          { kind: "repaid", amountRaw: usdc(40), hfBefore: 1n, hfAfter: 2n, reason: "act" },
+          { kind: "repaid", amountRaw: usdc(40), hfBefore: 1n, hfAfter: 2n },
           {},
           { key: "c", time: T - 3 * day, hash: tx(3) },
         ),

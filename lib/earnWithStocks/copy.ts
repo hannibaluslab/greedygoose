@@ -1,3 +1,4 @@
+import { PROTECT_LINE } from "@/lib/agents/list";
 import type { AgentStatus } from "@/lib/agents/status";
 import { CREDIT_BLOCKED, shortNames, type CreditBlock } from "@/lib/creditBuy/copy";
 import type { CreditPlan } from "@/lib/creditBuy";
@@ -36,16 +37,16 @@ export const EARN_COSTS_MORE = "At this amount, credit costs more than your cash
 
 /**
  * The one risk line, from what Protect does now: repay from the cash, and sell a little backing stock when that's on
- * (decision 5), only once the credit reaches Act and back to Watch (Act is the line, 2026-10-15). "Protect is off" only
- * when it is.
+ * (decision 5), only once the credit falls under Protect's line, and back to Watch (Adrian, 2026-10-19). "Protect is
+ * off" only when it is.
  */
 export function earnRiskLine(p: { names: readonly string[]; protect: AgentStatus; sell: AgentStatus }): string {
   const one = p.names.length === 1 ? p.names[0] : null;
   const falls = one ? `If ${one} falls` : "If your stocks fall";
   if (p.protect === "on") {
     return p.sell === "on"
-      ? `${falls}, you can repay from your cash. If your credit reaches Act, Protect repays from it, then sells a little ${one ?? "of them"} to bring it back to Watch.`
-      : `${falls}, you can repay from your cash. If your credit reaches Act, Protect repays from it. Protect won’t sell your ${one ? "stock" : "stocks"}.`;
+      ? `${falls}, you can repay from your cash. If your credit falls under ${PROTECT_LINE}, Protect repays from it, then sells a little ${one ?? "of them"} to bring it back to Watch.`
+      : `${falls}, you can repay from your cash. If your credit falls under ${PROTECT_LINE}, Protect repays from it. Protect won’t sell your ${one ? "stock" : "stocks"}.`;
   }
   const off = p.protect === "off" || p.protect === "unconfigured" ? " Protect is off." : "";
   return `${falls}, repay from your cash. If ${one ? "it falls" : "they fall"} too far, part of ${one ? "it" : "them"} can be sold to repay what you owe.${off}`;

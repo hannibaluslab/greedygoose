@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { decodeFunctionData, erc20Abi } from "viem";
 import { inWeekendWindow, planProtect, planSave, weekendHeadsUp } from "@/lib/agents/rules/protect";
-import { sellTiming } from "@/lib/agents/rules/protectSell";
-import { CASH_AGENT, PROTECT_SELL, RISK } from "@/config/risk";
+import { sellsNow } from "@/lib/agents/rules/protectSell";
+import { CASH_AGENT, CREDIT_CAP, PROTECT_SELL, RISK } from "@/config/risk";
 import { buildAddSavingsCalls } from "@/lib/savings";
 import { PERIOD } from "@/lib/agents/permissions";
 import { aaveV3PoolAbi } from "@/lib/protocols/abis";
@@ -14,50 +14,65 @@ const base = { totalBackingUsd: 1000, avgCf: 0.7, savingsUsd: 500, capLeftUsd: 5
 /** What's owed for a health factor on that power. */
 const owedAt = (hf: number) => 700 / hf;
 
-describe("Act is the line (Adrian, 2026-10-15)", () => {
-  it("says it in config/risk.ts: Protect steps in below the Act line and brings the credit back to Watch at 1.2", () => {
-    expect(CASH_AGENT.triggerHf).toBe(RISK.watchMin);
-    expect(CASH_AGENT.targetHf).toBe(1.2);
-    expect(CASH_AGENT.targetHf).toBeGreaterThan(RISK.watchMin);
+describe("Protect's line (Adrian, 2026-10-19)", () => {
+  it("says it in config/risk.ts: Protect acts below 1.03 and brings the credit back to 1.12, the credit cap's line", () => {
+    expect(CASH_AGENT.triggerHf).toBe(1.03);
+    expect(CASH_AGENT.triggerHf).toBeLessThan(RISK.watchMin); // Act only warns
+    expect(CASH_AGENT.targetHf).toBe(1.12);
+    expect(CASH_AGENT.targetHf).toBe(CREDIT_CAP.minHf);
     expect(CASH_AGENT.targetHf).toBeLessThan(RISK.safeMin);
-    expect(PROTECT_SELL).toMatchObject({ headsUpHf: RISK.watchMin, nowHf: 1.05, targetHf: 1.2 });
+    expect(PROTECT_SELL).toEqual({ floorBps: 300, poolCapUsd: 10_000, maxSliceUsd: 5_000 });
   });
 
-  it("does nothing at 1.3 (Watch), however much cash there is", () => {
+  it("does nothing above the line: 1.3 (Watch), 1.08 (Act, a warning only), however much cash there is", () => {
     expect(planProtect({ ...base, debtUsd: owedAt(1.3), savingsUsd: 10_000, capLeftUsd: 10_000 })).toMatchObject({
       action: "none",
       reason: "healthy",
     });
-    // …nor anywhere in Watch, down to the line itself
-    expect(planProtect({ ...base, debtUsd: owedAt(1.49) }).action).toBe("none");
-    expect(planProtect({ ...base, debtUsd: owedAt(1.1001) }).action).toBe("none");
+    expect(planProtect({ ...base, debtUsd: owedAt(1.08) }).action).toBe("none");
+    expect(planProtect({ ...base, debtUsd: owedAt(1.0301) }).action).toBe("none");
   });
 
-  it("acts at 1.05 (Act), repaying just enough to be back in Watch at about 1.2", () => {
-    const d = planProtect({ ...base, debtUsd: owedAt(1.05) }); // owes $666.67
+  it("acts at 1.02, repaying just enough to be back at 1.12", () => {
+    const d = planProtect({ ...base, debtUsd: owedAt(1.02) }); // owes $686.27
     expect(d).toMatchObject({ action: "repay", reason: "act" });
     if (d.action !== "repay") return;
-    // to 1.2: owe 700 / 1.2 = $583.33, so repay $83.33, an eighth of what's owed; back to Safe (1.5) would be $200
-    expect(d.amountUsd).toBeCloseTo(83.33, 2);
-    expect(d.hfAfter).toBeCloseTo(1.2, 6);
+    // to 1.12: owe 700 / 1.12 = $625, so repay $61.27, 5/56 of what's owed
+    expect(d.amountUsd).toBeCloseTo(61.27, 2);
+    expect(d.hfAfter).toBeCloseTo(1.12, 6);
   });
 
-  it("sells only if the cash can't reach 1.2: the sale's timing runs on the health the repay leaves", () => {
-    const l = { headsUpHf: 1_100n * 10n ** 15n, nowHf: 1_050n * 10n ** 15n, headsUpDelaySec: 1_800n };
+  it("during a rescue, acts above the line too, until 1.12", () => {
+    const d = planProtect({ ...base, debtUsd: owedAt(1.06), rescuing: true }); // owes $660.38
+    expect(d).toMatchObject({ action: "repay", reason: "act" });
+    if (d.action === "repay") expect(d.hfAfter).toBeCloseTo(1.12, 6);
+    expect(planProtect({ ...base, debtUsd: owedAt(1.06) }).action).toBe("none"); // no rescue: above the line
+    expect(planProtect({ ...base, debtUsd: owedAt(1.12), rescuing: true }).action).toBe("none");
+  });
+
+  it("sells only if the cash can't reach 1.12, at once below the line, and on through the rescue above it", () => {
+    const l = { triggerHf: 1_030n * 10n ** 15n, targetHf: 1_120n * 10n ** 15n };
     const wad = (hf: number) => BigInt(Math.round(hf * 1e6)) * 10n ** 12n;
-    // Enough cash: the repay brings it to 1.2, and selling waits (Watch is fine).
-    const enough = planProtect({ ...base, debtUsd: owedAt(1.04), savingsUsd: 500 });
-    expect(enough).toMatchObject({ action: "repay", hfAfter: expect.closeTo(1.2, 6) });
-    if (enough.action === "repay") expect(sellTiming(wad(enough.hfAfter), 0n, 1_000n, false, l).timing).toBe("wait");
-    // $3 of cash: the repay leaves it in Act (1.045), deep enough for a sale at once.
-    const short = planProtect({ ...base, debtUsd: owedAt(1.04), savingsUsd: 3 });
+    // Enough cash: the repay brings it to 1.12, the rescue ends, and nothing sells.
+    const enough = planProtect({ ...base, debtUsd: owedAt(1.02), savingsUsd: 500 });
+    expect(enough).toMatchObject({ action: "repay", hfAfter: expect.closeTo(1.12, 6) });
+    if (enough.action === "repay") expect(sellsNow(wad(enough.hfAfter), false, false, l)).toBe(false);
+    // $3 of cash: the repay leaves it under the line (1.0245): a sale at once.
+    const short = planProtect({ ...base, debtUsd: owedAt(1.02), savingsUsd: 3 });
     expect(short).toMatchObject({ action: "repay", amountUsd: 3, limitedBy: "savings" });
     if (short.action === "repay") {
-      expect(short.hfAfter).toBeLessThan(1.05);
-      expect(sellTiming(wad(short.hfAfter), 0n, 1_000n, false, l)).toEqual({ timing: "sell", atOnce: true });
+      expect(short.hfAfter).toBeLessThan(1.03);
+      expect(sellsNow(wad(short.hfAfter), true, false, l)).toBe(true);
+    }
+    // $20 of cash: over the line (1.0506) but short of 1.12. Only the rescue sells the rest.
+    const over = planProtect({ ...base, debtUsd: owedAt(1.02), savingsUsd: 20 });
+    if (over.action === "repay") {
+      expect(over.hfAfter).toBeGreaterThan(1.03);
+      expect(sellsNow(wad(over.hfAfter), true, false, l)).toBe(true);
+      expect(sellsNow(wad(over.hfAfter), false, false, l)).toBe(false);
     }
     // No cash at all: nothing to repay with, and the sale goes on its own.
-    expect(planProtect({ ...base, debtUsd: owedAt(1.04), savingsUsd: 0 })).toMatchObject({
+    expect(planProtect({ ...base, debtUsd: owedAt(1.02), savingsUsd: 0 })).toMatchObject({
       action: "none",
       reason: "no-savings",
     });
@@ -69,8 +84,8 @@ describe("planProtect", () => {
     expect(planProtect({ ...base, debtUsd: 0 })).toMatchObject({ action: "none", reason: "no-debt" });
     expect(planProtect({ ...base, debtUsd: 400 })).toMatchObject({ action: "none", reason: "healthy" }); // HF 1.75
   });
-  it("is limited by savings and by the daily cap", () => {
-    const act = owedAt(1.05);
+  it("is limited by savings and by what's left of the grant's limit", () => {
+    const act = owedAt(1.02);
     expect(planProtect({ ...base, debtUsd: act, savingsUsd: 50 })).toMatchObject({
       action: "repay",
       amountUsd: 50,
@@ -88,8 +103,8 @@ describe("planProtect", () => {
     expect(planProtect({ ...base, debtUsd: act, capLeftUsd: 0 })).toMatchObject({ action: "none", reason: "no-cap" });
   });
   it("skips dust repays (gas would cost more than it helps)", () => {
-    // In Act, but only 1 cent of savings left → too small to be worth a transaction.
-    expect(planProtect({ ...base, debtUsd: owedAt(1.05), savingsUsd: 0.01 })).toMatchObject({
+    // Under the line, but only 1 cent of savings left → too small to be worth a transaction.
+    expect(planProtect({ ...base, debtUsd: owedAt(1.02), savingsUsd: 0.01 })).toMatchObject({
       action: "none",
       reason: "too-small",
     });
@@ -97,22 +112,22 @@ describe("planProtect", () => {
 });
 
 describe("weekendHeadsUp: Weekend Shield is a card now, never a repay", () => {
-  it("before the freeze, warns credit in Watch that a 15% drop would take into Act, with the repay that keeps it in Watch", () => {
-    // 1.25 (Watch): −15% → 1.0625, under the Act line
-    const h = weekendHeadsUp({ totalBackingUsd: 1000, avgCf: 0.7, debtUsd: owedAt(1.25), weekendWindow: true });
+  it("before the freeze, warns credit that a 15% drop would take under Aave's line, with the repay that keeps it clear", () => {
+    // 1.15 (Watch): −15% → 0.9775, under Aave's line (1.0)
+    const h = weekendHeadsUp({ totalBackingUsd: 1000, avgCf: 0.7, debtUsd: owedAt(1.15), weekendWindow: true });
     expect(h).not.toBeNull();
-    expect(h!.stressedHf).toBeCloseTo(1.0625, 4);
-    // the stressed health back to 1.1 + 0.1: owe 595 / 1.2 = $495.83, so $64.17 of the $560 owed
-    expect(h!.addUsd).toBeCloseTo(64.17, 2);
+    expect(h!.stressedHf).toBeCloseTo(0.9775, 4);
+    // the stressed health back to 1.0 + 0.09 (a rescue's margin): owe 595 / 1.09 = $545.87, so $62.82 of $608.70
+    expect(h!.addUsd).toBeCloseTo(62.82, 2);
     // and planProtect still does nothing for it
-    expect(planProtect({ ...base, debtUsd: owedAt(1.25) }).action).toBe("none");
+    expect(planProtect({ ...base, debtUsd: owedAt(1.15) }).action).toBe("none");
   });
-  it("says nothing outside the window, when the drop leaves it out of Act, or in Act (Protect acts itself)", () => {
+  it("says nothing outside the window, when the drop leaves it over Aave's line, or under Protect's (it acts itself)", () => {
     const at = (hf: number, weekendWindow = true) =>
       weekendHeadsUp({ totalBackingUsd: 1000, avgCf: 0.7, debtUsd: owedAt(hf), weekendWindow });
-    expect(at(1.25, false)).toBeNull();
-    expect(at(1.4)).toBeNull(); // −15% → 1.19, still Watch
-    expect(at(1.05)).toBeNull();
+    expect(at(1.15, false)).toBeNull();
+    expect(at(1.25)).toBeNull(); // −15% → 1.0625, still over Aave's line
+    expect(at(1.02)).toBeNull();
     expect(weekendHeadsUp({ totalBackingUsd: 1000, avgCf: 0.7, debtUsd: 0, weekendWindow: true })).toBeNull();
   });
 });

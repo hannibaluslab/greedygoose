@@ -1,6 +1,6 @@
 /**
- * Moves the fork's clock forward (scripts/rehearsal/README.md, "Time warp"): evm_increaseTime, then a block. For
- * Protect's heads-up (it sells 30 minutes later), a daily limit's next period, or the Rebalancer's window.
+ * Moves the fork's clock forward (scripts/rehearsal/README.md, "Time warp"): evm_increaseTime, then a block. For a
+ * daily limit's next period (the test deploy's CAP_MAX), the Rebalancer's window, or prices reopening after a weekend.
  *
  *   npm run rehearsal:warp -- 30m      # also 90s, 2h, 1d
  *

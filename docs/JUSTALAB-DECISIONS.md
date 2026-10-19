@@ -499,3 +499,52 @@ The no-ai-slop pass on every on-screen string (report: ~/Marketing Claude/greedy
 - **Trade and Repay keep "the stock’s price".** The Trade sheet's main screen names no protocol (see "the Trade sheet").
 - **"Interest still accrues." and "Prices were off today" stay.** The clearer wording is longer.
 - **"Finish in JAW" stays** until Adrian decides: the spec keeps JAW to the trust mark.
+
+## 2026-10-19 · Protect's line and the runner switch
+
+Adrian approved Protect's new rules and ten copy decisions on 2026-10-19, with the runner switch (`jl/runner-switch`). This replaces, in "Act is the line", the whole "### Protect" part (the trigger at the Act line, the target at 1.20, the heads-up and the 30-minute wait, the at-once line at 1.05 and the 1% / 3% floors, the Rebalancer's gate on Protect's trigger, its words), in "No confirm screens of ours, and limits that read as limits", Protect's "Limit $100 a day", its "Daily limit" card and its limit choices (the Rebalancer's stay), wherever a record above names a daily limit for Protect or its selling, and D3's "No alerts in the MVP" (`CLAUDE.md`, now marked there). Those records keep their meaning for their day.
+
+**The rules.**
+
+- **Protect does nothing above 1.03,** Protect's line (`CASH_AGENT.triggerHf`, pinned on-chain by `CashRules.TRIGGER_HF`): as late as is safe before Aave's line at 1.0, a 2.9% fall, where the feeds move in steps of about 0.5% and the largest single update measured was −2.13%.
+- **Act (under 1.1) is a warning only:** a card on the Agents tab from a plain health check, and a push the runner sends (outside this repo). No move.
+- **Below 1.03 Protect repays from cash back to 1.12;** if cash runs short it sells backing stock, also back to 1.12, at once: no heads-up, no wait. 1.12 is the line credit is capped at (`CREDIT_CAP.minHf`), so Protect puts the account back where it was allowed to be.
+- **Once started, the rescue goes on,** above 1.03 too, until the credit is back at 1.12 (the executor's `rescueAt`; `planProtect`'s and `sellsNow`'s `rescuing`). A move that reaches the target, or leaves nothing owed, ends it (`EndRescue`, which moves no money).
+- **Never sells while prices are held** (weekends and holidays, the executor's own calendar). The repay from cash still runs.
+- **Sale floor: 3% under Aave's price,** every sale (`PROTECT_SELL.floorBps`). There is no 1% floor any more.
+- **No amount limit,** as at DeFi Saver: Protect is limited by what it does, not by how much. No typed limit for Protect or its selling, no limit advice, no "Daily limit" field. The app grants Protect's and Protect · sell's spends at the executor's `CAP_MAX` (read from the executor, `capMaxRaw`; $5 on the test deploy, the largest uint160 on a deploy with `EXECUTOR_CAPS=none`). Each stock's sell limit is still twice the dollar amount at Aave's price (`stockLimitsRaw`), held to what the grant's terms can hold: 32 bits of 1e-4 share a stock. The Rebalancer keeps its one typed weekly limit.
+- **The Rebalancer waits while the credit is in Act** (under 1.1, `RebalanceJob.ACT_HF`; the app's next line gates on `RISK.watchMin`), not down to Protect's line.
+
+**The ten copy decisions** (as built):
+
+1. **The 1.1 warning:** a card from a plain health check (`actWarning` in `lib/agents/next.ts`, `useActWarning`): credit owing, health under 1.1 and at or over 1.03, Protect on or off, with Top up and Repay. "Your credit is in Act." and "Protect steps in at 1.03. Repaying $X now brings it back to Watch." ("Protect is off. Repaying $X now brings it back to Watch." while it's off). $X is the repay back to 1.12, in whole dollars, rounded up. It replaces the heads-up card (`useHeadsUp`, the executor's `SellHeadsUp` and `headsUpAt`). The push is the runner's.
+2. **Between 1.1 and 1.03,** Protect's next line: "Act. Protect steps in at 1.03" (in Watch, "Watch. Protect steps in at 1.03"). Protect's row: "Steps in under 1.03". Its rule: "Steps in only if your credit falls under 1.03, and brings it back to 1.12." Its never line: "Protect does nothing until your credit falls under 1.03. It never sells a stock that doesn’t back your credit, and never sells on a weekend."
+3. **The weekend card stays,** warning about Aave's line: "Prices pause at 8:00 PM. If stocks reopen 15% lower, Aave can sell part of them." and "Repaying $X now keeps your credit over Aave’s line." ($X from `weekendHeadsUp`, now against 1.0). "Protect does nothing before Act" is gone.
+4. **Sales on weekends: still never** ("never sells on a weekend" stays in the never line).
+5. **Sale floor: 3% under Aave's price,** with no 1% vs 3% anywhere.
+6. **Sell order** (Most safety per dollar / Keep my mix): as it was.
+7. **The Rebalancer's pause stays at 1.1:** "Waits until your credit is out of Act", gated on `RISK.watchMin`.
+8. **"My credit status"** (`CreditStatusSheet`): the Act row reads "A warning. Protect steps in at 1.03.", and a new row under it, in the same style with Act's pill: "Under 1.03 · Protect repays from your cash, then sells if needed."
+9. **Credit Buy's risk line** says Protect sells only while its selling is on, as Earn with stocks' does: "If your credit falls under 1.03, Protect repays from your cash, then sells a little X to bring it back to Watch." or "…Protect repays from your cash. Protect won’t sell your stock." Earn with stocks: "If your credit falls under 1.03, Protect repays from it, then sells a little X…" / "…Protect repays from it. Protect won’t sell your stock."
+10. **No limit in code:** JAW spends at `CAP_MAX`; "Used today" and "Today’s limit is used" are gone for Protect and selling; the row chip, the settings' "Daily limit" card and "up to $X a day" are gone. The Rebalancer keeps its limit, so the shared words are now its own: the Agents footer "Rebalance’s limit is signed with Face ID." (or "You approve each agent with Face ID."), the limit's line "Rebalance never moves more than this in a week.", and SPEC's "one typed amount, a week".
+
+**Other words.** Protect's settings: "Repay from your cash · Only under 1.03, and always first. Your cash pays before any stock is sold." and "Sell stock if cash isn’t enough · Only stock that backs your credit". Saving lists "Repay from your cash: on", "Selling: on", "Never sell: …". The feed: "Protect is on. If your credit falls under 1.03, it repays from your cash." and "Protect can sell backing stock."; a repay's or a sale's "Why" is "Your credit fell under 1.03." or, for a rescue going on above the line, "Protect went on until 1.12."; "Back to Watch." stays (1.12 is in Watch). With no cash, the next line is "Next: sells backing stock to repay" when selling is on, "Act. Sells backing stock when prices reopen" while prices are held, "Act. No cash to repay with" when it's off. A used-up limit can only be a capped test deploy's: "Act. Repays on its next run".
+
+**The contract changed** (GooseExecutor, a new deploy and a new grant for every user):
+
+- **The rescue:** `Account.rescueAt` (was `headsUpAt`) is when a rescue started; while it lasts Protect acts below the target, not only below its line. Action `EndRescue` clears it (bookkeeping, no money). `HeadsUp`, `ClearHeadsUp`, `SellHeadsUp`, `SellHeadsUpCleared` and `ProtectSold`'s `atOnce` are gone; `SellLimits` is `{floorBps, poolCap, maxSlice}`.
+- **The overshoot check:** a Protect move that leaves credit owing may not land above the target plus 0.01 (`CashRules.OVERSHOOT_HF`, `Overshoot()`), so having no amount limit never means an oversized move.
+- **The Protect list:** `protectMembers` / `protectMemberCount` and `checkProtect(shard, shards)`, the same check as `checkUpkeep` over the accounts with Protect on: what a runner scans on each stock price update.
+- **Registration:** `registerApproved(permission)` takes the permission exactly as JAW's manager approved it (a runner passes the `PermissionApproved` event's data), and `registrationOf(permission)` says first, as a view, whether it would take it. Chainlink Automation's log trigger (`checkLog`) and the `Mode` wrapper are gone: `performUpkeep` takes `abi.encode(address[])`.
+- **GooseReceiver:** where Chainlink CRE delivers the runner's reports (Base's KeystoneForwarder → `onReport`), one of the executor's forwarders, allowed exactly two calls: a run (`performUpkeep`) or a registration (`registerApproved`).
+- **The Rebalancer's gate** is its own Act line (`RebalanceJob.ACT_HF`, 1.1), no longer Protect's trigger.
+
+**In this repo:** `lib/agents/events.ts` reads no heads-up and no `atOnce` (and no `reason`: only Act repays); `useAgentSettings` reads `rescueAt` (`rescuing`) and no sell limits; `useAgentFeed` keeps no heads-up; `lib/agents/permissions.ts` has `NO_LIMIT_JOBS`, `hasLimit` and `startCapRaw` (CAP_MAX for Protect's two jobs) and `LIMIT_USD` for Save, Entry and the Rebalancer only; `lib/agents/protect.ts` has no limit to choose (`ProtectSaved.repayOn`); the rehearsal's `run-agents.ts` registers through `registrationOf` and `registerApproved` and decodes the plain address list; `prove.ts`'s shock step drops sam to about 1.02 and checks Protect's repay.
+
+**Tests:** `agent-list`, `agent-next` (the new lines, the rescue, no cash with and without selling and while prices are held, the Act warning, the weekend card against Aave's line, the Rebalancer at 1.077, `EndRescue` saying nothing), `agent-feed`, `agent-events`, `protect-settings` (grants at CAP_MAX, the 32-bit clamp on a deploy with no amount limit), `agents` (the limit parts), `earn-with-stocks`, `cash-activity`. `protect-rules`, `protect-sell`, the vectors and the contract tests are the lead's.
+
+**Open for Adrian.**
+
+- **Under 1.03 with Protect off there is no card:** the warning shows from 1.1 down to 1.03 as decided, Protect on or off; below 1.03 with Protect off nothing on the Agents tab says so (Home's status still reads Act).
+- **"Watch: Nothing is sold."** on the status sheet: a rescue that started under 1.03 can sell between 1.10 and 1.12, in Watch, on its way back to 1.12.
+- **The weekend card shows only while Protect runs,** as Weekend Shield did; with Protect off, nobody acts, yet no card.

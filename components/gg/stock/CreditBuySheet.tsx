@@ -69,7 +69,7 @@ export function CreditBuySheet({
   const preset = EQUITIES.find((e) => e.symbol === symbol) ?? null;
   const cfRead = useBackingFactorsRead(data.holdings);
   const cfs = cfRead.cfs;
-  const protect = useAgents(user).status.protect;
+  const agentStatus = useAgents(user).status;
 
   const [step, setStep] = useState<Step>("back");
   const [direction, setDirection] = useState<"forward" | "back">("forward");
@@ -232,7 +232,8 @@ export function CreditBuySheet({
               setAck={setAck}
               amount={amount}
               plan={plan}
-              protectOn={protect === "on"}
+              protectOn={agentStatus.protect === "on"}
+              sellOn={agentStatus.sell === "on"}
             />
           ) : (
             <div aria-busy className="h-[320px] animate-pulse rounded-[16px] bg-chip" />

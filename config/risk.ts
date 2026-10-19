@@ -40,25 +40,24 @@ export const CREDIT_CAP = {
  * public 7-day delay. These mirror its deploy defaults (contracts/script/DeployExecutor.s.sol, checked by
  * contracts/test/DeployExecutor.t.sol); read the live ones with the executor's `thresholds()` and `amounts()`.
  *
- * Act is the line (Adrian, 2026-10-15: "watch is ok, it is act that is not"): Protect steps in only below the Act line
- * and brings the credit back to Watch, not to Safe. 1.2 leaves an 8% cushion (1 − 1.1/1.2) before the credit is back
- * in Act, so a normal day's move doesn't set it off again on the next run, and spends well under half of what
- * reaching Safe would: from 1.05, 12.5% of what's owed against 30%. The executor's bounds pin the trigger to the Act
- * line (contracts/src/CashRules.sol TRIGGER_HF) and keep the target under the Safe line.
+ * Protect's line (Adrian, 2026-10-19): Protect acts only below 1.03, as late as is safe before Aave's line at 1.0 (a
+ * 2.9% fall; the feeds move in steps of about 0.5%, the largest measured −2.13%). Act (1.1) is a warning only. Once it
+ * acts, the rescue goes on until the credit is back at 1.12: savings first, then selling. 1.12 is the same line credit
+ * is capped at (CREDIT_CAP.minHf), so Protect puts the account back where it was allowed to be. There is no amount
+ * limit: like DeFi Saver, Protect is limited by what it does, and a move may not land above the target plus 0.01. The
+ * executor's bounds pin the line (contracts/src/CashRules.sol TRIGGER_HF) and keep the target under the Safe line.
  */
 export const CASH_AGENT = {
-  /** Protect repays from cash below this health factor (the Act line)… */
-  triggerHf: RISK.watchMin,
-  /** …just enough to bring the credit back to this one, in Watch with a margin. */
-  targetHf: 1.2,
-  /**
-   * The weekend heads-up (no move, a card only): the price drop it tests just before prices freeze, and the health
-   * that drop must leave, which is the Act line.
-   */
+  /** Protect acts below this health factor (Protect's line)… */
+  triggerHf: 1.03,
+  /** …and brings the credit back to this one, in Watch, savings first, then selling. */
+  targetHf: 1.12,
+  /** The weekend card (no move, a card only): the price drop it tests just before prices freeze, and the health that
+   *  drop must leave, which is Aave's own line. */
   stressDrop: 0.15,
-  stressFloorHf: RISK.watchMin,
-  /** How long before a freeze the weekend heads-up shows (Friday 14:00–20:00 New York with no holiday; the app reads
-   *  the executor's own calendar, so a holiday's eve gets it too). */
+  stressFloorHf: AAVE_LINE_HF,
+  /** How long before a freeze the weekend card shows (Friday 14:00–20:00 New York with no holiday; the app reads the
+   *  executor's own calendar, so a holiday's eve gets it too). */
   weekendWindowSec: 6 * 3600,
   /** Smallest repay and smallest save worth a run. */
   minRepayUsd: 0.05,
@@ -68,23 +67,16 @@ export const CASH_AGENT = {
 } as const;
 
 /**
- * Protect · sell's numbers (D18): when cash can't bring the credit back to Watch, Protect sells backing stock. Act is
- * the line here too (Adrian, 2026-10-15): the heads-up goes out below the Act line, on a weekday, and the sale follows
- * 30 minutes later if the credit is still in Act; deep in Act, below 1.05 (halfway to Aave's limit at 1.0), it sells
- * at once. A sale brings the credit back to Watch at 1.2, the same target as a repay from cash. Before 2026-10-15 the
- * heads-up was below 1.25 and the target 1.4 (plan item 1). The floors and the pool numbers follow the expert panel
- * (eval/protect-panel.json): 1% under Aave's price after a heads-up, 3% at once, about 2% of a pool's USDC depth per
- * 10 minutes, and each swap near 1% of it (the Aerodrome pools hold $0.44M–1.57M, 2026-10-14). All wait on calibration
- * (plan item 6 step 9). GooseExecutor holds the live values within hard bounds (contracts/src/SellRules.sol); a
- * change waits the public 7-day delay.
+ * Protect · sell's numbers (D18): when savings can't bring the credit back to the target, Protect sells backing stock,
+ * at once, on Protect's own lines (CASH_AGENT): below 1.03, and on through a rescue until 1.12 (Adrian, 2026-10-19).
+ * Never while prices are held. Before 2026-10-19: a heads-up below 1.1 and a sale 30 minutes later, at once below 1.05,
+ * back to 1.2. Every sale is urgent now, so it takes the urgent floor, 3% under Aave's price. The pool numbers follow
+ * the expert panel (eval/protect-panel.json): about 2% of a pool's USDC depth per 10 minutes, and each swap near 1% of
+ * it (the Aerodrome pools hold $0.44M–1.57M, 2026-10-14). All wait on calibration (plan item 6 step 9). GooseExecutor
+ * holds the live values within hard bounds (contracts/src/SellRules.sol); a change waits the public 7-day delay.
  */
 export const PROTECT_SELL = {
-  headsUpHf: RISK.watchMin,
-  nowHf: 1.05,
-  targetHf: CASH_AGENT.targetHf,
-  headsUpDelaySec: 30 * 60,
-  floorBps: 100,
-  actFloorBps: 300,
+  floorBps: 300,
   /** All accounts together, into one stock's pool, per 10 minutes. */
   poolCapUsd: 10_000,
   maxSliceUsd: 5_000,

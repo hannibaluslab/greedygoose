@@ -7,9 +7,11 @@ import {
   agentPermission,
   entryGrant,
   entryPermission,
+  hasLimit,
   jobGrant,
   LIMIT_USD,
   limitRaw,
+  NO_LIMIT_JOBS,
   parseLimitUsd,
   readAgentGrant,
   readStockLimits,
@@ -17,6 +19,7 @@ import {
   rebalancePermission,
   sellGrant,
   sellPermission,
+  startCapRaw,
   stockLimitsRaw,
   stockTerms,
   testCapNote,
@@ -445,23 +448,31 @@ describe("jobStatus", () => {
   });
 });
 
-describe("limitRaw (the limit a switch turns a job on with)", () => {
-  it("starts Protect and selling on $100 a day, the Rebalancer on $100 a week, Save and Entry on $1,000 a day with no other offer", () => {
-    expect(limitRaw(LIMIT_USD.protect.start, 10n ** 12n)).toBe(100_000_000n);
-    expect(limitRaw(LIMIT_USD.sell.start, 10n ** 12n)).toBe(100_000_000n);
+describe("limitRaw and startCapRaw (the cap a switch turns a job on with)", () => {
+  it("starts the Rebalancer on $100 a week, Save and Entry on $1,000 a day", () => {
     expect([LIMIT_USD.rebalance.start, LIMIT_USD.rebalance.per]).toEqual([100, "week"]);
     expect(limitRaw(LIMIT_USD.save.start, 10n ** 12n)).toBe(1_000_000_000n);
     expect(limitRaw(LIMIT_USD.entry.start, 10n ** 12n)).toBe(1_000_000_000n);
-    expect([LIMIT_USD.save.options, LIMIT_USD.entry.options]).toEqual([[], []]);
+    expect(startCapRaw("rebalance", 10n ** 12n)).toBe(100_000_000n);
+    expect(startCapRaw("save", 10n ** 12n)).toBe(1_000_000_000n);
   });
 
-  it("offers Protect, selling and the Rebalancer $25, $50, $100 and $200, then Custom", () => {
-    for (const job of ["protect", "sell", "rebalance"] as const)
-      expect(LIMIT_USD[job].options).toEqual([25, 50, 100, 200]);
+  it("gives Protect and selling no amount limit (Adrian, 2026-10-19): their grants carry the executor's CAP_MAX", () => {
+    expect(NO_LIMIT_JOBS).toEqual(["protect", "sell"]);
+    expect((["save", "protect", "sell", "rebalance", "entry"] as const).map(hasLimit)).toEqual([
+      true,
+      false,
+      false,
+      true,
+      true,
+    ]);
+    expect(Object.keys(LIMIT_USD).sort()).toEqual(["entry", "rebalance", "save"]);
+    expect(startCapRaw("protect", 10n ** 12n)).toBe(10n ** 12n);
+    expect(startCapRaw("sell", 5_000_000n)).toBe(5_000_000n);
   });
 
   it("never asks for more than the executor's CAP_MAX, so a $5 test deploy registers the grant", () => {
-    expect(limitRaw(LIMIT_USD.protect.start, 5_000_000n)).toBe(5_000_000n);
+    expect(limitRaw(LIMIT_USD.rebalance.start, 5_000_000n)).toBe(5_000_000n);
     expect(limitRaw(LIMIT_USD.save.start, 5_000_000n)).toBe(5_000_000n);
     expect(limitRaw(parseLimitUsd("1,250")!, 5_000_000n)).toBe(5_000_000n);
   });
@@ -490,7 +501,7 @@ describe("parseLimitUsd (a Custom limit as typed)", () => {
   });
 });
 
-describe("testCapNote (dev only, when the executor's CAP_MAX bites)", () => {
+describe("testCapNote (dev only, when the executor's CAP_MAX bites the Rebalancer's limit)", () => {
   it("says what the test deploy allows when the limit on screen is more", () => {
     expect(testCapNote(100, 5_000_000n, true)).toBe("Test version: up to $5");
     expect(testCapNote(25, 10_500_000n, true)).toBe("Test version: up to $10.50");

@@ -284,12 +284,12 @@ describe("earnQuote: one amount", () => {
 });
 
 describe("the words around the button", () => {
-  it("says what Protect does if the stocks fall: only at Act, back to Watch", () => {
+  it("says what Protect does if the stocks fall: only under 1.03, back to Watch, selling only when that's on", () => {
     expect(earnRiskLine({ names: ["Tesla"], protect: "on", sell: "on" })).toBe(
-      "If Tesla falls, you can repay from your cash. If your credit reaches Act, Protect repays from it, then sells a little Tesla to bring it back to Watch.",
+      "If Tesla falls, you can repay from your cash. If your credit falls under 1.03, Protect repays from it, then sells a little Tesla to bring it back to Watch.",
     );
     expect(earnRiskLine({ names: ["Tesla"], protect: "on", sell: "off" })).toBe(
-      "If Tesla falls, you can repay from your cash. If your credit reaches Act, Protect repays from it. Protect won’t sell your stock.",
+      "If Tesla falls, you can repay from your cash. If your credit falls under 1.03, Protect repays from it. Protect won’t sell your stock.",
     );
     expect(earnRiskLine({ names: ["Tesla", "NVIDIA"], protect: "off", sell: "off" })).toBe(
       "If your stocks fall, repay from your cash. If they fall too far, part of them can be sold to repay what you owe. Protect is off.",

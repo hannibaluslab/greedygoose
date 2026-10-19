@@ -22,7 +22,7 @@ const NEVER_SELL_WARNING = "Protect won’t sell it, but Aave still can if your 
 
 /**
  * Whether Save can go, and the line under it when it can't: not live yet, no network fee, or why the plan is blocked.
- * `ready`: the limit is a number, it's not the dev preview, nothing else is loading or signing, and the cap is read.
+ * `ready`: it's not the dev preview, nothing else is loading or signing, and the executor's CAP_MAX is read.
  */
 export function saveState(p: {
   live: boolean;
@@ -127,20 +127,6 @@ export function SellChoices({
           ))
         )}
       </div>
-    </>
-  );
-}
-
-/** Under the daily limit: the test cap's note, and that Protect is off and starts on this limit. */
-export function LimitNotes({ capNote, offNow }: { capNote: string | null; offNow: boolean }) {
-  return (
-    <>
-      {capNote && <span className="text-xs leading-[1.4] text-subtle">{capNote}</span>}
-      {offNow && (
-        <span className="text-xs leading-[1.4] text-subtle">
-          Off now. It starts on this limit when you switch it on.
-        </span>
-      )}
     </>
   );
 }

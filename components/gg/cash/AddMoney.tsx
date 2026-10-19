@@ -95,7 +95,7 @@ export function TopUpSheetView({ open, onClose, ...body }: AddMoneyProps & { ope
 
 /**
  * Top up (Adrian, 2026-10-15: "top up and repay should open a sheet not a full page"): Receive as a sheet over the page
- * it opens from (Home's Top up, the Cash sheet, Send's Receive, the Trade sheet, Protect's heads-up). It was the
+ * it opens from (Home's Top up, the Cash sheet, Send's Receive, the Trade sheet, Protect's Act warning). It was the
  * /receive page, which now redirects to Home with this sheet open. "Turn into cash" prepares only while it's open.
  */
 export function TopUpSheet({ open, address, onClose }: { open: boolean; address: `0x${string}`; onClose: () => void }) {

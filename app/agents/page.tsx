@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { isAddressEqual } from "viem";
+import { isAddressEqual, maxUint160 } from "viem";
 import { useAccount } from "wagmi";
 import { toast } from "sonner";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
@@ -12,13 +12,13 @@ import { ProtectSettings } from "@/components/gg/agents/ProtectSettings";
 import { RebalanceSettings } from "@/components/gg/agents/RebalanceSettings";
 import { AgentRow, AgentsFeed, AgentsView, AttentionCard, MixBar, TurnOffAll } from "@/components/gg/Agents";
 import { useAgentFeed } from "@/hooks/useAgentFeed";
+import { useActWarning } from "@/hooks/useActWarning";
 import { useAgentRun, type AgentStep } from "@/hooks/useAgentRun";
 import { TAP_AGAIN } from "@/hooks/useTx";
 import { GRANT_SECONDS, useAgents } from "@/hooks/useAgents";
 import { useAgentSettings } from "@/hooks/useAgentSettings";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import type { GrantStep } from "@/hooks/useManageSave";
-import { useHeadsUp } from "@/hooks/useHeadsUp";
 import { useNextFreeze } from "@/hooks/useNextFreeze";
 import { useNowSec } from "@/hooks/useNowSec";
 import { usePosition, type PositionData } from "@/hooks/usePosition";
@@ -39,8 +39,8 @@ import {
   type SheetAction,
 } from "@/lib/agents/list";
 import { rebalanceOptions } from "@/lib/agents/mix";
-import { agentNexts, defaultNumbers, weekendCard } from "@/lib/agents/next";
-import { JOBS, LIMIT_USD, limitRaw, stockLimitsRaw, type AgentJob } from "@/lib/agents/permissions";
+import { agentNexts, defaultNumbers, pricesHeldAt, weekendCard } from "@/lib/agents/next";
+import { hasLimit, JOBS, limitRaw, startCapRaw, stockLimitsRaw, type AgentJob } from "@/lib/agents/permissions";
 import { offSteps } from "@/lib/agents/status";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
@@ -54,14 +54,26 @@ const LOADING = Object.fromEntries(AGENTS.map((a) => [a, { idle: "…" }])) as R
 
 const PREVIEW = "Preview mode. Sign in to do this.";
 
+/** A job or an agent that runs: on, or starting (its grant is in JAW's list, not yet in the registry). */
+const runs = (s: string) => s === "on" || s === "starting";
+
+/** What the agents' rules read off the executor's registry: nothing saved, no rescue and no plan until it's read. */
+const registryInput = (settings: ReturnType<typeof useAgentSettings>) => ({
+  mixBps: settings?.mixBps ?? null,
+  rebalanceDay: settings?.rebalanceDay ?? 0,
+  rescuing: settings?.rescuing === true,
+  plan: settings?.plan ?? null,
+});
+
 /**
  * The Agents tab (Adrian, 2026-10-15): Protect and Rebalance. Each agent's state is the executor's registry and JAW's
  * list (useAgents, D14); its next move is the executor's `planOf` or its TypeScript rule on live data
- * (lib/agents/next.ts); the cards come from the executor's events and registry. Every switch, Renew and Turn off opens
- * JAW's own sheet straight away (its Review and Face ID), once a grant or revoke: the row or the sheet already says the
- * limit, so there is no confirm step of ours. Until the agents are live (AGENTS_LIVE), everything renders with real
- * data and Coming soon stands where the switches are. The feed is the agents' moves only (ruling 15). Earning and turning other dollars into cash run under the hood and have
- * no place here (D20).
+ * (lib/agents/next.ts); the cards come from a plain health check, the executor's events and registry. Every switch,
+ * Renew and Turn off opens JAW's own sheet straight away (its Review and Face ID), once a grant or revoke: the row or
+ * the sheet already says what it does (Protect's grants are at the executor's CAP_MAX, with no amount limit; the
+ * Rebalancer's at the limit it shows), so there is no confirm step of ours. Until the agents are live (AGENTS_LIVE),
+ * everything renders with real data and Coming soon stands where the switches are. The feed is the agents' moves only
+ * (ruling 15). Earning and turning other dollars into cash run under the hood and have no place here (D20).
  */
 function Agents({ address }: { address: `0x${string}` }) {
   const { address: signer } = useAccount();
@@ -72,7 +84,6 @@ function Agents({ address }: { address: `0x${string}` }) {
   const feed = useAgentFeed(address);
   const nowSec = useNowSec();
   const freezeAt = useNextFreeze(nowSec);
-  const headsUp = useHeadsUp(address, feed.headsUp, settings, nowSec);
   const runner = useAgentRun(agents);
   const live = AGENTS_LIVE;
 
@@ -84,6 +95,11 @@ function Agents({ address }: { address: `0x${string}` }) {
 
   const capMax = agents.capMaxRaw;
   const capOf = (usd: number) => limitRaw(usd, capMax ?? BigInt(usd) * 10n ** BigInt(USDC.decimals));
+  /**
+   * The cap a job starts on: CAP_MAX for Protect's two jobs (no amount limit), else its starting limit. Until CAP_MAX
+   * is read nothing is granted, and the rules run on the largest a grant could hold.
+   */
+  const startCap = (job: AgentJob) => startCapRaw(job, capMax ?? maxUint160);
   const mixSet = !!settings?.mixBps.some((w) => w > 0);
 
   const numbers = settings?.numbers ?? defaultNumbers(rebalanceOptions());
@@ -95,19 +111,21 @@ function Agents({ address }: { address: `0x${string}` }) {
         avgCf: position.avgCf,
         debtUsd: position.debtUsd,
         holdings: position.holdings,
-        mixBps: settings?.mixBps ?? null,
+        ...registryInput(settings),
         left: agents.left,
-        capRaw: byJob((job) => agents.terms[job]?.capRaw ?? capOf(LIMIT_USD[job].start)),
+        capRaw: byJob((job) => agents.terms[job]?.capRaw ?? startCap(job)),
         capMaxRaw: capMax,
         numbers,
-        rebalanceDay: settings?.rebalanceDay ?? 0,
-        plan: settings?.plan ?? null,
+        sellOn: runs(agents.status.sell),
+        pricesHeld: pricesHeldAt(nowSec, freezeAt),
       })
     : LOADING;
   const items = agentItems({ status: agents.status, capRaw: byJob((job) => agents.terms[job]?.capRaw ?? null), next });
 
-  // The weekend heads-up: a card only, while Protect runs, as Weekend Shield did (Act is the line, 2026-10-15).
-  const protectRuns = ["on", "starting"].includes(agentStatus("protect", agents.status));
+  // The Act warning: a plain health check, Protect on or off (Adrian, 2026-10-19). A card only.
+  const protectRuns = runs(agentStatus("protect", agents.status));
+  const actCard = useActWarning(address, numbers, protectRuns);
+  // The weekend card: a card only, while Protect runs, as Weekend Shield did.
   const weekend =
     position && protectRuns
       ? weekendCard({
@@ -122,7 +140,7 @@ function Agents({ address }: { address: `0x${string}` }) {
 
   const cards = agentCards({
     nowSec,
-    headsUp,
+    act: actCard,
     weekend,
     status: agents.status,
     ends: byJob((job) => agents.terms[job]?.end ?? null),
@@ -137,8 +155,11 @@ function Agents({ address }: { address: `0x${string}` }) {
     cooldownUntil: agents.cooldownUntil,
   });
 
-  /** The limit an agent will run with: its grant's, else the one it starts on. */
-  const limitUsd = (agent: Agent) => items.find((i) => i.agent === agent)!.limitUsd;
+  /** The cap an agent's switch grants: the Rebalancer's limit on its row; Protect's CAP_MAX (no amount limit). */
+  const switchCap = (agent: Agent) => {
+    const usd = items.find((i) => i.agent === agent)!.limitUsd;
+    return usd === null ? startCap(AGENT_JOBS[agent][0]) : capOf(usd);
+  };
 
   /** A job's grant at `capRaw`; a job that sells stock takes a limit per stock it may sell, at Aave's price now. */
   const grantFor = (job: AgentJob, capRaw: bigint, data: PositionData): GrantStep => {
@@ -151,9 +172,12 @@ function Agents({ address }: { address: `0x${string}` }) {
     return { job, capRaw, limitsRaw: stockLimitsRaw(capRaw, capMax!, prices, sellable) };
   };
 
-  /** What renewing a job keeps: the limit of the grant it runs with, or last ran with. */
+  /**
+   * What renewing a job keeps: the limit of the grant it runs with, or last ran with. Protect's two jobs renew at
+   * CAP_MAX, with no amount limit, whatever a grant from before carried.
+   */
   const renewCapRaw = (job: AgentJob) =>
-    agents.terms[job]?.capRaw ?? agents.lastTerms[job]?.capRaw ?? capOf(LIMIT_USD[job].start);
+    hasLimit(job) ? (agents.terms[job]?.capRaw ?? agents.lastTerms[job]?.capRaw ?? startCap(job)) : startCap(job);
 
   /** Turning `jobs` off: a revoke for each with a grant to revoke, or why it can't go ahead (the list is unreadable). */
   const offFor = (jobs: readonly AgentJob[]) =>
@@ -173,7 +197,7 @@ function Agents({ address }: { address: `0x${string}` }) {
       return (jobs ?? AGENT_JOBS[agent].filter((j) => agents.terms[j])).map((j) => ({
         grant: grantFor(j, renewCapRaw(j), position),
       }));
-    return [{ grant: grantFor(main, capOf(limitUsd(agent)), position) }];
+    return [{ grant: grantFor(main, switchCap(agent), position) }];
   };
 
   // The dev preview (`?as=`) reads another account: nothing can be signed for it.
@@ -242,7 +266,7 @@ function Agents({ address }: { address: `0x${string}` }) {
         error={runner.errorFor(`${agent}:`)}
         offSteps={agents.faceIdsOff(AGENT_JOBS[agent])}
         stops={ends.length ? longDateText(Math.min(...ends)) : null}
-        // Each settings body carries the agent's limit and Save, which switches it on too.
+        // Each settings body carries Save, which switches it on too (and the Rebalancer's, its limit).
         settings={agent === "protect" ? <ProtectSettings account={address} /> : <RebalanceSettings account={address} />}
         activity={
           <FeedCard>
@@ -270,7 +294,7 @@ function Agents({ address }: { address: `0x${string}` }) {
     <>
       <AgentsView
         live={live}
-        signed={TAB_JOBS.some((j) => !!agents.terms[j])}
+        signed={!!agents.terms.rebalance}
         cards={cards.map((c) => (
           <AttentionCard
             key={c.key}

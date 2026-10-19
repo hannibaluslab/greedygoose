@@ -1,18 +1,20 @@
 /**
- * Runs the agents on the fork the way Chainlink Automation runs them on Base (scripts/rehearsal/README.md, "Agents"),
- * with the forwarder setup.ts bootstrapped (an anvil dev account) in Chainlink's place:
+ * Runs the agents on the fork the way the runner runs them on Base (scripts/rehearsal/README.md, "Agents"; the runner
+ * itself lives outside this repo, and Chainlink Automation is gone since 2026-10-19), with the forwarder setup.ts
+ * bootstrapped (an anvil dev account) in the runner's place:
  *
- *   1. Registration (the log-trigger upkeep): every PermissionApproved the manager emitted since the last run goes
- *      through GooseExecutor's `checkLog`, and each one it accepts is registered with `performUpkeep`.
- *   2. A run (the custom-logic upkeep, checkData = abi.encode(0, 1)): `checkUpkeep`, then `performUpkeep` with what it
- *      lists, at the upkeep's gas limit (5M; 1M for a registration), as Chainlink sends it. `--until-idle` repeats until nothing is listed (a sale cut short goes on in the next run), at most 5 times.
+ *   1. Registration: every PermissionApproved the manager emitted since the last run is read with GooseExecutor's
+ *      `registrationOf`, and each one it accepts is registered with `registerApproved`, at 1M gas.
+ *   2. A run (the safety-net round, checkData = abi.encode(0, 1)): `checkUpkeep`, then `performUpkeep` with the
+ *      accounts it lists, at 5M gas. `--until-idle` repeats until nothing is listed (a rescue goes on in the next
+ *      runs until the credit is back at 1.12), at most 5 times.
  *
  * What each step did is printed from the executor's events.
  *
  *   npm run rehearsal:agents
  *   npm run rehearsal:agents -- --until-idle
  */
-import { decodeAbiParameters, encodeAbiParameters, encodeFunctionData, getAbiItem, type Address, type Hex } from "viem";
+import { decodeAbiParameters, encodeAbiParameters, encodeFunctionData, getAbiItem, type Address } from "viem";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import { permissionManagerAbi } from "@/lib/protocols/abis";
 import { PROTOCOLS } from "@/lib/protocols/config";
@@ -22,19 +24,7 @@ import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 
 const MANAGER = PROTOCOLS.PERMISSION_MANAGER as Address;
 const APPROVED = getAbiItem({ abi: permissionManagerAbi, name: "PermissionApproved" });
-const MODES = ["Run", "Register"] as const;
-const ACTIONS = [
-  "None",
-  "Prune",
-  "Repay",
-  "Save",
-  "Sell",
-  "HeadsUp",
-  "ClearHeadsUp",
-  "Defer",
-  "Rebalance",
-  "Convert",
-] as const;
+const ACTIONS = ["None", "Prune", "Repay", "Save", "Sell", "EndRescue", "Defer", "Rebalance", "Convert"] as const;
 const JOBS = ["Save", "Protect", "Protect · sell", "Rebalance", "Receive"] as const;
 
 async function main() {
@@ -73,7 +63,7 @@ async function main() {
   }
 }
 
-/** The log trigger: the manager's PermissionApproved since the last registration, through checkLog. */
+/** Registration: the manager's PermissionApproved since the last one, through registrationOf and registerApproved. */
 async function register(fork: Fork, state: State, who: (a: Address) => string) {
   const latest = await fork.pub.getBlockNumber();
   const from = BigInt((state.registeredThrough ?? state.executorBlock) + 1);
@@ -84,33 +74,29 @@ async function register(fork: Fork, state: State, who: (a: Address) => string) {
       : [];
   if (!logs.length) console.log("  none");
   for (const log of logs) {
-    const block = await fork.pub.getBlock({ blockNumber: log.blockNumber });
-    const chainlinkLog = {
-      index: BigInt(log.logIndex),
-      timestamp: block.timestamp,
-      txHash: log.transactionHash,
-      blockNumber: log.blockNumber,
-      blockHash: log.blockHash,
-      source: log.address,
-      topics: log.topics as Hex[],
-      data: log.data,
-    };
-    const [needed, performData] = await fork.pub.readContract({
+    const permission = log.args.permission;
+    if (!permission) continue;
+    const [ok] = await fork.pub.readContract({
       address: state.executor,
       abi: gooseExecutorAbi,
-      functionName: "checkLog",
-      args: [chainlinkLog, "0x"],
-      account: state.forwarder,
+      functionName: "registrationOf",
+      args: [permission],
     });
-    const account = log.args.permission?.account;
-    if (!needed) {
+    if (!ok) {
       console.log(
-        `  ${account ? who(account) : "?"}: a grant checkLog doesn't register (not a GooseExecutor template, already on, or stale)`,
+        `  ${who(permission.account)}: a grant registrationOf doesn't take (not a GooseExecutor template, or stale)`,
       );
       continue;
     }
-    const receipt = await perform(fork, state, performData, REGISTER_GAS);
-    for (const line of describeExecutorLogs(receipt.logs, state.executor, who)) console.log(`  ${line}`);
+    const receipt = await fork.send(
+      state.forwarder,
+      state.executor,
+      encodeFunctionData({ abi: gooseExecutorAbi, functionName: "registerApproved", args: [permission] }),
+      "registerApproved",
+      REGISTER_GAS,
+    );
+    const lines = describeExecutorLogs(receipt.logs, state.executor, who);
+    for (const line of lines.length ? lines : [`${who(permission.account)}: already on`]) console.log(`  ${line}`);
   }
   state.registeredThrough = Number(latest);
   writeState(state);
@@ -141,8 +127,7 @@ async function runOnce(fork: Fork, state: State, who: (a: Address) => string, n:
     }
     return false;
   }
-  const [mode, data] = decodeAbiParameters([{ type: "uint8" }, { type: "bytes" }], performData);
-  const listed = MODES[mode] === "Run" ? decodeAbiParameters([{ type: "address[]" }], data)[0] : [];
+  const [listed] = decodeAbiParameters([{ type: "address[]" }], performData);
   console.log(`  listed: ${listed.map(who).join(", ")}`);
   for (const a of listed) {
     const p = await fork.pub.readContract({
@@ -153,7 +138,13 @@ async function runOnce(fork: Fork, state: State, who: (a: Address) => string, n:
     });
     console.log(`  ${who(a)} plans ${ACTIONS[p.action]} (${JOBS[p.job]})`);
   }
-  const receipt = await perform(fork, state, performData, RUN_GAS);
+  const receipt = await fork.send(
+    state.forwarder,
+    state.executor,
+    encodeFunctionData({ abi: gooseExecutorAbi, functionName: "performUpkeep", args: [performData] }),
+    "performUpkeep",
+    RUN_GAS,
+  );
   const lines = describeExecutorLogs(receipt.logs, state.executor, who);
   for (const line of lines.length ? lines : ["the run moved nothing"]) console.log(`  ${line}`);
   console.log(`  performUpkeep ${receipt.transactionHash} (${receipt.gasUsed.toLocaleString("en-US")} gas)`);
@@ -161,21 +152,12 @@ async function runOnce(fork: Fork, state: State, who: (a: Address) => string, n:
 }
 
 /**
- * The upkeeps' gas limits on Base (contracts/docs/DEPLOYMENTS.md): Chainlink sends performUpkeep with these. Never an
- * estimate: a run with too little gas succeeds by deferring every account, so an estimate finds exactly that.
+ * The gas a run and a registration are sent with (the upkeeps' limits on Base before the runner, contracts/docs/
+ * DEPLOYMENTS.md). Never an estimate: a run with too little gas succeeds by deferring every account, so an estimate
+ * finds exactly that.
  */
 const RUN_GAS = 5_000_000n;
 const REGISTER_GAS = 1_000_000n;
-
-function perform(fork: Fork, state: State, performData: Hex, gas: bigint) {
-  return fork.send(
-    state.forwarder,
-    state.executor,
-    encodeFunctionData({ abi: gooseExecutorAbi, functionName: "performUpkeep", args: [performData] }),
-    "performUpkeep",
-    gas,
-  );
-}
 
 main().catch((e) => {
   console.error(`\nrun-agents failed: ${e instanceof Error ? e.message : e}`);

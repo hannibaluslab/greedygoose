@@ -2,17 +2,17 @@ import { parseUnits } from "viem";
 import { CASH, CASH_AGENT } from "@/config/risk";
 
 /**
- * Protect's decision for one account (from cash). Pure — the keeper and the app's preview share it, and GooseExecutor's
- * CashRules.sol ports it line for line.
+ * Protect's decision for one account (from cash). Pure — the app's preview uses it, and GooseExecutor's CashRules.sol
+ * ports it line for line.
  *
- * Act is the line (Adrian, 2026-10-15: "watch is ok, it is act that is not, also the guardian should only act on act
- * and not take decision and repays under watch"):
- * - Trigger: health factor below `triggerHf`, the Act line. In Safe or Watch it does nothing.
- * - Target: repay just enough to reach `targetHf`, back in Watch with a margin (1.2), not back to Safe.
- * - Never more than the savings balance, the remaining daily cap, or the debt itself.
+ * Protect's line (Adrian, 2026-10-19):
+ * - Trigger: health factor below `triggerHf` (1.03). Act (1.1) is a warning only; above the line it does nothing.
+ * - Rescue: once Protect has acted, it goes on below `targetHf` (`rescuing`), savings first, then selling, until the
+ *   credit is back at the target.
+ * - Target: repay just enough to reach `targetHf` (1.12, in Watch), never more: no amount limit, as at DeFi Saver.
+ * - Never more than the savings balance, what's left of the grant's limit, or the debt itself.
  *
- * Weekend Shield no longer repays: before a freeze the credit is outside Act by definition, so it is a heads-up card
- * only (`weekendHeadsUp`), and the executor has no weekend move.
+ * Weekend Shield no longer repays: the weekend is a card only (`weekendHeadsUp`), and the executor has no weekend move.
  */
 type ProtectInput = {
   totalBackingUsd: number;
@@ -22,6 +22,8 @@ type ProtectInput = {
   capLeftUsd: number;
   triggerHf?: number;
   targetHf?: number;
+  /** A rescue Protect started is under way (the executor's `rescueAt`): it acts below the target, not only the line. */
+  rescuing?: boolean;
   /** Don't bother below this (gas would dominate). */
   minRepayUsd?: number;
 };
@@ -31,8 +33,8 @@ type ProtectDecision =
   | { action: "repay"; amountUsd: number; reason: "act"; hf: number; hfAfter: number; limitedBy?: "savings" | "cap" };
 
 const PROTECT_DEFAULTS = {
-  triggerHf: CASH_AGENT.triggerHf, // 1.1, the Act line
-  targetHf: CASH_AGENT.targetHf, // 1.2, in Watch
+  triggerHf: CASH_AGENT.triggerHf, // 1.03, Protect's line
+  targetHf: CASH_AGENT.targetHf, // 1.12, in Watch
   minRepayUsd: CASH_AGENT.minRepayUsd,
 } as const;
 
@@ -41,8 +43,8 @@ export function planProtect(i: ProtectInput): ProtectDecision {
   if (i.debtUsd <= 0) return { action: "none", reason: "no-debt", hf: null };
   const power = i.totalBackingUsd * i.avgCf;
   const hf = power / i.debtUsd;
-  // Safe and Watch are fine: Protect steps in only in Act.
-  if (hf >= o.triggerHf) return { action: "none", reason: "healthy", hf };
+  // Above Protect's line it does nothing, unless a rescue it started hasn't reached the target yet.
+  if (hf >= (i.rescuing ? o.targetHf : o.triggerHf)) return { action: "none", reason: "healthy", hf };
   const need = i.debtUsd - power / o.targetHf;
   if (need <= 0) return { action: "none", reason: "healthy", hf };
   if (i.savingsUsd <= 0) return { action: "none", reason: "no-savings", hf };
@@ -71,11 +73,11 @@ export function planProtect(i: ProtectInput): ProtectDecision {
 }
 
 /**
- * The weekend heads-up: what Weekend Shield used to repay, now only a card (Adrian, 2026-10-15: no move outside Act).
- * Shortly before stock prices freeze, a stressed price (−15% at the reopen) is tested; if it would take a credit that
- * isn't in Act today into Act, the card says so, and what repaying would keep it in Watch through that drop: the
- * stressed health back to the Act line plus the same margin a repay leaves (1.1 + 0.1). Nothing moves; in Act Protect
- * acts on its own. App-only: the executor has no weekend move, and so no port of this.
+ * The weekend card: what Weekend Shield used to repay, now only a card. Shortly before stock prices freeze, a stressed
+ * price (−15% at the reopen) is tested; if it would take the credit under Aave's line (`stressFloorHf`, 1.0), the card
+ * says so, and what repaying would keep it clear of that line through the drop: the stressed health back to the line
+ * plus the same margin a rescue leaves (1.0 + 0.09). Nothing moves; below its line Protect acts on its own. App-only:
+ * the executor has no weekend move, and so no port of this.
  */
 type WeekendHeadsUpInput = {
   totalBackingUsd: number;
@@ -95,7 +97,7 @@ const HEADS_UP_DEFAULTS = {
   triggerHf: CASH_AGENT.triggerHf,
   targetHf: CASH_AGENT.targetHf,
   stressDrop: CASH_AGENT.stressDrop, // 15%
-  stressFloorHf: CASH_AGENT.stressFloorHf, // 1.1, the Act line
+  stressFloorHf: CASH_AGENT.stressFloorHf, // 1.0, Aave's line
 } as const;
 
 export function weekendHeadsUp(i: WeekendHeadsUpInput): WeekendHeadsUp | null {
@@ -103,7 +105,7 @@ export function weekendHeadsUp(i: WeekendHeadsUpInput): WeekendHeadsUp | null {
   if (!i.weekendWindow || i.debtUsd <= 0) return null;
   const power = i.totalBackingUsd * i.avgCf;
   const hf = power / i.debtUsd;
-  if (hf < o.triggerHf) return null; // in Act: Protect itself steps in
+  if (hf < o.triggerHf) return null; // below its line, Protect itself acts
   const stressedHf = (power * (1 - o.stressDrop)) / i.debtUsd;
   if (stressedHf >= o.stressFloorHf) return null;
   const addUsd = i.debtUsd - (power * (1 - o.stressDrop)) / (o.stressFloorHf + (o.targetHf - o.triggerHf));
@@ -146,9 +148,9 @@ function strip<T extends object>(o: T): Partial<T> {
 }
 
 /**
- * Weekend window: Friday from 14:00 until the 20:00 ET freeze, with no holiday (Leo's). The weekend heads-up card
+ * Weekend window: Friday from 14:00 until the 20:00 ET freeze, with no holiday (Leo's). The weekend card
  * reads the executor's own calendar instead (`beforeFreeze` in lib/agents/next.ts), which agrees with this on a week
- * with no holiday (contracts/test/NyCalendar.t.sol). Nothing moves in it (Act is the line, 2026-10-15).
+ * with no holiday (contracts/test/NyCalendar.t.sol). Nothing moves in it.
  */
 export function inWeekendWindow(now: Date = new Date()): boolean {
   const f = new Intl.DateTimeFormat("en-US", {

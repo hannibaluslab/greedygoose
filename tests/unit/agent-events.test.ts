@@ -65,8 +65,6 @@ describe("decodeAgentLogs: every GooseExecutor event", () => {
     "JobOff",
     "Saved",
     "ProtectRepaid",
-    "SellHeadsUp",
-    "SellHeadsUpCleared",
     "ProtectSold",
     "KeepMixSet",
     "MixSet",
@@ -108,47 +106,30 @@ describe("decodeAgentLogs: what each event carries", () => {
     expect(one(log("JobOff", { account, job: 4, reason: 0 }))[0]).toMatchObject({ job: "entry", reason: "revoked" });
   });
 
-  it("reads Protect's repay from savings: Act, or an older executor's Weekend Shield", () => {
+  it("reads Protect's repay from savings, below its line or on through a rescue (ProtectCase Act)", () => {
     const act = {
       account,
       amount: 120_000_000n,
-      hfBefore: 1_050_000_000_000_000_000n,
-      hfAfter: 1_200_000_000_000_000_000n,
+      hfBefore: 1_020_000_000_000_000_000n,
+      hfAfter: 1_120_000_000_000_000_000n,
       reason: 5,
     };
-    expect(one(log("ProtectRepaid", act))[0]).toMatchObject({ kind: "repaid", amountRaw: 120_000_000n, reason: "act" });
-    // Executors deployed before Act was the line (2026-10-15) also repaid before a weekend freeze.
-    expect(one(log("ProtectRepaid", { ...act, reason: 6 }))[0]).toMatchObject({ reason: "weekend" });
+    expect(one(log("ProtectRepaid", act))[0]).toEqual(
+      expect.objectContaining({
+        kind: "repaid",
+        amountRaw: 120_000_000n,
+        hfBefore: 1_020_000_000_000_000_000n,
+        hfAfter: 1_120_000_000_000_000_000n,
+      }),
+    );
+    expect(one(log("ProtectRepaid", act))[0]).not.toHaveProperty("reason");
   });
 
-  it("reads the heads-up, its clearing and the sale, by reserve id", () => {
-    expect(
-      one(
-        log("SellHeadsUp", {
-          account,
-          hf: 1_080_000_000_000_000_000n,
-          sellValue: 180_000_000n,
-          sellAfter: 1_760_000_000,
-        }),
-      )[0],
-    ).toMatchObject({
-      kind: "heads-up",
-      hf: 1_080_000_000_000_000_000n,
-      sellValueRaw: 180_000_000n,
-      sellAfter: 1_760_000_000,
-    });
-    expect(one(log("SellHeadsUpCleared", { account, hf: 1_300_000_000_000_000_000n }))[0]).toMatchObject({
-      kind: "heads-up-cleared",
-    });
+  it("reads the sale by reserve id, at once with no heads-up before it", () => {
     const shares = [0n, 0n, 0n, 0n, 0n, 0n, 47_000_000n];
-    expect(
-      one(log("ProtectSold", { account, shares, repaid: 178_200_000n, hfBefore: 1n, hfAfter: 2n, atOnce: true }))[0],
-    ).toMatchObject({
-      kind: "sold",
-      sharesRaw: shares,
-      repaidRaw: 178_200_000n,
-      atOnce: true,
-    });
+    const sold = one(log("ProtectSold", { account, shares, repaid: 178_200_000n, hfBefore: 1n, hfAfter: 2n }))[0];
+    expect(sold).toMatchObject({ kind: "sold", sharesRaw: shares, repaidRaw: 178_200_000n, hfBefore: 1n, hfAfter: 2n });
+    expect(sold).not.toHaveProperty("atOnce");
   });
 
   it("reads the Rebalancer's mix and trades, and Entry's coins", () => {

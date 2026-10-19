@@ -1,9 +1,9 @@
 import { decodeErrorResult, isAddressEqual, maxUint256, type Hex } from "viem";
+import { CASH_AGENT } from "@/config/risk";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import type { AgentEvent } from "@/lib/agents/events";
-import type { AgentName } from "@/lib/agents/list";
+import { PROTECT_LINE, PROTECT_TARGET, type AgentName } from "@/lib/agents/list";
 import type { AgentJob } from "@/lib/agents/permissions";
-import { marketState } from "@/lib/market-hours";
 import { statusFor, type Status } from "@/lib/risk/status";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
@@ -27,8 +27,8 @@ export type AgentMove = {
 
 /**
  * What the chain said around a move, read at its block and the one before: what was owed, the cash (wallet plus
- * savings, D15), how much of the grant's limit the period had used after it, and Aave's prices. Each is optional: a
- * row says less when a read fails.
+ * savings, D15), how much of the grant's limit the period had used after it (the Rebalancer's), and Aave's prices.
+ * Each is optional: a row says less when a read fails.
  */
 export type MoveContext = {
   /** USDC units owed, before and after. */
@@ -42,20 +42,12 @@ export type MoveContext = {
 };
 
 /**
- * Which grant's limit an agent's move counts against ("Used today"). A cash event (a Save, a conversion) shows no
- * limit: those grants run under the hood (D20).
+ * Which grant's limit an agent's move counts against ("Used this week"): the Rebalancer's only. Protect's moves show
+ * none, as it has no amount limit (2026-10-19), and a cash event (a Save, a conversion) shows none either: those grants
+ * run under the hood (D20).
  */
 export function limitOf(e: AgentEvent): { job: AgentJob; spend: number } | null {
-  switch (e.kind) {
-    case "repaid":
-      return { job: "protect", spend: 0 };
-    case "sold":
-      return { job: "sell", spend: 0 };
-    case "rebalanced":
-      return { job: "rebalance", spend: 0 };
-    default:
-      return null;
-  }
+  return e.kind === "rebalanced" ? { job: "rebalance", spend: 0 } : null;
 }
 
 /** Whether a move's row reads what was owed and the cash around it. */
@@ -80,8 +72,8 @@ const word = (hf: bigint): Words => {
   return s === "none" ? ["Nothing owed"] : [{ status: s }];
 };
 /**
- * After a Protect move: "Back to Watch." (where Protect brings it, since Act is the line), "Back to Safe.", "Still in
- * Act." when a sale was cut short, or "Nothing owed now."
+ * After a Protect move: "Back to Watch." (where Protect brings it, 1.12), "Back to Safe.", "Still in Act." when a move
+ * was cut short, or "Nothing owed now."
  */
 const after = (hf: bigint): Words => {
   const s = statusOf(hf);
@@ -118,25 +110,35 @@ function owedRow(ctx: MoveContext) {
   return ctx.owedRaw ? [{ label: "You owe", value: [`${owed(ctx.owedRaw[0])} → ${owed(ctx.owedRaw[1])}`] }] : [];
 }
 
-function usedRow(ctx: MoveContext, per: "today" | "this week") {
+/** The Rebalancer's "Used this week": Protect has no amount limit, so its moves have no such row. */
+function usedRow(ctx: MoveContext) {
   if (!ctx.used) return [];
   const { spentRaw, capRaw } = ctx.used;
-  return [{ label: per === "today" ? "Used today" : "Used this week", value: [`${usd(spentRaw)} of ${usd(capRaw)}`] }];
+  return [{ label: "Used this week", value: [`${usd(spentRaw)} of ${usd(capRaw)}`] }];
 }
 
 /**
+ * Why Protect moved: the credit fell under its line, or a rescue it started went on (above the line, under the target)
+ * until the credit was back at the target.
+ */
+const protectWhy = (hfBefore: bigint): Words =>
+  Number(hfBefore) / 1e18 < CASH_AGENT.triggerHf
+    ? [`Your credit fell under ${PROTECT_LINE}.`]
+    : [`Protect went on until ${PROTECT_TARGET}.`];
+
+/**
  * An agent job's name in a sentence, and the agent its rows sit under. Save and Entry are switched on once, where they
- * matter, and their switches make no row (D20).
+ * matter, and their switches make no row (D20). Protect's two have no amount limit, so their lines name none.
  */
 const JOB: Partial<Record<AgentJob, { agent: AgentName; on: (cap: string) => string; off: string }>> = {
   protect: {
     agent: "Protect",
-    on: (cap) => `Protect is on. If your credit reaches Act, it repays from your cash, up to ${cap} a day.`,
+    on: () => `Protect is on. If your credit falls under ${PROTECT_LINE}, it repays from your cash.`,
     off: "Protect is off",
   },
   sell: {
     agent: "Protect",
-    on: (cap) => `Protect can sell backing stock, up to ${cap} a day.`,
+    on: () => "Protect can sell backing stock.",
     off: "Protect won’t sell",
   },
   rebalance: { agent: "Rebalance", on: (cap) => `Rebalance is on, up to ${cap} a week.`, off: "Rebalance is off" },
@@ -164,24 +166,17 @@ function coin(address: `0x${string}`) {
 }
 const coinAmount = (raw: bigint, decimals: number) => formatCoin(Number(raw) / 10 ** decimals);
 
-/** Protect repaid from the cash: how much, the status it brought, and why (Act, or the weekend's pause). */
+/** Protect repaid from the cash: how much, the status it brought, and why. */
 function repaidMove(e: Extract<AgentEvent, { kind: "repaid" }>, ctx: MoveContext): AgentMove {
   return {
     by: "Protect",
     line: [`Repaid ${usd(e.amountRaw)} from your cash. `, ...after(e.hfAfter)],
     details: [
-      {
-        label: "Why",
-        value:
-          e.reason === "weekend"
-            ? ["Prices pause for the weekend. Protect repaid a little in case they reopen lower."]
-            : ["Your credit reached ", ...word(e.hfBefore), "."],
-      },
+      { label: "Why", value: protectWhy(e.hfBefore) },
       ...owedRow(ctx),
       { label: "Status", value: [...word(e.hfBefore), " → ", ...word(e.hfAfter)] },
       // Cash is savings (D15): the repay came from it (plan §6's "From your cash: $X", in the board's 82px label).
       { label: "My cash", value: [`${usd(e.amountRaw)} used`] },
-      ...usedRow(ctx, "today"),
     ],
   };
 }
@@ -192,24 +187,18 @@ function soldMove(e: Extract<AgentEvent, { kind: "sold" }>, ctx: MoveContext): A
     by: "Protect",
     line: [`Sold ${worth(e.sharesRaw, ctx.pricesRaw)} of ${names(held(e.sharesRaw))} to repay. `, ...after(e.hfAfter)],
     details: [
-      {
-        label: "Why",
-        value: e.atOnce
-          ? ["Your credit fell deep into ", ...word(e.hfBefore), ", so Protect sold at once."]
-          : ["Your credit was still in ", ...word(e.hfBefore), " after the heads-up."],
-      },
+      { label: "Why", value: protectWhy(e.hfBefore) },
       ...owedRow(ctx),
       { label: "Status", value: [...word(e.hfBefore), " → ", ...word(e.hfAfter)] },
       { label: "My cash", value: cashAfterTrade(ctx) },
-      ...usedRow(ctx, "today"),
     ],
   };
 }
 
 /**
- * The Agents board's words for one executor event at `time` (seconds). Plain words and dollars, no health factor
- * (D17's words too); null for what isn't a move from the user's side: a run deferred to the next block, Save's and
- * Entry's switches, and a coin waiting for a fair price (the Cash card says it's arriving).
+ * The Agents board's words for one executor event at `time` (seconds). Plain words and dollars, no health factor but
+ * Protect's line and target (D17's words too); null for what isn't a move from the user's side: a run deferred to the
+ * next block, Save's and Entry's switches, and a coin waiting for a fair price (the Cash card says it's arriving).
  */
 export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext = {}): AgentMove | null {
   switch (e.kind) {
@@ -238,26 +227,6 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
       return repaidMove(e, ctx);
     case "sold":
       return soldMove(e, ctx);
-    case "heads-up":
-      return {
-        by: "Protect",
-        line: ["Credit reached ", ...word(e.hf), ". Asked you to repay or add more."],
-        details: [
-          { label: "Why", value: ["Your cash couldn’t bring it back to ", { status: "watch" }, "."] },
-          { label: "Would sell", value: [`${usd(e.sellValueRaw)} of backing stock`] },
-          // A wait that ends while prices are held gives their reopening as the sale time: the second before is closed.
-          {
-            label: "Sells at",
-            value: [marketState(new Date((e.sellAfter - 1) * 1000)).open ? at(e.sellAfter) : "When prices reopen"],
-          },
-        ],
-      };
-    case "heads-up-cleared":
-      return {
-        by: "Protect",
-        line: ["Credit recovered. Nothing was sold."],
-        details: [{ label: "Status", value: word(e.hf) }],
-      };
     case "keep-mix":
       return {
         by: "Protect",
@@ -285,7 +254,7 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
         details: [
           { label: "Why", value: ["Your mix drifted too far from its target."] },
           { label: "My cash", value: cashAfterTrade(ctx) },
-          ...usedRow(ctx, "this week"),
+          ...usedRow(ctx),
         ],
       };
     case "rebalance-skipped":

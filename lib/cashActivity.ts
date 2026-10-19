@@ -263,7 +263,7 @@ const coinOf = (address: `0x${string}`) => ENTRY_COINS.find((c) => isAddressEqua
 /**
  * One of the executor's moves as a cash row, with the feed's own details: other dollars that became cash, Protect's
  * repay from the cash, and a sale or a trade only when its swaps left the cash up by a cent or more. Saves move nothing
- * in the one pot (D20), so they make no row; neither do switches, heads-ups, mixes or runs that didn't go through.
+ * in the one pot (D20), so they make no row; neither do switches, mixes or runs that didn't go through.
  */
 export function executorCashRow(m: ExecutorMove): CashRow | null {
   const e = m.event;

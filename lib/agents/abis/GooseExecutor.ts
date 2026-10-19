@@ -138,32 +138,7 @@ export const gooseExecutorAbi = [
             internalType: "struct SellLimits",
             components: [
               {
-                name: "headsUpHf",
-                type: "uint64",
-                internalType: "uint64",
-              },
-              {
-                name: "nowHf",
-                type: "uint64",
-                internalType: "uint64",
-              },
-              {
-                name: "targetHf",
-                type: "uint64",
-                internalType: "uint64",
-              },
-              {
-                name: "headsUpDelay",
-                type: "uint32",
-                internalType: "uint32",
-              },
-              {
                 name: "floorBps",
-                type: "uint16",
-                internalType: "uint16",
-              },
-              {
-                name: "actFloorBps",
                 type: "uint16",
                 internalType: "uint16",
               },
@@ -454,7 +429,7 @@ export const gooseExecutorAbi = [
         internalType: "uint8",
       },
       {
-        name: "headsUpAt",
+        name: "rescueAt",
         type: "uint48",
         internalType: "uint48",
       },
@@ -465,6 +440,11 @@ export const gooseExecutorAbi = [
       },
       {
         name: "rebalanceDay",
+        type: "uint32",
+        internalType: "uint32",
+      },
+      {
+        name: "protectIndex",
         type: "uint32",
         internalType: "uint32",
       },
@@ -600,59 +580,17 @@ export const gooseExecutorAbi = [
   },
   {
     type: "function",
-    name: "checkLog",
+    name: "checkProtect",
     inputs: [
       {
-        name: "log",
-        type: "tuple",
-        internalType: "struct Log",
-        components: [
-          {
-            name: "index",
-            type: "uint256",
-            internalType: "uint256",
-          },
-          {
-            name: "timestamp",
-            type: "uint256",
-            internalType: "uint256",
-          },
-          {
-            name: "txHash",
-            type: "bytes32",
-            internalType: "bytes32",
-          },
-          {
-            name: "blockNumber",
-            type: "uint256",
-            internalType: "uint256",
-          },
-          {
-            name: "blockHash",
-            type: "bytes32",
-            internalType: "bytes32",
-          },
-          {
-            name: "source",
-            type: "address",
-            internalType: "address",
-          },
-          {
-            name: "topics",
-            type: "bytes32[]",
-            internalType: "bytes32[]",
-          },
-          {
-            name: "data",
-            type: "bytes",
-            internalType: "bytes",
-          },
-        ],
+        name: "shard",
+        type: "uint256",
+        internalType: "uint256",
       },
       {
-        name: "",
-        type: "bytes",
-        internalType: "bytes",
+        name: "shards",
+        type: "uint256",
+        internalType: "uint256",
       },
     ],
     outputs: [
@@ -1171,6 +1109,38 @@ export const gooseExecutorAbi = [
   },
   {
     type: "function",
+    name: "protectMemberCount",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "protectMembers",
+    inputs: [
+      {
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
     name: "prune",
     inputs: [
       {
@@ -1318,6 +1288,205 @@ export const gooseExecutorAbi = [
   },
   {
     type: "function",
+    name: "registerApproved",
+    inputs: [
+      {
+        name: "permission",
+        type: "tuple",
+        internalType: "struct IJustaPermissionManager.Permission",
+        components: [
+          {
+            name: "account",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "spender",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "start",
+            type: "uint48",
+            internalType: "uint48",
+          },
+          {
+            name: "end",
+            type: "uint48",
+            internalType: "uint48",
+          },
+          {
+            name: "salt",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "calls",
+            type: "tuple[]",
+            internalType: "struct IJustaPermissionManager.CallPermission[]",
+            components: [
+              {
+                name: "target",
+                type: "address",
+                internalType: "address",
+              },
+              {
+                name: "selector",
+                type: "bytes4",
+                internalType: "bytes4",
+              },
+              {
+                name: "checker",
+                type: "address",
+                internalType: "address",
+              },
+            ],
+          },
+          {
+            name: "spends",
+            type: "tuple[]",
+            internalType: "struct IJustaPermissionManager.SpendLimit[]",
+            components: [
+              {
+                name: "token",
+                type: "address",
+                internalType: "address",
+              },
+              {
+                name: "allowance",
+                type: "uint160",
+                internalType: "uint160",
+              },
+              {
+                name: "unit",
+                type: "uint8",
+                internalType: "enum IJustaPermissionManager.PeriodUnit",
+              },
+              {
+                name: "multiplier",
+                type: "uint16",
+                internalType: "uint16",
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "registrationOf",
+    inputs: [
+      {
+        name: "permission",
+        type: "tuple",
+        internalType: "struct IJustaPermissionManager.Permission",
+        components: [
+          {
+            name: "account",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "spender",
+            type: "address",
+            internalType: "address",
+          },
+          {
+            name: "start",
+            type: "uint48",
+            internalType: "uint48",
+          },
+          {
+            name: "end",
+            type: "uint48",
+            internalType: "uint48",
+          },
+          {
+            name: "salt",
+            type: "uint256",
+            internalType: "uint256",
+          },
+          {
+            name: "calls",
+            type: "tuple[]",
+            internalType: "struct IJustaPermissionManager.CallPermission[]",
+            components: [
+              {
+                name: "target",
+                type: "address",
+                internalType: "address",
+              },
+              {
+                name: "selector",
+                type: "bytes4",
+                internalType: "bytes4",
+              },
+              {
+                name: "checker",
+                type: "address",
+                internalType: "address",
+              },
+            ],
+          },
+          {
+            name: "spends",
+            type: "tuple[]",
+            internalType: "struct IJustaPermissionManager.SpendLimit[]",
+            components: [
+              {
+                name: "token",
+                type: "address",
+                internalType: "address",
+              },
+              {
+                name: "allowance",
+                type: "uint160",
+                internalType: "uint160",
+              },
+              {
+                name: "unit",
+                type: "uint8",
+                internalType: "enum IJustaPermissionManager.PeriodUnit",
+              },
+              {
+                name: "multiplier",
+                type: "uint16",
+                internalType: "uint16",
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    outputs: [
+      {
+        name: "ok",
+        type: "bool",
+        internalType: "bool",
+      },
+      {
+        name: "job",
+        type: "uint8",
+        internalType: "enum GooseExecutor.Job",
+      },
+      {
+        name: "cap",
+        type: "uint160",
+        internalType: "uint160",
+      },
+      {
+        name: "t",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
     name: "removeForwarder",
     inputs: [
       {
@@ -1359,32 +1528,7 @@ export const gooseExecutorAbi = [
     inputs: [],
     outputs: [
       {
-        name: "headsUpHf",
-        type: "uint64",
-        internalType: "uint64",
-      },
-      {
-        name: "nowHf",
-        type: "uint64",
-        internalType: "uint64",
-      },
-      {
-        name: "targetHf",
-        type: "uint64",
-        internalType: "uint64",
-      },
-      {
-        name: "headsUpDelay",
-        type: "uint32",
-        internalType: "uint32",
-      },
-      {
         name: "floorBps",
-        type: "uint16",
-        internalType: "uint16",
-      },
-      {
-        name: "actFloorBps",
         type: "uint16",
         internalType: "uint16",
       },
@@ -1867,12 +2011,6 @@ export const gooseExecutorAbi = [
         indexed: false,
         internalType: "uint256",
       },
-      {
-        name: "atOnce",
-        type: "bool",
-        indexed: false,
-        internalType: "bool",
-      },
     ],
     anonymous: false,
   },
@@ -1964,56 +2102,6 @@ export const gooseExecutorAbi = [
       },
       {
         name: "amount",
-        type: "uint256",
-        indexed: false,
-        internalType: "uint256",
-      },
-    ],
-    anonymous: false,
-  },
-  {
-    type: "event",
-    name: "SellHeadsUp",
-    inputs: [
-      {
-        name: "account",
-        type: "address",
-        indexed: true,
-        internalType: "address",
-      },
-      {
-        name: "hf",
-        type: "uint256",
-        indexed: false,
-        internalType: "uint256",
-      },
-      {
-        name: "sellValue",
-        type: "uint256",
-        indexed: false,
-        internalType: "uint256",
-      },
-      {
-        name: "sellAfter",
-        type: "uint48",
-        indexed: false,
-        internalType: "uint48",
-      },
-    ],
-    anonymous: false,
-  },
-  {
-    type: "event",
-    name: "SellHeadsUpCleared",
-    inputs: [
-      {
-        name: "account",
-        type: "address",
-        indexed: true,
-        internalType: "address",
-      },
-      {
-        name: "hf",
         type: "uint256",
         indexed: false,
         internalType: "uint256",
@@ -2124,6 +2212,11 @@ export const gooseExecutorAbi = [
   {
     type: "error",
     name: "OutOfBounds",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "Overshoot",
     inputs: [],
   },
   {

@@ -1,11 +1,13 @@
-import { LIMIT_USD, type AgentJob } from "@/lib/agents/permissions";
+import { CASH_AGENT } from "@/config/risk";
+import { hasLimit, LIMIT_USD, type AgentJob } from "@/lib/agents/permissions";
 import type { AgentStatus } from "@/lib/agents/status";
 import { formatUsdTrim } from "@/lib/formatting";
 import { USDC } from "@/lib/tokens/registry";
 
 /*
- * The Agents tab (Adrian, 2026-10-15): two agents, each a switch, a "next" line and a limit, and cards only when
- * something needs the user. Pure, so the dev gallery draws every state with the app's own words.
+ * The Agents tab (Adrian, 2026-10-15): two agents, each a switch and a "next" line, the Rebalancer's limit (Protect has
+ * no amount limit, 2026-10-19), and cards only when something needs the user. Pure, so the dev gallery draws every
+ * state with the app's own words.
  *
  * Earning and turning other dollars into cash (the Save and Entry jobs) run under the hood (D20): they have no row,
  * no sheet and no switch here. Their grants are asked where they matter, on Home and Pay (lib/cashSetup.ts).
@@ -40,16 +42,26 @@ export const AGENT_NAME: Record<Agent, Exclude<AgentName, "Agents">> = {
   rebalance: "Rebalance",
 };
 
-/** Protect's rule in one line (Adrian, 2026-10-15: "watch is ok, it is act that is not"), wherever Protect is named. */
-export const PROTECT_RULE = "Steps in only if your credit reaches Act, and brings it back to Watch.";
+/** Health factors as the app writes them: "1.03", "1.12". */
+export const hfText = (hf: number) => hf.toFixed(2);
+/** Protect's line and target as the copy names them (the deploy defaults, config/risk.ts CASH_AGENT): "1.03", "1.12". */
+export const PROTECT_LINE = hfText(CASH_AGENT.triggerHf);
+export const PROTECT_TARGET = hfText(CASH_AGENT.targetHf);
+const LINE = PROTECT_LINE;
+const TARGET = PROTECT_TARGET;
+
+/**
+ * Protect's rule in one line (Adrian, 2026-10-19: Protect's line is 1.03, Act is a warning only), wherever Protect is
+ * named. Once it steps in, it goes on until the credit is back at the target.
+ */
+export const PROTECT_RULE = `Steps in only if your credit falls under ${LINE}, and brings it back to ${TARGET}.`;
 
 /** What each agent does, in under six words for its row and in a line for its sheet, and what it never does. */
 export const AGENT_COPY: Record<Agent, { does: string; lead: string; never: string }> = {
   protect: {
-    does: "Steps in only at Act",
+    does: `Steps in under ${LINE}`,
     lead: `${PROTECT_RULE} It repays from your cash, and can sell backing stock if cash isn’t enough.`,
-    never:
-      "Protect does nothing while your credit is Safe or in Watch. It never sells a stock that doesn’t back your credit, and never sells on a weekend.",
+    never: `Protect does nothing until your credit falls under ${LINE}. It never sells a stock that doesn’t back your credit, and never sells on a weekend.`,
   },
   rebalance: {
     does: "Keeps your mix on target",
@@ -64,8 +76,6 @@ export function agentStatus(agent: Agent, status: Readonly<Record<AgentJob, Agen
   return (["unconfigured", "loading", "on", "starting"] as const).find((x) => s.includes(x)) ?? "off";
 }
 
-/** "$100 a day", "$100 a week". */
-const limitText = (usd: number, job: AgentJob) => `${formatUsdTrim(usd)} a ${LIMIT_USD[job].per}`;
 const usdOf = (raw: bigint) => Number(raw) / 10 ** USDC.decimals;
 
 /**
@@ -92,9 +102,12 @@ export type AgentItem = {
   /** The switch: on while the agent runs or is starting. */
   on: boolean;
   line: string;
-  /** "Limit $100 a day": the grant's limit while it has one, the one it starts on otherwise. */
-  limit: string;
-  limitUsd: number;
+  /**
+   * "Limit $100 a week": the grant's limit while it has one, the one it starts on otherwise. Null for Protect, which
+   * has no amount limit.
+   */
+  limit: string | null;
+  limitUsd: number | null;
 };
 
 type AgentItemsInput = {
@@ -104,13 +117,13 @@ type AgentItemsInput = {
   next: Readonly<Record<Agent, Next>>;
 };
 
-/** The two rows. Each limit is the agent's own job's (Protect's: repaying from cash). */
+/** The two rows. A limit is the agent's own job's: the Rebalancer's ("$100 a week"); Protect has none. */
 export function agentItems(i: AgentItemsInput): AgentItem[] {
   return AGENTS.map((agent) => {
     const job = AGENT_JOBS[agent][0];
     const status = agentStatus(agent, i.status);
     const cap = i.capRaw[job];
-    const limitUsd = cap === null ? LIMIT_USD[job].start : usdOf(cap);
+    const limitUsd = hasLimit(job) ? (cap === null ? LIMIT_USD[job].start : usdOf(cap)) : null;
     return {
       agent,
       name: AGENT_NAME[agent],
@@ -118,7 +131,7 @@ export function agentItems(i: AgentItemsInput): AgentItem[] {
       status,
       on: status === "on" || status === "starting",
       line: nextLine(status, i.next[agent]),
-      limit: `Limit ${limitText(limitUsd, job)}`,
+      limit: hasLimit(job) && limitUsd !== null ? `Limit ${formatUsdTrim(limitUsd)} a ${LIMIT_USD[job].per}` : null,
       limitUsd,
     };
   });
@@ -152,7 +165,7 @@ export type CardAction =
 
 export type AgentCard = {
   key: string;
-  /** The heads-ups wear the credit's colour (a sale's Act, the weekend's Watch); the rest are plain. */
+  /** The warnings wear the credit's colour (Act's, the weekend's Watch); the rest are plain. */
   tone: "watch" | "act" | "plain";
   agent: AgentName;
   text: string;
@@ -160,18 +173,22 @@ export type AgentCard = {
   actions: CardAction[];
 };
 
-/** Protect · sell's pending heads-up, read live: what to add, what it would sell, and when. Only in Act. */
-export type HeadsUpCard = { addUsd: number; sellUsd: number; when: string };
+/**
+ * The Act warning (Adrian, 2026-10-19), from a plain health check (lib/agents/next.ts `actWarning`): credit in Act but
+ * not yet under Protect's line, Protect on or off. A warning only: what repaying brings it back to Watch, and whether
+ * Protect is on to step in at its line.
+ */
+export type ActCard = { addUsd: number; protectOn: boolean };
 
 /**
- * The weekend heads-up (lib/agents/rules/protect.ts `weekendHeadsUp`): no move, a card only. Before prices pause, credit in
- * Watch that a drop at the reopen would take into Act: when they pause, the drop, and the repay that keeps it in Watch.
+ * The weekend card (lib/agents/rules/protect.ts `weekendHeadsUp`): no move, a card only. Before prices pause, credit
+ * that a drop at the reopen would take under Aave's line: when they pause, the drop, and the repay that keeps it over.
  */
 export type WeekendCard = { addUsd: number; dropPct: number; when: string };
 
 export type CardsInput = {
   nowSec: number;
-  headsUp: HeadsUpCard | null;
+  act: ActCard | null;
   /** Only while Protect runs (on or starting), as Weekend Shield did. */
   weekend: WeekendCard | null;
   status: Readonly<Record<AgentJob, AgentStatus>>;
@@ -187,16 +204,17 @@ export type CardsInput = {
   cooldownUntil: number;
 };
 
-/** The cards, most urgent first: the heads-ups, failed runs, stopped agents, agents about to stop. */
+/** The cards, most urgent first: the warnings, failed runs, stopped agents, agents about to stop. */
 export function agentCards(i: CardsInput): AgentCard[] {
   const cards: AgentCard[] = [];
-  if (i.headsUp) {
-    const h = i.headsUp;
+  if (i.act) {
+    const a = i.act;
     cards.push({
-      key: "heads-up",
+      key: "act",
       tone: "act",
       agent: "Protect",
-      text: `Your credit hit Act. Add ${formatUsdTrim(h.addUsd)}, or Protect sells ${formatUsdTrim(h.sellUsd)} ${h.when}.`,
+      text: "Your credit is in Act.",
+      sub: `${a.protectOn ? `Protect steps in at ${LINE}.` : "Protect is off."} Repaying ${formatUsdTrim(a.addUsd)} now brings it back to Watch.`,
       actions: [
         { kind: "sheet", label: "Top up", sheet: "top-up" },
         { kind: "sheet", label: "Repay", sheet: "repay" },
@@ -209,9 +227,9 @@ export function agentCards(i: CardsInput): AgentCard[] {
       key: "weekend",
       tone: "watch",
       agent: "Protect",
-      text: `Prices pause ${w.when}. If stocks reopen ${w.dropPct}% lower, your credit reaches Act.`,
-      sub: `Repaying ${formatUsdTrim(w.addUsd)} now keeps it in Watch. Protect does nothing before Act.`,
-      // As the heads-up's: the last action is the lime one, and here it is the repay the line names.
+      text: `Prices pause ${w.when}. If stocks reopen ${w.dropPct}% lower, Aave can sell part of them.`,
+      sub: `Repaying ${formatUsdTrim(w.addUsd)} now keeps your credit over Aave’s line.`,
+      // As the Act warning's: the last action is the lime one, and here it is the repay the line names.
       actions: [
         { kind: "sheet", label: "Top up", sheet: "top-up" },
         { kind: "sheet", label: "Repay", sheet: "repay" },

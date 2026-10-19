@@ -1,6 +1,6 @@
 # Rehearsal: the real app on a local fork of Base
 
-A dress rehearsal for GreedyGoose. The real app (`next dev`) runs against a local anvil fork of Base mainnet, with fake money. Every flow signs and lands on the fork, and the agents run in GooseExecutor, triggered the way Chainlink triggers them.
+A dress rehearsal for GreedyGoose. The real app (`next dev`) runs against a local anvil fork of Base mainnet, with fake money. Every flow signs and lands on the fork, and the agents run in GooseExecutor, triggered the way the runner triggers them (the runner lives outside this repo; Chainlink Automation is gone since 2026-10-19).
 
 Nothing here writes to Base. Anvil reads Base's state the first time something touches it and keeps every write on this machine. The fork signer and the scripts refuse any RPC that isn't a local anvil on chain 8453. The production build can't contain the signer ([The fence](#the-fence)).
 
@@ -19,7 +19,7 @@ Open http://localhost:3100, tick the eligibility box and press "Sign in with you
 Then, from any terminal:
 
 ```sh
-npm run rehearsal:agents                # what Chainlink would do now: register new grants, then a run
+npm run rehearsal:agents                # what the runner would do now: register new grants, then a run
 npm run rehearsal:shock -- NVDAc -28%   # move a price on Aave's oracle
 npm run rehearsal:warp -- 30m           # move the fork's clock
 npm run rehearsal:prove -- --shock      # the scripted proof run, with screenshots
@@ -60,7 +60,7 @@ The anvil dev accounts' roles:
 | # | Role |
 | --- | --- |
 | 0 | GooseExecutor's owner and deployer; sends the factory calls |
-| 1 | The forwarder (Chainlink's place) |
+| 1 | The forwarder (the runner's place) |
 | 2 | sam's signer (the passkey's place) |
 | 3 | ana's signer |
 
@@ -99,10 +99,10 @@ Before the first write it checks that the node is anvil, the chain is 8453, the 
 
 ## Agents
 
-`npm run rehearsal:agents` (`run-agents.ts`) does what Chainlink Automation does on Base, with the forwarder:
+`npm run rehearsal:agents` (`run-agents.ts`) does what the runner does on Base, with the forwarder:
 
-1. **Registration** (the log-trigger upkeep): every `PermissionApproved` the manager emitted since the last run goes through GooseExecutor's `checkLog`, and each one it accepts is registered with `performUpkeep`, at the registration upkeep's 1M gas.
-2. **A run** (the custom-logic upkeep, `checkData = abi.encode(0, 1)`): `checkUpkeep`, then `performUpkeep` with what it lists, at the run upkeep's 5M gas. Never at an estimate: a run with too little gas succeeds by deferring every account, so an estimate finds exactly that. `-- --until-idle` repeats until nothing is listed, at most 5 times.
+1. **Registration**: every `PermissionApproved` the manager emitted since the last run is read with GooseExecutor's `registrationOf`, and each one it accepts is registered with `registerApproved`, at 1M gas.
+2. **A run** (the safety-net round, `checkData = abi.encode(0, 1)`): `checkUpkeep`, then `performUpkeep` with the accounts it lists, at 5M gas. Never at an estimate: a run with too little gas succeeds by deferring every account, so an estimate finds exactly that. `-- --until-idle` repeats until nothing is listed, at most 5 times.
 
 It prints what each step did, from the executor's events:
 
@@ -110,7 +110,7 @@ It prints what each step did, from the executor's events:
 Run 1: checkUpkeep(shard 0 of 1)
   listed: sam
   sam plans Repay (Protect)
-  sam: Protect repaid $5.00 from savings (Watch), health 1.398 → 1.416 (Watch)
+  sam: Protect repaid $5.00 from savings (Act), health 1.020 → 1.033 (Act)
 ```
 
 ## Price shock
@@ -123,22 +123,26 @@ The stock's pools don't move. A buy of a shocked stock is blocked by the app's 1
 
 ## Time warp
 
-`npm run rehearsal:warp -- 30m` (`time-warp.ts`; also `90s`, `2h`, `1d`) adds the time with `evm_increaseTime`, mines a block, and says whether stock prices are live or held at the new time (the executor's calendar). The browser's clock doesn't move, so the app's own countdowns still count from now.
+`npm run rehearsal:warp -- 1d` (`time-warp.ts`; also `90s`, `30m`, `2h`) adds the time with `evm_increaseTime`, mines a block, and says whether stock prices are live or held at the new time (the executor's calendar). The browser's clock doesn't move, so the app's own countdowns still count from now.
 
 ## A Protect rehearsal
 
-From a fresh setup, with Protect switched on in the app (selling included):
+From a fresh setup, with Protect switched on in the app (selling included). NVIDIA is all that backs sam's credit, so the health moves with its price (each shock is from the price before it):
 
 ```sh
 npm run rehearsal:agents                 # registers both grants
-npm run rehearsal:shock -- NVDAc -28%    # sam: health 1.94 → 1.40, Watch
-npm run rehearsal:agents                 # Protect repays $5 from savings (the D13 cap)
-npm run rehearsal:shock -- NVDAc 135     # health about 1.20: below the heads-up line
-npm run rehearsal:agents                 # SellHeadsUp: sells about $5 in 30 minutes unless the health recovers
-npm run rehearsal:warp -- 31m
-npm run rehearsal:agents -- --until-idle # Protect · sell takes NVIDIA out of Aave, sells it on Aerodrome, repays
+npm run rehearsal:shock -- NVDAc -42%    # sam: health 1.94 → about 1.13, Watch: Protect does nothing
+npm run rehearsal:shock -- NVDAc -6%     # about 1.06, Act: the Agents tab shows the warning; Protect still does nothing
+npm run rehearsal:agents                 # nothing to do
+npm run rehearsal:shock -- NVDAc -4%     # about 1.02: under Protect's line (1.03)
+npm run rehearsal:agents -- --until-idle # Protect repays $5 from savings, then Protect · sell takes NVIDIA out of Aave,
+                                         # sells it on Aerodrome and repays, at once (each $5 a day, the test CAP_MAX)
+npm run rehearsal:warp -- 1d
+npm run rehearsal:agents -- --until-idle # the rescue goes on above 1.03, toward 1.12, as the limits renew
 npm run rehearsal:shock -- NVDAc reset
 ```
+
+On the test deploy (CAP_MAX $5 a day) a rescue moves $5 a day for each grant; with no amount limit it reaches 1.12 in a run or a few. Prices held (a weekend) stop the sale, never the repay from savings.
 
 ## Proof
 
@@ -148,7 +152,7 @@ npm run rehearsal:shock -- NVDAc reset
 2. Buy $5 of NVIDIA from cash (buy sheet, Review, Confirm). Checks: NVIDIA received, at least the review's minimum; cash down $5; savings down by the withdrawal the review announced; the wallet's USDC exact to the unit.
 3. Switch Protect on in its sheet, selling included. Checks: two grants on JAW's manager with GooseExecutor as the spender.
 4. `run-agents`. Checks: GooseExecutor has Protect and Protect · sell on for sam.
-5. With `-- --shock`: NVIDIA down 28%, sam in Watch on Home, `run-agents`. Checks: Protect repaid $5 from savings. The price is put back after.
+5. With `-- --shock`: NVIDIA down to about health 1.02, under Protect's line, sam in Act on Home, `run-agents`. Checks: Protect repaid $5 from savings (the test CAP_MAX). The price is put back after.
 
 Screenshots go to `.rehearsal/shots` (`REHEARSAL_SHOTS`). Chrome is the system's (`REHEARSAL_CHROME` takes a path). It needs a fresh setup: on a second run Protect is already on.
 
@@ -172,7 +176,7 @@ The fork signer exists only in development, and only against a local fork.
 | JAW's popup, passkey and Face ID; a user operation through JAW's bundler | No popup: the owner key sends `executeBatch` straight away. The calls are the same; the envelope isn't. |
 | The network fee in USDC, through JAW's paymaster | The owner pays in the fork's ETH; no USDC fee is taken. The app still says "Paid from your cash", and its $0.50 fee buffer stays in the wallet. |
 | JAW's relay lists the permissions; its call history spans devices | Both come from the fork's events and this browser's storage. |
-| Chainlink's forwarders, a registrar, upkeep balances, latency | Dev account #1 as the forwarder, when you run `run-agents`. |
+| The runner (its forwarder key, its schedule and price-update triggers, the push it sends), latency | Dev account #1 as the forwarder, when you run `run-agents`. |
 | Live oracle prices | Aave's prices from the fork block until shocked. |
 | A name like `sam.justan.id` | A fresh address with no name: Home says "Hi there". |
 

@@ -5,9 +5,9 @@ import { AmountField } from "./AmountField";
 import { parseLimitUsd } from "@/lib/agents/permissions";
 
 /**
- * An agent's limit (ruling 20): one amount field, in whole dollars, that the user types; no preset chips. The card's
- * title says "a day" or "a week" ("Daily limit") and names the field for screen readers. `onChange` gets null while
- * what's typed isn't a limit yet.
+ * The Rebalancer's limit (ruling 20): one amount field, in whole dollars, that the user types; no preset chips. The
+ * card's title says "a week" ("Weekly limit") and names the field for screen readers. `onChange` gets null while what's
+ * typed isn't a limit yet. Protect has no limit to type (Adrian, 2026-10-19).
  */
 export function LimitField({
   label,
@@ -34,5 +34,5 @@ export function LimitField({
   );
 }
 
-/** The one line under a limit's title ("Daily limit"): "Protect never moves more than this in a day." */
-export const neverMoreThan = (name: string, per: "day" | "week") => `${name} never moves more than this in a ${per}.`;
+/** The one line under the limit's title ("Weekly limit"). */
+export const NEVER_MORE_THAN = "Rebalance never moves more than this in a week.";

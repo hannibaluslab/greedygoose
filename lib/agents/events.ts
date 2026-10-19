@@ -14,28 +14,13 @@ import { JOBS, type AgentJob } from "@/lib/agents/permissions";
 export const OFF_REASONS = ["revoked", "expired", "not-owner", "stuck"] as const;
 type OffReason = (typeof OFF_REASONS)[number];
 
-/**
- * CashRules' ProtectCase: only Act (5) repays. Executors deployed before Act was the line (2026-10-15) also repaid
- * before a weekend freeze with WeekendShield (6); their events still read as such.
- */
-const WEEKEND_SHIELD = 6;
-
 /** What GooseExecutor did, or was told, for one account: every event it emits indexed by the account. */
 export type AgentEvent =
   | { kind: "job-on"; job: AgentJob; capRaw: bigint; end: number }
   | { kind: "job-off"; job: AgentJob; reason: OffReason }
   | { kind: "saved"; amountRaw: bigint }
-  | { kind: "repaid"; amountRaw: bigint; hfBefore: bigint; hfAfter: bigint; reason: "act" | "weekend" }
-  | { kind: "heads-up"; hf: bigint; sellValueRaw: bigint; sellAfter: number }
-  | { kind: "heads-up-cleared"; hf: bigint }
-  | {
-      kind: "sold";
-      sharesRaw: readonly bigint[];
-      repaidRaw: bigint;
-      hfBefore: bigint;
-      hfAfter: bigint;
-      atOnce: boolean;
-    }
+  | { kind: "repaid"; amountRaw: bigint; hfBefore: bigint; hfAfter: bigint }
+  | { kind: "sold"; sharesRaw: readonly bigint[]; repaidRaw: bigint; hfBefore: bigint; hfAfter: bigint }
   | { kind: "keep-mix"; on: boolean }
   | { kind: "mix"; weightsBps: readonly number[] }
   | { kind: "rebalanced"; soldRaw: readonly bigint[]; boughtRaw: readonly bigint[] }
@@ -72,22 +57,15 @@ const DECODE: { [N in EventName]: (a: Args<N>) => AgentEvent | null } = {
     return j && reason ? { kind: "job-off", job: j, reason } : null;
   },
   Saved: (a) => ({ kind: "saved", amountRaw: a.amount }),
-  ProtectRepaid: (a) => ({
-    kind: "repaid",
-    amountRaw: a.amount,
-    hfBefore: a.hfBefore,
-    hfAfter: a.hfAfter,
-    reason: a.reason === WEEKEND_SHIELD ? "weekend" : "act",
-  }),
-  SellHeadsUp: (a) => ({ kind: "heads-up", hf: a.hf, sellValueRaw: a.sellValue, sellAfter: a.sellAfter }),
-  SellHeadsUpCleared: (a) => ({ kind: "heads-up-cleared", hf: a.hf }),
+  // Its `reason` is CashRules' ProtectCase, and only Act (5) repays: below Protect's line, or on through a rescue. The
+  // WeekendShield case (6) went with Act as the line (2026-10-15), and this executor never emits it.
+  ProtectRepaid: (a) => ({ kind: "repaid", amountRaw: a.amount, hfBefore: a.hfBefore, hfAfter: a.hfAfter }),
   ProtectSold: (a) => ({
     kind: "sold",
     sharesRaw: a.shares,
     repaidRaw: a.repaid,
     hfBefore: a.hfBefore,
     hfAfter: a.hfAfter,
-    atOnce: a.atOnce,
   }),
   KeepMixSet: (a) => ({ kind: "keep-mix", on: a.on }),
   MixSet: (a) => ({ kind: "mix", weightsBps: a.weights }),

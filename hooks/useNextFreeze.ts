@@ -8,7 +8,7 @@ import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 /**
  * When stock prices next freeze, in seconds, on GooseExecutor's own calendar (`nextFreeze`: 20:00 New York before a
  * weekend or a holiday it holds; the time asked itself while prices are already held). Null until the executor is
- * configured and read. For the weekend heads-up card (Act is the line, 2026-10-15).
+ * configured and read. For the weekend card, and whether prices are held now.
  *
  * Asked for the start of the current hour, so the read changes once an hour rather than every minute. That's exact:
  * a freeze starts on the hour (20:00 New York is a whole UTC hour), so one later in this hour can't be missed, and one

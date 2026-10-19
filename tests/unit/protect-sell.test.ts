@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { PROTECT_SELL } from "@/config/risk";
+import { CASH_AGENT, PROTECT_SELL } from "@/config/risk";
 import {
   planSell,
   sellAmounts,
   sellOrder,
   sellPower,
   sellSlices,
-  sellTiming,
+  sellsNow,
   SELL_RULE,
   type SellBook,
   type SellHolding,
@@ -36,12 +36,13 @@ const bookAt = (stocks: Partial<Record<number, SellHolding>>, hf: number): SellB
     usdcLeftRaw: ALL,
   };
 };
-/** Back to Watch at 1.2 (PROTECT_SELL.targetHf; Act is the line, 2026-10-15). */
+/** The worked examples' target, 1.2 (2026-10-15): the rule takes any target. Protect's own is CASH_AGENT.targetHf. */
 const opts = { targetHf: (12n * WAD) / 10n, floorBps: 100n, keepMix: false, maxSliceRaw: 5_000n * 10n ** 6n };
 
 describe("sellAmounts (Protect · sell, plan item 1)", () => {
-  it("sells back to Watch at 1.2, the deploy default", () => {
-    expect(opts.targetHf).toBe(BigInt(PROTECT_SELL.targetHf * 10) * 10n ** 17n);
+  it("sells on Protect's own lines, at the urgent floor: 1.12 back, 3% under Aave's price at most", () => {
+    expect(CASH_AGENT.targetHf).toBe(1.12);
+    expect(PROTECT_SELL.floorBps).toBe(300);
   });
 
   // The protect-panel example, in Act: NVDA $4,000, AAPL $3,500, TSLA $1,500 back $6,000 of credit at health 1.084.
@@ -120,30 +121,24 @@ describe("sellSlices", () => {
   });
 });
 
-describe("sellTiming (decision 3, Act is the line)", () => {
+describe("sellsNow (Adrian, 2026-10-19)", () => {
   const wad = (x: number) => BigInt(Math.round(x * 1000)) * 10n ** 15n;
-  const l = {
-    headsUpHf: wad(PROTECT_SELL.headsUpHf),
-    nowHf: wad(PROTECT_SELL.nowHf),
-    headsUpDelaySec: BigInt(PROTECT_SELL.headsUpDelaySec),
-  };
-  const at = wad;
+  const l = { triggerHf: wad(CASH_AGENT.triggerHf), targetHf: wad(CASH_AGENT.targetHf) };
 
-  it("sends a heads-up in Act, sells 30 minutes later, and at once below 1.05", () => {
-    expect(sellTiming(at(1.08), 0n, 1_000n, false, l)).toEqual({ timing: "heads-up", atOnce: false });
-    expect(sellTiming(at(1.08), 1_000n, 2_799n, false, l)).toEqual({ timing: "wait", atOnce: false });
-    expect(sellTiming(at(1.08), 1_000n, 2_800n, false, l)).toEqual({ timing: "sell", atOnce: false });
-    expect(sellTiming(at(1.049), 0n, 1_000n, false, l)).toEqual({ timing: "sell", atOnce: true });
+  it("sells at once below 1.03, with no heads-up, and nothing above it", () => {
+    expect(sellsNow(wad(1.029), false, false, l)).toBe(true);
+    expect(sellsNow(wad(1.03), false, false, l)).toBe(false);
+    expect(sellsNow(wad(1.08), false, false, l)).toBe(false); // Act only warns
+    expect(sellsNow(wad(1.3), false, false, l)).toBe(false);
   });
 
-  it("does nothing in Watch: no heads-up at 1.3, nor at the line", () => {
-    expect(sellTiming(at(1.3), 0n, 1_000n, false, l)).toEqual({ timing: "wait", atOnce: false });
-    expect(sellTiming(at(1.1), 0n, 1_000n, false, l)).toEqual({ timing: "wait", atOnce: false });
-    expect(sellTiming(at(1.2), 1_000n, 9_000n, false, l)).toEqual({ timing: "clear", atOnce: false }); // a heads-up from Act is cleared, not sold
+  it("goes on through a rescue until 1.12", () => {
+    expect(sellsNow(wad(1.06), true, false, l)).toBe(true);
+    expect(sellsNow(wad(1.12), true, false, l)).toBe(false);
   });
 
-  it("never sells while prices are held, and clears a heads-up once back above the line", () => {
-    expect(sellTiming(at(1.04), 0n, 1_000n, true, l).timing).toBe("wait");
-    expect(sellTiming(at(1.15), 1_000n, 1_000n, true, l).timing).toBe("clear");
+  it("never sells while prices are held", () => {
+    expect(sellsNow(wad(1.0), false, true, l)).toBe(false);
+    expect(sellsNow(wad(1.06), true, true, l)).toBe(false);
   });
 });

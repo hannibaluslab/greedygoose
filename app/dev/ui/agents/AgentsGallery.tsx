@@ -17,13 +17,12 @@ import {
   agentItems,
   longDateText,
   TAB_JOBS,
-  timeText,
   type Agent,
   type AgentItem,
 } from "@/lib/agents/list";
 import { rebalanceOptions } from "@/lib/agents/mix";
 import { agentNexts, defaultNumbers, type NextInput } from "@/lib/agents/next";
-import { JOBS, LIMIT_USD, type AgentJob } from "@/lib/agents/permissions";
+import { JOBS, startCapRaw, type AgentJob } from "@/lib/agents/permissions";
 import type { AgentStatus } from "@/lib/agents/status";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 import { ProtectDemo } from "../ProtectDemos";
@@ -61,6 +60,9 @@ const HOLDINGS = PRICES.map((p, reserveId) => ({
 }));
 const MIX = [2_500, 0, 0, 0, 0, 5_000, 2_500];
 
+/** The executor's CAP_MAX here: Protect's grants are at it (no amount limit), the Rebalancer's at its $100 a week. */
+const CAP_MAX = usdc(10_000);
+
 /** $400 of cash earning, $600 owed against $2,000 of backing: Safe. */
 function nextInput(nowSec: number, over: Partial<NextInput> = {}): NextInput {
   return {
@@ -72,19 +74,25 @@ function nextInput(nowSec: number, over: Partial<NextInput> = {}): NextInput {
     holdings: HOLDINGS,
     mixBps: MIX,
     left: byJob(() => null),
-    capRaw: byJob((job) => usdc(LIMIT_USD[job].start)),
-    capMaxRaw: usdc(10_000),
+    capRaw: caps,
+    capMaxRaw: CAP_MAX,
     numbers: defaultNumbers(rebalanceOptions()),
     rebalanceDay: 0,
+    rescuing: false,
+    sellOn: true,
+    pricesHeld: false,
     plan: null,
     ...over,
   };
 }
 
 const all = (s: AgentStatus) => byJob(() => s);
-const caps = byJob((job) => usdc(LIMIT_USD[job].start));
+const caps = byJob((job) => startCapRaw(job, CAP_MAX));
 
-/** What the agents did, and the cash events: today $40 arriving and a sale after a heads-up, two days back a rebalance and 120 USDT arriving. */
+/**
+ * What the agents did, and the cash events: today $40 arriving, a repay from cash and a sale that went on until 1.12
+ * after the credit fell under 1.03, two days back a rebalance and 120 USDT arriving.
+ */
 function feedRows(nowMs: number): FeedAgentRow[] {
   const at = (daysBack: number, h: number, m: number) =>
     new Date(nowMs).setHours(h, m, 0, 0) / 1000 - daysBack * 86_400;
@@ -99,22 +107,16 @@ function feedRows(nowMs: number): FeedAgentRow[] {
         kind: "sold",
         sharesRaw: seven(6, shares(180, 378.38)),
         repaidRaw: usdc(178.2),
-        hfBefore: hf(1.08),
-        hfAfter: hf(1.2),
-        atOnce: false,
+        hfBefore: hf(1.06),
+        hfAfter: hf(1.12),
       },
-      {
-        owedRaw: [usdc(780), usdc(600)],
-        cashRaw: [usdc(400), usdc(401.8)],
-        used: { spentRaw: usdc(180), capRaw: usdc(300) },
-        pricesRaw: prices,
-      },
+      { owedRaw: [usdc(780), usdc(600)], cashRaw: [usdc(0), usdc(1.8)], pricesRaw: prices },
     ],
     [
-      "heads-up",
-      at(0, 2, 41),
-      { kind: "heads-up", hf: hf(1.08), sellValueRaw: usdc(180), sellAfter: at(0, 3, 11) },
-      {},
+      "repay",
+      at(0, 3, 2),
+      { kind: "repaid", amountRaw: usdc(40), hfBefore: hf(1.02), hfAfter: hf(1.06) },
+      { owedRaw: [usdc(820), usdc(780)], cashRaw: [usdc(40), usdc(0)] },
     ],
     [
       "rebalance",
@@ -174,7 +176,7 @@ export function AgentsGallery() {
   const cards = cardsView
     ? agentCards({
         nowSec,
-        headsUp: { addUsd: 120, sellUsd: 180, when: `at ${timeText(nowSec + 30 * 60)}` },
+        act: { addUsd: 120, protectOn: true },
         weekend: { addUsd: 40, dropPct: 15, when: "at 8:00 PM" },
         status,
         ends: byJob((job) =>
@@ -208,7 +210,7 @@ export function AgentsGallery() {
     <>
       <AgentsView
         live={live}
-        signed={allOffSteps > 0}
+        signed={live && status.rebalance !== "off"}
         cards={cards.map((c) => (
           <AttentionCard key={c.key} card={c} onRenew={NOTHING_SIGNED} />
         ))}

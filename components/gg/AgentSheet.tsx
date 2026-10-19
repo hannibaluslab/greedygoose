@@ -11,8 +11,8 @@ import { stepsNote } from "@/lib/formatting";
 
 /*
  * An agent's sheet (Adrian, 2026-10-15): what it does and never does, its state and next move, its own settings (which
- * carry its limit and the button that saves it or switches it on), when it stops, what it did, and a way to turn it
- * off. The sheet already says what a change does, so there is no confirm step of ours: Renew and Turn off open JAW's
+ * carry the button that saves it or switches it on, and the Rebalancer's limit; Protect has none), when it stops, what
+ * it did, and a way to turn it off. The sheet already says what a change does, so there is no confirm step of ours: Renew and Turn off open JAW's
  * own sheet straight away, once a grant or revoke (a small line says "2 steps" when there are more).
  */
 
@@ -52,8 +52,8 @@ export function AgentSheet({
   /** "Oct 15, 2027": when its grant ends, while it has one. */
   stops: string | null;
   /**
-   * Its settings body (Protect's, Rebalance's): the limit and its own button to JAW's sheet, which also switches the
-   * agent on, so there is one limit and one such button on screen.
+   * Its settings body (Protect's, Rebalance's): its own button to JAW's sheet, which also switches the agent on, and the
+   * Rebalancer's limit, so there is one limit and one such button on screen.
    */
   settings: ReactNode;
   activity: ReactNode;

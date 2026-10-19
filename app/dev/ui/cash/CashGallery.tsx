@@ -243,7 +243,7 @@ function ActivityFixture({ nowSec }: { nowSec: number }) {
     [
       "sale",
       at(0, 3, 12),
-      { kind: "sold", sharesRaw: tesla, repaidRaw: usdc(178.2), hfBefore: hf(1.24), hfAfter: hf(1.52), atOnce: false },
+      { kind: "sold", sharesRaw: tesla, repaidRaw: usdc(178.2), hfBefore: hf(1.02), hfAfter: hf(1.12) },
       {
         owedRaw: [usdc(780), usdc(600)],
         cashRaw: [usdc(400), usdc(401.8)],

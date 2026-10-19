@@ -12,14 +12,11 @@ const BACKS = [0, 0, 0, 0, 0, 2_000, 1_400];
 const CAP_MAX = usdc(10_000);
 const TESLA = 6;
 
+/** Protect's grants are at the executor's CAP_MAX (no amount limit). */
 const SAVED: Record<"off" | "on" | "repay", ProtectSaved> = {
-  off: { repayCapRaw: null, sell: null, keepMix: null },
-  on: {
-    repayCapRaw: usdc(100),
-    sell: { capRaw: usdc(100), limitsRaw: sellLimitsFor(usdc(100), CAP_MAX, PRICES, [TESLA]) },
-    keepMix: false,
-  },
-  repay: { repayCapRaw: usdc(100), sell: null, keepMix: false },
+  off: { repayOn: false, sell: null, keepMix: null },
+  on: { repayOn: true, sell: { limitsRaw: sellLimitsFor(CAP_MAX, PRICES, [TESLA]) }, keepMix: false },
+  repay: { repayOn: true, sell: null, keepMix: false },
 };
 
 /**

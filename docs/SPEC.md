@@ -56,22 +56,28 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
 
 ## Credit health
 
-| Band  | Health factor | What happens                                         |
-| ----- | ------------- | ---------------------------------------------------- |
-| Safe  | 1.5 and above | Nothing                                              |
-| Watch | 1.1 to 1.5    | Allowed. Ending in Watch asks for one tick           |
-| Act   | under 1.1     | Protect steps in. Nothing the user does may end here |
+| Band  | Health factor | What happens                                                                    |
+| ----- | ------------- | ------------------------------------------------------------------------------- |
+| Safe  | 1.5 and above | Nothing                                                                         |
+| Watch | 1.1 to 1.5    | Allowed. Ending in Watch asks for one tick                                      |
+| Act   | under 1.1     | A warning. Nothing the user does may end here. Protect steps in only under 1.03 |
 
 - **1.12 is the line.** Taking credit and freeing stock never end below 1.12 (Act line + 0.02). There is no other cap
   on leverage.
 - **Aave's own check runs before JAW's sheet.** Every batch that takes credit or frees stock is simulated on Base with
   the health read after it; a result under 1.10 stops it.
-- **Protect** acts only in Act. It repays from cash first, sells backing stock only if cash can't, and brings the
-  credit back to 1.20. It never acts in Safe or Watch and never sells on a weekend.
+- **Protect** acts only under 1.03, Protect's line (Adrian, 2026-10-19). Act is a warning only: a card on the Agents
+  tab from a plain health check (Top up, Repay), Protect on or off, and a push the runner sends. Under 1.03 Protect
+  repays from cash first and, if cash runs short, sells backing stock at once (no heads-up, no wait), both back to
+  1.12. Once it acts, the rescue goes on, above 1.03 too, until the credit is back at 1.12. It never sells while
+  prices are held (weekends and holidays), and never for less than 3% under Aave's price. It has no amount limit.
+- **The weekend card** warns against Aave's line: before prices pause, if stocks reopening 15% lower would take the
+  credit under 1.0, it says so and what repaying now keeps it over the line. Nothing moves.
 - On Home, Credit's ⓘ opens "My credit status", on Aave's rules: the health and how far the stocks can fall, all
   together, before Aave's line (1.0) and before Act (1 − line ÷ health); how it's worked out (each stock that backs
-  credit counts its value × the share Aave counts, together ÷ what's owed); and the scale: Safe, Watch, Act and Aave's
-  line, each with where it starts and what happens there. The owed amount opens the Credit sheet.
+  credit counts its value × the share Aave counts, together ÷ what's owed); and the scale: Safe, Watch, Act (a
+  warning), under 1.03 (Protect repays from cash, then sells if needed) and Aave's line, each with where it starts and
+  what happens there. The owed amount opens the Credit sheet.
 
 ## Money rules
 
@@ -164,8 +170,11 @@ the free shares' value. A stock whose shares all back credit is listed but can't
   Coming soon, with nothing to open yet.
 - Invisible: earning on idle cash (Save) and turning other dollars into cash (Receive). Their permissions are asked
   when money first arrives.
-- Permissions go through JAW's own screens; the spender is `GooseExecutor`. Each limit is one typed amount.
-- Until Chainlink approves the automation (`NEXT_PUBLIC_AGENTS_LIVE=1`), "Coming soon" stands where the switches and
+- Permissions go through JAW's own screens; the spender is `GooseExecutor`. Protect has no amount limit: its two grants
+  (repay from cash, sell) are at the executor's CAP_MAX, with no field to type. The Rebalancer keeps one typed amount,
+  a week.
+- The Rebalancer waits while the credit is in Act (under 1.1), not down to Protect's line.
+- Until the agents go live (`NEXT_PUBLIC_AGENTS_LIVE=1`), "Coming soon" stands where the switches and
   Save are; the figures are real. The invisible grants wait too: Start earning is its batch alone (no Save grant), and
   "Do this automatically next time?" (the Receive grant) isn't asked.
 - The Agents feed shows the agents' moves only. "Turn off all agents" shows only while one is on.

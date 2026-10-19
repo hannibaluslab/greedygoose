@@ -49,7 +49,7 @@ const CALLS: Record<CashJob, readonly { target: Address; selector: Hex }[]> = {
 /**
  * The tokens each job's daily limit covers, all at the same cap. Protect needs aUSDC as well as USDC: with checker 0,
  * a withdrawal of savings to someone else moves no USDC from the account, so a USDC limit alone would charge it
- * nothing (contracts/docs/MANAGER-NOTES.md §1).
+ * nothing (contracts/docs/MANAGER-NOTES.md §1). Protect's cap is the executor's CAP_MAX (`NO_LIMIT_JOBS`).
  */
 const LIMITED: Record<CashJob, readonly Address[]> = {
   save: [USDC.address],
@@ -57,17 +57,23 @@ const LIMITED: Record<CashJob, readonly Address[]> = {
 };
 
 /**
- * The limits an agent's sheet offers and the one each job is switched on with, in dollars a day (a week for the
- * Rebalancer). Protect (for repaying from cash and for selling backing stock alike) and the Rebalancer: $25 / $50 /
- * $100 / $200 or any whole number of dollars (Custom), starting on $100 (Adrian, 2026-10-15). Save and Entry run under
- * the hood (D20), each at $1,000 a day with no other offer. All wait on the calibration pass (plan item 6 step 9).
+ * Protect's two jobs have no amount limit (Adrian, 2026-10-19): like DeFi Saver, Protect is limited by what it does
+ * (below 1.03, back to 1.12, and a move may not land past the target), not by how much. Their grants carry the
+ * executor's CAP_MAX, the most a grant may hold (a D13 test deploy allows $5), and the user types no limit.
  */
-export const LIMIT_USD: Record<AgentJob, { options: readonly number[]; start: number; per: "day" | "week" }> = {
-  save: { options: [], start: 1_000, per: "day" },
-  protect: { options: [25, 50, 100, 200], start: 100, per: "day" },
-  sell: { options: [25, 50, 100, 200], start: 100, per: "day" },
-  rebalance: { options: [25, 50, 100, 200], start: 100, per: "week" },
-  entry: { options: [], start: 1_000, per: "day" },
+export const NO_LIMIT_JOBS = ["protect", "sell"] as const;
+type LimitedJob = Exclude<AgentJob, (typeof NO_LIMIT_JOBS)[number]>;
+export const hasLimit = (job: AgentJob): job is LimitedJob => !(NO_LIMIT_JOBS as readonly AgentJob[]).includes(job);
+
+/**
+ * The limit each other job is switched on with, in dollars a day (a week for the Rebalancer). The Rebalancer: any whole
+ * number of dollars the user types, starting on $100 (Adrian, 2026-10-15). Save and Entry run under the hood (D20),
+ * each at $1,000 a day with no other offer. All wait on the calibration pass (plan item 6 step 9).
+ */
+export const LIMIT_USD: Record<LimitedJob, { start: number; per: "day" | "week" }> = {
+  save: { start: 1_000, per: "day" },
+  rebalance: { start: 100, per: "week" },
+  entry: { start: 1_000, per: "day" },
 };
 
 /** The most a typed limit may be, so the dollars stay exact as a number; the executor's `CAP_MAX` binds far below. */
@@ -85,6 +91,11 @@ export function parseLimitUsd(text: string): number | null {
 export function limitRaw(usd: number, capMaxRaw: bigint): bigint {
   const raw = BigInt(usd) * 10n ** BigInt(USDC.decimals);
   return raw < capMaxRaw ? raw : capMaxRaw;
+}
+
+/** The cap a job is switched on with: CAP_MAX for Protect's two jobs (no amount limit), its starting limit otherwise. */
+export function startCapRaw(job: AgentJob, capMaxRaw: bigint): bigint {
+  return hasLimit(job) ? limitRaw(LIMIT_USD[job].start, capMaxRaw) : capMaxRaw;
 }
 
 /**
@@ -130,13 +141,15 @@ export function agentPermission(
 }
 
 /*
- * Protect · sell (GooseExecutor's Job.ProtectSell, id 2): when savings can't bring the credit out of Act, the executor
- * sells some of the stock that backs it and repays, back to Watch. Its own JAW grant, so selling can be switched off alone (decision 5);
- * not one of the Cash Agent switches (`CASH_JOBS`).
+ * Protect · sell (GooseExecutor's Job.ProtectSell, id 2): when savings can't bring the credit back to 1.12 below
+ * Protect's line (or during a rescue), the executor sells some of the stock that backs it and repays. Its own JAW grant,
+ * so selling can be switched off alone (decision 5); not one of the Cash Agent switches (`CASH_JOBS`).
  */
 
 /** A stock's daily limit is a whole number of these raw units (1e-4 share): the executor packs all seven in one word. */
 export const STOCK_LIMIT_UNIT = 10_000n;
+/** The most a stock's limit can be: 32 bits of units, what the grant's terms hold (`stockTerms`). */
+const STOCK_LIMIT_MAX = (2n ** 32n - 1n) * STOCK_LIMIT_UNIT;
 
 /** A daily limit per stock, in raw shares, by reserve id (EQUITIES order). 0 = never sell that stock. */
 export type StockLimits = readonly bigint[];
@@ -170,6 +183,7 @@ function sellCalls(limitsRaw: StockLimits) {
 /**
  * Daily limits: USDC on the repay leg and aUSDC at the same cap (nothing here moves savings, so the manager bounds any
  * savings move a batch could make through an allowance the account gave elsewhere), then each sellable stock's own.
+ * The cap is the executor's CAP_MAX: selling has no amount limit either (`NO_LIMIT_JOBS`).
  */
 function sellSpends(capRaw: bigint, limitsRaw: StockLimits) {
   return [
@@ -371,8 +385,9 @@ export function jobGrant(job: AgentJob, capRaw: bigint, limitsRaw?: StockLimits)
  * Each stock's limit in a Protect · sell or Rebalancer grant, from the dollar limit `capRaw`: shares worth twice it at
  * Aave's price now, so a stock that falls after the grant can still be sold up to the dollar limit (the USDC limit is
  * the one that binds). Held 1% under the executor's bound (twice CAP_MAX, JobBase.STOCK_LIMIT_CAPS), so a price tick
- * before registration doesn't refuse it. `pricesRaw` are Aave's prices by reserve id (8 decimals); a stock `sellable`
- * leaves out gets 0, so the grant has no approve for it.
+ * before registration doesn't refuse it, and never past what the grant's terms hold (32 bits of units a stock), which
+ * binds for Protect · sell's CAP_MAX on a deploy with no amount limit. `pricesRaw` are Aave's prices by reserve id
+ * (8 decimals); a stock `sellable` leaves out gets 0, so the grant has no approve for it.
  */
 export function stockLimitsRaw(
   capRaw: bigint,
@@ -385,7 +400,7 @@ export function stockLimitsRaw(
   return EQUITIES.map((e) => {
     if (!sellable[e.reserveId] || pricesRaw[e.reserveId] <= 0n) return 0n;
     const shares = (worth * 10n ** 10n) / pricesRaw[e.reserveId];
-    return (shares / STOCK_LIMIT_UNIT) * STOCK_LIMIT_UNIT;
+    return shares < STOCK_LIMIT_MAX ? (shares / STOCK_LIMIT_UNIT) * STOCK_LIMIT_UNIT : STOCK_LIMIT_MAX;
   });
 }
 

@@ -176,7 +176,8 @@ const OFF_REASONS = [
   "stuck after failed runs",
 ] as const;
 /** CashRules.sol `ProtectCase`; a repay is only ever Watch or WeekendShield. */
-const PROTECT_CASES = ["NoDebt", "Healthy", "NoSavings", "NoCap", "TooSmall", "Watch", "Weekend Shield"] as const;
+/** CashRules' ProtectCase: only Act repays, below Protect's line or on through a rescue. */
+const PROTECT_CASES = ["NoDebt", "Healthy", "NoSavings", "NoCap", "TooSmall", "Act"] as const;
 
 const stockList = (amounts: readonly bigint[]) =>
   amounts.flatMap((a, r) => (a > 0n ? [`${shares(a)} ${EQUITIES[r].symbol}`] : [])).join(", ") || "nothing";
@@ -211,17 +212,9 @@ export function describeExecutorLogs(logs: readonly Log[], executor: Address, wh
           `${name}: Protect repaid ${usd(a.amount as bigint)} from savings (${PROTECT_CASES[Number(a.reason)]}), health ${hf(a.hfBefore as bigint)} → ${health(a.hfAfter as bigint)}`,
         );
         break;
-      case "SellHeadsUp":
-        out.push(
-          `${name}: heads-up at health ${health(a.hf as bigint)}: Protect sells ${usd(a.sellValue as bigint)} at ${nyTime(a.sellAfter as number)} unless the health is back above 1.25`,
-        );
-        break;
-      case "SellHeadsUpCleared":
-        out.push(`${name}: heads-up cleared, health ${health(a.hf as bigint)}`);
-        break;
       case "ProtectSold":
         out.push(
-          `${name}: Protect sold ${stockList(a.shares as bigint[])}${a.atOnce ? " at once (Act)" : ""} and repaid ${usd(a.repaid as bigint)}, health ${hf(a.hfBefore as bigint)} → ${health(a.hfAfter as bigint)}`,
+          `${name}: Protect sold ${stockList(a.shares as bigint[])} and repaid ${usd(a.repaid as bigint)}, health ${hf(a.hfBefore as bigint)} → ${health(a.hfAfter as bigint)}`,
         );
         break;
       case "Rebalanced":

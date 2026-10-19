@@ -6,6 +6,7 @@ import { Button } from "./kit/Button";
 import { StatusBar, StatusPill } from "./Status";
 import { AAVE_LINE_HF, CREDIT_CAP, RISK } from "@/config/risk";
 import { useBackingFactorsRead, type PositionData } from "@/hooks/usePosition";
+import { PROTECT_LINE } from "@/lib/agents/list";
 import { formatUsd } from "@/lib/formatting";
 import { healthMargins, healthParts } from "@/lib/risk/health";
 import { STATUS_LABEL, type Status } from "@/lib/risk/status";
@@ -14,15 +15,30 @@ const hf = (n: number) => n.toFixed(2);
 /** A fall in whole percents, rounded down: the margin is never shown as more than it is. */
 const pct = (f: number) => `${Math.floor(f * 100 + 1e-9)}%`;
 
-/** The scale, from the top: where each band starts and what happens in it. */
-const SCALE: { status: Exclude<Status, "none">; range: string; line: string }[] = [
-  { status: "safe", range: `${RISK.safeMin} and up`, line: "Nothing to do." },
+/**
+ * The scale, from the top: where each band starts and what happens in it. Act is a warning only; Protect's line, under
+ * it, is where Protect steps in (Adrian, 2026-10-19), still in Act, so its row wears Act's pill.
+ */
+const SCALE: { key: string; status: Exclude<Status, "none">; range: string; line: string }[] = [
+  { key: "safe", status: "safe", range: `${RISK.safeMin} and up`, line: "Nothing to do." },
   {
+    key: "watch",
     status: "watch",
     range: `${RISK.watchMin} to ${RISK.safeMin}`,
     line: `Nothing is sold. New credit and free up stop at ${CREDIT_CAP.minHf}.`,
   },
-  { status: "act", range: `Under ${RISK.watchMin}`, line: "Protect steps in, if it’s on." },
+  {
+    key: "act",
+    status: "act",
+    range: `Under ${RISK.watchMin}`,
+    line: `A warning. Protect steps in at ${PROTECT_LINE}.`,
+  },
+  {
+    key: "protect",
+    status: "act",
+    range: `Under ${PROTECT_LINE}`,
+    line: "Protect repays from your cash, then sells if needed.",
+  },
 ];
 
 /** How far the stocks can fall, together, before Aave's line (and Act, while the credit is above it). */
@@ -37,7 +53,7 @@ function marginLine(health: number): string {
 /**
  * "My credit status", from Credit's ⓘ on Home: the credit's health and how far the stocks can fall before Aave's line;
  * how the health is worked out on Aave's rules (each stock's value × the share Aave counts, ÷ what's owed); and the
- * scale, Safe, Watch and Act, down to Aave's line at 1.0. With nothing owed, the scale only.
+ * scale, Safe, Watch, Act and Protect's line at 1.03, down to Aave's line at 1.0. With nothing owed, the scale only.
  */
 export function StatusSheet({
   open,
@@ -110,7 +126,7 @@ export function StatusSheet({
         <Card>
           <ul className="m-0 flex list-none flex-col gap-3 p-0">
             {SCALE.map((r) => (
-              <li key={r.status} className="flex items-start gap-2.5">
+              <li key={r.key} className="flex items-start gap-2.5">
                 <span className="w-[58px] shrink-0">
                   <StatusPill status={r.status} size="sm" />
                 </span>

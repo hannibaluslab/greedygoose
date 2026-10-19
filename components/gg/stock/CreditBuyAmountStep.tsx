@@ -10,6 +10,7 @@ import type { useBuyQuote } from "@/hooks/useBuyQuote";
 import type { useCreditBuy } from "@/hooks/useCreditBuy";
 import type { PositionData } from "@/hooks/usePosition";
 import { monthlyCost } from "@/lib/aave/math";
+import { PROTECT_LINE } from "@/lib/agents/list";
 import { backers, shortNames, type BackingOption, type BackingPick, type CreditPlan } from "@/lib/creditBuy";
 import {
   ceilCents,
@@ -69,6 +70,7 @@ export function CreditBuyAmountStep({
   blocker,
   ready,
   protectOn,
+  sellOn,
   feeBlocked,
   feeLoading,
   isConnected,
@@ -93,6 +95,8 @@ export function CreditBuyAmountStep({
   blocker: string | null;
   ready: boolean;
   protectOn: boolean;
+  /** Protect may sell backing stock too (its sell grant is on). */
+  sellOn: boolean;
   feeBlocked: boolean;
   feeLoading: boolean;
   isConnected: boolean;
@@ -166,6 +170,7 @@ export function CreditBuyAmountStep({
           usd={econ.usd}
           venue={q.venue}
           protectOn={protectOn}
+          sellOn={sellOn}
         />
       )}
       {ready && plan.extraConfirm && (
@@ -270,6 +275,7 @@ function BatchNote({
   usd,
   venue,
   protectOn,
+  sellOn,
 }: {
   data: PositionData;
   plan: CreditPlan;
@@ -279,6 +285,7 @@ function BatchNote({
   usd: number;
   venue: BuyQuote["venue"];
   protectOn: boolean;
+  sellOn: boolean;
 }) {
   const lead = chosen?.stock.symbol;
   const adding = pick.raw > 0n && lead ? [lead] : [];
@@ -296,22 +303,24 @@ function BatchNote({
         `exactly ${formatUsd(usd)} is approved for the ${VENUE_LABEL[venue]} router and swapped`,
       ])}
       . You’ll owe {formatUsd(data.debtUsd + amount)}, backed by {shortNames(againstNames)}.{" "}
-      {riskNote(againstNames, protectOn)}
+      {riskNote(againstNames, protectOn, sellOn)}
     </p>
   );
 }
 
 /**
  * The risk line (F2-6's, now in the amount step's small print). The board's "Your cash is never touched" is left out:
- * the network fee comes from cash, and Protect repays from savings first (D11).
+ * the network fee comes from cash, and Protect repays from savings first (D11). It says Protect sells only while its
+ * selling is on, as Earn with stocks' line does (lib/earnWithStocks/copy.ts).
  */
-function riskNote(backers: string[], protectOn: boolean): string {
+function riskNote(backers: string[], protectOn: boolean, sellOn: boolean): string {
   const one = backers.length === 1 ? backers[0] : null;
-  // Act is the line (2026-10-15): Protect steps in only at Act, and brings the credit back to Watch.
+  // Protect's line (Adrian, 2026-10-19): Protect steps in only under 1.03, and brings the credit back to Watch.
   if (protectOn) {
-    return one
-      ? `If ${one} falls, you can repay. If your credit reaches Act, Protect repays from your cash or sells a little ${one} to bring it back to Watch.`
-      : "If your stocks fall, you can repay. If your credit reaches Act, Protect repays from your cash or sells a little of them to bring it back to Watch.";
+    const falls = `${one ? `If ${one} falls` : "If your stocks fall"}, you can repay. If your credit falls under ${PROTECT_LINE}`;
+    return sellOn
+      ? `${falls}, Protect repays from your cash, then sells a little ${one ?? "of them"} to bring it back to Watch.`
+      : `${falls}, Protect repays from your cash. Protect won’t sell your ${one ? "stock" : "stocks"}.`;
   }
   return one
     ? `If ${one} falls, you can repay. If it falls too far, part of it can be sold to repay what you owe.`

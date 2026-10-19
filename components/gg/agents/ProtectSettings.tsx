@@ -4,9 +4,8 @@ import { useState } from "react";
 import { isAddressEqual } from "viem";
 import { useAccount } from "wagmi";
 import { toast } from "sonner";
-import { CardTitle, ManageCard, SaveFooter } from "@/components/gg/Manage";
+import { ManageCard, SaveFooter } from "@/components/gg/Manage";
 import { ComingSoon } from "@/components/gg/Agents";
-import { LimitField, neverMoreThan } from "@/components/gg/kit/LimitField";
 import { Switch } from "@/components/gg/kit/Switch";
 import { useAgents } from "@/hooks/useAgents";
 import { useAgentSettings } from "@/hooks/useAgentSettings";
@@ -15,7 +14,7 @@ import { usePosition } from "@/hooks/usePosition";
 import { useProtectSave } from "@/hooks/useProtectSave";
 import { usePrepare, type TxPhase, type TxPlan, type TxPrep } from "@/hooks/useTx";
 import { AGENTS_LIVE } from "@/lib/agents/config";
-import { limitRaw, testCapNote } from "@/lib/agents/permissions";
+import { PROTECT_LINE } from "@/lib/agents/list";
 import {
   protectSteps,
   savedChoice,
@@ -25,18 +24,18 @@ import {
   type ProtectStep,
 } from "@/lib/agents/protect";
 import type { AgentStatus } from "@/lib/agents/status";
-import { toUsd } from "@/lib/cash";
-import { formatUsdTrim, inWords } from "@/lib/formatting";
+import { inWords } from "@/lib/formatting";
 import { EQUITIES } from "@/lib/tokens/registry";
-import { LimitNotes, ORDER, SaveSummary, SellChoices, saveState } from "./ProtectSettingsParts";
+import { ORDER, SaveSummary, SellChoices, saveState } from "./ProtectSettingsParts";
 
 const running = (s: AgentStatus) => s === "on" || s === "starting";
 
 /**
- * Protect's settings, for the agent sheet's settings slot: repay from cash (always first) at a daily limit, selling
- * backing stock as its own switch (Job.ProtectSell), what it sells first (`setKeepMix`) and the never-sell list (stocks
- * left out of a new sell grant). Everything comes from the chain through the agents' hooks; saving opens JAW's sheet
- * once a change (`useProtectSave`). Without an executor it renders the real figures and saves nothing ("Not live yet").
+ * Protect's settings, for the agent sheet's settings slot: repay from cash (always first), selling backing stock as its
+ * own switch (Job.ProtectSell), what it sells first (`setKeepMix`) and the never-sell list (stocks left out of a new
+ * sell grant). No limit to type (Adrian, 2026-10-19): both grants are at the executor's CAP_MAX. Everything comes from
+ * the chain through the agents' hooks; saving opens JAW's sheet once a change (`useProtectSave`). Without an executor
+ * it renders the real figures and saves nothing ("Not live yet").
  */
 export function ProtectSettings({ account, onDone }: { account: `0x${string}`; onDone?: () => void }) {
   const { address } = useAccount();
@@ -64,8 +63,8 @@ export function ProtectSettings({ account, onDone }: { account: `0x${string}`; o
   }
   const { protect, sell } = agents.terms;
   const saved: ProtectSaved = {
-    repayCapRaw: running(agents.status.protect) && protect ? protect.capRaw : null,
-    sell: running(agents.status.sell) && sell?.limitsRaw ? { capRaw: sell.capRaw, limitsRaw: sell.limitsRaw } : null,
+    repayOn: running(agents.status.protect) && !!protect,
+    sell: running(agents.status.sell) && sell?.limitsRaw ? { limitsRaw: sell.limitsRaw } : null,
     keepMix: settings?.keepMix ?? null,
   };
   return (
@@ -112,6 +111,7 @@ export type ProtectSettingsViewProps = {
   backsUsd: readonly number[];
   /** Aave's prices by reserve id (8 decimals), for a sell grant's stock limits. */
   pricesRaw: readonly bigint[];
+  /** The executor's CAP_MAX: every grant of Protect's is at it (no amount limit). */
   capMaxRaw: bigint | null;
   /** Sell grants JAW lists that haven’t ended: one JAW sheet each to switch selling off. */
   sellGrants: number;
@@ -146,27 +146,22 @@ export function ProtectSettingsView({
   onSave,
 }: ProtectSettingsViewProps) {
   const [chosen, setChosen] = useState<Partial<ProtectChoice>>({});
-  // A Custom limit that isn't a number of dollars yet: nothing to save until it is.
-  const [limitTyped, setLimitTyped] = useState(true);
   const start = savedChoice(saved);
   const choice: ProtectChoice = { ...start, ...chosen };
   const set = (c: Partial<ProtectChoice>) => setChosen((p) => ({ ...p, ...c }));
 
-  const capMax = capMaxRaw ?? BigInt(choice.limitUsd) * 10n ** 6n;
-  const plan = protectSteps(saved, choice, { capMaxRaw: capMax, pricesRaw });
+  // Until CAP_MAX is read nothing can save (`ready` below), so the steps only say what's blocked.
+  const plan = protectSteps(saved, choice, { capMaxRaw: capMaxRaw ?? 0n, pricesRaw });
   const steps = live ? plan.steps : [];
   const count = stepCount(steps, sellGrants);
-  const limitUsd = toUsd(limitRaw(choice.limitUsd, capMax));
-  // Selling's own limit while untouched (a grant from before can differ), Protect's otherwise.
-  const sellUsd = saved.sell && chosen.limitUsd === undefined ? toUsd(saved.sell.capRaw) : limitUsd;
   const names = (ids: readonly number[]) =>
     inWords(EQUITIES.filter((e) => ids.includes(e.reserveId)).map((e) => e.name));
 
   // While repaying from cash is off, saving switches Protect on (protectSteps).
-  const off = saved.repayCapRaw === null;
+  const off = !saved.repayOn;
   const { canSave, note } = saveState({
     live,
-    ready: limitTyped && !preview && !waiting && !busy && capMaxRaw !== null,
+    ready: !preview && !waiting && !busy && capMaxRaw !== null,
     feeBlocked,
     blocked: plan.blocked,
     changes: steps.length,
@@ -179,11 +174,10 @@ export function ProtectSettingsView({
   const lines = steps.flatMap((s) => {
     if (s.kind === "keepMix") return [`Sells first: ${ORDER.find((o) => o.keepMix === s.on)!.label}`];
     if (s.kind === "revoke") return ["Selling: off"];
-    const upTo = `up to ${formatUsdTrim(toUsd(s.capRaw))} a day`;
-    if (s.job === "protect") return [`Repay from your cash: ${saved.repayCapRaw === null ? "on, " : ""}${upTo}`];
+    if (s.job === "protect") return ["Repay from your cash: on"];
     const never =
       !saved.sell || neverChanged ? [`Never sell: ${choice.never.length > 0 ? names(choice.never) : "none"}`] : [];
-    return [`Selling: ${saved.sell ? "" : "on, "}${upTo}`, ...never];
+    return [...(saved.sell ? [] : ["Selling: on"]), ...never];
   });
 
   // The never-sell list: what backs the credit now, and anything already on the list.
@@ -193,32 +187,17 @@ export function ProtectSettingsView({
 
   return (
     <div className="flex flex-col gap-3.5 leading-[normal]">
-      <ManageCard className="flex flex-col gap-3 px-4 py-3.5">
-        <CardTitle title="Daily limit" sub={neverMoreThan("Protect", "day")} />
-        <LimitField
-          label="Daily limit"
-          value={choice.limitUsd}
-          onChange={(usd) => {
-            setLimitTyped(usd !== null);
-            if (usd !== null) set({ limitUsd: usd });
-          }}
-        />
-        <LimitNotes capNote={limitTyped ? testCapNote(choice.limitUsd, capMaxRaw) : null} offNow={live && off} />
-      </ManageCard>
-
       <ManageCard className="flex flex-col px-4 py-0.5">
         <div className="flex flex-col gap-0.5 py-[13px]">
           <span className="text-[15px] font-semibold">Repay from your cash</span>
           <span className="text-xs leading-[1.35] text-subtle">
-            Only in Act, and always first. Your cash pays before any stock is sold.
+            Only under {PROTECT_LINE}, and always first. Your cash pays before any stock is sold.
           </span>
         </div>
         <div className="flex items-center gap-3 border-t border-hairline py-[13px]">
           <div className="flex grow flex-col gap-0.5">
             <span className="text-[15px] font-semibold">Sell stock if cash isn’t enough</span>
-            <span className="text-xs leading-[1.35] text-subtle">
-              Only stock that backs your credit, up to {formatUsdTrim(sellUsd)} a day
-            </span>
+            <span className="text-xs leading-[1.35] text-subtle">Only stock that backs your credit</span>
           </div>
           <Switch
             label="Sell stock if cash isn’t enough"
@@ -240,7 +219,7 @@ export function ProtectSettingsView({
         )}
       </ManageCard>
 
-      {live && limitTyped && <SaveSummary off={off} lines={lines} />}
+      {live && <SaveSummary off={off} lines={lines} />}
 
       {live ? (
         <SaveFooter
