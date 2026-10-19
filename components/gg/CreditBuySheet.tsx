@@ -12,8 +12,7 @@ import { useCreditBuyAmount } from "./useCreditBuyAmount";
 import { useAgents } from "@/hooks/useAgents";
 import { useBoughtHome } from "@/hooks/useBoughtHome";
 import { useBackingFactorsRead, type PositionData } from "@/hooks/usePosition";
-import { cashRaw, feeBufferRaw } from "@/lib/cash";
-import { CREDIT_FROM, FEE_FIRST, backingForBuy, planCredit, type BackingPick } from "@/lib/creditBuy";
+import { backingForBuy, creditLine, planCredit, type BackingPick } from "@/lib/creditBuy";
 import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
 
 /**
@@ -154,8 +153,6 @@ export function CreditBuySheet({
 
   const { title, back } = navOf(step, stock, preset);
   const leave = step === "back" && preset ? onBack : undefined;
-  // The plain line under "You can use up to": cash pays the network fee (D4), so without it the fee comes first.
-  const creditLine = cashRaw(data.cash) < feeBufferRaw ? FEE_FIRST : CREDIT_FROM;
 
   return (
     <LeaveForRepay.Provider value={leaveForRepay}>
@@ -206,7 +203,11 @@ export function CreditBuySheet({
             />
           ) : step === "pick" ? (
             <div className="flex flex-col gap-4 pt-1">
-              <CreditHero available={{ usd: reachUsd, line: creditLine }} failed={false} onRetry={cfRead.retry} />
+              <CreditHero
+                available={{ usd: reachUsd, line: creditLine(data.cash) }}
+                failed={false}
+                onRetry={cfRead.retry}
+              />
               <StockLists
                 held={held}
                 others={others}
