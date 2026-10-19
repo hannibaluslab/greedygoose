@@ -164,6 +164,48 @@ function coin(address: `0x${string}`) {
 }
 const coinAmount = (raw: bigint, decimals: number) => formatCoin(Number(raw) / 10 ** decimals);
 
+/** Protect repaid from the cash: how much, the status it brought, and why (Act, or the weekend's pause). */
+function repaidMove(e: Extract<AgentEvent, { kind: "repaid" }>, ctx: MoveContext): AgentMove {
+  return {
+    by: "Protect",
+    line: [`Repaid ${usd(e.amountRaw)} from your cash. `, ...after(e.hfAfter)],
+    details: [
+      {
+        label: "Why",
+        value:
+          e.reason === "weekend"
+            ? ["Prices pause for the weekend. Protect repaid a little in case they reopen lower."]
+            : ["Your credit reached ", ...word(e.hfBefore), "."],
+      },
+      ...owedRow(ctx),
+      { label: "Status", value: [...word(e.hfBefore), " → ", ...word(e.hfAfter)] },
+      // Cash is savings (D15): the repay came from it (plan §6's "From your cash: $X", in the board's 82px label).
+      { label: "My cash", value: [`${usd(e.amountRaw)} used`] },
+      ...usedRow(ctx, "today"),
+    ],
+  };
+}
+
+/** Protect sold backing stock to repay: what and how much, the status it brought, and why. */
+function soldMove(e: Extract<AgentEvent, { kind: "sold" }>, ctx: MoveContext): AgentMove {
+  return {
+    by: "Protect",
+    line: [`Sold ${worth(e.sharesRaw, ctx.pricesRaw)} of ${names(held(e.sharesRaw))} to repay. `, ...after(e.hfAfter)],
+    details: [
+      {
+        label: "Why",
+        value: e.atOnce
+          ? ["Your credit fell deep into ", ...word(e.hfBefore), ", so Protect sold at once."]
+          : ["Your credit was still in ", ...word(e.hfBefore), " after the heads-up."],
+      },
+      ...owedRow(ctx),
+      { label: "Status", value: [...word(e.hfBefore), " → ", ...word(e.hfAfter)] },
+      { label: "My cash", value: cashAfterTrade(ctx) },
+      ...usedRow(ctx, "today"),
+    ],
+  };
+}
+
 /**
  * The Agents board's words for one executor event at `time` (seconds). Plain words and dollars, no health factor
  * (D17's words too); null for what isn't a move from the user's side: a run deferred to the next block, Save's and
@@ -193,44 +235,9 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
         details: [{ label: "Why", value: ["Money that arrives in your account earns with the rest of your cash."] }],
       };
     case "repaid":
-      return {
-        by: "Protect",
-        line: [`Repaid ${usd(e.amountRaw)} from your cash. `, ...after(e.hfAfter)],
-        details: [
-          {
-            label: "Why",
-            value:
-              e.reason === "weekend"
-                ? ["Prices pause for the weekend. Protect repaid a little in case they reopen lower."]
-                : ["Your credit reached ", ...word(e.hfBefore), "."],
-          },
-          ...owedRow(ctx),
-          { label: "Status", value: [...word(e.hfBefore), " → ", ...word(e.hfAfter)] },
-          // Cash is savings (D15): the repay came from it (plan §6's "From your cash: $X", in the board's 82px label).
-          { label: "My cash", value: [`${usd(e.amountRaw)} used`] },
-          ...usedRow(ctx, "today"),
-        ],
-      };
+      return repaidMove(e, ctx);
     case "sold":
-      return {
-        by: "Protect",
-        line: [
-          `Sold ${worth(e.sharesRaw, ctx.pricesRaw)} of ${names(held(e.sharesRaw))} to repay. `,
-          ...after(e.hfAfter),
-        ],
-        details: [
-          {
-            label: "Why",
-            value: e.atOnce
-              ? ["Your credit fell deep into ", ...word(e.hfBefore), ", so Protect sold at once."]
-              : ["Your credit was still in ", ...word(e.hfBefore), " after the heads-up."],
-          },
-          ...owedRow(ctx),
-          { label: "Status", value: [...word(e.hfBefore), " → ", ...word(e.hfAfter)] },
-          { label: "My cash", value: cashAfterTrade(ctx) },
-          ...usedRow(ctx, "today"),
-        ],
-      };
+      return soldMove(e, ctx);
     case "heads-up":
       return {
         by: "Protect",
