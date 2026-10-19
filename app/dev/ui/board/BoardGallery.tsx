@@ -5,10 +5,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { numberToHex, type Address } from "viem";
 import { AddByNameSheet, type NameLookup } from "@/components/gg/leaderboard/AddByNameSheet";
-import { BoardView, PickBar, type BoardState } from "@/components/gg/leaderboard/BoardView";
+import { BoardView, PickBar } from "@/components/gg/leaderboard/BoardView";
 import { PersonSheet } from "@/components/gg/leaderboard/PersonSheet";
 import { rankRows, returnSinceJoining } from "@/lib/board/score";
-import type { BoardFilter, BoardPerson, OffBoard } from "@/lib/board/view";
+import type { BoardFilter, BoardPerson, BoardState, OffBoard } from "@/lib/board/view";
 
 /*
  * Dev only: the Leaderboard tab in each state it can be in, from fixtures run through the app's own score and ranking

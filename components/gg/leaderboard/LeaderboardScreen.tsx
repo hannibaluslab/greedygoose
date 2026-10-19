@@ -6,7 +6,7 @@ import { isAddressEqual, type Address } from "viem";
 import { useAccount } from "wagmi";
 import { toast } from "sonner";
 import { AddByNameSheet, type NameLookup } from "./AddByNameSheet";
-import { BoardView, PickBar, type BoardState } from "./BoardView";
+import { BoardView, PickBar } from "./BoardView";
 import { PersonSheet } from "./PersonSheet";
 import { useBoard } from "@/hooks/useBoard";
 import { useContactsTx, useFollowing, useNames } from "@/hooks/useContacts";
@@ -14,7 +14,16 @@ import type { ContactsChange } from "@/lib/tx/plans";
 import { TAP_AGAIN } from "@/hooks/useTx";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { GOOSE_BOARD } from "@/lib/board/config";
-import { BOARD_PAGE, type BoardFilter, type BoardPerson, type OffBoard } from "@/lib/board/view";
+import {
+  BOARD_PAGE,
+  boardChanges,
+  boardPeople,
+  boardState,
+  sheetPersonOf,
+  type BoardFilter,
+  type BoardPerson,
+  type OffBoard,
+} from "@/lib/board/view";
 import { addressOfName } from "@/lib/jaw/name";
 
 const lower = (a: string) => a.toLowerCase();
@@ -61,53 +70,43 @@ export function LeaderboardScreen({ address }: { address: Address }) {
   const nameOf = (a: string) => names.get(lower(a)) ?? null;
 
   const note = fee.state === "unsupported" && !preview ? FEE_BLOCKED : null;
-  const people: BoardPerson[] = rows.map((r) => ({
-    account: r.account,
-    name: nameOf(r.account),
-    pct: r.pct,
-    rank: r.rank,
-    you: isAddressEqual(r.account, address),
-    contact: contactSet.has(lower(r.account)),
-  }));
-  const offBoard: OffBoard[] = contacts
-    .filter((c) => !memberSet.has(lower(c)))
-    .map((c) => ({ account: c, name: nameOf(c) }));
-
-  const state: BoardState = !GOOSE_BOARD
-    ? { kind: "soon" }
-    : (board.isPending && !board.data) || (filter === "contacts" && following.isPending)
-      ? { kind: "loading" }
-      : !board.data
-        ? { kind: "error", what: "board" }
-        : filter === "contacts" && !following.data
-          ? { kind: "error", what: "contacts" }
-          : { kind: "ready", people, offBoard };
-
-  const sheetPerson = person
-    ? (people.find((p) => isAddressEqual(p.account, person)) ??
-      (contactSet.has(lower(person))
-        ? { account: person, name: nameOf(person), contact: true as const, you: false as const }
-        : null))
-    : null;
+  const { people, offBoard } = boardPeople({ rows, contacts, address, nameOf });
+  const state = boardState({
+    open: !!GOOSE_BOARD,
+    filter,
+    board: { pending: board.isPending, read: !!board.data },
+    contacts: { pending: following.isPending, read: !!following.data },
+    people,
+    offBoard,
+  });
+  const sheetPerson = sheetPersonOf(person, people, (a) => contactSet.has(lower(a)), nameOf);
 
   // The change each place would sign now. The one in front (a person's sheet, then the name sheet, then the bar) is
   // prepared while the screen is idle, so its tap opens JAW's sheet at once.
-  const personChange: ContactsChange | null =
-    personShown && sheetPerson && !sheetPerson.you
-      ? { verb: sheetPerson.contact ? "remove" : "add", user: address, targets: [sheetPerson.account] }
-      : null;
-  const found = lookup.kind === "found" ? lookup : null;
-  const nameChange: ContactsChange | null =
-    byName && found && !found.you && !found.contact ? { verb: "add", user: address, targets: [found.account] } : null;
-  const pickChange: ContactsChange | null =
-    picking && picked.size > 0 ? { verb: "add", user: address, targets: [...picked] as Address[] } : null;
+  const { personChange, nameChange, pickChange } = boardChanges({
+    user: address,
+    person: sheetPerson,
+    personShown,
+    found: lookup.kind === "found" ? lookup : null,
+    byName,
+    picking,
+    picked,
+  });
   const front = note ? null : (personChange ?? nameChange ?? pickChange);
   const tx = useContactsTx(front);
   const checkingFor = (c: ContactsChange | null) => tx.checking && !!c && c === front;
+  /** A sheet's own share of the one write: its phase and error once it signed, or while its change is in front. */
+  const placeOf = (where: "person" | "name", c: ContactsChange | null) => ({
+    phase: from === where ? tx.phase : ("idle" as const),
+    checking: checkingFor(c),
+    blocked: c !== null && c === front && tx.blocked,
+    error: from === where || (c !== null && c === front) ? tx.error : null,
+  });
 
   // A change that landed closes what asked for it, the sheet or the bar. Derived from the phase rather than set from
   // an effect; `settle` puts it away for good before anything new starts.
   const landed = tx.phase === "done" ? from : null;
+  const pickOpen = picking && landed !== "pick";
   useEffect(() => {
     if (tx.phase === "done") toast.success(verb === "add" ? "Added to your contacts" : "Removed from your contacts");
   }, [tx.phase, verb]);
@@ -177,7 +176,7 @@ export function LeaderboardScreen({ address }: { address: Address }) {
           void board.refetch();
           void following.refetch();
         }}
-        picking={picking && landed !== "pick"}
+        picking={pickOpen}
         picked={picked}
         onPickToggle={(a) =>
           setPicked((prev) => {
@@ -203,7 +202,7 @@ export function LeaderboardScreen({ address }: { address: Address }) {
           setByName(true);
         }}
         pickBar={
-          picking && landed !== "pick" ? (
+          pickOpen ? (
             <PickBar
               count={picked.size}
               phase={from === "pick" ? tx.phase : "idle"}
@@ -226,10 +225,7 @@ export function LeaderboardScreen({ address }: { address: Address }) {
         open={personShown && landed !== "person"}
         onClose={() => setPersonShown(false)}
         person={sheetPerson}
-        phase={from === "person" ? tx.phase : "idle"}
-        checking={checkingFor(personChange)}
-        blocked={personChange !== null && personChange === front && tx.blocked}
-        error={from === "person" || (personChange !== null && personChange === front) ? tx.error : null}
+        {...placeOf("person", personChange)}
         note={note}
         preview={preview}
         onAdd={() => {
@@ -248,10 +244,7 @@ export function LeaderboardScreen({ address }: { address: Address }) {
         onClose={() => setByName(false)}
         lookup={lookup}
         onLookup={(t) => void onLookup(t)}
-        phase={from === "name" ? tx.phase : "idle"}
-        checking={checkingFor(nameChange)}
-        blocked={nameChange !== null && nameChange === front && tx.blocked}
-        error={from === "name" || (nameChange !== null && nameChange === front) ? tx.error : null}
+        {...placeOf("name", nameChange)}
         note={note}
         preview={preview}
         onAdd={() => {

@@ -1,5 +1,6 @@
-import type { Address } from "viem";
+import { isAddressEqual, type Address } from "viem";
 import { shortAddress } from "@/lib/formatting";
+import type { ContactsChange } from "@/lib/tx/plans";
 
 /** Ranked rows shown on All before the list stops; your own row is pinned under them when it is further down. */
 export const BOARD_PAGE = 50;
@@ -83,4 +84,95 @@ export function boardPct(pct: number): string {
   if (Number(shown) === 0) return "0.0%";
   // "−" (U+2212), as formatSignedPct and the boards write it.
   return `${pct < 0 ? "−" : "+"}${shown}%`;
+}
+
+/** What the tab shows: opening soon, loading, couldn't read (the board, or on Contacts the contacts), or the board. */
+export type BoardState =
+  | { kind: "soon" }
+  | { kind: "loading" }
+  /** The board couldn't be read, or (on Contacts) the contacts list couldn't. */
+  | { kind: "error"; what?: "board" | "contacts" }
+  | { kind: "ready"; people: BoardPerson[]; offBoard: OffBoard[] };
+
+const lower = (a: string) => a.toLowerCase();
+
+/** The board's members as the screen draws them (named, you and your contacts marked), and the contacts not on it. */
+export function boardPeople(p: {
+  rows: readonly { account: Address; pct: number | null; rank: number | null }[];
+  contacts: readonly Address[];
+  address: Address;
+  nameOf: (a: string) => string | null;
+}): { people: BoardPerson[]; offBoard: OffBoard[] } {
+  const contactSet = new Set(p.contacts.map(lower));
+  const memberSet = new Set(p.rows.map((r) => lower(r.account)));
+  const people = p.rows.map((r) => ({
+    account: r.account,
+    name: p.nameOf(r.account),
+    pct: r.pct,
+    rank: r.rank,
+    you: isAddressEqual(r.account, p.address),
+    contact: contactSet.has(lower(r.account)),
+  }));
+  const offBoard = p.contacts.filter((c) => !memberSet.has(lower(c))).map((c) => ({ account: c, name: p.nameOf(c) }));
+  return { people, offBoard };
+}
+
+/**
+ * The tab's state, first match: the board not open yet, loading (the board, or on Contacts the contacts), the board
+ * unread, the contacts unread on Contacts, then the board.
+ */
+export function boardState(p: {
+  open: boolean;
+  filter: BoardFilter;
+  board: { pending: boolean; read: boolean };
+  contacts: { pending: boolean; read: boolean };
+  people: BoardPerson[];
+  offBoard: OffBoard[];
+}): BoardState {
+  const onContacts = p.filter === "contacts";
+  if (!p.open) return { kind: "soon" };
+  if ((p.board.pending && !p.board.read) || (onContacts && p.contacts.pending)) return { kind: "loading" };
+  if (!p.board.read) return { kind: "error", what: "board" };
+  if (onContacts && !p.contacts.read) return { kind: "error", what: "contacts" };
+  return { kind: "ready", people: p.people, offBoard: p.offBoard };
+}
+
+/** The person in the open sheet: on the board, or a contact not on it; nobody else. */
+export function sheetPersonOf(
+  person: Address | null,
+  people: BoardPerson[],
+  isContact: (a: string) => boolean,
+  nameOf: (a: string) => string | null,
+) {
+  if (!person) return null;
+  const onBoard = people.find((p) => isAddressEqual(p.account, person));
+  if (onBoard) return onBoard;
+  return isContact(person)
+    ? { account: person, name: nameOf(person), contact: true as const, you: false as const }
+    : null;
+}
+
+/**
+ * The change each place would sign now: the person's sheet (add or remove them), the name sheet (add who was found),
+ * and the Add several bar (add everyone ticked).
+ */
+export function boardChanges(p: {
+  user: Address;
+  person: { account: Address; you: boolean; contact: boolean } | null;
+  personShown: boolean;
+  found: { account: Address; you: boolean; contact: boolean } | null;
+  byName: boolean;
+  picking: boolean;
+  picked: ReadonlySet<string>;
+}): { personChange: ContactsChange | null; nameChange: ContactsChange | null; pickChange: ContactsChange | null } {
+  const { user, person, found } = p;
+  return {
+    personChange:
+      p.personShown && person && !person.you
+        ? { verb: person.contact ? "remove" : "add", user, targets: [person.account] }
+        : null,
+    nameChange:
+      p.byName && found && !found.you && !found.contact ? { verb: "add", user, targets: [found.account] } : null,
+    pickChange: p.picking && p.picked.size > 0 ? { verb: "add", user, targets: [...p.picked] as Address[] } : null,
+  };
 }

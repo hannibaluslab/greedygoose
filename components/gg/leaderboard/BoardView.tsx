@@ -14,6 +14,7 @@ import {
   personLabel,
   type BoardFilter,
   type BoardPerson,
+  type BoardState,
   type OffBoard,
 } from "@/lib/board/view";
 import { RetryButton } from "../RetryButton";
@@ -26,13 +27,6 @@ import { BoardRowItem, Gap, List, Note, Section, Skeleton } from "./BoardRow";
  * credit with. Contacts are the user's own list on Base; adding and removing open JAW's own sheet straight away. Plain
  * values in, so the dev gallery (/dev/ui/board) draws every state.
  */
-
-export type BoardState =
-  | { kind: "soon" }
-  | { kind: "loading" }
-  /** The board couldn't be read, or (on Contacts) the contacts list couldn't. */
-  | { kind: "error"; what?: "board" | "contacts" }
-  | { kind: "ready"; people: BoardPerson[]; offBoard: OffBoard[] };
 
 const FILTERS: { value: BoardFilter; label: string }[] = [
   { value: "all", label: "All" },
