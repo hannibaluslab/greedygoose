@@ -137,30 +137,23 @@ export function repaySaleMaxRaw(
 }
 
 /** Why a sale can't go ahead, first match, in this order (planSell). */
-function sellBlock(p: {
-  from: SellFrom;
-  h: SellHolding;
-  pos: SellPosition;
-  sharesRaw: bigint;
-  takeOutRaw: bigint;
-  maxRaw: bigint;
-  repayRaw: bigint;
-  hfAfter: number | null;
-  usd: number;
-  quote: SellQuote;
-  stock: ReserveAsset;
-}): SellBlock | undefined {
-  const { from, h, pos, sharesRaw, maxRaw, repayRaw, hfAfter } = p;
-  if (from !== "free" && p.takeOutRaw > 0n && h.paused) return "paused";
+function sellBlock(
+  p: Parameters<typeof planSell>[0],
+  s: { takeOutRaw: bigint; maxRaw: bigint; repayRaw: bigint; hfAfter: number | null; usd: number },
+): SellBlock | undefined {
+  const { from, holding: h, position: pos, quote, stock } = p;
+  const { maxRaw, repayRaw, hfAfter } = s;
+  const sharesRaw = quote.amountIn;
+  if (from !== "free" && s.takeOutRaw > 0n && h.paused) return "paused";
   if (from === "free" && sharesRaw > h.freeRaw) return "not-free";
   if (from !== "free" && sharesRaw > h.backingRaw) return "not-backing";
   if (from === "repay" && pos.debtRaw === 0n) return "nothing-owed";
   if (from === "backing" && sharesRaw > maxRaw) return "past-line";
   if (from === "repay" && sharesRaw > maxRaw) return "near-limit";
-  if (p.usd < SELL_LIMITS.minUsd || (from === "repay" && repayRaw === 0n)) return "too-small";
+  if (s.usd < SELL_LIMITS.minUsd || (from === "repay" && repayRaw === 0n)) return "too-small";
   if (from === "repay" && hfAfter !== null && endsInAct(statusFor(hfAfter)) && hfAfter < (pos.healthFactor ?? Infinity))
     return "act";
-  if (p.quote.amountOut < aaveFloorRaw(sharesRaw, p.stock, h.priceUsd)) return "price";
+  if (quote.amountOut < aaveFloorRaw(sharesRaw, stock, h.priceUsd)) return "price";
   return undefined;
 }
 
@@ -210,19 +203,7 @@ export function planSell(p: {
     hfAfter = debtAfter > 0 ? (pos.totalBackingUsd * pos.avgCf - valueUsd * p.cf) / debtAfter : null;
   }
 
-  const block = sellBlock({
-    from,
-    h,
-    pos,
-    sharesRaw,
-    takeOutRaw,
-    maxRaw,
-    repayRaw,
-    hfAfter,
-    usd: econ.usd,
-    quote,
-    stock,
-  });
+  const block = sellBlock(p, { takeOutRaw, maxRaw, repayRaw, hfAfter, usd: econ.usd });
 
   return {
     from,
