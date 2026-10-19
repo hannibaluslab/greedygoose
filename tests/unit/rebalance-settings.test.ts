@@ -94,33 +94,33 @@ describe("rebalanceSave", () => {
     });
   });
 
-  it("takes a new grant for a new weekly limit", () => {
+  it("takes a new grant for a new weekly limit: two JAW sheets, the grant and its registration", () => {
     expect(rebalanceSave({ ...base, capRaw: usdc(1_000) })).toMatchObject({
       mixChanged: false,
       needsGrant: true,
-      steps: 1,
+      steps: 2,
       note: null,
     });
   });
 
-  it("takes two steps for a stock the grant can't sell yet", () => {
+  it("takes three steps for a stock the grant can't sell yet: the mix, the grant and its registration", () => {
     const weights = [2_500, 2_500, 0, 0, 0, 2_500, 2_500];
     expect(rebalanceSave({ ...base, weights })).toMatchObject({
       mixChanged: true,
       needsGrant: true,
-      steps: 2,
+      steps: 3,
       note: null,
     });
   });
 
   it("switches it on with the first mix", () => {
     expect(rebalanceSave({ ...base, saved: [0, 0, 0, 0, 0, 0, 0], terms: null, running: false })).toMatchObject({
-      steps: 2,
+      steps: 3,
       canSave: true,
       note: null,
     });
     expect(rebalanceSave({ ...base, terms: null, running: false })).toMatchObject({
-      steps: 1,
+      steps: 2,
       canSave: true,
       note: null,
     });

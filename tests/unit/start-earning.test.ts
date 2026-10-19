@@ -199,9 +199,9 @@ describe("Start earning on Home: when the card shows, what it says, how many JAW
     expect(startedEarningText("3.9%")).toBe("Your cash is earning 3.9%");
   });
 
-  it("is one JAW sheet without an executor, two with one and no Save grant yet, once agents are live", () => {
+  it("is one JAW sheet without an executor, three with one and no Save grant yet (its grant and registration)", () => {
     expect(startEarningSteps("unconfigured", true)).toBe(1);
-    expect(startEarningSteps("off", true)).toBe(2);
+    expect(startEarningSteps("off", true)).toBe(3);
     expect(saveGrantFollows("off", true)).toBe(true);
     expect(saveGrantFollows("on", true)).toBe(false);
   });

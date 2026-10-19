@@ -158,10 +158,14 @@ const EXPIRING_SEC = 7 * 86_400;
 const FAILS_CARD = 3;
 const MAX_FAILS = 8;
 
-/** A card's button: the Top up or Repay sheet over the tab, or Renew (JAW's own sheet). */
+/**
+ * A card's button: the Top up or Repay sheet over the tab, Renew (JAW's own sheet), or Finish (the registrations of
+ * grants JAW made that the executor doesn't run yet, in one JAW sheet).
+ */
 export type CardAction =
   | { kind: "sheet"; label: string; sheet: "top-up" | "repay" }
-  | { kind: "renew"; agent: Agent; jobs: AgentJob[] };
+  | { kind: "renew"; agent: Agent; jobs: AgentJob[] }
+  | { kind: "finish" };
 
 export type AgentCard = {
   key: string;
@@ -202,9 +206,39 @@ export type CardsInput = {
   /** Failed runs in a row, and when the executor tries again. */
   fails: number;
   cooldownUntil: number;
+  /** Jobs JAW granted that the executor doesn't run yet: their registration didn't go through (useAgents `toFinish`). */
+  finish: readonly AgentJob[];
 };
 
-/** The cards, most urgent first: the warnings, failed runs, stopped agents, agents about to stop. */
+/** What the Finish card calls each job: its agent, or what it does for the two that run under the hood (D20). */
+const FINISH_NAME: Record<AgentJob, string> = {
+  protect: "Protect",
+  sell: "Protect",
+  rebalance: "Rebalance",
+  save: "Earning",
+  entry: "Turning other dollars into cash",
+};
+
+/**
+ * The Finish card: grants JAW made that the executor doesn't run yet (a registration sheet that didn't open, or was
+ * cancelled, or the app was closed before it), each named once, and the one tap that registers them all.
+ */
+function finishCard(jobs: readonly AgentJob[]): AgentCard | null {
+  if (jobs.length === 0) return null;
+  const names = [...new Set(jobs.map((j) => FINISH_NAME[j]))];
+  const agents = [...new Set(jobs.map(agentOf))];
+  const one = names.length === 1;
+  return {
+    key: "finish",
+    tone: "plain",
+    agent: agents.length === 1 && agents[0] ? AGENT_NAME[agents[0]] : "Agents",
+    text: `${one ? names[0] : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`} ${one ? "isn’t" : "aren’t"} running yet.`,
+    sub: `One more Face ID finishes turning ${one ? "it" : "them"} on.`,
+    actions: [{ kind: "finish" }],
+  };
+}
+
+/** The cards, most urgent first: the warnings, agents still to finish, failed runs, stopped agents, agents about to stop. */
 export function agentCards(i: CardsInput): AgentCard[] {
   const cards: AgentCard[] = [];
   if (i.act) {
@@ -236,6 +270,8 @@ export function agentCards(i: CardsInput): AgentCard[] {
       ],
     });
   }
+  const finish = finishCard(i.finish);
+  if (finish) cards.push(finish);
   // Runs fail for the whole account; with neither agent running, they were earning's or converting's (D20): no card.
   const running = AGENTS.some((a) => ["on", "starting"].includes(agentStatus(a, i.status)));
   if (i.fails >= FAILS_CARD && running) {

@@ -1,5 +1,6 @@
 import { MIX_WHOLE, type MixHolding } from "@/lib/agents/mix";
 import type { StockLimits } from "@/lib/agents/permissions";
+import { GRANT_SHEETS } from "@/lib/agents/status";
 import type { RebalanceTrade } from "@/lib/agents/rules/rebalance";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
@@ -61,7 +62,7 @@ export function rebalanceSave(p: {
     (!p.terms ||
       p.terms.capRaw !== p.capRaw ||
       p.weights.some((w, r) => w > 0 && !((p.terms!.limitsRaw?.[r] ?? 0n) > 0n)));
-  const steps = Number(mixChanged) + Number(needsGrant);
+  const steps = Number(mixChanged) + (needsGrant ? GRANT_SHEETS : 0);
   const canSave =
     p.configured &&
     p.connected &&

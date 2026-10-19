@@ -548,3 +548,15 @@ Adrian approved Protect's new rules and ten copy decisions on 2026-10-19, with t
 - **Under 1.03 with Protect off there is no card:** the warning shows from 1.1 down to 1.03 as decided, Protect on or off; below 1.03 with Protect off nothing on the Agents tab says so (Home's status still reads Act).
 - **"Watch: Nothing is sold."** on the status sheet: a rescue that started under 1.03 can sell between 1.10 and 1.12, in Watch, on its way back to 1.12.
 - **The weekend card shows only while Protect runs,** as Weekend Shield did; with Protect off, nobody acts, yet no card.
+
+## 2026-10-20 · The app registers each grant (runner switch, option 1)
+
+Adrian (2026-10-20, "ok tell him go"): KeeperHub's free tier can't watch the manager's `PermissionApproved` events, so no runner registers a grant. The app does it, from the user's own account, right after each JAW grant: one more Face ID when an agent is switched on.
+
+- **Right after the grant:** `useAgents.turnOn` reads JAW's grant response (`listedFromGrant` → `readAgentGrant`), rebuilds the exact on-chain permission with the job's own builder (`grantPermission`) and sends `registerApproved(abi.encode(permission))` on JAW's sheet (`lib/agents/register.ts`), checked and simulated first like every write (the allowlist's `registersOwnGrant`: the permission's account is the user and its spender the executor). It waits for Base and reads the registry again.
+- **Trying again never grants twice:** a job granted on the same terms and only waiting for its registration (a sheet JAW couldn't open on Safari, one cancelled) is registered alone; a sheet JAW couldn't open keeps its checked batch for 30 s, and the next tap sends it before anything is awaited.
+- **Every count says it:** a grant is two JAW sheets (`GRANT_SHEETS`): Start earning's "3 steps", Protect's and Rebalance's step notes, and "1 of 3 went through" after a stop (`RegisterStopped` counts a grant that landed when only its registration didn't).
+- **The Finish card** (Agents tab, after the warnings): any job JAW granted that the executor doesn't run yet (status "starting"), with one Finish button that registers them all in one sheet, prepared in the background (useTx with `useAgents.finishPlan`). "Protect isn’t running yet." / "One more Face ID finishes turning it on." Earning and Turning other dollars into cash are named there too: a grant of theirs left unregistered has nowhere else to finish.
+- **Proof:** `test_templates_hash_like_the_apps_builder` (fork) checks the app's registration bytes for each kind equal abi.encode of the executor's own template (`permissions.json` `registrations`); `tests/unit/register.test.ts` covers the bytes, the allowlist, the plan's key and the counts.
+
+**Open for Adrian.** Home's "Ready to spend. It starts earning in a moment." still shows for a Save grant waiting on its registration; the Finish card is on the Agents tab only.

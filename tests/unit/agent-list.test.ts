@@ -116,6 +116,7 @@ describe("agentCards: only when something needs the user", () => {
     stopped: none,
     fails: 0,
     cooldownUntil: 0,
+    finish: [],
   };
 
   it("shows nothing when all is fine", () => {
@@ -153,6 +154,33 @@ describe("agentCards: only when something needs the user", () => {
       { kind: "sheet", label: "Top up", sheet: "top-up" },
       { kind: "sheet", label: "Repay", sheet: "repay" },
     ]);
+  });
+
+  it("offers Finish for grants the executor doesn't run yet, each named once, right after the warnings", () => {
+    const [act, c] = agentCards({
+      ...calm,
+      act: { addUsd: 5, protectOn: true },
+      fails: 3,
+      finish: ["protect", "sell"],
+    });
+    expect(act.key).toBe("act");
+    expect(c).toEqual({
+      key: "finish",
+      tone: "plain",
+      agent: "Protect",
+      text: "Protect isn’t running yet.",
+      sub: "One more Face ID finishes turning it on.",
+      actions: [{ kind: "finish" }],
+    });
+    // Earning runs under the hood (D20), but a grant of it left unregistered has nowhere else to finish.
+    expect(agentCards({ ...calm, finish: ["save", "rebalance"] })[0]).toMatchObject({
+      agent: "Agents",
+      text: "Earning and Rebalance aren’t running yet.",
+      sub: "One more Face ID finishes turning them on.",
+    });
+    expect(agentCards({ ...calm, finish: ["save", "protect", "entry"] })[0].text).toBe(
+      "Earning, Protect and Turning other dollars into cash aren’t running yet.",
+    );
   });
 
   it("offers Renew for an agent that stopped on its own, and not once it's back on", () => {

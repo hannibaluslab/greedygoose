@@ -5,11 +5,15 @@ import { TAP_AGAIN, txKey, useTx, type TxPhase, type TxPlan } from "@/hooks/useT
 import { runError } from "@/hooks/useAgentRun";
 import type { useAgents } from "@/hooks/useAgents";
 import type { ProtectStep } from "@/lib/agents/protect";
-import { OFF_UNREADABLE } from "@/lib/agents/status";
+import { GRANT_SHEETS, OFF_UNREADABLE, grantLanded } from "@/lib/agents/status";
 import { isPopupBlocked } from "@/lib/tx/prepared";
 import { keepMixPlan } from "@/lib/tx/plans";
 
 const CANCELLED = /reject|denied|cancel/i;
+
+/** JAW sheets the steps open: a grant two (its registration follows it), the rest one. */
+const sheets = (steps: readonly ProtectStep[]) =>
+  steps.reduce((n, s) => n + (s.kind === "grant" ? GRANT_SHEETS : 1), 0);
 
 /** A stop useAgents doesn't keep as its own error (no JAW sheet opened): turning selling off with the list unreadable. */
 const stopOf = (error: unknown) => (error instanceof Error && error.message === OFF_UNREADABLE ? OFF_UNREADABLE : null);
@@ -67,14 +71,14 @@ export function useProtectSave(account: `0x${string}`, agents: ReturnType<typeof
     const ask = asked.current;
     const steps = rest.current;
     // "Sells first" was the first of this Save's JAW sheets.
-    const of = 1 + steps.length;
+    const of = 1 + sheets(steps);
     runGrants(live.current.agents, steps)
       .then((r) => {
         if (r.rest.length === 0) {
           setPending(null);
           live.current.onSaved();
         } else if (isPopupBlocked(r.error)) {
-          setPending({ asked: ask, rest: r.rest, done: of - r.rest.length, of });
+          setPending({ asked: ask, rest: r.rest, done: of - sheets(r.rest) + grantLanded(r.error), of });
         } else setStopped(stopOf(r.error)); // otherwise useAgents keeps the error for the screen
       })
       .finally(() => {
@@ -85,7 +89,7 @@ export function useProtectSave(account: `0x${string}`, agents: ReturnType<typeof
   }, [step, tx.phase]);
 
   /** Grants and revokes from this tap (`count`: the JAW sheets of this Save so far, when it goes on from one that didn't open). */
-  const grantNow = (steps: readonly ProtectStep[], ask: string, count = { done: 0, of: steps.length }) => {
+  const grantNow = (steps: readonly ProtectStep[], ask: string, count = { done: 0, of: sheets(steps) }) => {
     setStep("granting");
     runGrants(agents, steps)
       .then((r) => {
@@ -96,7 +100,12 @@ export function useProtectSave(account: `0x${string}`, agents: ReturnType<typeof
           setStopped(stopOf(r.error));
           setPending(
             isPopupBlocked(r.error)
-              ? { asked: ask, rest: r.rest, done: count.done + steps.length - r.rest.length, of: count.of }
+              ? {
+                  asked: ask,
+                  rest: r.rest,
+                  done: count.done + sheets(steps) - sheets(r.rest) + grantLanded(r.error),
+                  of: count.of,
+                }
               : null,
           );
         }

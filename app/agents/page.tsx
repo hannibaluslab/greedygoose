@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { isAddressEqual, maxUint160 } from "viem";
 import { useAccount } from "wagmi";
@@ -14,7 +14,7 @@ import { AgentRow, AgentsFeed, AgentsView, AttentionCard, MixBar, TurnOffAll } f
 import { useAgentFeed } from "@/hooks/useAgentFeed";
 import { useActWarning } from "@/hooks/useActWarning";
 import { useAgentRun, type AgentStep } from "@/hooks/useAgentRun";
-import { TAP_AGAIN } from "@/hooks/useTx";
+import { TAP_AGAIN, useTx } from "@/hooks/useTx";
 import { GRANT_SECONDS, useAgents } from "@/hooks/useAgents";
 import { useAgentSettings } from "@/hooks/useAgentSettings";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
@@ -85,6 +85,14 @@ function Agents({ address }: { address: `0x${string}` }) {
   const nowSec = useNowSec();
   const freezeAt = useNextFreeze(nowSec);
   const runner = useAgentRun(agents);
+  // The Finish card's write: the registrations of grants the executor doesn't run yet, prepared while the card shows.
+  const finish = useTx("This didn’t go through on Base. Try again to finish turning it on.", agents.finishPlan);
+  const resetFinish = finish.reset;
+  const finished = finish.phase === "done" && !agents.finishPlan;
+  // Registered: the write goes back to idle, so a later Finish card prepares its own batch.
+  useEffect(() => {
+    if (finished) resetFinish();
+  }, [finished, resetFinish]);
   const live = AGENTS_LIVE;
 
   // The sheet keeps its last agent while it slides away. A link can name one (`/agents?agent=protect`): its sheet
@@ -153,6 +161,7 @@ function Agents({ address }: { address: `0x${string}` }) {
     }),
     fails: agents.fails,
     cooldownUntil: agents.cooldownUntil,
+    finish: live ? agents.toFinish : [],
   });
 
   /** The cap an agent's switch grants: the Rebalancer's limit on its row; Protect's CAP_MAX (no amount limit). */
@@ -301,6 +310,12 @@ function Agents({ address }: { address: `0x${string}` }) {
             card={c}
             disabled={runner.running}
             onRenew={(agent, jobs) => act(agent, "renew", jobs)}
+            finish={{
+              onFinish: () => void finish.sign(),
+              busy: finish.busy,
+              waiting: finish.checking || finish.blocked,
+              error: finish.error,
+            }}
           />
         ))}
         rows={items.map((item: AgentItem) => (

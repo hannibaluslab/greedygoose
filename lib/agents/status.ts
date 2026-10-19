@@ -2,10 +2,31 @@ import { JOBS, type AgentGrant, type AgentJob } from "@/lib/agents/permissions";
 
 /**
  * - "unconfigured": no executor is set (NEXT_PUBLIC_GOOSE_EXECUTOR), so no agent can be switched on yet.
- * - "starting": JAW granted it and the executor hasn't registered it yet (its log-trigger upkeep does that).
+ * - "starting": JAW granted it and the executor hasn't registered it yet: the app does, right after the grant
+ *   (useAgents `register`), or the Agents tab's Finish card when that didn't go through.
  * - "on": the executor runs it with a grant JAW still lists.
  */
 export type AgentStatus = "unconfigured" | "loading" | "off" | "starting" | "on";
+
+/**
+ * JAW sheets a job's switch-on takes: its grant, then its registration with the executor (runner switch plan, option 1:
+ * no runner watches the manager, so the app registers each grant itself).
+ */
+export const GRANT_SHEETS = 2;
+
+/**
+ * A switch-on whose grant went through and whose registration didn't (`cause` says why: a sheet JAW couldn't open, one
+ * cancelled, a check or a landing that failed). The job shows "starting", and trying again registers it alone.
+ */
+export class RegisterStopped extends Error {
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause), { cause });
+    this.name = "RegisterStopped";
+  }
+}
+
+/** JAW sheets that went through in a step that stopped: its grant, when only its registration didn't. */
+export const grantLanded = (error: unknown) => (error instanceof RegisterStopped ? 1 : 0);
 
 /** A job's grant as the executor stores it: what the user signed that its template doesn't fix. */
 export type Stored = { start: number; end: number; cap: bigint };

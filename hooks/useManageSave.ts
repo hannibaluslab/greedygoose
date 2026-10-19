@@ -5,6 +5,7 @@ import { TAP_AGAIN, txKey, useTx, type TxPhase, type TxPlan } from "@/hooks/useT
 import { runError } from "@/hooks/useAgentRun";
 import type { useAgents } from "@/hooks/useAgents";
 import type { AgentJob, StockLimits } from "@/lib/agents/permissions";
+import { GRANT_SHEETS, grantLanded } from "@/lib/agents/status";
 import { isPopupBlocked } from "@/lib/tx/prepared";
 import { setMixPlan } from "@/lib/tx/plans";
 
@@ -20,9 +21,10 @@ const CANCELLED = /reject|denied|cancel/i;
 const openGrant = (agents: ReturnType<typeof useAgents>, g: GrantStep) => agents.turnOn(g.job, g.capRaw, g.limitsRaw);
 
 /**
- * Saves Rebalance's settings (its agent sheet) in at most two JAW sheets, each only when it's needed: first the mix
+ * Saves Rebalance's settings (its agent sheet) in at most three JAW sheets, each only when it's needed: first the mix
  * (`setMix`) through the one write path (useTx), then the job's new grant on JAW's own screen (D14: a grant is its own
- * user operation and can't ride in a batch). `onSaved` runs once both have landed. Protect's has its own steps
+ * user operation and can't ride in a batch) and its registration (useAgents `turnOn`). `onSaved` runs once all have
+ * landed. Protect's has its own steps
  * (useProtectSave).
  *
  * Each JAW sheet opens from a tap with nothing awaited before it: the settings body prepares the `setMix` batch
@@ -58,7 +60,8 @@ export function useManageSave(account: `0x${string}`, agents: ReturnType<typeof 
         },
         (e: unknown) => {
           // useAgents keeps the error for the screen; a grant JAW couldn't open waits for the next tap.
-          if (grant && isPopupBlocked(e)) setPending({ asked: ask, grant, done: 1, of: 2 });
+          if (grant && isPopupBlocked(e))
+            setPending({ asked: ask, grant, done: 1 + grantLanded(e), of: 1 + GRANT_SHEETS });
         },
       )
       .finally(() => {
@@ -69,7 +72,7 @@ export function useManageSave(account: `0x${string}`, agents: ReturnType<typeof 
   }, [step, tx.phase, grant]);
 
   /** A grant from this tap (`count`: the JAW sheets of this Save so far, when it goes on from one that didn't open). */
-  const grantNow = (g: GrantStep, ask: string, count = { done: 0, of: 1 }) => {
+  const grantNow = (g: GrantStep, ask: string, count = { done: 0, of: GRANT_SHEETS }) => {
     setStep("granting");
     openGrant(agents, g)
       .then(
@@ -78,7 +81,7 @@ export function useManageSave(account: `0x${string}`, agents: ReturnType<typeof 
           onSaved();
         },
         (e: unknown) => {
-          if (isPopupBlocked(e)) setPending({ asked: ask, grant: g, ...count });
+          if (isPopupBlocked(e)) setPending({ asked: ask, grant: g, done: count.done + grantLanded(e), of: count.of });
         },
       )
       .finally(() => setStep("idle"));

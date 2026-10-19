@@ -189,6 +189,8 @@ export function AgentsGallery() {
         stopped: byJob((job) => (job === "rebalance" ? nowSec - 2 * 86_400 : null)),
         fails: 3,
         cooldownUntil: nowSec + 20 * 60,
+        // Earning's grant whose registration didn't go through: the Finish card.
+        finish: ["save"],
       })
     : [];
 

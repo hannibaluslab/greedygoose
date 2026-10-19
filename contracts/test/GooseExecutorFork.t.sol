@@ -316,11 +316,14 @@ contract GooseExecutorForkTest is ExecutorForkBase {
 
     /// GooseExecutor.md §3: the app's grant (lib/agents/permissions.ts, hashed in scripts/agent-vectors.ts) and the
     /// executor's template give the same manager hash on 50 random inputs per kind: the Cash Agent's jobs, Protect ·
-    /// sell and the Rebalancer with their stock limits, and Entry.
+    /// sell and the Rebalancer with their stock limits, and Entry. And the registration the app sends for each kind's
+    /// first input (lib/agents/register.ts) is abi.encode of that same template, what registerApproved decodes.
     function test_templates_hash_like_the_apps_builder() public {
         vm.etch(Vectors.HASH_SPENDER, address(x).code);
         ExecutorHarness h = ExecutorHarness(Vectors.HASH_SPENDER);
         string memory json = vm.readFile("test/vectors/permissions.json");
+        bytes[] memory registrations = vm.parseJsonBytesArray(json, ".registrations");
+        assertEq(registrations.length, 4);
         bytes32[] memory hashes = vm.parseJsonBytes32Array(json, ".hashes");
         assertEq(hashes.length, 50);
         for (uint256 i; i < hashes.length; ++i) {
@@ -329,6 +332,7 @@ contract GooseExecutorForkTest is ExecutorForkBase {
                 GooseExecutor.Job(v.job), v.account, GooseExecutor.Grant(v.start, v.end, v.cap), v.salt, 0
             );
             assertEq(MANAGER.getHash(p), hashes[i], string.concat("vector ", vm.toString(i)));
+            if (i == 0) assertEq(abi.encode(p), registrations[0], "the app's registration");
         }
         bytes32[] memory sellHashes = vm.parseJsonBytes32Array(json, ".sellHashes");
         assertEq(sellHashes.length, 50);
@@ -342,6 +346,7 @@ contract GooseExecutorForkTest is ExecutorForkBase {
                 GooseExecutor.Job.ProtectSell, v.account, GooseExecutor.Grant(v.start, v.end, v.cap), v.salt, t
             );
             assertEq(MANAGER.getHash(p), sellHashes[i], string.concat("sell vector ", vm.toString(i)));
+            if (i == 0) assertEq(abi.encode(p), registrations[1], "the app's sell registration");
         }
         bytes32[] memory rebalanceHashes = vm.parseJsonBytes32Array(json, ".rebalanceHashes");
         assertEq(rebalanceHashes.length, 50);
@@ -355,6 +360,7 @@ contract GooseExecutorForkTest is ExecutorForkBase {
                 GooseExecutor.Job.Rebalance, v.account, GooseExecutor.Grant(v.start, v.end, v.cap), v.salt, t
             );
             assertEq(MANAGER.getHash(p), rebalanceHashes[i], string.concat("rebalance vector ", vm.toString(i)));
+            if (i == 0) assertEq(abi.encode(p), registrations[2], "the app's rebalance registration");
         }
         bytes32[] memory entryHashes = vm.parseJsonBytes32Array(json, ".entryHashes");
         assertEq(entryHashes.length, 50);
@@ -364,6 +370,7 @@ contract GooseExecutorForkTest is ExecutorForkBase {
                 GooseExecutor.Job.Entry, v.account, GooseExecutor.Grant(v.start, v.end, v.cap), v.salt, 0
             );
             assertEq(MANAGER.getHash(p), entryHashes[i], string.concat("entry vector ", vm.toString(i)));
+            if (i == 0) assertEq(abi.encode(p), registrations[3], "the app's entry registration");
         }
     }
 

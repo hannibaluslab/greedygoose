@@ -79,7 +79,8 @@ describe("protectSteps", () => {
       { kind: "grant", job: "protect", capRaw: CAP_MAX },
       { kind: "grant", job: "sell", capRaw: CAP_MAX, limitsRaw: sellLimitsFor(CAP_MAX, PRICES, [TESLA]) },
     ]);
-    expect(stepCount(steps, 0)).toBe(2);
+    // Each grant is two JAW sheets: the grant, then its registration with the executor.
+    expect(stepCount(steps, 0)).toBe(4);
     // Selling still on from before, its repay grant ended: repaying goes back on first.
     const sellOnly: ProtectSaved = { ...fullOn, repayOn: false };
     expect(protectSteps(sellOnly, savedChoice(sellOnly), ctx).steps).toEqual([

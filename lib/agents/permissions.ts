@@ -10,7 +10,7 @@ import { formatUsdTrim } from "@/lib/formatting";
 /** PeriodUnit enum in JustaPermissionManager (JustaPermissionManager.sol:206-213). There is no Year. */
 export const PERIOD = { Minute: 0, Hour: 1, Day: 2, Week: 3, Month: 4, Forever: 5 } as const;
 
-type JawPermission = {
+export type JawPermission = {
   account: `0x${string}`;
   spender: `0x${string}`;
   start: number;
@@ -382,6 +382,20 @@ export function jobGrant(job: AgentJob, capRaw: bigint, limitsRaw?: StockLimits)
 }
 
 /**
+ * The permission JAW put on-chain for a grant of ours (`readAgentGrant`): the job's builder with the start, end and salt
+ * JAW picked, exactly what GooseExecutor's `registerApproved` rebuilds and matches.
+ */
+export function grantPermission(g: AgentGrant, account: Address, spender: Address): JawPermission {
+  const signed = { account, spender, start: g.start, end: g.end, salt: g.salt, capRaw: g.capRaw };
+  if (g.job === "save" || g.job === "protect") return agentPermission(g.job, signed);
+  if (g.job === "entry") return entryPermission(signed);
+  if (!g.limitsRaw) throw new Error("One limit per stock");
+  return g.job === "sell"
+    ? sellPermission({ ...signed, limitsRaw: g.limitsRaw })
+    : rebalancePermission({ ...signed, limitsRaw: g.limitsRaw });
+}
+
+/**
  * Each stock's limit in a Protect · sell or Rebalancer grant, from the dollar limit `capRaw`: shares worth twice it at
  * Aave's price now, so a stock that falls after the grant can still be sold up to the dollar limit (the USDC limit is
  * the one that binds). Held 1% under the executor's bound (twice CAP_MAX, JobBase.STOCK_LIMIT_CAPS), so a price tick
@@ -414,6 +428,35 @@ export type ListedPermission = {
   calls: { target: string; selector: string; checker?: string }[];
   spends: { token: string; allowance: string; unit: string; multiplier: number }[];
 };
+
+/**
+ * JAW's grant response (`useGrantPermissions`), read as its list records the grant, so `readAgentGrant` reads both
+ * alike. A call's selector is the one field the response may leave out; none of ours does.
+ */
+export function listedFromGrant(r: {
+  permissionId: string;
+  spender: string;
+  start: number;
+  end: number;
+  salt: string;
+  calls: readonly { target: string; selector?: string }[];
+  spends: readonly { token: string; allowance: string; unit: string; multiplier?: number }[];
+}): ListedPermission {
+  return {
+    permissionId: r.permissionId,
+    spender: r.spender,
+    start: r.start,
+    end: r.end,
+    salt: r.salt,
+    calls: r.calls.map((c) => ({ target: c.target, selector: c.selector ?? "0x" })),
+    spends: r.spends.map((x) => ({
+      token: x.token,
+      allowance: x.allowance,
+      unit: x.unit,
+      multiplier: x.multiplier ?? 1,
+    })),
+  };
+}
 
 export type AgentGrant = {
   job: AgentJob;

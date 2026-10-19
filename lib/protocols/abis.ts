@@ -18,7 +18,7 @@ const spendLimit = {
     { name: "multiplier", type: "uint16" },
   ],
 } as const;
-const permissionTuple = {
+export const permissionTuple = {
   type: "tuple",
   name: "permission",
   components: [

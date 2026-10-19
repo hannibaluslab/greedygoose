@@ -4,13 +4,17 @@ import { useState } from "react";
 import type { useAgents } from "@/hooks/useAgents";
 import type { GrantStep } from "@/hooks/useManageSave";
 import type { AgentJob } from "@/lib/agents/permissions";
-import { OFF_UNREADABLE } from "@/lib/agents/status";
+import { GRANT_SHEETS, OFF_UNREADABLE, grantLanded } from "@/lib/agents/status";
 import { TAP_AGAIN, isPopupBlocked } from "@/lib/tx/prepared";
 
 /** One JAW screen: a job's new grant, or turning a job off (each of its grants revoked). */
 export type AgentStep = { grant: GrantStep } | { off: AgentJob };
 
 const CANCELLED = /reject|denied|cancel/i;
+
+/** JAW sheets the steps open: a grant two (its registration follows it), a turn-off one. */
+export const stepSheets = (steps: readonly AgentStep[]) =>
+  steps.reduce((n, s) => n + ("grant" in s ? GRANT_SHEETS : 1), 0);
 
 /** Runs `steps` in order with `exec`, stopping at the first that throws: how many went through, the rest, and why. */
 export async function runSteps(
@@ -46,12 +50,12 @@ export function runError(done: number, of: number, error: unknown): string {
 }
 
 /**
- * Runs an agent change on JAW's own sheets, one for each grant or revoke (D14: each is its own user operation), in
- * order, straight from the button that asks for it (the first request is built in the tap, with nothing awaited before
+ * Runs an agent change on JAW's own sheets, one for each grant, its registration and each revoke (D14: each is its own
+ * user operation), in order, straight from the button that asks for it (the first request is built in the tap, with nothing awaited before
  * JAW is called), stopping at the first that doesn't go through. `key` names the change: trying the same one again
  * runs only the steps that didn't, as they were first asked for (the steps the screen rebuilds from the chain leave out
  * a job that is already off, so counting into them would skip one that is still on). `prior` counts JAW sheets of the
- * same change that went through before this run (Start earning's batch, before its grant), so a stop reads "1 of 2
+ * same change that went through before this run (Start earning's batch, before its grant), so a stop reads "1 of 3
  * went through". `run` resolves to the error it shows, or null once every step went through.
  */
 export function useAgentRun(agents: ReturnType<typeof useAgents>) {
@@ -68,7 +72,7 @@ export function useAgentRun(agents: ReturnType<typeof useAgents>) {
     const retry = failed?.key === key ? failed : null;
     const todo = retry?.rest ?? steps;
     const before = retry?.done ?? prior;
-    const of = retry?.of ?? prior + steps.length;
+    const of = retry?.of ?? prior + stepSheets(steps);
     setRunning(key);
     setFailed(null);
     try {
@@ -79,7 +83,7 @@ export function useAgentRun(agents: ReturnType<typeof useAgents>) {
         onDone();
         return null;
       }
-      const done = before + r.done;
+      const done = before + stepSheets(todo.slice(0, r.done)) + grantLanded(r.error);
       const message = runError(done, of, r.error);
       setFailed({ key, done, of, rest: r.rest, message });
       return message;

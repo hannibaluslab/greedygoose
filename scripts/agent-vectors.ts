@@ -26,6 +26,7 @@ import {
   type StockLimits,
 } from "@/lib/agents/permissions";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
+import { encodePermission } from "@/lib/agents/register";
 
 const WAD = 10n ** 18n;
 const RAY = 10n ** 27n;
@@ -458,13 +459,23 @@ function managerHash(p: ReturnType<typeof agentPermission>) {
   });
 }
 
-/** The manager's hash of the permission JAW grants for each input, for the Cash jobs and for Protect · sell. */
+/**
+ * The manager's hash of the permission JAW grants for each input, for every job, and the registration the app sends for
+ * the first input of each kind (`registrations`: abi.encode(permission), lib/agents/register.ts), which the executor's
+ * registerApproved decodes and must find equal to its own template.
+ */
 function hashVectors() {
+  const firsts: Parameters<typeof encodePermission>[0][] = [];
+  const hashed = (i: number, p: Parameters<typeof encodePermission>[0]) => {
+    if (i === 0) firsts.push(p);
+    return managerHash(p);
+  };
   const hashes = [];
   for (let i = 0; i < HASH_COUNT; i++) {
     const v = hashInput(i);
     hashes.push(
-      managerHash(
+      hashed(
+        i,
         agentPermission(v.job, {
           account: v.account,
           spender: HASH_SPENDER,
@@ -480,7 +491,8 @@ function hashVectors() {
   for (let i = 0; i < HASH_COUNT; i++) {
     const v = sellHashInput(i);
     sellHashes.push(
-      managerHash(
+      hashed(
+        i,
         sellPermission({
           account: v.account,
           spender: HASH_SPENDER,
@@ -497,7 +509,8 @@ function hashVectors() {
   for (let i = 0; i < HASH_COUNT; i++) {
     const v = rebalanceHashInput(i);
     rebalanceHashes.push(
-      managerHash(
+      hashed(
+        i,
         rebalancePermission({
           account: v.account,
           spender: HASH_SPENDER,
@@ -514,7 +527,8 @@ function hashVectors() {
   for (let i = 0; i < HASH_COUNT; i++) {
     const v = entryHashInput(i);
     entryHashes.push(
-      managerHash(
+      hashed(
+        i,
         entryPermission({
           account: v.account,
           spender: HASH_SPENDER,
@@ -526,7 +540,8 @@ function hashVectors() {
       ),
     );
   }
-  return { spender: HASH_SPENDER, hashes, sellHashes, rebalanceHashes, entryHashes };
+  const registrations = firsts.map(encodePermission);
+  return { spender: HASH_SPENDER, hashes, sellHashes, rebalanceHashes, entryHashes, registrations };
 }
 
 /** config/risk.ts in on-chain units: the executor's deploy defaults must match. */

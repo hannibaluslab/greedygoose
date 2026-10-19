@@ -75,17 +75,23 @@ const TONE: Record<AgentCard["tone"], string> = {
   plain: "bg-card shadow-card-elev",
 };
 
+/** The Finish card's write (useTx with useAgents' `finishPlan`): what its button waits on, and what stopped it. */
+type FinishState = { onFinish: () => void; busy: boolean; waiting: boolean; error: string | null };
+
 /**
  * A card that needs the user: one sentence, and one or two ways to act on it. Add cash and Repay open their sheets over
- * the tab; Renew opens JAW's own sheet.
+ * the tab; Renew and Finish open JAW's own sheet.
  */
 export function AttentionCard({
   card,
   onRenew,
+  finish,
   disabled = false,
 }: {
   card: AgentCard;
   onRenew: (agent: Agent, jobs: AgentJob[]) => void;
+  /** The Finish card's write; its button stays off without one (the dev gallery). */
+  finish?: FinishState;
   /** A change is on JAW's sheet already. */
   disabled?: boolean;
 }) {
@@ -102,16 +108,17 @@ export function AttentionCard({
       </Button>
     ) : (
       <button
-        key="renew"
+        key={a.kind}
         type="button"
-        disabled={disabled}
-        onClick={() => onRenew(a.agent, a.jobs)}
+        disabled={disabled || (a.kind === "finish" && (!finish || finish.busy || finish.waiting))}
+        onClick={() => (a.kind === "renew" ? onRenew(a.agent, a.jobs) : finish?.onFinish())}
         className="flex h-9 shrink-0 items-center rounded-[18px] bg-ink px-4 text-sm font-semibold text-on-ink disabled:opacity-45"
       >
-        Renew
+        {a.kind === "renew" ? "Renew" : finish?.busy ? "Finishing…" : "Finish"}
       </button>
     );
-  const single = card.actions.length === 1 && card.actions[0].kind === "renew";
+  const single = card.actions.length === 1 && card.actions[0].kind !== "sheet";
+  const error = card.actions.some((a) => a.kind === "finish") ? finish?.error : null;
   return (
     <section
       aria-label={`From ${card.agent}`}
@@ -124,6 +131,11 @@ export function AttentionCard({
             {card.text}
           </p>
           {card.sub && <p className="m-0 text-[13px] leading-[1.35] text-ink-2">{card.sub}</p>}
+          {error && (
+            <p role="alert" className="m-0 text-[13px] leading-[1.35] text-ink-2">
+              {error}
+            </p>
+          )}
         </div>
         {single && button(card.actions[0], 0)}
       </div>

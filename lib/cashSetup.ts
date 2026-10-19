@@ -1,5 +1,5 @@
 import { erc20Abi, isAddressEqual } from "viem";
-import type { AgentStatus } from "@/lib/agents/status";
+import { GRANT_SHEETS, type AgentStatus } from "@/lib/agents/status";
 import { CHAIN_ID } from "@/lib/chain";
 import { formatCoin, formatUsdTrim } from "@/lib/formatting";
 import { startEarningMinRaw } from "@/lib/startEarning";
@@ -41,9 +41,11 @@ export const saveGrantFollows = (save: AgentStatus, live: boolean) => live && sa
 
 /**
  * JAW sheets one Start earning tap opens: the batch, then, when the Save grant follows (saveGrantFollows), JAW's own
- * screen for it (D14: a grant can't ride in a batch). The button's "2 steps".
+ * screen for it (D14: a grant can't ride in a batch) and the grant's registration with the executor. The button's
+ * "3 steps".
  */
-export const startEarningSteps = (save: AgentStatus, live: boolean) => (saveGrantFollows(save, live) ? 2 : 1);
+export const startEarningSteps = (save: AgentStatus, live: boolean) =>
+  saveGrantFollows(save, live) ? 1 + GRANT_SHEETS : 1;
 
 /**
  * The card's words (board 2g): money that just arrived, "Your $100 arrived · Start earning 4.6% on it."; with savings

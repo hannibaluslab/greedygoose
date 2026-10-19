@@ -1,5 +1,6 @@
 import { EQUITIES } from "@/lib/tokens/registry";
 import { stockLimitsRaw, type StockLimits } from "@/lib/agents/permissions";
+import { GRANT_SHEETS } from "@/lib/agents/status";
 
 /*
  * Protect's settings (the agent sheet, docs/agents-redesign): repay from cash (Job.Protect, always first), selling
@@ -90,7 +91,13 @@ export function protectSteps(
   return { steps, blocked: null };
 }
 
-/** How many times a save opens JAW's sheet: once a step, and a revoke once for each sell grant JAW still lists. */
+/**
+ * How many times a save opens JAW's sheet: once a step, a grant twice (its registration with the executor follows it,
+ * GRANT_SHEETS), and a revoke once for each sell grant JAW still lists.
+ */
 export function stepCount(steps: readonly ProtectStep[], sellGrants: number): number {
-  return steps.reduce((n, s) => n + (s.kind === "revoke" ? Math.max(1, sellGrants) : 1), 0);
+  return steps.reduce(
+    (n, s) => n + (s.kind === "revoke" ? Math.max(1, sellGrants) : s.kind === "grant" ? GRANT_SHEETS : 1),
+    0,
+  );
 }

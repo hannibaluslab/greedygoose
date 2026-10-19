@@ -82,7 +82,7 @@ export function useStartEarning(p: {
   const prep = usePrepare(tx.prep, plan);
 
   const said = () => toast.success(startedEarningText(live.current.rate));
-  /** The Save grant on JAW's screen; `prior`: the batch went through first, so a stop reads "1 of 2 went through". */
+  /** The Save grant on JAW's screen; `prior`: the batch went through first, so a stop reads "1 of 3 went through". */
   const grantSave = () =>
     live.current.setup.grantSave(said, 1).then((stopped) => setStage(stopped === null ? "landed" : "grant-left"));
 

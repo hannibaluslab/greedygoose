@@ -2,25 +2,49 @@
 
 import { useMemo } from "react";
 import { isAddressEqual, zeroAddress } from "viem";
-import { useAccount, useReadContract, useReadContracts } from "wagmi";
+import {
+  useAccount,
+  useCapabilities,
+  useConfig,
+  usePublicClient,
+  useReadContract,
+  useReadContracts,
+  useSendCalls,
+} from "wagmi";
+import { waitForCallsStatus } from "wagmi/actions";
 import { useGrantPermissions, usePermissions, useRevokePermissions } from "@jaw.id/wagmi";
+import type { ChainCapabilities } from "@jaw.id/core";
+import type { Call } from "@/lib/aave/tx";
 import { CHAIN_ID } from "@/lib/chain";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import type { SpendLeft } from "@/lib/agents/next";
 import {
   JOBS,
+  grantPermission,
   jobGrant,
+  listedFromGrant,
   readAgentGrant,
   readStockLimits,
   type AgentGrant,
   type AgentJob,
   type StockLimits,
 } from "@/lib/agents/permissions";
-import { OFF_UNREADABLE, jobStatus, offUnreadable, type AgentStatus, type Stored } from "@/lib/agents/status";
+import {
+  OFF_UNREADABLE,
+  RegisterStopped,
+  jobStatus,
+  offUnreadable,
+  type AgentStatus,
+  type Stored,
+} from "@/lib/agents/status";
+import { atomicSend, NOT_ATOMIC } from "@/lib/jaw/capabilities";
 import { PROTOCOLS } from "@/lib/protocols/config";
 import { permissionManagerAbi } from "@/lib/protocols/abis";
+import { PREPARED_TTL_MS, chainEpoch, chainMoved, checkPlan, isPopupBlocked, type TxPlan } from "@/lib/tx/prepared";
+import { registerPlan } from "@/lib/tx/plans";
 import { useNowSec } from "@/hooks/useNowSec";
+import { checkDeps } from "@/hooks/useTx";
 
 /** A grant lasts a year. */
 export const GRANT_SECONDS = 365 * 86_400;
@@ -36,6 +60,30 @@ const byJob = <T>(f: (job: AgentJob) => T) =>
  * gone: a turn-off that stopped part way on one screen goes on with the rest from any other, and isn't counted again.
  */
 const revoked = new Set<string>();
+
+/**
+ * Grants JAW returned on this page, by account and job, until the executor registers them: their registration doesn't
+ * wait for JAW's list to show them.
+ */
+const fresh = new Map<string, AgentGrant>();
+const freshKey = (account: string, job: AgentJob) => `${account.toLowerCase()}:${job}`;
+
+/**
+ * A registration JAW couldn't open (Safari opens its popup only inside a tap, and it comes after the grant's): its
+ * checked batch, sent by the next tap that asks for the same before anything is awaited, under useTx's 30 s and only if
+ * no write landed since.
+ */
+let kept: { key: string; batch: Call[]; at: number; epoch: number } | null = null;
+
+/** Said when a registration JAW sent didn't land: the grant stands, and the next try registers it alone. */
+const REGISTER_FAILED = "This didn’t go through on Base. Try again to finish turning it on.";
+
+/** Times a registration is checked: the grant's block can reach Base's public node a moment after JAW's. */
+const CHECKS = 3;
+const CHECK_GAP_MS = 2_000;
+
+const sameLimits = (a?: StockLimits, b?: StockLimits) =>
+  a === b || (!!a && !!b && a.length === b.length && a.every((x, i) => x === b[i]));
 
 /**
  * One account's agents, through JAW's own permission screens (D14): turned on with `useGrantPermissions`, listed
@@ -79,6 +127,11 @@ export function useAgents(account: `0x${string}`) {
   const revoke = useRevokePermissions();
   const { address: signer } = useAccount();
   const nowSec = useNowSec();
+  const client = usePublicClient({ chainId: CHAIN_ID });
+  const caps = useCapabilities({ account: signer, query: { enabled: !!signer && !!executor } });
+  const chainCaps = (caps.data as Record<number, ChainCapabilities> | undefined)?.[CHAIN_ID];
+  const send = useSendCalls();
+  const config = useConfig();
 
   /** Grants and revokes are the account's own, like useTx's calls: never while another address is shown (`?as=`). */
   function ownAccount() {
@@ -209,13 +262,97 @@ export function useAgents(account: `0x${string}`) {
   const refetch = () => Promise.all([listed.refetch(), registry.refetch()]);
 
   /**
-   * One JAW sheet per job: a grant request carries one permission. Protect · sell and the Rebalancer
-   * take a limit per stock as well (`stockLimitsRaw`). The request is built here, synchronously from the tap, and
-   * JAW's grant is called before anything is awaited (Safari opens JAW's popup only inside the tap's activation).
+   * Each job's newest grant the executor hasn't registered (JAW granted it, its registration is still to go): from JAW's
+   * list or this page's own grants, not past its end, and not the one the registry holds.
+   */
+  const unregistered = useMemo(
+    () =>
+      byJob((job): AgentGrant | null => {
+        const own = fresh.get(freshKey(account, job));
+        const newest = [own, live[job][0]]
+          .filter((g): g is AgentGrant => !!g && g.end >= nowSec)
+          .sort((a, b) => b.start - a.start)[0];
+        if (!newest || !stored) return null;
+        const id = JOBS.indexOf(job);
+        const registered = (stored.jobs & (1 << id)) !== 0 && stored.permissions[id].salt === newest.salt;
+        return registered ? null : newest;
+      }),
+    [account, live, stored, nowSec],
+  );
+
+  /** The jobs granted but not running yet (status "starting"), and the batch that registers them all. */
+  const toFinish = JOBS.filter((job) => status[job] === "starting" && unregistered[job]);
+  const finishPlan: TxPlan | null =
+    executor && toFinish.length > 0
+      ? registerPlan(
+          account,
+          toFinish.map((job) => grantPermission(unregistered[job]!, account, executor)),
+        )
+      : null;
+
+  /** A registration's batch, checked like every write (useTx's checkPlan), a few times while the grant's block lands. */
+  async function checked(plan: TxPlan): Promise<Call[]> {
+    for (let i = 1; ; i++) {
+      const r = await checkPlan(plan, checkDeps(client));
+      if (r.ok) return r.batch;
+      if (i === CHECKS) throw new Error(r.error);
+      await new Promise((ok) => setTimeout(ok, CHECK_GAP_MS));
+    }
+  }
+
+  /**
+   * Registers grants with the executor, one `registerApproved` each in one batch on JAW's sheet: the app's half of
+   * turning a job on, since no runner watches the manager (runner switch plan, option 1). Checked and simulated first,
+   * then JAW signs, then it waits for Base and reads the registry again. A sheet JAW couldn't open keeps its batch
+   * (`kept`), and the next tap for the same grants sends it before anything is awaited.
+   */
+  async function register(grants: readonly AgentGrant[]) {
+    if (!executor) throw new Error("Agents aren't available yet");
+    const plan = registerPlan(
+      account,
+      grants.map((g) => grantPermission(g, account, executor)),
+    );
+    const ready =
+      kept && kept.key === plan.key && Date.now() - kept.at < PREPARED_TTL_MS && kept.epoch === chainEpoch()
+        ? kept.batch
+        : null;
+    kept = null;
+    const batch = ready ?? (await checked(plan));
+    const atomic = atomicSend(chainCaps, batch.length);
+    if (!atomic) throw new Error(NOT_ATOMIC);
+    let id: string;
+    try {
+      ({ id } = await send.mutateAsync({
+        chainId: CHAIN_ID,
+        calls: batch.map(({ to, data }) => ({ to, data })),
+        ...atomic,
+      }));
+    } catch (e) {
+      if (isPopupBlocked(e)) kept = { key: plan.key, batch, at: Date.now(), epoch: chainEpoch() };
+      throw e;
+    }
+    try {
+      const landed = await waitForCallsStatus(config, { id });
+      if (landed.status !== "success") throw new Error(REGISTER_FAILED);
+      for (const g of grants) fresh.delete(freshKey(account, g.job));
+    } finally {
+      chainMoved();
+      await refetch();
+    }
+  }
+
+  /**
+   * Two JAW sheets per job: its grant (a grant request carries one permission), then its registration with the
+   * executor (`register`). Protect · sell and the Rebalancer take a limit per stock as well (`stockLimitsRaw`). The
+   * request is built here, synchronously from the tap, and JAW's grant is called before anything is awaited (Safari
+   * opens JAW's popup only inside the tap's activation). A job already granted on the same terms and only waiting for
+   * its registration (a sheet that didn't open, one cancelled) is registered alone, so trying again never grants twice.
    */
   async function turnOn(job: AgentJob, capRaw: bigint, limitsRaw?: StockLimits) {
     if (!executor) throw new Error("Agents aren't available yet");
     ownAccount();
+    const waiting = unregistered[job];
+    if (waiting && waiting.capRaw === capRaw && sameLimits(waiting.limitsRaw, limitsRaw)) return register([waiting]);
     const request = {
       address: account,
       chainId: CHAIN_ID,
@@ -223,8 +360,15 @@ export function useAgents(account: `0x${string}`) {
       spender: executor,
       permissions: jobGrant(job, capRaw, limitsRaw),
     };
-    await grant.mutateAsync(request);
+    const granted = readAgentGrant(listedFromGrant(await grant.mutateAsync(request)), executor);
+    if (granted) fresh.set(freshKey(account, job), granted);
     await refetch();
+    if (!granted) return;
+    try {
+      await register([granted]);
+    } catch (e) {
+      throw new RegisterStopped(e);
+    }
   }
 
   /**
@@ -237,6 +381,7 @@ export function useAgents(account: `0x${string}`) {
     // Shown on, but the list can't be read: nothing known to revoke. Say so rather than return as if it were off.
     const toRevoke = live[job].filter((g) => !revoked.has(g.permissionId)).length;
     if (offUnreadable(status[job], toRevoke, listed.isError)) throw new Error(OFF_UNREADABLE);
+    fresh.delete(freshKey(account, job));
     try {
       for (const g of live[job]) {
         if (revoked.has(g.permissionId)) continue;
@@ -268,10 +413,14 @@ export function useAgents(account: `0x${string}`) {
     /** Failed runs in a row, and when the executor tries again: it backs off, then switches the account off at eight. */
     fails: stored?.fails ?? 0,
     cooldownUntil: stored?.cooldownUntil ?? 0,
-    busy: grant.isPending || revoke.isPending,
-    error: grant.error ?? revoke.error,
+    busy: grant.isPending || revoke.isPending || send.isPending,
+    error: grant.error ?? revoke.error ?? send.error,
     turnOn,
     turnOff,
     refetch,
+    /** The jobs JAW granted that the executor hasn't registered yet: they show "starting" and run once registered. */
+    toFinish,
+    /** The batch that registers them all, for useTx (null when there are none): the Agents tab's Finish card. */
+    finishPlan,
   };
 }

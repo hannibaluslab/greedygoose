@@ -1,4 +1,12 @@
-import { decodeFunctionData, erc20Abi, isAddressEqual, toFunctionSelector, type Abi, type Hex } from "viem";
+import {
+  decodeAbiParameters,
+  decodeFunctionData,
+  erc20Abi,
+  isAddressEqual,
+  toFunctionSelector,
+  type Abi,
+  type Hex,
+} from "viem";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
@@ -18,7 +26,7 @@ import {
   MAX_LIST_OPS,
 } from "@/lib/efp/efp";
 import { PROTOCOLS } from "@/lib/protocols/config";
-import { aaveV3PoolAbi } from "@/lib/protocols/abis";
+import { aaveV3PoolAbi, permissionTuple } from "@/lib/protocols/abis";
 import { aeroRouterAbi, psm3Abi, swapRouter02Abi } from "@/lib/swap/abis";
 import { AERODROME, AERODROME_V1, ROUTERS, SPARK_PSM3, UNISWAP } from "@/lib/swap/venues";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
@@ -158,6 +166,19 @@ const savingsApprove: ArgsCheck = (args, user, ctx) =>
   is(args[0], PROTOCOLS.AAVE_V3_POOL) &&
   args[1] === ctx.saveRaw;
 
+/**
+ * GooseExecutor's registerApproved(approved): the permission it carries (abi.encode(permission), as the manager logs
+ * it) is the user's own, granted to this executor. It moves no money; the executor still checks the manager approved it.
+ */
+const registersOwnGrant: ArgsCheck = (args, user, ctx) => {
+  try {
+    const [p] = decodeAbiParameters([permissionTuple], args[0] as Hex);
+    return is(p.account, user) && is(p.spender, ctx.to);
+  } catch {
+    return false;
+  }
+};
+
 /** GooseBoard.join(): exactly its selector, nothing after it. */
 const JOIN = toFunctionSelector("join()");
 const bareJoin: ArgsCheck = (args, _user, ctx) => args.length === 0 && ctx.data.toLowerCase() === JOIN;
@@ -172,7 +193,8 @@ const bareJoin: ArgsCheck = (args, _user, ctx) => args.length === 0 && ctx.data.
  * (`saveForUser`, `savingsApprove`). Buys, repays and savings-first batches mix
  * targets, so each target is held to its own functions. A coin of Turn into cash is approved only to the venue that
  * converts it, and converted only there, at its own pool, into USDC (D20). GooseExecutor's settings move no money and apply to the signer alone
- * (`msg.sender`): a mix must add up to 100% (or clear it).
+ * (`msg.sender`): a mix must add up to 100% (or clear it). Its registrations move none either, and name only the user's
+ * own grants to it (`registersOwnGrant`).
  */
 const RULES: readonly Rule[] = [
   {
@@ -230,6 +252,7 @@ const RULES: readonly Rule[] = [
           functions: {
             setMix: (args: readonly unknown[]) => isMix(args[0] as readonly number[]),
             setKeepMix: () => true,
+            registerApproved: registersOwnGrant,
           },
         },
       ]
