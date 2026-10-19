@@ -25,6 +25,7 @@ export type AgentEvent =
   | { kind: "mix"; weightsBps: readonly number[] }
   | { kind: "rebalanced"; soldRaw: readonly bigint[]; boughtRaw: readonly bigint[] }
   | { kind: "rebalance-skipped" }
+  | { kind: "sale-skipped" }
   | { kind: "converted"; coin: Address; amountInRaw: bigint; usdcOutRaw: bigint }
   | { kind: "entry-waiting"; coin: Address; amountInRaw: bigint; retryAt: number }
   | { kind: "run-failed"; reason: Hex; fails: number }
@@ -71,6 +72,7 @@ const DECODE: { [N in EventName]: (a: Args<N>) => AgentEvent | null } = {
   MixSet: (a) => ({ kind: "mix", weightsBps: a.weights }),
   Rebalanced: (a) => ({ kind: "rebalanced", soldRaw: a.sold, boughtRaw: a.bought }),
   RebalanceSkipped: () => ({ kind: "rebalance-skipped" }),
+  SaleSkipped: () => ({ kind: "sale-skipped" }),
   EntryConverted: (a) => ({ kind: "converted", coin: a.coin, amountInRaw: a.amountIn, usdcOutRaw: a.usdcOut }),
   EntryWaiting: (a) => ({ kind: "entry-waiting", coin: a.coin, amountInRaw: a.amountIn, retryAt: a.retryAt }),
   RunFailed: (a) => ({ kind: "run-failed", reason: a.reason, fails: a.fails }),

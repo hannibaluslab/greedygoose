@@ -367,6 +367,42 @@ contract ProtectSellForkTest is SellForkBase {
         assertEq(uint8(x.planOf(a).action), uint8(GooseExecutor.Action.Sell));
     }
 
+    /// A sale whose batch can't run (here every swap reverts, as one under its floor would after someone moved the
+    /// pool) moves nothing and is skipped, not counted as a failure, so it can't add up to switching Protect off
+    /// (money-safety review, B1). The next run, the pool back, sells.
+    function test_a_sale_batch_that_cannot_run_is_skipped_not_failed() public {
+        address a = _owing("a", NVDA, 10e8, 1.02e18);
+        _sellOn(a, _limits(NVDA, 5e8));
+        uint256 backing = SPOKE.getUserSuppliedAssets(NVDA, a);
+        vm.mockCallRevert(address(ROUTER), abi.encodeWithSelector(IAeroRouter.exactInputSingle.selector), "too little");
+        vm.expectEmit(true, false, false, false, address(x));
+        emit GooseExecutor.SaleSkipped(a);
+        _run(_check());
+        assertEq(SPOKE.getUserSuppliedAssets(NVDA, a), backing, "nothing moved");
+        (,, uint8 fails, uint48 cooldownUntil,,,,,,) = x.accounts(a);
+        assertEq(fails, 0, "not a failure");
+        assertEq(cooldownUntil, 0);
+        vm.clearMockedCalls();
+        _run(_check());
+        _assertBackTo1_12(a);
+    }
+
+    /// A rescue the account finished on its own ends in Protect · sell too, for an account without Protect from cash.
+    function test_a_rescue_the_account_finished_ends_in_the_sell_job() public {
+        address a = _owing("a", NVDA, 10e8, 1.01e18);
+        _sellOn(a, _limits(NVDA, 5e8));
+        _run(_check()); // six slices from 1.01
+        if (_rescueAt(a) == 0) return; // reached 1.12 in one run on this fork: nothing left to end
+        _backWith(a, NVDA, 10e8); // twice the backing: far over the target
+        GooseExecutor.Plan memory plan = x.planOf(a);
+        assertEq(uint8(plan.job), uint8(GooseExecutor.Job.ProtectSell));
+        assertEq(uint8(plan.action), uint8(GooseExecutor.Action.EndRescue));
+        uint256 backing = SPOKE.getUserSuppliedAssets(NVDA, a);
+        _run(_check());
+        assertEq(_rescueAt(a), 0, "ended");
+        assertEq(SPOKE.getUserSuppliedAssets(NVDA, a), backing, "nothing sold");
+    }
+
     /// Tesla (65%) would go first, but its pool can't fill: the sale moves on to NVIDIA, back to 1.12, in the same run.
     function test_the_sale_moves_on_to_the_next_stock_when_a_pool_cannot_fill() public {
         address a = _newJawAccount("a");
@@ -669,6 +705,21 @@ contract ProtectSellSevenStockGasForkTest is SellForkBase {
         (,, uint8 fails,,,,,,,) = x.accounts(act);
         assertEq(fails, 0, "a deferral isn't a failure");
         assertGt(SPOKE.getUserAccountData(cash).healthFactor, 1.11e18, "the next account was repaid in the same run");
+    }
+
+    /// A runner that sends too little gas to plan a sale (here the account starts with about 1.65M) defers it rather
+    /// than running out of gas mid plan, which would count as a failure (money-safety review, B1).
+    function test_a_run_too_short_to_plan_a_sale_defers_it() public {
+        address[] memory one = new address[](1);
+        one[0] = act;
+        uint256 backing = SPOKE.getUserAccountData(act).totalCollateralValue;
+        vm.expectEmit(true, false, false, false, address(x));
+        emit GooseExecutor.RunDeferred(act);
+        vm.prank(forwarder);
+        x.performUpkeep{gas: 2_000_000}(abi.encode(one));
+        (,, uint8 fails,,,,,,,) = x.accounts(act);
+        assertEq(fails, 0, "a deferral, not a failure");
+        assertEq(SPOKE.getUserAccountData(act).totalCollateralValue, backing, "nothing sold yet");
     }
 
     /// Under CHECK_RESERVE less what the scan's try keeps back (1/64), so the scan can always afford the costliest

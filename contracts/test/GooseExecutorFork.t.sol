@@ -492,6 +492,38 @@ contract GooseExecutorForkTest is ExecutorForkBase {
         }
     }
 
+    /// A rescue under way when the user switches Protect off and on again (JAW revokes, nothing prunes) doesn't come
+    /// back with the new grant: Protect starts from its line again (money-safety review, B2).
+    function test_a_new_protect_grant_ends_an_old_rescue() public {
+        address alice = _newJawAccount("alice");
+        _withSavings(alice, 2e6);
+        _openCreditAt(alice, 1e8, 1.02e18);
+        PM.Permission memory p = _turnOn(alice, GooseExecutor.Job.Protect, 1_000e6);
+        _run(_check());
+        assertGt(_rescueAt(alice), 0, "a rescue under way");
+        assertGt(SPOKE.getUserAccountData(alice).healthFactor, 1.03e18, "over the line now");
+
+        _revokeThroughAccount(p); // switched off: nothing prunes it
+        vm.warp(vm.getBlockTimestamp() + 1);
+        _turnOn(alice, GooseExecutor.Job.Protect, 1_000e6); // and on again
+        assertEq(_rescueAt(alice), 0, "the new grant starts from the line");
+        _withSavings(alice, 100e6);
+        assertEq(uint8(x.planOf(alice).action), uint8(GooseExecutor.Action.None), "over 1.03: nothing to do");
+    }
+
+    /// With neither Protect job left on, the rescue ends.
+    function test_switching_protect_off_ends_the_rescue() public {
+        address alice = _newJawAccount("alice");
+        _withSavings(alice, 2e6);
+        _openCreditAt(alice, 1e8, 1.02e18);
+        PM.Permission memory p = _turnOn(alice, GooseExecutor.Job.Protect, 1_000e6);
+        _run(_check());
+        assertGt(_rescueAt(alice), 0);
+        _revokeThroughAccount(p);
+        x.prune(alice, GooseExecutor.Job.Protect);
+        assertEq(_rescueAt(alice), 0);
+    }
+
     /// Above Protect's line nothing moves: credit at 1.30 (Watch) or 1.08 (Act, a warning only), with savings, Protect
     /// from savings and Protect · sell all on, on a weekday or just before the weekend freeze.
     function test_above_protects_line_nothing_moves() public {

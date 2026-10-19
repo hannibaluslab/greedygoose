@@ -257,6 +257,14 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
           ...usedRow(ctx),
         ],
       };
+    case "sale-skipped":
+      return {
+        by: "Protect",
+        line: ["Couldn’t sell this time: the price was too far from Aave’s."],
+        details: [
+          { label: "Why", value: ["Each sale must get within 3% of Aave’s price. It tries again on its next run."] },
+        ],
+      };
     case "rebalance-skipped":
       return {
         by: "Rebalance",

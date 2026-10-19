@@ -96,6 +96,13 @@ contract GooseReceiverTest is Test {
         sim.onReport("", abi.encodeCall(GooseExecutor.performUpkeep, ("")));
     }
 
+    function test_on_base_the_owner_is_required() public {
+        vm.chainId(8453);
+        vm.expectRevert(GooseReceiver.OwnerNeededOnBase.selector);
+        new GooseReceiver(address(executor), forwarder, address(0), bytes10(0));
+        new GooseReceiver(address(executor), forwarder, author, bytes10(0)); // the owner alone is enough
+    }
+
     function test_constructor_rules() public {
         vm.expectRevert(GooseReceiver.ZeroAddress.selector);
         new GooseReceiver(address(0), forwarder, author, name);

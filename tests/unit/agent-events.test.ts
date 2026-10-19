@@ -66,6 +66,7 @@ describe("decodeAgentLogs: every GooseExecutor event", () => {
     "Saved",
     "ProtectRepaid",
     "ProtectSold",
+    "SaleSkipped",
     "KeepMixSet",
     "MixSet",
     "Rebalanced",

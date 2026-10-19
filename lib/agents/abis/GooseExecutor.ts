@@ -2092,6 +2092,19 @@ export const gooseExecutorAbi = [
   },
   {
     type: "event",
+    name: "SaleSkipped",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
     name: "Saved",
     inputs: [
       {

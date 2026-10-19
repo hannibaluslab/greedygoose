@@ -23,6 +23,10 @@ library SellJob {
     uint256 internal constant SELL_GAS = 2_600_000;
     /// Kept for the reads and post-checks around the batch.
     uint256 internal constant CHECKS_GAS = 400_000;
+    /// Planning a sale, before the batch: about 1.35M cold for seven stocks (ProtectSellSevenStockGasForkTest). A run
+    /// that may sell checks it first, so a runner that sends too little gas defers the sale instead of running out mid
+    /// plan, which would count as a failure and, repeated, switch Protect off.
+    uint256 internal constant PLAN_GAS = 1_500_000;
     /// The pool cap counts every account's sales into one stock's pool over this window.
     uint48 internal constant POOL_WINDOW = 10 minutes;
     /// A stock is for sale only while its pool sits no more than the floor less this under Aave's price: the room for
@@ -111,6 +115,11 @@ library SellJob {
         GooseExecutor.Account storage acc,
         mapping(uint256 => GooseExecutor.PoolUse) storage pools
     ) external returns (GooseExecutor.Plan memory p) {
+        if (gasleft() < PLAN_GAS && _mightSell(e, c, acc)) {
+            p.job = GooseExecutor.Job.ProtectSell;
+            p.action = GooseExecutor.Action.Defer;
+            return p;
+        }
         Sale memory sale;
         (p, sale) = _plan(e, c, acc, pools);
         if (p.action != GooseExecutor.Action.Sell) return p;
@@ -118,7 +127,8 @@ library SellJob {
             p.action = GooseExecutor.Action.Defer;
             return p;
         }
-        (uint256 hfAfter, bool owes) = _sell(e, c.account, sale, p.hf, c.thresholds.targetHf);
+        (bool done, uint256 hfAfter, bool owes) = _sell(e, c.account, sale, p.hf, c.thresholds.targetHf);
+        if (!done) return p; // the batch couldn't run: nothing moved, the next run tries again
         // Counted once per stock, as the rule budgets it: a rounding up per slice could pass the cap by a unit.
         uint256[7] memory sold;
         for (uint256 i; i < sale.slices.length; ++i) {
@@ -128,6 +138,18 @@ library SellJob {
             if (sold[r] > 0) _usePool(pools[r], JobBase.ceilDiv(sold[r] * sale.prices[r], 1e10));
         }
         acc.rescueAt = JobBase.rescueAfter(acc.rescueAt, owes, hfAfter, c.thresholds.targetHf);
+    }
+
+    /// The cheap part of `_plan`: whether this run may sell, before paying for a sale's plan.
+    function _mightSell(GooseExecutor.Env memory e, GooseExecutor.Ctx memory c, GooseExecutor.Account storage acc)
+        internal
+        view
+        returns (bool)
+    {
+        uint256 hf = c.hf != 0 ? c.hf : JobBase.health(e, c.account);
+        bool rescuing = acc.rescueAt != 0;
+        if (rescuing && JobBase.rescueDone(hf, c.thresholds.targetHf)) return false;
+        return SellRules.sellsNow(hf, rescuing, c.frozen, c.thresholds.triggerHf, c.thresholds.targetHf);
     }
 
     function _plan(
@@ -232,10 +254,13 @@ library SellJob {
 
     /// Takes each slice's stock out of Aave, swaps exactly that on Aerodrome to the account with Aave's price minus the
     /// floor as the minimum, and repays exactly that minimum. Approvals first, each for the whole run; the manager
-    /// resets them after the batch. Returns the health after, and whether anything is still owed.
+    /// resets them after the batch. A batch that can't run (a swap the pool can't fill at its floor, say after someone
+    /// moved the pool) moves nothing and is skipped, like the Rebalancer's, rather than counted as a failure: repeated,
+    /// failures would switch Protect off. The post-checks still revert anything a batch that did run got wrong.
+    /// Returns whether it sold, the health after, and whether anything is still owed.
     function _sell(GooseExecutor.Env memory e, address account, Sale memory sale, uint256 hfBefore, uint256 targetHf)
         internal
-        returns (uint256 hfAfter, bool owes)
+        returns (bool, uint256 hfAfter, bool owes)
     {
         uint256[7] memory sold;
         uint256 repay;
@@ -244,9 +269,25 @@ library SellJob {
             repay += sale.slices[i].minOut;
         }
         Before memory b = snapshot(e, account, sold, hfBefore);
-        e.manager.executeBatch{gas: SELL_GAS}(sale.perm, _calls(e, account, sale.slices, sold, repay));
+        if (!_batch(e, sale.perm, _calls(e, account, sale.slices, sold, repay))) {
+            emit GooseExecutor.SaleSkipped(account);
+            return (false, hfBefore, true);
+        }
         (hfAfter, owes) = check(e, account, b, targetHf);
         emit GooseExecutor.ProtectSold(account, sold, repay, hfBefore, hfAfter);
+        return (true, hfAfter, owes);
+    }
+
+    /// The sale's batch through the manager; false when it reverts, which moves nothing.
+    function _batch(GooseExecutor.Env memory e, PM.Permission memory perm, PM.Call[] memory calls)
+        internal
+        returns (bool)
+    {
+        try e.manager.executeBatch{gas: SELL_GAS}(perm, calls) {
+            return true;
+        } catch {
+            return false;
+        }
     }
 
     /// What a sale's post-checks compare with.

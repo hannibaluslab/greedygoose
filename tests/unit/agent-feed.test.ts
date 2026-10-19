@@ -200,6 +200,7 @@ describe("describeAgentEvent: the Agents board's rows", () => {
       { kind: "keep-mix", on: true },
       { kind: "keep-mix", on: false },
       { kind: "rebalance-skipped" },
+      { kind: "sale-skipped" },
       { kind: "converted", coin: ENTRY_COINS[3].address, amountInRaw: 1n, usdcOutRaw: 1n },
     ];
     for (const e of events) {

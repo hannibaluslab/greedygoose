@@ -278,6 +278,8 @@ contract GooseExecutor is AutomationCompatibleInterface {
     event ProtectRepaid(address indexed account, uint256 amount, uint256 hfBefore, uint256 hfAfter, ProtectCase reason);
     /// `shares` by reserve id; `repaid` in USDC units.
     event ProtectSold(address indexed account, uint256[7] shares, uint256 repaid, uint256 hfBefore, uint256 hfAfter);
+    /// A sale whose batch couldn't run (a swap under its floor): nothing moved, and the next run tries again.
+    event SaleSkipped(address indexed account);
     event KeepMixSet(address indexed account, bool on);
     event MixSet(address indexed account, uint16[7] weights);
     /// Shares by reserve id: what the sales sold and the buys bought.
@@ -444,7 +446,7 @@ contract GooseExecutor is AutomationCompatibleInterface {
     /// of them per block, in turn, so one caller serves every page as the list grows. A runner that wants every page
     /// at once passes shards ≥ the page count, one call per page. Each pass over a page starts one account further on,
     /// so a page that runs out of gas or fills MAX_WORK early still gets looked at in full over the next passes. Sales
-    /// are listed first, lowest health first, so they have the gas and the pools' room before anything else.
+    /// and repays are listed first, lowest health first, so they have the gas and the pools' room before anything else.
     function checkUpkeep(bytes calldata checkData)
         external
         view
@@ -486,7 +488,8 @@ contract GooseExecutor is AutomationCompatibleInterface {
             // Any revert (an Aave or oracle read) skips this account only.
             try this.planOf(account) returns (Plan memory p) {
                 if (p.action == Action.None) continue;
-                uint256 key = p.action == Action.Sell ? p.hf : type(uint256).max;
+                // Protect first, lowest health first; the other jobs after.
+                uint256 key = p.action == Action.Sell || p.action == Action.Repay ? p.hf : type(uint256).max;
                 uint256 k = n++;
                 for (; k > 0 && order[k - 1] > key; --k) {
                     (work[k], order[k]) = (work[k - 1], order[k - 1]);
@@ -746,6 +749,8 @@ contract GooseExecutor is AutomationCompatibleInterface {
         if (newGrant) {
             a.fails = 0;
             a.cooldownUntil = 0;
+            // A new Protect grant starts from Protect's line, never from a rescue an older grant left under way.
+            if (job == Job.Protect || job == Job.ProtectSell) a.rescueAt = 0;
         }
         if (a.index == 0) {
             if (members.length % PAGE_SIZE == 0) emit PageOpened(uint32(members.length / PAGE_SIZE));

@@ -10,9 +10,10 @@ import {GooseReceiver} from "../src/GooseReceiver.sol";
 ///   EXECUTOR=<executor> CRE_WORKFLOW_OWNER=<address> CRE_WORKFLOW_NAME=<bytes10> \
 ///     forge script script/DeployReceiver.s.sol --rpc-url <base> --broadcast
 ///
-/// CRE_FORWARDER defaults to Base's KeystoneForwarder. On Base the workflow's owner and name are required: without
-/// them any CRE workflow could run the executor through this receiver. Elsewhere (a fork for `cre workflow simulate`)
-/// they may be left out, since the simulator's mock forwarder sends no identity.
+/// CRE_FORWARDER defaults to Base's KeystoneForwarder. On Base the workflow's owner is required: without it any CRE
+/// workflow could run the executor through this receiver. The name is optional (check its 10 bytes against a real
+/// report first). Elsewhere (a fork for `cre workflow simulate`) both may be left out, since the simulator's mock
+/// forwarder sends no identity.
 contract DeployReceiver is Script {
     uint256 internal constant BASE = 8453;
     /// Chainlink CRE's KeystoneForwarder on Base (docs.chain.link, CRE supported networks, read 2026-10-19).
@@ -38,7 +39,7 @@ contract DeployReceiver is Script {
         require(forwarder.code.length > 0, "no forwarder at CRE_FORWARDER");
         if (chainId == BASE) {
             require(forwarder == BASE_FORWARDER, "Base takes Chainlink's KeystoneForwarder");
-            require(owner != address(0) && name != bytes10(0), "Base needs CRE_WORKFLOW_OWNER and CRE_WORKFLOW_NAME");
+            require(owner != address(0), "Base needs CRE_WORKFLOW_OWNER");
         }
     }
 }

@@ -28,12 +28,14 @@ contract GooseReceiver is IReceiver {
     address public immutable FORWARDER;
     /// The workflow's owner, as CRE stamps it in the report's metadata; 0 = not checked (simulation only).
     address public immutable WORKFLOW_OWNER;
-    /// The workflow's name as CRE encodes it (the first 10 bytes of its SHA-256); 0 = not checked. Needs an owner, as in
-    /// Chainlink's ReceiverTemplate: a name alone could be anyone's.
+    /// The workflow's name, as the 10 bytes CRE stamps in the metadata; 0 = not checked. Chainlink derives them from the
+    /// name's SHA-256: check the exact bytes against a real report before relying on them, or leave this 0 and rely on
+    /// the owner, which alone keeps out every other workflow. Needs an owner, as in Chainlink's ReceiverTemplate.
     bytes10 public immutable WORKFLOW_NAME;
 
     error ZeroAddress();
     error NameNeedsOwner();
+    error OwnerNeededOnBase();
     error NotForwarder(address sender);
     error BadMetadata();
     error WrongOwner(address owner);
@@ -43,6 +45,7 @@ contract GooseReceiver is IReceiver {
     constructor(address executor, address forwarder, address workflowOwner, bytes10 workflowName) {
         if (executor == address(0) || forwarder == address(0)) revert ZeroAddress();
         if (workflowName != bytes10(0) && workflowOwner == address(0)) revert NameNeedsOwner();
+        if (block.chainid == 8453 && workflowOwner == address(0)) revert OwnerNeededOnBase(); // simulation only elsewhere
         EXECUTOR = executor;
         FORWARDER = forwarder;
         WORKFLOW_OWNER = workflowOwner;
