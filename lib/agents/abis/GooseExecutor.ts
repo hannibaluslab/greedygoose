@@ -1,4 +1,7 @@
-/** Generated: cd contracts && forge inspect src/GooseExecutor.sol:GooseExecutor abi --json */
+/**
+ * Generated: cd contracts && forge inspect src/GooseExecutor.sol:GooseExecutor abi --json. Then by hand, the last
+ * entry: `jobsOf`, which only the executor live today has. hooks/useAgents.ts reads it until it reads `accounts`.
+ */
 export const gooseExecutorAbi = [
   {
     type: "constructor",
@@ -745,79 +748,6 @@ export const gooseExecutorAbi = [
   },
   {
     type: "function",
-    name: "jobsOf",
-    inputs: [
-      {
-        name: "account",
-        type: "address",
-        internalType: "address",
-      },
-    ],
-    outputs: [
-      {
-        name: "jobs",
-        type: "uint8",
-        internalType: "uint8",
-      },
-      {
-        name: "save",
-        type: "tuple",
-        internalType: "struct GooseExecutor.Grant",
-        components: [
-          {
-            name: "start",
-            type: "uint48",
-            internalType: "uint48",
-          },
-          {
-            name: "end",
-            type: "uint48",
-            internalType: "uint48",
-          },
-          {
-            name: "cap",
-            type: "uint160",
-            internalType: "uint160",
-          },
-        ],
-      },
-      {
-        name: "protect",
-        type: "tuple",
-        internalType: "struct GooseExecutor.Grant",
-        components: [
-          {
-            name: "start",
-            type: "uint48",
-            internalType: "uint48",
-          },
-          {
-            name: "end",
-            type: "uint48",
-            internalType: "uint48",
-          },
-          {
-            name: "cap",
-            type: "uint160",
-            internalType: "uint160",
-          },
-        ],
-      },
-      {
-        name: "fails",
-        type: "uint8",
-        internalType: "uint8",
-      },
-      {
-        name: "cooldownUntil",
-        type: "uint48",
-        internalType: "uint48",
-      },
-    ],
-    stateMutability: "view",
-  },
-  {
-    type: "function",
     name: "memberCount",
     inputs: [],
     outputs: [
@@ -1245,49 +1175,6 @@ export const gooseExecutorAbi = [
   },
   {
     type: "function",
-    name: "register",
-    inputs: [
-      {
-        name: "job",
-        type: "uint8",
-        internalType: "enum GooseExecutor.Job",
-      },
-      {
-        name: "account",
-        type: "address",
-        internalType: "address",
-      },
-      {
-        name: "start",
-        type: "uint48",
-        internalType: "uint48",
-      },
-      {
-        name: "end",
-        type: "uint48",
-        internalType: "uint48",
-      },
-      {
-        name: "salt",
-        type: "uint256",
-        internalType: "uint256",
-      },
-      {
-        name: "cap",
-        type: "uint160",
-        internalType: "uint160",
-      },
-      {
-        name: "t",
-        type: "uint256",
-        internalType: "uint256",
-      },
-    ],
-    outputs: [],
-    stateMutability: "nonpayable",
-  },
-  {
-    type: "function",
     name: "registerApproved",
     inputs: [
       {
@@ -1421,6 +1308,24 @@ export const gooseExecutorAbi = [
   },
   {
     type: "function",
+    name: "setTopUps",
+    inputs: [
+      {
+        name: "on",
+        type: "bool",
+        internalType: "bool",
+      },
+      {
+        name: "keep",
+        type: "uint48",
+        internalType: "uint48",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
     name: "stocks",
     inputs: [],
     outputs: [
@@ -1456,6 +1361,55 @@ export const gooseExecutorAbi = [
         name: "stressFloorHf",
         type: "uint64",
         internalType: "uint64",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "topUps",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "on",
+        type: "bool",
+        internalType: "bool",
+      },
+      {
+        name: "day",
+        type: "uint32",
+        internalType: "uint32",
+      },
+      {
+        name: "keep",
+        type: "uint48",
+        internalType: "uint48",
+      },
+      {
+        name: "ready",
+        type: "uint56",
+        internalType: "uint56",
+      },
+      {
+        name: "today",
+        type: "uint56",
+        internalType: "uint56",
+      },
+      {
+        name: "mark",
+        type: "uint56",
+        internalType: "uint56",
+      },
+      {
+        name: "own",
+        type: "uint256",
+        internalType: "uint256",
       },
     ],
     stateMutability: "view",
@@ -1971,6 +1925,81 @@ export const gooseExecutorAbi = [
     anonymous: false,
   },
   {
+    type: "event",
+    name: "TopUpCounted",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "amount",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "waiting",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "TopUpInvested",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "amount",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "bought",
+        type: "uint256[7]",
+        indexed: false,
+        internalType: "uint256[7]",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "TopUpsSet",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "on",
+        type: "bool",
+        indexed: false,
+        internalType: "bool",
+      },
+      {
+        name: "keep",
+        type: "uint48",
+        indexed: false,
+        internalType: "uint48",
+      },
+    ],
+    anonymous: false,
+  },
+  {
     type: "error",
     name: "AccountNotAllowed",
     inputs: [],
@@ -1992,22 +2021,7 @@ export const gooseExecutorAbi = [
   },
   {
     type: "error",
-    name: "BadTerms",
-    inputs: [],
-  },
-  {
-    type: "error",
-    name: "BadWindow",
-    inputs: [],
-  },
-  {
-    type: "error",
     name: "BelowFloor",
-    inputs: [],
-  },
-  {
-    type: "error",
-    name: "CapOutOfBounds",
     inputs: [],
   },
   {
@@ -2140,5 +2154,79 @@ export const gooseExecutorAbi = [
     type: "error",
     name: "ZeroValue",
     inputs: [],
+  },
+  // Only on the executor live today (the next one drops it to fit under 24 KB).
+  {
+    type: "function",
+    name: "jobsOf",
+    inputs: [
+      {
+        name: "account",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "jobs",
+        type: "uint8",
+        internalType: "uint8",
+      },
+      {
+        name: "save",
+        type: "tuple",
+        internalType: "struct GooseExecutor.Grant",
+        components: [
+          {
+            name: "start",
+            type: "uint48",
+            internalType: "uint48",
+          },
+          {
+            name: "end",
+            type: "uint48",
+            internalType: "uint48",
+          },
+          {
+            name: "cap",
+            type: "uint160",
+            internalType: "uint160",
+          },
+        ],
+      },
+      {
+        name: "protect",
+        type: "tuple",
+        internalType: "struct GooseExecutor.Grant",
+        components: [
+          {
+            name: "start",
+            type: "uint48",
+            internalType: "uint48",
+          },
+          {
+            name: "end",
+            type: "uint48",
+            internalType: "uint48",
+          },
+          {
+            name: "cap",
+            type: "uint160",
+            internalType: "uint160",
+          },
+        ],
+      },
+      {
+        name: "fails",
+        type: "uint8",
+        internalType: "uint8",
+      },
+      {
+        name: "cooldownUntil",
+        type: "uint48",
+        internalType: "uint48",
+      },
+    ],
+    stateMutability: "view",
   },
 ] as const;

@@ -25,6 +25,9 @@ export type AgentEvent =
   | { kind: "mix"; weightsBps: readonly number[] }
   | { kind: "rebalanced"; soldRaw: readonly bigint[]; boughtRaw: readonly bigint[] }
   | { kind: "rebalance-skipped" }
+  | { kind: "top-ups-set"; on: boolean; keepRaw: bigint }
+  | { kind: "top-up-counted"; amountRaw: bigint; waitingRaw: bigint }
+  | { kind: "top-up-invested"; amountRaw: bigint; boughtRaw: readonly bigint[] }
   | { kind: "sale-skipped" }
   | { kind: "converted"; coin: Address; amountInRaw: bigint; usdcOutRaw: bigint }
   | { kind: "entry-waiting"; coin: Address; amountInRaw: bigint; retryAt: number }
@@ -77,6 +80,10 @@ const DECODE: { [N in EventName]: (a: Args<N>) => AgentEvent | null } = {
   EntryWaiting: (a) => ({ kind: "entry-waiting", coin: a.coin, amountInRaw: a.amountIn, retryAt: a.retryAt }),
   RunFailed: (a) => ({ kind: "run-failed", reason: a.reason, fails: a.fails }),
   RunDeferred: () => ({ kind: "run-deferred" }),
+  // Top-ups go into my mix, from the next executor on.
+  TopUpsSet: (a) => ({ kind: "top-ups-set", on: a.on, keepRaw: BigInt(a.keep) }),
+  TopUpCounted: (a) => ({ kind: "top-up-counted", amountRaw: a.amount, waitingRaw: a.waiting }),
+  TopUpInvested: (a) => ({ kind: "top-up-invested", amountRaw: a.amount, boughtRaw: a.bought }),
   PageOpened: () => null,
   Paused: () => null,
   ForwarderSet: () => null,

@@ -71,6 +71,9 @@ describe("decodeAgentLogs: every GooseExecutor event", () => {
     "MixSet",
     "Rebalanced",
     "RebalanceSkipped",
+    "TopUpsSet",
+    "TopUpCounted",
+    "TopUpInvested",
     "EntryConverted",
     "EntryWaiting",
     "RunFailed",
@@ -143,6 +146,21 @@ describe("decodeAgentLogs: what each event carries", () => {
     expect(one(log("Rebalanced", { account, sold, bought }))[0]).toMatchObject({
       kind: "rebalanced",
       soldRaw: sold,
+      boughtRaw: bought,
+    });
+    expect(one(log("TopUpsSet", { account, on: true, keep: 500_000_000 }))[0]).toMatchObject({
+      kind: "top-ups-set",
+      on: true,
+      keepRaw: 500_000_000n,
+    });
+    expect(one(log("TopUpCounted", { account, amount: 300_000_000n, waiting: 450_000_000n }))[0]).toMatchObject({
+      kind: "top-up-counted",
+      amountRaw: 300_000_000n,
+      waitingRaw: 450_000_000n,
+    });
+    expect(one(log("TopUpInvested", { account, amount: 300_000_000n, bought }))[0]).toMatchObject({
+      kind: "top-up-invested",
+      amountRaw: 300_000_000n,
       boughtRaw: bought,
     });
     expect(

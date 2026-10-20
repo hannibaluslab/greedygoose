@@ -225,6 +225,17 @@ export function describeExecutorLogs(logs: readonly Log[], executor: Address, wh
       case "RebalanceSkipped":
         out.push(`${name}: Rebalance couldn't meet its floors today; nothing moved`);
         break;
+      case "TopUpsSet":
+        out.push(`${name}: top-ups into the mix ${a.on ? "on" : "off"}, keep ${usd(BigInt(a.keep as number))} as cash`);
+        break;
+      case "TopUpCounted":
+        out.push(`${name}: Save counted ${usd(a.amount as bigint)} of top-ups, ${usd(a.waiting as bigint)} waiting`);
+        break;
+      case "TopUpInvested":
+        out.push(
+          `${name}: Rebalance put ${usd(a.amount as bigint)} of top-ups into the mix, bought ${stockList(a.bought as bigint[])}`,
+        );
+        break;
       case "EntryConverted": {
         const coin = ENTRY_COINS.find((c) => isAddressEqual(c.address, a.coin as Address));
         out.push(

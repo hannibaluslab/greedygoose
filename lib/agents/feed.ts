@@ -269,6 +269,10 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
     }
     case "entry-waiting":
     case "run-deferred":
+    // Top-ups go into my mix: their rows come with the app's wiring for the executor that counts them.
+    case "top-ups-set":
+    case "top-up-counted":
+    case "top-up-invested":
       return null;
     case "run-failed":
       return {
