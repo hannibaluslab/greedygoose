@@ -35,7 +35,7 @@ struct Slice {
 }
 
 /// @title SellRules
-/// @notice Protect · sell's rule, ported from the TypeScript reference (lib/guardian/sell.ts) line for line:
+/// @notice Protect · sell's rule, ported from the TypeScript reference (lib/agents/rules/protectSell.ts) line for line:
 ///         test/SellRules.t.sol runs both on the vectors scripts/agent-vectors.ts exports, and they must agree exactly.
 /// @dev Integer maths only. Units: Aave Value (1e26 = $1), WAD (1e18), prices and shares with 8 decimals, USDC units
 ///      with 6, collateral factors in BPS. A holding is worth shares × price × 1e10 Value and backs cf × that.

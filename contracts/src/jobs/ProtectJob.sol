@@ -68,7 +68,7 @@ library ProtectJob {
         JobBase.addOwn(topUps[c.account], change);
     }
 
-    /// A port of planGuardian (lib/guardian/plan.ts). Cheap reads first: most accounts owe nothing or are
+    /// A port of planProtect (lib/agents/rules/protect.ts). Cheap reads first: most accounts owe nothing or are
     /// healthy, and the permission's status is only paid for when there is a move to make.
     function _plan(GooseExecutor.Env memory e, GooseExecutor.Ctx memory c, bool rescuing, PM.Permission memory perm)
         internal

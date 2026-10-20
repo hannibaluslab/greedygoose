@@ -39,7 +39,7 @@ Tests run a job's post-checks around a batch of their own by calling the library
 
 ## Protect · sell
 
-Plan item 1, steps 10–12: when savings can't keep the credit Safe, Protect sells some of the stock that backs it and repays. It is its own job (`Job.ProtectSell`) and its own JAW grant, so selling can be switched off alone (decision 5). The rule is `SellRules` (Solidity) and `lib/guardian/sell.ts` (TypeScript): `test/SellRules.t.sol` runs both on 600 sale vectors and 1,000 timing vectors and they agree to the unit.
+Plan item 1, steps 10–12: when savings can't keep the credit Safe, Protect sells some of the stock that backs it and repays. It is its own job (`Job.ProtectSell`) and its own JAW grant, so selling can be switched off alone (decision 5). The rule is `SellRules` (Solidity) and `lib/agents/rules/protectSell.ts` (TypeScript): `test/SellRules.t.sol` runs both on 600 sale vectors and 1,000 timing vectors and they agree to the unit.
 
 **What it does.**
 
@@ -105,7 +105,7 @@ Facts found on the way:
 
 ## The Rebalancer
 
-Plan item 9, steps 2 and 3: once a market day, 30 to 60 minutes after the open, the Rebalancer brings the account's mix of free stock back when a stock breaks its band, selling what grew too big to buy what fell short. It is its own job (`Job.Rebalance`) and its own JAW grant. The rule is `RebalanceRules` (Solidity) and `lib/guardian/rebalance.ts` (TypeScript): `test/RebalanceRules.t.sol` runs both on 800 vectors and they agree to the unit.
+Plan item 9, steps 2 and 3: once a market day, 30 to 60 minutes after the open, the Rebalancer brings the account's mix of free stock back when a stock breaks its band, selling what grew too big to buy what fell short. It is its own job (`Job.Rebalance`) and its own JAW grant. The rule is `RebalanceRules` (Solidity) and `lib/agents/rules/rebalance.ts` (TypeScript): `test/RebalanceRules.t.sol` runs both on 800 vectors and they agree to the unit.
 
 **What it does.**
 
@@ -149,7 +149,7 @@ Plan item 9, steps 2 and 3: once a market day, 30 to 60 minutes after the open, 
 
 ## Entry on Base
 
-Plan item 2, steps 1 to 3: a whitelisted dollar stablecoin in the wallet becomes USDC in the same wallet at 99.5% of its face value or better, one capped swap a run. It is its own job (`Job.Entry`) and its own JAW grant. The rule is `EntryRules` (Solidity) and `lib/guardian/entry.ts` (TypeScript): `test/EntryRules.t.sol` runs both on 1,000 vectors and they agree to the unit.
+Plan item 2, steps 1 to 3: a whitelisted dollar stablecoin in the wallet becomes USDC in the same wallet at 99.5% of its face value or better, one capped swap a run. It is its own job (`Job.Entry`) and its own JAW grant. The rule is `EntryRules` (Solidity) and `lib/agents/rules/entry.ts` (TypeScript): `test/EntryRules.t.sol` runs both on 1,000 vectors and they agree to the unit.
 
 **Coins and venues**, each the deepest for that coin on Base, measured 2026-10-14 (`tests/onchain/entry.test.ts` re-reads them):
 
@@ -190,7 +190,7 @@ Adrian: "watch is ok, it is act that is not, also the guardian should only act o
 | --- | --- | --- |
 | Protect from savings: below 1.50, back to 1.65 | Below 1.10 (Act), back to 1.20 (Watch) | Act is the line. 1.20 leaves an 8% cushion before Act again and repays an eighth of what's owed from 1.05 (Safe would take 30%). |
 | Bounds: trigger 1.20–2.00, target up to 2.50 | Trigger pinned at 1.10 (`CashRules.TRIGGER_HF`), target 1.15 to 1.40 | No change through the delay can make Protect repay in Watch, leave part of Act without it, or repay past Watch toward Safe. |
-| Weekend Shield repays before a freeze (`ProtectCase.WeekendShield`) | Gone: `protectNeed` has no `preFreeze`, `Ctx` no `preFreeze`, `runAccount(account, frozen)` | It only ever acted outside Act. The app shows a heads-up card instead (`lib/guardian/plan.ts` `weekendHeadsUp`). `stressDrop`, `stressFloorHf` and `weekendWindow` stay in the registry, bounded, as the card's numbers. |
+| Weekend Shield repays before a freeze (`ProtectCase.WeekendShield`) | Gone: `protectNeed` has no `preFreeze`, `Ctx` no `preFreeze`, `runAccount(account, frozen)` | It only ever acted outside Act. The app shows a heads-up card instead (`lib/agents/rules/protect.ts` `weekendHeadsUp`). `stressDrop`, `stressFloorHf` and `weekendWindow` stay in the registry, bounded, as the card's numbers. |
 | Sale: heads-up below 1.25, at once below 1.10, back to 1.40 | Heads-up below 1.10, at once below 1.05, back to 1.20 | Sale timing stays inside Act. A heads-up back out of Act is cleared and nothing sold; a sale cut short goes on only while still in Act. |
 | Bounds: heads-up 1.10–1.50; at once 1.02 up to the heads-up; sale target up to 2.00 | Heads-up pinned at 1.10 (`SellRules.HEADS_UP_HF`, the same line as Protect's trigger); at once 1.05 to 1.08; sale target 1.15 to 1.40 | The same, for selling. With both lines on the Act line, a sale can never start above the cash repay's line (stock sold while cash sits in savings), and the Rebalancer's gate (Protect's trigger) stays there too. The at-once sale can't be held back past 1.05, and the 0.02 band keeps a heads-up before most sales. `CashRulesTest.test_the_bounds_sit_on_the_apps_bands` ties them to `config/risk.ts`. |
 | The Rebalancer waits below Protect's trigger (Safe) | The same rule, so it waits only in Act | It only touches free stock; in Watch it trades. |

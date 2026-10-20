@@ -50,7 +50,7 @@ contract DeployExecutor is Script {
     uint256 internal constant BASE = 8453;
     uint256 internal constant BASE_SEPOLIA = 84532;
 
-    /// lib/guardian/config.ts; the same 14,180 bytes at the same address on Base Sepolia (MANAGER-NOTES).
+    /// lib/protocols/config.ts; the same 14,180 bytes at the same address on Base Sepolia (MANAGER-NOTES).
     address internal constant MANAGER = 0xf1b40E3D5701C04d86F7828f0EB367B9C90901D8;
     /// JAW's factory `getImplementation()` on Base and Base Sepolia, read 2026-10-14.
     address internal constant JAW_ACCOUNT = 0xbb4f7d5418Cd8DADB61bb95561179e517572cBCd;
@@ -63,7 +63,7 @@ contract DeployExecutor is Script {
     /// never-used account too"): an executor without this hash would revert the whole batch. The deploy refuses to go
     /// without it (checkCode, run).
     bytes32 public constant JAW_CLONE_CODEHASH = 0xc79e2c8f7a03b38abd65a7e073fc3410849544bba74f53360c127775bc891848;
-    /// lib/guardian/config.ts, lib/aave/addresses.ts, lib/tokens/registry.ts (verified on-chain 2026-10-12/13).
+    /// lib/protocols/config.ts, lib/aave/addresses.ts, lib/tokens/registry.ts (verified on-chain 2026-10-12/13).
     address internal constant BASE_AAVE_V3_POOL = 0xA238Dd80C259a72e81d7e4664a9801593F98d1c5;
     address internal constant BASE_SPOKE = 0x17905Db0e4A3514467539956c084180616AE7B8D;
     address internal constant BASE_USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;

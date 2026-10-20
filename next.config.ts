@@ -27,7 +27,7 @@ const nextConfig: NextConfig = {
     { source: "/friends", destination: "/leaderboard?filter=contacts", permanent: false },
     // Pay became Send.
     { source: "/pay", destination: "/send", permanent: false },
-    // Top up (Receive) and Repay are sheets over the page they open from (components/gg/MoneySheets.tsx): their old
+    // Top up (Receive) and Repay are sheets over the page they open from (components/gg/cash/MoneySheets.tsx): their old
     // pages open them over Home, or over Send for Send's old Receive link.
     {
       source: "/receive",

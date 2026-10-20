@@ -2,7 +2,9 @@
 
 What the JAW permission manager on Base does, read from its verified source. These notes answer the questions the plan left open for M0 and feed the executor spec ([goose-executor-plan.md](../../docs/archive/goose-executor-plan.md), archived; the contract as built is [GooseExecutor-as-built.md](./GooseExecutor-as-built.md)).
 
-**Source.** `JustaPermissionManager` at `0xf1b40E3D5701C04d86F7828f0EB367B9C90901D8` (`lib/guardian/config.ts:11`), fetched from Sourcify's v2 API on 2026-10-14 (`/server/v2/contract/8453/<address>?fields=sources,compilation,deployment`). solc 0.8.30, via-IR, deployed in block 42,868,201. The same 14,180 bytes sit at the same address on Base Sepolia. The contract is not a proxy and has no admin, so what follows can't change.
+Leo's POC files these notes cite by name and line (`config.ts`, `permission.ts` and `useGuardian.ts`, `tests/unit/guardian.test.ts`, `GuardianFork.t.sol`) are gone: `hooks/useGuardian.ts` in 9f900bf, the rest in cfa4865, which moved `lib/guardian/config.ts` to `lib/protocols/config.ts`, `PERIOD` to `lib/agents/permissions.ts` and the Guardian test to `tests/unit/protect-rules.test.ts`. Read them in git before those commits. The manager's facts below still hold.
+
+**Source.** `JustaPermissionManager` at `0xf1b40E3D5701C04d86F7828f0EB367B9C90901D8` (`lib/protocols/config.ts`), fetched from Sourcify's v2 API on 2026-10-14 (`/server/v2/contract/8453/<address>?fields=sources,compilation,deployment`). solc 0.8.30, via-IR, deployed in block 42,868,201. The same 14,180 bytes sit at the same address on Base Sepolia. The contract is not a proxy and has no admin, so what follows can't change.
 
 Line references are to `src/JustaPermissionManager.sol` in that bundle unless a file is named. `BaseAccount.sol`, `JustanAccount.sol` and `MultiOwnable.sol` come from the same bundle (`lib/justanaccount/...`). SDK references are to `node_modules/@jaw.id/core/dist` at version 1.6.3, the version `package.json` pins.
 
@@ -29,7 +31,7 @@ Details that matter for us:
 | --- | --- | --- |
 | `PermissionApproved(bytes32 permissionHash, Permission permission)` | `:332`, emitted `:486` | the hash only; the whole permission (account, spender, salt, calls, spends) is in the data |
 | `PermissionRevoked(bytes32 permissionHash)` | `:333`, emitted `:1202` | the hash |
-| `CallsExecuted(bytes32 permissionHash)` | `:334`, emitted `:729` | the hash (this is the name `docs/archive/guardian-poc.md:49` uses) |
+| `CallsExecuted(bytes32 permissionHash)` | `:334`, emitted `:729` | the hash (this is the name `docs/archive/guardian-poc.md:52` uses) |
 | `SpendLimitUsed(bytes32 permissionHash, address token, PeriodSpend periodSpend)` | `:335`, emitted `:1124` | hash and token; `periodSpend.spend` is this batch's amount, not the running total |
 
 No manager event indexes the account. To read one account's agent moves from the manager you need its permission hashes. That is one reason the executor emits its own events indexed by account.
@@ -105,7 +107,7 @@ D14 grants through `useGrantPermissions`. From sections 1 and 5:
 - `salt` and `start` are chosen by the SDK, not by us. The app learns them from the grant response, and the executor from the `PermissionApproved` log. The permission can't be rebuilt from a fixed salt the way `GUARDIAN_SALT` (`config.ts:28`) works.
 - The grant transaction can't also call `executor.register` (section 5), so registration needs either the log trigger or a second transaction.
 
-For comparison, Leo's direct `manager.approve` through `wallet_sendCalls` (`useGuardian.ts:66-80`) can attach checkers, choose the salt and `start = now - 300`, and register in the same Face ID. It doesn't appear in JAW's permission list, can't be revoked from JAW's screens, and whether JAW's signing screen accepts it is still unverified (`docs/archive/guardian-poc.md:44`). The relay already stores a `checker` per call (`rpc/permissions.d.ts:191`) and `relayPermissionToPermission` already reads it (`rpc/permissions.js:156`). Only the request type and `apiPermissionsToPermission` drop it.
+For comparison, Leo's direct `manager.approve` through `wallet_sendCalls` (`useGuardian.ts:66-80`) can attach checkers, choose the salt and `start = now - 300`, and register in the same Face ID. It doesn't appear in JAW's permission list, can't be revoked from JAW's screens, and whether JAW's signing screen accepts it is still unverified (`docs/archive/guardian-poc.md:48`). The relay already stores a `checker` per call (`rpc/permissions.d.ts:191`) and `relayPermissionToPermission` already reads it (`rpc/permissions.js:156`). Only the request type and `apiPermissionsToPermission` drop it.
 
 ## 8. Other facts found on the way
 

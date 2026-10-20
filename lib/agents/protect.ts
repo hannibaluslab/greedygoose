@@ -2,7 +2,7 @@ import { EQUITIES } from "@/lib/tokens/registry";
 import { stockLimitsRaw, type StockLimits } from "@/lib/agents/permissions";
 
 /*
- * Protect's settings (the agent sheet, docs/agents-redesign): repay from cash (Job.Protect, always first), selling
+ * Protect's settings (the agent sheet, JUSTALAB-DECISIONS.md "From the Agents redesign"): repay from cash (Job.Protect, always first), selling
  * backing stock as its own grant (Job.ProtectSell, decision 5), what it sells first (the registry's `keepMix`) and the
  * never-sell list (stocks left out of the sell grant). No amount limit (Adrian, 2026-10-19): both grants carry the
  * executor's CAP_MAX, and there is no limit to choose. Pure, so the steps a save takes are tested.

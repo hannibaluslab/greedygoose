@@ -4,7 +4,7 @@ import { CHAIN_ID } from "@/lib/chain";
  * Aave V4 Equities Hub on Base.
  * Source: aave-dao/aave-address-book PR #1569; verified on-chain 2026-10-12
  * (code present, spoke.ORACLE() == SPOKE_ORACLE, reserves 0–7 listed on HUB).
- * `scripts/verify-registry.ts` re-checks all of this.
+ * `tests/onchain/verify-registry.test.ts` (`npm run verify:registry`) re-checks all of this.
  */
 export const AAVE = {
   chainId: CHAIN_ID,

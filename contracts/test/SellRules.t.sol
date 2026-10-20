@@ -5,8 +5,8 @@ import {Test} from "forge-std/Test.sol";
 import {Book, Holding, SellLimits, SellRules, Slice} from "../src/SellRules.sol";
 import {Vectors} from "./Vectors.sol";
 
-/// Protect · sell's rule against the TypeScript reference (planSell and sellTiming in lib/guardian/sell.ts), on the
-/// vectors scripts/agent-vectors.ts exported, plus the properties the plan asks for: ranking, the least amount,
+/// Protect · sell's rule against the TypeScript reference (planSell and sellsNow in lib/agents/rules/protectSell.ts),
+/// on the vectors scripts/agent-vectors.ts exported, plus the properties the plan asks for: ranking, the least amount,
 /// spill-over at a stock's limit, never-sell, keep-my-mix, and slices that keep Aave's withdrawal check happy.
 contract SellRulesTest is Test {
     uint256 constant WAD = 1e18;

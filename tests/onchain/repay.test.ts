@@ -1,7 +1,7 @@
 /**
  * Simulates the Repay sheet's "Pay with" batches on Base mainnet (eth_simulateV1), from a real account. Nothing is
  * signed or sent. The account is read the way usePosition and useBackingFactors read it, the rows and the amount
- * come from lib/repay.ts as the sheet plans them, quotes from the live pools (read again on their pools the way
+ * come from lib/repay/ as the sheet plans them, quotes from the live pools (read again on their pools the way
  * useSigningQuote reads them before JAW's sheet), and the batch is the one useRepayWith prepares.
  */
 import { describe, expect, it } from "vitest";

@@ -18,7 +18,7 @@ struct Coin {
 }
 
 /// @title EntryRules
-/// @notice The Entry agent's rule, ported from the TypeScript reference (lib/guardian/entry.ts) line for line:
+/// @notice The Entry agent's rule, ported from the TypeScript reference (lib/agents/rules/entry.ts) line for line:
 ///         test/EntryRules.t.sol runs both on the vectors scripts/agent-vectors.ts exports, and they must agree exactly.
 library EntryRules {
     uint256 internal constant BPS = 1e4;

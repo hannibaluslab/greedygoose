@@ -345,7 +345,7 @@ select {
   pointer-events: none;
 }
 
-/* Sheet step push / pop (SheetSteps in components/sheets/SheetShell.tsx). The header stays put,
+/* Sheet step push / pop (SheetSteps in components/gg/kit/SheetShell.tsx). The header stays put,
    so the body only has to say "this replaced that": 14px and 200ms. */
 @keyframes sheet-step-fwd {
   from {

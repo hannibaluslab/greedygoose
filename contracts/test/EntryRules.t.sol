@@ -5,7 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {Coin, EntryLimits, EntryRules} from "../src/EntryRules.sol";
 import {Vectors} from "./Vectors.sol";
 
-/// The Entry rule against the TypeScript reference (planEntry in lib/guardian/entry.ts), on the vectors
+/// The Entry rule against the TypeScript reference (planEntry in lib/agents/rules/entry.ts), on the vectors
 /// scripts/agent-vectors.ts exported, plus the plan's cases: the 99.5% floor with decimals adjusted, splitting a large
 /// balance, the daily limit, and a coin that is waiting.
 contract EntryRulesTest is Test {

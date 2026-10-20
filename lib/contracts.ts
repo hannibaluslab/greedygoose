@@ -23,7 +23,7 @@ const JAW_FEE_TREASURY: Address = "0x4337Ff05c84B9A80Ea0a78dBE7B8E102F66d4c08";
  * seven stocks, savings and its debt token, the other dollars), Aave V4's hub, spoke and oracle, Aave V3's pool, the
  * swap venues' factories, quoters and routers, JAW's permission manager, paymaster and fee treasury, the ERC-4337 entry points, EFP,
  * Multicall3, and GooseExecutor and GooseBoard once they're set. None of them is someone's account: money sent to one
- * is stuck there or taken by whoever can sweep it, so Send refuses them (lib/send.ts) and the allowlist never lets a
+ * is stuck there or taken by whoever can sweep it, so Send refuses them (lib/send/) and the allowlist never lets a
  * transfer reach one (lib/allowlist.ts).
  */
 export const APP_CONTRACTS: readonly Address[] = [

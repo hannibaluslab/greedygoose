@@ -53,9 +53,9 @@ struct TopUps {
 }
 
 /// @title CashRules
-/// @notice The Cash Agent's rules, ported line for line from Leo's `planGuardian` and our `planSave`
-///         (lib/guardian/plan.ts). The TypeScript versions stay the reference: test/CashRules.t.sol runs both on the
-///         same vectors (scripts/agent-vectors.ts).
+/// @notice The Cash Agent's rules, ported line for line from Leo's `planGuardian` (now `planProtect`) and our
+///         `planSave` (lib/agents/rules/protect.ts). The TypeScript versions stay the reference: test/CashRules.t.sol
+///         runs both on the same vectors (scripts/agent-vectors.ts).
 /// @dev Integer maths only. Units: Aave Value (1e26 = $1), WAD (1e18), RAY (1e27), USDC units (1e6 = $1 = 1e20 Value).
 library CashRules {
     uint256 internal constant WAD = 1e18;

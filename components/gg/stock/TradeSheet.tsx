@@ -117,7 +117,7 @@ export function TradeSheet({
   const fresh = () => {
     if (phase === "failed") reset();
   };
-  /** The legs and the amount move only through `tradeForm` (lib/trade.ts): flip, pick, typed dollars, MAX. */
+  /** The legs and the amount move only through `tradeForm` (lib/trade/form.ts): flip, pick, typed dollars, MAX. */
   const dispatch = (action: TradeAction) => {
     fresh();
     setForm((f) => tradeForm({ ...f, legs: f.legs ?? legs }, action, data));

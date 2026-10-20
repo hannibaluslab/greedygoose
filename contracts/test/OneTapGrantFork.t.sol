@@ -19,8 +19,8 @@ interface IJawAccount {
 }
 
 /// One Face ID for an agent's grant (Adrian, 2026-10-20, drops D14): the app's own wallet_sendCalls batch, the way
-/// Leo's Guardian granted (GreedyGoose hooks/useGuardian.ts), instead of JAW's permission screen followed by the
-/// registration batch. For Start earning the batch is
+/// Leo's Guardian granted (hooks/useGuardian.ts, removed in 9f900bf), instead of JAW's permission screen followed by
+/// the registration batch. For Start earning the batch is
 ///
 ///   [USDC.approve(pool, x), pool.supply(USDC, x, account, 0),   Start earning only
 ///    account.addOwnerAddress(manager),                           only when the manager isn't an owner yet

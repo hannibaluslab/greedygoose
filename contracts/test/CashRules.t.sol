@@ -5,9 +5,9 @@ import {Test} from "forge-std/Test.sol";
 import {Amounts, CashRules, ProtectCase, SaveCase, Thresholds, TopUps} from "../src/CashRules.sol";
 import {Vectors} from "./Vectors.sol";
 
-/// The Solidity rules against the TypeScript reference (planGuardian and planSave in lib/guardian/plan.ts, and the
-/// top-ups' counts in lib/agents/rules/topUps.ts), on the vectors scripts/agent-vectors.ts exported, plus properties that
-/// hold for any input.
+/// The Solidity rules against the TypeScript reference (planProtect and planSave in lib/agents/rules/protect.ts, and
+/// the top-ups' counts in lib/agents/rules/topUps.ts), on the vectors scripts/agent-vectors.ts exported, plus
+/// properties that hold for any input.
 contract CashRulesTest is Test {
     uint256 constant CENT = 10_000; // USDC units
 
