@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import { formatLog, type Address, type RpcLog } from "viem";
 import { memberFlows, type FlowRules } from "@/lib/board/flows";
 import { AAVE_V4_PLACES } from "@/lib/board/inside";
-import { decodeRecords } from "@/lib/board/logs";
+import { ADDRESSES_PER_QUERY, addressGroups, decodeRecords } from "@/lib/board/logs";
+import { BOARD_TOKENS } from "@/lib/board/tokens";
 import { tokenInfo } from "@/lib/board/tokens";
 import { PROTOCOLS } from "@/lib/protocols/config";
 import { USDC } from "@/lib/tokens/registry";
@@ -114,5 +115,20 @@ describe("decoding real Base logs", () => {
       amount: 3_245n,
     });
     expect(flows("paymaster.fee", who).moves).toEqual([{ block: 52_626_007n, dir: "out", usd6: 10_200_000n }]);
+  });
+});
+
+describe("log requests PublicNode takes", () => {
+  it("cuts the tracked tokens into groups of at most 10 addresses, keeping every one once and in order", () => {
+    const tokens = BOARD_TOKENS.map((t) => t.address);
+    const groups = addressGroups(tokens);
+    expect(tokens.length).toBeGreaterThan(ADDRESSES_PER_QUERY);
+    expect(groups.every((g) => g.length > 0 && g.length <= ADDRESSES_PER_QUERY)).toBe(true);
+    expect(groups.flat()).toEqual(tokens);
+  });
+
+  it("keeps a short list in one request", () => {
+    const two = [USDC.address, PROTOCOLS.AUSDC];
+    expect(addressGroups(two)).toEqual([two]);
   });
 });

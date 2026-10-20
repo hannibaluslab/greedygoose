@@ -84,17 +84,36 @@ function boardChunks(from: bigint, to: bigint, size = BOARD_LOG_CHUNK): Chunk[] 
   return out;
 }
 
+/**
+ * Contract addresses per eth_getLogs request: PublicNode refuses more ("A maximum of 10 addresses is allowed",
+ * measured 2026-10-20), and the board tracks more tokens than that.
+ */
+export const ADDRESSES_PER_QUERY = 10;
+
+/** `addresses` cut into groups PublicNode takes in one request, in order. */
+export function addressGroups(addresses: readonly Address[], size = ADDRESSES_PER_QUERY): Address[][] {
+  const out: Address[][] = [];
+  for (let i = 0; i < addresses.length; i += size) out.push(addresses.slice(i, i + size));
+  return out;
+}
+
 async function getLogs(
   client: Client,
   address: Address | Address[],
   topics: (Hex | Hex[] | null)[],
   c: Chunk,
 ): Promise<Log[]> {
-  const logs = (await client.request({
-    method: "eth_getLogs",
-    params: [{ address, topics, fromBlock: toHex(c.from), toBlock: toHex(c.to) }],
-  })) as RpcLog[];
-  return logs.map((l) => formatLog(l));
+  const groups = addressGroups(Array.isArray(address) ? address : [address]);
+  const parts = await Promise.all(
+    groups.map(
+      (group) =>
+        client.request({
+          method: "eth_getLogs",
+          params: [{ address: group, topics, fromBlock: toHex(c.from), toBlock: toHex(c.to) }],
+        }) as Promise<RpcLog[]>,
+    ),
+  );
+  return parts.flat().map((l) => formatLog(l));
 }
 
 const base = (l: Log) => ({ block: l.blockNumber!, tx: l.transactionHash!, logIndex: l.logIndex! });
