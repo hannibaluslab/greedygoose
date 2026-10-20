@@ -8,7 +8,7 @@ An invest-and-earn app on Base. You sign in with a passkey. Your account is a JA
   Microsoft, NVIDIA, Tesla).
 - **Credit backed by your stocks.** Take USDC credit on Aave V4's Equities spoke with your stocks backing it. Repay and
   free up stocks in one signature.
-- **Agents (coming soon).** Save moves new cash into savings. Entry turns other dollar coins you receive into cash.
+- **Agents.** Save moves new cash into savings. Entry turns other dollar coins you receive into cash.
   Protect repays from your cash if your credit falls under 1.03, and sells stock that backs your credit if cash isn't
   enough. Rebalance trades your stocks toward your mix, and can put your top-ups into it.
 - **One Face ID per change.** Each action is one batch, shown on JAW's sheet before you sign. Turning an agent on is
@@ -20,10 +20,10 @@ Tokenized stocks track stock prices. They are not company shares, and they earn 
 ## Status
 
 - The app runs on Base mainnet. Production is greedygoose.vercel.app.
-- The agents show "Coming soon" until GooseExecutor is deployed and set in the app (`NEXT_PUBLIC_GOOSE_EXECUTOR` and
-  `NEXT_PUBLIC_AGENTS_LIVE=1`, see `lib/agents/config.ts`). The executor they need is built and tested on a Base fork,
-  with a few pre-launch values still to set. It is not deployed yet (the go-live checklist in
-  [DEPLOYMENTS.md](contracts/docs/DEPLOYMENTS.md)).
+- The agents are on in production since 2026-10-20 (Adrian's go), on the preview GooseExecutor `0x686c…F02D`: no
+  amount cap, not audited yet, the review's fixes parked ([DEPLOYMENTS.md](contracts/docs/DEPLOYMENTS.md)). A build
+  without `NEXT_PUBLIC_GOOSE_EXECUTOR` and `NEXT_PUBLIC_AGENTS_LIVE=1` shows them as "Coming soon"
+  (`lib/agents/config.ts`).
 - The Leaderboard opens once its contract, GooseBoard, is deployed. It isn't yet.
 
 ## Start here

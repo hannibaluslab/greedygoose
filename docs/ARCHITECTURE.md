@@ -59,6 +59,6 @@ code.
 
 ## Branches
 
-- `v2` is the line for the new version. It holds everything from `jl/welcome-bg`, `main`, `jl/credit-cap-act` and
-  `jl/rehearsal`.
-- Every `jl/*` branch before it is merged into `v2` and kept as history.
+- `main` is the only working branch. `v2` and every earlier `jl/*` branch are merged into it; `v2` was deleted on
+  2026-10-20.
+- `jl/executor-fixes` holds the parked draft of the next executor's review fixes. Never merge it as it stands.
