@@ -15,9 +15,8 @@ import { rebalanceCard, type RebalanceCardModel } from "@/lib/agents/rebalanceCa
 
 /**
  * Rebalance's state as its overview card draws it (lib/agents/rebalanceCard.ts), from the account's reads: the
- * registry, JAW's list, the position and the agents' feed. Its sheet says the same in its pill and its line, so the two
- * never disagree. Null while the reads are in or the Rebalancer's state loads. The same reads as RebalanceCard's own,
- * which can take its model from here.
+ * registry, JAW's list, the position and the agents' feed. The card and the sheet's pill and line both take it from
+ * here, so the two never disagree. Null while the reads are in or the Rebalancer's state loads.
  */
 export function useRebalanceCard(account: `0x${string}`): RebalanceCardModel | null {
   const agents = useAgents(account);

@@ -4,12 +4,13 @@ import type { ReactNode } from "react";
 import { SheetShell } from "@/components/gg/kit/SheetShell";
 import { TxError } from "@/components/gg/TxUi";
 import { FinishBlock, type FinishState } from "./FinishTurningOn";
+import { RebalancePill } from "./RebalanceCard";
 import { RebalanceSettings } from "./RebalanceSettings";
 import { useAgents } from "@/hooks/useAgents";
 import { useRebalanceCard } from "@/hooks/useRebalanceCard";
 import { AGENTS_LIVE } from "@/lib/agents/config";
 import { AGENT_JOBS, type SheetAction } from "@/lib/agents/list";
-import type { PillTone, RebalanceCardModel } from "@/lib/agents/rebalanceCard";
+import type { RebalanceCardModel } from "@/lib/agents/rebalanceCard";
 import { sheetLine } from "@/lib/agents/rebalanceSettings";
 import { stepsNote } from "@/lib/formatting";
 
@@ -20,13 +21,6 @@ import { stepsNote } from "@/lib/formatting";
  * Turn off and Renew go through the Agents page's runner (`onAction`), as Protect's sheet does; Finish too (`finish`),
  * which stands where the line is while JAW granted it and the executor doesn't run it yet.
  */
-
-const PILL: Record<PillTone, string> = {
-  on: "bg-pos-soft text-pos",
-  neutral: "bg-card-bone text-ink-mid",
-  needs: "bg-needs-soft text-needs-ink",
-  due: "bg-due-soft text-due-ink",
-};
 
 export function RebalanceSheet({
   account,
@@ -69,18 +63,6 @@ export function RebalanceSheet({
         settings={<RebalanceSettings account={account} />}
       />
     </SheetShell>
-  );
-}
-
-/** Rebalance's state beside the sheet's title, as its card shows it ("On", "Needs you", "Ends soon"). */
-export function RebalancePill({ model }: { model: RebalanceCardModel | null }) {
-  if (!model) return <span aria-hidden className="h-6 w-12 shrink-0 animate-pulse rounded-xl bg-card-bone" />;
-  return (
-    <span
-      className={`flex h-6 shrink-0 items-center whitespace-nowrap rounded-xl px-2.5 text-xs font-bold ${PILL[model.pill.tone]}`}
-    >
-      {model.pill.text}
-    </span>
   );
 }
 
