@@ -1,0 +1,54 @@
+# Adversarial review of GooseExecutor before a no-limit launch (2026-10-20)
+
+**Scope:** `contracts/src` at `main` @ `54fae99` (the code deployed at `0x686cd88F248DE3F9FC0835566DB798D93881F02D`; `958c84a` changes only comments). GooseExecutor, the five job libraries, the Rules libraries, NyCalendar, GooseReceiver and the interfaces, reviewed with no amount limit (`CAP_MAX` = max uint160): every protection comes from this code.
+
+**Method:** 13 reviewers, run as a Claude workflow (Adrian asked for it on 2026-10-20). Six attackers each hunted one kind of loss: taking or redirecting money, pricing and MEV, rule logic, access and admin, the registry, and reentrancy or DoS. One skeptic per attacker re-read the code to refute each finding. A completeness critic then named what nobody had looked at. Read-only: no forks and no transactions; the critic ran the 114 non-fork unit tests offline, and all pass.
+
+**Result:** no critical finding: **nobody found a way to take or redirect user money.** Every call the executor sends through an account has fixed targets, and every recipient or `onBehalfOf` is the account itself. The skeptics confirmed 23 findings and refuted 2. Once duplicates are merged, there are **14 distinct issues: 6 high, 4 medium and 4 low.** Most of the highs are the same weakness: in a crash, Protect can be stopped, fail, or switch itself off. An outsider can also cause that on purpose.
+
+**Triage:** awaiting Adrian's agree/disagree on each item. No fix is planned until then.
+
+## High
+
+| # | What goes wrong | Where (54fae99) | Proposed fix | Merged from |
+|---|---|---|---|---|
+| H1 | **Protect from savings fails, and the sale never gets its turn.** When Aave V3 can't pay out the planned withdrawal (USDC use near 100% in a crash, or a paused reserve), the batch reverts. Protect runs first, so the account's run reverts before Protect · sell is tried. Each failure doubles a cooldown, during which nothing runs. The 8th failure (about 21 hours) switches every agent off (Stuck). | `jobs/ProtectJob.sol:94-98` (repay not capped by V3's free cash; the V4 USDC pause flag isn't checked, unlike `SellJob.sol:180`), `:138` (`executeBatch` not in try/catch); `GooseExecutor.sol:541-543, 905-919` | Cap the repay at what V3 can pay out now, and skip when the reserve is paused. Wrap the batch in try/catch like `SellJob._batch`, so a failed repay hands over to the sale in the same run and doesn't count toward Stuck. | review items 1, 6, 11, 15, 21 |
+| H2 | **A refused Save puts the whole account in cooldown.** When Aave V3's supply cap is reached or USDC is frozen, Save's batch reverts. The cooldown covers every job, Protect included, and 8 failures switch every agent off. | `jobs/SaveJob.sol:99-112` (no supply-cap, frozen or paused check), `:131` (no try/catch); `GooseExecutor.sol:905-919` | Check the cap and the reserve's state in the plan, and wrap the batch in try/catch. A refused Save should be a quiet no-op, never a failure. | 5, 11, 16, 22 |
+| H3 | **5 cents of savings block the sale.** Protect from savings repays any amount of $0.05 or more, and a run makes only one move. So anyone can send 0.05 aUSDC to an account before each run (supply `onBehalfOf` the account), and Protect · sell never runs. The cost is about $0.05 plus gas per run, and it works against every user at once. Confirmed by reading the code: `_priority` puts Protect first, and `runAccount` returns after one move. | `GooseExecutor.sol:550-578, 886-888`; `CashRules.sol:128-142` (`minRepay` 0.05e6) | When savings can't reach the target, carry on to Protect · sell in the same run, or let the sale spend the savings first in its own batch. A larger `minRepay` only raises the attacker's cost. | 18 |
+| H4 | **An EIP-7702 account can change its code after it registers.** The codehash allow-list is checked only at registration, and it allows a 7702 delegation to JAW's implementation. An attacker registers, re-delegates to their own code, then fakes sales that use up each stock's shared pool window (which blocks everyone's Protect · sell), or burns the runner's gas every round. | `GooseExecutor.sol:732` (the only codehash check); `jobs/JobBase.sol:29-44`; `jobs/SellJob.sol:309-353` (sold stocks: the check doesn't confirm the backing fell by the amount sold); `DeployExecutor.s.sol:205` | Re-check the codehash on every plan and run. Tighten the sale's post-check to the measured drop, and charge the pool window from it. **On the live deploy:** `disallowCodehash(0xd9f5ead9804121543baaa39356ceae4adf7310d7cee95559bdd42b92a6091285)` takes effect at once and closes this hole, since no account is registered yet. GreedyGoose's passkey accounts are JAW clones, never 7702. | 10, 14, 19 |
+| H5 | **A sale that reverts is retried every round, with no wait.** A skipped sale counts as a move and resets failures, so a failing account burns about 4M gas every round and starves the accounts after it in its page. On sponsored gas, this also drains the runner's credit. | `jobs/SellJob.sol:276-295`; `GooseExecutor.sol:530-540, 574-576` | Give a skipped sale a short retry wait (2 minutes, doubling) that doesn't count as a failure, and cap the batch gas at the measured cost. Fixing H4 removes the cheap way to trigger this. | 20 |
+| H6 | **After Aave cuts a collateral factor, Protect · sell can fail every run.** The sale's model reads the reserve's latest settings, but the health it compares against is Aave's reading on the user's stored settings. After a cut, the post-check (`HealthNotHigher`) reverts, outside the try, so each run counts as a failure and Protect is off within about 21 hours. Whether Aave V4 moves the position to the new settings on withdraw still needs confirming in its source. | `jobs/SellJob.sol:166, 241, 275, 339` | Compare against the model's own health before the sale, on the refreshed settings. Run the batch and its post-checks in one try, so a failed check rolls back as SaleSkipped. | 7 |
+
+## Medium
+
+| # | What goes wrong | Where | Proposed fix | Merged from |
+|---|---|---|---|---|
+| M1 | **Sales share one window per stock, first come first served.** $10k per stock per 10 minutes, for all users together. A big position can't be rescued fast enough in a crash, and one large rescue can use a stock's whole window ahead of accounts closer to liquidation. | `jobs/SellJob.sol:31, 224, 396-407`; `GooseExecutor.sol:263`; `DeployExecutor.s.sol:223` | Give sales below the line priority over rescue sales, cap each account's share of a window, and size the cap to pool depth. | 3, 9 |
+| M2 | **Protect ignores cash in the wallet.** It repays only from savings, so stock is sold while wallet USDC sits unused. That breaks the app's own definition of cash (D15). | `jobs/ProtectJob.sol:94-97, 132-138`; `jobs/SellJob.sol:183-185` | Repay from wallet USDC above the keep-back first (the template already allows it), then savings, then size the sale against what's left. | 8 |
+| M3 | **A compromised runner can sandwich sales.** Up to about 2.7% of a Protect sale, and about 0.5% of a Rebalance or Entry swap. The pool price is read from slot0 in the same transaction. | `jobs/SellJob.sol:251-257, 377-386` | Require the pool price to sit within a tight band of Aave's price (or its TWAP) at sale time, and set the swap's price limit at the floor. | 13 |
+| M4 | **The page scan creeps one account per pass.** Accounts behind costly plans wait about 20 passes, and anyone can add accounts that make plans costly. | `GooseExecutor.sol:489-497` | Advance the start by about what a pass covers, and run the cheap Protect plans over the whole page before any sale plan. | 23 |
+
+## Low
+
+| # | What goes wrong | Where | Proposed fix | Merged from |
+|---|---|---|---|---|
+| L1 | Once a job is off, anyone can switch it back on with an older approved grant that was never revoked. The app revokes every replaced grant, so only grants made outside the app are exposed. | `GooseExecutor.sol:443-451, 735-738, 769-772` | Keep a high-water mark of the newest grant start per job that `_jobOff` never clears. | 2 |
+| L2 | The owner can pause every Protect at once, and a removed forwarder takes 7 days to come back. This is a designed owner power. | `GooseExecutor.sol:637-667, 694-695` | Make a pause expire on its own, or keep Protect running while paused, and let users run their own account. | 12 |
+| L3 | A cheap nudge to a stock's pool can keep the Rebalancer out for a day. The sale side isn't affected. | `jobs/RebalanceJob.sol:290-302`; `RebalanceRules.sol:135-138` | Gate on a TWAP rather than slot0. | 4 |
+| L4 | A replacement grant whose start is in the future is accepted, and Protect sits idle until it starts (a wrong device clock). | `GooseExecutor.sol:735-737, 769-772` | Refuse `start > block.timestamp` at registration, with a small tolerance. | 17 |
+
+## The completeness critic's open areas
+
+| Area | Status |
+|---|---|
+| 1. The 7702 code swap, also used to move pools or Aave V3 cash within one round | Same root cause as H4 |
+| 2. No sale or rebalance has ever run against the real B20 stock tokens (tests replace them with plain ERC-20s) | Open: simulate a full sale and rebalance on Base with the real tokens (eth_simulateV1, keyless RPC) |
+| 3. Aave V4's withdraw, oracle and config-refresh behaviour behind the slicing math | Open: read the deployed spoke's source (also settles H6) |
+| 4. The runners aren't in the repo; a short-gas run defers a sale silently, with no alarm | Open: runners send at least 5M gas per write (KeeperHub sends 5.5M); alerting on repeated RunDeferred or SaleSkipped is still missing |
+| 5. The open `registerApproved` is safe only if JAW's manager hashes every field | **Closed (2026-10-20):** `JustaPermissionManager` (verified source on Sourcify, `0xf1b40E3D5701C04d86F7828f0EB367B9C90901D8`): `getHash` covers account, spender, start, end, salt, every call (target, selector, checker) and every spend (token, allowance, unit, multiplier), and `approve` requires the account itself as sender |
+
+**Critic's verdict:** not acceptable for a no-limit mainnet launch with real users today. No path to take funds was found, but several findings leave Protect stuck, off or silently deferred in a crash, and the crash path has never run end to end. A team-only preview is reasonable only with small team-owned positions until the highs and open areas 2–3 are closed.
+
+## Where this leaves the preview deploy
+
+Adrian chose to keep the preview uncapped (JUSTALAB-DECISIONS.md, 2026-10-20). With no members, the runner only reads. No finding takes money; the risk to a team member who turns agents on is that Protect doesn't save a position in a crash. One owner transaction closes H4 on the live deploy at once (above); everything else needs a new deploy.
