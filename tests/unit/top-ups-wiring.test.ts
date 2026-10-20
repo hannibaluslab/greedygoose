@@ -12,7 +12,8 @@ import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import { agentJobOf } from "@/lib/agents/agentJob";
 import { nyDay } from "@/lib/agents/next";
 import { approveCall, contractPermission, jawPermission, oneTapGrantCalls } from "@/lib/agents/oneTapGrant";
-import { GRANT_SECONDS, jobGrant, stockLimitsRaw } from "@/lib/agents/permissions";
+import { GRANT_SECONDS, jobGrant, startCapRaw, stockLimitsRaw } from "@/lib/agents/permissions";
+import { rebalanceChange, type MixSave } from "@/lib/agents/rebalanceSettings";
 import { buildRegisterCalls } from "@/lib/agents/register";
 import { buildSetMixCalls, buildSetTopUpsCalls } from "@/lib/agents/settings";
 import { KEEP_MAX_RAW, chainFacts, keepRawOf, readTopUps, type TopUpsAnswer } from "@/lib/agents/topUps";
@@ -115,6 +116,72 @@ describe("a top-ups change in one batch (the allowlist's pairing)", () => {
     expect(agentJobOf(contractPermission(rebalance), user, EXECUTOR)).toBe("rebalance");
     // The flagged grant approved and left unregistered is refused, as any grant is.
     expect(() => assertAllowed(user, [approveCall(rebalance), ...settings])).toThrow(/same batch/);
+  });
+});
+
+describe("rebalanceChange (what Rebalance's Save puts in its batch)", () => {
+  const grant = { job: "rebalance" as const, capRaw: maxUint160, limitsRaw: limits };
+  const base: MixSave = {
+    weights: [5_000, 0, 0, 0, 0, 5_000, 0],
+    mixChanged: false,
+    grant: null,
+    topUps: { on: true, keepUsd: 500 },
+    topUpsChanged: false,
+  };
+  const on = { save: "on" as const, capMaxRaw: maxUint160 };
+  const fnOf = (data: `0x${string}`) => decodeFunctionData({ abi: gooseExecutorAbi, data });
+
+  it("is nothing when nothing changed", () => {
+    expect(rebalanceChange(user, base, on)).toBeNull();
+  });
+
+  it("saves Keep alone as settings, no grant", () => {
+    const c = rebalanceChange(user, { ...base, topUps: { on: true, keepUsd: 800 }, topUpsChanged: true }, on)!;
+    expect(c.grants).toEqual([]);
+    expect(c.settings.map((x) => fnOf(x.data))).toEqual([{ functionName: "setTopUps", args: [true, 800_000_000] }]);
+  });
+
+  it("turns top-ups on with the flagged grant, and earning's grant too while it's off (P3, one signature)", () => {
+    const p = { ...base, grant: { ...grant, topUps: true }, topUpsChanged: true };
+    const c = rebalanceChange(user, p, { save: "off", capMaxRaw: maxUint160 })!;
+    expect(c.grants).toEqual([
+      { ...grant, topUps: true },
+      { job: "save", capRaw: startCapRaw("save", maxUint160) },
+    ]);
+    expect(c.settings.map((x) => fnOf(x.data).functionName)).toEqual(["setTopUps"]);
+    // Earning already on: the Rebalancer's grant alone.
+    expect(rebalanceChange(user, p, on)!.grants).toEqual([{ ...grant, topUps: true }]);
+    // While earning's state loads, it waits rather than turn top-ups on with nothing to count them.
+    expect(rebalanceChange(user, p, { save: "loading", capMaxRaw: maxUint160 })).toBeNull();
+    expect(rebalanceChange(user, p, { save: "off", capMaxRaw: null })).toBeNull();
+  });
+
+  it("grants earning too when the Rebalancer is granted anew with top-ups already on, never for Keep alone", () => {
+    const p = { ...base, grant: { ...grant, topUps: true } };
+    expect(rebalanceChange(user, p, { save: "off", capMaxRaw: maxUint160 })!.grants).toEqual([
+      { ...grant, topUps: true },
+      { job: "save", capRaw: startCapRaw("save", maxUint160) },
+    ]);
+    const keepOnly = { ...base, topUps: { on: true, keepUsd: 900 }, topUpsChanged: true };
+    expect(rebalanceChange(user, keepOnly, { save: "off", capMaxRaw: maxUint160 })!.grants).toEqual([]);
+  });
+
+  it("turns them off with a grant without the withdraw, and never grants earning for it", () => {
+    const p = { ...base, grant, topUps: { on: false, keepUsd: 500 }, topUpsChanged: true };
+    const c = rebalanceChange(user, p, { save: "off", capMaxRaw: maxUint160 })!;
+    expect(c.grants).toEqual([grant]);
+    expect(c.settings.map((x) => fnOf(x.data))).toEqual([{ functionName: "setTopUps", args: [false, 500_000_000] }]);
+  });
+
+  it("puts the mix first, then top-ups, in the same batch", () => {
+    const p = { ...base, mixChanged: true, topUps: { on: true, keepUsd: 0 }, topUpsChanged: true };
+    const c = rebalanceChange(user, p, on)!;
+    expect(c.settings.map((x) => fnOf(x.data).functionName)).toEqual(["setMix", "setTopUps"]);
+  });
+
+  it("sends no setTopUps while the executor's setting isn't read", () => {
+    const c = rebalanceChange(user, { ...base, mixChanged: true, topUps: null, topUpsChanged: false }, on)!;
+    expect(c.settings.map((x) => fnOf(x.data).functionName)).toEqual(["setMix"]);
   });
 });
 

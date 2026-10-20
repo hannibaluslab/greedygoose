@@ -20,6 +20,7 @@ import {
 import {
   GRANT_SECONDS,
   JOBS,
+  carriesTopUps,
   grantPermission,
   jobGrant,
   readAgentGrant,
@@ -31,6 +32,7 @@ import {
 } from "@/lib/agents/permissions";
 import { pickFor } from "@/lib/agents/picks";
 import { encodePermission, REGISTER_FALLBACK } from "@/lib/agents/register";
+import { buildSetTopUpsCalls } from "@/lib/agents/settings";
 import { deleteFromRelay, recordInRelay, relayPermission, type RelayDeps } from "@/lib/agents/relay";
 import { jobStatus, type AgentStatus, type Stored } from "@/lib/agents/status";
 import { PROTOCOLS } from "@/lib/protocols/config";
@@ -38,14 +40,21 @@ import { justanAccountAbi, permissionManagerAbi } from "@/lib/protocols/abis";
 import { agentChangePlan, registerPlan, type ChangePrefix } from "@/lib/tx/plans";
 import { TxStop, txKey, type TxPlan, type TxReceipt } from "@/lib/tx/prepared";
 import { useNowSec } from "@/hooks/useNowSec";
+import { useTopUpsSwitch } from "@/hooks/useTopUps";
 
 export { GRANT_SECONDS } from "@/lib/agents/permissions";
 
-/** What a job runs with: its limit, and for Protect · sell and the Rebalancer each stock's. */
-type JobTerms = { capRaw: bigint; limitsRaw?: StockLimits };
+/**
+ * What a job runs with: its limit, for Protect · sell and the Rebalancer each stock's, and whether the Rebalancer's
+ * grant carries top-ups (the savings withdraw).
+ */
+type JobTerms = { capRaw: bigint; limitsRaw?: StockLimits; topUps?: boolean };
 
-/** A job's new grant in a change: its limit, and each stock's for Protect · sell and the Rebalancer. */
-export type GrantStep = { job: AgentJob; capRaw: bigint; limitsRaw?: StockLimits };
+/**
+ * A job's new grant in a change: its limit, each stock's for Protect · sell and the Rebalancer, and for the Rebalancer
+ * whether it carries top-ups.
+ */
+export type GrantStep = { job: AgentJob; capRaw: bigint; limitsRaw?: StockLimits; topUps?: boolean };
 
 /** A grant the account holds, as the manager knows it: its id (the manager's hash) and the struct it approved. */
 type Held = { id: Hex; job: AgentJob; p: JawPermission };
@@ -169,17 +178,20 @@ export function useAgents(account: `0x${string}`) {
   const own = !!signer && isAddressEqual(signer, account);
   const nowSec = useNowSec();
   const client = usePublicClient({ chainId: CHAIN_ID });
+  // The account's own top-ups switch: a Rebalance turn-off switches it off in the same batch.
+  const topUpsSwitch = useTopUpsSwitch(account);
 
   /** The registry: the job bits, failures in a row and the back-off, and each job's stored grant (with its stock limits). */
   const stored = useMemo(() => {
     if (!registry.data) return undefined;
     const [[jobs, , fails, cooldownUntil], ...raw] = registry.data;
     const permissions = raw.map((p) => ({ ...p, calls: [...p.calls], spends: [...p.spends] }) as JawPermission);
-    const grants = byJob((job): Stored & { limitsRaw?: StockLimits; salt: bigint } => {
+    const grants = byJob((job): Stored & { limitsRaw?: StockLimits; topUps: boolean; salt: bigint } => {
       const p = permissions[JOBS.indexOf(job)];
       const limitsRaw =
         job === "sell" || job === "rebalance" ? (readStockLimits(job, p.spends) ?? undefined) : undefined;
-      return { start: p.start, end: p.end, cap: p.spends[0]?.allowance ?? 0n, limitsRaw, salt: p.salt };
+      const topUps = job === "rebalance" && carriesTopUps(p.spends);
+      return { start: p.start, end: p.end, cap: p.spends[0]?.allowance ?? 0n, limitsRaw, topUps, salt: p.salt };
     });
     const registered = JOBS.filter((job) => (jobs & (1 << JOBS.indexOf(job))) !== 0);
     return { jobs, fails, cooldownUntil: Number(cooldownUntil), grants, permissions, registered };
@@ -332,11 +344,13 @@ export function useAgents(account: `0x${string}`) {
       byJob((job): (JobTerms & { end: number }) | null => {
         if (status[job] === "on" && stored) {
           const g = stored.grants[job];
-          return { capRaw: g.cap, limitsRaw: g.limitsRaw, end: g.end };
+          return { capRaw: g.cap, limitsRaw: g.limitsRaw, topUps: g.topUps, end: g.end };
         }
         if (status[job] !== "starting") return null;
         const newest = live[job][0];
-        return newest ? { capRaw: newest.capRaw, limitsRaw: newest.limitsRaw, end: newest.end } : null;
+        return newest
+          ? { capRaw: newest.capRaw, limitsRaw: newest.limitsRaw, topUps: !!newest.topUps, end: newest.end }
+          : null;
       }),
     [status, stored, live],
   );
@@ -361,9 +375,9 @@ export function useAgents(account: `0x${string}`) {
     () =>
       byJob((job): JobTerms | null => {
         const newest = granted.filter((g) => g.job === job).sort((a, b) => b.start - a.start)[0];
-        if (newest) return { capRaw: newest.capRaw, limitsRaw: newest.limitsRaw };
+        if (newest) return { capRaw: newest.capRaw, limitsRaw: newest.limitsRaw, topUps: !!newest.topUps };
         const g = stored?.grants[job];
-        return g && g.cap > 0n ? { capRaw: g.cap, limitsRaw: g.limitsRaw } : null;
+        return g && g.cap > 0n ? { capRaw: g.cap, limitsRaw: g.limitsRaw, topUps: g.topUps } : null;
       }),
     [granted, stored],
   );
@@ -557,8 +571,10 @@ export function useAgents(account: `0x${string}`) {
    * A change's one batch, for useTx: `grants` (each job's new grant, its start and salt picked once per terms and per
    * the grant the executor holds, lib/agents/picks.ts), `off` (jobs turned off), the registry `settings`, and `prefix`
    * first (Start earning's supply). Each job granted anew or turned off has every live grant of it revoked in the same
-   * batch. Null while the agents' reads load (the screens wait on "loading") or with nothing to do; a plan that says
-   * why at the button when Base or JAW's list can't be read, or the grant can't be built.
+   * batch, and turning Rebalance off while top-ups are on switches them off too (`setTopUps(false)`), so nothing is
+   * left counting for a Rebalancer that's gone. Null while the agents' reads load (the screens wait on "loading") or
+   * with nothing to do; a plan that says why at the button when Base or JAW's list can't be read, or the grant can't
+   * be built.
    */
   function changePlan(change: {
     grants?: readonly GrantStep[];
@@ -567,6 +583,8 @@ export function useAgents(account: `0x${string}`) {
     prefix?: ChangePrefix;
   }): TxPlan | null {
     if (!executor || !client || !stored || !onChain) return null;
+    // Rebalance's turn-off switches top-ups off too, so it waits for the switch's first read.
+    if (change.off?.includes("rebalance") && topUpsSwitch === undefined) return null;
     const asked = change.grants ?? [];
     const jobs = [...new Set([...asked.map((g) => g.job), ...(change.off ?? [])])];
     // Nothing is granted or revoked on a guess: what Base or JAW's list would have said could be left behind.
@@ -575,20 +593,24 @@ export function useAgents(account: `0x${string}`) {
     if (asked.length === 0 && revokes.length === 0 && (change.settings?.length ?? 0) === 0 && !change.prefix)
       return null;
     let grants: Permission[];
+    let settings = change.settings ?? [];
     try {
       grants = asked.map((g) => {
         const held = stored.grants[g.job];
-        const pick = pickFor(account, g.job, txKey(g.capRaw, g.limitsRaw, held.salt, held.start), held.start + 1);
-        const detail = jobGrant(g.job, g.capRaw, g.limitsRaw);
+        const terms = txKey(g.capRaw, g.limitsRaw, !!g.topUps, held.salt, held.start);
+        const pick = pickFor(account, g.job, terms, held.start + 1);
+        const detail = jobGrant(g.job, g.capRaw, g.limitsRaw, g.topUps);
         return jawPermission(account, executor, pick.start + GRANT_SECONDS, detail, pick);
       });
+      if (change.off?.includes("rebalance") && topUpsSwitch?.on)
+        settings = [...settings, ...buildSetTopUpsCalls(account, false, topUpsSwitch.keepRaw)];
     } catch {
       // A grant its job's template can't hold (a Rebalancer with no stock it may sell): said, never thrown in render.
       return stopPlan(account, REGISTER_FALLBACK);
     }
     return agentChangePlan(
       account,
-      { grants, revokes: revokes.map((h) => h.p), settings: change.settings, prefix: change.prefix },
+      { grants, revokes: revokes.map((h) => h.p), settings, prefix: change.prefix },
       { ownerCalls: () => managerOwnerCalls(client, account), landed: landedFor(grants, revokes) },
     );
   }

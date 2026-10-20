@@ -1,8 +1,13 @@
+import type { Call } from "@/lib/aave/tx";
 import { MIX_WHOLE } from "@/lib/agents/mix";
-import type { StockLimits } from "@/lib/agents/permissions";
+import { startCapRaw, type AgentJob, type StockLimits } from "@/lib/agents/permissions";
 import type { RebalanceCardModel, Side } from "@/lib/agents/rebalanceCard";
-import { keepText, topUpsChanged, type TopUpsChoice, type TopUpsSetting } from "@/lib/agents/topUps";
-import { EQUITIES } from "@/lib/tokens/registry";
+import { buildSetMixCalls, buildSetTopUpsCalls } from "@/lib/agents/settings";
+import type { AgentStatus } from "@/lib/agents/status";
+import { keepRawOf, keepText, topUpsChanged, type TopUpsChoice, type TopUpsSetting } from "@/lib/agents/topUps";
+import { earningAllowsText } from "@/lib/cashSetup";
+import { formatUsdTrim } from "@/lib/formatting";
+import { USDC, EQUITIES } from "@/lib/tokens/registry";
 
 /**
  * Rebalance's sheet (boards 7e–7h): its line under the title, My mix, Top-ups go into my mix, and what saving takes
@@ -55,6 +60,8 @@ type SaveInput = {
   running: boolean;
   /** Top-ups go into my mix: what the executor has (null until it counts top-ups) and what's on screen. */
   topUps?: { saved: TopUpsSetting | null; chosen: TopUpsChoice };
+  /** Earning (the Save job) is off, so turning top-ups on grants it in the same batch (P3). */
+  earningOff?: boolean;
   feeBlocked: boolean;
   feeLoading: boolean;
   busy: boolean;
@@ -93,11 +100,23 @@ export function rebalanceSave(p: SaveInput): SavePlan {
   const note = saveNote(p, whole, keepMissing);
   const canSave = p.connected && note === null && steps > 0 && p.capMaxRaw !== null && !p.feeLoading && !p.busy;
   // Said only while Save grants, and not while Keep is empty: the line would name an amount nobody typed.
-  const allows =
-    needsGrant && !keepMissing
-      ? rebalanceAllows(topUps?.chosen.on ? { keepUsd: topUps.chosen.keepUsd ?? 0 } : undefined)
-      : null;
+  const allows = needsGrant && !keepMissing ? allowsLine(p, topUps?.chosen ?? null) : null;
   return { mixChanged, topUpsChanged: topUpsMoved, needsGrant, steps, canSave, note, allows };
+}
+
+/** "$1,000": earning's daily limit as its grant carries it (Start earning's, held to CAP_MAX). */
+const saveLimitText = (capMaxRaw: bigint) =>
+  formatUsdTrim(Number(startCapRaw("save", capMaxRaw)) / 10 ** USDC.decimals);
+
+/**
+ * The allows line for a Save that grants: Rebalance's (`rebalanceAllows`), and while top-ups are on and earning is
+ * off, earning's own line after it (Start earning's words), since the same Face ID grants earning too (P3,
+ * `rebalanceChange`).
+ */
+function allowsLine(p: SaveInput, chosen: TopUpsChoice | null): string {
+  const line = rebalanceAllows(chosen?.on ? { keepUsd: chosen.keepUsd ?? 0 } : undefined);
+  const earningToo = !!chosen?.on && !!p.earningOff && p.capMaxRaw !== null;
+  return earningToo ? `${line} ${earningAllowsText(saveLimitText(p.capMaxRaw!))}` : line;
 }
 
 /**
@@ -110,6 +129,56 @@ export function rebalanceAllows(topUps?: { keepUsd: number }): string {
     return "Rebalance can trade your stocks toward your mix, for a year. It never spends your cash. You can turn it off here.";
   const into = topUps.keepUsd > 0 ? `your top-ups above ${keepText(topUps.keepUsd)}` : "every top-up";
   return `Rebalance can trade your stocks toward your mix, and put ${into} into it, for a year. You can turn it off here.`;
+}
+
+/** A grant in a change's batch, as useAgents `changePlan` takes it (its GrantStep). */
+type GrantAsk = { job: AgentJob; capRaw: bigint; limitsRaw?: StockLimits; topUps?: boolean };
+
+/**
+ * What Rebalance's Save asks for (useManageSave): the mix (`setMix`, when it changed), the Rebalancer's new grant when
+ * one is needed (carrying top-ups while they're on), and top-ups as chosen (`setTopUps`, when they changed; null until
+ * the executor's setting is read, or on an executor that doesn't count them).
+ */
+export type MixSave = {
+  weights: readonly number[];
+  mixChanged: boolean;
+  grant: GrantAsk | null;
+  topUps: TopUpsSetting | null;
+  topUpsChanged: boolean;
+};
+
+/**
+ * Whether the batch also grants earning (the Save job), in the same signature (P3): only Save counts top-ups, so a Save
+ * whose Rebalancer grant carries them (turning them on, or granting anew with them on) turns earning on too while it's
+ * off. A Keep-only change grants nothing. Null while earning's state is still loading: the batch waits rather than
+ * leave top-ups on with nothing to count them.
+ */
+function earningGrant(p: MixSave, earning: { save: AgentStatus; capMaxRaw: bigint | null }): GrantAsk[] | null {
+  if (!p.grant?.topUps) return [];
+  if (earning.save === "loading" || earning.capMaxRaw === null) return null;
+  return earning.save === "off" ? [{ job: "save", capRaw: startCapRaw("save", earning.capMaxRaw) }] : [];
+}
+
+/**
+ * Save's one batch, for useAgents `changePlan` (useManageSave): the new grants (the Rebalancer's, and earning's when
+ * top-ups turn on while it's off) and the registry settings, `setMix` when the mix changed then `setTopUps` when
+ * top-ups changed. A Keep-only change is settings alone, with no grant. Null when there's nothing to save, or while
+ * earning's state loads; it throws only on what the sheet never sends (a mix that doesn't add up, Keep past $1,000,000),
+ * and useManageSave says so at the button.
+ */
+export function rebalanceChange(
+  account: `0x${string}`,
+  p: MixSave,
+  earning: { save: AgentStatus; capMaxRaw: bigint | null },
+): { grants: GrantAsk[]; settings: Call[] } | null {
+  const save = earningGrant(p, earning);
+  if (!save) return null;
+  const grants = [...(p.grant ? [p.grant] : []), ...save];
+  const settings = [
+    ...(p.mixChanged ? buildSetMixCalls(account, p.weights) : []),
+    ...(p.topUps && p.topUpsChanged ? buildSetTopUpsCalls(account, p.topUps.on, keepRawOf(p.topUps.keepUsd)) : []),
+  ];
+  return grants.length > 0 || settings.length > 0 ? { grants, settings } : null;
 }
 
 /** "tomorrow 10:00 AM" back from the card's capitalised "Tomorrow 10:00 AM" (a weekday keeps its capital). */

@@ -15,6 +15,7 @@ import { useManageSave, type MixSave } from "@/hooks/useManageSave";
 import { useNowSec } from "@/hooks/useNowSec";
 import { usePosition } from "@/hooks/usePosition";
 import { useSteadyPrices } from "@/hooks/useSteadyPrices";
+import { useTopUps } from "@/hooks/useTopUps";
 import { usePrepare, type TxPhase, type TxPlan, type TxPrep } from "@/hooks/useTx";
 import { aprToApy } from "@/lib/aave/math";
 import { AGENTS_LIVE } from "@/lib/agents/config";
@@ -23,6 +24,7 @@ import { stockLimitsRaw } from "@/lib/agents/permissions";
 import { rebalanceSave, type RebalanceTerms, type SavePlan } from "@/lib/agents/rebalanceSettings";
 import {
   TOP_UPS_NOT_YET,
+  chainFacts,
   choiceFrom,
   settingFrom,
   topUpsView,
@@ -33,9 +35,6 @@ import {
 import { rateText } from "@/lib/cashSetup";
 import { EQUITIES } from "@/lib/tokens/registry";
 
-/** Top-ups as the executor has them (useAgentSettings once it counts them, M5); until then not available. */
-type TopUpsChain = Pick<TopUpsFacts, "available" | "earningFirst" | "saved" | "waiting">;
-
 /**
  * The Rebalancer's settings, the body of its sheet (boards 7e–7h): My mix and Top-ups go into my mix, then Save, which
  * shows only when something changed. It has no amount limit: its grant is at the executor's CAP_MAX, with no field to
@@ -44,23 +43,17 @@ type TopUpsChain = Pick<TopUpsFacts, "available" | "earningFirst" | "saved" | "w
  * Saving is one batch, one Face ID (useManageSave, useAgents `changePlan`): the mix when it changed and a new grant
  * when one is needed, approved and registered, with the grant it replaces revoked. The body prepares it in render, so
  * the tap opens JAW's sheet with nothing awaited first. Without an executor it renders live data and saves nothing.
- * Top-ups wait for the executor that counts them (M4): until `topUps` says they're available, the switch says so.
+ * Top-ups are read on Base (useTopUps): on an executor that doesn't count them the switch says "Not available yet.";
+ * turning them on puts `setTopUps` and the grant's savings withdraw in Save's batch, with earning's grant when it's off.
  */
-export function RebalanceSettings({
-  account,
-  onDone,
-  topUps = TOP_UPS_NOT_YET,
-}: {
-  account: `0x${string}`;
-  onDone?: () => void;
-  topUps?: TopUpsChain;
-}) {
+export function RebalanceSettings({ account, onDone }: { account: `0x${string}`; onDone?: () => void }) {
   const { data } = usePosition(account);
   const agents = useAgents(account);
   const settings = useAgentSettings(account);
   const { address, isConnected } = useAccount();
   const fee = useFeeSupport();
   const nowSec = useNowSec();
+  const topUps = chainFacts(useTopUps(account));
   const onSaved = useCallback(() => {
     toast.success("Your mix is saved");
     onDone?.();
@@ -71,12 +64,15 @@ export function RebalanceSettings({
   // The grant's stock limits follow Aave's prices held steady, so the batch prepared for a Save isn't rebuilt on every read.
   const steady = useSteadyPrices(EQUITIES.map((e) => data?.holdings[e.reserveId].priceRaw ?? 0n));
   /**
-   * What a Save sends: the mix when it changed, and a new grant (at CAP_MAX, a limit per stock in the mix) when needed.
-   * M5 passes `topUps` on: setTopUps in the batch when it changed, and the grant's withdraw while it's on.
+   * What a Save sends: the mix when it changed, top-ups when they changed (`setTopUps`), and a new grant (at CAP_MAX, a
+   * limit per stock in the mix) when needed, carrying the savings withdraw while top-ups are on. Until the executor's
+   * setting is read (or on one that doesn't count them) a new grant keeps the shape the running one has.
    */
-  const toSave = ({ weights, capRaw, plan }: SaveRequest): MixSave => ({
+  const toSave = ({ weights, capRaw, plan, topUps: chosen }: SaveRequest): MixSave => ({
     weights,
     mixChanged: plan.mixChanged,
+    topUps: chosen,
+    topUpsChanged: plan.topUpsChanged,
     grant:
       plan.needsGrant && agents.capMaxRaw !== null
         ? {
@@ -88,6 +84,7 @@ export function RebalanceSettings({
               steady,
               weights.map((w) => w > 0),
             ),
+            topUps: chosen ? chosen.on : !!agents.terms.rebalance?.topUps,
           }
         : null,
   });
@@ -104,6 +101,7 @@ export function RebalanceSettings({
       connected={isConnected}
       preview={!address || !isAddressEqual(address, account)}
       running={status === "on" || status === "starting"}
+      earningOff={agents.status.save === "off"}
       topUps={{
         ...topUps,
         rate: rateText(aprToApy(data.savingsApr)),
@@ -155,6 +153,7 @@ export function RebalanceSettingsView({
   connected,
   preview = !connected,
   running,
+  earningOff = false,
   topUps = NO_TOP_UPS,
   feeBlocked,
   feeLoading,
@@ -177,6 +176,8 @@ export function RebalanceSettingsView({
   /** Not signed in as this account (the dev preview): nothing signs. */
   preview?: boolean;
   running: boolean;
+  /** Earning (the Save job) is off: turning top-ups on grants it in the same batch, and the allows line says so. */
+  earningOff?: boolean;
   /** Top-ups go into my mix: the executor's side and the account's numbers its card reads. */
   topUps?: TopUpsFacts;
   feeBlocked: boolean;
@@ -212,6 +213,7 @@ export function RebalanceSettingsView({
     capMaxRaw,
     running,
     topUps: { saved: topUps.saved, chosen: choice },
+    earningOff,
     feeBlocked,
     feeLoading,
     busy,

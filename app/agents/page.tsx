@@ -9,7 +9,7 @@ import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { FeedCard, FeedDays } from "@/components/gg/activity/Activity";
 import { AgentSheet } from "@/components/gg/AgentSheet";
 import { ProtectSettings } from "@/components/gg/agents/ProtectSettings";
-import { RebalanceSettings } from "@/components/gg/agents/RebalanceSettings";
+import { RebalanceSheet } from "@/components/gg/agents/RebalanceSheet";
 import { AgentsFeed, AgentsView, AttentionCard } from "@/components/gg/Agents";
 import { ProtectCardSkeleton, ProtectCardView } from "@/components/gg/agents/ProtectCard";
 import { RebalanceCard } from "@/components/gg/agents/RebalanceCard";
@@ -172,7 +172,10 @@ function Agents({ address }: { address: `0x${string}` }) {
   // A renewed grant's stock limits follow Aave's prices held steady, so its batch stays prepared while the sheet is open.
   const steady = useSteadyPrices(EQUITIES.map((e) => position?.holdings[e.reserveId].priceRaw ?? 0n));
 
-  /** A job's grant at `capRaw`; a job that sells stock takes a limit per stock it may sell, at Aave's price. */
+  /**
+   * A job's grant at `capRaw`; a job that sells stock takes a limit per stock it may sell, at Aave's price, and the
+   * Rebalancer keeps the savings withdraw its grant carries while top-ups are on.
+   */
   const grantFor = (job: AgentJob, capRaw: bigint, data: PositionData): GrantStep => {
     if (job !== "sell" && job !== "rebalance") return { job, capRaw };
     // The Rebalancer sells what's in its mix; until the mix is read, what its running grant may sell.
@@ -186,7 +189,10 @@ function Agents({ address }: { address: `0x${string}` }) {
           )
         : EQUITIES.map((e) => (agents.lastTerms.sell?.limitsRaw?.[e.reserveId] ?? 1n) > 0n);
     const prices = EQUITIES.map((e, r) => (steady[r] > 0n ? steady[r] : data.holdings[e.reserveId].priceRaw));
-    return { job, capRaw, limitsRaw: stockLimitsRaw(capRaw, capMax!, prices, sellable) };
+    const limitsRaw = stockLimitsRaw(capRaw, capMax!, prices, sellable);
+    return job === "rebalance"
+      ? { job, capRaw, limitsRaw, topUps: !!agents.terms.rebalance?.topUps }
+      : { job, capRaw, limitsRaw };
   };
 
   /**
@@ -263,17 +269,41 @@ function Agents({ address }: { address: `0x${string}` }) {
     const name = AGENT_NAME[agent];
     const ends = AGENT_JOBS[agent].map((j) => agents.terms[j]?.end ?? null).filter((e): e is number => e !== null);
     const activity = feed.rows.filter((r) => r.by === name);
+    const busy = (turnOff.busy && tapped.off === agent) || (renew.busy && tapped.renew === agent);
+    const error = (tapped.off === agent ? turnOff.error : null) ?? (tapped.renew === agent ? renew.error : null);
+    const finishing =
+      live && AGENT_JOBS[agent].some((j) => agents.toFinish.includes(j))
+        ? {
+            onFinish: () => void finish.sign(),
+            busy: finish.busy,
+            waiting: finish.checking || finish.blocked,
+            error: finish.error,
+          }
+        : undefined;
+    // Rebalance's own sheet (boards 7e–7h): My mix and Top-ups go into my mix, with Turn off, Renew and Finish here.
+    if (agent === "rebalance")
+      return (
+        <RebalanceSheet
+          account={address}
+          open={shown}
+          onClose={() => setShown(false)}
+          busy={busy}
+          error={error}
+          onAction={act}
+          finish={finishing}
+        />
+      );
     return (
       <AgentSheet
         open={shown}
         onClose={() => setShown(false)}
         item={item}
         live={live}
-        busy={(turnOff.busy && tapped.off === agent) || (renew.busy && tapped.renew === agent)}
-        error={(tapped.off === agent ? turnOff.error : null) ?? (tapped.renew === agent ? renew.error : null)}
+        busy={busy}
+        error={error}
         stops={ends.length ? longDateText(Math.min(...ends)) : null}
-        // Each settings body carries Save, which switches it on too (and the Rebalancer's, its limit).
-        settings={agent === "protect" ? <ProtectSettings account={address} /> : <RebalanceSettings account={address} />}
+        // Its settings body carries Save, which switches it on too.
+        settings={<ProtectSettings account={address} />}
         activity={
           <FeedCard>
             {feed.isLoading ? (
@@ -293,16 +323,7 @@ function Agents({ address }: { address: `0x${string}` }) {
             ? warnings.map((c) => <AttentionCard key={c.key} card={c} onLeave={() => setShown(false)} />)
             : undefined
         }
-        finish={
-          live && AGENT_JOBS[agent].some((j) => agents.toFinish.includes(j))
-            ? {
-                onFinish: () => void finish.sign(),
-                busy: finish.busy,
-                waiting: finish.checking || finish.blocked,
-                error: finish.error,
-              }
-            : undefined
-        }
+        finish={finishing}
       />
     );
   }

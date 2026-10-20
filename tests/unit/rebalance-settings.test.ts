@@ -179,6 +179,27 @@ describe("rebalanceSave: Top-ups go into my mix", () => {
     );
   });
 
+  it("says earning turns on too when top-ups turn on while it's off: the same Face ID grants it (P3)", () => {
+    const plan = rebalanceSave({ ...base, earningOff: true, topUps: { saved: off, chosen: on } });
+    expect(plan).toMatchObject({ needsGrant: true, steps: 1, canSave: true });
+    // Earning's limit on this $10,000 test cap is its own $1,000 a day.
+    expect(plan.allows).toBe(
+      `${rebalanceAllows({ keepUsd: 500 })} New cash that arrives moves into savings on its own, up to $1,000 a day.`,
+    );
+    // A new grant with top-ups already on (a stock added to the mix) grants earning too while it's off.
+    const weights = [2_500, 0, 0, 0, 2_500, 2_500, 2_500];
+    expect(
+      rebalanceSave({ ...withWithdraw, weights, earningOff: true, topUps: { saved: on, chosen: on } }).allows,
+    ).toBe(plan.allows);
+    // Earning already on, or top-ups turning off: Rebalance's line alone.
+    expect(rebalanceSave({ ...base, topUps: { saved: off, chosen: on } }).allows).toBe(
+      rebalanceAllows({ keepUsd: 500 }),
+    );
+    expect(rebalanceSave({ ...withWithdraw, earningOff: true, topUps: { saved: on, chosen: off } }).allows).toBe(
+      rebalanceAllows(),
+    );
+  });
+
   it("takes a new grant without the withdraw to turn them off: one batch, the old grant revoked in it", () => {
     expect(rebalanceSave({ ...withWithdraw, topUps: { saved: on, chosen: off } })).toMatchObject({
       topUpsChanged: true,
