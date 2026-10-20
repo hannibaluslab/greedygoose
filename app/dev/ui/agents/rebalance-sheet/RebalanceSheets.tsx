@@ -87,6 +87,17 @@ const STATES: Record<string, Fixture> = {
     title: "7g · $300 waiting for the next check",
     topUps: { saved: ON, waiting: { usd: 300, atSec: 0 } },
   },
+  "waiting-regrant": {
+    title: "$300 waiting and a Save that grants again: it stays as cash",
+    // A capped grant from before is granted again at CAP_MAX, which drops what was counted.
+    terms: { capRaw: usdc(100), limitsRaw: MIX.map(() => 1n), topUps: true },
+    topUps: { saved: ON, waiting: { usd: 300, atSec: 0 } },
+  },
+  "waiting-turn-off": {
+    title: "$300 waiting and top-ups turned off: it stays as cash",
+    topUps: { saved: ON, waiting: { usd: 300, atSec: 0 } },
+    draftTopUps: { on: false, keepUsd: 500 },
+  },
   warning: {
     title: "7h · Keep $0, owing, Protect can’t sell: the warning",
     topUps: { saved: ON, protectSells: false },

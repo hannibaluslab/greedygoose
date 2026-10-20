@@ -6,6 +6,7 @@ import { buildSetMixCalls, buildSetTopUpsCalls } from "@/lib/agents/settings";
 import type { AgentStatus } from "@/lib/agents/status";
 import { keepRawOf, keepText, topUpsChanged, type TopUpsChoice, type TopUpsSetting } from "@/lib/agents/topUps";
 import { earningAllowsText } from "@/lib/cashSetup";
+import { formatUsdTrim } from "@/lib/formatting";
 import { EQUITIES } from "@/lib/tokens/registry";
 
 /**
@@ -43,6 +44,11 @@ export type SavePlan = {
   note: string | null;
   /** What the Face ID lets Rebalance do (`rebalanceAllows`), above Save while it grants; null otherwise. */
   allows: string | null;
+  /**
+   * "The $300 waiting stays as cash.": the Save starts the counts again (a new Rebalancer grant, or the switch flipped)
+   * while a top-up waits, so it never goes in. Null otherwise.
+   */
+  keeps: string | null;
 };
 
 type SaveInput = {
@@ -61,6 +67,8 @@ type SaveInput = {
   topUps?: { saved: TopUpsSetting | null; chosen: TopUpsChoice };
   /** Earning (the Save job) is off, so turning top-ups on grants it in the same batch (P3). */
   earningOff?: boolean;
+  /** A counted top-up waiting for Rebalance's next check, in dollars; null or 0 when none. */
+  waitingUsd?: number | null;
   feeBlocked: boolean;
   feeLoading: boolean;
   busy: boolean;
@@ -91,24 +99,49 @@ function saveNote(p: SaveInput, whole: boolean, wait: { keepMissing: boolean; un
   return wait.keepMissing ? "Enter an amount" : null;
 }
 
+/** Top-ups once the executor's setting is read: what it has and what's on screen. Null before (nothing counts). */
+type ReadTopUps = { saved: TopUpsSetting; chosen: TopUpsChoice } | null;
+
+const readTopUpsOf = (p: SaveInput): ReadTopUps =>
+  p.configured && p.topUps?.saved ? { saved: p.topUps.saved, chosen: p.topUps.chosen } : null;
+
+/**
+ * What Save waits for: an amount in an empty Keep, or the switch's read while the grant running now carries top-ups
+ * (`unread`): a new grant's line would say "It never spends your cash." over a grant with the savings withdraw, so a
+ * Save that grants waits for the read.
+ */
+function waitsFor(p: SaveInput, topUps: ReadTopUps, needsGrant: boolean) {
+  return {
+    keepMissing: !!topUps && topUps.chosen.on && topUps.chosen.keepUsd === null,
+    unread: needsGrant && !topUps && !!p.terms?.topUps,
+  };
+}
+
+/**
+ * "The $300 waiting stays as cash.": a new Rebalancer grant, or the switch flipped, starts the executor's counts again,
+ * so a top-up waiting for the next check never goes in. Null when nothing waits or the Save keeps the count.
+ */
+function keepsLine(p: SaveInput, topUps: ReadTopUps, needsGrant: boolean): string | null {
+  const restarts = needsGrant || (!!topUps && topUps.chosen.on !== topUps.saved.on);
+  const waiting = p.waitingUsd ?? 0;
+  return restarts && waiting >= 0.01 ? `The ${formatUsdTrim(waiting)} waiting stays as cash.` : null;
+}
+
 export function rebalanceSave(p: SaveInput): SavePlan {
   const whole = p.weights.reduce((a, b) => a + b, 0) === MIX_WHOLE;
   const mixChanged = p.configured && p.saved !== null && p.weights.some((w, r) => w !== p.saved![r]);
-  // Nothing about top-ups counts until the executor's setting is read.
-  const topUps = p.configured && p.topUps?.saved ? p.topUps : null;
+  const topUps = readTopUpsOf(p);
   const topUpsMoved = !!topUps && topUpsChanged(topUps.saved, topUps.chosen);
   const needsGrant = p.configured && grantNeeded(p, topUps ? topUps.chosen.on : null);
   const steps = rebalanceSteps({ needsGrant, mixChanged, topUpsChanged: topUpsMoved }).length;
-  const keepMissing = !!topUps && topUps.chosen.on && topUps.chosen.keepUsd === null;
-  // The grant running now carries top-ups and the switch isn't read (or its read failed): a new grant's line would say
-  // "It never spends your cash." over a grant with the savings withdraw, so a Save that grants waits for the read.
-  const unread = needsGrant && !topUps && !!p.terms?.topUps;
-  const note = saveNote(p, whole, { keepMissing, unread });
+  const wait = waitsFor(p, topUps, needsGrant);
+  const note = saveNote(p, whole, wait);
   const canSave = p.connected && note === null && steps > 0 && p.capMaxRaw !== null && !p.feeLoading && !p.busy;
   // Said only while Save grants, and not while Keep is empty (the line would name an amount nobody typed) or the
   // switch is unread (the line could contradict the grant).
-  const allows = needsGrant && !keepMissing && !unread ? allowsLine(p, topUps?.chosen ?? null) : null;
-  return { mixChanged, topUpsChanged: topUpsMoved, needsGrant, steps, canSave, note, allows };
+  const allows = needsGrant && !wait.keepMissing && !wait.unread ? allowsLine(p, topUps?.chosen ?? null) : null;
+  const keeps = steps > 0 ? keepsLine(p, topUps, needsGrant) : null;
+  return { mixChanged, topUpsChanged: topUpsMoved, needsGrant, steps, canSave, note, allows, keeps };
 }
 
 /**

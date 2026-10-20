@@ -32,6 +32,7 @@ describe("rebalanceSave", () => {
       canSave: false,
       note: "Not live yet",
       allows: null,
+      keeps: null,
     });
   });
 
@@ -290,6 +291,35 @@ describe("rebalanceSave: Top-ups go into my mix", () => {
       canSave: true,
       note: null,
     });
+  });
+
+  it("says a waiting top-up stays as cash when the Save starts the counts again", () => {
+    const waiting = { waitingUsd: 300 };
+    const newStock = [2_500, 0, 0, 0, 2_500, 2_500, 2_500]; // a new grant
+    const keeps = "The $300 waiting stays as cash.";
+    // A new Rebalancer grant: the executor drops what was counted before it.
+    expect(
+      rebalanceSave({ ...withWithdraw, ...waiting, weights: newStock, topUps: { saved: on, chosen: on } }).keeps,
+    ).toBe(keeps);
+    // Switching top-ups off starts them again from nothing too.
+    expect(rebalanceSave({ ...withWithdraw, ...waiting, topUps: { saved: on, chosen: off } }).keeps).toBe(keeps);
+    expect(rebalanceSave({ ...withWithdraw, waitingUsd: 300.5, topUps: { saved: on, chosen: off } }).keeps).toBe(
+      "The $300.50 waiting stays as cash.",
+    );
+    // Keep alone, or the mix alone, keeps the count: nothing to say. Nor with nothing waiting, or nothing to save.
+    expect(
+      rebalanceSave({ ...withWithdraw, ...waiting, topUps: { saved: on, chosen: { on: true, keepUsd: 900 } } }).keeps,
+    ).toBeNull();
+    expect(
+      rebalanceSave({
+        ...withWithdraw,
+        ...waiting,
+        weights: [5_000, 0, 0, 0, 0, 2_500, 2_500],
+        topUps: { saved: on, chosen: on },
+      }).keeps,
+    ).toBeNull();
+    expect(rebalanceSave({ ...withWithdraw, waitingUsd: null, topUps: { saved: on, chosen: off } }).keeps).toBeNull();
+    expect(rebalanceSave({ ...withWithdraw, ...waiting, topUps: { saved: on, chosen: on } }).keeps).toBeNull();
   });
 
   it("puts a mix change and a top-ups change in the same batch", () => {

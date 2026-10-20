@@ -217,6 +217,7 @@ export function RebalanceSettingsView({
     running,
     topUps: { saved: topUps.saved, chosen: choice },
     earningOff,
+    waitingUsd: topUps.waiting?.usd ?? null,
     feeBlocked,
     feeLoading,
     busy,
@@ -261,8 +262,8 @@ export function RebalanceSettingsView({
 
 /**
  * Save at the foot of the sheet, only when something changed (`plan.steps` > 0): one batch, one Face ID, whatever it
- * carries. Above it, what a new grant lets Rebalance do (`plan.allows`: JAW's batch sheet shows no words of ours) and
- * the last write's error.
+ * carries. Above it, what a new grant lets Rebalance do (`plan.allows`: JAW's batch sheet shows no words of ours), a
+ * waiting top-up the Save leaves as cash (`plan.keeps`), and the last write's error.
  */
 function SaveArea({
   plan,
@@ -287,6 +288,7 @@ function SaveArea({
   return (
     <div className="flex flex-col gap-2 pt-1">
       {plan.allows && plan.steps > 0 && <p className="m-0 px-1 text-[13px] leading-[1.4] text-ink-2">{plan.allows}</p>}
+      {plan.keeps && <p className="m-0 px-1 text-[13px] leading-[1.4] text-ink-2">{plan.keeps}</p>}
       <TxError error={error} />
       {plan.steps > 0 && (
         <TxButton
