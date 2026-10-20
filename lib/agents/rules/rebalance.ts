@@ -16,14 +16,14 @@ export type RebalanceHolding = {
   price: bigint;
   /** Target weight in BPS; 0 = not in the mix, never traded. The mix adds up to 10,000. */
   weightBps: bigint;
-  /** Raw shares this week's sell limit still allows. 0 = can't be sold (not in the grant, or used up). */
+  /** Raw shares the grant's sell limit still allows this period. 0 = can't be sold (not in the grant, or used up). */
   sellLeftRaw: bigint;
 };
 
 export type RebalanceBook = {
   /** The seven stocks, by reserve id. */
   stocks: readonly RebalanceHolding[];
-  /** USDC units this week's limit on the buy leg still allows. */
+  /** USDC units the grant's limit on the buy leg still allows this period. */
   usdcLeftRaw: bigint;
 };
 
@@ -50,6 +50,10 @@ const BPS = 10_000n;
 const min = (...v: bigint[]) => v.reduce((a, b) => (b < a ? b : a));
 const value = (s: RebalanceHolding) => (s.sharesRaw * s.price) / 10n ** 10n;
 const sum = (v: readonly bigint[]) => v.reduce((a, b) => a + b, 0n);
+
+/** A stock's band, in BPS of the mix: the smaller of `bandBps` of its target and `bandMaxBps` points. */
+export const bandOf = (weightBps: bigint, o: Pick<RebalanceOptions, "bandBps" | "bandMaxBps">) =>
+  min((weightBps * o.bandBps) / BPS, o.bandMaxBps);
 
 /**
  * Match the sides, within the USDC limit: the larger one shrinks, and a trade that falls under the minimum goes, until
@@ -79,9 +83,9 @@ function matchSides(sell: bigint[], buy: bigint[], usdcLeftRaw: bigint, minTrade
  * The trades that bring the mix back. A stock breaks its band when it sits further from its target than the smaller of
  * `bandBps` of the target and `bandMaxBps` points; it is traded back to half the band, and only it. The other side of
  * the trade goes to the stocks still in their band that are furthest from their target (to their target, no further),
- * so the sales and the buys match at Aave's price. Each trade is held to `maxSliceRaw`, a sale to the stock's weekly
- * sell limit, the buys to the weekly USDC limit; trades under `minTradeRaw` are skipped, and the other side shrinks to
- * match. Nothing to sell or nothing to buy means no trade: the Rebalancer never sells to cash or buys with it.
+ * so the sales and the buys match at Aave's price. Each trade is held to `maxSliceRaw`, a sale to the grant's sell
+ * limit for the stock, the buys to the grant's USDC limit; trades under `minTradeRaw` are skipped, and the other side
+ * shrinks to match. Nothing to sell or nothing to buy means no trade: the Rebalancer never sells to cash or buys with it.
  */
 export function rebalanceTrades(book: RebalanceBook, o: RebalanceOptions): RebalanceTrade[] {
   const s = book.stocks;
@@ -99,7 +103,7 @@ export function rebalanceTrades(book: RebalanceBook, o: RebalanceOptions): Rebal
   for (let i = 0; i < s.length; i++) {
     if (s[i].weightBps === 0n) continue;
     const target = (total * s[i].weightBps) / BPS;
-    const band = (total * min((s[i].weightBps * o.bandBps) / BPS, o.bandMaxBps)) / BPS;
+    const band = (total * bandOf(s[i].weightBps, o)) / BPS;
     if (values[i] > target + band) {
       primary = true;
       const leg = min(values[i] - target - band / 2n, sellable[i]);

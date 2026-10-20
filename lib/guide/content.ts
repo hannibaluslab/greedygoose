@@ -236,7 +236,7 @@ export function guideContent(flags: GuideFlags = FLAGS): Guide {
       steps: [
         "Protect steps in if your credit falls under 1.03. It repays from your cash first, then sells if needed.",
         "Rebalance keeps your mix on target, once a market day.",
-        "You approve each agent. You set Rebalance’s limit.",
+        "You approve each agent. You set Rebalance’s mix.",
       ],
       note: "You can turn any agent off at any time.",
       tag: agentsTag,

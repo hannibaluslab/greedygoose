@@ -5,7 +5,6 @@ import { PROTOCOLS, SEL } from "@/lib/protocols/config";
 import { AERODROME, AERODROME_V1, SPARK_PSM3, UNISWAP } from "@/lib/swap/venues";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
-import { formatUsdTrim } from "@/lib/formatting";
 
 /** A grant lasts a year: its end is its start plus this, and the allowlist approves no other window. */
 export const GRANT_SECONDS = 365 * 86_400;
@@ -60,35 +59,23 @@ const LIMITED: Record<CashJob, readonly Address[]> = {
 };
 
 /**
- * Protect's two jobs have no amount limit (Adrian, 2026-10-19): like DeFi Saver, Protect is limited by what it does
- * (below 1.03, back to 1.12, and a move may not land past the target), not by how much. Their grants carry the
- * executor's CAP_MAX, the most a grant may hold (a D13 test deploy allows $5), and the user types no limit.
+ * The jobs with no amount limit: Protect's two and the Rebalancer. Like DeFi Saver, each is limited by what it does,
+ * not by how much. Protect acts below 1.03, goes back to 1.12, and no move lands past the target; the Rebalancer trades
+ * only a stock past its band, partway back, once a market day. Their grants carry the executor's CAP_MAX, the most a
+ * grant may hold (a D13 test deploy allows $5), and the user types no limit.
  */
-export const NO_LIMIT_JOBS = ["protect", "sell"] as const;
+export const NO_LIMIT_JOBS = ["protect", "sell", "rebalance"] as const;
 type LimitedJob = Exclude<AgentJob, (typeof NO_LIMIT_JOBS)[number]>;
 export const hasLimit = (job: AgentJob): job is LimitedJob => !(NO_LIMIT_JOBS as readonly AgentJob[]).includes(job);
 
 /**
- * The limit each other job is switched on with, in dollars a day (a week for the Rebalancer). The Rebalancer: any whole
- * number of dollars the user types, starting on $100 (Adrian, 2026-10-15). Save and Entry run under the hood (D20),
- * each at $1,000 a day with no other offer. All wait on the calibration pass (plan item 6 step 9).
+ * The limit each other job is switched on with, in dollars a day. Save and Entry run under the hood (D20), each at
+ * $1,000 a day with no other offer. Both wait on the calibration pass (plan item 6 step 9).
  */
-export const LIMIT_USD: Record<LimitedJob, { start: number; per: "day" | "week" }> = {
-  save: { start: 1_000, per: "day" },
-  rebalance: { start: 100, per: "week" },
-  entry: { start: 1_000, per: "day" },
+export const LIMIT_USD: Record<LimitedJob, { start: number }> = {
+  save: { start: 1_000 },
+  entry: { start: 1_000 },
 };
-
-/** The most a typed limit may be, so the dollars stay exact as a number; the executor's `CAP_MAX` binds far below. */
-const MAX_LIMIT_USD = 1_000_000_000;
-
-/** A Custom limit as typed: whole dollars from $1 ("1,000" and "250.75" read as $1,000 and $250), or null. */
-export function parseLimitUsd(text: string): number | null {
-  const t = text.trim().replace(/,/g, "");
-  if (!/^\d+(\.\d*)?$/.test(t)) return null;
-  const usd = Math.floor(Number(t));
-  return usd >= 1 && usd <= MAX_LIMIT_USD ? usd : null;
-}
 
 /** A dollar limit in USDC units, never above the executor's `CAP_MAX` (a D13 test deploy allows $5). */
 export function limitRaw(usd: number, capMaxRaw: bigint): bigint {
@@ -96,23 +83,9 @@ export function limitRaw(usd: number, capMaxRaw: bigint): bigint {
   return raw < capMaxRaw ? raw : capMaxRaw;
 }
 
-/** The cap a job is switched on with: CAP_MAX for Protect's two jobs (no amount limit), its starting limit otherwise. */
+/** The cap a job is switched on with: CAP_MAX for a job with no amount limit, its starting limit otherwise. */
 export function startCapRaw(job: AgentJob, capMaxRaw: bigint): bigint {
   return hasLimit(job) ? limitRaw(LIMIT_USD[job].start, capMaxRaw) : capMaxRaw;
-}
-
-/**
- * In dev, when the executor's `CAP_MAX` is under the limit on screen (a D13 test deploy allows $5): "Test version: up
- * to $5". The grant is held to it either way (`limitRaw`); production never shows this line.
- */
-export function testCapNote(
-  usd: number | null,
-  capMaxRaw: bigint | null,
-  dev = process.env.NODE_ENV !== "production",
-): string | null {
-  if (!dev || usd === null || capMaxRaw === null) return null;
-  if (BigInt(usd) * 10n ** BigInt(USDC.decimals) <= capMaxRaw) return null;
-  return `Test version: up to ${formatUsdTrim(Number(capMaxRaw) / 10 ** USDC.decimals)}`;
 }
 
 /** What the app sends to JAW's `useGrantPermissions` to switch `job` on, with a daily limit in USDC units. */
@@ -263,7 +236,10 @@ function rebalanceCalls(limitsRaw: StockLimits) {
   ] as const;
 }
 
-/** Weekly limits: USDC on the buy leg (the boards' "sells up to $X a week"), then each stock's own, in shares. */
+/**
+ * The spends, a week each (`PeriodUnit.Week`, which keeps the template's hash): USDC on the buy leg at the executor's
+ * CAP_MAX (no amount limit, `NO_LIMIT_JOBS`), then each stock's own, in shares.
+ */
 function rebalanceSpends(capRaw: bigint, limitsRaw: StockLimits) {
   return [
     { token: USDC.address, allowance: capRaw },
@@ -271,9 +247,9 @@ function rebalanceSpends(capRaw: bigint, limitsRaw: StockLimits) {
   ];
 }
 
-/** What the app sends to JAW's `useGrantPermissions` to switch the Rebalancer on, with weekly limits. */
+/** What the app sends to JAW's `useGrantPermissions` to switch the Rebalancer on, with a limit per stock to sell. */
 export function rebalanceGrant(capRaw: bigint, limitsRaw: StockLimits): PermissionsDetail {
-  if (capRaw <= 0n) throw new Error("Weekly limit must be positive");
+  if (capRaw <= 0n) throw new Error("USDC limit must be positive");
   return {
     calls: rebalanceCalls(limitsRaw).map(({ target, selector }) => ({ target, selector })),
     spends: rebalanceSpends(capRaw, limitsRaw).map(({ token, allowance }) => ({
@@ -403,7 +379,7 @@ export function grantPermission(g: AgentGrant, account: Address, spender: Addres
  * Aave's price now, so a stock that falls after the grant can still be sold up to the dollar limit (the USDC limit is
  * the one that binds). Held 1% under the executor's bound (twice CAP_MAX, JobBase.STOCK_LIMIT_CAPS), so a price tick
  * before registration doesn't refuse it, and never past what the grant's terms hold (32 bits of units a stock), which
- * binds for Protect · sell's CAP_MAX on a deploy with no amount limit. `pricesRaw` are Aave's prices by reserve id
+ * binds for both jobs' CAP_MAX on a deploy with no amount limit. `pricesRaw` are Aave's prices by reserve id
  * (8 decimals); a stock `sellable` leaves out gets 0, so the grant has no approve for it.
  */
 export function stockLimitsRaw(

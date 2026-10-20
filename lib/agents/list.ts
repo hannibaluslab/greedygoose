@@ -1,13 +1,11 @@
 import { CASH_AGENT } from "@/config/risk";
-import { hasLimit, LIMIT_USD, type AgentJob } from "@/lib/agents/permissions";
+import type { AgentJob } from "@/lib/agents/permissions";
 import type { AgentStatus } from "@/lib/agents/status";
 import { formatUsdTrim } from "@/lib/formatting";
-import { USDC } from "@/lib/tokens/registry";
 
 /*
- * The Agents tab (Adrian, 2026-10-15): two agents, each a switch and a "next" line, the Rebalancer's limit (Protect has
- * no amount limit, 2026-10-19), and cards only when something needs the user. Pure, so the dev gallery draws every
- * state with the app's own words.
+ * The Agents tab (Adrian, 2026-10-15): two agents, each a switch and a "next" line (neither has an amount limit), and
+ * cards only when something needs the user. Pure, so the dev gallery draws every state with the app's own words.
  *
  * Earning and turning other dollars into cash (the Save and Entry jobs) run under the hood (D20): they have no row,
  * no sheet and no switch here. Their grants are asked where they matter, on Home and Pay (lib/cashSetup.ts).
@@ -76,8 +74,6 @@ export function agentStatus(agent: Agent, status: Readonly<Record<AgentJob, Agen
   return (["unconfigured", "loading", "on", "starting"] as const).find((x) => s.includes(x)) ?? "off";
 }
 
-const usdOf = (raw: bigint) => Number(raw) / 10 ** USDC.decimals;
-
 /**
  * What an agent does next, from the executor's `planOf` or its rule (lib/agents/next.ts): a move, said for an agent
  * that runs ("repays $40 from your cash") and for one that doesn't ("Would repay $40 from your cash"), or why there's
@@ -103,27 +99,24 @@ export type AgentItem = {
   on: boolean;
   line: string;
   /**
-   * "Limit $100 a week": the grant's limit while it has one, the one it starts on otherwise. Null for Protect, which
-   * has no amount limit.
+   * Always null: neither agent has an amount limit, so no row shows one and each switch grants at the executor's
+   * CAP_MAX. The fields stay while the page's rows and switches still read them.
    */
-  limit: string | null;
-  limitUsd: number | null;
+  limit: null;
+  limitUsd: null;
 };
 
 type AgentItemsInput = {
   status: Readonly<Record<AgentJob, AgentStatus>>;
-  /** Each job's limit while it has a grant (on or starting), USDC units; null otherwise. */
+  /** Each job's limit while it has a grant (on or starting), USDC units; null otherwise. Not read: no agent has one. */
   capRaw: Readonly<Record<AgentJob, bigint | null>>;
   next: Readonly<Record<Agent, Next>>;
 };
 
-/** The two rows. A limit is the agent's own job's: the Rebalancer's ("$100 a week"); Protect has none. */
+/** The two rows, with no limit on either. */
 export function agentItems(i: AgentItemsInput): AgentItem[] {
   return AGENTS.map((agent) => {
-    const job = AGENT_JOBS[agent][0];
     const status = agentStatus(agent, i.status);
-    const cap = i.capRaw[job];
-    const limitUsd = hasLimit(job) ? (cap === null ? LIMIT_USD[job].start : usdOf(cap)) : null;
     return {
       agent,
       name: AGENT_NAME[agent],
@@ -131,8 +124,8 @@ export function agentItems(i: AgentItemsInput): AgentItem[] {
       status,
       on: status === "on" || status === "starting",
       line: nextLine(status, i.next[agent]),
-      limit: hasLimit(job) && limitUsd !== null ? `Limit ${formatUsdTrim(limitUsd)} a ${LIMIT_USD[job].per}` : null,
-      limitUsd,
+      limit: null,
+      limitUsd: null,
     };
   });
 }
@@ -207,5 +200,5 @@ export function protectWarnings(i: { act: ActCard | null; weekend: WeekendCard |
   return cards;
 }
 
-/** What an agent's sheet can do, each a JAW grant or revoke on JAW's own sheet. Its limit is set in its body. */
+/** What an agent's sheet can do, each a JAW grant or revoke on JAW's own sheet. */
 export type SheetAction = "on" | "off" | "renew";

@@ -38,7 +38,7 @@ function input(over: Partial<NextInput> = {}): NextInput {
     holdings: [free(0, 5_000, 250), free(5, 5_000, 180)],
     mixBps: [5_000, 0, 0, 0, 0, 5_000, 0],
     left: byJob(() => null),
-    capRaw: { save: usdc(1_000), protect: usdc(300), sell: usdc(300), rebalance: usdc(500), entry: usdc(1_000) },
+    capRaw: { save: usdc(1_000), protect: usdc(300), sell: usdc(300), rebalance: usdc(10_000), entry: usdc(1_000) },
     capMaxRaw: usdc(10_000),
     numbers: defaultNumbers(rebalanceOptions()),
     rebalanceDay: 0,

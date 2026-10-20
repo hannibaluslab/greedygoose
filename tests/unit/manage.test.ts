@@ -124,7 +124,7 @@ describe("previewTrades (the Rebalancer's rule on today's free stock)", () => {
     expect(trades.length).toBeGreaterThan(0);
   });
 
-  it("stays within the weekly limit, and trades nothing for a mix that doesn't add up", () => {
+  it("stays within what the grant's USDC limit allows, and trades nothing for a mix that doesn't add up", () => {
     const small = previewTrades({ holdings: board, rows: boardMix, capRaw: 100_000_000n, capMaxRaw: null, options });
     expect(small.filter((t) => t.buy).reduce((a, t) => a + t.amountIn, 0n)).toBeLessThanOrEqual(100_000_000n);
     expect(

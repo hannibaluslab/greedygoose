@@ -53,7 +53,7 @@ const HOLDINGS = PRICES.map((p, reserveId) => ({
 }));
 const MIX = [2_500, 0, 0, 0, 0, 5_000, 2_500];
 
-/** The executor's CAP_MAX here: Protect's grants are at it (no amount limit), the Rebalancer's at its $100 a week. */
+/** The executor's CAP_MAX here: Protect's and the Rebalancer's grants are at it (no amount limit). */
 const CAP_MAX = usdc(10_000);
 
 /** $400 of cash earning, $600 owed against $2,000 of backing: Safe. */
@@ -115,7 +115,7 @@ function feedRows(nowMs: number): FeedAgentRow[] {
       "rebalance",
       at(2, 10, 5),
       { kind: "rebalanced", soldRaw: seven(0, shares(250, 222.22)), boughtRaw: seven(5, shares(250, 178.57)) },
-      { cashRaw: [usdc(400), usdc(401.12)], used: { spentRaw: usdc(250), capRaw: usdc(500) }, pricesRaw: prices },
+      { cashRaw: [usdc(400), usdc(401.12)], pricesRaw: prices },
     ],
     [
       "convert",

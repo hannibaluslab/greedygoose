@@ -94,6 +94,20 @@ export function nowPercents(holdings: readonly MixHolding[], rows: readonly MixR
 }
 
 /**
+ * Each stock's share of the mix's free stock at Aave's price now, in BPS to a hundredth (nowPercents rounds to whole
+ * %), by reserve id: 0 for a stock out of the mix. Only the mix's stocks count, as the rule counts them. Null when the
+ * mix holds nothing.
+ */
+export function mixBpsNow(holdings: readonly MixHolding[], mixBps: readonly number[]): number[] | null {
+  const values = EQUITIES.map((e) => {
+    const h = mixBps[e.reserveId] > 0 ? holdingOf(holdings, e.reserveId) : undefined;
+    return h ? valueRaw(h) : 0n;
+  });
+  const total = values.reduce((a, b) => a + b, 0n);
+  return total > 0n ? values.map((v) => Number((v * 1_000_000n) / total) / 100) : null;
+}
+
+/**
  * The rule's options: GooseExecutor's live `rebalanceLimits()` once read (D18), config/risk.ts REBALANCER (its deploy
  * defaults) before.
  */
@@ -124,9 +138,10 @@ export function rebalanceOptions(live?: {
 }
 
 /**
- * What the Rebalancer's next run would trade for `rows` on today's free stock: with what its grant's limits still allow
- * this week (`left`), or before it has one with a fresh weekly limit of `capRaw` and the stock limits a grant at that
- * limit carries (`stockLimitsRaw`, each mix stock may be sold). Nothing while the rows don't add up to 100%.
+ * What the Rebalancer's next run would trade for `rows` on today's free stock: with what the grant's limits still allow
+ * this period (`left`), or before it has one with a fresh period at `capRaw` (the executor's CAP_MAX: no amount limit)
+ * and the stock limits a grant at that cap carries (`stockLimitsRaw`, each mix stock may be sold). Nothing while the
+ * rows don't add up to 100%.
  */
 export function previewTrades(p: {
   holdings: readonly MixHolding[];
@@ -135,7 +150,7 @@ export function previewTrades(p: {
   /** The executor's CAP_MAX; the limit itself bounds it before the executor is read. */
   capMaxRaw: bigint | null;
   options: RebalanceOptions;
-  /** This week's USDC left and each stock's shares left, by reserve id, from the grant the executor runs. */
+  /** The period's USDC left and each stock's shares left, by reserve id, from the grant the executor runs. */
   left?: { usdcRaw: bigint; stocksRaw: StockLimits };
 }): RebalanceTrade[] {
   const weights = mixWeights(p.rows);

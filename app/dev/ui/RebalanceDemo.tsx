@@ -32,7 +32,11 @@ const TARGET: MixRow[] = [
   { reserveId: 0, bps: 2_500 },
   { reserveId: 6, bps: 2_500 },
 ];
-const TERMS = { capRaw: 100_000_000n, limitsRaw: EQUITIES.map((e) => (SAVED[e.reserveId] > 0 ? 1n : 0n)) };
+/** The executor's CAP_MAX here: the Rebalancer's grant is at it (no amount limit). */
+const CAP_MAX = 10_000_000_000n;
+const TERMS = { capRaw: CAP_MAX, limitsRaw: EQUITIES.map((e) => (SAVED[e.reserveId] > 0 ? 1n : 0n)) };
+/** A grant from before the Rebalancer had no amount limit, $100 a week: the next Save grants it again. */
+const CAPPED = { ...TERMS, capRaw: 100_000_000n };
 const noop = () => {};
 const noopSubscribe = () => () => {};
 const previewAs = () => {
@@ -60,6 +64,14 @@ const STATES = [
     draft: undefined,
   },
   {
+    key: "capped",
+    title: "A capped grant from before · two steps",
+    configured: true,
+    saved: SAVED,
+    terms: CAPPED,
+    draft: undefined,
+  },
+  {
     key: "switch-on",
     title: "Off · first mix switches it on",
     configured: true,
@@ -80,7 +92,7 @@ export function RebalanceStateBody({ state }: { state: RebalanceState }) {
       saved={s.saved}
       options={rebalanceOptions()}
       terms={s.terms}
-      capMaxRaw={s.configured ? 10_000_000_000n : null}
+      capMaxRaw={s.configured ? CAP_MAX : null}
       configured={s.configured}
       connected
       running={!!s.terms}
