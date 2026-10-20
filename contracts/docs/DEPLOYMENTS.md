@@ -73,6 +73,26 @@ Adds to the runner switch's next deploy above (GooseExecutor-as-built.md, "Rebal
 
 The app works with both until the switch: it reads `topUps(account)` with `allowFailure`, and a revert means "Not available yet" (M5, built: JUSTALAB-DECISIONS.md, "2026-10-20 · Top-ups wired in the app (M5)").
 
+### Check after the next deploy: JAW's account clone is allowed (2026-10-20)
+
+An account JAW hasn't deployed yet (money arrived, nothing ever sent) starts earning in one Face ID: JAW's factory deploys it first, in the same user operation, then the batch supplies to savings, approves Save and registers it (JUSTALAB-DECISIONS.md, "One Face ID for a never-used account too"). The app can't simulate that registration from a bare address, so the executor must allow the code JAW's factory deploys. If it doesn't, the whole batch reverts on Base: no money moves, but the user pays the network fee.
+
+| What | Value |
+|---|---|
+| Codehash | `0xc79e2c8f7a03b38abd65a7e073fc3410849544bba74f53360c127775bc891848`, the EIP-1167 clone of JAW's implementation `0xbb4f7d5418Cd8DADB61bb95561179e517572cBCd`, which is what JAW's factory `0x5803c076563C85799989d42Fc00292A8aE52fa9E` deploys |
+| Measured | 2026-10-20 on Base through a keyless RPC: `cast codehash 0x14087c532332dE6E971Eb2F60a252cbf511F59eA`, a passkey account with owners [passkey, manager] that the factory's `getAddress(owners, 0)` gives |
+| Set by | `script/DeployExecutor.s.sol`: `jawCodehashes()[0]`, pinned as `JAW_CLONE_CODEHASH`. `checkCode` refuses a list without it (and a factory that clones other code), and `run` reads it back from the new executor; forge runs both before it sends anything |
+| Proven | `DeployExecutorTest.test_the_script_deploys_an_executor_that_allows_jaws_account_clone` (the script's own run on a Base fork) |
+
+After the deploy, before the app points at it:
+
+```sh
+cast call <executor> 'allowedCodehash(bytes32)(bool)' 0xc79e2c8f7a03b38abd65a7e073fc3410849544bba74f53360c127775bc891848 --rpc-url https://mainnet.base.org
+# true. If false, don't point the app at it: every never-used account's Start earning would revert.
+cast call 0x5803c076563C85799989d42Fc00292A8aE52fa9E 'getImplementation()(address)' --rpc-url https://mainnet.base.org
+# 0xbb4f7d5418Cd8DADB61bb95561179e517572cBCd, so the clone above is still what new accounts run.
+```
+
 ## GooseBoard — not deployed yet
 
 The leaderboard's member list (`src/GooseBoard.sol`, JUSTALAB-DECISIONS.md "The Leaderboard"). It holds nothing, calls nothing and has no owner: an account only puts itself on (`join()`) or takes itself off (`leave()`, not in the app). The deployer key pays the gas and gets no power over it. Adrian approves and signs the mainnet deploy; nobody else deploys it to Base.

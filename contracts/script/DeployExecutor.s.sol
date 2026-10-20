@@ -16,6 +16,10 @@ interface ISpokeOracle {
     function ORACLE() external view returns (address);
 }
 
+interface IJawAccountFactory {
+    function getImplementation() external view returns (address);
+}
+
 /// Deploys GooseExecutor. By default a D13 test deploy: daily limits of at most $5, for throwaway accounts, never wired
 /// into the production app config. EXECUTOR_CAPS=none deploys with no amount limit (CAP_MAX = the largest uint160),
 /// as production will once the audit is done (plan item 6; Adrian, 2026-10-19: Protect is limited by what it does).
@@ -50,6 +54,15 @@ contract DeployExecutor is Script {
     address internal constant MANAGER = 0xf1b40E3D5701C04d86F7828f0EB367B9C90901D8;
     /// JAW's factory `getImplementation()` on Base and Base Sepolia, read 2026-10-14.
     address internal constant JAW_ACCOUNT = 0xbb4f7d5418Cd8DADB61bb95561179e517572cBCd;
+    /// JAW's account factory on Base and Base Sepolia (ACCOUNT_RECIPE_V1's factory in JAW's core SDK 1.6.3).
+    address internal constant JAW_FACTORY = 0x5803c076563C85799989d42Fc00292A8aE52fa9E;
+    /// The code of every account JAW's factory deploys, the EIP-1167 clone of JAW_ACCOUNT (jawCodehashes()[0]). Read on
+    /// Base on 2026-10-20 through a keyless RPC: `cast codehash` of 0x14087c53…59eA, a passkey account the factory made
+    /// with owners [passkey, manager]. An account JAW hasn't deployed yet starts earning in one batch the factory deploys
+    /// it in first, and that batch's registration can't be simulated (JUSTALAB-DECISIONS.md, "One Face ID for a
+    /// never-used account too"): an executor without this hash would revert the whole batch. The deploy refuses to go
+    /// without it (checkCode, run).
+    bytes32 public constant JAW_CLONE_CODEHASH = 0xc79e2c8f7a03b38abd65a7e073fc3410849544bba74f53360c127775bc891848;
     /// lib/guardian/config.ts, lib/aave/addresses.ts, lib/tokens/registry.ts (verified on-chain 2026-10-12/13).
     address internal constant BASE_AAVE_V3_POOL = 0xA238Dd80C259a72e81d7e4664a9801593F98d1c5;
     address internal constant BASE_SPOKE = 0x17905Db0e4A3514467539956c084180616AE7B8D;
@@ -75,14 +88,17 @@ contract DeployExecutor is Script {
         vm.startBroadcast();
         executor = new GooseExecutor(c);
         vm.stopBroadcast();
+        // Read back from the executor itself; forge runs this before it sends anything, so a miss sends nothing.
+        require(executor.allowedCodehash(JAW_CLONE_CODEHASH), "the executor doesn't allow JAW's account clone");
     }
 
     /// Before anything is sent: every address the executor is deployed with or its job libraries fix has code (the
-    /// manager, Aave, USDC and aUSDC, the oracle, the router, the seven stocks and JAW's account implementation behind
-    /// the allowed codehashes), and on Base Aerodrome's pool factory, Entry's coins and venues, and the stocks, USDC and
-    /// the oracle are the spoke's own.
+    /// manager, Aave, USDC and aUSDC, the oracle, the router, the seven stocks, and JAW's factory and the account
+    /// implementation behind the allowed codehashes); the allowed codehashes include JAW's account clone, and JAW's
+    /// factory still clones that implementation; and on Base Aerodrome's pool factory, Entry's coins and venues, and the
+    /// stocks, USDC and the oracle are the spoke's own.
     function checkCode(GooseExecutor.Config memory c) public view {
-        address[15] memory need = [
+        address[16] memory need = [
             address(c.manager),
             address(c.aaveV3Pool),
             address(c.spoke),
@@ -91,6 +107,7 @@ contract DeployExecutor is Script {
             address(c.oracle),
             c.router,
             JAW_ACCOUNT,
+            JAW_FACTORY,
             c.stocks[0],
             c.stocks[1],
             c.stocks[2],
@@ -102,6 +119,12 @@ contract DeployExecutor is Script {
         for (uint256 i; i < need.length; ++i) {
             require(need[i].code.length > 0, "no code at a configured address");
         }
+        bool clone;
+        for (uint256 i; i < c.codehashes.length; ++i) {
+            clone = clone || c.codehashes[i] == JAW_CLONE_CODEHASH;
+        }
+        require(clone, "JAW's account clone isn't allowed");
+        require(IJawAccountFactory(JAW_FACTORY).getImplementation() == JAW_ACCOUNT, "JAW's factory clones other code");
         if (block.chainid != BASE) return; // Sepolia's stand-ins have no Entry, no spoke reserves and no pools
         require(IAeroRouter(c.router).factory().code.length > 0, "no code at a configured address");
         for (uint256 k; k < EntryJob.COINS; ++k) {
@@ -174,8 +197,8 @@ contract DeployExecutor is Script {
         ];
     }
 
-    /// The code a JAW account runs: the ERC-1167 proxy JAW's factory deploys, or an EIP-7702 delegation to the same
-    /// implementation.
+    /// The code a JAW account runs: the ERC-1167 proxy JAW's factory deploys (JAW_CLONE_CODEHASH, as read on Base), or
+    /// an EIP-7702 delegation to the same implementation.
     function jawCodehashes() public pure returns (bytes32[] memory h) {
         h = new bytes32[](2);
         h[0] = keccak256(abi.encodePacked(hex"363d3d373d3d3d363d73", JAW_ACCOUNT, hex"5af43d82803e903d91602b57fd5bf3"));

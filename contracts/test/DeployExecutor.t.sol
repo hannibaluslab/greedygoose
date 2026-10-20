@@ -124,6 +124,27 @@ contract DeployExecutorTest is ForkBase {
         assertEq(allowed[1], keccak256(abi.encodePacked(hex"ef0100", JAW_FACTORY.getImplementation())), "7702");
     }
 
+    /// A never-used account starts earning in one batch whose registration can't be simulated, so the executor must
+    /// allow JAW's account clone (DEPLOYMENTS.md, "Check after the next deploy"). The script's own run on a Base fork:
+    /// the executor it deploys allows it, read back; a list without it is refused before anything is sent.
+    function test_the_script_deploys_an_executor_that_allows_jaws_account_clone() public {
+        bytes32 clone = deploy.JAW_CLONE_CODEHASH();
+        assertEq(clone, 0xc79e2c8f7a03b38abd65a7e073fc3410849544bba74f53360c127775bc891848, "measured on Base");
+        assertEq(deploy.jawCodehashes()[0], clone, "the EIP-1167 clone of JAW's implementation");
+        assertEq(_newJawAccount("alice").codehash, clone, "what JAW's factory deploys at this block");
+
+        vm.setEnv("EXECUTOR_OWNER", vm.toString(makeAddr("owner")));
+        GooseExecutor x = deploy.run();
+        assertTrue(x.allowedCodehash(clone), "the deployed executor allows it");
+
+        GooseExecutor.Config memory c = deploy.config(8453, makeAddr("owner"));
+        bytes32[] memory only7702 = new bytes32[](1);
+        only7702[0] = c.codehashes[1];
+        c.codehashes = only7702;
+        vm.expectRevert("JAW's account clone isn't allowed");
+        deploy.checkCode(c);
+    }
+
     function test_defaults_mirror_config_risk() public view {
         string memory json = vm.readFile("test/vectors/defaults.json");
         Thresholds memory t = deploy.thresholds();
@@ -154,8 +175,9 @@ contract DeployExecutorTest is ForkBase {
         assertEq(e.maxSwap, vm.parseJsonUint(json, ".entry.maxSwap"));
     }
 
-    /// The script refuses to deploy unless every address it uses has code (the seven stocks, JAW's implementation and
-    /// Entry's coins and venues included) and, on Base, the stocks, USDC and the oracle are the spoke's own.
+    /// The script refuses to deploy unless every address it uses has code (the seven stocks, JAW's factory and
+    /// implementation, and Entry's coins and venues included) and, on Base, the stocks, USDC and the oracle are the
+    /// spoke's own.
     function test_the_script_checks_every_address_before_it_deploys() public {
         GooseExecutor.Config memory c = deploy.config(8453, makeAddr("owner"));
         deploy.checkCode(c);
