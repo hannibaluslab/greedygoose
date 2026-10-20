@@ -95,6 +95,19 @@ function useSheetWait(confirming: boolean, embedded: boolean) {
 }
 
 /**
+ * While the body is inert, focus leaves the sheet, and a step that took its place as the wait ended couldn't take focus
+ * (SheetSteps tried while it was still inert). So when the wait ends, the step on screen takes focus, and is announced.
+ */
+function useFocusAfterWait(waits: boolean, scroll: React.RefObject<HTMLDivElement | null>) {
+  const was = useRef(waits);
+  useEffect(() => {
+    if (was.current && !waits)
+      scroll.current?.querySelector<HTMLElement>('[tabindex="-1"]')?.focus({ preventScroll: true });
+    was.current = waits;
+  }, [waits, scroll]);
+}
+
+/**
  * Once JAW's sheet hands back, the change confirms on Base: the whole sheet shows it, not only the button (Adrian,
  * 2026-10-21). Call it where the button is; outside a sheet (a page) it does nothing.
  */
@@ -192,6 +205,7 @@ export function SheetShell({
   const dragToClose = useDragToClose(() => onOpenChange(false));
   const { waits, add } = useSheetWait(confirming, embedded);
   const scroll = useRef<HTMLDivElement>(null);
+  useFocusAfterWait(waits, scroll);
 
   // As a step: contribute the body only. The host owns the drawer, the
   // header (title / back / close) and the scroll area, so the chrome props

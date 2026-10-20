@@ -4,7 +4,7 @@ import { MIN_ARRIVAL_USD } from "@/lib/activity/arrivals";
 import type { AgentEvent } from "@/lib/agents/events";
 import type { AgentMove, MoveContext, Words } from "@/lib/agents/feed";
 import { maxSpendRaw, toUsd, type Cash } from "@/lib/cash";
-import { formatCoin, formatShares, formatUsd, formatUsdTrim, inWords, shortAddress } from "@/lib/formatting";
+import { ceilCents, formatCoin, formatShares, formatUsd, inWords, shortAddress } from "@/lib/formatting";
 import { EQUITIES, USDC, tickerOf } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 
@@ -15,12 +15,13 @@ import { ENTRY_COINS } from "@/lib/tokens/stables";
  */
 
 /**
- * What's owed beside the cash (rounded up, as on Home) and how it's repaid. Null when nothing is owed.
+ * What's owed beside the cash, to the cent and rounded up, as Home's Credit figure shows it (Adrian, 2026-10-21), and
+ * how it's repaid. Null when nothing is owed.
  */
 export function owedBeside(debtUsd: number, cash: Cash): { owed: string; line: string } | null {
   if (debtUsd <= 0) return null;
   return {
-    owed: formatUsdTrim(Math.ceil(debtUsd)),
+    owed: formatUsd(ceilCents(debtUsd)),
     line: maxSpendRaw(cash) > 0n ? "Repay from your cash any time." : "Top up your cash to repay.",
   };
 }

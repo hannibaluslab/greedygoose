@@ -58,8 +58,9 @@ describe("the credit beside the cash (no split of the cash)", () => {
   });
 
   it("shows what's owed, rounded up as on Home, and how it's repaid", () => {
-    expect(owedBeside(64.2, cash)).toEqual({ owed: "$65", line: "Repay from your cash any time." });
-    expect(owedBeside(64, cash)).toEqual({ owed: "$64", line: "Repay from your cash any time." });
+    expect(owedBeside(64.2, cash)).toEqual({ owed: "$64.20", line: "Repay from your cash any time." });
+    expect(owedBeside(8.031, cash)?.owed).toBe("$8.04");
+    expect(owedBeside(64, cash)).toEqual({ owed: "$64.00", line: "Repay from your cash any time." });
   });
 
   it("asks for money first when the cash can't repay (the fee buffer stays for the network fee)", () => {

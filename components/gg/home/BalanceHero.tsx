@@ -101,8 +101,11 @@ function FitLine({ children, align }: { children: ReactNode; align: "start" | "c
   }, []);
   return (
     <div ref={box} className={`relative flex min-w-0 ${align === "center" ? "justify-center" : "justify-start"}`}>
-      <span ref={probe} aria-hidden className="invisible absolute left-0 top-0 inline-block whitespace-nowrap">
-        {children}
+      {/* Clipped, so the full-size copy never widens the page (it measured past a 375px screen with cents owed). */}
+      <span aria-hidden className="pointer-events-none invisible absolute inset-0 overflow-hidden">
+        <span ref={probe} className="absolute left-0 top-0 inline-block whitespace-nowrap">
+          {children}
+        </span>
       </span>
       <span className="inline-block whitespace-nowrap" style={k < 1 ? { zoom: k } : undefined}>
         {children}
