@@ -171,7 +171,7 @@ the free shares' value. A stock whose shares all back credit is listed but can't
 ## Agents
 
 - Visible: **Protect** and **Rebalance**, on the Agents tab. Under them, **DCA**, **Auto top up** and **JAW MCP** show as
-  Coming soon, with nothing to open yet.
+  Coming soon, with nothing to open yet. DCA and Top-ups go into my mix are either/or. DCA isn't built.
 - Invisible: earning on idle cash (Save) and turning other dollars into cash (Receive). Their permissions are asked
   when money first arrives.
 - Permissions go through JAW's own screens; the spender is `GooseExecutor`. Protect and Rebalance have no amount limit:
@@ -185,6 +185,20 @@ the free shares' value. A stock whose shares all back credit is listed but can't
 - The Agents feed shows the agents' moves only. "Turn off all agents" shows only while one is on.
 - Rebalance only moves stocks that don't back credit, and never spends cash beyond the network fee. Its mix never adds
   up to more than 100%: a target stops where the other stocks' leave off.
+- **Top-ups go into my mix (to build)**, a Rebalance setting, off by default, with **Keep $X as cash** ($500 by default,
+  whole dollars, $0 allowed). A top-up is money that comes in from outside: USDC sent to the account, and other dollar
+  coins turned into cash. A sale's proceeds and credit taken as cash are never top-ups (they go into savings inside the
+  user's own batch), nor is the change the agents' sales leave; the change from the user's own sales (about 1%) counts
+  as one. A top-up fills cash up to Keep $X first, and only the part above goes into the mix (Keep $0: all of it). It
+  goes in at the next market morning's check, never the day it arrived, and earns until then. Rebalance takes it from
+  savings and buys the stocks furthest below their target first, then pro rata to the mix. It never sells for this, has
+  no amount cap, and waits while the credit is in Act. If the cash falls after a top-up is counted, the fall comes out
+  of the waiting top-up first. With the setting off, Rebalance spends no cash.
+- **How top-ups run (to build).** Only Save counts top-ups, so turning the setting on also turns on earning, in the same
+  signature. Save counts what it puts in savings; Rebalance, at its daily check, invests the smaller of that count and
+  the cash above Keep $X. The Rebalance grant carries Aave V3's savings withdraw (to the account only) only while the
+  setting is on. Save's grant moves to the executor's CAP_MAX too. The sheet warns when Keep is $0, something is owed
+  and Protect can't sell. Until the executor that counts top-ups is live, the setting says "Not available yet."
 
 ## Words
 

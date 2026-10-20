@@ -587,3 +587,28 @@ Adrian (2026-10-20): no weekly cap on the Rebalancer. Like Protect, it is limite
 **Tests:** `agents` (Rebalance in `NO_LIMIT_JOBS`, a new grant at `CAP_MAX` with each stock at the clamp), `rebalance-settings` (a capped grant from before needs a new grant at `CAP_MAX`), `agent-feed`, `agent-list`, `agent-next`, `manage`, `rebalance`.
 
 **Left for the overview's rebuild** (another session owns `app/agents/page.tsx` and `components/gg/Agents.tsx`): the footer still says "Rebalance’s limit is signed with Face ID." once a Rebalancer grant exists, and the page's `switchCap` and `renewCapRaw` still read `limitUsd` and `hasLimit` (both now give `CAP_MAX` for the Rebalancer). `AgentItem.limit` and `limitUsd` stay, always null, until the page stops reading them.
+
+## 2026-10-20 · Top-ups go into my mix (to build)
+
+Adrian approved top-ups going into the mix on 2026-10-20, and took the builder's defaults for P1 to P7 the same day (the build plan for Rebalance's top-ups, milestones M1 to M5). Nothing in this section is built yet: SPEC's two top-ups bullets say "(to build)" until the new executor (M4) and the app's wiring (M5) land, and the proof is added here then.
+
+**The rules.**
+
+- **A Rebalance setting,** off by default: Top-ups go into my mix, with Keep $X as cash ($500 by default, whole dollars, $0 allowed, at most $1,000,000 in the app).
+- **What a top-up is:** money from outside, USDC sent to the account and other dollar coins turned into cash. A sale's proceeds and credit taken as cash are not: they go into savings inside the user's own batch.
+- **Keep $X first:** a top-up fills cash up to Keep $X, and only the part above goes into the mix. It goes in at the next market morning's check, never the day it arrived, and earns until then. On a day it invests, band trades wait for the next market day.
+- **Buys only:** the stock furthest below its target first, then pro rata to the mix. No amount cap. It waits while the credit is in Act and invests only at health 1.1 or above.
+- **It takes both:** the account's own `setTopUps(on)` and the grant's top-ups flag. Anyone can register a grant, so the grant alone never turns it on.
+- **Counts from before the registered grant's start day are dropped:** that money stays cash.
+
+**Adrian's answers (2026-10-20): the defaults taken.**
+
+- **P1. The agents' own change is left out exactly:** the executor keeps an own-cash count written by Rebalance, Protect and Sell. The change from the user's own sales (about 1%) counts as a top-up.
+- **P2. Save has no amount limit either:** its grant moves to `CAP_MAX`, like Protect's and Rebalance's. Everyone grants again for the new executor anyway.
+- **P3. Turning top-ups on also turns on earning** (the Save grant), in the same single signature, since only Save counts top-ups. If one signature isn't available, the switch is greyed with "Turn on earning first."
+- **P4. The stricter rule:** a fall in cash after a top-up is counted comes out of the waiting top-up first. Rises never add to it, so Protect's repays shrink it on their own.
+- **P5** (the overview's layout, attention cards, "Turn off all agents") is the overview session's (`jl/agents-overview`).
+- **P6. The Rebalance sheet keeps only my mix and the top-ups setting:** "Its next trades", "When it runs", "What it did" and the shield "never" line leave the sheet. Activity stays on the overview.
+- **P7. Turning top-ups off doesn't revoke the grant it replaces:** the executor only runs the newest registered grant, and the old one goes with "Turn off Rebalance", as every replaced grant does.
+
+**Builder defaults, pending Adrian (copy).** The switch until the new executor is live: "Not available yet." The sheet's button while Rebalance is off: "Turn on · 2 steps". The never line with top-ups on: "Rebalance never touches the stocks backing your credit." The feed row: "Put $300 of top-ups into your mix." The card while agents aren't live: the pill "Coming soon".
