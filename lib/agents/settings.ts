@@ -4,10 +4,12 @@ import type { Call } from "@/lib/aave/tx";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import { isMix } from "@/lib/agents/mix";
+import { KEEP_MAX_RAW } from "@/lib/agents/topUps";
 
 /**
  * The agents' settings in GooseExecutor's registry, which only the account itself sets (the executor reads
- * `msg.sender`), each in one batch through `useTx`: the Rebalancer's mix and Protect · sell's "Keep my mix".
+ * `msg.sender`), each riding in a change's one batch: the Rebalancer's mix, Protect · sell's "Keep my mix" and
+ * Rebalance's "Top-ups go into my mix" with Keep as cash.
  */
 
 function executor() {
@@ -34,6 +36,22 @@ export function buildSetKeepMixCalls(user: `0x${string}`, on: boolean): Call[] {
     {
       to: executor(),
       data: encodeFunctionData({ abi: gooseExecutorAbi, functionName: "setKeepMix", args: [on] }),
+      value: 0n,
+    },
+  ]);
+}
+
+/**
+ * `setTopUps(on, keep)`: top-ups go into the mix (on) or stay as cash, with Keep as cash in USDC units (whole dollars
+ * from the app, $0 allowed, at most KEEP_MAX_RAW). The executor counts only once both this and the Rebalancer grant's
+ * top-ups flag are set.
+ */
+export function buildSetTopUpsCalls(user: `0x${string}`, on: boolean, keepRaw: bigint): Call[] {
+  if (keepRaw < 0n || keepRaw > KEEP_MAX_RAW) throw new Error("Keep as cash is $0 to $1,000,000");
+  return assertAllowed(user, [
+    {
+      to: executor(),
+      data: encodeFunctionData({ abi: gooseExecutorAbi, functionName: "setTopUps", args: [on, Number(keepRaw)] }),
       value: 0n,
     },
   ]);

@@ -115,10 +115,11 @@ const WINDOW = { hour: 10, minutes: 30 } as const;
 
 /**
  * When the Rebalancer next looks at the mix: 10:00 New York on the next weekday whose window hasn't passed and on
- * which it hasn't traded yet (`ranDay`, the registry's rebalanceDay). Holidays are the executor's own calendar.
+ * which it hasn't traded yet (`ranDay`, the registry's rebalanceDay), never before New York day `notBefore` (a top-up
+ * counted today goes in on a later day). Holidays are the executor's own calendar.
  */
-export function rebalanceCheckAt(nowSec: number, ranDay: number): number {
-  for (let d = nyDay(nowSec); ; d++) {
+export function rebalanceCheckAt(nowSec: number, ranDay: number, notBefore = 0): number {
+  for (let d = Math.max(nyDay(nowSec), notBefore); ; d++) {
     const weekday = new Date(d * 86_400_000).getUTCDay();
     const opens = nyHour(d, WINDOW.hour);
     if (weekday === 0 || weekday === 6 || d === ranDay || nowSec >= opens + WINDOW.minutes * 60) continue;

@@ -266,6 +266,9 @@ describe("the Rebalancer's next window", () => {
     expect(rebalanceCheckAt(at(2025, 9, 17, 20), 0)).toBe(at(2025, 9, 20, 14));
     // Standard time in December: 15:00 UTC.
     expect(rebalanceCheckAt(at(2025, 11, 3, 12), 0)).toBe(at(2025, 11, 3, 15));
+    // Not before a later day (a top-up counted today): Wednesday 9:00 waits for Thursday; Friday's for Monday.
+    expect(rebalanceCheckAt(at(2025, 9, 15, 13), 0, nyDay(WED_NOON) + 1)).toBe(at(2025, 9, 16, 14));
+    expect(rebalanceCheckAt(at(2025, 9, 17, 13), 0, nyDay(at(2025, 9, 17, 13)) + 1)).toBe(at(2025, 9, 20, 14));
   });
 
   it("says when in the viewer's own day", () => {

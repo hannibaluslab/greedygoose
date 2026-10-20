@@ -1,5 +1,7 @@
-import { whenText } from "@/lib/agents/next";
+import { nyDay, rebalanceCheckAt, whenText } from "@/lib/agents/next";
+import { waitingRaw as waitingOf } from "@/lib/agents/rules/topUps";
 import { formatUsdTrim } from "@/lib/formatting";
+import { USDC } from "@/lib/tokens/registry";
 
 /*
  * "Top-ups go into my mix", a Rebalance setting (SPEC, Agents), as its card in Rebalance's sheet shows it (boards
@@ -11,6 +13,8 @@ import { formatUsdTrim } from "@/lib/formatting";
 /** Keep as cash: $500 to start (board 7f), whole dollars, $0 allowed, at most $1,000,000. */
 export const KEEP_DEFAULT_USD = 500;
 export const KEEP_MAX_USD = 1_000_000;
+/** The most Keep may be in USDC units, what the allowlist lets `setTopUps` carry. */
+export const KEEP_MAX_RAW = BigInt(KEEP_MAX_USD) * 10n ** BigInt(USDC.decimals);
 
 export const TOP_UPS_TITLE = "Top-ups go into my mix";
 export const TOP_UPS_SUB = "Each top-up buys what’s furthest below its target.";
@@ -132,3 +136,67 @@ export function topUpsChanged(saved: TopUpsSetting | null, chosen: TopUpsChoice)
   if (!saved) return false;
   return chosen.on !== saved.on || (chosen.on && chosen.keepUsd !== saved.keepUsd);
 }
+
+/** `topUps(account)` as GooseExecutor returns it: on, day, keep, ready, today, mark, own (CashRules.TopUps). */
+type TopUpsTuple = readonly [boolean, number, number, bigint, bigint, bigint, bigint];
+
+/** One multicall answer (allowFailure): the struct, or a revert (an executor without top-ups has no such getter). */
+export type TopUpsAnswer = { status: "success"; result: TopUpsTuple } | { status: "failure" };
+
+/** Top-ups as the app reads them on Base. */
+export type TopUpsRead = {
+  /** The executor counts top-ups: its `topUps(account)` didn't revert (the executor live today has none). */
+  available: boolean;
+  /** The account's own switch (`setTopUps`). */
+  on: boolean;
+  /** Keep as cash, USDC units. */
+  keepRaw: bigint;
+  /** Counted and not in the mix yet: what's ready and today's count, after any fall since and within savings past Keep. */
+  waitingRaw: bigint;
+  /** When the last of it goes in: the next check for what's ready, the next market day's after today for today's. */
+  readyAtSec: number;
+};
+
+/**
+ * Reads `topUps(account)` the way GooseExecutor will act on it (lib/agents/rules/topUps.ts `waitingRaw`): at New York
+ * day `nyDay(nowSec)` with `savingsRaw` in savings, and Rebalance's last day (`rebalanceDay`, one batch a day). A
+ * revert means the executor doesn't count top-ups: not available, nothing waits.
+ */
+export function readTopUps(
+  answer: TopUpsAnswer,
+  ctx: { nowSec: number; savingsRaw: bigint; rebalanceDay: number },
+): TopUpsRead {
+  if (answer.status !== "success") return { available: false, on: false, keepRaw: 0n, waitingRaw: 0n, readyAtSec: 0 };
+  const [on, day, keep, ready, today, mark, own] = answer.result;
+  const keepRaw = BigInt(keep);
+  if (!on) return { available: true, on, keepRaw, waitingRaw: 0n, readyAtSec: 0 };
+  const now = nyDay(ctx.nowSec);
+  const state = { day, keepRaw, readyRaw: ready, todayRaw: today, markRaw: mark, ownRaw: own };
+  const w = waitingOf(state, now, ctx.savingsRaw);
+  const waitingRaw = w.readyRaw + w.todayRaw;
+  const readyAtSec =
+    waitingRaw === 0n ? 0 : rebalanceCheckAt(ctx.nowSec, ctx.rebalanceDay, w.todayRaw > 0n ? now + 1 : 0);
+  return { available: true, on, keepRaw, waitingRaw, readyAtSec };
+}
+
+/**
+ * What the card reads from Base (`TopUpsFacts`' chain side): before the read is in, the switch waits with nothing to
+ * say; a revert says "Not available yet." Earning never comes first: turning top-ups on while earning is off grants
+ * earning in the same signature (P3, useManageSave).
+ */
+export function chainFacts(
+  read: TopUpsRead | null,
+): Pick<TopUpsFacts, "available" | "earningFirst" | "saved" | "waiting"> {
+  if (!read) return { available: true, earningFirst: false, saved: null, waiting: null };
+  if (!read.available) return TOP_UPS_NOT_YET;
+  const usd = (raw: bigint) => Number(raw) / 10 ** USDC.decimals;
+  return {
+    available: true,
+    earningFirst: false,
+    saved: { on: read.on, keepUsd: Math.floor(usd(read.keepRaw)) },
+    waiting: read.waitingRaw > 0n ? { usd: usd(read.waitingRaw), atSec: read.readyAtSec } : null,
+  };
+}
+
+/** Keep as cash in USDC units, for `setTopUps`: whole dollars. */
+export const keepRawOf = (keepUsd: number) => BigInt(Math.floor(keepUsd)) * 10n ** BigInt(USDC.decimals);

@@ -286,6 +286,9 @@ const RULES: readonly Rule[] = [
           functions: {
             setMix: (args: readonly unknown[]) => isMix(args[0] as readonly number[]),
             setKeepMix: () => true,
+            // Top-ups go into my mix: a switch, and Keep as cash in whole USDC units up to $1,000,000 (KEEP_MAX_USD).
+            setTopUps: (args: readonly unknown[]) =>
+              typeof args[0] === "boolean" && typeof args[1] === "number" && args[1] >= 0 && args[1] <= 10 ** 12,
             registerApproved: registersOwnGrant,
           },
         },
