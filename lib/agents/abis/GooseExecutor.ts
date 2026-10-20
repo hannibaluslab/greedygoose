@@ -1,7 +1,4 @@
-/**
- * Generated: cd contracts && forge inspect src/GooseExecutor.sol:GooseExecutor abi --json. Then by hand, the last
- * entry: `jobsOf`, which only the executor live today has. hooks/useAgents.ts reads it until it reads `accounts`.
- */
+/** Generated: cd contracts && forge inspect src/GooseExecutor.sol:GooseExecutor abi --json. */
 export const gooseExecutorAbi = [
   {
     type: "constructor",
@@ -2154,79 +2151,5 @@ export const gooseExecutorAbi = [
     type: "error",
     name: "ZeroValue",
     inputs: [],
-  },
-  // Only on the executor live today (the next one drops it to fit under 24 KB).
-  {
-    type: "function",
-    name: "jobsOf",
-    inputs: [
-      {
-        name: "account",
-        type: "address",
-        internalType: "address",
-      },
-    ],
-    outputs: [
-      {
-        name: "jobs",
-        type: "uint8",
-        internalType: "uint8",
-      },
-      {
-        name: "save",
-        type: "tuple",
-        internalType: "struct GooseExecutor.Grant",
-        components: [
-          {
-            name: "start",
-            type: "uint48",
-            internalType: "uint48",
-          },
-          {
-            name: "end",
-            type: "uint48",
-            internalType: "uint48",
-          },
-          {
-            name: "cap",
-            type: "uint160",
-            internalType: "uint160",
-          },
-        ],
-      },
-      {
-        name: "protect",
-        type: "tuple",
-        internalType: "struct GooseExecutor.Grant",
-        components: [
-          {
-            name: "start",
-            type: "uint48",
-            internalType: "uint48",
-          },
-          {
-            name: "end",
-            type: "uint48",
-            internalType: "uint48",
-          },
-          {
-            name: "cap",
-            type: "uint160",
-            internalType: "uint160",
-          },
-        ],
-      },
-      {
-        name: "fails",
-        type: "uint8",
-        internalType: "uint8",
-      },
-      {
-        name: "cooldownUntil",
-        type: "uint48",
-        internalType: "uint48",
-      },
-    ],
-    stateMutability: "view",
   },
 ] as const;
