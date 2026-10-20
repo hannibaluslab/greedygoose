@@ -9,7 +9,15 @@ import { usePosition } from "@/hooks/usePosition";
 import { CHAIN_ID } from "@/lib/chain";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
-import { readTopUps, topUpsAnswerOf, topUpsReverted, type TopUpsAnswer, type TopUpsRead } from "@/lib/agents/topUps";
+import type { TopUpsState } from "@/lib/agents/rules/topUps";
+import {
+  readTopUps,
+  topUpsAnswerOf,
+  topUpsReverted,
+  topUpsStateOf,
+  type TopUpsAnswer,
+  type TopUpsRead,
+} from "@/lib/agents/topUps";
 
 /** What an executor that doesn't count top-ups (or no executor at all) reads as. */
 const NONE: TopUpsAnswer = { status: "failure" };
@@ -45,6 +53,15 @@ export function useTopUpsSwitch(account: `0x${string}`): { on: boolean; keepRaw:
   if (answer.status !== "success") return null;
   const [on, , keep] = answer.result;
   return { on, keepRaw: BigInt(keep) };
+}
+
+/**
+ * The executor's top-up counts for the account while its switch is on (`topUpsStateOf`), for Rebalance's card to work
+ * out what goes in at the next check; null while off, unread, or on an executor that doesn't count top-ups.
+ */
+export function useTopUpsState(account: `0x${string}`): TopUpsState | null {
+  const answer = useTopUpsAnswer(account);
+  return useMemo(() => (answer ? topUpsStateOf(answer) : null), [answer]);
 }
 
 /**

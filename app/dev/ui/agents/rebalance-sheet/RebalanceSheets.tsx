@@ -12,7 +12,7 @@ import { SheetShell } from "@/components/gg/kit/SheetShell";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { useNowSec } from "@/hooks/useNowSec";
 import { rebalanceOptions, type MixRow } from "@/lib/agents/mix";
-import { rebalanceOutlook } from "@/lib/agents/next";
+import { nyDay, rebalanceOutlook } from "@/lib/agents/next";
 import { rebalanceCard, type RebalanceCardInput } from "@/lib/agents/rebalanceCard";
 import type { RebalanceTerms } from "@/lib/agents/rebalanceSettings";
 import type { TopUpsChoice, TopUpsFacts, TopUpsSetting } from "@/lib/agents/topUps";
@@ -68,6 +68,8 @@ type Fixture = {
   /** Earning (the Save job) is off: turning top-ups on grants it in the same Face ID. */
   earningOff?: boolean;
   finish?: boolean;
+  /** Dollars of top-ups counted yesterday, going in at the next check (Keep $500, enough savings above it). */
+  invest?: number;
 };
 
 const STATES: Record<string, Fixture> = {
@@ -86,6 +88,17 @@ const STATES: Record<string, Fixture> = {
   waiting: {
     title: "7g · $300 waiting for the next check",
     topUps: { saved: ON, waiting: { usd: 300, atSec: 0 } },
+  },
+  "going-in": {
+    title: "$1,000 of top-ups going in at the next check: the line says it",
+    topUps: { saved: ON, waiting: { usd: 1_000, atSec: 0 } },
+    invest: 1_000,
+  },
+  "going-in-trades-due": {
+    title: "A top-up and trades both due: the top-up first, trades wait a day",
+    pcts: DRIFTED,
+    topUps: { saved: ON, waiting: { usd: 300, atSec: 0 } },
+    invest: 300,
   },
   "waiting-regrant": {
     title: "$300 waiting and a Save that grants again: it stays as cash",
@@ -252,6 +265,21 @@ function stateOf(nowSec: number, f: Fixture) {
     mixBps: MIX,
     options,
     outlook,
+    topUps: f.invest
+      ? {
+          state: {
+            day: nyDay(nowSec) - 1,
+            keepRaw: usdc(500),
+            readyRaw: usdc(f.invest),
+            todayRaw: 0n,
+            markRaw: usdc(f.invest + 1_000),
+            ownRaw: 0n,
+          },
+          savingsRaw: usdc(f.invest + 1_000),
+          usdcLeftRaw: CAP_MAX,
+          savingsLeftRaw: CAP_MAX,
+        }
+      : null,
     ...card,
   });
   const status = card.status ?? "on";

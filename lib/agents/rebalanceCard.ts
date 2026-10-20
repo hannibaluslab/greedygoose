@@ -1,15 +1,17 @@
 import { mixBpsNow, startingMix, type MixHolding } from "@/lib/agents/mix";
-import { rebalanceCheckAt, whenText, type RebalanceOutlook } from "@/lib/agents/next";
+import { nyDay, rebalanceCheckAt, whenText, type RebalanceOutlook } from "@/lib/agents/next";
 import { bandOf, type RebalanceOptions, type RebalanceTrade } from "@/lib/agents/rules/rebalance";
+import { investTrades, topUpsReady, type TopUpsState } from "@/lib/agents/rules/topUps";
 import type { AgentStatus } from "@/lib/agents/status";
-import { EQUITIES } from "@/lib/tokens/registry";
+import { formatUsdTrim } from "@/lib/formatting";
+import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
 /*
  * Rebalance's card on the Agents overview: one slot per stock in the mix, in Home's order, each with its target on top
  * and its logo placed by how far it sits from its target, measured in its own band, so every stock reads on the same
  * scale whatever its size. The slots of the stocks the next check trades are tinted (sell red, buy green) with a ghost
- * where the logo goes back to. Under it, "On target" and the next check, or the trades due and when, or the state's
- * words. One pill says what Rebalance itself is doing; the first state that applies wins, in the order of board 7.
+ * where the logo goes back to. Under it, "On target" and the next check, the top-ups going in or the trades due and
+ * when, or the state's words. One pill says what Rebalance itself is doing; the first state that applies wins, in the order of board 7.
  * Nothing on the card can be tapped on its own: the whole card opens Rebalance's sheet. Pure, so the gallery and the
  * tests draw every state with the app's own words.
  */
@@ -74,6 +76,8 @@ export type PillTone = "on" | "neutral" | "needs" | "due";
 export type RebalanceFooter =
   | { kind: "on-target"; next: string }
   | { kind: "trades"; text: string; when: string }
+  /** Counted top-ups go into the mix at the next check ("$300 going in"). */
+  | { kind: "invest"; text: string; when: string }
   | { kind: "words"; line1: string; line2: string | null };
 
 export type RebalanceCardModel = {
@@ -105,10 +109,57 @@ export type RebalanceCardInput = {
   rebalanceDay: number;
   holdings: readonly MixHolding[];
   mixBps: readonly number[] | null;
-  options: Pick<RebalanceOptions, "bandBps" | "bandMaxBps">;
+  options: RebalanceOptions;
   /** Its next window (lib/agents/next.ts `rebalanceOutlook`), shared with its sheet's line. */
   outlook: RebalanceOutlook;
+  /** Top-ups, while they're on in both the account's switch and the grant it runs; null or absent otherwise. */
+  topUps?: CardTopUps | null;
 };
+
+/** Top-ups as the card reads them, to work out what goes in at the next check (`investDue`). */
+export type CardTopUps = {
+  /** The executor's counts for the account (`topUps(account)`). */
+  state: TopUpsState;
+  /** Savings now, USDC units. */
+  savingsRaw: bigint;
+  /** What the grant's USDC limit (the buys) and its aUSDC limit (the savings withdraw) still allow, USDC units. */
+  usdcLeftRaw: bigint;
+  savingsLeftRaw: bigint;
+};
+
+/** Aave's rounding on a savings withdraw, which the manager charges on aUSDC (JobBase.SAVINGS_ROUNDING). */
+const SAVINGS_ROUNDING = 2n;
+const minOf = (...v: bigint[]) => v.reduce((a, b) => (b < a ? b : a));
+
+/**
+ * The buys that put counted top-ups into the mix at the check on New York day `day`, as GooseExecutor's RebalanceJob
+ * plans them: what was counted on an earlier day (`topUpsReady`: any fall since taken out, within savings above Keep),
+ * within what the grant's limits leave, once it's at least the smallest trade (`investTrades`, the contract's
+ * RebalanceRules.invest). Empty when nothing goes in: the band trades go then. A day it invests, they wait a day.
+ */
+export function investDue(p: {
+  holdings: readonly MixHolding[];
+  mixBps: readonly number[];
+  options: RebalanceOptions;
+  topUps: CardTopUps;
+  day: number;
+}): RebalanceTrade[] {
+  const t = p.topUps;
+  const ready = topUpsReady(t.state, p.day, t.savingsRaw).readyRaw;
+  const savingsLeft = t.savingsLeftRaw > SAVINGS_ROUNDING ? t.savingsLeftRaw - SAVINGS_ROUNDING : 0n;
+  const amount = minOf(ready, savingsLeft, t.usdcLeftRaw);
+  if (amount < p.options.minTradeRaw) return [];
+  const stocks = EQUITIES.map((e) => {
+    const h = p.holdings.find((x) => x.reserveId === e.reserveId);
+    return {
+      sharesRaw: h?.freeRaw ?? 0n,
+      price: h?.priceRaw ?? 0n,
+      weightBps: BigInt(p.mixBps[e.reserveId]),
+      sellLeftRaw: 0n,
+    };
+  });
+  return investTrades({ stocks }, amount, p.options);
+}
 
 /** Failed runs in a row before the card says so (the executor switches the account off at eight). */
 const RETRYING_AT = 3;
@@ -122,6 +173,53 @@ const names = (ids: readonly number[]) => {
   const n = ids.map((id) => EQUITIES[id].name);
   return n.length > 1 ? `${n.slice(0, -1).join(", ")} and ${n.at(-1)}` : n[0];
 };
+
+/**
+ * When it checks next. The executor backs a failing account off: its next check is the first window after that, and
+ * never before the back-off ends (one that ends inside a window checks then, not at the window's open).
+ */
+function nextCheck(i: RebalanceCardInput): number {
+  const o = i.outlook;
+  return i.cooldownUntil > o.checkAt
+    ? Math.max(i.cooldownUntil, rebalanceCheckAt(i.cooldownUntil, i.rebalanceDay))
+    : o.checkAt;
+}
+
+/** The top-ups going in at the check at `checkAt` (`investDue`): only while they're on and a mix is saved. */
+function investAt(i: RebalanceCardInput, checkAt: number): RebalanceTrade[] {
+  if (!i.topUps || !i.mixBps || i.outlook.noMix) return [];
+  return investDue({
+    holdings: i.holdings,
+    mixBps: i.mixBps,
+    options: i.options,
+    topUps: i.topUps,
+    day: nyDay(checkAt),
+  });
+}
+
+/**
+ * The footer for what the next check does, and the card's words for it: top-ups going in ("$300 going in", the stocks
+ * it buys), else the band trades due ("3 trades", what it sells and buys); null when it does neither.
+ */
+function dueFooter(
+  invest: readonly RebalanceTrade[],
+  trades: readonly RebalanceTrade[],
+  when: string,
+): { footer: RebalanceFooter; say: string } | null {
+  if (invest.length > 0) {
+    const text = `${formatUsdTrim(Number(invest.reduce((a, t) => a + t.amountIn, 0n)) / 10 ** USDC.decimals)} going in`;
+    return {
+      footer: { kind: "invest", text, when: capital(when) },
+      say: `${text} ${when}. Buys ${names(invest.map((t) => t.reserveId))}.`,
+    };
+  }
+  if (trades.length === 0) return null;
+  const text = `${trades.length} trade${trades.length === 1 ? "" : "s"}`;
+  const sells = trades.filter((t) => !t.buy).map((t) => t.reserveId);
+  const buys = trades.filter((t) => t.buy).map((t) => t.reserveId);
+  const what = [sells.length > 0 ? ` Sells ${names(sells)}.` : "", buys.length > 0 ? ` Buys ${names(buys)}.` : ""];
+  return { footer: { kind: "trades", text, when: capital(when) }, say: `${text} ${when}.${what.join("")}` };
+}
 
 /** What the card says while off and before the agents are live. */
 const OFF_WORDS = ["When on, it keeps your mix on target.", "Checks once a market day, after the US open."] as const;
@@ -160,15 +258,13 @@ export function rebalanceCard(i: RebalanceCardInput): RebalanceCardModel | null 
   }
 
   const o = i.outlook;
-  // The executor backs a failing account off: its next check is the first window after that, and never before the
-  // back-off ends (one that ends inside a window checks then, not at the window's open).
-  const checkAt =
-    i.cooldownUntil > o.checkAt
-      ? Math.max(i.cooldownUntil, rebalanceCheckAt(i.cooldownUntil, i.rebalanceDay))
-      : o.checkAt;
+  const checkAt = nextCheck(i);
   const when = whenText(checkAt, i.nowSec);
-  const due = o.waitsInAct ? [] : o.trades;
-  const moving = slots(due);
+  // Counted top-ups that go in at that check: the executor puts them in first, and band trades wait a day.
+  const invest = investAt(i, checkAt);
+  const next = invest.length > 0 ? invest : o.trades;
+  const waits = next.length > 0 && o.inAct;
+  const moving = slots(waits ? [] : next);
   // 4. Runs keep failing.
   if (i.fails >= RETRYING_AT)
     return card(
@@ -177,22 +273,12 @@ export function rebalanceCard(i: RebalanceCardInput): RebalanceCardModel | null 
       words(`Your agents’ last ${i.fails} runs didn’t go through.`, `Nothing moved. Next check ${when}.`),
       { slots: moving },
     );
-  // 5. Trades are due, and the credit is in Act: it waits.
-  if (o.waitsInAct)
+  // 5. Trades or top-ups are due, and the credit is in Act: it waits.
+  if (waits)
     return card("Paused", "neutral", words("Waits until your credit is out of Act.", "Nothing trades meanwhile."));
-  // 6. Trades at the next check.
-  if (due.length > 0) {
-    const text = `${due.length} trade${due.length === 1 ? "" : "s"}`;
-    const sells = due.filter((t) => !t.buy).map((t) => t.reserveId);
-    const buys = due.filter((t) => t.buy).map((t) => t.reserveId);
-    const what = [sells.length > 0 ? ` Sells ${names(sells)}.` : "", buys.length > 0 ? ` Buys ${names(buys)}.` : ""];
-    return card(
-      "On",
-      "on",
-      { kind: "trades", text, when: capital(when) },
-      { slots: moving, say: `${text} ${when}.${what.join("")}` },
-    );
-  }
+  // 6. Top-ups going into the mix at the next check, else the trades due then.
+  const due = dueFooter(invest, o.trades, when);
+  if (due) return card("On", "on", due.footer, { slots: moving, say: due.say });
   const onTarget = o.noMix ? "No mix yet." : `On target. Checks ${when}.`;
   // 7. Its grant ends within a week.
   if (i.endsAt !== null && i.endsAt - i.nowSec <= ENDS_SOON_SEC)

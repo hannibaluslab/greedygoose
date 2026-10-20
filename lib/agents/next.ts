@@ -298,14 +298,20 @@ export type RebalanceOutlook = {
   noMix: boolean;
   trades: RebalanceTrade[];
   checkAt: number;
+  /** The credit is in Act now: GooseExecutor's RebalanceJob trades nothing, top-ups included. */
+  inAct: boolean;
   /** Trades are due, and the credit is in Act: GooseExecutor's RebalanceJob waits. */
   waitsInAct: boolean;
 };
 
 export function rebalanceOutlook(i: OutlookInput): RebalanceOutlook {
   const checkAt = rebalanceCheckAt(i.nowSec, i.rebalanceDay);
+  // GooseExecutor's RebalanceJob waits while the credit is in Act: the status line (RebalanceJob.ACT_HF), not
+  // Protect's, which acts further down (Adrian, 2026-10-19).
+  const hf = i.debtUsd > 0 ? (i.totalBackingUsd * i.avgCf) / i.debtUsd : Infinity;
+  const inAct = hf < RISK.watchMin;
   if (!i.mixBps || !isMix(i.mixBps) || i.mixBps.every((w) => w === 0))
-    return { noMix: true, trades: [], checkAt, waitsInAct: false };
+    return { noMix: true, trades: [], checkAt, inAct, waitsInAct: false };
   const left = i.left.rebalance;
   const trades = previewTrades({
     holdings: i.holdings,
@@ -324,10 +330,7 @@ export function rebalanceOutlook(i: OutlookInput): RebalanceOutlook {
         }
       : undefined,
   });
-  // GooseExecutor's RebalanceJob waits while the credit is in Act: the status line (RebalanceJob.ACT_HF), not
-  // Protect's, which acts further down (Adrian, 2026-10-19).
-  const hf = i.debtUsd > 0 ? (i.totalBackingUsd * i.avgCf) / i.debtUsd : Infinity;
-  return { noMix: false, trades, checkAt, waitsInAct: trades.length > 0 && hf < RISK.watchMin };
+  return { noMix: false, trades, checkAt, inAct, waitsInAct: trades.length > 0 && inAct };
 }
 
 /** Rebalance: the trades its rule finds for the saved mix on today's free shares, at the next window. */

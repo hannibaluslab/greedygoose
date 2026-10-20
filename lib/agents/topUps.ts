@@ -1,6 +1,6 @@
 import { BaseError, ContractFunctionRevertedError, ContractFunctionZeroDataError } from "viem";
 import { nyDay, rebalanceCheckAt, whenText } from "@/lib/agents/next";
-import { waitingRaw as waitingOf } from "@/lib/agents/rules/topUps";
+import { waitingRaw as waitingOf, type TopUpsState } from "@/lib/agents/rules/topUps";
 import { formatUsdTrim } from "@/lib/formatting";
 import { USDC } from "@/lib/tokens/registry";
 
@@ -174,6 +174,16 @@ export type TopUpsRead = {
 };
 
 /**
+ * The executor's counts for the account (lib/agents/rules/topUps.ts `TopUpsState`) while its switch is on; null while
+ * it's off (nothing counts) or the executor doesn't count top-ups (a revert).
+ */
+export function topUpsStateOf(answer: TopUpsAnswer): TopUpsState | null {
+  if (answer.status !== "success" || !answer.result[0]) return null;
+  const [, day, keep, ready, today, mark, own] = answer.result;
+  return { day, keepRaw: BigInt(keep), readyRaw: ready, todayRaw: today, markRaw: mark, ownRaw: own };
+}
+
+/**
  * Reads `topUps(account)` the way GooseExecutor will act on it (lib/agents/rules/topUps.ts `waitingRaw`): at New York
  * day `nyDay(nowSec)` with `savingsRaw` in savings, and Rebalance's last day (`rebalanceDay`, one batch a day). A
  * revert means the executor doesn't count top-ups: not available, nothing waits.
@@ -183,11 +193,11 @@ export function readTopUps(
   ctx: { nowSec: number; savingsRaw: bigint; rebalanceDay: number },
 ): TopUpsRead {
   if (answer.status !== "success") return { available: false, on: false, keepRaw: 0n, waitingRaw: 0n, readyAtSec: 0 };
-  const [on, day, keep, ready, today, mark, own] = answer.result;
+  const [on, , keep] = answer.result;
   const keepRaw = BigInt(keep);
-  if (!on) return { available: true, on, keepRaw, waitingRaw: 0n, readyAtSec: 0 };
+  const state = topUpsStateOf(answer);
+  if (!state) return { available: true, on, keepRaw, waitingRaw: 0n, readyAtSec: 0 };
   const now = nyDay(ctx.nowSec);
-  const state = { day, keepRaw, readyRaw: ready, todayRaw: today, markRaw: mark, ownRaw: own };
   const w = waitingOf(state, now, ctx.savingsRaw);
   const waitingRaw = w.readyRaw + w.todayRaw;
   const readyAtSec =

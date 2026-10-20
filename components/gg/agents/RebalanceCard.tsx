@@ -156,8 +156,8 @@ function MixPicture({ slots, faded }: { slots: readonly MixSlot[]; faded: boolea
 const PILL_ROW = "inline-flex h-7 items-center rounded-[14px] text-[13px] font-semibold";
 
 /**
- * On target and the next check, the trades due and when (the boards' footer), or the state's words. Each side keeps to
- * one line; on a phone narrower than the boards' the right one goes under the left.
+ * On target and the next check, the top-ups going in or the trades due and when (the boards' footer), or the state's
+ * words. Each side keeps to one line; on a phone narrower than the boards' the right one goes under the left.
  */
 function Footer({ footer }: { footer: RebalanceFooter }) {
   if (footer.kind === "on-target")
@@ -182,16 +182,18 @@ function Footer({ footer }: { footer: RebalanceFooter }) {
         </span>
       </span>
     );
-  if (footer.kind === "trades")
+  if (footer.kind === "trades" || footer.kind === "invest") {
+    // Top-ups going in: green, with money going down into the mix. Trades: amber, with the two-way arrows.
+    const invest = footer.kind === "invest";
     return (
       <span className="num mt-6 flex flex-wrap items-center justify-between gap-2 whitespace-nowrap">
-        <span className={`${PILL_ROW} gap-1.5 bg-due-soft px-3 text-due-ink`}>
+        <span className={`${PILL_ROW} gap-1.5 px-3 ${invest ? "bg-pos-soft text-pos" : "bg-due-soft text-due-ink"}`}>
           <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
             <path
-              d="M1.5 4h8l-2-2M10.5 8h-8l2 2"
+              d={invest ? "M6 1.5v8M2.5 6.5L6 10l3.5-3.5" : "M1.5 4h8l-2-2M10.5 8h-8l2 2"}
               fill="none"
               stroke="currentColor"
-              strokeWidth="1.5"
+              strokeWidth={invest ? 1.6 : 1.5}
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -207,6 +209,7 @@ function Footer({ footer }: { footer: RebalanceFooter }) {
         </span>
       </span>
     );
+  }
   return (
     <>
       <span className="mt-3.5 text-[15px] font-medium leading-5">{footer.line1}</span>

@@ -1,8 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { mixBpsNow, rebalanceOptions, type MixHolding } from "@/lib/agents/mix";
-import { rebalanceCheckAt, rebalanceOutlook, whenText, type OutlookInput } from "@/lib/agents/next";
-import { mixSlots, OFFSET_MAX, rebalanceCard, type RebalanceCardInput } from "@/lib/agents/rebalanceCard";
+import { nyDay, rebalanceCheckAt, rebalanceOutlook, whenText, type OutlookInput } from "@/lib/agents/next";
+import {
+  investDue,
+  mixSlots,
+  OFFSET_MAX,
+  rebalanceCard,
+  type CardTopUps,
+  type RebalanceCardInput,
+} from "@/lib/agents/rebalanceCard";
+import { sheetLine } from "@/lib/agents/rebalanceSettings";
 import { bandOf } from "@/lib/agents/rules/rebalance";
+import type { TopUpsState } from "@/lib/agents/rules/topUps";
 
 const usdc = (x: number) => BigInt(Math.round(x * 1e6));
 const CAP_MAX = usdc(1_000_000);
@@ -144,6 +153,7 @@ describe("rebalanceOutlook: the sheet's line and the card share it", () => {
       noMix: false,
       trades: [],
       checkAt: rebalanceCheckAt(WED_NOON, 0),
+      inAct: false,
       waitsInAct: false,
     });
     expect(rebalanceOutlook(outlookIn({ mixBps: null }))).toMatchObject({ noMix: true, trades: [] });
@@ -155,8 +165,8 @@ describe("rebalanceOutlook: the sheet's line and the card share it", () => {
     ]);
     // $1,300 owed on $2,000 at 70%: health 1.08, in Act.
     expect(rebalanceOutlook(outlookIn({ holdings: holdings(DRIFTED), debtUsd: 1_300 })).waitsInAct).toBe(true);
-    // In Act but nothing to trade: it doesn't wait for anything.
-    expect(rebalanceOutlook(outlookIn({ debtUsd: 1_300 })).waitsInAct).toBe(false);
+    // In Act but nothing to trade: it doesn't wait for anything (a top-up going in would: the card reads `inAct`).
+    expect(rebalanceOutlook(outlookIn({ debtUsd: 1_300 }))).toMatchObject({ inAct: true, waitsInAct: false });
   });
 });
 
@@ -284,5 +294,124 @@ describe("rebalanceCard: the first state that applies, in board 7's order, with 
     expect(faded({ status: "off" })).toBe(true);
     expect(faded({ status: "starting" })).toBe(true);
     expect(faded({ live: false })).toBe(true);
+  });
+});
+
+describe("top-ups going in: the card and the sheet's line show what the next check puts into the mix", () => {
+  const TWO = [0, 0, 0, 0, 0, 6_000, 4_000];
+  const WED = nyDay(WED_NOON);
+  /** $300 counted on `day`, $1,300 in savings and Keep $500, the grant's limits at CAP_MAX. */
+  const topUps = (over: Partial<TopUpsState> = {}, at: Partial<CardTopUps> = {}): CardTopUps => ({
+    state: {
+      day: WED - 1,
+      keepRaw: usdc(500),
+      readyRaw: usdc(300),
+      todayRaw: 0n,
+      markRaw: usdc(1_300),
+      ownRaw: 0n,
+      ...over,
+    },
+    savingsRaw: usdc(1_300),
+    usdcLeftRaw: CAP_MAX,
+    savingsLeftRaw: CAP_MAX,
+    ...at,
+  });
+  const two = { holdings: holdings([0, 0, 0, 0, 0, 60, 40]), mixBps: TWO };
+  const investCard = (t: CardTopUps | null, over: Partial<RebalanceCardInput> = {}, at: Partial<OutlookInput> = two) =>
+    card({ topUps: t, ...over }, at);
+  const buys = (m: ReturnType<typeof card>) => m.slots.filter((s) => s.side).map((s) => [s.reserveId, s.side]);
+  const dollars = (raw: bigint) => Number(raw) / 1e6;
+  /** What goes in at Thursday's check, in dollars. */
+  const spent = (t: CardTopUps) =>
+    dollars(investDue({ ...two, options, topUps: t, day: WED + 1 }).reduce((a, x) => a + x.amountIn, 0n));
+
+  it("buys what's furthest below its target with what was counted on an earlier day (the contract's invest)", () => {
+    // 60/40 on target, $300 in: targets $6,180 and $4,120, so $180 of NVIDIA and $120 of Tesla (to a unit: the
+    // fixture's shares are rounded).
+    const trades = investDue({ ...two, options, topUps: topUps(), day: WED + 1 });
+    expect(trades.map((t) => [t.reserveId, t.buy])).toEqual([
+      [5, true],
+      [6, true],
+    ]);
+    expect(dollars(trades[0].amountIn)).toBeCloseTo(180, 5);
+    expect(dollars(trades[1].amountIn)).toBeCloseTo(120, 5);
+  });
+
+  it("shows the top-up going in: the green pill, the time, BUY on the stocks it buys", () => {
+    const m = investCard(topUps());
+    expect(m.pill).toEqual({ text: "On", tone: "on" });
+    expect(m.footer).toEqual({
+      kind: "invest",
+      text: "$300 going in",
+      when: next.charAt(0).toUpperCase() + next.slice(1),
+    });
+    expect(buys(m)).toEqual([
+      [5, "buy"],
+      [6, "buy"],
+    ]);
+    expect(m.label).toBe(`Rebalance, on. $300 going in ${next}. Buys NVIDIA and Tesla.`);
+    expect(sheetLine(m)).toEqual({ text: `$300 going in ${next}. Buys NVIDIA and Tesla.`, renew: false });
+  });
+
+  it("shows the top-up, not the band trades, when both are due: the contract invests first, trades wait a day", () => {
+    // "Coin hop": NVIDIA past its band. $300 in: Apple is furthest below its target ($2,060 against $1,600).
+    const m = investCard(topUps(), {}, { holdings: holdings(DRIFTED) });
+    expect(m.footer).toMatchObject({ kind: "invest", text: "$300 going in" });
+    expect(buys(m)).toEqual([[0, "buy"]]);
+    expect(card({}, { holdings: holdings(DRIFTED) }).footer).toMatchObject({ kind: "trades", text: "3 trades" });
+  });
+
+  it("puts in only what the trades take: a last piece under the smallest trade waits for the next check", () => {
+    // The boards' mix on target, $300 in: $130 Tesla, $60 Apple, $45 Microsoft, $30 Amazon, $30 Alphabet; Meta's $5 waits.
+    const m = card({ topUps: topUps() });
+    expect(m.footer).toMatchObject({ kind: "invest", text: "$295 going in" });
+    expect(buys(m).map(([id]) => id)).toEqual([0, 1, 2, 4, 6]);
+  });
+
+  it("goes in the market day after it was counted: a count today waits past today's check", () => {
+    const morning = WED_NOON - 3 * 3_600; // Wednesday 9:00 AM New York: today's window is still ahead
+    const today = topUps({ day: WED, readyRaw: 0n, todayRaw: usdc(300) });
+    const early = rebalanceCard(input({ nowSec: morning, topUps: today }, { ...two, nowSec: morning }))!;
+    expect(early.footer.kind).toBe("on-target");
+    // After the window, the next check is Thursday's: Wednesday's count goes in then.
+    expect(investCard(today).footer).toMatchObject({ kind: "invest", text: "$300 going in" });
+  });
+
+  it("takes a fall in savings out of it, and never goes past savings above Keep or the grant's limits", () => {
+    expect(spent(topUps({}, { savingsRaw: usdc(1_100) }))).toBeCloseTo(100, 5); // $200 spent since the count
+    expect(spent(topUps({ markRaw: usdc(700) }, { savingsRaw: usdc(700) }))).toBeCloseTo(200, 5); // $700 saved, Keep $500
+    expect(spent(topUps({}, { usdcLeftRaw: usdc(100) }))).toBeCloseTo(100, 5);
+    // The aUSDC limit less Aave's rounding (2 units), exactly: all of it buys Apple, furthest below its target.
+    const apple = investDue({
+      holdings: holdings(DRIFTED),
+      mixBps: MIX,
+      options,
+      topUps: topUps({}, { savingsLeftRaw: usdc(100) }),
+      day: WED + 1,
+    });
+    expect(apple.map((t) => [t.reserveId, t.amountIn])).toEqual([[0, usdc(100) - 2n]]);
+  });
+
+  it("shows nothing going in under the smallest trade, with top-ups off, or with no mix", () => {
+    expect(investCard(topUps({ readyRaw: usdc(15) })).footer.kind).toBe("on-target");
+    expect(investCard(null).footer.kind).toBe("on-target");
+    expect(card({ topUps: topUps(), mixBps: null }, { mixBps: null }).footer).toEqual({
+      kind: "words",
+      line1: "No mix yet.",
+      line2: null,
+    });
+  });
+
+  it("waits in Act, and says so while retrying, with the buys still marked", () => {
+    // $1,300 owed on $2,000 at 70%: in Act, on target, so only the top-up would trade.
+    const paused = investCard(topUps(), {}, { ...two, debtUsd: 1_300 });
+    expect(paused.pill).toEqual({ text: "Paused", tone: "neutral" });
+    expect(paused.slots.every((s) => s.side === null)).toBe(true);
+    const retrying = investCard(topUps(), { fails: 3 });
+    expect(retrying.pill.text).toBe("Retrying");
+    expect(buys(retrying)).toEqual([
+      [5, "buy"],
+      [6, "buy"],
+    ]);
   });
 });
