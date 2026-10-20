@@ -48,6 +48,10 @@ import { CashSheetDemo, SHEET_VIEWS, type SheetView } from "./CashSheetDemo";
  *   ?view=earn | earn-watch       the earn step at $500 (Safe), and at $1,000 (Watch, with the risk tick)
  *   ?view=sheet-activity          the activity with a row open (&open=n in the screenshots)
  *   ?view=sheet-error             part of the activity couldn't be read
+ * Credit Buy's Cash row (CashSheetDemo), over Home:
+ *   ?view=credit-buy-pick         the list: Available stocks, then Cash ("Earns 4.1% in savings"), then My holdings
+ *   ?view=credit-buy-cash         $500 of credit into savings, backed by Tesla, while credit costs more: the gap shown
+ *   ?view=credit-buy-cash-earns   the same while the cash earns more than the credit costs
  */
 
 const RATE = rateText(0.0391);

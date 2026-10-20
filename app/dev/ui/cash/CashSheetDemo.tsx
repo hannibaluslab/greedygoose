@@ -4,6 +4,8 @@ import { toast } from "sonner";
 import { CashFeed } from "@/components/gg/cash/CashActivity";
 import { CashStep, cashLead } from "@/components/gg/cash/CashSheet";
 import { EarnCard, EarnStep } from "@/components/gg/cash/EarnWithStocks";
+import { CreditBuyCashStep } from "@/components/gg/stock/CreditBuyCashStep";
+import { CreditHero, StockLists } from "@/components/gg/stock/CreditBuyStocks";
 import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
 import type { Holding, PositionData } from "@/hooks/usePosition";
 import type { CashFeedError } from "@/lib/cashActivity";
@@ -13,10 +15,19 @@ import { describeAgentEvent, type MoveContext } from "@/lib/agents/feed";
 import type { AgentStatus } from "@/lib/agents/status";
 import { cashRaw, toUsd, type Cash } from "@/lib/cash";
 import { cashRows, type Arrival, type ExecutorMove, type OwnMove } from "@/lib/cashActivity";
-import { backingOptions, creditWith } from "@/lib/creditBuy";
-import { earnOffer } from "@/lib/earnWithStocks";
+import {
+  backingForBuy,
+  backingOptions,
+  creditLine,
+  creditWith,
+  ownCreditUsd,
+  planCredit,
+  type BackingPick,
+} from "@/lib/creditBuy";
+import { cashRowLine, toCashQuote } from "@/lib/creditBuy/toCash";
+import { earnOffer, earnTenths } from "@/lib/earnWithStocks";
 import { statusFor } from "@/lib/risk/status";
-import { EQUITIES } from "@/lib/tokens/registry";
+import { byStockOrder, EQUITIES } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 
 /*
@@ -34,6 +45,9 @@ export const SHEET_VIEWS = [
   "earn-watch",
   "sheet-activity",
   "sheet-error",
+  "credit-buy-pick",
+  "credit-buy-cash",
+  "credit-buy-cash-earns",
 ] as const;
 export type SheetView = (typeof SHEET_VIEWS)[number];
 
@@ -201,7 +215,81 @@ function activity(nowMs: number) {
   return { own, executor: moves, arrivals };
 }
 
+/**
+ * Credit Buy's Cash row over Home: the stock list with Cash between the available stocks and My holdings, and the
+ * amount at $500 backed by Tesla, the credit straight into savings. "credit-buy-cash": credit costs more than the cash
+ * earns (allowed, the gap in Watch's colour); "-earns": the cash earns more.
+ */
+function CreditBuyCashDemo({ view }: { view: SheetView }) {
+  const data = position({ owed: 300, saveOn: true, creditApr: view === "credit-buy-cash" ? 0.0435 : undefined });
+  const held = data.holdings.filter((h) => h.freeShares + h.backingShares > 0).sort(byStockOrder);
+  const others = EQUITIES.filter((e) => !held.some((h) => h.symbol === e.symbol));
+  const priceOf = (symbol: string) => data.holdings.find((h) => h.symbol === symbol)?.priceUsd ?? 0;
+  const tsla = backingOptions(data.holdings, CFS).find((o) => o.stock.symbol === "TSLAc")!;
+  const reachUsd = ownCreditUsd(data, tsla);
+  const cashApy = aprToApy(data.savingsApr);
+
+  if (view === "credit-buy-pick") {
+    return (
+      <SheetShell open onOpenChange={() => {}} title="Credit Buy" topPx={188} onBack={noop}>
+        <SheetSteps stepKey="pick" className="flex flex-col gap-4 pt-1">
+          <CreditHero available={{ usd: reachUsd, line: creditLine(data.cash) }} failed={false} onRetry={noop} />
+          <StockLists
+            held={held}
+            others={others}
+            priceOf={priceOf}
+            withCash={false}
+            othersFirst
+            cash={{ line: cashRowLine(earnTenths(cashApy)), onPick: noop }}
+            onPick={noop}
+          />
+        </SheetSteps>
+      </SheetShell>
+    );
+  }
+  const amount = 500;
+  const creditRaw = usdc(amount);
+  const pick: BackingPick = { option: tsla, raw: backingForBuy(tsla, amount) };
+  const plan = planCredit({ position: data, backing: pick, creditRaw, cash: data.cash });
+  const quote = toCashQuote({
+    plan,
+    debtUsd: data.debtUsd,
+    cashApy,
+    creditApyNow: aprToApy(data.apr),
+    creditApyAfter: aprToApy(data.apr + 0.0002),
+  });
+  return (
+    <SheetShell open onOpenChange={() => {}} title="Credit Buy Cash" onBack={noop}>
+      <SheetSteps stepKey="amount" className="flex flex-col gap-3">
+        <CreditBuyCashStep
+          data={data}
+          chosen={tsla}
+          pick={pick}
+          reachUsd={reachUsd}
+          raw={String(amount)}
+          setRaw={noop}
+          ack={false}
+          setAck={noop}
+          amount={amount}
+          plan={plan}
+          quote={quote}
+          blocker={null}
+          ready
+          protect="on"
+          sell="on"
+          feeBlocked={false}
+          feeLoading={false}
+          preview={false}
+          signable
+          tx={{ phase: "idle", error: null, checking: false, blocked: false, onSign: noop }}
+        />
+      </SheetSteps>
+    </SheetShell>
+  );
+}
+
 export function CashSheetDemo({ view, nowSec }: { view: SheetView; nowSec: number }) {
+  if (view.startsWith("credit-buy")) return <CreditBuyCashDemo view={view} />;
   const nowMs = nowSec * 1000;
   const owed = view === "sheet" || view === "sheet-start" ? 0 : 300;
   const save: AgentStatus = view === "sheet-start" ? "off" : "on";

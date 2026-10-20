@@ -6,6 +6,8 @@ import {
   type EarnOpen,
   type EarnQuote,
 } from "@/lib/earnWithStocks";
+import { CREDIT_FLOOR } from "@/lib/creditBuy";
+import { toCashStop, type ToCashQuote } from "@/lib/creditBuy/toCash";
 import { TxStop, txKey, type TxPlan } from "../prepared";
 import type { CashToSign } from "./types";
 
@@ -43,5 +45,38 @@ export const earnPlan = (p: EarnInput, cashToSign: CashToSign): TxPlan => ({
   fallback: EARN_REVERT,
   // The health on Aave after it, read in its simulation: in Act, it stops (Act is the line).
   healthFloor: EARN_FLOOR,
+  activity: earnActivity(p.quote.plan),
+});
+
+/** What Credit Buy's Cash row would sign: the quote on screen, and the risk tick. */
+type ToCashInput = { user: `0x${string}`; quote: ToCashQuote; confirmedRisk: boolean };
+
+/**
+ * What Credit Buy's Cash row signs (useTx): Earn with stocks' batch (assertEarn: the backing picked on step 1, the
+ * credit, and exactly that credit put where the cash earns), with Credit Buy's stops checked again (toCashStop). It is
+ * not stopped while credit costs more than the cash earns: the screen shows the gap first. Keyed by the credit, what
+ * goes in use, the status it ends in, the risk tick and the stop, so another amount or plan is another batch.
+ */
+export const toCashPlan = (p: ToCashInput, cashToSign: CashToSign): TxPlan => ({
+  key: txKey(
+    "toCash",
+    p.user,
+    p.quote.plan.creditRaw,
+    p.quote.plan.backing.map((b) => [b.stock.symbol, b.raw]),
+    p.quote.plan.after,
+    p.quote.plan.extraConfirm,
+    p.confirmedRisk,
+    toCashStop(p.quote, p.confirmedRisk),
+  ),
+  user: p.user,
+  calls: async () => {
+    const stop = toCashStop(p.quote, p.confirmedRisk);
+    if (stop) throw new TxStop(stop);
+    const cash = await cashToSign(p.user, 0n);
+    const { backing, creditRaw, limit } = p.quote.plan;
+    return buildEarnCalls({ user: p.user, backing, creditRaw, limit, cash });
+  },
+  fallback: EARN_REVERT,
+  healthFloor: CREDIT_FLOOR,
   activity: earnActivity(p.quote.plan),
 });

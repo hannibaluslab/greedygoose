@@ -130,7 +130,8 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
 
 ## Credit Buy (canvas boards 30–34)
 
-- The stock to buy lists the other stocks first, then My holdings. MAX fills the most to the cent, rounded down.
+- The stock to buy lists Available stocks first, then **Cash**, then My holdings. MAX fills the most to the cent,
+  rounded down.
 - Step 1: **Credit ready** first (the credit left on what already backs credit; nothing new goes in), then **Back new
   credit with** each stock and what it backs on its own ("Up to $417"). Then the stock to buy, then the amount. The
   stock to buy is always chosen on that list, even when Credit Buy opens from a stock's sheet: a stock put in use buys
@@ -139,6 +140,11 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
   its own, or all of it (then it may end in Watch, with the tick). The amount says "Backed by 1.16 Apple · $290".
 - The amount step shows how far the buy moves the credit: the bar from now to after, and "Safe → Watch" when it changes.
   Credit ready only lowers health; new backing moves it toward Safe.
+- **Cash** (Adrian, 2026-10-20): one row, "Cash · Earns 3.8% in savings". Its amount takes credit on step 1's backing
+  and puts exactly that credit into savings, in one signature (Earn with stocks' batch), so it lands as cash that earns,
+  never in Investments, and counts as From credit. "Goes to your cash, earning 3.8%"; the Cost cell reads "4.0% · Earns
+  3.8%". Unlike Earn with stocks, it stays open while credit costs more than the cash earns: the gap shows before the
+  tap ("Costs 0.2% a year more than it earns, under $1 a year. Both rates are variable."). No minimum of ours.
 
 ## Repay (canvas boards 1–8)
 
