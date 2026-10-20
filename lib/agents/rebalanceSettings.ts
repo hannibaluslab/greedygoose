@@ -5,9 +5,10 @@ import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
 /**
  * The Rebalancer's settings in its agent sheet (agents-redesign spec): what its next run would trade, and what saving
- * takes (`rebalanceSteps`). A new grant (none yet, the weekly limit changed, or a stock in the mix has no sell limit in
- * it) opens JAW's sheet, then one batch carries the mix (`setMix`, when it changed) and the grant's registration; with
- * no grant, the mix alone (Adrian, 2026-10-20: "Batch those into one").
+ * takes (`rebalanceSteps`). A new grant (none yet, one capped below the executor's CAP_MAX from before the Rebalancer
+ * had no amount limit, or a stock in the mix has no sell limit in it) opens JAW's sheet, then one batch carries the
+ * mix (`setMix`, when it changed) and the grant's registration; with no grant, the mix alone (Adrian, 2026-10-20:
+ * "Batch those into one").
  */
 
 /**
@@ -40,7 +41,7 @@ export function tradeLines(trades: readonly RebalanceTrade[], holdings: readonly
     .sort((a, b) => Number(a.buy) - Number(b.buy) || b.usd - a.usd);
 }
 
-/** What the Rebalancer runs with now: its grant's weekly limit and each stock's, while it has one. */
+/** What the Rebalancer runs with now: its grant's USDC limit and each stock's, while it has one. */
 export type RebalanceTerms = { capRaw: bigint; limitsRaw?: StockLimits } | null | undefined;
 
 export type SavePlan = {
@@ -61,8 +62,7 @@ export function rebalanceSave(p: {
   /** The mix on screen, BPS by reserve id. */
   weights: readonly number[];
   terms: RebalanceTerms;
-  /** The weekly limit chosen, in USDC units. */
-  capRaw: bigint;
+  /** The executor's CAP_MAX, what a grant made now carries (no amount limit); null before it is read. */
   capMaxRaw: bigint | null;
   /** Whether the Rebalancer runs now (on, or registering). */
   running: boolean;
@@ -74,10 +74,11 @@ export function rebalanceSave(p: {
 }): SavePlan {
   const whole = p.weights.reduce((a, b) => a + b, 0) === MIX_WHOLE;
   const mixChanged = p.configured && p.saved !== null && p.weights.some((w, r) => w !== p.saved![r]);
+  // A grant capped below CAP_MAX is from before the Rebalancer had no amount limit: the next Save grants it again.
   const needsGrant =
     p.configured &&
     (!p.terms ||
-      p.terms.capRaw !== p.capRaw ||
+      (p.capMaxRaw !== null && p.terms.capRaw !== p.capMaxRaw) ||
       p.weights.some((w, r) => w > 0 && !((p.terms!.limitsRaw?.[r] ?? 0n) > 0n)));
   const steps = rebalanceSteps({ needsGrant, mixChanged, waiting: !!p.waiting }).length;
   const canSave =

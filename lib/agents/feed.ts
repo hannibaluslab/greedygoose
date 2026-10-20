@@ -27,28 +27,16 @@ export type AgentMove = {
 
 /**
  * What the chain said around a move, read at its block and the one before: what was owed, the cash (wallet plus
- * savings, D15), how much of the grant's limit the period had used after it (the Rebalancer's), and Aave's prices.
- * Each is optional: a row says less when a read fails.
+ * savings, D15) and Aave's prices. Each is optional: a row says less when a read fails.
  */
 export type MoveContext = {
   /** USDC units owed, before and after. */
   owedRaw?: readonly [bigint, bigint];
   /** USDC units of cash, before and after. */
   cashRaw?: readonly [bigint, bigint];
-  /** The grant's limit and what its period had used, in USDC units. */
-  used?: { spentRaw: bigint; capRaw: bigint };
   /** Aave's price per stock, 8 decimals, by reserve id. */
   pricesRaw?: readonly bigint[];
 };
-
-/**
- * Which grant's limit an agent's move counts against ("Used this week"): the Rebalancer's only. Protect's moves show
- * none, as it has no amount limit (2026-10-19), and a cash event (a Save, a conversion) shows none either: those grants
- * run under the hood (D20).
- */
-export function limitOf(e: AgentEvent): { job: AgentJob; spend: number } | null {
-  return e.kind === "rebalanced" ? { job: "rebalance", spend: 0 } : null;
-}
 
 /** Whether a move's row reads what was owed and the cash around it. */
 export const movesMoney = (e: AgentEvent) => e.kind === "repaid" || e.kind === "sold" || e.kind === "rebalanced";
@@ -110,13 +98,6 @@ function owedRow(ctx: MoveContext) {
   return ctx.owedRaw ? [{ label: "You owe", value: [`${owed(ctx.owedRaw[0])} → ${owed(ctx.owedRaw[1])}`] }] : [];
 }
 
-/** The Rebalancer's "Used this week": Protect has no amount limit, so its moves have no such row. */
-function usedRow(ctx: MoveContext) {
-  if (!ctx.used) return [];
-  const { spentRaw, capRaw } = ctx.used;
-  return [{ label: "Used this week", value: [`${usd(spentRaw)} of ${usd(capRaw)}`] }];
-}
-
 /**
  * Why Protect moved: the credit fell under its line, or a rescue it started went on (above the line, under the target)
  * until the credit was back at the target.
@@ -128,20 +109,20 @@ const protectWhy = (hfBefore: bigint): Words =>
 
 /**
  * An agent job's name in a sentence, and the agent its rows sit under. Save and Entry are switched on once, where they
- * matter, and their switches make no row (D20). Protect's two have no amount limit, so their lines name none.
+ * matter, and their switches make no row (D20). No agent job has an amount limit, so the lines name none.
  */
-const JOB: Partial<Record<AgentJob, { agent: AgentName; on: (cap: string) => string; off: string }>> = {
+const JOB: Partial<Record<AgentJob, { agent: AgentName; on: string; off: string }>> = {
   protect: {
     agent: "Protect",
-    on: () => `Protect is on. If your credit falls under ${PROTECT_LINE}, it repays from your cash.`,
+    on: `Protect is on. If your credit falls under ${PROTECT_LINE}, it repays from your cash.`,
     off: "Protect is off",
   },
   sell: {
     agent: "Protect",
-    on: () => "Protect can sell backing stock.",
+    on: "Protect can sell backing stock.",
     off: "Protect won’t sell",
   },
-  rebalance: { agent: "Rebalance", on: (cap) => `Rebalance is on, up to ${cap} a week.`, off: "Rebalance is off" },
+  rebalance: { agent: "Rebalance", on: "Rebalance is on.", off: "Rebalance is off" },
 };
 
 /** Why a job was switched off, after its name ("Save is off: …"). */
@@ -207,7 +188,7 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
       return j
         ? {
             by: j.agent,
-            line: [j.on(usd(e.capRaw))],
+            line: [j.on],
             details: [{ label: "Until", value: [DATE.format(e.end * 1000)] }],
           }
         : null;
@@ -254,7 +235,6 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
         details: [
           { label: "Why", value: ["Your mix drifted too far from its target."] },
           { label: "My cash", value: cashAfterTrade(ctx) },
-          ...usedRow(ctx),
         ],
       };
     case "sale-skipped":

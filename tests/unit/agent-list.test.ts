@@ -56,20 +56,6 @@ describe("the two agents", () => {
     expect(NOT_LIVE).not.toMatch(ON_SCREEN);
   });
 
-  it("starts the Rebalancer on its limit and shows the grant's once it has one; Protect has no amount limit", () => {
-    expect(agentItems({ status: jobs("off"), capRaw: none, next: nexts }).map((i) => i.limit)).toEqual([
-      null,
-      "Limit $100 a week",
-    ]);
-    // Protect's grant is at the executor's CAP_MAX: no chip, whatever it holds.
-    const capRaw = { ...none, protect: 5_000_000n, rebalance: 1_234_000_000n };
-    const items = agentItems({ status: jobs("on"), capRaw, next: nexts });
-    expect(items.map((i) => [i.limit, i.limitUsd])).toEqual([
-      [null, null],
-      ["Limit $1,234 a week", 1_234],
-    ]);
-  });
-
   it("leaves earning and converting other dollars off the tab: no agent runs them, and turning all off spares them (D20)", () => {
     expect(agentOf("save")).toBeNull();
     expect(agentOf("entry")).toBeNull();

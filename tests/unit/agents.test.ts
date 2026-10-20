@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { toFunctionSelector, toHex, zeroAddress } from "viem";
+import { maxUint160, toFunctionSelector, toHex, zeroAddress } from "viem";
 import type { PermissionsDetail } from "@jaw.id/wagmi";
 import {
   agentGrant,
@@ -12,7 +12,6 @@ import {
   LIMIT_USD,
   limitRaw,
   NO_LIMIT_JOBS,
-  parseLimitUsd,
   readAgentGrant,
   readStockLimits,
   rebalanceGrant,
@@ -22,7 +21,6 @@ import {
   startCapRaw,
   stockLimitsRaw,
   stockTerms,
-  testCapNote,
   type ListedPermission,
 } from "@/lib/agents/permissions";
 import { jobStatus } from "@/lib/agents/status";
@@ -387,6 +385,17 @@ describe("stockLimitsRaw (a grant's limit per stock, from its dollar limit)", ()
     expect(sellGrant(300_000_000n, l).calls!.some((c) => c.target === EQUITIES[0].address)).toBe(false);
   });
 
+  it("starts a Rebalancer grant at CAP_MAX, with each stock at the clamp on a deploy with no amount limit", () => {
+    const cap = startCapRaw("rebalance", maxUint160);
+    const l = stockLimitsRaw(cap, maxUint160, prices, all);
+    const clamp = (2n ** 32n - 1n) * 10_000n; // 32 bits of 1e-4 share, what the grant's terms hold
+    expect(l.every((x) => x === clamp)).toBe(true);
+    const spends = rebalanceGrant(cap, l).spends!;
+    expect(spends[0]).toEqual({ token: USDC.address, allowance: maxUint160.toString(), unit: "week" });
+    expect(spends.slice(1).every((x) => x.allowance === clamp.toString() && x.unit === "week")).toBe(true);
+    expect(stockTerms(l)).toBeGreaterThan(0n);
+  });
+
   it("reads back from a grant's spends (readStockLimits)", () => {
     const l = stockLimitsRaw(
       300_000_000n,
@@ -449,68 +458,30 @@ describe("jobStatus", () => {
 });
 
 describe("limitRaw and startCapRaw (the cap a switch turns a job on with)", () => {
-  it("starts the Rebalancer on $100 a week, Save and Entry on $1,000 a day", () => {
-    expect([LIMIT_USD.rebalance.start, LIMIT_USD.rebalance.per]).toEqual([100, "week"]);
+  it("starts Save and Entry on $1,000 a day", () => {
     expect(limitRaw(LIMIT_USD.save.start, 10n ** 12n)).toBe(1_000_000_000n);
     expect(limitRaw(LIMIT_USD.entry.start, 10n ** 12n)).toBe(1_000_000_000n);
-    expect(startCapRaw("rebalance", 10n ** 12n)).toBe(100_000_000n);
     expect(startCapRaw("save", 10n ** 12n)).toBe(1_000_000_000n);
   });
 
-  it("gives Protect and selling no amount limit (Adrian, 2026-10-19): their grants carry the executor's CAP_MAX", () => {
-    expect(NO_LIMIT_JOBS).toEqual(["protect", "sell"]);
+  it("gives Protect, selling and the Rebalancer no amount limit: their grants carry the executor's CAP_MAX", () => {
+    expect(NO_LIMIT_JOBS).toEqual(["protect", "sell", "rebalance"]);
     expect((["save", "protect", "sell", "rebalance", "entry"] as const).map(hasLimit)).toEqual([
       true,
       false,
       false,
-      true,
+      false,
       true,
     ]);
-    expect(Object.keys(LIMIT_USD).sort()).toEqual(["entry", "rebalance", "save"]);
+    expect(Object.keys(LIMIT_USD).sort()).toEqual(["entry", "save"]);
     expect(startCapRaw("protect", 10n ** 12n)).toBe(10n ** 12n);
     expect(startCapRaw("sell", 5_000_000n)).toBe(5_000_000n);
+    expect(startCapRaw("rebalance", 10n ** 12n)).toBe(10n ** 12n);
+    expect(startCapRaw("rebalance", 5_000_000n)).toBe(5_000_000n);
   });
 
   it("never asks for more than the executor's CAP_MAX, so a $5 test deploy registers the grant", () => {
-    expect(limitRaw(LIMIT_USD.rebalance.start, 5_000_000n)).toBe(5_000_000n);
     expect(limitRaw(LIMIT_USD.save.start, 5_000_000n)).toBe(5_000_000n);
-    expect(limitRaw(parseLimitUsd("1,250")!, 5_000_000n)).toBe(5_000_000n);
-  });
-});
-
-describe("parseLimitUsd (a Custom limit as typed)", () => {
-  it("reads whole dollars, with or without thousands commas", () => {
-    expect(parseLimitUsd("75")).toBe(75);
-    expect(parseLimitUsd("1,000")).toBe(1_000);
-    expect(parseLimitUsd(" 300 ")).toBe(300);
-  });
-
-  it("drops cents rather than refusing them", () => {
-    expect(parseLimitUsd("250.75")).toBe(250);
-    expect(parseLimitUsd("12.")).toBe(12);
-  });
-
-  it("is no limit until it's at least $1 and a plain number", () => {
-    for (const t of ["", "0", "0.99", "abc", "-5", "1e3", "$100", "1.2.3"]) expect(parseLimitUsd(t)).toBeNull();
-    expect(parseLimitUsd("1")).toBe(1);
-  });
-
-  it("refuses a number too big to keep exact", () => {
-    expect(parseLimitUsd("1000000000")).toBe(1_000_000_000);
-    expect(parseLimitUsd("1000000001")).toBeNull();
-  });
-});
-
-describe("testCapNote (dev only, when the executor's CAP_MAX bites the Rebalancer's limit)", () => {
-  it("says what the test deploy allows when the limit on screen is more", () => {
-    expect(testCapNote(100, 5_000_000n, true)).toBe("Test version: up to $5");
-    expect(testCapNote(25, 10_500_000n, true)).toBe("Test version: up to $10.50");
-  });
-
-  it("says nothing when the limit fits, before CAP_MAX is read, without a limit, or in production", () => {
-    expect(testCapNote(5, 5_000_000n, true)).toBeNull();
-    expect(testCapNote(100, null, true)).toBeNull();
-    expect(testCapNote(null, 5_000_000n, true)).toBeNull();
-    expect(testCapNote(100, 5_000_000n, false)).toBeNull();
+    expect(limitRaw(LIMIT_USD.entry.start, 5_000_000n)).toBe(5_000_000n);
   });
 });

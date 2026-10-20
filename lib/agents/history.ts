@@ -1,14 +1,11 @@
 import { erc20Abi, formatLog, pad, toHex, type Address, type Client, type Log, type RpcLog } from "viem";
-import { getBlock, multicall, readContract } from "viem/actions";
+import { getBlock, multicall } from "viem/actions";
 import { AAVE } from "@/lib/aave/addresses";
 import { aaveOracleAbi } from "@/lib/aave/abis/IAaveOracle";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
-import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import type { AgentLog } from "@/lib/agents/events";
-import { limitOf, movesMoney, type MoveContext } from "@/lib/agents/feed";
-import { JOBS } from "@/lib/agents/permissions";
+import { movesMoney, type MoveContext } from "@/lib/agents/feed";
 import { PROTOCOLS } from "@/lib/protocols/config";
-import { permissionManagerAbi } from "@/lib/protocols/abis";
 import { USDC } from "@/lib/tokens/registry";
 
 /** Blocks per getLogs request. */
@@ -54,16 +51,15 @@ const held = (shares: readonly bigint[]) => shares.flatMap((s, r) => (s > 0n ? [
 
 /**
  * When a move happened, and what the chain said around it: the account's debt and cash at the block before and at
- * its own block, its grant's limit and what the period had used after it, and Aave's price for what it traded. These
- * read past state, so Base's node must serve it (an archive read). A read that fails leaves its part out.
+ * its own block, and Aave's price for what it traded. These read past state, so Base's node must serve it (an archive
+ * read). A read that fails leaves its part out.
  */
 export async function readMoveContext(
   client: Client,
-  q: { executor: Address; account: Address },
+  q: { account: Address },
   e: AgentLog,
 ): Promise<{ time: number; ctx: MoveContext }> {
   const block = await getBlock(client, { blockNumber: e.blockNumber });
-  const limit = limitOf(e);
   const money = movesMoney(e);
   const traded =
     e.kind === "sold"
@@ -87,7 +83,7 @@ export async function readMoveContext(
         { address: PROTOCOLS.AUSDC, abi: erc20Abi, functionName: "balanceOf", args: [q.account] },
       ],
     }).catch(() => undefined);
-  const [before, after, prices, permission] = await Promise.all([
+  const [before, after, prices] = await Promise.all([
     money ? balances(e.blockNumber - 1n) : undefined,
     money ? balances(e.blockNumber) : undefined,
     traded.length
@@ -105,15 +101,6 @@ export async function readMoveContext(
           ),
         }).catch(() => undefined)
       : undefined,
-    limit
-      ? readContract(client, {
-          address: q.executor,
-          abi: gooseExecutorAbi,
-          functionName: "permissionOf",
-          args: [q.account, JOBS.indexOf(limit.job)],
-          blockNumber: e.blockNumber,
-        }).catch(() => undefined)
-      : undefined,
   ]);
 
   const ctx: MoveContext = {};
@@ -122,16 +109,5 @@ export async function readMoveContext(
     ctx.cashRaw = [before[1] + before[2], after[1] + after[2]];
   }
   if (prices) ctx.pricesRaw = Array.from({ length: 7 }, (_, r) => prices[traded.indexOf(r)] ?? 0n);
-  const spend = limit && permission?.spends[limit.spend];
-  if (limit && permission && spend) {
-    const period = await readContract(client, {
-      address: PROTOCOLS.PERMISSION_MANAGER,
-      abi: permissionManagerAbi,
-      functionName: "getCurrentPeriod",
-      args: [permission, spend],
-      blockNumber: e.blockNumber,
-    }).catch(() => undefined);
-    if (period) ctx.used = { spentRaw: period.spend, capRaw: spend.allowance };
-  }
   return { time: Number(block.timestamp), ctx };
 }

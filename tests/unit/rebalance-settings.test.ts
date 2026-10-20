@@ -37,18 +37,20 @@ describe("tradeLines", () => {
       { reserveId: 0, bps: 2_500 },
       { reserveId: 6, bps: 2_500 },
     ];
+    // No amount limit: the preview runs at the executor's CAP_MAX, so the band alone shapes the trades.
     const trades = previewTrades({
       holdings: HOLDINGS,
       rows,
-      capRaw: usdc(500),
-      capMaxRaw: null,
+      capRaw: usdc(10_000),
+      capMaxRaw: usdc(10_000),
       options: rebalanceOptions(),
     });
     const lines = tradeLines(trades, HOLDINGS);
     expect(lines.length).toBeGreaterThan(0);
-    // NVIDIA is under its target, so it's the one bought; what's bought fits in the weekly limit.
+    // NVIDIA is under its target, so it's the one bought, with no more than the sales bring in.
     expect(lines.filter((l) => l.buy).map((l) => l.name)).toEqual(["NVIDIA"]);
-    expect(lines.filter((l) => l.buy).reduce((a, l) => a + l.usd, 0)).toBeLessThanOrEqual(500);
+    const sold = lines.filter((l) => !l.buy).reduce((a, l) => a + l.usd, 0);
+    expect(lines.filter((l) => l.buy).reduce((a, l) => a + l.usd, 0)).toBeLessThanOrEqual(sold);
   });
 });
 
@@ -60,8 +62,7 @@ describe("rebalanceSave", () => {
     connected: true,
     saved: mix,
     weights: mix,
-    terms: { capRaw: usdc(500), limitsRaw: limits },
-    capRaw: usdc(500),
+    terms: { capRaw: usdc(10_000), limitsRaw: limits },
     capMaxRaw: usdc(10_000),
     running: true,
     feeBlocked: false,
@@ -79,7 +80,7 @@ describe("rebalanceSave", () => {
     });
   });
 
-  it("has nothing to save when the mix and the limit are what it runs with", () => {
+  it("has nothing to save when the mix is what it runs with, on a grant at CAP_MAX", () => {
     expect(rebalanceSave(base)).toMatchObject({ steps: 0, canSave: false, note: null });
   });
 
@@ -94,13 +95,17 @@ describe("rebalanceSave", () => {
     });
   });
 
-  it("takes a new grant for a new weekly limit: two JAW sheets, the grant and its registration", () => {
-    expect(rebalanceSave({ ...base, capRaw: usdc(1_000) })).toMatchObject({
+  it("needs a new grant at CAP_MAX for a capped grant from before: two JAW sheets, the grant and its registration", () => {
+    const capped = { ...base, terms: { capRaw: usdc(100), limitsRaw: limits } };
+    expect(rebalanceSave(capped)).toMatchObject({
       mixChanged: false,
       needsGrant: true,
       steps: 2,
+      canSave: true,
       note: null,
     });
+    // Until CAP_MAX is read nothing saves, and the grant isn't judged capped yet.
+    expect(rebalanceSave({ ...capped, capMaxRaw: null })).toMatchObject({ needsGrant: false, canSave: false });
   });
 
   it("takes two steps for a stock the grant can't sell yet: the grant, then the mix and its registration in one batch", () => {
@@ -164,8 +169,7 @@ describe('rebalanceSteps: what Save runs is what it counts (Adrian, 2026-10-20: 
       connected: true,
       saved: mix,
       weights: mix,
-      terms: { capRaw: usdc(500), limitsRaw: [1n, 0n, 0n, 0n, 0n, 1n, 1n] },
-      capRaw: usdc(500),
+      terms: { capRaw: usdc(10_000), limitsRaw: [1n, 0n, 0n, 0n, 0n, 1n, 1n] },
       capMaxRaw: usdc(10_000),
       running: true,
       feeBlocked: false,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { maxUint256 } from "viem";
 import type { AgentEvent } from "@/lib/agents/events";
-import { describeAgentEvent, limitOf, type MoveContext, type Words } from "@/lib/agents/feed";
+import { describeAgentEvent, type MoveContext, type Words } from "@/lib/agents/feed";
 import { STATUS_LABEL } from "@/lib/risk/status";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 
@@ -20,7 +20,7 @@ function row(e: AgentEvent, ctx?: MoveContext) {
 }
 
 describe("describeAgentEvent: the Agents board's rows", () => {
-  it("draws the board's sale: what sold, why, what's owed, the status and the cash, with no limit (none for Protect)", () => {
+  it("draws the board's sale: what sold, why, what's owed, the status and the cash, with no limit", () => {
     const sale: AgentEvent = {
       kind: "sold",
       sharesRaw: sevenWith(6, 46_997_389n),
@@ -32,7 +32,6 @@ describe("describeAgentEvent: the Agents board's rows", () => {
       row(sale, {
         owedRaw: [usdc(780), usdc(600)],
         cashRaw: [usdc(400), usdc(400)],
-        used: { spentRaw: usdc(180), capRaw: usdc(300) },
         pricesRaw: prices,
       }),
     ).toEqual({
@@ -45,7 +44,6 @@ describe("describeAgentEvent: the Agents board's rows", () => {
         "My cash": "Not touched",
       },
     });
-    expect(limitOf(sale)).toBeNull();
   });
 
   it("names a sale that goes on through a rescue above 1.03, and what the swaps left in the wallet", () => {
@@ -80,7 +78,7 @@ describe("describeAgentEvent: the Agents board's rows", () => {
   it("says a repay from savings used your cash, rounding what's owed up to the cent, with no limit", () => {
     const r = row(
       { kind: "repaid", amountRaw: usdc(120), hfBefore: hf(1.02), hfAfter: hf(1.12) },
-      { owedRaw: [780_000_001n, 660_000_001n], used: { spentRaw: usdc(120), capRaw: usdc(300) } },
+      { owedRaw: [780_000_001n, 660_000_001n] },
     );
     expect(r).toMatchObject({ by: "Protect", line: "Repaid $120 from your cash. Back to Watch." });
     expect(r.details).toEqual({
@@ -96,21 +94,18 @@ describe("describeAgentEvent: the Agents board's rows", () => {
     const all = row({ kind: "repaid", amountRaw: usdc(16.58), hfBefore: hf(1.02), hfAfter: maxUint256 });
     expect(all.line).toBe("Repaid $16.58 from your cash. Nothing owed now.");
     expect(all.details.Status).toBe("Act → Nothing owed");
-    expect(limitOf({ kind: "repaid", amountRaw: 1n, hfBefore: 1n, hfAfter: 1n })).toBeNull();
   });
 
-  it("draws a Rebalance row, with the week's limit", () => {
+  it("draws a Rebalance row: what traded, why and the cash, with no limit", () => {
     const r = row(
       { kind: "rebalanced", soldRaw: sevenWith(0, 20_000_000n), boughtRaw: sevenWith(5, 27_777_778n) },
-      { cashRaw: [usdc(5), usdc(5.002)], used: { spentRaw: usdc(50), capRaw: usdc(500) }, pricesRaw: prices },
+      { cashRaw: [usdc(5), usdc(5.002)], pricesRaw: prices },
     );
     expect(r).toMatchObject({ by: "Rebalance", line: "Sold $50 of Apple, bought $50 of NVIDIA." });
     expect(r.details).toEqual({
       Why: "Your mix drifted too far from its target.",
       "My cash": "Not touched",
-      "Used this week": "$50 of $500",
     });
-    expect(limitOf({ kind: "rebalanced", soldRaw: [], boughtRaw: [] })).toEqual({ job: "rebalance", spend: 0 });
   });
 
   it("reads a Save as money arriving, with no agent and no limit (D20)", () => {
@@ -120,7 +115,6 @@ describe("describeAgentEvent: the Agents board's rows", () => {
       line: "$40 added to your cash.",
       details: { Why: "Money that arrives in your account earns with the rest of your cash." },
     });
-    expect(limitOf({ kind: "saved", amountRaw: 1n })).toBeNull();
   });
 
   it("reads a conversion as other dollars arriving as cash, and a coin waiting for a fair price as nothing", () => {
@@ -142,7 +136,6 @@ describe("describeAgentEvent: the Agents board's rows", () => {
     expect(
       row({ kind: "converted", coin: ENTRY_COINS[0].address, amountInRaw: usdc(120), usdcOutRaw: usdc(119.83) }).line,
     ).toBe("120 USDT arrived as $119.83 cash.");
-    expect(limitOf({ kind: "converted", coin: usde.address, amountInRaw: 1n, usdcOutRaw: 1n })).toBeNull();
     expect(
       describeAgentEvent(
         { kind: "entry-waiting", coin: ENTRY_COINS[0].address, amountInRaw: 1n, retryAt: at + 3600 },
@@ -152,7 +145,7 @@ describe("describeAgentEvent: the Agents board's rows", () => {
   });
 
   it("names switches, the mix and failed runs in plain words, with the executor's own error name", () => {
-    // Protect has no amount limit: its switches name none, whatever cap the grant holds (the executor's CAP_MAX).
+    // No agent has an amount limit: the switches name none, whatever cap the grant holds (the executor's CAP_MAX).
     expect(row({ kind: "job-on", job: "protect", capRaw: usdc(5), end: 1_791_984_607 }).line).toBe(
       "Protect is on. If your credit falls under 1.03, it repays from your cash.",
     );
@@ -160,7 +153,7 @@ describe("describeAgentEvent: the Agents board's rows", () => {
       "Protect can sell backing stock.",
     );
     expect(row({ kind: "job-on", job: "rebalance", capRaw: usdc(500), end: 1_791_984_607 }).line).toBe(
-      "Rebalance is on, up to $500 a week.",
+      "Rebalance is on.",
     );
     expect(row({ kind: "job-off", job: "protect", reason: "stuck" }).line).toBe(
       "Protect is off: its last runs didn’t go through.",

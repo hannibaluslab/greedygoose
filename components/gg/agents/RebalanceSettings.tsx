@@ -1,12 +1,11 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { isAddressEqual } from "viem";
+import { isAddressEqual, maxUint160 } from "viem";
 import { useAccount } from "wagmi";
 import { toast } from "sonner";
 import { CardTitle, ManageCard, MixSlider } from "@/components/gg/Manage";
 import { ComingSoon } from "@/components/gg/Agents";
-import { LimitField, NEVER_MORE_THAN } from "@/components/gg/kit/LimitField";
 import { StockAvatar, tickerOf } from "@/components/gg/kit/StockAvatar";
 import { TxButton, TxError } from "@/components/gg/TxUi";
 import { PlusIcon } from "@/components/gg/kit/icons";
@@ -28,7 +27,7 @@ import {
   type MixHolding,
   type MixRow,
 } from "@/lib/agents/mix";
-import { limitRaw, LIMIT_USD, stockLimitsRaw, testCapNote } from "@/lib/agents/permissions";
+import { stockLimitsRaw } from "@/lib/agents/permissions";
 import { rebalanceSave, tradeLines, type RebalanceTerms, type SavePlan } from "@/lib/agents/rebalanceSettings";
 import { toUsd } from "@/lib/cash";
 import { formatUsdShort, formatUsdTrim } from "@/lib/formatting";
@@ -36,9 +35,9 @@ import type { RebalanceOptions } from "@/lib/agents/rules/rebalance";
 import { EQUITIES } from "@/lib/tokens/registry";
 
 /**
- * The Rebalancer's settings, the body of its agent sheet (agents-redesign spec): your mix, its weekly limit, when it
- * runs and its next trades from its own rule (lib/agents/rules/rebalance.ts) on live holdings. The sheet says what it
- * never does. While it's off, saving switches it on.
+ * The Rebalancer's settings, the body of its agent sheet (agents-redesign spec): your mix, when it runs and its next
+ * trades from its own rule (lib/agents/rules/rebalance.ts) on live holdings. It has no amount limit: its grant is at the
+ * executor's CAP_MAX, with no field to type. The sheet says what it never does. While it's off, saving switches it on.
  * Everything comes from hooks, so it drops into the sheet with `<RebalanceSettings account={account} />`.
  * Saving is a new grant on JAW's own screen when needed, then one batch with the mix and its registration, or the
  * mix alone through useTx (useManageSave). Without an executor it renders live data and saves nothing ("Not live yet").
@@ -164,9 +163,6 @@ export function RebalanceSettingsView({
   draft?: MixRow[];
 }) {
   const [edited, setEdited] = useState<MixRow[] | null>(draft ?? null);
-  const [chosenUsd, setChosenUsd] = useState<number | null>(null);
-  // A Custom limit that isn't a number of dollars yet: nothing to save until it is.
-  const [limitTyped, setLimitTyped] = useState(true);
   const [adding, setAdding] = useState(false);
 
   const rows = edited ?? startingMix(holdings, saved);
@@ -174,9 +170,9 @@ export function RebalanceSettingsView({
   const sum = weights.reduce((a, b) => a + b, 0);
   const whole = rows.length > 0 && sum === MIX_WHOLE;
 
-  // The limit: the grant's while it has one, $100 a week before (LIMIT_USD).
-  const limitUsd = chosenUsd ?? (terms ? toUsd(terms.capRaw) : LIMIT_USD.rebalance.start);
-  const capRaw = limitRaw(limitUsd, capMaxRaw ?? BigInt(limitUsd) * 10n ** 6n);
+  // No amount limit: the grant is at the executor's CAP_MAX. Until it's read, the preview runs on the most a grant
+  // could hold, and nothing saves (rebalanceSave).
+  const capRaw = capMaxRaw ?? maxUint160;
   const trades = whole ? previewTrades({ holdings, rows, capRaw, capMaxRaw, options }) : [];
   const lines = tradeLines(trades, holdings);
   const now = nowPercents(holdings, rows);
@@ -187,7 +183,6 @@ export function RebalanceSettingsView({
     saved,
     weights,
     terms,
-    capRaw,
     capMaxRaw,
     running,
     feeBlocked,
@@ -198,10 +193,7 @@ export function RebalanceSettingsView({
   // Save's only JAW sheet is the mix when it changed and nothing is granted or waiting (else the mix rides in the batch
   // after the grant): its batch is prepared while the body is idle, so the tap opens it.
   const mixAlone = plan.mixChanged && !plan.needsGrant && !waiting;
-  const prepared = usePrepare(
-    prep,
-    plan.canSave && limitTyped && !preview && mixAlone && settingPlan ? settingPlan(weights) : null,
-  );
+  const prepared = usePrepare(prep, plan.canSave && !preview && mixAlone && settingPlan ? settingPlan(weights) : null);
 
   const notInMix = EQUITIES.filter((e) => !rows.some((r) => r.reserveId === e.reserveId));
   const add = (reserveId: number) => {
@@ -249,21 +241,6 @@ export function RebalanceSettingsView({
       <NextTrades whole={whole} empty={rows.length === 0} lines={lines} backingUsd={backingUsd} />
 
       <ManageCard>
-        <CardTitle title="Weekly limit" sub={NEVER_MORE_THAN} />
-        <LimitField
-          label="Weekly limit"
-          value={limitUsd}
-          onChange={(usd) => {
-            setLimitTyped(usd !== null);
-            if (usd !== null) setChosenUsd(usd);
-          }}
-        />
-        {limitTyped && testCapNote(limitUsd, capMaxRaw) && (
-          <span className="text-xs leading-[1.4] text-subtle">{testCapNote(limitUsd, capMaxRaw)}</span>
-        )}
-      </ManageCard>
-
-      <ManageCard>
         <CardTitle title="When it runs" sub="Once a market day, after the open" />
         <span className="text-xs leading-[1.4] text-subtle">
           Only when a stock drifts too far from its target, and then part of the way back. Skips trades under{" "}
@@ -283,7 +260,7 @@ export function RebalanceSettingsView({
             checking={prepared.checking}
             steps={plan.steps}
             note={plan.note}
-            disabled={!plan.canSave || !limitTyped || busy || prepared.blocked}
+            disabled={!plan.canSave || busy || prepared.blocked}
             preview={preview}
             onClick={() => onSave({ weights, capRaw, plan })}
           />

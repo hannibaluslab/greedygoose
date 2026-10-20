@@ -174,9 +174,10 @@ the free shares' value. A stock whose shares all back credit is listed but can't
   Coming soon, with nothing to open yet.
 - Invisible: earning on idle cash (Save) and turning other dollars into cash (Receive). Their permissions are asked
   when money first arrives.
-- Permissions go through JAW's own screens; the spender is `GooseExecutor`. Protect has no amount limit: its two grants
-  (repay from cash, sell) are at the executor's CAP_MAX, with no field to type. The Rebalancer keeps one typed amount,
-  a week.
+- Permissions go through JAW's own screens; the spender is `GooseExecutor`. Protect and Rebalance have no amount limit:
+  their grants (Protect's repay from cash and sell, Rebalance's trades) are at the executor's CAP_MAX, with no field to
+  type. Each is limited by its rules. A Rebalance grant capped below CAP_MAX, from before, is granted again at the
+  next Save.
 - The Rebalancer waits while the credit is in Act (under 1.1), not down to Protect's line.
 - Until the agents go live (`NEXT_PUBLIC_AGENTS_LIVE=1`), "Coming soon" stands where the switches and
   Save are; the figures are real. The invisible grants wait too: Start earning is its batch alone (no Save grant), and

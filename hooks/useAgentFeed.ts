@@ -76,7 +76,7 @@ export function useAgentFeed(account: Address) {
       queryKey: ["agentMove", executor, e.key],
       enabled: !!client,
       staleTime: Infinity,
-      queryFn: () => readMoveContext(client!, { executor: executor!, account }, e),
+      queryFn: () => readMoveContext(client!, { account }, e),
     })),
   });
 

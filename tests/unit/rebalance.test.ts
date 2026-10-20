@@ -69,7 +69,7 @@ describe("rebalanceTrades (the Rebalancer, plan item 9)", () => {
     expect(valueOf(t[0].amountIn, 300)).toBe(450);
   });
 
-  it("skips trades under $20, a used-up weekly limit, and never sells to cash or buys with it", () => {
+  it("skips trades under $20, a used-up limit, and never sells to cash or buys with it", () => {
     expect(rebalanceTrades(book({ 5: holding(336, 200, 50), 0: holding(264, 250, 50) }), opts)).toHaveLength(2);
     expect(rebalanceTrades(book({ 5: holding(280, 200, 50), 0: holding(220, 250, 50) }), opts)).toEqual([]);
     expect(rebalanceTrades(book({ 5: holding(5_600, 200, 50, 0n), 0: holding(4_400, 250, 50) }), opts)).toEqual([]);
