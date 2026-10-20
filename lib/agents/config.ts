@@ -11,9 +11,9 @@ const deployBlock = process.env.NEXT_PUBLIC_GOOSE_EXECUTOR_BLOCK;
 export const GOOSE_EXECUTOR = executor && isAddress(executor) ? executor : undefined;
 
 /**
- * Whether the agents can be switched on: GooseExecutor is set and Chainlink has approved its automation
- * (NEXT_PUBLIC_AGENTS_LIVE=1). Until then the Agents tab reads the real figures and shows "Coming soon" where its
- * switches and Save would be (rulings 19, 22).
+ * Whether the agents can be switched on: GooseExecutor is set and its runner is on (NEXT_PUBLIC_AGENTS_LIVE=1, the
+ * go-live checklist in contracts/docs/DEPLOYMENTS.md). Until then the Agents tab reads the real figures and shows
+ * "Coming soon" where its switches and Save would be (rulings 19, 22).
  */
 export const AGENTS_LIVE = !!GOOSE_EXECUTOR && process.env.NEXT_PUBLIC_AGENTS_LIVE === "1";
 
