@@ -13,7 +13,7 @@ import type { GrantView, useCashSetup } from "@/hooks/useCashSetup";
 import { usePrepare, type TxPhase, type TxPlan, type TxPrep } from "@/hooks/useTx";
 import { AGENTS_LIVE } from "@/lib/agents/config";
 import { askAutomatic, arrivedText, type Arrived, type ArrivedView } from "@/lib/cashSetup";
-import { formatCoin, formatUsd, inWords, stepsNote } from "@/lib/formatting";
+import { formatCoin, formatUsd, inWords } from "@/lib/formatting";
 import { USDC } from "@/lib/tokens/registry";
 import type { EntryVenue } from "@/lib/tokens/stables";
 
@@ -35,8 +35,7 @@ const PILL =
  * Home's card while the wallet's cash isn't earning (board 2g): "Your $100 arrived · Start earning 4.6% on it.", or
  * "$40 isn't earning" beside savings that already earn. Its button moves that cash into savings in one batch on JAW's
  * sheet (useStartEarning), named for the action only. When the same Face ID also has new cash earn on its own, one line
- * says so before the tap (`allows`: JAW's batch sheet shows no words of ours); "2 steps" only for an account JAW hasn't
- * deployed yet. While JAW's sheet is open, the card adds nothing.
+ * says so before the tap (`allows`: JAW's batch sheet shows no words of ours). While JAW's sheet is open, the card adds nothing.
  */
 export function StartEarningCard({
   title,
@@ -44,7 +43,6 @@ export function StartEarningCard({
   phase,
   checking = false,
   blocked = false,
-  steps = 1,
   allows = null,
   note,
   error,
@@ -58,8 +56,6 @@ export function StartEarningCard({
   checking?: boolean;
   /** The batch can't go ahead (`error` says why). */
   blocked?: boolean;
-  /** JAW sheets one tap opens: one batch, two when the Save grant follows on its own. */
-  steps?: number;
   /** What its Face ID lets the app do beyond this cash (earning on new cash); null when nothing. */
   allows?: string | null;
   /** Why it can't be signed now; null when it can. */
@@ -72,7 +68,7 @@ export function StartEarningCard({
   const waiting = checking && !busy && phase !== "done";
   const label =
     phase === "simulating" || waiting ? "Checking…" : phase === "pending" ? "Confirming on Base…" : "Start earning";
-  const small = preview ? "Preview mode. Sign in to do this." : (note ?? stepsNote(steps));
+  const small = preview ? "Preview mode. Sign in to do this." : note;
   return (
     <section aria-label="Start earning" className={SMALL_CARD}>
       <div className="flex items-center gap-2.5">

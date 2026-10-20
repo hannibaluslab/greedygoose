@@ -63,6 +63,13 @@ export type TxPlan = {
   /** What Activity shows while it confirms. */
   activity?: ActivityItem[];
   /**
+   * The part of the batch the check simulates, when one call can't be simulated before the batch runs: an agent's
+   * registration from an account JAW deploys in the same user operation (the executor reads the account's code and
+   * owners, which JAW's factory puts there first; checked on Base for JAW's accounts, lib/tx/plans/agents.ts). The
+   * whole batch is still what's signed.
+   */
+  simulated?: (batch: Call[]) => Call[];
+  /**
    * Runs once, after the batch landed on Base, with its receipts (EIP-5792 wallet_getCallsStatus): what the app records
    * off-chain (an agent's grant in JAW's list).
    */
@@ -121,17 +128,18 @@ export async function checkPlan(plan: TxPlan, d: CheckDeps): Promise<Checked> {
   try {
     const built = typeof plan.calls === "function" ? await plan.calls() : plan.calls;
     const batch = await d.join(plan.user, built);
+    const sim = plan.simulated ? plan.simulated(batch) : batch;
     const floor = plan.healthFloor;
-    const results = await d.simulate(plan.user, floor ? [...batch, accountDataRead(plan.user)] : batch);
-    const bad = results.slice(0, batch.length).findIndex((r) => r.status !== "success");
+    const results = await d.simulate(plan.user, floor ? [...sim, accountDataRead(plan.user)] : sim);
+    const bad = results.slice(0, sim.length).findIndex((r) => r.status !== "success");
     if (bad >= 0)
       return {
         ok: false,
-        error: d.explain(results[bad].data, plan.fallback ?? DEFAULT_FALLBACK, batch[bad]),
+        error: d.explain(results[bad].data, plan.fallback ?? DEFAULT_FALLBACK, sim[bad]),
         blocks: true,
       };
     if (floor) {
-      const read = results[batch.length];
+      const read = results[sim.length];
       // No health after it, no signature: it's checked again, as when Base doesn't answer.
       if (read?.status !== "success" || !read.data) return { ok: false, error: CANT_CHECK, blocks: false };
       const hf = healthFromAccountData(read.data);

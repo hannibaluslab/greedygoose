@@ -19,13 +19,7 @@ import { assertAllowed } from "@/lib/allowlist";
 import { feeBufferRaw, payFromCash, type Cash } from "@/lib/cash";
 import { cashRows, ownCashRow, type OwnMove } from "@/lib/cashActivity";
 import { AGENTS_LIVE } from "@/lib/agents/config";
-import {
-  saveGrantFollows,
-  startedEarningText,
-  startEarningShown,
-  startEarningSteps,
-  startEarningText,
-} from "@/lib/cashSetup";
+import { saveGrantFollows, startedEarningText, startEarningShown, startEarningText } from "@/lib/cashSetup";
 import { PROTOCOLS } from "@/lib/protocols/config";
 import { aaveV3PoolAbi } from "@/lib/protocols/abis";
 import { buildSendCalls } from "@/lib/send";
@@ -199,18 +193,13 @@ describe("Start earning on Home: when the card shows, what it says, how many JAW
     expect(startedEarningText("3.9%")).toBe("Your cash is earning 3.9%");
   });
 
-  it("is one JAW sheet, earning's grant riding in the batch; two only for an account JAW hasn't deployed yet", () => {
-    expect(startEarningSteps("unconfigured", true, true)).toBe(1);
-    expect(startEarningSteps("off", true, true)).toBe(1);
-    expect(startEarningSteps("off", true, false)).toBe(2);
-    expect(startEarningSteps("on", true, false)).toBe(1);
+  it("grants earning in the same batch only with an executor and no Save grant yet", () => {
     expect(saveGrantFollows("off", true)).toBe(true);
     expect(saveGrantFollows("on", true)).toBe(false);
   });
 
-  it("never asks for the Save grant until agents are live (NEXT_PUBLIC_AGENTS_LIVE): one sheet, the batch alone", () => {
+  it("never asks for the Save grant until agents are live (NEXT_PUBLIC_AGENTS_LIVE): the batch alone", () => {
     for (const save of ["unconfigured", "off", "starting", "on", "loading"] as const) {
-      expect(startEarningSteps(save, false, false)).toBe(1);
       expect(saveGrantFollows(save, false)).toBe(false);
     }
     expect(AGENTS_LIVE).toBe(false);

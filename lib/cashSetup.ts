@@ -40,15 +40,6 @@ export function startEarningShown(save: AgentStatus, walletRaw: bigint): boolean
 export const saveGrantFollows = (save: AgentStatus, live: boolean) => live && save === "off";
 
 /**
- * JAW sheets one Start earning tap opens: one batch, the Save grant riding in it (Adrian, 2026-10-20: "the permission,
- * the cash move and the registration in one signature"); two when it grants and JAW hasn't deployed the account yet
- * (`deployed` false): every batch is simulated first, and the executor can't check a registration for an account
- * with no code, so the grant goes right after the batch that deploys it.
- */
-export const startEarningSteps = (save: AgentStatus, live: boolean, deployed: boolean) =>
-  saveGrantFollows(save, live) && !deployed ? 2 : 1;
-
-/**
  * What Start earning's one Face ID lets the app do when it grants earning, said on the card before the tap. Save has
  * no amount limit (P2, Adrian 2026-10-20), so the line names none.
  */

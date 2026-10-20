@@ -23,7 +23,6 @@ import type { AgentEvent } from "@/lib/agents/events";
 import { describeAgentEvent, type MoveContext } from "@/lib/agents/feed";
 import { arrivedCoins, arrivedView, rateText, startEarningText } from "@/lib/cashSetup";
 import { convertFloorRaw } from "@/lib/swap/entry";
-import { TAP_AGAIN } from "@/lib/tx/prepared";
 import { CASH_COINS } from "@/lib/tokens/stables";
 import { CashSheetDemo, SHEET_VIEWS, type SheetView } from "./CashSheetDemo";
 
@@ -33,8 +32,7 @@ import { CashSheetDemo, SHEET_VIEWS, type SheetView } from "./CashSheetDemo";
  *   /dev/ui/cash?view=home        Home with "120 USDT arrived · Turn into cash" (its one screen) and "Your $100 arrived ·
  *                                 Start earning"
  *   ?view=start                   Start earning's other states: "$40 isn't earning" with earning granted in the same
- *                                 Face ID (its line), confirming on Base, and, for an account JAW hadn't deployed, the
- *                                 grant left after the batch landed ("2 steps")
+ *                                 Face ID (its line), and confirming on Base
  *   ?view=arriving                Home once other dollars convert on their own: the Cash card says "arriving"
  *   ?view=convert                 "Turn into cash" with one coin under the floor: it stays as it is
  *   ?view=auto                    once it lands, "Do this automatically next time?"
@@ -127,14 +125,6 @@ export function CashGallery() {
               onStart={noop}
             />
             <StartEarningCard {...ARRIVED} phase="pending" error={null} preview={false} onStart={noop} />
-            <StartEarningCard
-              {...IDLE}
-              phase="idle"
-              steps={2}
-              error={`1 of 2 went through. ${TAP_AGAIN}`}
-              preview={false}
-              onStart={noop}
-            />
           </>
         }
         sheet={null}

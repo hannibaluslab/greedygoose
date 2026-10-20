@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { useBytecode, usePublicClient } from "wagmi";
+import { usePublicClient } from "wagmi";
 import type { useCashSetup } from "@/hooks/useCashSetup";
 import { usePrepare, useTx } from "@/hooks/useTx";
 import { toUsd, type Cash } from "@/lib/cash";
@@ -14,22 +14,19 @@ import {
   saveGrantFollows,
   startedEarningText,
   startEarningShown,
-  startEarningSteps,
   startEarningText,
 } from "@/lib/cashSetup";
 import { startEarningFlow, startEarningPlan, startEarningPrefix, type StartEarningStage } from "@/lib/startEarning";
 
-/** What the card said at the tap, and whether the Save grant follows on its own: kept while JAW's sheets are open. */
-type Held = { title: string; line: string; steps: number; walletRaw: bigint; grant: boolean };
+/** What the card said at the tap: kept while JAW's sheet is open, so it doesn't change under the user. */
+type Held = { title: string; line: string; walletRaw: bigint };
 
 /**
  * Home's Start earning (Adrian, 2026-10-15): one tap moves the wallet's idle USDC into savings in one user-signed batch
  * (lib/startEarning.ts), prepared while the card shows so the tap opens JAW's sheet at once (useTx). With an executor
- * and no Save grant, earning's grant rides in the same batch, one Face ID (Adrian, 2026-10-20: "the permission, the
- * cash move and the registration in one signature"). An account JAW hasn't deployed yet can't have its registration
- * simulated, so there the grant is its own batch right after ("2 steps"); where JAW opens a popup only inside a tap
- * (Safari), that second sheet can't open by itself: "1 of 2 went through. Tap again to open JAW.", and the next tap
- * opens it. Once it's all through: "Your cash is earning 3.9%", and the card goes once the wallet is read again.
+ * and no Save grant, earning's grant rides in the same batch: one Face ID, an account JAW hasn't deployed yet included
+ * (Adrian, 2026-10-20; how its registration is checked: lib/tx/plans/agents.ts). Once it's through: "Your cash is
+ * earning 3.9%", and the card goes once the wallet is read again.
  */
 export function useStartEarning(p: {
   account: `0x${string}`;
@@ -42,29 +39,18 @@ export function useStartEarning(p: {
 }) {
   const { account, cash, setup, rate } = p;
   const client = usePublicClient({ chainId: CHAIN_ID });
-  const code = useBytecode({ address: account, chainId: CHAIN_ID });
   const tx = useTx("This didn’t go through on Base. Your cash didn’t move, except any network fee.");
-  // Earning's grant on its own, after a batch that deployed the account.
-  const grantTx = useTx("This didn’t go through on Base. Try again to start earning on new cash.");
   const [held, setHeld] = useState<Held | null>(null);
   const [stage, setStage] = useState<StartEarningStage | null>(null);
-  // What the tap asked for (whether earning's grant follows on its own), kept apart from the card's state, which goes
-  // the moment Home reads the wallet again: the grant after a landed batch starts once, and the toast is said once.
-  const tapped = useRef<{ grant: boolean } | null>(null);
-  const launched = useRef(false);
+  // The toast is said once a tap's batch lands, read off the write: the card's state goes the moment Home reads the
+  // wallet again, maybe in the same render.
+  const tapped = useRef(false);
 
-  // The grant on its own (from the landed batch, or a later tap) landed: all through; it stopped (cancelled, or a sheet
-  // JAW couldn't open): only it is left, and the next tap opens it.
-  const grantFollows = held ? held.grant : null;
-  const asked = startEarningFlow({ stage, phase: tx.phase, busy: tx.busy, grantFollows }).granting;
-  const grantDone = asked && grantTx.phase === "done";
-  const grantStopped = asked && (grantTx.phase === "failed" || (grantTx.phase === "idle" && !!grantTx.error));
-  const current: StartEarningStage | null = grantDone ? "landed" : grantStopped ? "grant-left" : stage;
-  const { granting, landed, pinned, phase } = startEarningFlow({
-    stage: current,
+  const { landed, pinned, phase } = startEarningFlow({
+    stage,
     phase: tx.phase,
     busy: tx.busy,
-    grantFollows,
+    grantFollows: held ? false : null,
   });
   // Done, and Home read the wallet again (the batch moved it): the card follows the rule again, for new money.
   if (landed && held && cash && cash.walletRaw !== held.walletRaw) {
@@ -82,47 +68,23 @@ export function useStartEarning(p: {
         : null;
   // Earning is granted only once the agents are live (SPEC: "Coming soon" stands where Save is).
   const grants = saveGrantFollows(setup.save, AGENTS_LIVE);
-  const deployed = !!code.data && code.data !== "0x";
-  const together = grants && deployed;
-  const steps = pinned && held ? held.steps : startEarningSteps(setup.save, AGENTS_LIVE, deployed);
-  // Its batch reads the wallet again while it's prepared (readCash), as every flow that spends cash does. Nothing to
-  // prepare mid-tap, or before the account's code is read (it decides whether the grant rides along).
+  // Its batch reads the wallet again while it's prepared (readCash), as every flow that spends cash does.
   const readWallet = async (user: `0x${string}`) => (await readCash(client!, user)).walletRaw;
-  const supply =
-    visible && !pinned && cash && code.isFetched ? startEarningPlan(account, cash.walletRaw, readWallet) : null;
-  const plan = supply && (together ? setup.earningPlan(startEarningPrefix(supply)) : supply);
+  const supply = visible && !pinned && cash ? startEarningPlan(account, cash.walletRaw, readWallet) : null;
+  const plan = supply && (grants ? setup.earningPlan(startEarningPrefix(supply)) : supply);
   // Prepared while the card waits (useTx's store), so the tap opens JAW's sheet with nothing awaited first.
   const prep = usePrepare(tx.prep, plan);
-  // The grant alone, once it's the step left: prepared then, so a second tap opens it at once.
-  const grantPlan = asked || current === "grant-left" ? setup.earningPlan() : null;
-  const grantPrep = usePrepare(grantTx.prep, grantPlan);
 
-  const live = useRef({ setup, rate, grantPlan, resetTx: tx.reset });
+  const live = useRef({ rate, resetTx: tx.reset });
   useEffect(() => {
-    live.current = { setup, rate, grantPlan, resetTx: tx.reset };
+    live.current = { rate, resetTx: tx.reset };
   });
-  const said = () => toast.success(startedEarningText(live.current.rate));
 
-  // The grant on its own landed: said once. Read off its write, not the card, which may already have gone.
-  const grantSaid = useRef(false);
+  // The batch landed: said once.
   useEffect(() => {
-    if (grantTx.phase !== "done" || grantSaid.current) return;
-    grantSaid.current = true;
-    said();
-  }, [grantTx.phase]);
-
-  // The batch landed: earning's grant on its own when the tap asked for it, once (the card shows it as granting);
-  // else it's done, and says so. Read off the write, not the card, which may already have gone.
-  useEffect(() => {
-    if (tx.phase !== "done" || !tapped.current || launched.current) return;
-    launched.current = true;
-    if (tapped.current.grant) {
-      grantSaid.current = false;
-      grantTx.reset();
-      void grantTx.sign(live.current.setup.earningPlan());
-    } else said();
-    // said and the grant's plan read the latest setup and rate from `live`; grantTx's calls are stable.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (tx.phase !== "done" || !tapped.current) return;
+    tapped.current = false;
+    toast.success(startedEarningText(live.current.rate));
   }, [tx.phase]);
 
   // Cleared after it landed: the write goes back to idle, so new money's batch is prepared again.
@@ -131,47 +93,28 @@ export function useStartEarning(p: {
   }, [stage, held, tx.phase]);
 
   function start() {
-    // The batch landed and only the grant is left: this tap opens JAW's sheet for it, prepared, nothing awaited first.
-    if (current === "grant-left") {
-      setStage("grant");
-      grantSaid.current = false;
-      void grantTx.sign(grantPlan);
-      return;
-    }
     if (!plan || !cash || !words) return;
     if (tx.phase === "failed") tx.reset();
-    grantTx.reset();
-    launched.current = false;
-    tapped.current = { grant: grants && !together };
-    setHeld({ title: words.title, line: words.line, steps, walletRaw: cash.walletRaw, grant: grants && !together });
+    tapped.current = true;
+    setHeld({ title: words.title, line: words.line, walletRaw: cash.walletRaw });
     setStage("deposit");
     void tx.sign(plan);
   }
 
   // With a grant, it needs the executor's limit read too ("One moment…"); the batch alone, only the fee.
-  const left = current === "grant-left";
-  const note = grants || left ? setup.earningBlocked : setup.feeBlocked;
+  const note = grants ? setup.earningBlocked : setup.feeBlocked;
   const { title, line } = words ?? { title: "", line: "" };
-  // The grant's own error once only it is left; none while it's on JAW's sheet; else the batch's, or its preparing's.
-  const error = left
-    ? grantTx.error
-      ? `1 of 2 went through. ${grantTx.error}`
-      : grantPrep.error
-    : granting
-      ? null
-      : (tx.error ?? (plan ? prep.error : null));
   return {
     visible,
     title,
     line,
-    steps,
     /** What its Face ID lets the app do when it grants earning; null when it doesn't. */
     allows: grants ? earningAllowsText() : null,
     phase,
     // A batch that grants earning waits for what it's built from (the executor's registry): checking until then.
-    checking: left ? grantPrep.checking : plan ? prep.checking : !!supply,
-    blocked: left ? grantPrep.blocked : plan ? prep.blocked : false,
-    error,
+    checking: plan ? prep.checking : !!supply,
+    blocked: plan ? prep.blocked : false,
+    error: tx.error ?? (plan ? prep.error : null),
     note,
     preview: setup.preview,
     start,
