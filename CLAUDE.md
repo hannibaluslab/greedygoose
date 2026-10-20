@@ -5,9 +5,11 @@ Next.js version notes: @AGENTS.md
 An invest-and-earn app on Base. Cash earns in Aave V3 savings, the seven Coinbase tokenized stocks can be bought, sold
 and traded, credit is USDC on Aave V4's Equities spoke backed by those stocks, and agents (Save, Entry, Protect,
 Rebalance) act on-chain in GooseExecutor under permissions the user grants. Accounts are JAW passkey smart accounts.
-The agents are not live yet. Until GooseExecutor is deployed and `NEXT_PUBLIC_AGENTS_LIVE=1` (`lib/agents/config.ts`),
-the app shows them as Coming soon. Mobile-first web, installable to the home screen, with iPhone Safari and passkeys as
-the primary target (D5, `app/manifest.ts`).
+The agents are on in production since 2026-10-20 (Adrian's go), on GooseExecutor `0x686c…F02D`: no amount cap, not
+audited yet (`contracts/docs/DEPLOYMENTS.md`). The Leaderboard is live too, on GooseBoard `0x0E10…FcA1`. Both come from
+build flags: a build without `NEXT_PUBLIC_GOOSE_EXECUTOR` and `NEXT_PUBLIC_AGENTS_LIVE=1` (`lib/agents/config.ts`) shows
+the agents as Coming soon, and one without `NEXT_PUBLIC_GOOSE_BOARD` shows the board as opens soon. Mobile-first web,
+installable to the home screen, with iPhone Safari and passkeys as the primary target (D5, `app/manifest.ts`).
 
 ## Read first
 
