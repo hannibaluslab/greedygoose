@@ -57,6 +57,10 @@ describe("topUpsView: the switch", () => {
     expect(topUpsView(input({ earningFirst: true }))).toMatchObject({ disabled: false, blocked: null });
   });
 
+  it("can be switched back on after switching it off, while earning waits", () => {
+    expect(topUpsView(input({ earningFirst: true, on: false }))).toMatchObject({ disabled: false, blocked: null });
+  });
+
   it("is greyed with nothing to say while the setting isn't read", () => {
     expect(topUpsView(input({ saved: null, on: false }))).toMatchObject({ disabled: true, blocked: null });
   });

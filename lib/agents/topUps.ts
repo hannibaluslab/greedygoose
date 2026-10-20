@@ -73,7 +73,8 @@ const atText = (sec: number, nowSec: number) => whenText(sec, nowSec).replace(" 
  * next top-up" while turning it on, then a top-up waiting for the next check.
  */
 export function topUpsView(i: TopUpsFacts & TopUpsChoice): TopUpsView {
-  const blocked = !i.available ? NOT_AVAILABLE : i.earningFirst && !i.on ? EARNING_FIRST : null;
+  // Earning first only blocks turning top-ups on: once they're on, switching them off and back stays possible.
+  const blocked = !i.available ? NOT_AVAILABLE : i.earningFirst && !i.on && !i.saved?.on ? EARNING_FIRST : null;
   const disabled = blocked !== null || !i.saved;
   if (!i.on) return { disabled, blocked, open: false, helper: null, note: null };
 
