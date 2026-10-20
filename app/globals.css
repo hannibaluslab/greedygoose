@@ -432,3 +432,196 @@ body.gg-welcome {
     animation: gg-egg-rock 4.8s ease-in-out 1.2s infinite;
   }
 }
+
+/* GooseLoader (Adrian, 2026-10-21): the goose for a wait. `walk`: he waddles across the stage, legs stepping, jumps
+   and turns in the air at each end, and walks back. `sleep`: the film's night, slow breathing over his egg, z's
+   drifting up. Inside the SVG, transforms are in the mark's own units (transform-box: view-box). Reduced motion: he
+   stands still, centred. */
+.ggl-stage {
+  container-type: inline-size;
+}
+.ggl-track {
+  transform: translateX(-50%);
+}
+.ggl-hop {
+  transform-origin: 50% 100%;
+}
+.ggl-waddle,
+.ggl-breathe,
+.ggl-leg-l,
+.ggl-leg-r,
+.ggl-z {
+  transform-box: view-box;
+}
+.ggl-waddle,
+.ggl-breathe {
+  transform-origin: 124px 240px;
+}
+.ggl-leg-l {
+  transform-origin: 112px 198px;
+}
+.ggl-leg-r {
+  transform-origin: 146px 195px;
+}
+.ggl-egg {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+.ggl-z {
+  opacity: 0;
+}
+/* Right edge to left edge (he faces left), a jump that turns him at its top, then back. */
+@keyframes ggl-track {
+  0%,
+  3% {
+    transform: translateX(calc(50cqw - 100%)) scaleX(1);
+  }
+  40%,
+  46% {
+    transform: translateX(-50cqw) scaleX(1);
+  }
+  46.1%,
+  53% {
+    transform: translateX(-50cqw) scaleX(-1);
+  }
+  90%,
+  96% {
+    transform: translateX(calc(50cqw - 100%)) scaleX(-1);
+  }
+  96.1%,
+  100% {
+    transform: translateX(calc(50cqw - 100%)) scaleX(1);
+  }
+}
+@keyframes ggl-hop {
+  0% {
+    transform: translateY(0) scale(1.06, 0.9);
+  }
+  3%,
+  40% {
+    transform: translateY(0) scale(1, 1);
+  }
+  42% {
+    transform: translateY(0) scale(1.08, 0.88);
+    animation-timing-function: cubic-bezier(0.2, 0.7, 0.4, 1);
+  }
+  46% {
+    transform: translateY(-42%) scale(0.95, 1.07);
+    animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.3);
+  }
+  50% {
+    transform: translateY(0) scale(1.06, 0.9);
+  }
+  53%,
+  90% {
+    transform: translateY(0) scale(1, 1);
+  }
+  92% {
+    transform: translateY(0) scale(1.08, 0.88);
+    animation-timing-function: cubic-bezier(0.2, 0.7, 0.4, 1);
+  }
+  96% {
+    transform: translateY(-42%) scale(0.95, 1.07);
+    animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.3);
+  }
+  100% {
+    transform: translateY(0) scale(1.06, 0.9);
+  }
+}
+@keyframes ggl-waddle {
+  0%,
+  100% {
+    transform: rotate(-4deg) translateY(0);
+  }
+  25%,
+  75% {
+    transform: rotate(0deg) translateY(-7px);
+  }
+  50% {
+    transform: rotate(4deg) translateY(0);
+  }
+}
+@keyframes ggl-leg {
+  0%,
+  100% {
+    transform: rotate(16deg);
+  }
+  50% {
+    transform: rotate(-16deg);
+  }
+}
+@keyframes ggl-breathe {
+  0%,
+  100% {
+    transform: scale(1, 1);
+  }
+  45% {
+    transform: scale(1.015, 1.045);
+  }
+}
+@keyframes ggl-egg-nudge {
+  0%,
+  70%,
+  100% {
+    transform: rotate(0deg);
+  }
+  78% {
+    transform: rotate(-5deg);
+  }
+  86% {
+    transform: rotate(2deg);
+  }
+}
+@keyframes ggl-z {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) rotate(0deg);
+  }
+  15% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(34px, -58px) rotate(-12deg);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ggl-track {
+    animation: ggl-track 7s linear infinite;
+  }
+  .ggl-hop {
+    animation: ggl-hop 7s linear infinite;
+  }
+  .ggl-waddle {
+    animation: ggl-waddle 0.7s ease-in-out infinite;
+  }
+  .ggl-leg-l {
+    animation: ggl-leg 0.7s ease-in-out infinite;
+  }
+  .ggl-leg-r {
+    animation: ggl-leg 0.7s ease-in-out -0.35s infinite;
+  }
+  .ggl-breathe {
+    animation: ggl-breathe 3.2s ease-in-out infinite;
+  }
+  .ggl-breathe .ggl-egg {
+    animation: ggl-egg-nudge 6.4s ease-in-out 1s infinite;
+  }
+  .ggl-z {
+    animation: ggl-z 3s ease-out infinite;
+  }
+  .ggl-z2 {
+    animation-delay: 1s;
+  }
+  .ggl-z3 {
+    animation-delay: 2s;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ggl-z {
+    opacity: 0.6;
+  }
+}

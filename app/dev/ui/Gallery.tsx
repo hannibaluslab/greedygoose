@@ -6,6 +6,7 @@ import { FeedCard, FeedDays } from "@/components/gg/activity/Activity";
 import { AmountArrow, AmountBadge, AmountField, AmountSource, YouGet } from "@/components/gg/kit/AmountField";
 import { BalanceHero, TodayChange } from "@/components/gg/home/BalanceHero";
 import { Button } from "@/components/gg/kit/Button";
+import { GooseLoader } from "@/components/gg/kit/GooseLoader";
 import { CashCard, CreditCard } from "@/components/gg/home/Cards";
 import { AddStockCard, HoldingCard, HoldingList, HoldingRow } from "@/components/gg/stock/Holding";
 import { ProtectDemo } from "./ProtectDemos";
@@ -332,6 +333,13 @@ export function Gallery() {
         <FeedCard>
           <FeedDays rows={MOVES(now)} nowMs={now} />
         </FeedCard>
+      </Section>
+
+      <Section title="Goose loader · walk, sleep" kit="goose-loader">
+        <div className="flex flex-col items-center gap-6 rounded-[22px] bg-sheet py-6">
+          <GooseLoader mode="walk" className="h-[72px] w-[210px]" />
+          <GooseLoader mode="sleep" className="h-[72px] w-[210px]" />
+        </div>
       </Section>
 
       <Section title="Sheet with steps" kit="sheet">

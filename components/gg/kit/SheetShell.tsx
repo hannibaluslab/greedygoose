@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from "react";
 import { ArrowLeftIcon, CloseIcon } from "@/components/gg/kit/icons";
+import { GooseLoader } from "@/components/gg/kit/GooseLoader";
 import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
 import { useBodyScrollLock, useKeyboardLift } from "@/hooks/useSheetViewport";
 
@@ -77,6 +78,21 @@ const SheetHostContext = createContext(false);
  * after, so a sheet with several buttons waits while any of them does.
  */
 const SheetConfirmingContext = createContext<(() => () => void) | null>(null);
+
+/**
+ * Whether a sheet waits on Base: `confirming` (the sheet's own say), or any change inside it that added itself (`add`,
+ * through SheetConfirmingContext) and hasn't taken itself off yet. A step (`embedded`) draws no wait of its own: its
+ * `confirming` goes to the host, which does.
+ */
+function useSheetWait(confirming: boolean, embedded: boolean) {
+  const [count, setCount] = useState(0);
+  const add = useCallback(() => {
+    setCount((n) => n + 1);
+    return () => setCount((n) => n - 1);
+  }, []);
+  useSheetConfirming(confirming && embedded);
+  return { waits: !embedded && (confirming || count > 0), add };
+}
 
 /**
  * Once JAW's sheet hands back, the change confirms on Base: the whole sheet shows it, not only the button (Adrian,
@@ -174,13 +190,8 @@ export function SheetShell({
   useBodyScrollLock(open && !embedded);
   useKeyboardLift(open && !embedded);
   const dragToClose = useDragToClose(() => onOpenChange(false));
-  const [count, setCount] = useState(0);
-  const add = useCallback(() => {
-    setCount((n) => n + 1);
-    return () => setCount((n) => n - 1);
-  }, []);
+  const { waits, add } = useSheetWait(confirming, embedded);
   const scroll = useRef<HTMLDivElement>(null);
-  const waits = !embedded && (confirming || count > 0);
 
   // As a step: contribute the body only. The host owns the drawer, the
   // header (title / back / close) and the scroll area, so the chrome props
@@ -287,7 +298,7 @@ export function SheetShell({
             ref={scroll}
             data-sheet-scroll
             inert={waits}
-            aria-busy={waits || undefined}
+            aria-busy={waits}
             className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-5 ${flushBottom ? "" : "pb-[max(34px,env(safe-area-inset-bottom))]"}`}
             // flex none while locked: `flex-1` would let the drawer's layout
             // renegotiate the height the lock is meant to pin.
@@ -304,7 +315,7 @@ export function SheetShell({
 
 /**
  * The sheet while its change confirms on Base: over the body (the header's Close still works), the content fades
- * behind a veil and one line says what it waits for. Placed on the scroll area as it is now, and again if it resizes.
+ * behind a veil, the goose walks it off, and one line says what it waits for. Placed on the scroll area as it is now, and again if it resizes.
  */
 function SheetConfirming({ scroll }: { scroll: React.RefObject<HTMLDivElement | null> }) {
   const [box, setBox] = useState<{ top: number; height: number } | null>(null);
@@ -321,10 +332,11 @@ function SheetConfirming({ scroll }: { scroll: React.RefObject<HTMLDivElement | 
   return (
     <div
       role="status"
-      className="absolute inset-x-0 z-10 flex flex-col items-center justify-center gap-3 bg-sheet/80 backdrop-blur-[2px] animate-in fade-in-0 duration-200"
+      className="absolute inset-x-0 z-10 flex flex-col items-center justify-center gap-4 bg-sheet/85 backdrop-blur-[2px] animate-in fade-in-0 duration-200"
       style={box}
     >
-      <span aria-hidden className="size-7 animate-spin rounded-full border-[2.5px] border-ink/15 border-t-ink" />
+      {/* The goose walks it off while Base confirms (Adrian, 2026-10-21: "something cool and fun"). */}
+      <GooseLoader mode="walk" className="h-[72px] w-[210px]" />
       <span className="text-[15px] font-semibold text-ink">Confirming on Base…</span>
     </div>
   );
