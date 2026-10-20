@@ -82,7 +82,7 @@ An account JAW hasn't deployed yet (money arrived, nothing ever sent) starts ear
 | Codehash | `0xc79e2c8f7a03b38abd65a7e073fc3410849544bba74f53360c127775bc891848`, the EIP-1167 clone of JAW's implementation `0xbb4f7d5418Cd8DADB61bb95561179e517572cBCd`, which is what JAW's factory `0x5803c076563C85799989d42Fc00292A8aE52fa9E` deploys |
 | Measured | 2026-10-20 on Base through a keyless RPC: `cast codehash 0x14087c532332dE6E971Eb2F60a252cbf511F59eA`, a passkey account with owners [passkey, manager] that the factory's `getAddress(owners, 0)` gives |
 | Set by | `script/DeployExecutor.s.sol`: `jawCodehashes()[0]`, pinned as `JAW_CLONE_CODEHASH`. `checkCode` refuses a list without it (and a factory that clones other code), and `run` reads it back from the new executor; forge runs both before it sends anything |
-| Proven | `DeployExecutorTest.test_the_script_deploys_an_executor_that_allows_jaws_account_clone` (the script's own run on a Base fork) |
+| Proven | `DeployExecutorTest.test_the_script_deploys_an_executor_that_allows_jaws_account_clone` (the script's own run on a Base fork); `OneTapNewAccountForkTest` (Base fork, the real EntryPoint v0.8: a never-used passkey account deployed by the factory's initCode and earning in the same user operation; with an executor that doesn't allow the clone, the batch reverts and nothing moves) |
 
 After the deploy, before the app points at it:
 
