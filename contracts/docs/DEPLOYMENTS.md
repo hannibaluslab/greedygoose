@@ -57,6 +57,22 @@ Supersedes the Act-only table above for the next deploy (JUSTALAB-DECISIONS.md, 
 
 After the deploy, the same day: deploy the receiver, `bootstrap([receiver, KeeperHub wallet])`, queue the NYSE holidays (each waits 7 days), cancel the two pending Automation requests above (Adrian signs; 0.0008 WETH back), and record it all here.
 
+### The next deploy carries top-ups into the mix (2026-10-20)
+
+Adds to the runner switch's next deploy above (GooseExecutor-as-built.md, "Rebalance's top-ups (2026-10-20)"). Built on branch `jl/rebalance-topups`; nothing has been deployed for it. A new executor is a new spender, so every account grants all its agents again.
+
+| What | Executor live today | Next deploy |
+|---|---|---|
+| Top-ups into the mix | none | `setTopUps(on, keep)`, `topUps(account)`; Save counts, Rebalance puts in from savings at the next market morning |
+| Rebalance's grant | no Aave call | with top-ups: Aave V3's savings withdraw (to the account only) and an aUSDC limit at spends[1], a week, at CAP_MAX |
+| Save's grant | $1,000 a day | the app grants it at CAP_MAX (P2; the app's wiring, M5) |
+| Registration | `register(...)` and `registerApproved` | `registerApproved` only |
+| Reads | `jobsOf` | gone: the app reads `accounts` (hooks/useAgents.ts still reads `jobsOf`, to move) |
+| Events | | `TopUpsSet`, `TopUpCounted`, `TopUpInvested` |
+| Size | 24,381 bytes | 24,365 bytes |
+
+The app must work with both until the switch: it reads `topUps(account)` with `allowFailure`, and a revert means "Not available yet" (M5).
+
 ## GooseBoard — not deployed yet
 
 The leaderboard's member list (`src/GooseBoard.sol`, JUSTALAB-DECISIONS.md "The Leaderboard"). It holds nothing, calls nothing and has no owner: an account only puts itself on (`join()`) or takes itself off (`leave()`, not in the app). The deployer key pays the gas and gets no power over it. Adrian approves and signs the mainnet deploy; nobody else deploys it to Base.

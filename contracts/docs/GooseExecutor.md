@@ -268,6 +268,8 @@ Post-checks: the account's USDC fell by exactly `amount`; its aUSDC rose by at l
 
 Event: `Saved(account, amount)`. The daily Save limit applies to Save only. Nothing ever delays Protect.
 
+*(Extended 2026-10-20, GooseExecutor-as-built.md "Rebalance's top-ups": with top-ups on and Rebalance on, what Save puts away, less the agents' own change, is counted as a top-up waiting to go into the mix, after Keep. Save's grant moves to the executor's CAP_MAX, with no daily limit to slow top-ups (P2); the daily number of saves stays.)*
+
 ## 6. Running
 
 ### checkUpkeep
