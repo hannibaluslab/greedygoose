@@ -62,7 +62,15 @@ export type TxPlan = {
   healthFloor?: HealthFloor;
   /** What Activity shows while it confirms. */
   activity?: ActivityItem[];
+  /**
+   * Runs once, after the batch landed on Base, with its receipts (EIP-5792 wallet_getCallsStatus): what the app records
+   * off-chain (an agent's grant in JAW's list).
+   */
+  landed?: (receipts: readonly TxReceipt[]) => void | Promise<void>;
 };
+
+/** A landed batch's receipt as wallet_getCallsStatus returns it: the logs are what the app reads. */
+export type TxReceipt = { logs?: readonly { address: string; data: Hex; topics: readonly Hex[] }[] };
 
 /** A key from the inputs that shape a batch, bigints included. Same inputs, same key. */
 export function txKey(...parts: unknown[]): string {

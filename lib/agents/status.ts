@@ -2,18 +2,17 @@ import { JOBS, type AgentGrant, type AgentJob } from "@/lib/agents/permissions";
 
 /**
  * - "unconfigured": no executor is set (NEXT_PUBLIC_GOOSE_EXECUTOR), so no agent can be switched on yet.
- * - "starting": JAW granted it and the executor hasn't registered it yet: the app does in the change's last batch
- *   (useAgents `registerJobs`), or the Agents tab's Finish card when that didn't go through.
- * - "on": the executor runs it with a grant JAW still lists.
+ * - "starting": a grant JAW lists that the executor hasn't registered: one granted on JAW's own sheet before grants
+ *   became one signature (D14, dropped 2026-10-20). Its sheet's Finish registers it (useAgents `finishPlan`).
+ * - "on": the executor runs it: registered, not past its end, and not revoked in the manager.
  */
 export type AgentStatus = "unconfigured" | "loading" | "off" | "starting" | "on";
 
 /**
- * JAW sheets a change's grants take once registered (runner switch plan, option 1: no runner watches the manager, so the
- * app registers each grant itself): one sheet per grant, then one batch with the change's registry settings and every
- * new grant's registration (Adrian, 2026-10-20: "Batch those into one").
+ * JAW sheets a change's grants take: one batch with every grant's approve and registration and the change's registry
+ * settings (Adrian, 2026-10-20: "the permission, the cash move and the registration in one signature").
  */
-export const changeSheets = (grants: number) => (grants > 0 ? grants + 1 : 0);
+export const changeSheets = (grants: number) => (grants > 0 ? 1 : 0);
 
 /**
  * A change's last batch that stopped before JAW signed it, in the app's own words (its simulation's reason, a batch that
@@ -30,9 +29,11 @@ export class AgentStop extends Error {
 export type Stored = { start: number; end: number; cap: bigint };
 
 /**
- * Whether the executor runs `job`: registered (its bit in `jobs`, GooseExecutor.jobsOf), not past its end, and with
- * that same grant still in JAW's list, where a revoke shows at once (the registry only learns of it on the next run).
- * If JAW's list can't be read, the registry alone decides.
+ * Whether the executor runs `job`: registered (its bit in `jobs`, GooseExecutor.jobsOf), not past its end, and not
+ * revoked in the manager (`revoked`, read on Base, where a revoke shows at once; the registry only learns of it on the
+ * next run). A one-signature grant reaches JAW's list after its batch, so the list doesn't decide. Until the manager is
+ * read (`revoked` undefined), that same grant still in JAW's list stands for it, or the registry alone if the list
+ * can't be read either.
  */
 export function jobStatus(
   job: AgentJob,
@@ -41,11 +42,15 @@ export function jobStatus(
   granted: readonly AgentGrant[],
   nowSec: number,
   listUnreadable: boolean,
+  revoked?: boolean,
 ): Exclude<AgentStatus, "unconfigured" | "loading"> {
   const live = granted.filter((g) => g.job === job && g.end >= nowSec);
   const registered = (jobs & (1 << JOBS.indexOf(job))) !== 0 && stored.end >= nowSec;
   const stillGranted =
-    listUnreadable || live.some((g) => g.start === stored.start && g.end === stored.end && g.capRaw === stored.cap);
+    revoked === undefined
+      ? listUnreadable ||
+        live.some((g) => g.start === stored.start && g.end === stored.end && g.capRaw === stored.cap)
+      : !revoked;
   if (registered && stillGranted) return "on";
   return live.length > 0 ? "starting" : "off";
 }

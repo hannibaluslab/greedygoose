@@ -16,13 +16,12 @@ import { usePrepare, type TxPhase, type TxPlan, type TxPrep } from "@/hooks/useT
 import { AGENTS_LIVE } from "@/lib/agents/config";
 import { PROTECT_LINE } from "@/lib/agents/list";
 import {
+  protectAllows,
+  protectBatch,
   protectSteps,
   savedChoice,
-  stepCount,
-  withRegistration,
   type ProtectChoice,
   type ProtectSaved,
-  type ProtectJob,
   type ProtectStep,
 } from "@/lib/agents/protect";
 import type { AgentStatus } from "@/lib/agents/status";
@@ -80,19 +79,36 @@ export function ProtectSettings({ account, onDone }: { account: `0x${string}`; o
       )}
       pricesRaw={EQUITIES.map((e) => data.holdings[e.reserveId].priceRaw)}
       capMaxRaw={agents.capMaxRaw}
-      // Turning selling off revokes each sell grant JAW lists that hasn’t ended (useAgents.turnOff): one JAW sheet each.
-      sellGrants={agents.faceIdsOff(["sell"])}
-      registering={saving.registering}
       feeBlocked={!!address && fee.state === "unsupported"}
-      waiting={fee.loading || agents.busy}
+      waiting={fee.loading}
       phase={saving.phase}
       error={saving.error}
       busy={saving.busy}
       prep={saving.prep}
-      settingPlan={saving.settingPlan}
+      planFor={saving.planFor}
       onSave={saving.save}
     />
   );
+}
+
+/** How far an Aave price may move before a sell grant's stock limits are worked out again: inside its 1% headroom. */
+const STEADY_MOVE = 0.005;
+
+/**
+ * Aave's prices as a sell grant's stock limits use them: the ones read when the sheet opened, until any moves more than
+ * half a percent. The limits leave 1% under the executor's bound at registration (permissions `stockLimitsRaw`), so a
+ * smaller move can't refuse it, and the save's batch, keyed by its terms, stays prepared.
+ */
+function useSteadyPrices(pricesRaw: readonly bigint[]): readonly bigint[] {
+  const [held, setHeld] = useState(pricesRaw);
+  const moved = pricesRaw.some((p, i) => {
+    const h = held[i] ?? 0n;
+    if (h === 0n) return p !== 0n;
+    const diff = p > h ? p - h : h - p;
+    return Number(diff) / Number(h) > STEADY_MOVE;
+  });
+  if (moved) setHeld(pricesRaw);
+  return moved ? pricesRaw : held;
 }
 
 function ProtectSettingsSkeleton() {
@@ -116,19 +132,15 @@ export type ProtectSettingsViewProps = {
   pricesRaw: readonly bigint[];
   /** The executor's CAP_MAX: every grant of Protect's is at it (no amount limit). */
   capMaxRaw: bigint | null;
-  /** Sell grants JAW lists that haven’t ended: one JAW sheet each to switch selling off. */
-  sellGrants: number;
-  /** This sheet's grants waiting for a batch that didn't go through: Save sends it (useProtectSave `registering`). */
-  registering?: readonly ProtectJob[];
   feeBlocked: boolean;
   /** Something still loading or signing elsewhere (fee support, an agent switch). */
   waiting?: boolean;
   phase: TxPhase;
   error: string | null;
   busy: boolean;
-  /** The write's store (useProtectSave's `prep`) and "Sells first"'s batch, so Save's first sheet is ready before the tap. */
+  /** The write's store (useProtectSave's `prep`) and the save's batch, so Save's sheet is ready before the tap. */
   prep?: TxPrep;
-  settingPlan?: (on: boolean) => TxPlan | null;
+  planFor?: (steps: readonly ProtectStep[]) => TxPlan | null;
   onSave: (steps: ProtectStep[]) => void;
 };
 
@@ -140,15 +152,13 @@ export function ProtectSettingsView({
   backsUsd,
   pricesRaw,
   capMaxRaw,
-  sellGrants,
-  registering = [],
   feeBlocked,
   waiting = false,
   phase,
   error,
   busy,
   prep,
-  settingPlan,
+  planFor,
   onSave,
 }: ProtectSettingsViewProps) {
   const [chosen, setChosen] = useState<Partial<ProtectChoice>>({});
@@ -156,10 +166,13 @@ export function ProtectSettingsView({
   const choice: ProtectChoice = { ...start, ...chosen };
   const set = (c: Partial<ProtectChoice>) => setChosen((p) => ({ ...p, ...c }));
 
-  // Until CAP_MAX is read nothing can save (`ready` below), so the steps only say what's blocked.
-  const plan = protectSteps(saved, choice, { capMaxRaw: capMaxRaw ?? 0n, pricesRaw });
+  // Until CAP_MAX is read nothing can save (`ready` below), so the steps only say what's blocked. A sell grant's stock
+  // limits follow Aave's prices held steady (`useSteadyPrices`), so the batch prepared for it isn't rebuilt on every read.
+  const steady = useSteadyPrices(pricesRaw);
+  const plan = protectSteps(saved, choice, { capMaxRaw: capMaxRaw ?? 0n, pricesRaw: steady });
   const steps = live ? plan.steps : [];
-  const count = stepCount(steps, sellGrants, registering);
+  // One batch, one Face ID, whatever the save holds.
+  const count = protectBatch(steps) ? 1 : 0;
   const names = (ids: readonly number[]) =>
     inWords(EQUITIES.filter((e) => ids.includes(e.reserveId)).map((e) => e.name));
 
@@ -170,19 +183,15 @@ export function ProtectSettingsView({
     ready: !preview && !waiting && !busy && capMaxRaw !== null,
     feeBlocked,
     blocked: plan.blocked,
-    // A batch this sheet still owes counts as something to save: Save sends it.
-    changes: withRegistration(steps, registering).length,
+    changes: steps.length,
   });
-  // Save's first JAW sheet is "Sells first" when it changed and nothing is granted (else it rides in the last batch): its
-  // batch is prepared while the body is idle.
-  const first = withRegistration(steps, registering)[0];
-  const prepared = usePrepare(prep, canSave && first?.kind === "keepMix" && settingPlan ? settingPlan(first.on) : null);
+  // Save's batch (every grant and "Sells first", one Face ID) is prepared while the body is idle.
+  const prepared = usePrepare(prep, canSave && planFor ? planFor(steps) : null);
 
   const neverChanged = choice.never.length !== start.never.length || choice.never.some((r) => !start.never.includes(r));
   const lines = steps.flatMap((s) => {
     if (s.kind === "keepMix") return [`Sells first: ${ORDER.find((o) => o.keepMix === s.on)!.label}`];
     if (s.kind === "revoke") return ["Selling: off"];
-    if (s.kind === "register") return [];
     if (s.job === "protect") return ["Repay from your cash: on"];
     const never =
       !saved.sell || neverChanged ? [`Never sell: ${choice.never.length > 0 ? names(choice.never) : "none"}`] : [];
@@ -228,7 +237,13 @@ export function ProtectSettingsView({
         )}
       </ManageCard>
 
-      {live && <SaveSummary off={off} lines={lines} />}
+      {live && (
+        <SaveSummary
+          off={off}
+          lines={lines}
+          allows={protectAllows(steps, PROTECT_LINE, choice.never.length > 0 ? names(choice.never) : null)}
+        />
+      )}
 
       {live ? (
         <SaveFooter

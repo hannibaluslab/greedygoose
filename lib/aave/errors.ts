@@ -1,7 +1,8 @@
-import { decodeErrorResult, isAddressEqual, type Hex } from "viem";
+import { decodeAbiParameters, decodeErrorResult, isAddressEqual, toFunctionSelector, type Hex } from "viem";
 import { spokeAbi } from "./abis/ISpoke";
 import { hubAbi } from "./abis/IHub";
 import { swapOf } from "@/lib/allowlist";
+import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import { PROTOCOLS, SEL } from "@/lib/protocols/config";
 import { BUY_LIMITS } from "@/lib/swap/buy";
 import { AERODROME_V1, ROUTERS, SPARK_PSM3 } from "@/lib/swap/venues";
@@ -18,6 +19,37 @@ const PLAIN: Record<string, string> = {
   MustNotLeaveDust: "That would leave a tiny amount behind. Repay all, or a little less.",
   MaximumUserReservesExceeded: "You’ve reached Aave’s limit on how many markets one account can use.",
 };
+
+/**
+ * GooseExecutor's reasons for refusing a registration, as a turn-on says them (lib/agents/register.ts): the batch that
+ * approves and registers an agent in one signature reverts whole, so nothing changed.
+ */
+const AGENT_PLAIN: Record<string, string> = {
+  NotApproved: "Your account didn’t approve this agent, so nothing changed. Try again.",
+  ManagerNotOwner: "Your account isn’t set up for agents yet, so nothing changed. Try again.",
+  StaleGrant: "A newer setting is already on. Close this and open it again.",
+  AccountNotAllowed: "Agents can’t run on this account yet.",
+  BadWindow: "This agent’s time window isn’t right. Try again.",
+  CapOutOfBounds: "That’s over what an agent may move. Try a smaller amount.",
+  BadTerms: "This agent’s settings can’t be used. Try different ones.",
+  BadMix: "Make your mix add up to 100% to save it.",
+};
+
+/**
+ * The account's own wrapper when one call of its batch reverts: ExecuteError(uint256 index, bytes error) (JAW's
+ * account, measured in contracts/test/OneTapGrantFork.t.sol). The inner revert is the one to explain.
+ */
+const EXECUTE_ERROR = toFunctionSelector("ExecuteError(uint256,bytes)");
+
+function unwrapExecuteError(data: Hex): Hex {
+  if (data.slice(0, 10).toLowerCase() !== EXECUTE_ERROR) return data;
+  try {
+    const [, inner] = decodeAbiParameters([{ type: "uint256" }, { type: "bytes" }], `0x${data.slice(10)}`);
+    return inner;
+  } catch {
+    return data;
+  }
+}
 
 /**
  * A savings withdrawal (Aave V3 Pool.withdraw) reverts when the pool is short of free USDC, is paused,
@@ -68,11 +100,12 @@ function isConversion(call: { to: `0x${string}`; data: Hex }): boolean {
 
 /** Turn a revert into consumer language (CLAUDE.md › Error handling). `call` is the call that reverted. */
 export function explainRevert(
-  data: Hex | undefined,
+  raw: Hex | undefined,
   fallback: string,
   call?: { to: `0x${string}`; data: Hex },
 ): string {
   if (call && isSavingsWithdrawal(call)) return CASH_STUCK;
+  const data = raw && unwrapExecuteError(raw);
   if (!data || data === "0x" || (call && isConversion(call))) return fallback;
   if (call && isSwap(call)) {
     try {
@@ -91,6 +124,12 @@ export function explainRevert(
     } catch {
       /* not this ABI */
     }
+  }
+  try {
+    const { errorName } = decodeErrorResult({ abi: gooseExecutorAbi, data });
+    return AGENT_PLAIN[errorName] ?? fallback;
+  } catch {
+    /* not the executor's */
   }
   return fallback;
 }
