@@ -17,6 +17,10 @@ The no-limit executor (`CAP_MAX` = max uint160), unaudited, for a team-only prev
 
 `bootstrap([0x9c74d428Ff2707e0E9cB576AFFFD87c1b1eF3E93])`, KeeperHub's wallet alone (`GooseReceiver` still waits on Chainlink; add it later through the 7-day `AddForwarder`): tx `0x37bf2b1c31eb70336cd079cffac5d18330d77c9171d79215f83d1c5103d191de`, block 52851439, 0.0000004 ETH. `isForwarder(0x9c74…3E93)` = true.
 
+### EIP-7702 accounts no longer allowed (2026-10-20)
+
+`disallowCodehash(0xd9f5ead9804121543baaa39356ceae4adf7310d7cee95559bdd42b92a6091285)`, the hash of an EIP-7702 delegation to JAW's implementation (`0xef0100 ‖ 0xbb4f…cBCd`). This closes review finding H4 on this deploy: a 7702 account could register, then swap its code (REVIEW-2026-10-20-adversarial.md). It was sent by the owner with Adrian's OK: tx `0x6759b8b6b3c587320a9f68412805873035257faed8385a563a87b57b8cc88ba5`, block 52852528 (11:06 UTC), 27,333 gas, 0.00000015 ETH. Read back: that hash is now `false`, JAW's clone (`0xc79e…1848`) is still `true`, and no account was registered (`memberCount` 0), so no 7702 account is in the registry. Allowing it again would take the 7-day `AllowCodehash` change. GreedyGoose's passkey accounts are JAW clones, never 7702.
+
 ### NYSE holidays queued (each waits 7 days)
 
 Twelve `queueChange(SetHoliday, abi.encode(uint32 day, true))` from the owner; `changeNonce` is now 12. All twelve read back from `queued(id)` on 2026-10-20. The first ETA is 1793097069 (2026-10-27 10:31:09 UTC), the last 1793097119 (10:31:59 UTC).
