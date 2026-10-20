@@ -82,6 +82,26 @@ describe("setTopUps (Top-ups go into my mix, with Keep as cash)", () => {
     expect(() => buildSetTopUpsCalls(user, true, -1n)).toThrow(/Keep as cash/);
   });
 
+  it("turning off is never refused over a Keep set past $1,000,000 outside the app (the executor takes any uint48)", () => {
+    // Turn off Rebalance sends the executor's own Keep back (useAgents), and the sheet's switch the saved one.
+    const onChain = 2n ** 48n - 1n;
+    expect(buildSetTopUpsCalls(user, false, onChain)[0].data).toBe(setTopUps(false, 10 ** 12));
+    expect(buildSetTopUpsCalls(user, false, usdc(500))[0].data).toBe(setTopUps(false, 500_000_000));
+    expect(() => buildSetTopUpsCalls(user, true, onChain)).toThrow(/Keep as cash/);
+    const off = rebalanceChange(
+      user,
+      {
+        weights: [5_000, 0, 0, 0, 0, 5_000, 0],
+        mixChanged: false,
+        grant: null,
+        topUps: { on: false, keepUsd: 2_000_000 },
+        topUpsChanged: true,
+      },
+      { save: "on", capMaxRaw: maxUint160 },
+    )!;
+    expect(off.settings.map((c) => c.data)).toEqual([setTopUps(false, 10 ** 12)]);
+  });
+
   it("the allowlist takes it on the executor alone, with no value and Keep at most $1,000,000", () => {
     expect(send(setTopUps(true, 10 ** 12))).toHaveLength(1);
     expect(send(setTopUps(false, 0))).toHaveLength(1);

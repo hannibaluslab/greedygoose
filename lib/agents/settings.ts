@@ -44,14 +44,16 @@ export function buildSetKeepMixCalls(user: `0x${string}`, on: boolean): Call[] {
 /**
  * `setTopUps(on, keep)`: top-ups go into the mix (on) or stay as cash, with Keep as cash in USDC units (whole dollars
  * from the app, $0 allowed, at most KEEP_MAX_RAW). The executor counts only once both this and the Rebalancer grant's
- * top-ups flag are set.
+ * top-ups flag are set. Off, Keep isn't used, so a Keep set past KEEP_MAX_RAW outside the app (the executor takes any
+ * uint48) is sent as KEEP_MAX_RAW: turning top-ups or Rebalance off is never refused over it.
  */
 export function buildSetTopUpsCalls(user: `0x${string}`, on: boolean, keepRaw: bigint): Call[] {
-  if (keepRaw < 0n || keepRaw > KEEP_MAX_RAW) throw new Error("Keep as cash is $0 to $1,000,000");
+  const keep = !on && keepRaw > KEEP_MAX_RAW ? KEEP_MAX_RAW : keepRaw;
+  if (keep < 0n || keep > KEEP_MAX_RAW) throw new Error("Keep as cash is $0 to $1,000,000");
   return assertAllowed(user, [
     {
       to: executor(),
-      data: encodeFunctionData({ abi: gooseExecutorAbi, functionName: "setTopUps", args: [on, Number(keepRaw)] }),
+      data: encodeFunctionData({ abi: gooseExecutorAbi, functionName: "setTopUps", args: [on, Number(keep)] }),
       value: 0n,
     },
   ]);
