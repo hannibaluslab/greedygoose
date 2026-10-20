@@ -82,6 +82,9 @@ library CashRules {
     uint64 internal constant MIN_REPAY_MAX = 50e6;
     uint64 internal constant MIN_SAVE_MIN = 0.1e6;
     uint64 internal constant MIN_SAVE_MAX = 100e6;
+    /// Above the app's $0.50 fuel tank plus Fill up's 2-cent margin, so Save never sweeps a fill back into savings and
+    /// counts it as a top-up (config/risk.ts CASH.feeBufferUsd, lib/fuelTank.ts).
+    uint64 internal constant KEEP_BACK_MIN = 0.6e6;
     uint64 internal constant KEEP_BACK_MAX = 5e6;
     uint32 internal constant WEEKEND_WINDOW_MIN = 1 hours;
     uint32 internal constant WEEKEND_WINDOW_MAX = 12 hours;
@@ -96,9 +99,9 @@ library CashRules {
 
     function amountsOk(Amounts memory a) internal pure returns (bool) {
         return a.minRepay >= MIN_REPAY_MIN && a.minRepay <= MIN_REPAY_MAX && a.minSave >= MIN_SAVE_MIN
-            && a.minSave <= MIN_SAVE_MAX && a.keepBack <= KEEP_BACK_MAX && a.weekendWindow >= WEEKEND_WINDOW_MIN
-            && a.weekendWindow <= WEEKEND_WINDOW_MAX && a.maxSavesPerDay >= MAX_SAVES_MIN
-            && a.maxSavesPerDay <= MAX_SAVES_MAX;
+            && a.minSave <= MIN_SAVE_MAX && a.keepBack >= KEEP_BACK_MIN && a.keepBack <= KEEP_BACK_MAX
+            && a.weekendWindow >= WEEKEND_WINDOW_MIN && a.weekendWindow <= WEEKEND_WINDOW_MAX
+            && a.maxSavesPerDay >= MAX_SAVES_MIN && a.maxSavesPerDay <= MAX_SAVES_MAX;
     }
 
     /// Protect, first half (plan.ts `planGuardian`): how much debt, in Value, should go. Needs only the account data,

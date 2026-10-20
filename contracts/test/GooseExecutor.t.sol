@@ -212,7 +212,7 @@ contract GooseExecutorTest is Test {
 
     function test_thresholds_amounts_and_owner_change_after_the_delay() public {
         Thresholds memory t = Thresholds(1.03e18, 1.1e18, 0.2e18, 1.02e18);
-        Amounts memory a = Amounts(1e6, 2e6, 0, 3 hours, 4);
+        Amounts memory a = Amounts(1e6, 2e6, 0.6e6, 3 hours, 4);
         address newOwner = makeAddr("new owner");
         vm.startPrank(owner);
         x.queueChange(GooseExecutor.Change.SetThresholds, abi.encode(t));
@@ -229,7 +229,7 @@ contract GooseExecutorTest is Test {
         assertEq(target, 1.1e18);
         assertEq(floor, 1.02e18);
         (,, uint64 keepBack, uint32 window,) = x.amounts();
-        assertEq(keepBack, 0);
+        assertEq(keepBack, 0.6e6);
         assertEq(window, 3 hours);
         assertEq(x.owner(), newOwner);
     }
@@ -250,9 +250,10 @@ contract GooseExecutorTest is Test {
             vm.expectRevert(GooseExecutor.OutOfBounds.selector);
             x.queueChange(GooseExecutor.Change.SetThresholds, abi.encode(bad[i]));
         }
-        Amounts[5] memory badAmounts = [
+        Amounts[6] memory badAmounts = [
             Amounts(0.04e6, 1e6, 1e6, 6 hours, 6), // repay minimum below 5 cents
             Amounts(0.05e6, 101e6, 1e6, 6 hours, 6), // save minimum above $100
+            Amounts(0.05e6, 1e6, 0.59e6, 6 hours, 6), // keep-back under the fuel tank and Fill up's margin
             Amounts(0.05e6, 1e6, 6e6, 6 hours, 6), // keep-back above $5
             Amounts(0.05e6, 1e6, 1e6, 13 hours, 6), // window above 12 h
             Amounts(0.05e6, 1e6, 1e6, 6 hours, 0) // no saves a day
