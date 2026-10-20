@@ -14,7 +14,7 @@ How the code is organised, the conventions every change follows, and the clean-u
 | Engines     | `lib/`                   | Pure planners and batch builders: what a screen shows (`planSend`, `planTrade`, `planCredit`) and the calls it signs, unit-tested without a chain. Big flows have a folder (`lib/trade/`, `lib/send/`, `lib/repay/`); `lib/sell/covers.ts` checks a sale's repay or savings supply against the sale; `lib/cash/read.ts` reads the cash again at signing |
 | Guards      | `lib/allowlist.ts`, `lib/tx/prepared.ts` | Every batch is checked against the allowlist and simulated on Base (`eth_simulateV1`), with Aave's health read after it, before JAW's sheet |
 | Plans       | `lib/tx/plans/`          | What each flow signs (`TxPlan`): its key, its batch built from fresh reads, its fallback words and health floor, one file per flow              |
-| Contracts   | `contracts/`             | `GooseExecutor` and its job rules (Foundry), triggered by Chainlink Automation                                                                   |
+| Contracts   | `contracts/`             | `GooseExecutor` and its job rules (Foundry), woken by its runners (KeeperHub, and Chainlink CRE through `GooseReceiver`)                          |
 | Config      | `config/risk.ts`         | Every threshold and buffer, mirrored on-chain where the executor uses it                                                                         |
 
 A screen is three parts: a pure plan function in `lib/` that turns inputs into everything the screen shows (tested),
@@ -23,7 +23,8 @@ hooks that read and write, and a view that renders the plan. New screens follow 
 ## Conventions (enforced by `npm run check` and CI)
 
 - **Format:** Prettier, 120 columns. Formatting-only commits go in `.git-blame-ignore-revs`.
-- **Lint:** Next's rules plus type-only imports, no unused code, `===` only, and no console logging in the app.
+- **Lint:** Next's rules plus type-only imports, no unused code, `===` only, and no `console.log` in the app (`console.warn`
+  and `console.error` pass).
 - **No dead code:** knip fails on unused files, exports and dependencies.
 - **Tests:** unit tests for every planner and builder (`tests/unit`); Base simulations for every new batch
   (`tests/onchain`, needs an RPC); Foundry tests for the contracts, fork suites included when `BASE_RPC_URL` is set.

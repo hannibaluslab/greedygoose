@@ -19,8 +19,9 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
 - **Stocks** are the 7 Coinbase tokenized stocks (Apple, Amazon, Alphabet, Meta, Microsoft, NVIDIA, Tesla). They earn
   no yield, so no stock shows an APY. "Not company shares" appears once, on the stock sheet.
 - **Credit** is USDC on the Aave V4 Equities spoke, backed by the user's stocks.
-- **Agents** run on-chain in `GooseExecutor`, triggered by Chainlink Automation. There is no server and no database:
-  the app reads everything from Base, and the price route is stateless.
+- **Agents** run on-chain in `GooseExecutor`, woken by its runners (KeeperHub, and Chainlink CRE through
+  `GooseReceiver`). There is no server and no database: the app reads everything from Base, and the price route is
+  stateless.
 
 ## Home
 
@@ -207,8 +208,8 @@ the free shares' value. A stock whose shares all back credit is listed but can't
   the cash above Keep $X. The Rebalance grant carries Aave V3's savings withdraw (to the account only) only while the
   setting is on, so switching it on or off is a new grant; changing Keep alone is the setting only. Turning Rebalance
   off switches top-ups off in the same signature; once Rebalance has stopped, switching them off is the setting alone.
-  Save has no amount limit either, its grant at the executor's CAP_MAX: Rebalance's Save grants it so, and Start
-  earning's grant and words follow **(to build)**. The sheet shows what's waiting and when it goes in, and warns when
+  Save has no amount limit either, its grant at the executor's CAP_MAX, from Rebalance's Save and from Start earning
+  alike. The sheet shows what's waiting and when it goes in, and warns when
   Keep is $0, something is owed and Protect can't sell; the card and the sheet's line show a top-up going in at the
   next check and the stocks it buys. A Save that drops a waiting top-up (a new grant, or the switch flipped) says so
   first. Until the executor that counts top-ups is live, the setting says "Not available yet."
