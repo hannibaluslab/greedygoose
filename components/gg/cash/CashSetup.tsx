@@ -345,7 +345,7 @@ function ConvertedSheet({
           <AutomaticStep
             landed={cashNowText(held.sent)}
             grant={setup.automatic.view}
-            limit={setup.limitText("entry")}
+            limit={setup.entryLimitText}
             prep={setup.automatic.prep}
             plan={setup.automatic.plan}
             onYes={() =>

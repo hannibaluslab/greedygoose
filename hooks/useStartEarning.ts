@@ -166,7 +166,7 @@ export function useStartEarning(p: {
     line,
     steps,
     /** What its Face ID lets the app do when it grants earning; null when it doesn't. */
-    allows: grants ? earningAllowsText(setup.limitText("save")) : null,
+    allows: grants ? earningAllowsText() : null,
     phase,
     // A batch that grants earning waits for what it's built from (the executor's registry): checking until then.
     checking: left ? grantPrep.checking : plan ? prep.checking : !!supply,
