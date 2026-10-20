@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { CASH } from "@/config/risk";
+import { feeBufferRaw, savingsWithdrawal } from "@/lib/cash";
+import { fillRaw } from "@/lib/fuelTank";
 import type { RebalanceHolding } from "@/lib/agents/rules/rebalance";
 import {
   investTrades,
@@ -111,5 +114,44 @@ describe("topUpsReady, waitingRaw and topUpInvested (Rebalance's check)", () => 
     const after = topUpInvested(b.state, usd(700), usd(800) - 2n);
     expect(after.readyRaw).toBe(usd(300) - 2n);
     expect(topUpsReady(after, DAY + 1, usd(800) - 2n).readyRaw).toBe(usd(300) - 2n);
+  });
+});
+
+/*
+ * The fuel tank (lib/fuelTank.ts) and Save's count. Save moves only the wallet above its keep-back (CashRules.planSave,
+ * CASH.keepBackUsd, the executor's `keepBack`) and counts what it moves as a top-up. So whatever the app brings back
+ * from savings into the wallet has to stop at or under the keep-back, or Save would put it back with the next top-up
+ * and count it: savings bought into the mix (contracts/test/TopUpsFork.t.sol shows both sides on a Base fork).
+ */
+describe("the fuel tank and Save's count", () => {
+  const keepBackRaw = usd(CASH.keepBackUsd);
+  const lots = usd(1_000);
+
+  it("Fill up stops at or under Save's keep-back", () => {
+    for (const walletRaw of [0n, 1n, feeBufferRaw / 2n, feeBufferRaw - 1n]) {
+      const f = fillRaw({ walletRaw, savingsRaw: lots, saveOn: true });
+      expect(f).not.toBeNull();
+      expect(walletRaw + (f?.raw ?? 0n)).toBeLessThanOrEqual(keepBackRaw);
+    }
+  });
+
+  it("a spend from cash leaves the wallet at the tank or lower, never higher than it was", () => {
+    expect(feeBufferRaw).toBeLessThanOrEqual(keepBackRaw);
+    for (const walletRaw of [0n, feeBufferRaw / 2n, keepBackRaw - 1n, keepBackRaw, keepBackRaw + usd(0.9)]) {
+      const w = savingsWithdrawal(usd(20), { walletRaw, savingsRaw: lots, saveOn: true });
+      const after = walletRaw + (w?.raw ?? 0n) - usd(20);
+      expect(after).toBeLessThanOrEqual(walletRaw > feeBufferRaw ? walletRaw : feeBufferRaw);
+    }
+  });
+
+  it("a fill comes out of what's waiting, and the next top-up counts only what arrived", () => {
+    // $300 counted, network fees drain the wallet to $0.10, Fill up, then $100 arrives and Save sweeps past the keep-back.
+    const counted = topUpCounted(fresh(0), DAY, usd(1_000), usd(300), usd(1_300)).state;
+    const walletRaw = usd(0.1);
+    const fill = fillRaw({ walletRaw, savingsRaw: usd(1_300), saveOn: true })?.raw ?? 0n;
+    const swept = walletRaw + fill + usd(100) - keepBackRaw;
+    const next = topUpCounted(counted, DAY, usd(1_300) - fill, swept, usd(1_300) - fill + swept).state;
+    expect(next.todayRaw).toBe(usd(300) - fill + swept);
+    expect(next.todayRaw).toBeLessThan(usd(400));
   });
 });

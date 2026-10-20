@@ -27,7 +27,7 @@ abstract contract TopUpsForkBase is RebalanceForkBase {
     }
 
     /// A fresh JAW account with free stock worth `usd` of each stock in `stocks` (USDC units at Aave's price), the mix
-    /// `weights`, `savings` in savings and $1 of fuel; Save on, the Rebalancer on with top-ups (the app's one grant at
+    /// `weights`, `savings` in savings and $1 in the wallet; Save on, the Rebalancer on with top-ups (the app's one grant at
     /// CAP_MAX, each stock it may sell worth $50,000 a week), and its own switch on with Keep `keep`.
     function _investor(
         string memory name,
@@ -47,7 +47,7 @@ abstract contract TopUpsForkBase is RebalanceForkBase {
         vm.prank(a);
         x.setMix(weights);
         if (savings > 0) _withSavings(a, savings);
-        deal(address(USDC), a, 1e6); // the fuel tank: Save keeps $1 back
+        deal(address(USDC), a, 1e6); // Save's keep-back, over the $0.50 fuel tank
         _turnOn(a, GooseExecutor.Job.Save, x.CAP_MAX());
         _rebalanceGrant(a, t, true);
         vm.prank(a);
@@ -325,6 +325,57 @@ contract TopUpsForkTest is TopUpsForkBase {
         if (waiting >= 20e6) assertApproxEqAbs(x.planOf(a).amount, waiting, 1e6, "the top-up less Protect's repay");
         else assertEq(uint8(x.planOf(a).action), uint8(GooseExecutor.Action.None), "all of it went to Protect");
         console.log("Protect repaid from savings, waiting after", repaid, waiting);
+    }
+
+    /// The fuel tank (lib/fuelTank.ts): Fill up brings the wallet back from savings, never past Save's keep-back
+    /// (tests/unit/top-ups.test.ts holds the app to that). Filled right up to it, the most the app may: Save leaves the
+    /// fill in the wallet, the fill is a fall in savings that comes out of what's waiting (P4), and the next top-up
+    /// counts only what arrived.
+    function test_a_fill_up_is_never_counted_and_comes_out_of_what_is_waiting() public {
+        address a = _investor("a", _list(NVDA, AAPL), _list(4_600e6, 5_400e6), fiftyFifty, 1_000e6, 0);
+        (,, uint64 keepBack,,) = x.amounts();
+        _warpNy(0, 15 hours);
+        _topUp(a, 300e6);
+        assertEq(_topUpsOf(a).today, 300e6);
+
+        uint256 fill = _drainAndFill(a, keepBack);
+        vm.recordLogs();
+        _run(_one(a));
+        assertFalse(_counted(vm.getRecordedLogs()), "nothing to save");
+        assertEq(USDC.balanceOf(a), keepBack, "the fill stays in the wallet");
+
+        _topUp(a, 100e6);
+        uint256 today = _topUpsOf(a).today;
+        assertApproxEqAbs(today, 400e6 - fill, 2, "the fill came out of what's waiting");
+        assertLt(today, 400e6, "never more than arrived");
+        assertEq(USDC.balanceOf(a), keepBack);
+        console.log("$300 counted, a fill of", fill, "then $100: waiting", today);
+    }
+
+    /// With nothing waiting, P4 has nothing to take a fill out of: the next top-up counts exactly what arrived, as long
+    /// as the fill stops at the keep-back. One unit past it, the executor can't tell that unit from a top-up and counts
+    /// it with the next one, savings bought into the mix: why the app's tank stays under Save's keep-back.
+    function test_a_fill_up_past_the_keep_back_is_counted_with_the_next_top_up() public {
+        address a = _investor("a", _list(NVDA, AAPL), _list(4_600e6, 5_400e6), fiftyFifty, 1_000e6, 0);
+        address b = _investor("b", _list(NVDA, AAPL), _list(4_600e6, 5_400e6), fiftyFifty, 1_000e6, 0);
+        (,, uint64 keepBack,,) = x.amounts();
+        _warpNy(0, 15 hours);
+        _drainAndFill(a, keepBack);
+        _drainAndFill(b, keepBack + 1);
+        _topUp(a, 100e6);
+        _topUp(b, 100e6);
+        assertEq(_topUpsOf(a).today, 100e6, "exactly what arrived");
+        assertEq(_topUpsOf(b).today, 100e6 + 1, "and the unit of savings past the keep-back");
+    }
+
+    /// Network fees drain the wallet to $0.10, then Fill up, the user's own batch (lib/fuelTank.ts), withdraws savings
+    /// into it up to `to`. Returns the fill.
+    function _drainAndFill(address a, uint256 to) internal returns (uint256 fill) {
+        deal(address(USDC), a, 0.1e6);
+        fill = to - 0.1e6;
+        vm.prank(a);
+        POOL.withdraw(address(USDC), fill, a);
+        assertEq(USDC.balanceOf(a), to);
     }
 
     /// The change a band trade leaves in the wallet is the agents' own: Save puts it away and counts none of it.
