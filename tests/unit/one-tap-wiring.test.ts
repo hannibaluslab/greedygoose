@@ -129,7 +129,7 @@ describe("the allowlist for one-signature grants (D14 dropped, Adrian 2026-10-20
 
 describe("agentChangePlan: a change in one batch", () => {
   const owner = addManagerOwnerCall(user);
-  const deps = { ownerCalls: () => Promise.resolve([owner]) };
+  const deps = { getCode: () => Promise.resolve("0x6001" as Hex), ownerCalls: () => Promise.resolve([owner]) };
 
   it("puts what goes first, the revokes, the owner call, the approves, the settings, then the registrations", async () => {
     const p = grantOf("protect");
@@ -154,6 +154,28 @@ describe("agentChangePlan: a change in one batch", () => {
     expect(
       agentChangePlan(user, { grants: [grantOf("protect", 1n)], settings: buildSetKeepMixCalls(user, true) }, deps).key,
     ).not.toBe(a);
+  });
+
+  it("simulates every call of a deployed account's batch", async () => {
+    const plan = agentChangePlan(user, { grants: [grantOf("save")] }, deps);
+    const batch = await (plan.calls as () => Promise<{ to: `0x${string}`; data: Hex; value: bigint }[]>)();
+    expect(plan.simulated?.(batch)).toEqual(batch);
+  });
+
+  it("an account JAW hasn't deployed yet: one batch, simulated without its registrations, no owner call read", async () => {
+    const ownerCalls = vi.fn(() => Promise.resolve([owner]));
+    const fresh = { getCode: () => Promise.resolve(undefined), ownerCalls };
+    const plan = agentChangePlan(user, { grants: [grantOf("save")] }, fresh);
+    const batch = await (plan.calls as () => Promise<{ to: `0x${string}`; data: Hex; value: bigint }[]>)();
+    const fn = (c: { to: string; data: Hex }) =>
+      c.to === MANAGER
+        ? decodeFunctionData({ abi: permissionManagerAbi, data: c.data }).functionName
+        : decodeFunctionData({ abi: gooseExecutorAbi, data: c.data }).functionName;
+    // The whole batch is signed: the approve and its registration, no owner call (JAW's factory makes the manager one).
+    expect(batch.map(fn)).toEqual(["approve", "registerApproved"]);
+    expect(ownerCalls).not.toHaveBeenCalled();
+    // The check simulates all of it but the registration, which only passes once the account is deployed.
+    expect(plan.simulated?.(batch).map(fn)).toEqual(["approve"]);
   });
 
   it("hands the receipts to `landed` for the change's records", async () => {

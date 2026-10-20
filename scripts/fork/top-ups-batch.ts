@@ -12,7 +12,7 @@
  * `start` and `salt` stand in for lib/agents/picks.ts (the device's clock less five minutes, and 256 random bits);
  * the Rebalancer's grant takes `salt`, earning's `salt + 1`. `prices` are Aave's, 8 decimals, comma-separated.
  */
-import { encodeAbiParameters, type Address } from "viem";
+import { encodeAbiParameters, type Address, type Hex } from "viem";
 import { contractPermission, jawPermission } from "@/lib/agents/oneTapGrant";
 import { GRANT_SECONDS, jobGrant, stockLimitsRaw, type AgentJob, type StockLimits } from "@/lib/agents/permissions";
 import { rebalanceChange, rebalanceSave, type MixSave } from "@/lib/agents/rebalanceSettings";
@@ -61,7 +61,8 @@ const grantOf = (g: { job: AgentJob; capRaw: bigint; limitsRaw?: StockLimits; to
   });
 
 async function batch(): Promise<{ calls: Call[]; grants: ReturnType<typeof grantOf>[] }> {
-  const deps = { ownerCalls: () => Promise.resolve([]) };
+  // The fork account is deployed: getCode answers with code, as on Base.
+  const deps = { getCode: () => Promise.resolve("0x6001" as Hex), ownerCalls: () => Promise.resolve([]) };
   if (mode === "off") {
     const held = grantOf(rebalanceAsk(true), 0);
     const settings = buildSetTopUpsCalls(account, false, keepRawOf(KEEP_USD));

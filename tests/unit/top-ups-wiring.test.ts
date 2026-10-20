@@ -7,6 +7,7 @@ import {
   encodeFunctionData,
   maxUint160,
   toFunctionSelector,
+  type Hex,
 } from "viem";
 
 // The app's executor, before anything reads lib/agents/config.ts: the allowlist only lets it through once it's set.
@@ -125,7 +126,7 @@ describe("a top-ups change in one batch (the allowlist's pairing)", () => {
         revokes: [contractPermission(rebalanceOf(true))],
         settings: buildSetTopUpsCalls(user, false, usdc(500)),
       },
-      { ownerCalls: () => Promise.resolve([]) },
+      { getCode: () => Promise.resolve("0x6001" as Hex), ownerCalls: () => Promise.resolve([]) },
     );
     const calls = await (plan.calls as () => Promise<unknown[]>)();
     expect(calls).toEqual([

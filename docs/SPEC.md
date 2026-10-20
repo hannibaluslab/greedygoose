@@ -177,7 +177,7 @@ the free shares' value. A stock whose shares all back credit is listed but can't
 - Each change is one batch, one Face ID (D14 dropped, Adrian 2026-10-20): its permissions approved in JAW's manager and
   registered with the executor, the ones they replace (or a turn-off's) revoked, with the settings and any cash move,
   then recorded in JAW's list. The card says what its Face ID allows before the tap. The spender is `GooseExecutor`.
-  An account JAW hasn't deployed yet takes two on its first Start earning (the batch, then earning's permission).
+  An account JAW hasn't deployed yet starts earning in one too.
   Protect and Rebalance have no amount limit:
   their grants (Protect's repay from cash and sell, Rebalance's trades) are at the executor's CAP_MAX, with no field to
   type. Each is limited by its rules. A Rebalance grant capped below CAP_MAX, from before, is granted again at the

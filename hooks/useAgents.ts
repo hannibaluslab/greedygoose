@@ -633,7 +633,11 @@ export function useAgents(account: `0x${string}`) {
     return agentChangePlan(
       account,
       { grants, revokes: revokes.map((h) => h.p), settings, prefix: change.prefix },
-      { ownerCalls: () => managerOwnerCalls(client, account), landed: landedFor(grants, revokes) },
+      {
+        getCode: (a) => client.getCode({ address: a }),
+        ownerCalls: () => managerOwnerCalls(client, account),
+        landed: landedFor(grants, revokes),
+      },
     );
   }
 
