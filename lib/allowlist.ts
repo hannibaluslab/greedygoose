@@ -13,7 +13,8 @@ import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import { isMix } from "@/lib/agents/mix";
-import { GRANT_SECONDS, agentJobOf, type JawPermission } from "@/lib/agents/permissions";
+import { agentJobOf } from "@/lib/agents/agentJob";
+import { GRANT_SECONDS, type JawPermission } from "@/lib/agents/permissions";
 import { gooseBoardAbi } from "@/lib/board/abi";
 import { GOOSE_BOARD } from "@/lib/board/config";
 import { recipientBlock } from "@/lib/contracts";
@@ -364,10 +365,12 @@ function assertGrantsPaired(user: Address, calls: readonly { to: Address; data: 
       approves.push({ index, encoded, job: agentJobOf(p, user, executor) ?? "" });
     } else if (isAddressEqual(c.to, executor)) {
       const { functionName, args } = decodeFunctionData({ abi: gooseExecutorAbi, data: c.data });
-      if (functionName === "registerApproved") registers.push({ index, encoded: (args[0] as Hex).toLowerCase() as Hex });
+      if (functionName === "registerApproved")
+        registers.push({ index, encoded: (args[0] as Hex).toLowerCase() as Hex });
     }
   });
-  if (new Set(approves.map((a) => a.job)).size !== approves.length) throw new Error("Blocked: two grants for one agent");
+  if (new Set(approves.map((a) => a.job)).size !== approves.length)
+    throw new Error("Blocked: two grants for one agent");
   for (const a of approves) {
     if (!registers.some((r) => r.index > a.index && r.encoded === a.encoded))
       throw new Error("Blocked: a grant that isn’t switched on in the same batch");

@@ -32,8 +32,9 @@ import { CashSheetDemo, SHEET_VIEWS, type SheetView } from "./CashSheetDemo";
  * rules and words (arrivedView, arrivedText, describeAgentEvent). Nothing here reads the chain or signs.
  *   /dev/ui/cash?view=home        Home with "120 USDT arrived · Turn into cash" (its one screen) and "Your $100 arrived ·
  *                                 Start earning"
- *   ?view=start                   Start earning's other states: "$40 isn't earning" with the Save grant to follow
- *                                 ("2 steps"), confirming on Base, and the grant left after the batch landed
+ *   ?view=start                   Start earning's other states: "$40 isn't earning" with earning granted in the same
+ *                                 Face ID (its line), confirming on Base, and, for an account JAW hadn't deployed, the
+ *                                 grant left after the batch landed ("2 steps")
  *   ?view=arriving                Home once other dollars convert on their own: the Cash card says "arriving"
  *   ?view=convert                 "Turn into cash" with one coin under the floor: it stays as it is
  *   ?view=auto                    once it lands, "Do this automatically next time?"
@@ -67,7 +68,7 @@ const UNFAIR: ConvertQuote = {
   outRaw: usdc(49.1),
   fair: false,
 };
-const GRANT: GrantView = { busy: false, error: null, blocked: null, preview: false };
+const GRANT: GrantView = { phase: "idle", busy: false, checking: false, error: null, blocked: null, preview: false };
 const ZERO_TX = `0x${"0".repeat(64)}` as const;
 const noop = () => toast("Dev gallery: nothing is signed");
 
@@ -117,7 +118,14 @@ export function CashGallery() {
       <HomeFixture
         cards={
           <>
-            <StartEarningCard {...IDLE} phase="idle" steps={2} error={null} preview={false} onStart={noop} />
+            <StartEarningCard
+              {...IDLE}
+              phase="idle"
+              allows="New cash that arrives moves into savings on its own, up to $1,000 a day."
+              error={null}
+              preview={false}
+              onStart={noop}
+            />
             <StartEarningCard {...ARRIVED} phase="pending" error={null} preview={false} onStart={noop} />
             <StartEarningCard
               {...IDLE}
@@ -140,7 +148,7 @@ export function CashGallery() {
   const sheet =
     view === "auto" ? (
       <Sheet title="Do this automatically next time?">
-        <AutomaticStep landed={cashNowText(QUOTES)} grant={GRANT} onYes={noop} onNo={noop} />
+        <AutomaticStep landed={cashNowText(QUOTES)} grant={GRANT} limit="$1,000" onYes={noop} onNo={noop} />
       </Sheet>
     ) : view === "done" ? (
       <Sheet title="Turn into cash">

@@ -33,7 +33,7 @@ export type { TxPhase, TxPlan } from "@/lib/tx/prepared";
 type Client = NonNullable<ReturnType<typeof usePublicClient>>;
 
 /** How a batch is checked, at the tap and in the background alike: join() when due, then eth_simulateV1 from the user. */
-export const checkDeps = (client: Client | undefined): CheckDeps => ({
+const checkDeps = (client: Client | undefined): CheckDeps => ({
   join: (user, batch) => withBoardJoin(client!, user, batch),
   simulate: async (user, batch) =>
     (await client!.simulateCalls({ account: user, calls: batch.map(({ to, data }) => ({ to, data })) })).results,

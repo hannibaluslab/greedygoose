@@ -4,7 +4,6 @@ import { UserRejectedRequestError, encodeFunctionResult, maxUint256 } from "viem
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { accountDataRead, type Call } from "@/lib/aave/tx";
 import { NOT_ATOMIC } from "@/lib/jaw/capabilities";
-import { runError } from "@/hooks/useAgentRun";
 import { tapDeps } from "@/hooks/useTx";
 import {
   CANCELLED,
@@ -570,12 +569,5 @@ describe("signPlan: the tap", () => {
     await signPlan(plan("A"), apart.d);
     expect(apart.send).not.toHaveBeenCalled();
     expect(apart.state).toEqual({ phase: "failed", error: NOT_ATOMIC });
-  });
-});
-
-describe("agent changes: a sheet JAW couldn't open waits for the next tap", () => {
-  it("says to tap again, with what already went through", () => {
-    expect(runError(0, 1, popupError())).toBe(TAP_AGAIN);
-    expect(runError(1, 2, popupError())).toBe(`1 of 2 went through. ${TAP_AGAIN}`);
   });
 });

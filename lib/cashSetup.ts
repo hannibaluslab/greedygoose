@@ -1,5 +1,5 @@
 import { erc20Abi, isAddressEqual } from "viem";
-import { changeSheets, type AgentStatus } from "@/lib/agents/status";
+import type { AgentStatus } from "@/lib/agents/status";
 import { CHAIN_ID } from "@/lib/chain";
 import { formatCoin, formatUsdTrim } from "@/lib/formatting";
 import { startEarningMinRaw } from "@/lib/startEarning";
@@ -33,19 +33,24 @@ export function startEarningShown(save: AgentStatus, walletRaw: bigint): boolean
 }
 
 /**
- * Whether Start earning's batch is followed by the Save grant on JAW's own screen: only once the agents are live
- * (`live`: AGENTS_LIVE, Chainlink approved the automation; until then SPEC has "Coming soon" where Save is), with an
- * executor and no Save grant yet. Otherwise the user would sign a grant to an executor that doesn't run.
+ * Whether Start earning's tap also grants earning (the Save job): only once the agents are live (`live`: AGENTS_LIVE,
+ * Chainlink approved the automation; until then SPEC has "Coming soon" where Save is), with an executor and no Save
+ * grant yet. Otherwise the user would sign a grant to an executor that doesn't run.
  */
 export const saveGrantFollows = (save: AgentStatus, live: boolean) => live && save === "off";
 
 /**
- * JAW sheets one Start earning tap opens: the batch, then, when the Save grant follows (saveGrantFollows), JAW's own
- * screen for it (D14: a grant can't ride in a batch) and the grant's registration with the executor. The button's
- * "3 steps".
+ * JAW sheets one Start earning tap opens: one batch, the Save grant riding in it (Adrian, 2026-10-20: "the permission,
+ * the cash move and the registration in one signature"); two when it grants and JAW hasn't deployed the account yet
+ * (`deployed` false): every batch is simulated first, and the executor can't check a registration for an account
+ * with no code, so the grant goes right after the batch that deploys it.
  */
-export const startEarningSteps = (save: AgentStatus, live: boolean) =>
-  saveGrantFollows(save, live) ? 1 + changeSheets(1) : 1;
+export const startEarningSteps = (save: AgentStatus, live: boolean, deployed: boolean) =>
+  saveGrantFollows(save, live) && !deployed ? 2 : 1;
+
+/** What Start earning's one Face ID lets the app do when it grants earning, said on the card before the tap. */
+export const earningAllowsText = (limit: string) =>
+  `New cash that arrives moves into savings on its own, up to ${limit} a day.`;
 
 /**
  * The card's words (board 2g): money that just arrived, "Your $100 arrived · Start earning 4.6% on it."; with savings

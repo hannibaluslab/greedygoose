@@ -500,48 +500,6 @@ function isTemplate(p: ListedPermission, want: PermissionsDetail): boolean {
   );
 }
 
-/** JAW's word for each JustaPermissionManager PeriodUnit, as its relay lists a spend (core `periodToEnum`, reversed). */
-export const PERIOD_WORD: Record<number, string> = {
-  [PERIOD.Minute]: "minute",
-  [PERIOD.Hour]: "hour",
-  [PERIOD.Day]: "day",
-  [PERIOD.Week]: "week",
-  [PERIOD.Month]: "month",
-  [PERIOD.Forever]: "forever",
-};
-
-/**
- * An on-chain permission (the manager's struct, as `permissionOf` or a batch's approve carries it) read as JAW's relay
- * lists it, so `readAgentGrant` checks it against the same templates; null for a period JAW has no word for.
- */
-export function listedFromPermission(p: JawPermission, permissionId: string): ListedPermission | null {
-  const spends: ListedPermission["spends"] = [];
-  for (const s of p.spends) {
-    const unit = PERIOD_WORD[s.unit];
-    if (!unit) return null;
-    spends.push({ token: s.token, allowance: s.allowance.toString(), unit, multiplier: s.multiplier });
-  }
-  return {
-    permissionId,
-    spender: p.spender,
-    start: p.start,
-    end: p.end,
-    salt: `0x${p.salt.toString(16)}`,
-    calls: p.calls.map((c) => ({ target: c.target, selector: c.selector, checker: c.checker })),
-    spends,
-  };
-}
-
-/**
- * The job an on-chain permission is a grant of: `user`'s own, to `executor`, and exactly one job's template; null for
- * anything else. What the allowlist lets a batch approve and register.
- */
-export function agentJobOf(p: JawPermission, user: Address, executor: Address): AgentJob | null {
-  if (!isAddressEqual(p.account, user) || !isAddressEqual(p.spender, executor)) return null;
-  const listed = listedFromPermission(p, "0x");
-  return listed ? (readAgentGrant(listed, executor)?.job ?? null) : null;
-}
-
 /**
  * Reads a listed permission as one of ours: the executor as spender and exactly one job's template, rebuilt from the
  * limits it lists (`jobGrant`), so a grant JAW stored for anything else never counts as an agent.

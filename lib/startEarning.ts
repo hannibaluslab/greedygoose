@@ -7,6 +7,7 @@ import { PROTOCOLS } from "@/lib/protocols/config";
 import { aaveV3PoolAbi } from "@/lib/protocols/abis";
 import { buildAddSavingsCalls } from "@/lib/savings";
 import { TxStop, txKey, type TxPhase, type TxPlan } from "@/lib/tx/prepared";
+import type { ChangePrefix } from "@/lib/tx/plans";
 import { USDC } from "@/lib/tokens/registry";
 
 /*
@@ -120,6 +121,19 @@ export function startEarningPlan(
       return buildStartEarningCalls({ user, walletRaw: fresh < walletRaw ? fresh : walletRaw });
     },
     activity: startEarningActivity(amountRaw),
+  };
+}
+
+/**
+ * Start earning's supply as the first calls of a batch that also grants earning (useAgents `changePlan`): the same
+ * calls, key and activity, and the one savings supply it declares for the user (`saveTo`).
+ */
+export function startEarningPrefix(plan: TxPlan): ChangePrefix {
+  return {
+    key: plan.key,
+    calls: async () => (typeof plan.calls === "function" ? plan.calls() : plan.calls),
+    allow: { saveTo: plan.user },
+    activity: plan.activity,
   };
 }
 

@@ -25,7 +25,6 @@ export function AgentsView({
   protect,
   rebalance,
   live,
-  signed,
   feed,
 }: {
   /** Protect's card (ProtectCard). */
@@ -34,11 +33,6 @@ export function AgentsView({
   rebalance: ReactNode;
   /** Whether the agents can be switched on (AGENTS_LIVE): until then, Coming soon. */
   live: boolean;
-  /**
-   * Whether the Rebalancer's limit is signed: the foot says so once it is (ruling 16). Protect has no amount limit
-   * (2026-10-19), so the limit the foot names is the Rebalancer's.
-   */
-  signed: boolean;
   feed: ReactNode;
 }) {
   return (
@@ -58,8 +52,7 @@ export function AgentsView({
       <p className="m-0 flex items-center justify-center gap-1.5 text-xs text-subtle">
         <PadlockIcon />
         <span>
-          {signed ? "Rebalance’s limit is signed with Face ID." : "You approve each agent with Face ID."} Enforced by{" "}
-          <span className="font-bold text-ink">JAW.id</span>.
+          You approve each agent with Face ID. Enforced by <span className="font-bold text-ink">JAW.id</span>.
         </span>
       </p>
       <TabBar />
@@ -209,11 +202,6 @@ export function AgentRow({
       </div>
       <div className="pointer-events-none relative flex items-center gap-2 border-t border-hairline py-2.5 pl-3 pr-2.5">
         <span className="num min-w-0 grow truncate text-[13px] text-ink-2">{item.line}</span>
-        {item.limit && (
-          <span className="num flex h-[22px] shrink-0 items-center rounded-[11px] bg-pill px-2 text-xs font-semibold text-ink-mid">
-            {item.limit}
-          </span>
-        )}
         <ChevronRight size={16} className="shrink-0 text-subtle" />
       </div>
     </div>

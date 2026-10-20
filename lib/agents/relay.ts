@@ -1,6 +1,7 @@
 import { isAddressEqual, type Hex } from "viem";
 import type { Permission, SpendPeriod, StorePermissionApiResponse } from "@jaw.id/core";
-import { PERIOD_WORD, type JawPermission } from "@/lib/agents/permissions";
+import { PERIOD_WORD } from "@/lib/agents/agentJob";
+import type { JawPermission } from "@/lib/agents/permissions";
 import { RELAY_PERMISSIONS_URL, relayRecord } from "@/lib/agents/oneTapGrant";
 
 /*
@@ -38,6 +39,7 @@ export function relayPermission(p: JawPermission): Permission | null {
   };
 }
 
+const ZERO = "0x0000000000000000000000000000000000000000";
 const sameHex = (a: string, b: string) => {
   try {
     return BigInt(a) === BigInt(b);
@@ -68,7 +70,7 @@ export function sameRecord(r: StorePermissionApiResponse, id: Hex, p: Permission
       (c, i) =>
         sameAddress(c.target, want.calls[i].target) &&
         c.selector.toLowerCase() === want.calls[i].selector.toLowerCase() &&
-        sameAddress(c.checker ?? "0x0000000000000000000000000000000000000000", want.calls[i].checker),
+        sameAddress(c.checker ?? ZERO, want.calls[i].checker ?? ZERO),
     ) &&
     r.spends.length === want.spends.length &&
     r.spends.every(

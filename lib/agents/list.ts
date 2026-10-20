@@ -98,18 +98,10 @@ export type AgentItem = {
   /** The switch: on while the agent runs or is starting. */
   on: boolean;
   line: string;
-  /**
-   * Always null: neither agent has an amount limit, so no row shows one and each switch grants at the executor's
-   * CAP_MAX. The fields stay while the page's rows and switches still read them.
-   */
-  limit: null;
-  limitUsd: null;
 };
 
 type AgentItemsInput = {
   status: Readonly<Record<AgentJob, AgentStatus>>;
-  /** Each job's limit while it has a grant (on or starting), USDC units; null otherwise. Not read: no agent has one. */
-  capRaw: Readonly<Record<AgentJob, bigint | null>>;
   next: Readonly<Record<Agent, Next>>;
 };
 
@@ -124,8 +116,6 @@ export function agentItems(i: AgentItemsInput): AgentItem[] {
       status,
       on: status === "on" || status === "starting",
       line: nextLine(status, i.next[agent]),
-      limit: null,
-      limitUsd: null,
     };
   });
 }

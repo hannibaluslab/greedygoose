@@ -12,8 +12,9 @@ import { PlusIcon } from "@/components/gg/kit/icons";
 import { useAgents } from "@/hooks/useAgents";
 import { useAgentSettings } from "@/hooks/useAgentSettings";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
-import { useManageSave } from "@/hooks/useManageSave";
+import { useManageSave, type MixSave } from "@/hooks/useManageSave";
 import { usePosition } from "@/hooks/usePosition";
+import { useSteadyPrices } from "@/hooks/useSteadyPrices";
 import { usePrepare, type TxPhase, type TxPlan, type TxPrep } from "@/hooks/useTx";
 import { AGENTS_LIVE } from "@/lib/agents/config";
 import {
@@ -28,7 +29,13 @@ import {
   type MixRow,
 } from "@/lib/agents/mix";
 import { stockLimitsRaw } from "@/lib/agents/permissions";
-import { rebalanceSave, tradeLines, type RebalanceTerms, type SavePlan } from "@/lib/agents/rebalanceSettings";
+import {
+  rebalanceAllows,
+  rebalanceSave,
+  tradeLines,
+  type RebalanceTerms,
+  type SavePlan,
+} from "@/lib/agents/rebalanceSettings";
 import { toUsd } from "@/lib/cash";
 import { formatUsdShort, formatUsdTrim } from "@/lib/formatting";
 import type { RebalanceOptions } from "@/lib/agents/rules/rebalance";
@@ -55,6 +62,26 @@ export function RebalanceSettings({ account, onDone }: { account: `0x${string}`;
   const saving = useManageSave(account, agents, onSaved);
   const configured = AGENTS_LIVE;
   const status = agents.status.rebalance;
+  // The grant's stock limits follow Aave's prices held steady, so the batch prepared for a Save isn't rebuilt on every read.
+  const steady = useSteadyPrices(EQUITIES.map((e) => data?.holdings[e.reserveId].priceRaw ?? 0n));
+  /** What a Save sends: the mix when it changed, and a new grant (at CAP_MAX, a limit per stock in the mix) when needed. */
+  const toSave = ({ weights, capRaw, plan }: SaveRequest): MixSave => ({
+    weights,
+    mixChanged: plan.mixChanged,
+    grant:
+      plan.needsGrant && agents.capMaxRaw !== null
+        ? {
+            job: "rebalance",
+            capRaw,
+            limitsRaw: stockLimitsRaw(
+              capRaw,
+              agents.capMaxRaw,
+              steady,
+              weights.map((w) => w > 0),
+            ),
+          }
+        : null,
+  });
 
   if (!data || (configured && (!settings || status === "loading"))) return <RebalanceSettingsSkeleton />;
   const holdings = data.holdings;
@@ -71,30 +98,12 @@ export function RebalanceSettings({ account, onDone }: { account: `0x${string}`;
       running={status === "on" || status === "starting"}
       feeBlocked={isConnected && fee.state === "unsupported"}
       feeLoading={fee.loading}
-      busy={agents.busy || saving.busy}
-      waiting={saving.registering}
+      busy={saving.busy}
       phase={saving.phase}
       error={saving.error}
       prep={saving.prep}
-      settingPlan={saving.settingPlan}
-      onSave={({ weights, capRaw, plan }) =>
-        saving.save({
-          weights,
-          mixChanged: plan.mixChanged,
-          grant: plan.needsGrant
-            ? {
-                job: "rebalance",
-                capRaw,
-                limitsRaw: stockLimitsRaw(
-                  capRaw,
-                  agents.capMaxRaw!,
-                  EQUITIES.map((e) => holdings[e.reserveId].priceRaw),
-                  weights.map((w) => w > 0),
-                ),
-              }
-            : null,
-        })
-      }
+      planFor={(r) => saving.planFor(toSave(r))}
+      onSave={(r) => saving.save(toSave(r))}
     />
   );
 }
@@ -129,11 +138,10 @@ export function RebalanceSettingsView({
   feeBlocked,
   feeLoading,
   busy,
-  waiting = false,
   phase,
   error,
   prep,
-  settingPlan,
+  planFor,
   onSave,
   draft,
 }: {
@@ -151,13 +159,11 @@ export function RebalanceSettingsView({
   feeBlocked: boolean;
   feeLoading: boolean;
   busy: boolean;
-  /** This sheet's grant waits for its batch: Save sends it (useManageSave `registering`). */
-  waiting?: boolean;
   phase: TxPhase;
   error: string | null;
-  /** The write's store (useManageSave's `prep`) and the `setMix` batch for a mix, so Save's batch is ready before the tap. */
+  /** The write's store (useManageSave's `prep`) and the Save's one batch, so it's ready before the tap. */
   prep?: TxPrep;
-  settingPlan?: (weights: readonly number[]) => TxPlan | null;
+  planFor?: (r: SaveRequest) => TxPlan | null;
   onSave: (r: SaveRequest) => void;
   /** Opens on an edit (the dev gallery's states). */
   draft?: MixRow[];
@@ -188,12 +194,10 @@ export function RebalanceSettingsView({
     feeBlocked,
     feeLoading,
     busy,
-    waiting,
   });
-  // Save's only JAW sheet is the mix when it changed and nothing is granted or waiting (else the mix rides in the batch
-  // after the grant): its batch is prepared while the body is idle, so the tap opens it.
-  const mixAlone = plan.mixChanged && !plan.needsGrant && !waiting;
-  const prepared = usePrepare(prep, plan.canSave && !preview && mixAlone && settingPlan ? settingPlan(weights) : null);
+  // Save's one batch (the mix and any new grant) is prepared while the body is idle, so the tap opens it.
+  const request: SaveRequest = { weights, capRaw, plan };
+  const prepared = usePrepare(prep, plan.canSave && !preview && planFor ? planFor(request) : null);
 
   const notInMix = EQUITIES.filter((e) => !rows.some((r) => r.reserveId === e.reserveId));
   const add = (reserveId: number) => {
@@ -253,6 +257,8 @@ export function RebalanceSettingsView({
 
       {configured ? (
         <div className="flex flex-col gap-2 pt-1">
+          {/* JAW's batch sheet shows no words of ours: what the Face ID lets Rebalance do, before the tap. */}
+          {plan.needsGrant && <p className="m-0 px-1 text-[13px] leading-[1.4] text-ink-2">{rebalanceAllows()}</p>}
           <TxError error={error ?? prepared.error} />
           <TxButton
             label={running ? "Save" : "Switch on"}
@@ -262,7 +268,7 @@ export function RebalanceSettingsView({
             note={plan.note}
             disabled={!plan.canSave || busy || prepared.blocked}
             preview={preview}
-            onClick={() => onSave({ weights, capRaw, plan })}
+            onClick={() => onSave(request)}
           />
         </div>
       ) : (

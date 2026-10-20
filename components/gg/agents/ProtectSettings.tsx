@@ -12,6 +12,7 @@ import { useAgentSettings } from "@/hooks/useAgentSettings";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { usePosition } from "@/hooks/usePosition";
 import { useProtectSave } from "@/hooks/useProtectSave";
+import { useSteadyPrices } from "@/hooks/useSteadyPrices";
 import { usePrepare, type TxPhase, type TxPlan, type TxPrep } from "@/hooks/useTx";
 import { AGENTS_LIVE } from "@/lib/agents/config";
 import { PROTECT_LINE } from "@/lib/agents/list";
@@ -89,26 +90,6 @@ export function ProtectSettings({ account, onDone }: { account: `0x${string}`; o
       onSave={saving.save}
     />
   );
-}
-
-/** How far an Aave price may move before a sell grant's stock limits are worked out again: inside its 1% headroom. */
-const STEADY_MOVE = 0.005;
-
-/**
- * Aave's prices as a sell grant's stock limits use them: the ones read when the sheet opened, until any moves more than
- * half a percent. The limits leave 1% under the executor's bound at registration (permissions `stockLimitsRaw`), so a
- * smaller move can't refuse it, and the save's batch, keyed by its terms, stays prepared.
- */
-function useSteadyPrices(pricesRaw: readonly bigint[]): readonly bigint[] {
-  const [held, setHeld] = useState(pricesRaw);
-  const moved = pricesRaw.some((p, i) => {
-    const h = held[i] ?? 0n;
-    if (h === 0n) return p !== 0n;
-    const diff = p > h ? p - h : h - p;
-    return Number(diff) / Number(h) > STEADY_MOVE;
-  });
-  if (moved) setHeld(pricesRaw);
-  return moved ? pricesRaw : held;
 }
 
 function ProtectSettingsSkeleton() {

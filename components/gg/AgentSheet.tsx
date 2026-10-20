@@ -8,13 +8,12 @@ import { ShieldIcon } from "./kit/icons";
 import { FinishBlock, type FinishState } from "./agents/FinishTurningOn";
 import { AGENT_COPY, type AgentItem, type SheetAction } from "@/lib/agents/list";
 import type { AgentStatus } from "@/lib/agents/status";
-import { stepsNote } from "@/lib/formatting";
 
 /*
  * An agent's sheet (Adrian, 2026-10-15): what it does and never does, its state and next move, its own settings (which
- * carry the button that saves it or switches it on, and the Rebalancer's limit; Protect has none), when it stops, what
- * it did, and a way to turn it off. The sheet already says what a change does, so there is no confirm step of ours: Renew and Turn off open JAW's
- * own sheet straight away, once a grant or revoke (a small line says "2 steps" when there are more).
+ * carry the button that saves it or switches it on), when it stops, what it did, and a way to turn it off. The sheet
+ * already says what a change does, so there is no confirm step of ours: Renew and Turn off are each one batch, one
+ * Face ID (useAgents `changePlan`), straight to JAW's sheet.
  */
 
 const PILL: Record<AgentStatus, { text: string; tone: "on" | "neutral" }> = {
@@ -34,7 +33,6 @@ export function AgentSheet({
   live,
   busy,
   error,
-  offSteps,
   stops,
   settings,
   activity,
@@ -50,13 +48,11 @@ export function AgentSheet({
   busy: boolean;
   /** What went wrong with the last change, if it didn't go through. */
   error: string | null;
-  /** How many times turning it off opens JAW's sheet: once for each grant JAW lists. */
-  offSteps: number;
   /** "Oct 15, 2027": when its grant ends, while it has one. */
   stops: string | null;
   /**
-   * Its settings body (Protect's, Rebalance's): its own button to JAW's sheet, which also switches the agent on, and the
-   * Rebalancer's limit, so there is one limit and one such button on screen.
+   * Its settings body (Protect's, Rebalance's): its own button to JAW's sheet, which also switches the agent on, so
+   * there is one such button on screen.
    */
   settings: ReactNode;
   activity: ReactNode;
@@ -123,7 +119,6 @@ export function AgentSheet({
             >
               Turn off
             </button>
-            {stepsNote(offSteps) && <span className="text-xs text-subtle">{stepsNote(offSteps)}</span>}
           </div>
         )}
       </SheetSteps>

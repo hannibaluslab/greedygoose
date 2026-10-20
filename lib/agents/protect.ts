@@ -32,7 +32,7 @@ export type ProtectStep =
   | { kind: "revoke"; job: "sell" };
 
 /** Protect's two jobs: repaying from cash, and selling backing stock. */
-export type ProtectJob = "protect" | "sell";
+type ProtectJob = "protect" | "sell";
 
 /** The stocks a sell grant leaves out (limit 0), by reserve id. */
 export function neverSellOf(limitsRaw: StockLimits | null | undefined): number[] {

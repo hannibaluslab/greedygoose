@@ -10,7 +10,7 @@ import { TrendUpIcon } from "../kit/icons";
 import { useConvert, useConvertQuotes } from "@/hooks/useConvert";
 import { NOT_FAIR, type ConvertQuote } from "@/lib/tx/plans";
 import type { GrantView, useCashSetup } from "@/hooks/useCashSetup";
-import { usePrepare, type TxPhase } from "@/hooks/useTx";
+import { usePrepare, type TxPhase, type TxPlan, type TxPrep } from "@/hooks/useTx";
 import { AGENTS_LIVE } from "@/lib/agents/config";
 import { askAutomatic, arrivedText, type Arrived, type ArrivedView } from "@/lib/cashSetup";
 import { formatCoin, formatUsd, inWords, stepsNote } from "@/lib/formatting";
@@ -34,8 +34,9 @@ const PILL =
 /**
  * Home's card while the wallet's cash isn't earning (board 2g): "Your $100 arrived · Start earning 4.6% on it.", or
  * "$40 isn't earning" beside savings that already earn. Its button moves that cash into savings in one batch on JAW's
- * sheet (useStartEarning), named for the action only; with the Save grant to follow, a small line under it says
- * "2 steps". While JAW's sheet is open, the card adds nothing.
+ * sheet (useStartEarning), named for the action only. When the same Face ID also has new cash earn on its own, one line
+ * says so before the tap (`allows`: JAW's batch sheet shows no words of ours); "2 steps" only for an account JAW hasn't
+ * deployed yet. While JAW's sheet is open, the card adds nothing.
  */
 export function StartEarningCard({
   title,
@@ -44,6 +45,7 @@ export function StartEarningCard({
   checking = false,
   blocked = false,
   steps = 1,
+  allows = null,
   note,
   error,
   preview,
@@ -56,8 +58,10 @@ export function StartEarningCard({
   checking?: boolean;
   /** The batch can't go ahead (`error` says why). */
   blocked?: boolean;
-  /** JAW sheets one tap opens: the batch, and the Save grant when it follows. */
+  /** JAW sheets one tap opens: one batch, two when the Save grant follows on its own. */
   steps?: number;
+  /** What its Face ID lets the app do beyond this cash (earning on new cash); null when nothing. */
+  allows?: string | null;
   /** Why it can't be signed now; null when it can. */
   note?: string | null;
   error: string | null;
@@ -90,6 +94,7 @@ export function StartEarningCard({
           {label}
         </button>
       </div>
+      {allows && <p className="m-0 text-xs leading-[1.4] text-ink-2">{allows}</p>}
       <TxError error={error} />
       {small && <p className={`m-0 text-xs text-subtle ${!preview && !note ? "text-right" : ""}`}>{small}</p>}
     </section>
@@ -193,28 +198,39 @@ export const cashNowText = (sent: readonly ConvertQuote[]) =>
 export function AutomaticStep({
   landed,
   grant,
+  limit,
+  prep,
+  plan = null,
   onYes,
   onNo,
 }: {
   landed: string;
   grant: GrantView;
+  /** The daily limit its one Face ID allows ("$1,000"). */
+  limit: string;
+  /** Its write's store and batch (useCashSetup `automatic`), prepared while it shows; none in the dev gallery. */
+  prep?: TxPrep;
+  plan?: TxPlan | null;
   onYes: () => void;
   onNo: () => void;
 }) {
+  const prepared = usePrepare(prep, plan);
   return (
     <>
       <p className="m-0 text-[13px] text-ink-mid">{landed}</p>
+      {/* JAW's batch sheet shows no words of ours: what the Face ID lets the app do, before the tap. */}
       <p className="m-0 text-[15px] leading-[1.45] text-ink-2">
-        Dollars other than USDC that arrive in your account turn into cash on their own, at 99.5% of face value or
-        better.
+        Dollars other than USDC that arrive in your account turn into cash on their own, up to {limit} a day, at 99.5%
+        of face value or better.
       </p>
-      <TxError error={grant.error} />
+      <TxError error={grant.error ?? prepared.error} />
       <TxButton
         label="Yes"
         size="md"
-        phase={grant.busy ? "signing" : "idle"}
+        phase={grant.phase}
+        checking={prepared.checking}
         note={grant.blocked}
-        disabled={!!grant.blocked}
+        disabled={!!grant.blocked || prepared.blocked}
         preview={grant.preview}
         onClick={onYes}
       />
@@ -328,7 +344,10 @@ function ConvertedSheet({
         {held?.ask ? (
           <AutomaticStep
             landed={cashNowText(held.sent)}
-            grant={setup.automatic}
+            grant={setup.automatic.view}
+            limit={setup.limitText("entry")}
+            prep={setup.automatic.prep}
+            plan={setup.automatic.plan}
             onYes={() =>
               setup.convertAutomatically(() => {
                 toast.success("Done. Next time it’s automatic");

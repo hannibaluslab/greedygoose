@@ -15,7 +15,7 @@ const picks = new Map<string, Pick>();
  * A new grant starts this far behind the device's clock, so a phone a few minutes fast doesn't replace a running grant
  * with one that can't run yet (the executor skips a grant before its start).
  */
-export const START_BEHIND_SEC = 300;
+const START_BEHIND_SEC = 300;
 
 /**
  * The start and salt for `job`'s grant on `terms`: the one picked before, else a new one. Its start is never under

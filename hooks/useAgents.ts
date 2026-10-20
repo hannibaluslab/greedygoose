@@ -372,7 +372,12 @@ export function useAgents(account: `0x${string}`) {
     for (const { id, p } of todo) {
       const struct = contractPermission(p);
       const [approved, isRevoked] = await Promise.all([
-        client.readContract({ address: MANAGER, abi: permissionManagerAbi, functionName: "isApproved", args: [struct] }),
+        client.readContract({
+          address: MANAGER,
+          abi: permissionManagerAbi,
+          functionName: "isApproved",
+          args: [struct],
+        }),
         client.readContract({ address: MANAGER, abi: permissionManagerAbi, functionName: "isRevoked", args: [struct] }),
       ]).catch(() => [false, true]);
       if (!approved || isRevoked || revoked.has(id.toLowerCase())) continue;

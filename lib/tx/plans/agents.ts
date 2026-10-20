@@ -55,7 +55,7 @@ export type ChangePrefix = {
 };
 
 /** What a change's batch reads on Base while it's built, and what runs once it lands. */
-export type ChangeDeps = {
+type ChangeDeps = {
   /** addOwnerAddress(manager) when the manager doesn't own the account yet (oneTapGrant `managerOwnerCalls`). */
   ownerCalls: () => Promise<Call[]>;
   /** Records the change off-chain once it landed (JAW's list): never sends anything again. */
