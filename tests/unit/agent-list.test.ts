@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   AGENT_COPY,
   AGENTS,
-  agentCards,
   agentItems,
   agentOf,
   agentParam,
@@ -10,8 +9,8 @@ import {
   nextLine,
   NOT_LIVE,
   PROTECT_RULE,
+  protectWarnings,
   TAB_JOBS,
-  type CardsInput,
   type Next,
 } from "@/lib/agents/list";
 import { JOBS, type AgentJob } from "@/lib/agents/permissions";
@@ -28,8 +27,6 @@ const none = Object.fromEntries(JOBS.map((j) => [j, null])) as Record<AgentJob, 
 const idle = (idle: string): Next => ({ idle });
 const repays: Next = { will: "repays $40 from your cash", would: "Would repay $40 from your cash" };
 const nexts = { protect: repays, rebalance: idle("No mix yet") };
-const NOW = 1_760_000_000;
-const DAY = 86_400;
 
 /** Every word a person can read on the tab and its sheets, for the word checks. */
 const ON_SCREEN = /borrow|lock|permission|executor|upkeep|registry|spender|saving/i;
@@ -100,154 +97,36 @@ describe("the two agents", () => {
   });
 });
 
-describe("agentCards: only when something needs the user", () => {
-  const calm: CardsInput = {
-    nowSec: NOW,
-    act: null,
-    weekend: null,
-    status: jobs("on"),
-    ends: {
-      save: NOW + 200 * DAY,
-      protect: NOW + 200 * DAY,
-      sell: NOW + 200 * DAY,
-      rebalance: NOW + 200 * DAY,
-      entry: NOW + 200 * DAY,
-    },
-    stopped: none,
-    fails: 0,
-    cooldownUntil: 0,
-    finish: [],
-  };
-
-  it("shows nothing when all is fine", () => {
-    expect(agentCards(calm)).toEqual([]);
+describe("protectWarnings: the credit's warnings, with Top up and Repay, in Protect's sheet", () => {
+  it("says nothing when all is fine", () => {
+    expect(protectWarnings({ act: null, weekend: null })).toEqual([]);
   });
 
-  it("warns in Act, with Top up and Repay: a warning only, saying whether Protect is on to step in at 1.03", () => {
-    const [c] = agentCards({ ...calm, act: { addUsd: 120, protectOn: true } });
-    expect(c).toMatchObject({
+  it("warns in Act, saying whether Protect is on to step in at 1.03, then the weekend", () => {
+    const [act, weekend] = protectWarnings({
+      act: { addUsd: 120, protectOn: true },
+      weekend: { addUsd: 129, dropPct: 15, when: "at 8:00 PM" },
+    });
+    expect(act).toMatchObject({
       key: "act",
       tone: "act",
-      agent: "Protect",
       text: "Your credit is in Act.",
       sub: "Protect steps in at 1.03. Repaying $120 now brings it back to Watch.",
     });
-    expect(c.actions).toEqual([
-      { kind: "sheet", label: "Top up", sheet: "top-up" },
-      { kind: "sheet", label: "Repay", sheet: "repay" },
-    ]);
-    expect(agentCards({ ...calm, act: { addUsd: 5, protectOn: false } })[0].sub).toBe(
-      "Protect is off. Repaying $5 now brings it back to Watch.",
-    );
-  });
-
-  it("says the weekend card against Aave's line, with Repay as its main action: Weekend Shield moves nothing now", () => {
-    const [c] = agentCards({ ...calm, weekend: { addUsd: 129, dropPct: 15, when: "at 8:00 PM" } });
-    expect(c).toMatchObject({
+    expect(weekend).toMatchObject({
       key: "weekend",
       tone: "watch",
-      agent: "Protect",
       text: "Prices pause at 8:00 PM. If stocks reopen 15% lower, Aave can sell part of them.",
       sub: "Repaying $129 now keeps your credit over Aave’s line.",
     });
-    expect(c.actions).toEqual([
-      { kind: "sheet", label: "Top up", sheet: "top-up" },
-      { kind: "sheet", label: "Repay", sheet: "repay" },
-    ]);
-  });
-
-  it("offers Finish for grants the executor doesn't run yet, each named once, right after the warnings", () => {
-    const [act, c] = agentCards({
-      ...calm,
-      act: { addUsd: 5, protectOn: true },
-      fails: 3,
-      finish: ["protect", "sell"],
-    });
-    expect(act.key).toBe("act");
-    expect(c).toEqual({
-      key: "finish",
-      tone: "plain",
-      agent: "Protect",
-      text: "Protect isn’t running yet.",
-      sub: "One more Face ID finishes turning it on.",
-      actions: [{ kind: "finish" }],
-    });
-    // Earning runs under the hood (D20), but a grant of it left unregistered has nowhere else to finish.
-    expect(agentCards({ ...calm, finish: ["save", "rebalance"] })[0]).toMatchObject({
-      agent: "Agents",
-      text: "Earning and Rebalance aren’t running yet.",
-      sub: "One more Face ID finishes turning them on.",
-    });
-    expect(agentCards({ ...calm, finish: ["save", "protect", "entry"] })[0].text).toBe(
-      "Earning, Protect and Turning other dollars into cash aren’t running yet.",
+    for (const c of [act, weekend])
+      expect(c.actions).toEqual([
+        { kind: "sheet", label: "Top up", sheet: "top-up" },
+        { kind: "sheet", label: "Repay", sheet: "repay" },
+      ]);
+    expect(protectWarnings({ act: { addUsd: 5, protectOn: false }, weekend: null })[0].sub).toBe(
+      "Protect is off. Repaying $5 now brings it back to Watch.",
     );
-  });
-
-  it("offers Renew for an agent that stopped on its own, and not once it's back on", () => {
-    const stopped = {
-      ...calm,
-      status: { ...jobs("on"), rebalance: "off" as const },
-      stopped: { ...none, rebalance: NOW - 2 * DAY },
-    };
-    const [c] = agentCards(stopped);
-    expect(c.text).toMatch(/^Rebalance stopped on \w{3} \d{1,2}\. Switch it back on\?$/);
-    expect(c.actions).toEqual([{ kind: "renew", agent: "rebalance", jobs: ["rebalance"] }]);
-    expect(agentCards({ ...stopped, status: jobs("on") })).toEqual([]);
-  });
-
-  it("has no card for earning or other dollars: those grants are asked on Home (D20)", () => {
-    const quiet = {
-      ...calm,
-      status: { ...jobs("on"), save: "off" as const, entry: "off" as const },
-      stopped: { ...none, save: NOW - DAY, entry: NOW - DAY },
-    };
-    expect(agentCards({ ...quiet, ends: { ...calm.ends, save: NOW + DAY, entry: NOW + DAY } })).toEqual([]);
-  });
-
-  it("warns a week before a grant ends, naming the agent once for both of Protect's", () => {
-    const soon = { ...calm, ends: { ...calm.ends, protect: NOW + 5 * DAY, sell: NOW + 6 * DAY } };
-    const [c] = agentCards(soon);
-    expect(c.text).toMatch(/^Protect stops on \w{3} \d{1,2}\.$/);
-    expect(c.actions).toEqual([{ kind: "renew", agent: "protect", jobs: ["protect", "sell"] }]);
-    expect(agentCards({ ...calm, ends: { ...calm.ends, rebalance: NOW + 8 * DAY } })).toEqual([]);
-  });
-
-  it("says when runs keep failing, from three in a row", () => {
-    expect(agentCards({ ...calm, fails: 2 })).toEqual([]);
-    const [c] = agentCards({ ...calm, fails: 3, cooldownUntil: NOW + 1200 });
-    expect(c.text).toBe("Your agents’ last 3 runs didn’t go through. Nothing moved.");
-    expect(c.sub).toMatch(
-      /^They try again at \d{1,2}:\d{2} [AP]M\. At 8 in a row they stop, and you can switch them back on here\.$/,
-    );
-  });
-
-  it("says nothing of failed runs while neither agent runs: they were earning's or converting's (D20)", () => {
-    const cashOnly = {
-      ...calm,
-      status: { ...jobs("off"), save: "on" as const, entry: "on" as const },
-      ends: { ...calm.ends, protect: null, sell: null, rebalance: null },
-    };
-    expect(agentCards({ ...cashOnly, fails: 5 })).toEqual([]);
-  });
-
-  it("puts the warnings first, then failures, stopped and stopping soon", () => {
-    const everything: CardsInput = {
-      ...calm,
-      act: { addUsd: 1, protectOn: true },
-      weekend: { addUsd: 1, dropPct: 15, when: "at 8:00 PM" },
-      status: { ...jobs("on"), rebalance: "off" },
-      ends: { ...calm.ends, rebalance: null, protect: NOW + DAY },
-      stopped: { ...none, rebalance: NOW - DAY },
-      fails: 4,
-    };
-    expect(agentCards(everything).map((c) => c.key)).toEqual([
-      "act",
-      "weekend",
-      "fails",
-      "stopped-rebalance",
-      "expiring-protect",
-    ]);
-    for (const c of agentCards(everything)) expect(`${c.text} ${c.sub ?? ""}`).not.toMatch(ON_SCREEN);
   });
 });
 

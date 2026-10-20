@@ -5,6 +5,7 @@ import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
 import { AgentPill } from "./Status";
 import { TxError } from "./TxUi";
 import { ShieldIcon } from "./kit/icons";
+import { FinishBlock, type FinishState } from "./agents/FinishTurningOn";
 import { AGENT_COPY, type AgentItem, type SheetAction } from "@/lib/agents/list";
 import type { AgentStatus } from "@/lib/agents/status";
 import { stepsNote } from "@/lib/formatting";
@@ -38,6 +39,8 @@ export function AgentSheet({
   settings,
   activity,
   onAction,
+  warnings,
+  finish,
 }: {
   open: boolean;
   onClose: () => void;
@@ -58,6 +61,13 @@ export function AgentSheet({
   settings: ReactNode;
   activity: ReactNode;
   onAction: (a: SheetAction) => void;
+  /** Warnings about the credit, each with Top up and Repay (Protect's sheet: Act, the weekend). */
+  warnings?: ReactNode;
+  /**
+   * While JAW granted it and the executor doesn't run it yet: the batch that registers it (useTx with useAgents'
+   * `finishPlan`), sent from here now the overview has no cards.
+   */
+  finish?: FinishState;
 }) {
   const copy = AGENT_COPY[item.agent];
   const on = item.status === "on" || item.status === "starting";
@@ -90,6 +100,9 @@ export function AgentSheet({
             </p>
           )}
         </div>
+
+        {warnings}
+        {finish && <FinishBlock finish={finish} disabled={!live || busy} />}
 
         {settings}
 

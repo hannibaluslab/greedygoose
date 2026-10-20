@@ -46,7 +46,7 @@ export function StatusChange({ from, to }: { from: Status; to: Status }) {
 }
 
 /** The bar's segments, in flex units: Safe, Watch, Act. */
-const BAR = { safe: 5, watch: 2, act: 1.4 } as const;
+export const BAR = { safe: 5, watch: 2, act: 1.4 } as const;
 
 /**
  * Where a health factor sits along the bar, 0 (left) to 1 (right). Each band's range fills its own segment, so the

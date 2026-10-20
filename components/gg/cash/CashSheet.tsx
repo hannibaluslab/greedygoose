@@ -5,6 +5,7 @@ import { isAddressEqual } from "viem";
 import { useAccount } from "wagmi";
 import { toast } from "sonner";
 import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
+import { FinishTurningOn } from "@/components/gg/agents/FinishTurningOn";
 import { Button } from "../kit/Button";
 import { CashActivity } from "./CashActivity";
 import { EarnCard, EarnStep } from "./EarnWithStocks";
@@ -182,6 +183,7 @@ export function CashStep({
   onEarn,
   activity,
   onLeave,
+  finish,
 }: {
   data: PositionData;
   arrived: ArrivedView;
@@ -193,10 +195,13 @@ export function CashStep({
   onEarn: () => void;
   activity: ReactNode;
   onLeave?: () => void;
+  /** Earning's (or converting's) grant waiting for its registration: its Finish (FinishTurningOn). */
+  finish?: ReactNode;
 }) {
   return (
     <>
       <CashAmount data={data} arrived={arrived} split={split} />
+      {finish}
       {card ?? <EarnCard offer={offer} onOpen={onEarn} />}
       {activity}
       <CashFooter owes={data.debtUsd > 0} onLeave={onLeave} />
@@ -333,6 +338,25 @@ export function CashSheet({
             onEarn={() => go("earn")}
             activity={open && <CashActivity account={account} />}
             onLeave={close}
+            finish={
+              open && (
+                <FinishTurningOn
+                  account={account}
+                  jobs={["save", "entry"]}
+                  copy={(waiting) =>
+                    waiting.includes("save")
+                      ? {
+                          title: "One more Face ID starts earning.",
+                          sub: "Your cash is ready to spend. It earns once this is done.",
+                        }
+                      : {
+                          title: "One more Face ID turns other dollars into cash.",
+                          sub: "Until then, they stay as they are.",
+                        }
+                  }
+                />
+              )
+            }
           />
         )}
       </SheetSteps>

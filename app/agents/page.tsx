@@ -10,7 +10,8 @@ import { FeedCard, FeedDays } from "@/components/gg/activity/Activity";
 import { AgentSheet } from "@/components/gg/AgentSheet";
 import { ProtectSettings } from "@/components/gg/agents/ProtectSettings";
 import { RebalanceSettings } from "@/components/gg/agents/RebalanceSettings";
-import { AgentRow, AgentsFeed, AgentsView, AttentionCard, MixBar, TurnOffAll } from "@/components/gg/Agents";
+import { AgentRow, AgentsFeed, AgentsView, AttentionCard, MixBar } from "@/components/gg/Agents";
+import { ProtectCardSkeleton, ProtectCardView } from "@/components/gg/agents/ProtectCard";
 import { useAgentFeed } from "@/hooks/useAgentFeed";
 import { useActWarning } from "@/hooks/useActWarning";
 import { useAgentRun, type AgentStep } from "@/hooks/useAgentRun";
@@ -27,12 +28,11 @@ import {
   AGENT_JOBS,
   AGENT_NAME,
   AGENTS,
-  agentCards,
   agentItems,
   agentParam,
   agentStatus,
   longDateText,
-  TAB_JOBS,
+  protectWarnings,
   type Agent,
   type AgentItem,
   type Next,
@@ -41,6 +41,7 @@ import {
 import { rebalanceOptions } from "@/lib/agents/mix";
 import { agentNexts, defaultNumbers, pricesHeldAt, weekendCard } from "@/lib/agents/next";
 import { hasLimit, JOBS, limitRaw, startCapRaw, stockLimitsRaw, type AgentJob } from "@/lib/agents/permissions";
+import { protectCard } from "@/lib/agents/protectCard";
 import { offSteps } from "@/lib/agents/status";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
@@ -53,6 +54,7 @@ const byJob = <T,>(f: (job: AgentJob) => T) =>
 const LOADING = Object.fromEntries(AGENTS.map((a) => [a, { idle: "…" }])) as Record<Agent, Next>;
 
 const PREVIEW = "Preview mode. Sign in to do this.";
+const SHORT_DATE = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
 
 /** A job or an agent that runs: on, or starting (its grant is in JAW's list, not yet in the registry). */
 const runs = (s: string) => s === "on" || s === "starting";
@@ -146,23 +148,46 @@ function Agents({ address }: { address: `0x${string}` }) {
         })
       : null;
 
-  const cards = agentCards({
+  // Off without the user turning it off: its grant ran out, or the executor switched it off.
+  const stoppedAt = (job: AgentJob) => {
+    const last = feed.switched[job];
+    if (agents.status[job] !== "off" || last?.byUser) return null;
+    const at = Math.max(agents.ranOut[job] ?? 0, last && !last.on ? last.at : 0);
+    return at > 0 ? at : null;
+  };
+  // Protect's card carries what the warning cards used to say; their Top up and Repay live in its sheet. It reads
+  // Protect as one agent, both its jobs, as its sheet, the Act warning and the weekend card do.
+  const protectEnds = AGENT_JOBS.protect.flatMap((j) => (agents.terms[j] ? [agents.terms[j].end] : []));
+  const protectStops = AGENT_JOBS.protect.flatMap((j) => stoppedAt(j) ?? []);
+  const protect = protectCard({
+    live,
     nowSec,
-    act: actCard,
-    weekend,
-    status: agents.status,
-    ends: byJob((job) => agents.terms[job]?.end ?? null),
-    // Off without the user turning it off: its grant ran out, or the executor switched it off.
-    stopped: byJob((job) => {
-      const last = feed.switched[job];
-      if (agents.status[job] !== "off" || last?.byUser) return null;
-      const at = Math.max(agents.ranOut[job] ?? 0, last && !last.on ? last.at : 0);
-      return at > 0 ? at : null;
-    }),
+    status: agentStatus("protect", agents.status),
+    waiting: (["protect", "sell"] as const).find((j) => agents.toFinish.includes(j)) ?? null,
+    hf: position?.healthFactor ?? null,
+    rescuing: settings?.rescuing === true,
     fails: agents.fails,
     cooldownUntil: agents.cooldownUntil,
-    finish: live ? agents.toFinish : [],
+    stoppedAt: protectRuns || protectStops.length === 0 ? null : Math.max(...protectStops),
+    endsAt: protectEnds.length > 0 ? Math.min(...protectEnds) : null,
+    act: actCard,
+    weekend,
+    next: next.protect,
+    triggerHf: numbers.triggerHf,
+    targetHf: numbers.targetHf,
   });
+  const warnings = protectWarnings({ act: actCard, weekend });
+  /**
+   * The Rebalancer's row line, until its own card lands: failed runs while Protect's card doesn't say so (Protect off),
+   * and a stop on its own, which the old tab's cards said.
+   */
+  const rebalanceStop = stoppedAt("rebalance");
+  const rebalanceLine = (line: string) =>
+    rebalanceStop !== null
+      ? `Stopped on ${SHORT_DATE.format(rebalanceStop * 1000)}`
+      : !protectRuns && runs(agents.status.rebalance) && agents.fails >= 3
+        ? `Its last ${agents.fails} runs didn’t go through. Nothing moved.`
+        : line;
 
   /** The cap an agent's switch grants: the Rebalancer's limit on its row; Protect's CAP_MAX (no amount limit). */
   const switchCap = (agent: Agent) => {
@@ -291,44 +316,50 @@ function Agents({ address }: { address: `0x${string}` }) {
           </FeedCard>
         }
         onAction={(action) => act(agent, action)}
+        warnings={
+          agent === "protect" && warnings.length > 0
+            ? warnings.map((c) => <AttentionCard key={c.key} card={c} onLeave={() => setShown(false)} />)
+            : undefined
+        }
+        finish={
+          live && AGENT_JOBS[agent].some((j) => agents.toFinish.includes(j))
+            ? {
+                onFinish: () => void finish.sign(),
+                busy: finish.busy,
+                waiting: finish.checking || finish.blocked,
+                error: finish.error,
+              }
+            : undefined
+        }
       />
     );
   }
-
-  // "Turn off all agents" is Protect and Rebalance: earning and converting other dollars stay on (D20).
-  const allOff = offFor(TAB_JOBS);
-  const allOffIds = agents.faceIdsOff(TAB_JOBS);
 
   return (
     <>
       <AgentsView
         live={live}
         signed={!!agents.terms.rebalance}
-        cards={cards.map((c) => (
-          <AttentionCard
-            key={c.key}
-            card={c}
-            disabled={runner.running}
-            onRenew={(agent, jobs) => act(agent, "renew", jobs)}
-            finish={{
-              onFinish: () => void finish.sign(),
-              busy: finish.busy,
-              waiting: finish.checking || finish.blocked,
-              error: finish.error,
-            }}
-          />
-        ))}
-        rows={items.map((item: AgentItem) => (
-          <AgentRow
-            key={item.agent}
-            item={item}
-            live={live}
-            switchable={live && item.status !== "loading" && !runner.running}
-            onOpen={() => openSheet(item.agent)}
-            onSwitch={(on) => onSwitch(item.agent, on)}
-            extra={item.agent === "rebalance" && mixSet && settings ? <MixBar mixBps={settings.mixBps} /> : undefined}
-          />
-        ))}
+        protect={
+          !position || (live && agents.status.protect === "loading") ? (
+            <ProtectCardSkeleton onOpen={() => openSheet("protect")} />
+          ) : (
+            <ProtectCardView model={protect} onOpen={() => openSheet("protect")} />
+          )
+        }
+        rebalance={items
+          .filter((item: AgentItem) => item.agent === "rebalance")
+          .map((item: AgentItem) => (
+            <AgentRow
+              key={item.agent}
+              item={{ ...item, line: rebalanceLine(item.line) }}
+              live={live}
+              switchable={live && item.status !== "loading" && !runner.running}
+              onOpen={() => openSheet(item.agent)}
+              onSwitch={(on) => onSwitch(item.agent, on)}
+              extra={mixSet && settings ? <MixBar mixBps={settings.mixBps} /> : undefined}
+            />
+          ))}
         feed={
           <AgentsFeed
             empty="Nothing yet. What your agents do, and why, shows up here."
@@ -340,17 +371,6 @@ function Agents({ address }: { address: `0x${string}` }) {
             more={feed.more}
             onShowEarlier={feed.showEarlier}
           />
-        }
-        turnOffAll={
-          live &&
-          // While one is on: with the list unreadable it stays, and its tap says why nothing can be turned off.
-          allOff.on && (
-            <TurnOffAll
-              steps={allOffIds}
-              disabled={agents.busy || runner.running}
-              onClick={() => start("all:off", null, allOff.steps, "Your agents are off", allOff.error)}
-            />
-          )
         }
       />
       {sheet}

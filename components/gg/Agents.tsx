@@ -9,28 +9,29 @@ import { stockColor } from "./kit/StockAvatar";
 import { Switch } from "./kit/Switch";
 import { TabBar } from "./TabBar";
 import { ChevronRight, PadlockIcon, PlugIcon, PlusIcon, RepeatIcon } from "./kit/icons";
-import { NOT_LIVE, type Agent, type AgentCard, type AgentItem, type CardAction } from "@/lib/agents/list";
-import type { AgentJob } from "@/lib/agents/permissions";
-import { stepsNote } from "@/lib/formatting";
+import { NOT_LIVE, type AgentCard, type AgentItem, type CardAction } from "@/lib/agents/list";
 import { EQUITIES } from "@/lib/tokens/registry";
 import { RetryButton } from "./kit/RetryButton";
 
 /*
- * The Agents tab (Adrian, 2026-10-15): cards only when something needs the user, the two agents with their
- * switches, what they did and why, and one way to turn them all off. Plain values in, so the dev gallery draws every
- * state.
+ * The Agents tab, an overview (Adrian, 2026-10-20: "the agent page is the entry page for all type of agents we have,
+ * each one opens a dedicated sheet with all the info needed… if you want to see more or take action you need to open
+ * the sheet"): one card per agent, the agents to come, and what they did and why. No warnings stacked on top and no
+ * switches: Protect's card carries its own state, and every action lives in the agent's sheet. Plain values in, so the
+ * dev gallery draws every state.
  */
 
 export function AgentsView({
-  cards,
-  rows,
+  protect,
+  rebalance,
   live,
   signed,
   feed,
-  turnOffAll,
 }: {
-  cards: ReactNode;
-  rows: ReactNode;
+  /** Protect's card (ProtectCard). */
+  protect: ReactNode;
+  /** The Rebalancer's. */
+  rebalance: ReactNode;
   /** Whether the agents can be switched on (AGENTS_LIVE): until then, Coming soon. */
   live: boolean;
   /**
@@ -39,15 +40,13 @@ export function AgentsView({
    */
   signed: boolean;
   feed: ReactNode;
-  /** "Turn off all agents", only while one is on (ruling 18). */
-  turnOffAll: ReactNode;
 }) {
   return (
     <div className="relative flex min-h-dvh flex-col gap-3 px-5 pt-[calc(env(safe-area-inset-top)+8px)] leading-[normal]">
       <TabHeader title="Agents" back="/home" />
-      {cards}
-      <section aria-label="My agents" className="flex flex-col gap-2">
-        {rows}
+      <section aria-label="My agents" className="flex flex-col gap-3">
+        {protect}
+        {rebalance}
         {!live && <p className="m-0 px-1 text-xs leading-[1.4] text-subtle">{NOT_LIVE}</p>}
       </section>
       <section aria-label="Coming soon" className="flex flex-col gap-2">
@@ -56,7 +55,6 @@ export function AgentsView({
         ))}
       </section>
       {feed}
-      {turnOffAll}
       <p className="m-0 flex items-center justify-center gap-1.5 text-xs text-subtle">
         <PadlockIcon />
         <span>
@@ -72,53 +70,27 @@ export function AgentsView({
 const TONE: Record<AgentCard["tone"], string> = {
   watch: "bg-watch-soft",
   act: "bg-neg-soft",
-  plain: "bg-card shadow-card-elev",
 };
 
-/** The Finish card's write (useTx with useAgents' `finishPlan`): what its button waits on, and what stopped it. */
-type FinishState = { onFinish: () => void; busy: boolean; waiting: boolean; error: string | null };
-
 /**
- * A card that needs the user: one sentence, and one or two ways to act on it. Add cash and Repay open their sheets over
- * the tab; Renew and Finish open JAW's own sheet.
+ * A warning in Protect's sheet: one sentence, and Top up and Repay. Their sheets open once the sheet it sits in has
+ * closed (`onLeave`), as every sheet hops to a money sheet.
  */
-export function AttentionCard({
-  card,
-  onRenew,
-  finish,
-  disabled = false,
-}: {
-  card: AgentCard;
-  onRenew: (agent: Agent, jobs: AgentJob[]) => void;
-  /** The Finish card's write; its button stays off without one (the dev gallery). */
-  finish?: FinishState;
-  /** A change is on JAW's sheet already. */
-  disabled?: boolean;
-}) {
-  const urgent = card.tone !== "plain";
+export function AttentionCard({ card, onLeave }: { card: AgentCard; onLeave?: () => void }) {
   const money = useMoneySheets();
-  const button = (a: CardAction, i: number) =>
-    a.kind === "sheet" ? (
-      <Button
-        key={a.label}
-        variant={i === 0 ? "dark" : "primary"}
-        onClick={a.sheet === "top-up" ? money.topUp : () => money.repay()}
-      >
-        {a.label}
-      </Button>
-    ) : (
-      <button
-        key={a.kind}
-        type="button"
-        disabled={disabled || (a.kind === "finish" && (!finish || finish.busy || finish.waiting))}
-        onClick={() => (a.kind === "renew" ? onRenew(a.agent, a.jobs) : finish?.onFinish())}
-        className="flex h-9 shrink-0 items-center rounded-[18px] bg-ink px-4 text-sm font-semibold text-on-ink disabled:opacity-45"
-      >
-        {a.kind === "renew" ? "Renew" : finish?.busy ? "Finishing…" : "Finish"}
-      </button>
-    );
-  const single = card.actions.length === 1 && card.actions[0].kind !== "sheet";
-  const error = card.actions.some((a) => a.kind === "finish") ? finish?.error : null;
+  const button = (a: CardAction, i: number) => (
+    <Button
+      key={a.label}
+      variant={i === 0 ? "dark" : "primary"}
+      onClick={() => {
+        onLeave?.();
+        if (a.sheet === "top-up") money.topUp();
+        else money.repay();
+      }}
+    >
+      {a.label}
+    </Button>
+  );
   return (
     <section
       aria-label={`From ${card.agent}`}
@@ -127,19 +99,13 @@ export function AttentionCard({
       <div className="flex items-center gap-2.5">
         <AgentMark agent={card.agent} size={32} />
         <div className="flex min-w-0 grow flex-col gap-0.5">
-          <p role={urgent ? "alert" : undefined} className="m-0 text-[15px] font-semibold leading-[1.3]">
+          <p role="alert" className="m-0 text-[15px] font-semibold leading-[1.3]">
             {card.text}
           </p>
           {card.sub && <p className="m-0 text-[13px] leading-[1.35] text-ink-2">{card.sub}</p>}
-          {error && (
-            <p role="alert" className="m-0 text-[13px] leading-[1.35] text-ink-2">
-              {error}
-            </p>
-          )}
         </div>
-        {single && button(card.actions[0], 0)}
       </div>
-      {!single && card.actions.length > 0 && <div className="grid grid-cols-2 gap-2">{card.actions.map(button)}</div>}
+      {card.actions.length > 0 && <div className="grid grid-cols-2 gap-2">{card.actions.map(button)}</div>}
     </section>
   );
 }
@@ -250,27 +216,6 @@ export function AgentRow({
         )}
         <ChevronRight size={16} className="shrink-0 text-subtle" />
       </div>
-    </div>
-  );
-}
-
-/**
- * "Turn off all agents", shown only while one is on (ruling 18): straight to JAW's own sheet, once for each grant that's
- * on ("3 steps").
- */
-export function TurnOffAll({ steps, disabled, onClick }: { steps: number; disabled: boolean; onClick: () => void }) {
-  const note = stepsNote(steps);
-  return (
-    <div className="flex flex-col items-center gap-0.5">
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={onClick}
-        className="flex h-11 items-center px-4 text-sm font-semibold text-act disabled:text-ink-mid disabled:opacity-60"
-      >
-        Turn off all agents
-      </button>
-      {note && <span className="text-xs text-subtle">{note}</span>}
     </div>
   );
 }
