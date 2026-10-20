@@ -2,50 +2,47 @@
 
 import { useMemo } from "react";
 import { zeroAddress } from "viem";
-import { useReadContracts } from "wagmi";
+import { useReadContract } from "wagmi";
 import { useAgentSettings } from "@/hooks/useAgentSettings";
 import { useNowSec } from "@/hooks/useNowSec";
 import { usePosition } from "@/hooks/usePosition";
 import { CHAIN_ID } from "@/lib/chain";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
-import { readTopUps, type TopUpsAnswer, type TopUpsRead } from "@/lib/agents/topUps";
+import { readTopUps, topUpsAnswerOf, topUpsReverted, type TopUpsAnswer, type TopUpsRead } from "@/lib/agents/topUps";
 
 /** What an executor that doesn't count top-ups (or no executor at all) reads as. */
 const NONE: TopUpsAnswer = { status: "failure" };
 
 /**
- * GooseExecutor's `topUps(account)`, allowed to fail: the executor live today has no such getter, so its revert reads
- * as "not available" and every screen keeps working on it. Without an executor, not available either. Undefined
- * while it loads or Base can't be read.
+ * GooseExecutor's `topUps(account)`. The executor live today has no such getter: its revert reads as "not available"
+ * and every screen keeps working on it (a revert is the answer, so it isn't tried again). Without an executor, not
+ * available either. Undefined until Base answers: Base not answering (a 429, a dropped call) is never read as a revert
+ * (`topUpsAnswerOf`), and a refetch that fails keeps the last answer.
  */
-function useTopUpsAnswer(account: `0x${string}`): { answer: TopUpsAnswer | undefined; loading: boolean } {
+function useTopUpsAnswer(account: `0x${string}`): TopUpsAnswer | undefined {
   const executor = GOOSE_EXECUTOR;
-  const q = useReadContracts({
-    contracts: [
-      {
-        address: executor ?? zeroAddress,
-        abi: gooseExecutorAbi,
-        functionName: "topUps",
-        args: [account],
-        chainId: CHAIN_ID,
-      },
-    ],
-    allowFailure: true,
-    query: { enabled: !!executor, refetchInterval: 20_000 },
+  const q = useReadContract({
+    address: executor ?? zeroAddress,
+    abi: gooseExecutorAbi,
+    functionName: "topUps",
+    args: [account],
+    chainId: CHAIN_ID,
+    query: { enabled: !!executor, refetchInterval: 20_000, retry: (n, e) => n < 3 && !topUpsReverted(e) },
   });
-  if (!executor) return { answer: NONE, loading: false };
-  return { answer: q.data?.[0] as TopUpsAnswer | undefined, loading: q.isPending };
+  const answer = useMemo(() => topUpsAnswerOf(q.data, q.error), [q.data, q.error]);
+  return executor ? answer : NONE;
 }
 
 /**
  * The account's own top-ups switch and Keep as cash (USDC units) as the executor has them, for a turn-off's batch:
- * undefined while it's first read, null on an executor that doesn't count top-ups or when Base can't be read.
+ * undefined until Base answers (a turn-off waits rather than leave top-ups on), null on an executor that doesn't count
+ * top-ups.
  */
 export function useTopUpsSwitch(account: `0x${string}`): { on: boolean; keepRaw: bigint } | null | undefined {
-  const { answer, loading } = useTopUpsAnswer(account);
-  if (loading) return undefined;
-  if (answer?.status !== "success") return null;
+  const answer = useTopUpsAnswer(account);
+  if (!answer) return undefined;
+  if (answer.status !== "success") return null;
   const [on, , keep] = answer.result;
   return { on, keepRaw: BigInt(keep) };
 }
@@ -56,7 +53,7 @@ export function useTopUpsSwitch(account: `0x${string}`): { on: boolean; keepRaw:
  * Null until the reads are in.
  */
 export function useTopUps(account: `0x${string}`): TopUpsRead | null {
-  const { answer } = useTopUpsAnswer(account);
+  const answer = useTopUpsAnswer(account);
   const { data: position } = usePosition(account);
   const settings = useAgentSettings(account);
   const nowSec = useNowSec();

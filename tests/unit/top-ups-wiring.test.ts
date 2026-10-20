@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { decodeFunctionData, encodeFunctionData, maxUint160, toFunctionSelector } from "viem";
+import {
+  ContractFunctionExecutionError,
+  ContractFunctionRevertedError,
+  HttpRequestError,
+  decodeFunctionData,
+  encodeFunctionData,
+  maxUint160,
+  toFunctionSelector,
+} from "viem";
 
 // The app's executor, before anything reads lib/agents/config.ts: the allowlist only lets it through once it's set.
 const EXECUTOR = vi.hoisted(() => {
@@ -16,7 +24,15 @@ import { GRANT_SECONDS, jobGrant, startCapRaw, stockLimitsRaw } from "@/lib/agen
 import { rebalanceChange, type MixSave } from "@/lib/agents/rebalanceSettings";
 import { buildRegisterCalls } from "@/lib/agents/register";
 import { buildSetMixCalls, buildSetTopUpsCalls } from "@/lib/agents/settings";
-import { KEEP_MAX_RAW, chainFacts, keepRawOf, readTopUps, type TopUpsAnswer } from "@/lib/agents/topUps";
+import {
+  KEEP_MAX_RAW,
+  chainFacts,
+  keepRawOf,
+  readTopUps,
+  topUpsAnswerOf,
+  topUpsReverted,
+  type TopUpsAnswer,
+} from "@/lib/agents/topUps";
 import { assertAllowed } from "@/lib/allowlist";
 import { EQUITIES } from "@/lib/tokens/registry";
 import { agentChangePlan, revokeCall } from "@/lib/tx/plans";
@@ -228,6 +244,27 @@ describe("readTopUps (topUps(account) on Base)", () => {
       readTopUps(answer({ today: usdc(300), mark: usdc(1_300) }), { ...ctx, savingsRaw: usdc(1_200) }),
     ).toMatchObject({ waitingRaw: usdc(200) });
     expect(readTopUps(answer({ ready: usdc(900), mark: usdc(1_300) }), ctx)).toMatchObject({ waitingRaw: usdc(800) });
+  });
+
+  it("only a revert is not available: Base not answering waits, and the last answer stands through a failed refetch", () => {
+    const at = { abi: gooseExecutorAbi, functionName: "topUps", args: [user], contractAddress: EXECUTOR } as const;
+    // What the executor live today answers (measured on Base: its getter reverts).
+    const reverted = new ContractFunctionExecutionError(
+      new ContractFunctionRevertedError({ abi: gooseExecutorAbi, functionName: "topUps", data: "0x" }),
+      at,
+    );
+    // What a 429 or a dropped call looks like to the app.
+    const unanswered = new ContractFunctionExecutionError(
+      new HttpRequestError({ url: "https://mainnet.base.org", status: 429 }),
+      at,
+    );
+    expect(topUpsReverted(reverted)).toBe(true);
+    expect(topUpsReverted(unanswered)).toBe(false);
+    expect(topUpsAnswerOf(undefined, reverted)).toEqual({ status: "failure" });
+    expect(topUpsAnswerOf(undefined, unanswered)).toBeUndefined();
+    expect(topUpsAnswerOf(undefined, null)).toBeUndefined();
+    const read = answer({ on: true }) as Extract<TopUpsAnswer, { status: "success" }>;
+    expect(topUpsAnswerOf(read.result, unanswered)).toEqual(read);
   });
 
   it("nothing waits while the switch is off; before the read the switch waits with nothing to say", () => {

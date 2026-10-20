@@ -1,3 +1,4 @@
+import { BaseError, ContractFunctionRevertedError, ContractFunctionZeroDataError } from "viem";
 import { nyDay, rebalanceCheckAt, whenText } from "@/lib/agents/next";
 import { waitingRaw as waitingOf } from "@/lib/agents/rules/topUps";
 import { formatUsdTrim } from "@/lib/formatting";
@@ -140,8 +141,23 @@ export function topUpsChanged(saved: TopUpsSetting | null, chosen: TopUpsChoice)
 /** `topUps(account)` as GooseExecutor returns it: on, day, keep, ready, today, mark, own (CashRules.TopUps). */
 type TopUpsTuple = readonly [boolean, number, number, bigint, bigint, bigint, bigint];
 
-/** One multicall answer (allowFailure): the struct, or a revert (an executor without top-ups has no such getter). */
+/** What `topUps(account)` answered: the struct, or a revert (an executor without top-ups has no such getter). */
 export type TopUpsAnswer = { status: "success"; result: TopUpsTuple } | { status: "failure" };
+
+/** The executor itself reverted (it has no `topUps` getter), as opposed to Base not answering (a 429, a dropped call). */
+export const topUpsReverted = (error: unknown): boolean =>
+  error instanceof BaseError &&
+  !!error.walk((e) => e instanceof ContractFunctionRevertedError || e instanceof ContractFunctionZeroDataError);
+
+/**
+ * A `topUps(account)` read as an answer: the struct (the last one Base gave, kept through a refetch that failed), a
+ * revert, or undefined while Base hasn't answered. Base not answering is never "not available": read that way, Turn
+ * off Rebalance would leave top-ups on, and the switch would say "Not available yet." on an executor that has them.
+ */
+export function topUpsAnswerOf(data: TopUpsTuple | undefined, error: unknown): TopUpsAnswer | undefined {
+  if (data) return { status: "success", result: data };
+  return topUpsReverted(error) ? { status: "failure" } : undefined;
+}
 
 /** Top-ups as the app reads them on Base. */
 export type TopUpsRead = {
