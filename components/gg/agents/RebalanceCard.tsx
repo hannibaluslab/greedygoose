@@ -94,7 +94,7 @@ const pctText = (bps: number) => `${Number((bps / 100).toFixed(2))}%`;
  * BUY or SELL under a traded slot. All from the model, so it reads the same at every phone width. With 1–4 stocks
  * everything is drawn ×1.5 (`mixScale`, board 7l); 5–7 keep the boards' size.
  */
-function MixPicture({ slots, faded }: { slots: readonly MixSlot[]; faded: boolean }) {
+export function MixPicture({ slots, faded }: { slots: readonly MixSlot[]; faded: boolean }) {
   const k = mixScale(slots.length);
   const labelled = slots.some((s) => s.side !== null);
   const pctLine = k > 1 ? 18 : 16;

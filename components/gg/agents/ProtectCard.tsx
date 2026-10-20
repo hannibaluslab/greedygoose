@@ -83,7 +83,7 @@ function Tick({ at, solid }: { at: number; solid: boolean }) {
  * Protect's line marked over it. A rescue shows its path back to the target; a weekend risk, the drop that would reach
  * Aave's line (the bar's end).
  */
-function LevelBar({ bar }: { bar: ProtectCardModel["bar"] }) {
+export function LevelBar({ bar }: { bar: ProtectCardModel["bar"] }) {
   const at = bar.hf === null ? null : barPosition(bar.hf);
   const line = barPosition(bar.line);
   const target = barPosition(bar.target);

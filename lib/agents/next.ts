@@ -111,7 +111,7 @@ function nyHour(day: number, hour: number): number {
 }
 
 /** The Rebalancer's window: 10:00 to 10:30 New York, once a market day (GooseExecutor's RebalanceJob). */
-const WINDOW = { hour: 10, minutes: 30 } as const;
+export const WINDOW = { hour: 10, minutes: 30 } as const;
 
 /**
  * When the Rebalancer next looks at the mix: 10:00 New York on the next weekday whose window hasn't passed and on

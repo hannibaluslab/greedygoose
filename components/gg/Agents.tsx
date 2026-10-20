@@ -1,10 +1,11 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { AgentMark, FeedCard, FeedDays, type FeedRow } from "./activity/Activity";
 import { Button } from "./kit/Button";
 import { useMoneySheets } from "./cash/MoneySheets";
 import { TabHeader } from "./Screen";
+import { AgentsGuideButton, AgentsGuideSheet } from "./agents/AgentsGuide";
 import { stockColor } from "./kit/StockAvatar";
 import { Switch } from "./kit/Switch";
 import { TabBar } from "./TabBar";
@@ -35,9 +36,11 @@ export function AgentsView({
   live: boolean;
   feed: ReactNode;
 }) {
+  const [guide, setGuide] = useState(false);
   return (
     <div className="relative flex min-h-dvh flex-col gap-3 px-5 pt-[calc(env(safe-area-inset-top)+8px)] leading-[normal]">
-      <TabHeader title="Agents" back="/home" />
+      <TabHeader title="Agents" back="/home" action={<AgentsGuideButton onOpen={() => setGuide(true)} />} />
+      <AgentsGuideSheet open={guide} onClose={() => setGuide(false)} />
       <section aria-label="My agents" className="flex flex-col gap-3">
         {protect}
         {rebalance}

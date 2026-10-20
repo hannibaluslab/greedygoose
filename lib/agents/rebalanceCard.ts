@@ -75,13 +75,13 @@ export function mixSlots(p: {
  * and backing credit, at its share of all the stock now, all on target. Rebalance trades free shares only, but while
  * it's off the card shows what the user owns. Nothing held: the seven stocks, with no target.
  */
-export function portfolioSlots(holdings: readonly MixHolding[]): MixSlot[] {
+function portfolioSlots(holdings: readonly MixHolding[]): MixSlot[] {
   const whole = holdings.map((h) => ({ ...h, freeRaw: h.freeRaw + (h.backingRaw ?? 0n) }));
   return mixSlots({ holdings: whole, mixBps: null, options: { bandBps: 0n, bandMaxBps: 0n }, trades: [] });
 }
 
 /** Up to this many stocks, the card draws its slots bigger (Adrian, 2026-10-20, board 7l). */
-export const BIG_MIX_MAX = 4;
+const BIG_MIX_MAX = 4;
 
 /** How much bigger the card draws its slots, logos and targets: ×1.5 for 1–4 stocks, today's size for 5–7. */
 export const mixScale = (count: number): number => (count <= BIG_MIX_MAX ? 1.5 : 1);
