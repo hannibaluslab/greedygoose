@@ -65,13 +65,13 @@ Adds to the runner switch's next deploy above (GooseExecutor-as-built.md, "Rebal
 |---|---|---|
 | Top-ups into the mix | none | `setTopUps(on, keep)`, `topUps(account)`; Save counts, Rebalance puts in from savings at the next market morning |
 | Rebalance's grant | no Aave call | with top-ups: Aave V3's savings withdraw (to the account only) and an aUSDC limit at spends[1], a week, at CAP_MAX |
-| Save's grant | $1,000 a day | the app grants it at CAP_MAX (P2; the app's wiring, M5) |
+| Save's grant | $1,000 a day | the app grants it at CAP_MAX (P2, still to build: the app grants $1,000 a day) |
 | Registration | `register(...)` and `registerApproved` | `registerApproved` only |
-| Reads | `jobsOf` | gone: the app reads `accounts` (hooks/useAgents.ts still reads `jobsOf`, to move) |
+| Reads | `jobsOf` | gone: the app reads `accounts`, which both executors have |
 | Events | | `TopUpsSet`, `TopUpCounted`, `TopUpInvested` |
 | Size | 24,381 bytes | 24,365 bytes |
 
-The app must work with both until the switch: it reads `topUps(account)` with `allowFailure`, and a revert means "Not available yet" (M5).
+The app works with both until the switch: it reads `topUps(account)` with `allowFailure`, and a revert means "Not available yet" (M5, built: JUSTALAB-DECISIONS.md, "2026-10-20 · Top-ups wired in the app (M5)").
 
 ## GooseBoard — not deployed yet
 
