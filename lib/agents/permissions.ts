@@ -72,11 +72,10 @@ export const hasLimit = (job: AgentJob): job is LimitedJob => !(NO_LIMIT_JOBS as
 
 /**
  * The limit a job that has one is switched on with, in dollars a day: Entry, under the hood (D20), at $1,000 a day with
- * no other offer, pending the calibration pass (plan item 6 step 9). `save` stays only while Cash setup
- * (hooks/useCashSetup.ts) still grants earning from this table; Save has no amount limit (`startCapRaw` gives CAP_MAX).
+ * no other offer, pending the calibration pass (plan item 6 step 9). Save has no amount limit (P2): `startCapRaw` gives
+ * it CAP_MAX.
  */
-export const LIMIT_USD: Record<LimitedJob | "save", { start: number }> = {
-  save: { start: 1_000 },
+export const LIMIT_USD: Record<LimitedJob, { start: number }> = {
   entry: { start: 1_000 },
 };
 
