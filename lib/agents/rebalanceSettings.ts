@@ -79,12 +79,16 @@ function grantNeeded(p: SaveInput, topUpsOn: boolean | null): boolean {
   return topUpsOn !== null && topUpsOn !== !!t.topUps;
 }
 
+/** The app's own wait word: Save holds until the top-ups switch is read. */
+const ONE_MOMENT = "One moment…";
+
 /** Why Save can't go ahead, under it; null when it can. */
-function saveNote(p: SaveInput, whole: boolean, keepMissing: boolean): string | null {
+function saveNote(p: SaveInput, whole: boolean, wait: { keepMissing: boolean; unread: boolean }): string | null {
   if (!p.configured) return "Not live yet";
   if (p.connected && p.feeBlocked) return "Your account can’t pay network fees from your cash right now.";
   if (!whole) return "Make your mix add up to 100% to save it.";
-  return keepMissing ? "Enter an amount" : null;
+  if (wait.unread) return ONE_MOMENT;
+  return wait.keepMissing ? "Enter an amount" : null;
 }
 
 export function rebalanceSave(p: SaveInput): SavePlan {
@@ -96,10 +100,14 @@ export function rebalanceSave(p: SaveInput): SavePlan {
   const needsGrant = p.configured && grantNeeded(p, topUps ? topUps.chosen.on : null);
   const steps = rebalanceSteps({ needsGrant, mixChanged, topUpsChanged: topUpsMoved }).length;
   const keepMissing = !!topUps && topUps.chosen.on && topUps.chosen.keepUsd === null;
-  const note = saveNote(p, whole, keepMissing);
+  // The grant running now carries top-ups and the switch isn't read (or its read failed): a new grant's line would say
+  // "It never spends your cash." over a grant with the savings withdraw, so a Save that grants waits for the read.
+  const unread = needsGrant && !topUps && !!p.terms?.topUps;
+  const note = saveNote(p, whole, { keepMissing, unread });
   const canSave = p.connected && note === null && steps > 0 && p.capMaxRaw !== null && !p.feeLoading && !p.busy;
-  // Said only while Save grants, and not while Keep is empty: the line would name an amount nobody typed.
-  const allows = needsGrant && !keepMissing ? allowsLine(p, topUps?.chosen ?? null) : null;
+  // Said only while Save grants, and not while Keep is empty (the line would name an amount nobody typed) or the
+  // switch is unread (the line could contradict the grant).
+  const allows = needsGrant && !keepMissing && !unread ? allowsLine(p, topUps?.chosen ?? null) : null;
   return { mixChanged, topUpsChanged: topUpsMoved, needsGrant, steps, canSave, note, allows };
 }
 

@@ -263,6 +263,35 @@ describe("rebalanceSave: Top-ups go into my mix", () => {
     ).toMatchObject({ topUpsChanged: false, steps: 0 });
   });
 
+  it("holds a Save that grants while the running grant carries top-ups and the switch isn't read", () => {
+    const weights = [2_500, 0, 0, 0, 2_500, 2_500, 2_500]; // Microsoft has no sell limit yet: a new grant
+    for (const saved of [undefined, null]) {
+      const plan = rebalanceSave({
+        ...withWithdraw,
+        weights,
+        topUps: saved === undefined ? undefined : { saved, chosen: on },
+      });
+      expect(plan).toMatchObject({ needsGrant: true, steps: 1, canSave: false, note: "One moment…", allows: null });
+    }
+    // Read, the same Save goes ahead with the line for the grant it makes.
+    expect(rebalanceSave({ ...withWithdraw, weights, topUps: { saved: on, chosen: on } })).toMatchObject({
+      canSave: true,
+      note: null,
+      allows: rebalanceAllows({ keepUsd: 500 }),
+    });
+    // A grant without the withdraw: nothing to contradict, so it doesn't wait. Nor does a Save that grants nothing.
+    expect(rebalanceSave({ ...base, weights, topUps: { saved: null, chosen: off } })).toMatchObject({
+      canSave: true,
+      allows: rebalanceAllows(),
+    });
+    const mixOnly = [5_000, 0, 0, 0, 0, 2_500, 2_500];
+    expect(rebalanceSave({ ...withWithdraw, weights: mixOnly, topUps: { saved: null, chosen: on } })).toMatchObject({
+      needsGrant: false,
+      canSave: true,
+      note: null,
+    });
+  });
+
   it("puts a mix change and a top-ups change in the same batch", () => {
     const weights = [5_000, 0, 0, 0, 0, 2_500, 2_500];
     expect(

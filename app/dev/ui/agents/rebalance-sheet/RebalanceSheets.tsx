@@ -114,6 +114,12 @@ const STATES: Record<string, Fixture> = {
     topUps: { saved: ON },
     draftTopUps: { on: true, keepUsd: null },
   },
+  unread: {
+    title: "A grant with top-ups, the switch not read yet: a new grant waits",
+    // A capped grant from before is granted again at CAP_MAX; the switch's read hasn't come back.
+    terms: { capRaw: usdc(100), limitsRaw: MIX.map(() => 1n), topUps: true },
+    topUps: { saved: null },
+  },
   "turn-off": {
     title: "Turning top-ups off: a new grant without the withdraw",
     topUps: { saved: ON },
