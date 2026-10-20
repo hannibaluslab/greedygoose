@@ -6,6 +6,7 @@ import { useReadContract, useReadContracts } from "wagmi";
 import { CHAIN_ID } from "@/lib/chain";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
+import { executorAccountsAbi } from "@/lib/agents/abis/accounts";
 import { rebalanceOptions, unpackMix } from "@/lib/agents/mix";
 import type { Plan, RuleNumbers } from "@/lib/agents/next";
 
@@ -24,7 +25,8 @@ export function useAgentSettings(account: `0x${string}`) {
   const q = useReadContracts({
     contracts: [
       { ...read, functionName: "mixes", args: [account] },
-      { ...read, functionName: "accounts", args: [account] },
+      // The fields every deployed executor has (the one live today has no protectIndex).
+      { address: at, abi: executorAccountsAbi, functionName: "accounts", args: [account], chainId: CHAIN_ID },
       { ...read, functionName: "rebalanceLimits" },
       { ...read, functionName: "amounts" },
       { ...read, functionName: "thresholds" },

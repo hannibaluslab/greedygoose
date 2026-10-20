@@ -7,7 +7,9 @@ const EXECUTOR = vi.hoisted(() => {
   return executor;
 });
 
+import { decodeFunctionResult } from "viem";
 import { explainRevert } from "@/lib/aave/errors";
+import { executorAccountsAbi } from "@/lib/agents/abis/accounts";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import {
   addManagerOwnerCall,
@@ -293,5 +295,23 @@ describe("the executor's refusals in plain words, unwrapped from the account's E
       `0x5a154675${encodeAbiParameters([{ type: "uint256" }, { type: "bytes" }], [2n, notApproved]).slice(2)}` as Hex;
     expect(explainRevert(wrapped, fallback)).toBe(explainRevert(notApproved, fallback));
     expect(explainRevert("0x5a154675", fallback)).toBe(fallback);
+  });
+});
+
+describe("accounts(): read with the fields every deployed executor has", () => {
+  const nine = [3, 7, 1, 1_760_000_000, 20_000, 1, 0, true, 20_001] as const;
+  const types = executorAccountsAbi[0].outputs.map((o) => ({ type: o.type }));
+
+  it("decodes today's executor (nine fields) and the next (a tenth, protectIndex, after them) alike", () => {
+    const today = encodeAbiParameters(types, [...nine]);
+    const next = encodeAbiParameters([...types, { type: "uint32" }], [...nine, 9]);
+    for (const data of [today, next]) {
+      const r = decodeFunctionResult({ abi: executorAccountsAbi, functionName: "accounts", data });
+      expect(r[0]).toBe(3);
+      expect(r[2]).toBe(1);
+      expect(r[3]).toBe(1_760_000_000);
+      expect(r[7]).toBe(true);
+      expect(r[8]).toBe(20_001);
+    }
   });
 });

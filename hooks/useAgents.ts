@@ -9,6 +9,7 @@ import type { Call } from "@/lib/aave/tx";
 import { CHAIN_ID } from "@/lib/chain";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
+import { executorAccountsAbi } from "@/lib/agents/abis/accounts";
 import type { SpendLeft } from "@/lib/agents/next";
 import {
   contractPermission,
@@ -155,8 +156,8 @@ export function useAgents(account: `0x${string}`) {
     }) as const;
   const registry = useReadContracts({
     contracts: [
-      // `accounts`, not `jobsOf`: the top-ups executor drops jobsOf to fit 24 KB; both have this getter, jobs first.
-      { address: at, abi: gooseExecutorAbi, functionName: "accounts", args: [account], chainId: CHAIN_ID },
+      // `accounts`, not `jobsOf`: the top-ups executor drops jobsOf to fit 24 KB. Read with the fields both have.
+      { address: at, abi: executorAccountsAbi, functionName: "accounts", args: [account], chainId: CHAIN_ID },
       permissionOf(0),
       permissionOf(1),
       permissionOf(2),

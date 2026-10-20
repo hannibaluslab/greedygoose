@@ -1,5 +1,5 @@
 import { erc20Abi, type Address, type PublicClient, type Transport } from "viem";
-import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
+import { executorAccountsAbi } from "@/lib/agents/abis/accounts";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import type { CHAIN } from "@/lib/chain";
 import { saveRuns, type Cash } from "@/lib/cash";
@@ -20,7 +20,12 @@ export async function readCash(client: PublicClient<Transport, typeof CHAIN>, us
       ],
     }),
     GOOSE_EXECUTOR
-      ? client.readContract({ address: GOOSE_EXECUTOR, abi: gooseExecutorAbi, functionName: "accounts", args: [user] })
+      ? client.readContract({
+          address: GOOSE_EXECUTOR,
+          abi: executorAccountsAbi,
+          functionName: "accounts",
+          args: [user],
+        })
       : undefined,
   ]);
   return { walletRaw, savingsRaw, saveOn: saveRuns(account?.[0] ?? 0) };
