@@ -6,7 +6,7 @@
 
 **Result:** no critical finding: **nobody found a way to take or redirect user money.** Every call the executor sends through an account has fixed targets, and every recipient or `onBehalfOf` is the account itself. The skeptics confirmed 23 findings and refuted 2. Once duplicates are merged, there are **14 distinct issues: 6 high, 4 medium and 4 low.** Most of the highs are the same weakness: in a crash, Protect can be stopped, fail, or switch itself off. An outsider can also cause that on purpose.
 
-**Triage:** awaiting Adrian's agree/disagree on each item. No fix is planned until then.
+**Triage (Adrian, 2026-10-20):** "I agree with all 14 takes as you wrote them. Plan the fixes for the next deploy." The takes: fix H1–H5, M2, M4, L1 and L4; fix H6 once Aave V4's source confirms it; M1 in part (sales below the line go first, and each account's share of a window is capped); M3 by tightening the price band; leave L2 (a designed owner power) and L3 (no safety impact) as they are. H4 is also closed on the live deploy with `disallowCodehash`, once Adrian OKs that transaction.
 
 ## High
 

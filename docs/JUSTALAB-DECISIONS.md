@@ -720,3 +720,7 @@ Adrian (2026-10-20): "deploy the contract and runner for a team-only preview. Pr
 - **The deploy:** GooseExecutor `0x686cd88F248DE3F9FC0835566DB798D93881F02D` on Base, `CAP_MAX` = max uint160, owned by the test deployer and bootstrapped with KeeperHub's wallet, with the runner enabled (`contracts/docs/DEPLOYMENTS.md`, "team-only preview deploy").
 - **Where it's wired in:** only the preview build (greedygoose-preview.vercel.app, behind Vercel login), with `NEXT_PUBLIC_AGENTS_LIVE=1`. greedygoose.vercel.app has no executor set, so its agents stay off.
 - **What's still open:** the adversarial review's findings, then the audit, before production or any wider preview.
+
+## 2026-10-20 · The executor review's 14 findings: all takes agreed
+
+Adrian (2026-10-20): "I agree with all 14 takes as you wrote them. Plan the fixes for the next deploy." The findings and the takes are in `contracts/docs/REVIEW-2026-10-20-adversarial.md`. In short: no way to take funds was found. Fix H1–H5, M2, M4, L1 and L4; fix H6 once Aave V4's source confirms it; M1 in part (sales below the line go first, and each account's share of a stock's sale window is capped); M3 by tightening the price band. L2 (the owner's instant pause) and L3 (a pool nudge that only delays the Rebalancer) stay as they are. The fixes ship in the next deploy; the preview deploy at `0x686c…F02D` keeps today's code.
