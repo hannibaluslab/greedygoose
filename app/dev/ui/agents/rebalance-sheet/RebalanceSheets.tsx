@@ -84,6 +84,11 @@ const STATES: Record<string, Fixture> = {
     topUps: { saved: ON, protectSells: false },
     draftTopUps: { on: true, keepUsd: 0 },
   },
+  "warning-turn-on": {
+    title: "Turning on with Keep $0 while owing: the warning comes first · 2 steps",
+    topUps: { saved: OFF, protectSells: false },
+    draftTopUps: { on: true, keepUsd: 0 },
+  },
   "on-unchanged": { title: "On, nothing changed: no Save", topUps: { saved: ON } },
   "keep-only": {
     title: "Only Keep changed: Save, one step",
@@ -133,6 +138,19 @@ const STATES: Record<string, Fixture> = {
     ],
   },
   "trades-due": { title: "Trades due at the next check", pcts: DRIFTED, topUps: { saved: OFF } },
+  paused: {
+    title: "Paused: trades due while the credit is in Act",
+    pcts: DRIFTED,
+    debtUsd: 1_300,
+    topUps: { saved: OFF },
+  },
+  retrying: { title: "Retrying: the last 3 runs didn’t go through", card: { fails: 3 }, topUps: { saved: OFF } },
+  stopped: {
+    title: "Stopped on its own: Turn on · 2 steps",
+    card: { status: "off", stoppedAt: -2 * DAY },
+    terms: null,
+    topUps: { saved: OFF },
+  },
   "ends-soon": {
     title: "Ends soon: Renew in the line",
     topUps: { saved: OFF },
@@ -165,7 +183,12 @@ function stateOf(nowSec: number, f: Fixture) {
   const debtUsd = f.debtUsd ?? 600;
   const options = rebalanceOptions();
   const live = f.live ?? true;
-  const card = { ...f.card, endsAt: f.card?.endsAt ? nowSec + f.card.endsAt : nowSec + 200 * DAY };
+  // Times in a fixture are from now: `endsAt` ahead, `stoppedAt` behind (negative).
+  const card = {
+    ...f.card,
+    endsAt: f.card?.endsAt ? nowSec + f.card.endsAt : nowSec + 200 * DAY,
+    stoppedAt: f.card?.stoppedAt ? nowSec + f.card.stoppedAt : null,
+  };
   const outlook = rebalanceOutlook({
     nowSec,
     holdings: h,
@@ -184,7 +207,6 @@ function stateOf(nowSec: number, f: Fixture) {
     nowSec,
     status: "on",
     waiting: false,
-    stoppedAt: null,
     fails: 0,
     cooldownUntil: 0,
     rebalanceDay: 0,
