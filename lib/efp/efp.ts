@@ -4,7 +4,7 @@
  * contracts/test/GooseBoardFork.t.sol checks it again on a Base fork). A contact is a follow record in a list the
  * user's own account owns, written by that account, readable by anyone.
  *
- * - EFP's write contracts are on Base mainnet only, which is GreedyGoose's chain, so the booth's `EFP_AVAILABLE`
+ * - EFP's write contracts are on Base mainnet only, which is GreedyGoo's chain, so the booth's `EFP_AVAILABLE`
  *   switch is always on here and is dropped.
  * - A first contact mints the list first: `easyMint` and the follows go in one batch, one JAW sheet either way.
  *
@@ -166,7 +166,7 @@ export function buildFollowCalls(targets: Address[], hasList: boolean, slot: big
 
 /**
  * Remove people from the list: EFP's remove op, on-chain. The booth only deleted its own database row and left the
- * follow on Base; GreedyGoose has no database (D12), so removing writes the op.
+ * follow on Base; GreedyGoo has no database (D12), so removing writes the op.
  */
 export function buildUnfollowCalls(targets: Address[], slot: bigint): EfpCall[] {
   if (!targets.length) throw new Error("Nobody to remove");

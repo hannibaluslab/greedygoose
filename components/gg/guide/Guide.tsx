@@ -125,7 +125,7 @@ function Intro({ guide }: { guide: Guide }) {
         <span aria-hidden className="flex size-11 shrink-0 items-center justify-center rounded-[22px] bg-ink">
           <GooseMark className="h-[34px] w-auto" />
         </span>
-        <h2 className="m-0 text-[19px] font-semibold leading-tight tracking-[-0.02em]">GreedyGoose in three lines</h2>
+        <h2 className="m-0 text-[19px] font-semibold leading-tight tracking-[-0.02em]">GreedyGoo in three lines</h2>
       </div>
       <dl className="m-0 flex flex-col gap-3.5">
         {guide.intro.map((r) => (

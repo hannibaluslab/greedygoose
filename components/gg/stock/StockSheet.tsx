@@ -25,7 +25,7 @@ type Step = "stock" | "sell";
 const ORDER: Step[] = ["stock", "sell"];
 
 /**
- * One stock in a sheet: NYM's CoinDetailSheet in the GreedyGoose kit, opened from the Home rail, the Invest rows and
+ * One stock in a sheet: NYM's CoinDetailSheet in the GreedyGoo kit, opened from the Home rail, the Invest rows and
  * the Market. The stock's market price and today's move, your holding and how it splits, the price chart, its share
  * of your portfolio and Aave's price (stocks earn no yield, D19), the actions, and this stock's moves. Selling is a step
  * inside this sheet (useSell), in dollars up to $X, the free shares: shares that back credit come back with a repay

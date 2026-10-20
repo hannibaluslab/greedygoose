@@ -64,7 +64,7 @@ export function Welcome() {
     >
       <section className="flex grow flex-col items-center justify-center pb-2 pt-4">
         <GooseMark glow className="h-[clamp(124px,30dvh,264px)] w-auto [@media(max-height:700px)]:h-[20dvh]" />
-        <p className="m-0 mt-[clamp(10px,2dvh,18px)] text-[19px] font-semibold tracking-[-0.02em]">GreedyGoose</p>
+        <p className="m-0 mt-[clamp(10px,2dvh,18px)] text-[19px] font-semibold tracking-[-0.02em]">GreedyGoo</p>
       </section>
 
       <div className="flex flex-col items-center text-center">

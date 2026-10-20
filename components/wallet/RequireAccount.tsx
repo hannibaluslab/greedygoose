@@ -59,7 +59,7 @@ export function RequireAccount({ children }: { children: (address: `0x${string}`
   if (chainId !== CHAIN.id) {
     return (
       <div className="flex flex-col gap-4 px-5 pt-[calc(env(safe-area-inset-top)+8px)]">
-        <p className="m-0 text-[15px]">GreedyGoose runs on Base.</p>
+        <p className="m-0 text-[15px]">GreedyGoo runs on Base.</p>
         <button
           type="button"
           onClick={() => switchChain({ chainId: CHAIN.id })}

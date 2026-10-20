@@ -1,7 +1,7 @@
 type Option<T extends string> = { value: T; label: string };
 
 /**
- * NYM's pill-shaped segmented control in the GreedyGoose kit (the stock sheet's chart ranges): a pale pill track,
+ * NYM's pill-shaped segmented control in the GreedyGoo kit (the stock sheet's chart ranges): a pale pill track,
  * the chosen option a white pill on it. Each option is drawn 30px tall and answers taps over 44px.
  */
 export function SegmentedControl<T extends string>({

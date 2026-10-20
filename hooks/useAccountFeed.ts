@@ -17,7 +17,7 @@ import { CHAIN_ID } from "@/lib/chain";
  * Everything that happened in the account, newest first: the user's own moves (JAW's history), the executor's (`feed`:
  * the agents' moves, and the cash's own events, D20), and money or stocks someone else sent (useArrivals), over the
  * same days, with what couldn't be read. Arrivals go back a week at a time, as the executor's feed does, down to the
- * first block GreedyGoose could have been used in. The Agents tab and Activity draw it with AgentsFeed.
+ * first block GreedyGoo could have been used in. The Agents tab and Activity draw it with AgentsFeed.
  */
 export function useAccountFeed(address: `0x${string}`, feed: ReturnType<typeof useAgentFeed>) {
   const client = usePublicClient({ chainId: CHAIN_ID });

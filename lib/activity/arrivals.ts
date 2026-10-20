@@ -10,7 +10,7 @@ import { decodeActivity, type ActivityItem } from "./decode";
  */
 
 /**
- * The first block anything in GreedyGoose could have happened in: the Aave V4 Equities spoke's deployment (Base block
+ * The first block anything in GreedyGoo could have happened in: the Aave V4 Equities spoke's deployment (Base block
  * 51,478,830, 2026-09-18, measured with eth_getCode). Activity reads arrivals no further back.
  */
 export const APP_START_BLOCK = 51_478_830n;

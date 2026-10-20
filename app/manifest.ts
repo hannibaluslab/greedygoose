@@ -3,8 +3,8 @@ import type { MetadataRoute } from "next";
 /** Installable to the home screen (D5): the v5 goose icon on ink, which is also the welcome's colour. */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "GreedyGoose",
-    short_name: "GreedyGoose",
+    name: "GreedyGoo",
+    short_name: "GreedyGoo",
     description: "Cash that earns, stocks like NVIDIA and Apple, and credit in one tap.",
     start_url: "/",
     display: "standalone",

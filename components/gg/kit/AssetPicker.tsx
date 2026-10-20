@@ -65,7 +65,7 @@ const FOOTER_PX = 52;
 const MENU_MIN_PX = 160;
 
 /**
- * NYM's SourcePill (flat mode) and TokenPicker in the GreedyGoose kit: a pill in the amount card's top right that opens
+ * NYM's SourcePill (flat mode) and TokenPicker in the GreedyGoo kit: a pill in the amount card's top right that opens
  * a list anchored under it, inside the sheet. On open it measures the room in the sheet's scroll area (SourcePill's
  * openMenu) and flips up when the whole list doesn't fit below and there's more room above (NYM stops at 300px; a long
  * To list then showed three rows under the To card). Its height is capped to that room, so it never runs off the sheet,

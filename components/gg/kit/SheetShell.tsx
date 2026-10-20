@@ -115,7 +115,7 @@ export function SheetSteps({
 
 /**
  * Chrome for every bottom sheet: vaul drawer on the phone column (NYM's
- * SheetShell, phone branch only), styled from the GreedyGoose canvas.
+ * SheetShell, phone branch only), styled from the GreedyGoo canvas.
  */
 export function SheetShell({
   open,

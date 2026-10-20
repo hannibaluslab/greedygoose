@@ -1,6 +1,6 @@
 /**
  * JAW's market data: the JAW backend proxy, called with the app's JAW API key. NYM's client
- * (`src/lib/prices/marketData.ts`), cut to the two calls GreedyGoose makes:
+ * (`src/lib/prices/marketData.ts`), cut to the two calls GreedyGoo makes:
  *
  *   GET /markets?symbols=NVDAC,AAPLC → [{ symbol, price, change24h, marketCap, spark24h }]
  *   GET /history?symbol=NVDAC&days=7 → prices, oldest first (hourly over 7 days; days 1, 30 and 365 for the chart)

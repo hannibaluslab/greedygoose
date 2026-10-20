@@ -1,4 +1,4 @@
-/* Stroke icons copied from the GreedyGoose design canvas. */
+/* Stroke icons copied from the GreedyGoo design canvas. */
 import type { SVGProps } from "react";
 
 type P = SVGProps<SVGSVGElement> & { size?: number };

@@ -11,7 +11,7 @@ import { shortAddress } from "@/lib/formatting";
 /**
  * "Hi, Sam / sam.justan.id" header from the design (HomeUpliftRail), with the account's JAW name. Without a name
  * it says "Hi there" over the short address; while the name loads, two quiet bars hold its place. The round mark
- * is the GreedyGoose logo on ink (Adrian, 2026-10-14), not the name's initial. A tap on the name copies it
+ * is the GreedyGoo logo on ink (Adrian, 2026-10-14), not the name's initial. A tap on the name copies it
  * ("sam.justan.id"), or the address when there's no name, and a toast says so.
  */
 export function Header({ address, aside, menu }: { address: `0x${string}`; aside?: ReactNode; menu?: MenuExtra }) {

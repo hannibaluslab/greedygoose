@@ -25,7 +25,7 @@ function Activity({ address }: { address: `0x${string}` }) {
       <TabHeader title="Activity" back="/home" />
       <AgentsFeed
         title={null}
-        empty="Nothing yet. Buys, backing, credit and repayments made in GreedyGoose show up here, and so does money arriving in your cash."
+        empty="Nothing yet. Buys, backing, credit and repayments made in GreedyGoo show up here, and so does money arriving in your cash."
         nowMs={nowSec * 1000}
         {...all}
       />

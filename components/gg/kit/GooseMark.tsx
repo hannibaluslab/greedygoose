@@ -1,14 +1,14 @@
 import { useId } from "react";
 
 /**
- * The GreedyGoose mark, v5 "looking back", for dark backgrounds (greedygoose-v5-mark-for-dark-bg.svg), inline so
+ * The GreedyGoo mark, v5 "looking back", for dark backgrounds (greedygoose-v5-mark-for-dark-bg.svg), inline so
  * it stays crisp at any size. The egg is its own path (`.gg-egg`), so the welcome can rock it. `glow` adds a soft
  * lime light behind the egg and a faint ground line under the feet.
  */
 export function GooseMark({
   className,
   glow = false,
-  title = "GreedyGoose",
+  title = "GreedyGoo",
 }: {
   className?: string;
   glow?: boolean;

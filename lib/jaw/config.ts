@@ -4,7 +4,7 @@ import type { JawTheme } from "@jaw.id/core";
 import { CHAIN } from "@/lib/chain";
 import type { Rehearsal } from "@/lib/rehearsal";
 
-const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? "GreedyGoose";
+const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? "GreedyGoo";
 const ENS_PARENT = process.env.NEXT_PUBLIC_ENS_PARENT ?? "justan.id";
 
 /**

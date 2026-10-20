@@ -19,7 +19,7 @@ export type BoardPerson = {
   contact: boolean;
 };
 
-/** A contact who isn't on the board: they haven't made a move in GreedyGoose yet. */
+/** A contact who isn't on the board: they haven't made a move in GreedyGoo yet. */
 export type OffBoard = { account: Address; name: string | null };
 
 type BoardLine = { kind: "row"; person: BoardPerson } | { kind: "gap"; key: string };

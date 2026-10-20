@@ -15,18 +15,18 @@ const SITE =
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE),
-  title: "GreedyGoose",
+  title: "GreedyGoo",
   description: "Let your money get greedy. Cash, stocks and credit in one account.",
   openGraph: {
     type: "website",
     url: "/",
-    siteName: "GreedyGoose",
-    title: "GreedyGoose",
+    siteName: "GreedyGoo",
+    title: "GreedyGoo",
     description: "Let your money get greedy. Cash, stocks and credit in one account.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "GreedyGoose",
+    title: "GreedyGoo",
     description: "Let your money get greedy. Cash, stocks and credit in one account.",
   },
 };

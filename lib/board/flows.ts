@@ -5,7 +5,7 @@ import { USDC_RESERVE_ID } from "./tokens";
  * Money in and out of a member's account since joining, from its logs (lib/board/logs.ts reads them). Pure.
  *
  * Read one transaction at a time. A leg between the account and Aave or a swap pool counts as the account's own use of
- * GreedyGoose only when the same transaction shows the account doing it; anything else is money put in or taken out:
+ * GreedyGoo only when the same transaction shows the account doing it; anything else is money put in or taken out:
  * - Aave V4 (hub and spoke): a leg is the account's own only next to its own spoke event for that reserve (it is the
  *   caller and the position is its own): Supply or Repay for what it paid, Withdraw or Borrow for what it got.
  * - Aave V3 savings: USDC into the savings token is the account's own next to its own Supply or Repay; USDC out of it

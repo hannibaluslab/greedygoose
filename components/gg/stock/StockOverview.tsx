@@ -19,7 +19,7 @@ import { holdingSplit } from "@/lib/holding";
 import { RANGES, moveUsd, yearLineStart, type Range } from "@/lib/prices/market";
 import { RetryButton } from "../kit/RetryButton";
 
-/** Pieces of the stock sheet's first step (StockSheet), from NYM's CoinDetailSheet in the GreedyGoose kit. */
+/** Pieces of the stock sheet's first step (StockSheet), from NYM's CoinDetailSheet in the GreedyGoo kit. */
 
 const RANGE_WORDS: Record<Range, string> = { "1D": "1 day", "1W": "7 days", "1M": "1 month", "1Y": "1 year" };
 const RANGE_OPTIONS = (Object.keys(RANGES) as Range[]).map((r) => ({ value: r, label: r }));
@@ -200,7 +200,7 @@ export function StockActivity({
           </div>
         ) : mine.length === 0 ? (
           <p className="m-0 py-3.5 text-sm leading-[1.4] text-ink-mid">
-            Nothing yet. What you do with {name} in GreedyGoose shows up here.
+            Nothing yet. What you do with {name} in GreedyGoo shows up here.
           </p>
         ) : (
           <FeedDays rows={mine} nowMs={nowMs} />

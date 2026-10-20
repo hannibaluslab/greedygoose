@@ -20,7 +20,7 @@ export default function SettingsPage() {
 /**
  * Settings: the account, its name first and the address under it (ruling 36); the fuel tank, the wallet cash network
  * fees are paid from (rulings 7, 37), and "Fill up" from savings while it isn't full (Adrian, 2026-10-20); the network
- * and the passkey; what GreedyGoose is; Sign out.
+ * and the passkey; what GreedyGoo is; Sign out.
  */
 function Settings({ address }: { address: `0x${string}` }) {
   const { disconnect } = useDisconnect();
@@ -87,7 +87,7 @@ function Settings({ address }: { address: `0x${string}` }) {
         )}
       </WhiteCard>
       <WhiteCard className="p-4 text-[13px] leading-snug text-ink-mid">
-        GreedyGoose is a non-custodial interface. Your stocks and cash stay in your own smart account. Credit comes from
+        GreedyGoo is a non-custodial interface. Your stocks and cash stay in your own smart account. Credit comes from
         the Aave protocol; if the stocks backing it fall too far in value, Aave can sell part of them. Not available to
         US persons.
       </WhiteCard>

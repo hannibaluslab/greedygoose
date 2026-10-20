@@ -1,5 +1,5 @@
 /**
- * Reading an account's EFP list off Base, the booth's `src/lib/efp-chain.ts` with the client passed in: GreedyGoose
+ * Reading an account's EFP list off Base, the booth's `src/lib/efp-chain.ts` with the client passed in: GreedyGoo
  * has no server (D12), so the browser reads its own list. No indexer: the list registry hands back a storage
  * location, the records contract hands back the raw op log, and the current follow set is that log replayed.
  */

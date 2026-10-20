@@ -5,7 +5,7 @@
    hover alone (Tailwind 4 already gates `hover:` behind `@media (hover: hover)`). */
 @custom-variant touch (@media (hover: none));
 
-/* Design tokens: NYM's token set (styles/tokens.css) with the GreedyGoose canvas values.
+/* Design tokens: NYM's token set (styles/tokens.css) with the GreedyGoo canvas values.
    Leo's names (ground, subtle, safe, act…) are mapped onto the same values below. */
 :root {
   /* Surfaces */

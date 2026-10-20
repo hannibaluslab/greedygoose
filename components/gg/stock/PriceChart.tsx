@@ -14,7 +14,7 @@ const GUTTER = 46;
 const TONE = { pos: "var(--pos)", neg: "var(--neg)" } as const;
 
 /**
- * NYM's PriceChart in the GreedyGoose kit: the line over a fading area, faint gridlines at round prices labelled on
+ * NYM's PriceChart in the GreedyGoo kit: the line over a fading area, faint gridlines at round prices labelled on
  * the right, and the lime dot on the newest price (the hero line's). The gridlines fit the series to nice round
  * prices, so the labels read cleanly across any range. Green when the range ends up, red when it ends down.
  */
