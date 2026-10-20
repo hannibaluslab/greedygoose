@@ -149,7 +149,7 @@ cast call 0x5803c076563C85799989d42Fc00292A8aE52fa9E 'getImplementation()(addres
 # 0xbb4f7d5418Cd8DADB61bb95561179e517572cBCd, so the clone above is still what new accounts run.
 ```
 
-## GooseBoard — not deployed yet
+## GooseBoard — deployed (2026-10-20)
 
 The leaderboard's member list (`src/GooseBoard.sol`, JUSTALAB-DECISIONS.md "The Leaderboard"). It holds nothing, calls nothing and has no owner: an account only puts itself on (`join()`) or takes itself off (`leave()`, not in the app). The deployer key pays the gas and gets no power over it. Adrian approves and signs the mainnet deploy; nobody else deploys it to Base.
 
@@ -177,7 +177,12 @@ The script prints the address and the block. Optionally verify the source (`forg
 
 | What | Value |
 |---|---|
-| GooseBoard | not deployed |
+| GooseBoard | `0x0E10c55D3f20D4Ea1DEf5aC6c60480b34c07FcA1` (1,857 bytes), block 52857929, tx `0x9ed1043740d819bfc60b61a5de485f5817b8286d6e52e3583298997e43df63ef` |
+| Signed by | Adrian, with the JustaLab test deployer `0xF3bBaa5f6BEAF49732c28D2bdd2b772AA01031aD` (it paid the gas and has no power over the board) |
+| Built from | `main` @ `90519eb` |
+| Deploy cost | about 0.0000025 ETH |
+| Logs RPC | A PublicNode personal token (free, made on Allnodes' portfolio page) as `NEXT_PUBLIC_BASE_RPC_URL`. Checked 2026-10-20: 10,000-block `eth_getLogs` from about 4 months back, past state, `eth_simulateV1`, open CORS; `tests/onchain/board.test.ts` passes through it. Every keyless Base RPC tried refuses logs older than about 10,000 blocks, and Alchemy's free tier answers 10 blocks a request. |
+| Production | `dpl_DaDFZ25PXB9Cq2gT2UQmuMD4rpLw` (`main` @ `90519eb`): the agents' three settings, `NEXT_PUBLIC_ALCHEMY_KEY`, `NEXT_PUBLIC_BASE_RPC_URL` and `NEXT_PUBLIC_GOOSE_BOARD`, all passed as `--build-env`. A deploy without the last two puts the Leaderboard back to "opens soon" and drops `join()`. The deploy before the board: `dpl_B8yuNVKFMtFo5oseoNUecP8W9f7R`. |
 | Bytecode | about 1.9 KB (`forge inspect GooseBoard deployedBytecode`) |
 | Rehearsed | Base fork: `GooseBoardForkTest` (JAW account batch: EFP mint + follow + join), `scripts/board-e2e.ts` (anvil) |
 

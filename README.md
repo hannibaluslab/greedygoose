@@ -24,7 +24,8 @@ Tokenized stocks track stock prices. They are not company shares, and they earn 
   amount cap, not audited yet, the review's fixes parked ([DEPLOYMENTS.md](contracts/docs/DEPLOYMENTS.md)). A build
   without `NEXT_PUBLIC_GOOSE_EXECUTOR` and `NEXT_PUBLIC_AGENTS_LIVE=1` shows them as "Coming soon"
   (`lib/agents/config.ts`).
-- The Leaderboard opens once its contract, GooseBoard, is deployed. It isn't yet.
+- The Leaderboard is live since 2026-10-20: GooseBoard `0x0E10…FcA1`, read through an RPC with the board's whole log
+  history (`NEXT_PUBLIC_BASE_RPC_URL`, [DEPLOYMENTS.md](contracts/docs/DEPLOYMENTS.md)).
 
 ## Start here
 
