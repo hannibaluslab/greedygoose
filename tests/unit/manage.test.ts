@@ -10,6 +10,7 @@ const EXECUTOR = vi.hoisted(() => {
 
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import {
+  inHomeOrder,
   isMix,
   mixWeights,
   nowPercents,
@@ -59,15 +60,28 @@ describe("the mix GooseExecutor's setMix takes", () => {
 });
 
 describe("startingMix (what Manage opens on)", () => {
-  it("is the saved mix, largest first", () => {
-    expect(startingMix(board, [2_500, 0, 0, 0, 0, 5_000, 2_500])).toEqual(boardMix);
+  it("is the saved mix, in Home's order (Apple first, Tesla last), whatever each weighs", () => {
+    expect(startingMix(board, [2_500, 0, 0, 0, 0, 5_000, 2_500])).toEqual([
+      { reserveId: 0, bps: 2_500 },
+      { reserveId: 5, bps: 5_000 },
+      { reserveId: 6, bps: 2_500 },
+    ]);
   });
 
   it("before a mix is saved, is the free stock at its share now, adding up to 100%: nothing trades yet", () => {
     const rows = startingMix(board, [0, 0, 0, 0, 0, 0, 0]);
-    expect(rows.map((r) => r.reserveId)).toEqual([5, 6, 0]);
+    expect(rows).toEqual([
+      { reserveId: 0, bps: 2_600 },
+      { reserveId: 5, bps: 4_400 },
+      { reserveId: 6, bps: 3_000 },
+    ]);
     expect(rows.reduce((a, r) => a + r.bps, 0)).toBe(10_000);
     expect(previewTrades({ holdings: board, rows, capRaw: 500_000_000n, capMaxRaw: null, options })).toEqual([]);
+  });
+
+  it("keeps Home's order when a stock is added to it", () => {
+    const rows = startingMix(board, [2_500, 0, 0, 0, 0, 5_000, 2_500]);
+    expect(inHomeOrder([...rows, { reserveId: 3, bps: 0 }]).map((r) => r.reserveId)).toEqual([0, 3, 5, 6]);
   });
 
   it("leaves out dust, and is empty with no free stock", () => {

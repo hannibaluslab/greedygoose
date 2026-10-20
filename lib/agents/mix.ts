@@ -14,6 +14,9 @@ export const MIX_WHOLE = 10_000;
 /** One stock on the mix card: its target in BPS. */
 export type MixRow = { reserveId: number; bps: number };
 
+/** Home's stock order, the one every list uses (SPEC, One stock order): the registry's, so by reserve id. */
+export const inHomeOrder = (rows: readonly MixRow[]): MixRow[] => [...rows].sort((a, b) => a.reserveId - b.reserveId);
+
 /** A stock as the mix sees it: free shares only (shares backing credit stay put) at Aave's price. */
 export type MixHolding = { reserveId: number; freeRaw: bigint; priceRaw: bigint };
 
@@ -66,21 +69,23 @@ const holdingOf = (holdings: readonly MixHolding[], reserveId: number) =>
   holdings.find((h) => h.reserveId === reserveId);
 
 /**
- * The rows Rebalance's sheet opens on: the saved mix, largest first; before one is saved, the stocks with free shares at their
- * share now, so nothing trades until the user moves a slider. Dust whose share rounds to 0% is left out (Add a stock
- * brings it back).
+ * The rows Rebalance's sheet opens on, in Home's order: the saved mix; before one is saved, the stocks with free shares
+ * at their share now, so nothing trades until the user moves a slider. Dust whose share rounds to 0% is left out (Add a
+ * stock brings it back).
  */
 export function startingMix(holdings: readonly MixHolding[], saved: readonly number[] | null): MixRow[] {
   if (saved && saved.some((w) => w > 0)) {
-    return EQUITIES.filter((e) => saved[e.reserveId] > 0)
-      .map((e) => ({ reserveId: e.reserveId, bps: saved[e.reserveId] }))
-      .sort((a, b) => b.bps - a.bps);
+    return EQUITIES.filter((e) => saved[e.reserveId] > 0).map((e) => ({
+      reserveId: e.reserveId,
+      bps: saved[e.reserveId],
+    }));
   }
+  // Largest first for the rounding (largest remainder), then back in Home's order.
   const held = holdings
     .filter((h) => h.freeRaw > 0n)
     .sort((a, b) => (valueRaw(b) > valueRaw(a) ? 1 : valueRaw(b) < valueRaw(a) ? -1 : 0));
   const pct = wholePercents(held.map((h) => Number(valueRaw(h))));
-  return held.map((h, i) => ({ reserveId: h.reserveId, bps: pct[i] * 100 })).filter((r) => r.bps > 0);
+  return inHomeOrder(held.map((h, i) => ({ reserveId: h.reserveId, bps: pct[i] * 100 })).filter((r) => r.bps > 0));
 }
 
 /** "now 43%": each row's share of the rows' free stock at Aave's price, rounded on its own; null when there is none. */

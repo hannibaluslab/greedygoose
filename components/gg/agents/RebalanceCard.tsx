@@ -1,27 +1,10 @@
 "use client";
 
-import { maxUint160 } from "viem";
 import { AgentMark } from "../activity/Activity";
 import { ChevronRight } from "../kit/icons";
 import { StockAvatar } from "../kit/StockAvatar";
-import { useAgentFeed } from "@/hooks/useAgentFeed";
-import { useAgents } from "@/hooks/useAgents";
-import { useAgentSettings } from "@/hooks/useAgentSettings";
-import { useNowSec } from "@/hooks/useNowSec";
-import { usePosition, type PositionData } from "@/hooks/usePosition";
-import { AGENTS_LIVE, GOOSE_EXECUTOR } from "@/lib/agents/config";
-import { agentStatus } from "@/lib/agents/list";
-import { rebalanceOptions } from "@/lib/agents/mix";
-import { defaultNumbers, rebalanceOutlook, type OutlookInput } from "@/lib/agents/next";
-import { startCapRaw } from "@/lib/agents/permissions";
-import {
-  rebalanceCard,
-  type MixSlot,
-  type PillTone,
-  type RebalanceCardModel,
-  type RebalanceFooter,
-  type Side,
-} from "@/lib/agents/rebalanceCard";
+import { useRebalanceCard } from "@/hooks/useRebalanceCard";
+import type { MixSlot, PillTone, RebalanceCardModel, RebalanceFooter, Side } from "@/lib/agents/rebalanceCard";
 import { EQUITIES } from "@/lib/tokens/registry";
 
 /*
@@ -32,65 +15,9 @@ import { EQUITIES } from "@/lib/tokens/registry";
 
 type Account = `0x${string}`;
 
-/** Rebalance's card for `account`, from its own reads: the registry, JAW's list, the position and the agents' feed. */
+/** Rebalance's card for `account`, from its reads (useRebalanceCard, the same model its sheet's pill and line use). */
 export function RebalanceCard({ account, onOpen }: { account: Account; onOpen: () => void }) {
-  const agents = useAgents(account);
-  const settings = useAgentSettings(account);
-  const { data: position } = usePosition(account);
-  const feed = useAgentFeed(account);
-  const nowSec = useNowSec();
-  // The registry's mix and numbers are read once an executor is set; until then the card runs on the deploy defaults.
-  const ready = !!position && nowSec > 0 && (!!settings || !GOOSE_EXECUTOR);
-  const model = ready ? cardFor(position, nowSec, agents, settings, feed) : null;
-  return <RebalanceCardView model={model} onOpen={onOpen} />;
-}
-
-function cardFor(
-  position: PositionData,
-  nowSec: number,
-  agents: ReturnType<typeof useAgents>,
-  settings: ReturnType<typeof useAgentSettings>,
-  feed: ReturnType<typeof useAgentFeed>,
-): RebalanceCardModel | null {
-  const capMax = agents.capMaxRaw;
-  const numbers = settings?.numbers ?? defaultNumbers(rebalanceOptions());
-  const mixBps = settings?.mixBps ?? null;
-  const rebalanceDay = settings?.rebalanceDay ?? 0;
-  const outlook: OutlookInput = {
-    nowSec,
-    holdings: position.holdings,
-    mixBps,
-    capMaxRaw: capMax,
-    rebalanceDay,
-    debtUsd: position.debtUsd,
-    totalBackingUsd: position.totalBackingUsd,
-    avgCf: position.avgCf,
-    left: { rebalance: agents.left.rebalance },
-    // The grant it runs with, else the one it starts on: the executor's CAP_MAX (no amount limit).
-    capRaw: { rebalance: agents.terms.rebalance?.capRaw ?? startCapRaw("rebalance", capMax ?? maxUint160) },
-    numbers,
-  };
-  // Off without the user turning it off: its grant ran out, or the executor switched it off.
-  const last = feed.switched.rebalance;
-  const stopped =
-    agents.status.rebalance !== "off" || last?.byUser
-      ? 0
-      : Math.max(agents.ranOut.rebalance ?? 0, last && !last.on ? last.at : 0);
-  return rebalanceCard({
-    live: AGENTS_LIVE,
-    nowSec,
-    status: agentStatus("rebalance", agents.status),
-    waiting: agents.toFinish.includes("rebalance"),
-    stoppedAt: stopped > 0 ? stopped : null,
-    endsAt: agents.terms.rebalance?.end ?? null,
-    fails: agents.fails,
-    cooldownUntil: agents.cooldownUntil,
-    rebalanceDay,
-    holdings: position.holdings,
-    mixBps,
-    options: numbers.rebalance,
-    outlook: rebalanceOutlook(outlook),
-  });
+  return <RebalanceCardView model={useRebalanceCard(account)} onOpen={onOpen} />;
 }
 
 const CARD =
@@ -102,6 +29,18 @@ const PILL: Record<PillTone, string> = {
   needs: "bg-needs-soft text-needs-ink",
   due: "bg-due-soft text-due-ink",
 };
+
+/** Rebalance's state as a pill ("On", "Needs you", "Ends soon"), on its card and beside its sheet's title. */
+export function RebalancePill({ model }: { model: RebalanceCardModel | null }) {
+  if (!model) return <span aria-hidden className="h-6 w-14 shrink-0 animate-pulse rounded-xl bg-card-bone" />;
+  return (
+    <span
+      className={`flex h-6 shrink-0 items-center whitespace-nowrap rounded-xl px-2.5 text-xs font-bold ${PILL[model.pill.tone]}`}
+    >
+      {model.pill.text}
+    </span>
+  );
+}
 
 /** The card from its model; null draws its frame while the Rebalancer's state loads. It opens the sheet either way. */
 export function RebalanceCardView({ model, onOpen }: { model: RebalanceCardModel | null; onOpen?: () => void }) {
@@ -116,15 +55,7 @@ export function RebalanceCardView({ model, onOpen }: { model: RebalanceCardModel
       <span className="flex h-8 items-center gap-2.5">
         <AgentMark agent="Rebalance" size={32} />
         <span className="min-w-0 grow truncate text-[17px] font-semibold">Rebalance</span>
-        {model ? (
-          <span
-            className={`flex h-6 shrink-0 items-center whitespace-nowrap rounded-xl px-2.5 text-xs font-bold ${PILL[model.pill.tone]}`}
-          >
-            {model.pill.text}
-          </span>
-        ) : (
-          <span className="h-6 w-14 animate-pulse rounded-xl bg-card-bone" />
-        )}
+        <RebalancePill model={model} />
         <ChevronRight size={14} className="shrink-0 text-ink-mid" />
       </span>
       {model ? (

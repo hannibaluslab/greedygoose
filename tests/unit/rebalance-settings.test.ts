@@ -1,58 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { previewTrades, rebalanceOptions, type MixHolding } from "@/lib/agents/mix";
+import { rebalanceOptions, type MixHolding } from "@/lib/agents/mix";
+import { rebalanceCheckAt, rebalanceOutlook, whenText, type OutlookInput } from "@/lib/agents/next";
 import type { StockLimits } from "@/lib/agents/permissions";
-import { rebalanceSave, rebalanceSteps, tradeLines } from "@/lib/agents/rebalanceSettings";
-import type { RebalanceTrade } from "@/lib/agents/rules/rebalance";
+import { rebalanceCard, type RebalanceCardInput } from "@/lib/agents/rebalanceCard";
+import { rebalanceSave, rebalanceSteps, sheetLine } from "@/lib/agents/rebalanceSettings";
 
 const usdc = (usd: number) => BigInt(usd) * 10n ** 6n;
-const price = (usd: number) => BigInt(Math.round(usd * 1e8));
-// NVIDIA, Apple, Tesla at 43/26/30 of $9,900 in free shares (the Manage board's figures).
-const HOLDINGS: MixHolding[] = [
-  { reserveId: 5, priceRaw: price(178.57), freeRaw: BigInt(Math.round((4_300 / 178.57) * 1e8)) },
-  { reserveId: 0, priceRaw: price(222.22), freeRaw: BigInt(Math.round((2_600 / 222.22) * 1e8)) },
-  { reserveId: 6, priceRaw: price(378.38), freeRaw: BigInt(Math.round((3_000 / 378.38) * 1e8)) },
-];
-
-describe("tradeLines", () => {
-  it("prices sales at Aave's price and buys at what they spend, sells first and largest first", () => {
-    const trades: RebalanceTrade[] = [
-      { reserveId: 5, buy: true, amountIn: usdc(300), minOut: 0n },
-      { reserveId: 0, buy: false, amountIn: (usdc(50) * 10n ** 10n) / price(222.22), minOut: 0n },
-      { reserveId: 6, buy: false, amountIn: (usdc(250) * 10n ** 10n) / price(378.38), minOut: 0n },
-    ];
-    expect(tradeLines(trades, HOLDINGS)).toEqual([
-      { reserveId: 6, name: "Tesla", buy: false, usd: 250 },
-      { reserveId: 0, name: "Apple", buy: false, usd: 50 },
-      { reserveId: 5, name: "NVIDIA", buy: true, usd: 300 },
-    ]);
-  });
-
-  it("leaves out a trade under half a dollar", () => {
-    expect(tradeLines([{ reserveId: 5, buy: true, amountIn: 400_000n, minOut: 0n }], HOLDINGS)).toEqual([]);
-  });
-
-  it("reads the Rebalancer's own rule on the board's mix", () => {
-    const rows = [
-      { reserveId: 5, bps: 5_000 },
-      { reserveId: 0, bps: 2_500 },
-      { reserveId: 6, bps: 2_500 },
-    ];
-    // No amount limit: the preview runs at the executor's CAP_MAX, so the band alone shapes the trades.
-    const trades = previewTrades({
-      holdings: HOLDINGS,
-      rows,
-      capRaw: usdc(10_000),
-      capMaxRaw: usdc(10_000),
-      options: rebalanceOptions(),
-    });
-    const lines = tradeLines(trades, HOLDINGS);
-    expect(lines.length).toBeGreaterThan(0);
-    // NVIDIA is under its target, so it's the one bought, with no more than the sales bring in.
-    expect(lines.filter((l) => l.buy).map((l) => l.name)).toEqual(["NVIDIA"]);
-    const sold = lines.filter((l) => !l.buy).reduce((a, l) => a + l.usd, 0);
-    expect(lines.filter((l) => l.buy).reduce((a, l) => a + l.usd, 0)).toBeLessThanOrEqual(sold);
-  });
-});
 
 describe("rebalanceSave", () => {
   const mix = [2_500, 0, 0, 0, 0, 5_000, 2_500];
@@ -73,6 +26,7 @@ describe("rebalanceSave", () => {
   it("says Not live yet and saves nothing without an executor", () => {
     expect(rebalanceSave({ ...base, configured: false, saved: null, terms: null })).toEqual({
       mixChanged: false,
+      topUpsChanged: false,
       needsGrant: false,
       steps: 0,
       canSave: false,
@@ -162,6 +116,13 @@ describe('rebalanceSteps: what Save runs is what it counts (Adrian, 2026-10-20: 
     expect(rebalanceSteps({ needsGrant: false, mixChanged: false, waiting: false })).toEqual([]);
   });
 
+  it("sends a top-ups change alone like a mix, one batch through useTx", () => {
+    const only = { needsGrant: false, mixChanged: false, topUpsChanged: true };
+    expect(rebalanceSteps({ ...only, waiting: false })).toEqual(["mix"]);
+    expect(rebalanceSteps({ ...only, waiting: true })).toEqual(["batch"]);
+    expect(rebalanceSteps({ ...only, needsGrant: true, waiting: false })).toEqual(["grant", "batch"]);
+  });
+
   it("keeps Save on while a batch this sheet owes is left, and counts it", () => {
     const mix = [2_500, 0, 0, 0, 0, 5_000, 2_500];
     const base = {
@@ -179,5 +140,167 @@ describe('rebalanceSteps: what Save runs is what it counts (Adrian, 2026-10-20: 
     const waiting = rebalanceSave({ ...base, waiting: true });
     expect(waiting).toMatchObject({ steps: 1, canSave: true });
     expect(rebalanceSave({ ...base })).toMatchObject({ steps: 0, canSave: false });
+  });
+});
+
+describe("rebalanceSave: Top-ups go into my mix", () => {
+  const mix = [2_500, 0, 0, 0, 0, 5_000, 2_500];
+  const limits: StockLimits = [1n, 0n, 0n, 0n, 0n, 1n, 1n];
+  const off = { on: false, keepUsd: 500 };
+  const on = { on: true, keepUsd: 500 };
+  const base = {
+    configured: true,
+    connected: true,
+    saved: mix,
+    weights: mix,
+    terms: { capRaw: usdc(10_000), limitsRaw: limits, topUps: false },
+    capMaxRaw: usdc(10_000),
+    running: true,
+    feeBlocked: false,
+    feeLoading: false,
+    busy: false,
+  };
+  const withWithdraw = { ...base, terms: { ...base.terms, topUps: true } };
+
+  it("has nothing to save while the setting is what the executor has", () => {
+    expect(rebalanceSave({ ...base, topUps: { saved: off, chosen: off } })).toMatchObject({ steps: 0, canSave: false });
+    expect(rebalanceSave({ ...withWithdraw, topUps: { saved: on, chosen: on } })).toMatchObject({ steps: 0 });
+  });
+
+  it("takes a new grant to turn them on, with the savings withdraw in it: Save · 2 steps (board 7f)", () => {
+    expect(rebalanceSave({ ...base, topUps: { saved: off, chosen: on } })).toMatchObject({
+      topUpsChanged: true,
+      needsGrant: true,
+      steps: 2,
+      canSave: true,
+      note: null,
+    });
+  });
+
+  it("takes a new grant without the withdraw to turn them off: 2 steps, the old grant left for Turn off (P7)", () => {
+    expect(rebalanceSave({ ...withWithdraw, topUps: { saved: on, chosen: off } })).toMatchObject({
+      topUpsChanged: true,
+      needsGrant: true,
+      steps: 2,
+    });
+  });
+
+  it("saves Keep alone in one step (board 7h)", () => {
+    expect(rebalanceSave({ ...withWithdraw, topUps: { saved: on, chosen: { on: true, keepUsd: 0 } } })).toMatchObject({
+      mixChanged: false,
+      topUpsChanged: true,
+      needsGrant: false,
+      steps: 1,
+      canSave: true,
+    });
+  });
+
+  it("waits for an amount while Keep is empty", () => {
+    expect(
+      rebalanceSave({ ...withWithdraw, topUps: { saved: on, chosen: { on: true, keepUsd: null } } }),
+    ).toMatchObject({ steps: 1, canSave: false, note: "Enter an amount" });
+  });
+
+  it("grants again when the grant lost the withdraw while top-ups are on", () => {
+    expect(rebalanceSave({ ...base, topUps: { saved: on, chosen: on } })).toMatchObject({
+      topUpsChanged: false,
+      needsGrant: true,
+      steps: 2,
+    });
+  });
+
+  it("counts nothing about top-ups until the executor's setting is read, or without an executor", () => {
+    expect(rebalanceSave({ ...base, topUps: { saved: null, chosen: on } })).toMatchObject({
+      topUpsChanged: false,
+      needsGrant: false,
+      steps: 0,
+    });
+    expect(
+      rebalanceSave({ ...base, configured: false, saved: null, terms: null, topUps: { saved: off, chosen: on } }),
+    ).toMatchObject({ topUpsChanged: false, steps: 0 });
+  });
+
+  it("puts a mix change and a top-ups change in the same batch", () => {
+    const weights = [5_000, 0, 0, 0, 0, 2_500, 2_500];
+    expect(
+      rebalanceSave({ ...withWithdraw, weights, topUps: { saved: on, chosen: { on: true, keepUsd: 900 } } }),
+    ).toMatchObject({ mixChanged: true, topUpsChanged: true, needsGrant: false, steps: 1 });
+  });
+});
+
+describe("sheetLine: the line under the sheet's title, from Rebalance's card", () => {
+  /** Wednesday 2025-10-15 12:00 New York (16:00 UTC). */
+  const WED_NOON = Date.UTC(2025, 9, 15, 16) / 1000;
+  const DAY = 86_400;
+  const PRICES = [250, 220, 180, 700, 500, 180, 400];
+  const MIX = [2_000, 1_000, 1_000, 1_000, 1_500, 2_500, 1_000];
+  const holdings = (pcts: readonly number[]): MixHolding[] =>
+    PRICES.map((p, reserveId) => ({
+      reserveId,
+      priceRaw: BigInt(Math.round(p * 1e8)),
+      freeRaw: BigInt(Math.round(((pcts[reserveId] / 100) * 10_000 * 1e8) / p)),
+    }));
+  const options = rebalanceOptions();
+  const card = (over: Partial<RebalanceCardInput> = {}, pcts = [20, 10, 10, 10, 15, 26, 9]) => {
+    const o: OutlookInput = {
+      nowSec: WED_NOON,
+      holdings: holdings(pcts),
+      mixBps: MIX,
+      capMaxRaw: usdc(1_000_000),
+      rebalanceDay: 0,
+      debtUsd: 600,
+      totalBackingUsd: 2_000,
+      avgCf: 0.7,
+      left: { rebalance: null },
+      capRaw: { rebalance: usdc(1_000_000) },
+      numbers: { rebalance: options },
+    };
+    return rebalanceCard({
+      live: true,
+      nowSec: WED_NOON,
+      status: "on",
+      waiting: false,
+      stoppedAt: null,
+      endsAt: WED_NOON + 200 * DAY,
+      fails: 0,
+      cooldownUntil: 0,
+      rebalanceDay: 0,
+      holdings: o.holdings,
+      mixBps: MIX,
+      options,
+      outlook: rebalanceOutlook(o),
+      ...over,
+    })!;
+  };
+  // "tomorrow 10:00 AM" in the viewer's own time; a weekday keeps its capital ("Mon 10:00 AM").
+  const next = whenText(rebalanceCheckAt(WED_NOON, 0), WED_NOON);
+
+  it("says it's on target and when it checks, as boards 7e–7h do", () => {
+    expect(sheetLine(card())).toEqual({ text: `On target. Checks ${next}.`, renew: false });
+  });
+
+  it("names the trades due and their stocks", () => {
+    expect(sheetLine(card({}, [16, 10, 10, 8, 15, 32, 9]))).toEqual({
+      text: `3 trades ${next}. Sells NVIDIA. Buys Apple and Meta.`,
+      renew: false,
+    });
+  });
+
+  it("offers Renew while the grant ends within the week", () => {
+    expect(sheetLine(card({ endsAt: WED_NOON + 4 * DAY }))).toMatchObject({ renew: true });
+    expect(sheetLine(card({ endsAt: WED_NOON + 4 * DAY })).text).toMatch(
+      /^Ends on .+\. Then nothing trades\. On target/,
+    );
+  });
+
+  it("says the state's own words otherwise", () => {
+    expect(sheetLine(card({ status: "off" }))).toEqual({
+      text: "When on, it keeps your mix on target. Checks once a market day, after the US open.",
+      renew: false,
+    });
+    expect(sheetLine(card({ status: "starting", waiting: true }))).toEqual({
+      text: "One more Face ID turns it on. Until then, nothing trades.",
+      renew: false,
+    });
   });
 });

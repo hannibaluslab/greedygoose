@@ -7,7 +7,7 @@ import {
   RebalanceSettingsView,
   type SettingsHolding,
 } from "@/components/gg/agents/RebalanceSettings";
-import { rebalanceOptions, type MixRow } from "@/lib/agents/mix";
+import type { MixRow } from "@/lib/agents/mix";
 import { EQUITIES } from "@/lib/tokens/registry";
 
 // Sample figures for the gallery only: the old Manage board's NVIDIA, Apple and Tesla at 43/26/30 of their free shares,
@@ -90,7 +90,6 @@ export function RebalanceStateBody({ state }: { state: RebalanceState }) {
     <RebalanceSettingsView
       holdings={HOLDINGS}
       saved={s.saved}
-      options={rebalanceOptions()}
       terms={s.terms}
       capMaxRaw={s.configured ? CAP_MAX : null}
       configured={s.configured}

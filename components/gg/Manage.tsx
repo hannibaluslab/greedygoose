@@ -19,15 +19,6 @@ export function ManageCard({
   return <WhiteCard className={`leading-[normal] ${className}`}>{children}</WhiteCard>;
 }
 
-export function CardTitle({ title, sub }: { title: string; sub: string }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-[17px] font-semibold">{title}</span>
-      <span className="text-xs text-subtle">{sub}</span>
-    </div>
-  );
-}
-
 /** A target slider: the board's 4px track and 22px thumb, over an invisible native range for touch, keys, readers. */
 export function MixSlider({ name, bps, onChange }: { name: string; bps: number; onChange: (bps: number) => void }) {
   const pct = bps / 100;
