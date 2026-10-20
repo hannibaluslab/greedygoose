@@ -3,7 +3,7 @@ import { rebalanceOptions, type MixHolding } from "@/lib/agents/mix";
 import { rebalanceCheckAt, rebalanceOutlook, whenText, type OutlookInput } from "@/lib/agents/next";
 import type { StockLimits } from "@/lib/agents/permissions";
 import { rebalanceCard, type RebalanceCardInput } from "@/lib/agents/rebalanceCard";
-import { rebalanceAllows, rebalanceSave, rebalanceSteps, sheetLine } from "@/lib/agents/rebalanceSettings";
+import { rebalanceAllows, rebalanceSave, rebalanceSteps, savedText, sheetLine } from "@/lib/agents/rebalanceSettings";
 
 const usdc = (usd: number) => BigInt(usd) * 10n ** 6n;
 
@@ -345,6 +345,28 @@ describe("rebalanceSave: Top-ups go into my mix", () => {
     expect(
       rebalanceSave({ ...withWithdraw, weights, topUps: { saved: on, chosen: { on: true, keepUsd: 900 } } }),
     ).toMatchObject({ mixChanged: true, topUpsChanged: true, needsGrant: false, steps: 1 });
+  });
+});
+
+describe("savedText: the toast once a Save lands", () => {
+  const plan = { mixChanged: false, topUpsChanged: false, needsGrant: false };
+  it("says the mix is saved only when the mix changed", () => {
+    expect(savedText({ ...plan, mixChanged: true }, true)).toBe("Your mix is saved");
+    expect(savedText({ ...plan, mixChanged: true, topUpsChanged: true, needsGrant: true }, true)).toBe(
+      "Your mix is saved",
+    );
+  });
+
+  it("says top-ups are saved for Keep alone or the switch alone", () => {
+    expect(savedText({ ...plan, topUpsChanged: true }, true)).toBe("Top-ups saved"); // Keep, no grant
+    expect(savedText({ ...plan, topUpsChanged: true, needsGrant: true }, true)).toBe("Top-ups saved"); // the switch
+    expect(savedText({ ...plan, topUpsChanged: true }, false)).toBe("Top-ups saved"); // off alone, Rebalance stopped
+  });
+
+  it("says Rebalance is on when the Save turned it on, and Saved for a grant alone", () => {
+    expect(savedText({ ...plan, needsGrant: true }, false)).toBe("Rebalance is on");
+    expect(savedText({ ...plan, topUpsChanged: true, needsGrant: true }, false)).toBe("Rebalance is on");
+    expect(savedText({ ...plan, needsGrant: true }, true)).toBe("Saved");
   });
 });
 

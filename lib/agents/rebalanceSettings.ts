@@ -148,6 +148,16 @@ export function rebalanceSave(p: SaveInput): SavePlan {
 }
 
 /**
+ * The toast once a Save lands, from what it saved: "Your mix is saved" only when the mix changed; Rebalance turned on
+ * by it; top-ups (the switch or Keep) alone; else "Saved" (a grant again at CAP_MAX, nothing on screen changed).
+ */
+export function savedText(plan: Pick<SavePlan, "mixChanged" | "topUpsChanged" | "needsGrant">, running: boolean) {
+  if (plan.mixChanged) return "Your mix is saved";
+  if (plan.needsGrant && !running) return "Rebalance is on";
+  return plan.topUpsChanged ? "Top-ups saved" : "Saved";
+}
+
+/**
  * The allows line for a Save that grants (`rebalanceAllows`): with earning's own words too while top-ups are on and
  * earning is off, since the same Face ID grants earning (P3, `rebalanceChange`).
  */

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { isAddressEqual, maxUint160 } from "viem";
 import { useAccount } from "wagmi";
 import { toast } from "sonner";
@@ -21,7 +21,7 @@ import { aprToApy } from "@/lib/aave/math";
 import { AGENTS_LIVE } from "@/lib/agents/config";
 import { mixWeights, startingMix, type MixHolding, type MixRow } from "@/lib/agents/mix";
 import { stockLimitsRaw } from "@/lib/agents/permissions";
-import { rebalanceSave, type RebalanceTerms, type SavePlan } from "@/lib/agents/rebalanceSettings";
+import { rebalanceSave, savedText, type RebalanceTerms, type SavePlan } from "@/lib/agents/rebalanceSettings";
 import {
   TOP_UPS_NOT_YET,
   chainFacts,
@@ -54,13 +54,16 @@ export function RebalanceSettings({ account, onDone }: { account: `0x${string}`;
   const fee = useFeeSupport();
   const nowSec = useNowSec();
   const topUps = chainFacts(useTopUps(account));
+  // What the toast says once the Save lands, taken at the tap (`savedText`): the reads after it no longer know.
+  const said = useRef("Saved");
   const onSaved = useCallback(() => {
-    toast.success("Your mix is saved");
+    toast.success(said.current);
     onDone?.();
   }, [onDone]);
   const saving = useManageSave(account, agents, onSaved);
   const configured = AGENTS_LIVE;
   const status = agents.status.rebalance;
+  const running = status === "on" || status === "starting";
   // The grant's stock limits follow Aave's prices held steady, so the batch prepared for a Save isn't rebuilt on every read.
   const steady = useSteadyPrices(EQUITIES.map((e) => data?.holdings[e.reserveId].priceRaw ?? 0n));
   /**
@@ -100,7 +103,7 @@ export function RebalanceSettings({ account, onDone }: { account: `0x${string}`;
       configured={configured}
       connected={isConnected}
       preview={!address || !isAddressEqual(address, account)}
-      running={status === "on" || status === "starting"}
+      running={running}
       earningOff={agents.status.save === "off"}
       topUps={{
         ...topUps,
@@ -119,7 +122,10 @@ export function RebalanceSettings({ account, onDone }: { account: `0x${string}`;
       error={saving.error}
       prep={saving.prep}
       planFor={(r) => saving.planFor(toSave(r))}
-      onSave={(r) => saving.save(toSave(r))}
+      onSave={(r) => {
+        said.current = savedText(r.plan, running);
+        saving.save(toSave(r));
+      }}
     />
   );
 }
