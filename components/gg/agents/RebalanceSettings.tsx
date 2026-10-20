@@ -104,6 +104,9 @@ export function RebalanceSettings({ account, onDone }: { account: `0x${string}`;
       earningOff={agents.status.save === "off"}
       topUps={{
         ...topUps,
+        // A count goes in only on the grant Rebalance runs now. Stopped, or still to finish, the next grant starts with
+        // nothing waiting, so no note says when it goes in.
+        waiting: status === "on" ? topUps.waiting : null,
         rate: rateText(aprToApy(data.savingsApr)),
         debtUsd: data.debtUsd,
         protectSells: agents.status.sell === "on",
