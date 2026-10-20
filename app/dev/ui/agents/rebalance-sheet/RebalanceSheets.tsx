@@ -65,6 +65,8 @@ type Fixture = {
   draft?: MixRow[];
   topUps?: Partial<TopUpsFacts>;
   draftTopUps?: TopUpsChoice;
+  /** Earning (the Save job) is off: turning top-ups on grants it in the same Face ID. */
+  earningOff?: boolean;
   finish?: boolean;
 };
 
@@ -74,6 +76,12 @@ const STATES: Record<string, Fixture> = {
     title: "7f · Turning top-ups on: a new grant, one Face ID",
     topUps: { saved: OFF },
     draftTopUps: { on: true, keepUsd: 500 },
+  },
+  "turn-on-earning-off": {
+    title: "Turning top-ups on while earning is off: earning in the same Face ID",
+    topUps: { saved: OFF },
+    draftTopUps: { on: true, keepUsd: 500 },
+    earningOff: true,
   },
   waiting: {
     title: "7g · $300 waiting for the next check",
@@ -252,6 +260,7 @@ function stateOf(nowSec: number, f: Fixture) {
           configured={live}
           connected
           running={running}
+          earningOff={f.earningOff}
           topUps={topUps}
           feeBlocked={false}
           feeLoading={false}
