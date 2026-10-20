@@ -1,18 +1,17 @@
 "use client";
 
 import { useState } from "react";
-import { toast } from "sonner";
 import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
 import { ActivityAvatar } from "../activity/Activity";
 import { Summary, type SummaryRow } from "../home/Summary";
 import { TxButton, TxDone, TxError } from "../TxUi";
 import { TrendUpIcon } from "../kit/icons";
 import { useConvert, useConvertQuotes } from "@/hooks/useConvert";
-import { NOT_FAIR, type ConvertQuote } from "@/lib/tx/plans";
-import type { GrantView, useCashSetup } from "@/hooks/useCashSetup";
-import { usePrepare, type TxPhase, type TxPlan, type TxPrep } from "@/hooks/useTx";
+import { NOT_FAIR, planPrefix, type ConvertQuote } from "@/lib/tx/plans";
+import type { useCashSetup } from "@/hooks/useCashSetup";
+import { usePrepare, type TxPhase } from "@/hooks/useTx";
 import { AGENTS_LIVE } from "@/lib/agents/config";
-import { askAutomatic, arrivedText, type Arrived, type ArrivedView } from "@/lib/cashSetup";
+import { askAutomatic, automaticText, type Arrived, type ArrivedView } from "@/lib/cashSetup";
 import { formatCoin, formatUsd, inWords } from "@/lib/formatting";
 import { USDC } from "@/lib/tokens/registry";
 import type { EntryVenue } from "@/lib/tokens/stables";
@@ -101,7 +100,6 @@ const VENUE: Record<EntryVenue["kind"], string> = { aerodrome: "Aerodrome", unis
 
 /** "120 USDT", from a quote. */
 const coinText = (q: ConvertQuote) => `${formatCoin(Number(q.amountIn) / 10 ** q.coin.decimals)} ${q.coin.symbol}`;
-const asArrived = (qs: readonly ConvertQuote[]) => qs.map((q) => ({ coin: q.coin, raw: q.amountIn }));
 
 /**
  * Other dollars in the account that nothing converts on its own, and turning them into cash on one screen: what they
@@ -116,6 +114,7 @@ export function ArrivedCard({
   blocked = false,
   error,
   preview,
+  allows = null,
   onConvert,
 }: {
   text: string;
@@ -128,6 +127,11 @@ export function ArrivedCard({
   blocked?: boolean;
   error: string | null;
   preview: boolean;
+  /**
+   * What its one Face ID also lets the app do, said before the tap (JAW's batch sheet shows no words of ours): convert
+   * the next ones on their own. Null when it doesn't (agents not live, or they already convert on their own).
+   */
+  allows?: string | null;
   onConvert: () => void;
 }) {
   const fair = quotes?.filter((q) => q.fair) ?? [];
@@ -169,6 +173,7 @@ export function ArrivedCard({
           swapped.
         </p>
       )}
+      {allows && fair.length > 0 && <p className="m-0 text-xs leading-[1.4] text-ink-2">{allows}</p>}
       <TxError error={error ?? (quotes && fair.length === 0 ? NOT_FAIR : null)} />
       <TxButton
         label="Turn into cash"
@@ -183,70 +188,13 @@ export function ArrivedCard({
   );
 }
 
-/** What a conversion that landed brought: "120 USDT is cash now: about $119.83." */
-export const cashNowText = (sent: readonly ConvertQuote[]) =>
-  `${arrivedText(asArrived(sent))} ${sent.length === 2 ? "are" : "is"} cash now: about ${usd(sent.reduce((t, q) => t + q.outRaw, 0n))}.`;
-
 /**
- * After a conversion lands (`landed` says what it brought), with nothing converting on its own yet: Yes is the Entry
- * grant on JAW's sheet, and next time it happens by itself.
- */
-export function AutomaticStep({
-  landed,
-  grant,
-  limit,
-  prep,
-  plan = null,
-  onYes,
-  onNo,
-}: {
-  landed: string;
-  grant: GrantView;
-  /** The daily limit its one Face ID allows ("$1,000"). */
-  limit: string;
-  /** Its write's store and batch (useCashSetup `automatic`), prepared while it shows; none in the dev gallery. */
-  prep?: TxPrep;
-  plan?: TxPlan | null;
-  onYes: () => void;
-  onNo: () => void;
-}) {
-  const prepared = usePrepare(prep, plan);
-  return (
-    <>
-      <p className="m-0 text-[13px] text-ink-mid">{landed}</p>
-      {/* JAW's batch sheet shows no words of ours: what the Face ID lets the app do, before the tap. */}
-      <p className="m-0 text-[15px] leading-[1.45] text-ink-2">
-        Dollars other than USDC that arrive in your account turn into cash on their own, up to {limit} a day, at 99.5%
-        of face value or better.
-      </p>
-      <TxError error={grant.error ?? prepared.error} />
-      <TxButton
-        label="Yes"
-        size="md"
-        phase={grant.phase}
-        checking={prepared.checking}
-        note={grant.blocked}
-        disabled={!!grant.blocked || prepared.blocked}
-        preview={grant.preview}
-        onClick={onYes}
-      />
-      <button
-        type="button"
-        onClick={onNo}
-        disabled={grant.busy}
-        className="h-11 text-[15px] font-semibold text-ink-mid disabled:opacity-45"
-      >
-        No
-      </button>
-    </>
-  );
-}
-
-/**
- * "Turn into cash" where other dollars show (Home, the Top up sheet): the card, signing from its own button, then, once the batch
- * lands, "Do this automatically next time?" when an executor is configured and nothing converts on its own yet, or
- * "It's cash now". The card keeps the coins it was signed for while JAW's sheet is open, so it doesn't change under the
- * user as balances re-read.
+ * "Turn into cash" where other dollars show (Home, the Top up sheet): the card, signing from its own button, then "It's
+ * cash now" once the batch lands. While the agents are live and nothing converts on its own yet, the same Face ID also
+ * has the next ones convert on their own (Adrian, 2026-10-20: "turn into cash means next time automatically"): the
+ * Entry grant rides in the conversion's batch (useCashSetup `automaticPlan`), and the card says so before the tap. The
+ * card keeps the coins it was signed for while JAW's sheet is open, so it doesn't change under the user as balances
+ * re-read.
  */
 export function TurnIntoCash({
   user,
@@ -261,21 +209,25 @@ export function TurnIntoCash({
   active?: boolean;
 }) {
   const tx = useConvert();
-  // What was signed for, and whether the next question is asked: settled at the tap, so the grant switching it on
-  // doesn't swap the step under the user.
+  // What was signed for, and whether it also converts the next ones: settled at the tap, so the grant switching it on
+  // doesn't change the words under the user.
   const [held, setHeld] = useState<{
     text: string;
     coins: Arrived[];
     sent: readonly ConvertQuote[];
-    ask: boolean;
+    auto: boolean;
   } | null>(null);
   const landed = tx.phase === "done" && !!held;
   const pinned = (tx.busy || landed) && !!held;
   const live = view.kind === "ask" ? { text: view.text, coins: view.coins } : null;
   const shown = pinned ? held : live;
   const quotes = useConvertQuotes(shown?.coins ?? [], !!shown && !pinned);
-  // What the card's button would sign now, prepared while it's idle so the tap opens JAW's sheet at once.
-  const plan = active && shown && !pinned && quotes.data ? tx.planFor(user, quotes.data) : null;
+  // Whether this tap also has the next ones convert on their own.
+  const auto = askAutomatic(setup.entry, AGENTS_LIVE);
+  // What the card's button would sign now, prepared while it's idle so the tap opens JAW's sheet at once: the
+  // conversion, and with it the Entry grant when it asks.
+  const convert = active && shown && !pinned && quotes.data ? tx.planFor(user, quotes.data) : null;
+  const plan = convert && (auto ? setup.automaticPlan(planPrefix(convert)) : convert);
   const prep = usePrepare(tx.prep, plan);
   const close = () => {
     setHeld(null);
@@ -288,73 +240,49 @@ export function TurnIntoCash({
           text={shown.text}
           quotes={quotes.data ?? (quotes.isError ? [] : null)}
           phase={tx.phase}
-          checking={prep.checking}
+          // A batch with the Entry grant waits for what it's built from (the executor's registry): checking until then.
+          checking={plan ? prep.checking : !!convert}
           blocked={prep.blocked}
           error={tx.error ?? prep.error}
           preview={setup.preview}
+          allows={(pinned ? held?.auto : auto) ? automaticText(setup.entryLimitText) : null}
           onConvert={() => {
             if (!plan) return;
             if (tx.phase === "failed") tx.reset();
-            setup.resetAutomatic();
             const all = quotes.data ?? [];
-            setHeld({
-              text: shown.text,
-              coins: shown.coins,
-              sent: all.filter((q) => q.fair),
-              ask: askAutomatic(setup.entry, AGENTS_LIVE),
-            });
+            setHeld({ text: shown.text, coins: shown.coins, sent: all.filter((q) => q.fair), auto });
             void tx.sign(plan);
           }}
         />
       )}
-      <ConvertedSheet open={landed} held={held} setup={setup} txHash={tx.txHash} onClose={close} />
+      <ConvertedSheet open={landed} held={held} txHash={tx.txHash} onClose={close} />
     </>
   );
 }
 
-/**
- * Once the conversion lands: "Do this automatically next time?" when it was asked at the tap, else "It's cash now" with
- * what came in.
- */
+/** Once the conversion lands: "It's cash now" with what came in, and that the next ones convert on their own if so. */
 function ConvertedSheet({
   open,
   held,
-  setup,
   txHash,
   onClose,
 }: {
   open: boolean;
-  held: { sent: readonly ConvertQuote[]; ask: boolean } | null;
-  setup: ReturnType<typeof useCashSetup>;
+  held: { sent: readonly ConvertQuote[]; auto: boolean } | null;
   txHash: ReturnType<typeof useConvert>["txHash"];
   onClose: () => void;
 }) {
   const got = held?.sent.reduce((t, q) => t + q.outRaw, 0n) ?? 0n;
+  const next = held?.auto ? " Next time it happens on its own." : "";
   return (
-    <SheetShell
-      open={open}
-      onOpenChange={(next) => !next && onClose()}
-      title={held?.ask ? "Do this automatically next time?" : "Turn into cash"}
-    >
-      <SheetSteps stepKey={held?.ask ? "ask" : "done"} className="flex flex-col gap-3.5">
-        {held?.ask ? (
-          <AutomaticStep
-            landed={cashNowText(held.sent)}
-            grant={setup.automatic.view}
-            limit={setup.entryLimitText}
-            prep={setup.automatic.prep}
-            plan={setup.automatic.plan}
-            onYes={() =>
-              setup.convertAutomatically(() => {
-                toast.success("Done. Next time it’s automatic");
-                onClose();
-              })
-            }
-            onNo={onClose}
-          />
-        ) : (
-          <TxDone title="It’s cash now" body={`About ${usd(got)} is in your cash.`} txHash={txHash} onDone={onClose} />
-        )}
+    <SheetShell open={open} onOpenChange={(next) => !next && onClose()} title="Turn into cash">
+      <SheetSteps stepKey="done" className="flex flex-col gap-3.5">
+        <TxDone
+          title="It’s cash now"
+          body={`About ${usd(got)} is in your cash.${next}`}
+          txHash={txHash}
+          onDone={onClose}
+        />
       </SheetSteps>
     </SheetShell>
   );

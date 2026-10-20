@@ -130,6 +130,12 @@ export function arrivedView(list: readonly Arrived[], entry: AgentStatus): Arriv
 export const askAutomatic = (entry: AgentStatus, live: boolean) => live && entry === "off";
 
 /**
+ * What Turn into cash's one Face ID also lets the app do when it asks (`askAutomatic`), said on the card before the tap
+ * (Adrian, 2026-10-20: "turn into cash means next time automatically"). `limit` is Entry's daily limit ("$1,000").
+ */
+export const automaticText = (limit: string) => `Next time it happens on its own, up to ${limit} a day.`;
+
+/**
  * The Cash card's line: "Always earning" with the Save agent on; otherwise what's in savings does earn (Earn with
  * stocks puts credit there in its own batch), so "$25 earning" rather than "Not earning yet", which only stays when
  * nothing is in savings.

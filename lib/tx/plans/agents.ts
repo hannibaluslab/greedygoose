@@ -55,6 +55,16 @@ export type ChangePrefix = {
   activity?: ActivityItem[];
 };
 
+/**
+ * Another write's plan as the first calls of a change's batch (Turn into cash's conversion): its calls, key and
+ * activity, with nothing more for the allowlist to know.
+ */
+export const planPrefix = (plan: TxPlan): ChangePrefix => ({
+  key: plan.key,
+  calls: async () => (typeof plan.calls === "function" ? plan.calls() : plan.calls),
+  activity: plan.activity,
+});
+
 /** What a change's batch reads on Base while it's built, and what runs once it lands. */
 type ChangeDeps = {
   /** The account's code on Base: none yet means JAW's factory deploys it in the same user operation. */

@@ -6,6 +6,7 @@ import {
   arrivedText,
   arrivedView,
   askAutomatic,
+  automaticText,
   earningLine,
   MIN_START_USD,
   rateText,
@@ -106,12 +107,14 @@ describe("other dollars in the account", () => {
     expect(arrivedView([], "off")).toEqual({ kind: "none" });
   });
 
-  it("ask 'Do this automatically next time?' only once agents are live, with an executor and no Entry grant", () => {
+  it("Turn into cash converts the next ones too only once agents are live, with an executor and no Entry grant", () => {
     expect(STATUSES.filter((s) => askAutomatic(s, true))).toEqual(["off"]);
     // Until Chainlink approves the automation (NEXT_PUBLIC_AGENTS_LIVE), the Entry grant is never asked for.
     expect(STATUSES.filter((s) => askAutomatic(s, false))).toEqual([]);
     expect(AGENTS_LIVE).toBe(false);
     expect(askAutomatic("off", AGENTS_LIVE)).toBe(false);
+    // Said on the card before its one Face ID.
+    expect(automaticText("$1,000")).toBe("Next time it happens on its own, up to $1,000 a day.");
   });
 
   it("never name an agent, a limit or a savings pot", () => {

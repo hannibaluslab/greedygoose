@@ -185,7 +185,8 @@ the free shares' value. A stock whose shares all back credit is listed but can't
 - The Rebalancer waits while the credit is in Act (under 1.1), not down to Protect's line.
 - Until the agents go live (`NEXT_PUBLIC_AGENTS_LIVE=1`), "Coming soon" stands where the switches and
   Save are; the figures are real. The invisible grants wait too: Start earning is its batch alone (no Save grant), and
-  "Do this automatically next time?" (the Receive grant) isn't asked.
+  Turn into cash is the conversion alone (no Receive grant). Once live, Turn into cash's one Face ID also has the next
+  ones convert on their own, and the card says so before the tap.
 - The Agents feed shows the agents' moves only. Each agent turns off from its own sheet.
 - Rebalance only moves stocks that don't back credit, and never spends cash beyond the network fee. Its mix never adds
   up to more than 100%: a target stops where the other stocks' leave off.
