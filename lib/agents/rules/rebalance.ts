@@ -51,6 +51,10 @@ const min = (...v: bigint[]) => v.reduce((a, b) => (b < a ? b : a));
 const value = (s: RebalanceHolding) => (s.sharesRaw * s.price) / 10n ** 10n;
 const sum = (v: readonly bigint[]) => v.reduce((a, b) => a + b, 0n);
 
+/** A stock's band, in BPS of the mix: the smaller of `bandBps` of its target and `bandMaxBps` points. */
+export const bandOf = (weightBps: bigint, o: Pick<RebalanceOptions, "bandBps" | "bandMaxBps">) =>
+  min((weightBps * o.bandBps) / BPS, o.bandMaxBps);
+
 /**
  * Match the sides, within the USDC limit: the larger one shrinks, and a trade that falls under the minimum goes, until
  * nothing more drops. Shrinks `sell` and `buy` in place; false when nothing is left to trade.
@@ -99,7 +103,7 @@ export function rebalanceTrades(book: RebalanceBook, o: RebalanceOptions): Rebal
   for (let i = 0; i < s.length; i++) {
     if (s[i].weightBps === 0n) continue;
     const target = (total * s[i].weightBps) / BPS;
-    const band = (total * min((s[i].weightBps * o.bandBps) / BPS, o.bandMaxBps)) / BPS;
+    const band = (total * bandOf(s[i].weightBps, o)) / BPS;
     if (values[i] > target + band) {
       primary = true;
       const leg = min(values[i] - target - band / 2n, sellable[i]);

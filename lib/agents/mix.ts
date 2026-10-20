@@ -94,6 +94,20 @@ export function nowPercents(holdings: readonly MixHolding[], rows: readonly MixR
 }
 
 /**
+ * Each stock's share of the mix's free stock at Aave's price now, in BPS to a hundredth (nowPercents rounds to whole
+ * %), by reserve id: 0 for a stock out of the mix. Only the mix's stocks count, as the rule counts them. Null when the
+ * mix holds nothing.
+ */
+export function mixBpsNow(holdings: readonly MixHolding[], mixBps: readonly number[]): number[] | null {
+  const values = EQUITIES.map((e) => {
+    const h = mixBps[e.reserveId] > 0 ? holdingOf(holdings, e.reserveId) : undefined;
+    return h ? valueRaw(h) : 0n;
+  });
+  const total = values.reduce((a, b) => a + b, 0n);
+  return total > 0n ? values.map((v) => Number((v * 1_000_000n) / total) / 100) : null;
+}
+
+/**
  * The rule's options: GooseExecutor's live `rebalanceLimits()` once read (D18), config/risk.ts REBALANCER (its deploy
  * defaults) before.
  */

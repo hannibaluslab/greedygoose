@@ -43,6 +43,14 @@
   --neg-soft: #f3e0da;
   --gold: #b69050;
 
+  /* The agent cards (Agents boards 7): a stock Rebalance will sell, something due (trades, Retrying, Ends soon), and
+     an agent that needs the user (Needs you, Stopped). Not the status colours above: the boards set their own. */
+  --sell-soft: #f4d8d1;
+  --due-soft: #f1e4c2;
+  --due-ink: #6e5010;
+  --needs-soft: #f8d9bf;
+  --needs-ink: #7a360a;
+
   /* Hairlines */
   --line: rgba(14, 13, 11, 0.09);
   --line-mid: rgba(14, 13, 11, 0.12);
@@ -104,6 +112,11 @@
   --color-neg: var(--neg);
   --color-neg-soft: var(--neg-soft);
   --color-gold: var(--gold);
+  --color-sell-soft: var(--sell-soft);
+  --color-due-soft: var(--due-soft);
+  --color-due-ink: var(--due-ink);
+  --color-needs-soft: var(--needs-soft);
+  --color-needs-ink: var(--needs-ink);
   --color-line: var(--line);
   --color-line-mid: var(--line-mid);
   --color-line-strong: var(--line-strong);

@@ -14,7 +14,7 @@ import {
 import { isMix, previewTrades, type MixHolding } from "@/lib/agents/mix";
 import { JOBS, readStockLimits, type AgentJob } from "@/lib/agents/permissions";
 import { planProtect, weekendHeadsUp } from "@/lib/agents/rules/protect";
-import type { RebalanceOptions } from "@/lib/agents/rules/rebalance";
+import type { RebalanceOptions, RebalanceTrade } from "@/lib/agents/rules/rebalance";
 import { formatUsdTrim } from "@/lib/formatting";
 import { marketState } from "@/lib/market-hours";
 import { STATUS_LABEL, statusFor } from "@/lib/risk/status";
@@ -279,9 +279,32 @@ export function pricesHeldAt(nowSec: number, freezeAt: number | null): boolean {
   return freezeAt !== null ? freezeAt <= nowSec : !marketState(new Date(nowSec * 1000)).open;
 }
 
-/** Rebalance: the trades its rule finds for the saved mix on today's free shares, at the next window. */
-function rebalanceNext(i: NextInput): Next {
-  if (!i.mixBps || !isMix(i.mixBps) || i.mixBps.every((w) => w === 0)) return { idle: "No mix yet" };
+/** What the Rebalancer's outlook reads: NextInput's own fields, the Rebalancer's alone where they're kept by job. */
+export type OutlookInput = Pick<
+  NextInput,
+  "nowSec" | "holdings" | "mixBps" | "capMaxRaw" | "rebalanceDay" | "debtUsd" | "totalBackingUsd" | "avgCf"
+> & {
+  left: Pick<NextInput["left"], "rebalance">;
+  capRaw: Pick<NextInput["capRaw"], "rebalance">;
+  numbers: Pick<RuleNumbers, "rebalance">;
+};
+
+/**
+ * What the Rebalancer does at its next window, for its sheet's line and its card: whether a mix is saved, the trades
+ * its rule finds for it on today's free shares, when it looks next, and whether it waits because the credit is in Act.
+ */
+export type RebalanceOutlook = {
+  noMix: boolean;
+  trades: RebalanceTrade[];
+  checkAt: number;
+  /** Trades are due, and the credit is in Act: GooseExecutor's RebalanceJob waits. */
+  waitsInAct: boolean;
+};
+
+export function rebalanceOutlook(i: OutlookInput): RebalanceOutlook {
+  const checkAt = rebalanceCheckAt(i.nowSec, i.rebalanceDay);
+  if (!i.mixBps || !isMix(i.mixBps) || i.mixBps.every((w) => w === 0))
+    return { noMix: true, trades: [], checkAt, waitsInAct: false };
   const left = i.left.rebalance;
   const trades = previewTrades({
     holdings: i.holdings,
@@ -300,13 +323,20 @@ function rebalanceNext(i: NextInput): Next {
         }
       : undefined,
   });
-  const when = whenText(rebalanceCheckAt(i.nowSec, i.rebalanceDay), i.nowSec);
-  if (trades.length === 0) return { idle: `On target. Checks ${when}` };
   // GooseExecutor's RebalanceJob waits while the credit is in Act: the status line (RebalanceJob.ACT_HF), not
   // Protect's, which acts further down (Adrian, 2026-10-19).
   const hf = i.debtUsd > 0 ? (i.totalBackingUsd * i.avgCf) / i.debtUsd : Infinity;
-  if (hf < RISK.watchMin) return { idle: "Waits until your credit is out of Act" };
-  const spend = usd(trades.filter((t) => t.buy).reduce((a, t) => a + t.amountIn, 0n));
+  return { noMix: false, trades, checkAt, waitsInAct: trades.length > 0 && hf < RISK.watchMin };
+}
+
+/** Rebalance: the trades its rule finds for the saved mix on today's free shares, at the next window. */
+function rebalanceNext(i: NextInput): Next {
+  const o = rebalanceOutlook(i);
+  if (o.noMix) return { idle: "No mix yet" };
+  const when = whenText(o.checkAt, i.nowSec);
+  if (o.trades.length === 0) return { idle: `On target. Checks ${when}` };
+  if (o.waitsInAct) return { idle: "Waits until your credit is out of Act" };
+  const spend = usd(o.trades.filter((t) => t.buy).reduce((a, t) => a + t.amountIn, 0n));
   return move(`trades ${spend} ${when}`, `Would trade ${spend}`);
 }
 
