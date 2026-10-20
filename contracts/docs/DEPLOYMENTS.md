@@ -65,7 +65,7 @@ Adds to the runner switch's next deploy above (GooseExecutor-as-built.md, "Rebal
 |---|---|---|
 | Top-ups into the mix | none | `setTopUps(on, keep)`, `topUps(account)`; Save counts, Rebalance puts in from savings at the next market morning |
 | Rebalance's grant | no Aave call | with top-ups: Aave V3's savings withdraw (to the account only) and an aUSDC limit at spends[1], a week, at CAP_MAX |
-| Save's grant | $1,000 a day | the app grants it at CAP_MAX (P2, still to build: the app grants $1,000 a day) |
+| Save's grant | $1,000 a day | CAP_MAX, a day (P2): Rebalance's Save grants it so; Start earning still grants $1,000 a day until Cash setup moves to `startCapRaw` |
 | Registration | `register(...)` and `registerApproved` | `registerApproved` only |
 | Reads | `jobsOf` | gone: the app reads `accounts`, which both executors have |
 | Events | | `TopUpsSet`, `TopUpCounted`, `TopUpInvested` |
