@@ -9,7 +9,7 @@ import { permissionTuple } from "@/lib/protocols/abis";
 /*
  * Registration (runner switch plan, option 1; Adrian, 2026-10-20): a JAW grant only approves the permission in the
  * manager, and GooseExecutor runs a job once it is registered. No runner watches the manager's events, so the app
- * registers it, from the user's own account, right after the grant: `registerApproved` with the permission as the
+ * registers it, from the user's own account, in the change's last batch after its grants: `registerApproved` with the permission as the
  * manager's PermissionApproved event logs it, abi.encode(permission). Anyone may call it; the executor rebuilds the
  * job's template and checks the manager approved exactly that.
  */
@@ -26,14 +26,22 @@ export function decodePermission(data: Hex): JawPermission {
   return { ...p, calls: [...p.calls], spends: [...p.spends] };
 }
 
-/** One `registerApproved` a permission, in one batch: the user's own grants of the executor, nothing else. */
-export function buildRegisterCalls(user: `0x${string}`, permissions: readonly JawPermission[]): Call[] {
+/**
+ * One batch for a change's last JAW sheet (Adrian, 2026-10-20: "Batch those into one"): its settings in the executor's
+ * registry (`setMix`, `setKeepMix`, each built by its own builder), then one `registerApproved` per new grant (the
+ * user's own grants of the executor, nothing else). Atomic: all of it lands, or none of it.
+ */
+export function buildRegisterCalls(
+  user: `0x${string}`,
+  permissions: readonly JawPermission[],
+  settings: readonly Call[] = [],
+): Call[] {
   if (!GOOSE_EXECUTOR) throw new Error("Agents aren't available yet");
   const executor = GOOSE_EXECUTOR;
-  if (permissions.length === 0) throw new Error("Nothing to register");
-  return assertAllowed(
-    user,
-    permissions.map((p) => ({
+  if (permissions.length === 0 && settings.length === 0) throw new Error("Nothing to register");
+  return assertAllowed(user, [
+    ...settings,
+    ...permissions.map((p) => ({
       to: executor,
       data: encodeFunctionData({
         abi: gooseExecutorAbi,
@@ -42,5 +50,5 @@ export function buildRegisterCalls(user: `0x${string}`, permissions: readonly Ja
       }),
       value: 0n,
     })),
-  );
+  ]);
 }

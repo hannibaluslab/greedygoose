@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { previewTrades, rebalanceOptions, type MixHolding } from "@/lib/agents/mix";
 import type { StockLimits } from "@/lib/agents/permissions";
-import { rebalanceSave, tradeLines } from "@/lib/agents/rebalanceSettings";
+import { rebalanceSave, rebalanceSteps, tradeLines } from "@/lib/agents/rebalanceSettings";
 import type { RebalanceTrade } from "@/lib/agents/rules/rebalance";
 
 const usdc = (usd: number) => BigInt(usd) * 10n ** 6n;
@@ -103,19 +103,19 @@ describe("rebalanceSave", () => {
     });
   });
 
-  it("takes three steps for a stock the grant can't sell yet: the mix, the grant and its registration", () => {
+  it("takes two steps for a stock the grant can't sell yet: the grant, then the mix and its registration in one batch", () => {
     const weights = [2_500, 2_500, 0, 0, 0, 2_500, 2_500];
     expect(rebalanceSave({ ...base, weights })).toMatchObject({
       mixChanged: true,
       needsGrant: true,
-      steps: 3,
+      steps: 2,
       note: null,
     });
   });
 
   it("switches it on with the first mix", () => {
     expect(rebalanceSave({ ...base, saved: [0, 0, 0, 0, 0, 0, 0], terms: null, running: false })).toMatchObject({
-      steps: 3,
+      steps: 2,
       canSave: true,
       note: null,
     });
@@ -144,5 +144,36 @@ describe("rebalanceSave", () => {
     expect(rebalanceSave({ ...base, weights, feeLoading: true }).canSave).toBe(false);
     expect(rebalanceSave({ ...base, weights, connected: false }).canSave).toBe(false);
     expect(rebalanceSave({ ...base, weights, capMaxRaw: null }).canSave).toBe(false);
+  });
+});
+
+describe('rebalanceSteps: what Save runs is what it counts (Adrian, 2026-10-20: "Batch those into one")', () => {
+  it("grants, then one batch; or the batch alone while this sheet's grant waits; or the mix alone", () => {
+    expect(rebalanceSteps({ needsGrant: true, mixChanged: true, waiting: false })).toEqual(["grant", "batch"]);
+    expect(rebalanceSteps({ needsGrant: true, mixChanged: false, waiting: true })).toEqual(["grant", "batch"]);
+    expect(rebalanceSteps({ needsGrant: false, mixChanged: true, waiting: true })).toEqual(["batch"]);
+    expect(rebalanceSteps({ needsGrant: false, mixChanged: false, waiting: true })).toEqual(["batch"]);
+    expect(rebalanceSteps({ needsGrant: false, mixChanged: true, waiting: false })).toEqual(["mix"]);
+    expect(rebalanceSteps({ needsGrant: false, mixChanged: false, waiting: false })).toEqual([]);
+  });
+
+  it("keeps Save on while a batch this sheet owes is left, and counts it", () => {
+    const mix = [2_500, 0, 0, 0, 0, 5_000, 2_500];
+    const base = {
+      configured: true,
+      connected: true,
+      saved: mix,
+      weights: mix,
+      terms: { capRaw: usdc(500), limitsRaw: [1n, 0n, 0n, 0n, 0n, 1n, 1n] },
+      capRaw: usdc(500),
+      capMaxRaw: usdc(10_000),
+      running: true,
+      feeBlocked: false,
+      feeLoading: false,
+      busy: false,
+    };
+    const waiting = rebalanceSave({ ...base, waiting: true });
+    expect(waiting).toMatchObject({ steps: 1, canSave: true });
+    expect(rebalanceSave({ ...base })).toMatchObject({ steps: 0, canSave: false });
   });
 });

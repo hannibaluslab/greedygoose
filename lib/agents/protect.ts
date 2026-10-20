@@ -1,6 +1,5 @@
 import { EQUITIES } from "@/lib/tokens/registry";
 import { stockLimitsRaw, type StockLimits } from "@/lib/agents/permissions";
-import { GRANT_SHEETS } from "@/lib/agents/status";
 
 /*
  * Protect's settings (the agent sheet, docs/agents-redesign): repay from cash (Job.Protect, always first), selling
@@ -22,12 +21,19 @@ export type ProtectSaved = {
 /** What the screen shows: the saved settings until the user changes one. */
 export type ProtectChoice = { sellOn: boolean; keepMix: boolean; never: readonly number[] };
 
-/** One JAW sheet each: the registry setting through useTx, then each grant or revoke on JAW's own screen (D14). */
+/**
+ * One JAW sheet each: the registry setting through useTx, each grant or revoke on JAW's own screen (D14), and a
+ * change's last batch (`withRegistration`): its "Sells first" and the registration of the jobs it granted.
+ */
 export type ProtectStep =
   | { kind: "keepMix"; on: boolean }
   | { kind: "grant"; job: "protect"; capRaw: bigint }
   | { kind: "grant"; job: "sell"; capRaw: bigint; limitsRaw: StockLimits }
-  | { kind: "revoke"; job: "sell" };
+  | { kind: "revoke"; job: "sell" }
+  | { kind: "register"; jobs: ProtectJob[]; keepMix?: boolean };
+
+/** Protect's two jobs: repaying from cash, and selling backing stock. */
+export type ProtectJob = "protect" | "sell";
 
 /** The stocks a sell grant leaves out (limit 0), by reserve id. */
 export function neverSellOf(limitsRaw: StockLimits | null | undefined): number[] {
@@ -92,12 +98,34 @@ export function protectSteps(
 }
 
 /**
- * How many times a save opens JAW's sheet: once a step, a grant twice (its registration with the executor follows it,
- * GRANT_SHEETS), and a revoke once for each sell grant JAW still lists.
+ * A save as it runs (Adrian, 2026-10-20: "Batch those into one"): when it grants anything, or this sheet's grants still
+ * wait for their batch (`waiting`: one that didn't go through; a grant from anywhere else is the Finish card's), its
+ * grants and revokes in order, then one batch with "Sells first" (when it changed) and the registration of every job
+ * granted or waiting, except one it revokes. With
+ * nothing to register, the steps as they are: "Sells first" on its own, first.
  */
-export function stepCount(steps: readonly ProtectStep[], sellGrants: number): number {
-  return steps.reduce(
-    (n, s) => n + (s.kind === "revoke" ? Math.max(1, sellGrants) : s.kind === "grant" ? GRANT_SHEETS : 1),
-    0,
+export function withRegistration(steps: readonly ProtectStep[], waiting: readonly ProtectJob[] = []): ProtectStep[] {
+  const revoked: ProtectJob[] = steps.flatMap((s) => (s.kind === "revoke" ? [s.job] : []));
+  const granted: ProtectJob[] = steps.flatMap((s) => (s.kind === "grant" ? [s.job] : []));
+  const jobs = (["protect", "sell"] as const).filter(
+    (j) => granted.includes(j) || (waiting.includes(j) && !revoked.includes(j)),
   );
+  if (jobs.length === 0) return [...steps];
+  const keep = steps.find((s) => s.kind === "keepMix");
+  return [
+    ...steps.filter((s) => s.kind !== "keepMix" && s.kind !== "register"),
+    { kind: "register", jobs, ...(keep && { keepMix: keep.on }) },
+  ];
+}
+
+/**
+ * How many times a save opens JAW's sheet, as it runs (`withRegistration`): once a step, and a revoke once for each
+ * sell grant JAW still lists.
+ */
+export function stepCount(
+  steps: readonly ProtectStep[],
+  sellGrants: number,
+  waiting: readonly ProtectJob[] = [],
+): number {
+  return withRegistration(steps, waiting).reduce((n, s) => n + (s.kind === "revoke" ? Math.max(1, sellGrants) : 1), 0);
 }

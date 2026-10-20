@@ -2,31 +2,29 @@ import { JOBS, type AgentGrant, type AgentJob } from "@/lib/agents/permissions";
 
 /**
  * - "unconfigured": no executor is set (NEXT_PUBLIC_GOOSE_EXECUTOR), so no agent can be switched on yet.
- * - "starting": JAW granted it and the executor hasn't registered it yet: the app does, right after the grant
- *   (useAgents `register`), or the Agents tab's Finish card when that didn't go through.
+ * - "starting": JAW granted it and the executor hasn't registered it yet: the app does in the change's last batch
+ *   (useAgents `registerJobs`), or the Agents tab's Finish card when that didn't go through.
  * - "on": the executor runs it with a grant JAW still lists.
  */
 export type AgentStatus = "unconfigured" | "loading" | "off" | "starting" | "on";
 
 /**
- * JAW sheets a job's switch-on takes: its grant, then its registration with the executor (runner switch plan, option 1:
- * no runner watches the manager, so the app registers each grant itself).
+ * JAW sheets a change's grants take once registered (runner switch plan, option 1: no runner watches the manager, so the
+ * app registers each grant itself): one sheet per grant, then one batch with the change's registry settings and every
+ * new grant's registration (Adrian, 2026-10-20: "Batch those into one").
  */
-export const GRANT_SHEETS = 2;
+export const changeSheets = (grants: number) => (grants > 0 ? grants + 1 : 0);
 
 /**
- * A switch-on whose grant went through and whose registration didn't (`cause` says why: a sheet JAW couldn't open, one
- * cancelled, a check or a landing that failed). The job shows "starting", and trying again registers it alone.
+ * A change's last batch that stopped before JAW signed it, in the app's own words (its simulation's reason, a batch that
+ * failed on Base, an account that can't send it in one go): said as it is, not as a generic failure.
  */
-export class RegisterStopped extends Error {
-  constructor(cause: unknown) {
-    super(cause instanceof Error ? cause.message : String(cause), { cause });
-    this.name = "RegisterStopped";
+export class AgentStop extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AgentStop";
   }
 }
-
-/** JAW sheets that went through in a step that stopped: its grant, when only its registration didn't. */
-export const grantLanded = (error: unknown) => (error instanceof RegisterStopped ? 1 : 0);
 
 /** A job's grant as the executor stores it: what the user signed that its template doesn't fix. */
 export type Stored = { start: number; end: number; cap: bigint };

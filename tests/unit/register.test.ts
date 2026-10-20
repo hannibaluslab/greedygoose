@@ -21,8 +21,9 @@ import {
   type JawPermission,
 } from "@/lib/agents/permissions";
 import { buildRegisterCalls, decodePermission, encodePermission } from "@/lib/agents/register";
-import { GRANT_SHEETS, RegisterStopped, grantLanded } from "@/lib/agents/status";
-import { stepSheets } from "@/hooks/useAgentRun";
+import { changeSheets } from "@/lib/agents/status";
+import { stepSheets, withRegistration } from "@/hooks/useAgentRun";
+import { buildSetKeepMixCalls, buildSetMixCalls } from "@/lib/agents/settings";
 import { assertAllowed } from "@/lib/allowlist";
 import { registerPlan } from "@/lib/tx/plans";
 import { EQUITIES } from "@/lib/tokens/registry";
@@ -164,18 +165,57 @@ describe("buildRegisterCalls: one registerApproved a grant, to the executor, fro
   });
 });
 
-describe("counting JAW sheets now each grant is registered", () => {
-  it("a grant is two sheets, a turn-off one", () => {
-    expect(GRANT_SHEETS).toBe(2);
-    expect(stepSheets([{ grant: { job: "protect", capRaw: 1n } }, { off: "sell" }])).toBe(3);
+describe("a change's last batch: its settings and its registrations, in one sheet (Adrian, 2026-10-20)", () => {
+  const mix = [5_000, 0, 0, 0, 0, 5_000, 0];
+
+  it("puts the settings first, then one registerApproved per grant, all allowlisted", () => {
+    const p = grantPermission(grantOf("rebalance"), user, EXECUTOR);
+    const calls = buildRegisterCalls(user, [p], buildSetMixCalls(user, mix));
+    expect(calls.map((c) => decodeFunctionData({ abi: gooseExecutorAbi, data: c.data }).functionName)).toEqual([
+      "setMix",
+      "registerApproved",
+    ]);
+    const protect = [
+      grantPermission(grantOf("protect"), user, EXECUTOR),
+      grantPermission(grantOf("sell"), user, EXECUTOR),
+    ];
+    expect(
+      buildRegisterCalls(user, protect, buildSetKeepMixCalls(user, true)).map(
+        (c) => decodeFunctionData({ abi: gooseExecutorAbi, data: c.data }).functionName,
+      ),
+    ).toEqual(["setKeepMix", "registerApproved", "registerApproved"]);
+    // Settings alone (a grant registered meanwhile) still make a batch; someone else's grant never does.
+    expect(buildRegisterCalls(user, [], buildSetMixCalls(user, mix))).toHaveLength(1);
+    expect(() => buildRegisterCalls(user, [{ ...p, account: someoneElse }], buildSetMixCalls(user, mix))).toThrow(
+      /Blocked/,
+    );
   });
 
-  it("a stop after the grant landed counts the grant, keeping the registration's own reason", () => {
-    const blocked = new Error("Failed to open popup. Please allow popups for this site.");
-    const stopped = new RegisterStopped(blocked);
-    expect(grantLanded(stopped)).toBe(1);
-    expect(grantLanded(blocked)).toBe(0);
-    expect(stopped.message).toBe(blocked.message);
-    expect(stopped.cause).toBe(blocked);
+  it("keys the plan by its settings too, so a kept batch is sent only for the same change", () => {
+    const p = grantPermission(grantOf("rebalance"), user, EXECUTOR);
+    expect(registerPlan(user, [p], buildSetMixCalls(user, mix)).key).not.toBe(registerPlan(user, [p]).key);
+    expect(registerPlan(user, [p], buildSetMixCalls(user, mix)).key).not.toBe(
+      registerPlan(user, [p], buildSetMixCalls(user, [10_000, 0, 0, 0, 0, 0, 0])).key,
+    );
+    expect(registerPlan(user, [p], buildSetMixCalls(user, mix)).key).toBe(
+      registerPlan(user, [p], buildSetMixCalls(user, [...mix])).key,
+    );
+  });
+
+  it("counts a sheet per grant, then the one batch", () => {
+    expect(changeSheets(0)).toBe(0);
+    expect(changeSheets(1)).toBe(2);
+    expect(changeSheets(2)).toBe(3);
+  });
+
+  it("ends an agent change that grants anything with one registration of every job it granted", () => {
+    const grantP = { grant: { job: "protect" as const, capRaw: 1n } };
+    const grantS = { grant: { job: "sell" as const, capRaw: 1n, limitsRaw: sellLimits } };
+    expect(withRegistration([grantP, grantS])).toEqual([grantP, grantS, { register: ["protect", "sell"] }]);
+    expect(stepSheets([grantP, grantS])).toBe(3);
+    expect(withRegistration([{ off: "sell" }])).toEqual([{ off: "sell" }]);
+    expect(stepSheets([{ off: "sell" }, { off: "protect" }])).toBe(2);
+    // A change that already ends in its batch (a retry's rest) is left as it is.
+    expect(withRegistration([{ register: ["protect"] }])).toEqual([{ register: ["protect"] }]);
   });
 });

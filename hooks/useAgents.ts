@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { isAddressEqual, zeroAddress } from "viem";
 import {
   useAccount,
@@ -31,8 +32,8 @@ import {
   type StockLimits,
 } from "@/lib/agents/permissions";
 import {
+  AgentStop,
   OFF_UNREADABLE,
-  RegisterStopped,
   jobStatus,
   offUnreadable,
   type AgentStatus,
@@ -69,13 +70,20 @@ const fresh = new Map<string, AgentGrant>();
 const freshKey = (account: string, job: AgentJob) => `${account.toLowerCase()}:${job}`;
 
 /**
+ * The registry settings a change's last batch carried when it stopped before landing (blocked, cancelled, failed), by
+ * account and job, so the Finish card completes the change as it was asked, not only its registrations. Forgotten once
+ * the job runs, or when a later save sets them alone (`forgetSettings`).
+ */
+const stoppedSettings = new Map<string, readonly Call[]>();
+
+/**
  * A registration JAW couldn't open (Safari opens its popup only inside a tap, and it comes after the grant's): its
  * checked batch, sent by the next tap that asks for the same before anything is awaited, under useTx's 30 s and only if
  * no write landed since.
  */
 let kept: { key: string; batch: Call[]; at: number; epoch: number } | null = null;
 
-/** Said when a registration JAW sent didn't land: the grant stands, and the next try registers it alone. */
+/** Said when a change's last batch JAW sent didn't land: the grants stand, and the next try sends the batch again. */
 const REGISTER_FAILED = "This didn’t go through on Base. Try again to finish turning it on.";
 
 /** Times a registration is checked: the grant's block can reach Base's public node a moment after JAW's. */
@@ -132,6 +140,7 @@ export function useAgents(account: `0x${string}`) {
   const chainCaps = (caps.data as Record<number, ChainCapabilities> | undefined)?.[CHAIN_ID];
   const send = useSendCalls();
   const config = useConfig();
+  const queryClient = useQueryClient();
 
   /** Grants and revokes are the account's own, like useTx's calls: never while another address is shown (`?as=`). */
   function ownAccount() {
@@ -280,38 +289,87 @@ export function useAgents(account: `0x${string}`) {
     [account, live, stored, nowSec],
   );
 
-  /** The jobs granted but not running yet (status "starting"), and the batch that registers them all. */
+  /**
+   * A job's grant waiting for its registration: this page's own while the registry doesn't hold it yet (JAW's list may
+   * not show it yet, and the render's state may be older than the grant), else `unregistered`.
+   */
+  const waitingGrant = (job: AgentJob): AgentGrant | null => {
+    const own = fresh.get(freshKey(account, job));
+    const id = JOBS.indexOf(job);
+    const held = !!stored && (stored.jobs & (1 << id)) !== 0 && stored.permissions[id].salt === own?.salt;
+    return own && !held ? own : unregistered[job];
+  };
+
+  /**
+   * The jobs granted but not running yet (status "starting"), and the batch that registers them all, with the settings
+   * their stopped change carried (each once).
+   */
   const toFinish = JOBS.filter((job) => status[job] === "starting" && unregistered[job]);
+  const finishSettings = [
+    ...new Map(
+      toFinish.flatMap((job) => stoppedSettings.get(freshKey(account, job)) ?? []).map((c) => [c.data, c] as const),
+    ).values(),
+  ];
   const finishPlan: TxPlan | null =
     executor && toFinish.length > 0
       ? registerPlan(
           account,
           toFinish.map((job) => grantPermission(unregistered[job]!, account, executor)),
+          finishSettings,
         )
       : null;
+
+  // A job that runs with no grant waiting has nothing left to finish: its stopped change's settings are forgotten.
+  useEffect(() => {
+    for (const job of JOBS)
+      if (status[job] === "on" && !unregistered[job]) stoppedSettings.delete(freshKey(account, job));
+  }, [account, status, unregistered]);
 
   /** A registration's batch, checked like every write (useTx's checkPlan), a few times while the grant's block lands. */
   async function checked(plan: TxPlan): Promise<Call[]> {
     for (let i = 1; ; i++) {
       const r = await checkPlan(plan, checkDeps(client));
       if (r.ok) return r.batch;
-      if (i === CHECKS) throw new Error(r.error);
+      if (i === CHECKS) throw new AgentStop(r.error);
       await new Promise((ok) => setTimeout(ok, CHECK_GAP_MS));
     }
   }
 
   /**
-   * Registers grants with the executor, one `registerApproved` each in one batch on JAW's sheet: the app's half of
-   * turning a job on, since no runner watches the manager (runner switch plan, option 1). Checked and simulated first,
-   * then JAW signs, then it waits for Base and reads the registry again. A sheet JAW couldn't open keeps its batch
-   * (`kept`), and the next tap for the same grants sends it before anything is awaited.
+   * A change's last batch on JAW's sheet: its registry `settings`, then one `registerApproved` per grant, the app's half
+   * of turning a job on, since no runner watches the manager (runner switch plan, option 1). Checked and simulated
+   * first, then JAW signs, then it waits for Base and reads the registry again. A sheet JAW couldn't open keeps its
+   * batch (`kept`), and the next tap for the same change sends it before anything is awaited.
    */
-  async function register(grants: readonly AgentGrant[]) {
+  async function register(grants: readonly AgentGrant[], settings: readonly Call[] = []) {
     if (!executor) throw new Error("Agents aren't available yet");
     const plan = registerPlan(
       account,
       grants.map((g) => grantPermission(g, account, executor)),
+      settings,
     );
+    try {
+      await sendBatch(plan);
+      for (const g of grants) {
+        fresh.delete(freshKey(account, g.job));
+        stoppedSettings.delete(freshKey(account, g.job));
+      }
+    } catch (e) {
+      // The batch that stopped is what the Finish card completes: its settings, or none.
+      for (const g of grants) {
+        if (settings.length > 0) stoppedSettings.set(freshKey(account, g.job), settings);
+        else stoppedSettings.delete(freshKey(account, g.job));
+      }
+      throw e;
+    }
+  }
+
+  /**
+   * Sends a checked batch on JAW's sheet, the kept one when it's ready for the same change (nothing awaited before JAW
+   * is called), then waits for Base. Landed: every read on the page is fetched again (the settings, the position), as
+   * useTx does. Either way the registry and JAW's list are read again.
+   */
+  async function sendBatch(plan: TxPlan) {
     const ready =
       kept && kept.key === plan.key && Date.now() - kept.at < PREPARED_TTL_MS && kept.epoch === chainEpoch()
         ? kept.batch
@@ -319,7 +377,7 @@ export function useAgents(account: `0x${string}`) {
     kept = null;
     const batch = ready ?? (await checked(plan));
     const atomic = atomicSend(chainCaps, batch.length);
-    if (!atomic) throw new Error(NOT_ATOMIC);
+    if (!atomic) throw new AgentStop(NOT_ATOMIC);
     let id: string;
     try {
       ({ id } = await send.mutateAsync({
@@ -333,8 +391,8 @@ export function useAgents(account: `0x${string}`) {
     }
     try {
       const landed = await waitForCallsStatus(config, { id });
-      if (landed.status !== "success") throw new Error(REGISTER_FAILED);
-      for (const g of grants) fresh.delete(freshKey(account, g.job));
+      if (landed.status !== "success") throw new AgentStop(REGISTER_FAILED);
+      void queryClient.invalidateQueries();
     } finally {
       chainMoved();
       await refetch();
@@ -342,17 +400,17 @@ export function useAgents(account: `0x${string}`) {
   }
 
   /**
-   * Two JAW sheets per job: its grant (a grant request carries one permission), then its registration with the
-   * executor (`register`). Protect · sell and the Rebalancer take a limit per stock as well (`stockLimitsRaw`). The
-   * request is built here, synchronously from the tap, and JAW's grant is called before anything is awaited (Safari
-   * opens JAW's popup only inside the tap's activation). A job already granted on the same terms and only waiting for
-   * its registration (a sheet that didn't open, one cancelled) is registered alone, so trying again never grants twice.
+   * A job's grant on JAW's own sheet (a grant request carries one permission); the change's last batch registers it
+   * (`registerJobs`). Protect · sell and the Rebalancer take a limit per stock as well (`stockLimitsRaw`). The request
+   * is built here, synchronously from the tap, and JAW's grant is called before anything is awaited (Safari opens JAW's
+   * popup only inside the tap's activation). A job already granted on the same terms and only waiting for its
+   * registration (a batch that didn't open, one cancelled) opens no sheet, so trying again never grants twice.
    */
-  async function turnOn(job: AgentJob, capRaw: bigint, limitsRaw?: StockLimits) {
+  async function grantJob(job: AgentJob, capRaw: bigint, limitsRaw?: StockLimits) {
     if (!executor) throw new Error("Agents aren't available yet");
     ownAccount();
-    const waiting = unregistered[job];
-    if (waiting && waiting.capRaw === capRaw && sameLimits(waiting.limitsRaw, limitsRaw)) return register([waiting]);
+    const waiting = waitingGrant(job);
+    if (waiting && waiting.capRaw === capRaw && sameLimits(waiting.limitsRaw, limitsRaw)) return;
     const request = {
       address: account,
       chainId: CHAIN_ID,
@@ -363,12 +421,18 @@ export function useAgents(account: `0x${string}`) {
     const granted = readAgentGrant(listedFromGrant(await grant.mutateAsync(request)), executor);
     if (granted) fresh.set(freshKey(account, job), granted);
     await refetch();
-    if (!granted) return;
-    try {
-      await register([granted]);
-    } catch (e) {
-      throw new RegisterStopped(e);
-    }
+  }
+
+  /**
+   * A change's last batch (Adrian, 2026-10-20: "Batch those into one"): its registry `settings` (`setMix`,
+   * `setKeepMix`) and the registration of each of `jobs`' grants that the executor doesn't run yet, this page's own
+   * first, in one JAW sheet. Nothing to register and no setting: nothing opens.
+   */
+  async function registerJobs(jobs: readonly AgentJob[], settings: readonly Call[] = []) {
+    ownAccount();
+    const grants = jobs.map(waitingGrant).filter((g): g is AgentGrant => !!g);
+    if (grants.length === 0 && settings.length === 0) return;
+    await register(grants, settings);
   }
 
   /**
@@ -382,6 +446,7 @@ export function useAgents(account: `0x${string}`) {
     const toRevoke = live[job].filter((g) => !revoked.has(g.permissionId)).length;
     if (offUnreadable(status[job], toRevoke, listed.isError)) throw new Error(OFF_UNREADABLE);
     fresh.delete(freshKey(account, job));
+    stoppedSettings.delete(freshKey(account, job));
     try {
       for (const g of live[job]) {
         if (revoked.has(g.permissionId)) continue;
@@ -415,7 +480,10 @@ export function useAgents(account: `0x${string}`) {
     cooldownUntil: stored?.cooldownUntil ?? 0,
     busy: grant.isPending || revoke.isPending || send.isPending,
     error: grant.error ?? revoke.error ?? send.error,
-    turnOn,
+    grantJob,
+    registerJobs,
+    /** A save that sets `job`'s settings alone: the stopped change's settings are no longer what the user wants. */
+    forgetSettings: (job: AgentJob) => stoppedSettings.delete(freshKey(account, job)),
     turnOff,
     refetch,
     /** The jobs JAW granted that the executor hasn't registered yet: they show "starting" and run once registered. */

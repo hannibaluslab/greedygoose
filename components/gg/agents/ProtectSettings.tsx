@@ -19,8 +19,10 @@ import {
   protectSteps,
   savedChoice,
   stepCount,
+  withRegistration,
   type ProtectChoice,
   type ProtectSaved,
+  type ProtectJob,
   type ProtectStep,
 } from "@/lib/agents/protect";
 import type { AgentStatus } from "@/lib/agents/status";
@@ -80,6 +82,7 @@ export function ProtectSettings({ account, onDone }: { account: `0x${string}`; o
       capMaxRaw={agents.capMaxRaw}
       // Turning selling off revokes each sell grant JAW lists that hasn’t ended (useAgents.turnOff): one JAW sheet each.
       sellGrants={agents.faceIdsOff(["sell"])}
+      registering={saving.registering}
       feeBlocked={!!address && fee.state === "unsupported"}
       waiting={fee.loading || agents.busy}
       phase={saving.phase}
@@ -115,6 +118,8 @@ export type ProtectSettingsViewProps = {
   capMaxRaw: bigint | null;
   /** Sell grants JAW lists that haven’t ended: one JAW sheet each to switch selling off. */
   sellGrants: number;
+  /** This sheet's grants waiting for a batch that didn't go through: Save sends it (useProtectSave `registering`). */
+  registering?: readonly ProtectJob[];
   feeBlocked: boolean;
   /** Something still loading or signing elsewhere (fee support, an agent switch). */
   waiting?: boolean;
@@ -136,6 +141,7 @@ export function ProtectSettingsView({
   pricesRaw,
   capMaxRaw,
   sellGrants,
+  registering = [],
   feeBlocked,
   waiting = false,
   phase,
@@ -153,7 +159,7 @@ export function ProtectSettingsView({
   // Until CAP_MAX is read nothing can save (`ready` below), so the steps only say what's blocked.
   const plan = protectSteps(saved, choice, { capMaxRaw: capMaxRaw ?? 0n, pricesRaw });
   const steps = live ? plan.steps : [];
-  const count = stepCount(steps, sellGrants);
+  const count = stepCount(steps, sellGrants, registering);
   const names = (ids: readonly number[]) =>
     inWords(EQUITIES.filter((e) => ids.includes(e.reserveId)).map((e) => e.name));
 
@@ -164,16 +170,19 @@ export function ProtectSettingsView({
     ready: !preview && !waiting && !busy && capMaxRaw !== null,
     feeBlocked,
     blocked: plan.blocked,
-    changes: steps.length,
+    // A batch this sheet still owes counts as something to save: Save sends it.
+    changes: withRegistration(steps, registering).length,
   });
-  // Save's first JAW sheet is "Sells first" when it changed: its batch is prepared while the body is idle.
-  const first = steps[0];
+  // Save's first JAW sheet is "Sells first" when it changed and nothing is granted (else it rides in the last batch): its
+  // batch is prepared while the body is idle.
+  const first = withRegistration(steps, registering)[0];
   const prepared = usePrepare(prep, canSave && first?.kind === "keepMix" && settingPlan ? settingPlan(first.on) : null);
 
   const neverChanged = choice.never.length !== start.never.length || choice.never.some((r) => !start.never.includes(r));
   const lines = steps.flatMap((s) => {
     if (s.kind === "keepMix") return [`Sells first: ${ORDER.find((o) => o.keepMix === s.on)!.label}`];
     if (s.kind === "revoke") return ["Selling: off"];
+    if (s.kind === "register") return [];
     if (s.job === "protect") return ["Repay from your cash: on"];
     const never =
       !saved.sell || neverChanged ? [`Never sell: ${choice.never.length > 0 ? names(choice.never) : "none"}`] : [];

@@ -1,3 +1,4 @@
+import type { Call } from "@/lib/aave/tx";
 import type { JawPermission } from "@/lib/agents/permissions";
 import { buildRegisterCalls, REGISTER_FALLBACK } from "@/lib/agents/register";
 import { buildSetKeepMixCalls, buildSetMixCalls } from "@/lib/agents/settings";
@@ -17,14 +18,22 @@ export const keepMixPlan = (account: `0x${string}`, on: boolean): TxPlan => ({
   calls: () => Promise.resolve(buildSetKeepMixCalls(account, on)),
 });
 
-/** The registrations of the user's new grants (`registerApproved`), as useTx signs them: keyed by the account and salts. */
-export const registerPlan = (account: `0x${string}`, permissions: readonly JawPermission[]): TxPlan => ({
+/**
+ * A change's last batch: its registry settings, then the registrations of its new grants (`registerApproved`), as
+ * useTx signs them: keyed by the account, the grants' salts and the settings' calldata.
+ */
+export const registerPlan = (
+  account: `0x${string}`,
+  permissions: readonly JawPermission[],
+  settings: readonly Call[] = [],
+): TxPlan => ({
   key: txKey(
     "register",
     account,
     permissions.map((p) => p.salt),
+    settings.map((c) => c.data),
   ),
   user: account,
-  calls: () => Promise.resolve(buildRegisterCalls(account, permissions)),
+  calls: () => Promise.resolve(buildRegisterCalls(account, permissions, settings)),
   fallback: REGISTER_FALLBACK,
 });

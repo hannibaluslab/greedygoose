@@ -40,8 +40,8 @@ import { EQUITIES } from "@/lib/tokens/registry";
  * runs and its next trades from its own rule (lib/agents/rules/rebalance.ts) on live holdings. The sheet says what it
  * never does. While it's off, saving switches it on.
  * Everything comes from hooks, so it drops into the sheet with `<RebalanceSettings account={account} />`.
- * Saving is `setMix` through useTx and, when needed, a new grant on JAW's own screen (useManageSave). Without an
- * executor it renders live data and saves nothing ("Not live yet").
+ * Saving is a new grant on JAW's own screen when needed, then one batch with the mix and its registration, or the
+ * mix alone through useTx (useManageSave). Without an executor it renders live data and saves nothing ("Not live yet").
  */
 export function RebalanceSettings({ account, onDone }: { account: `0x${string}`; onDone?: () => void }) {
   const { data } = usePosition(account);
@@ -73,6 +73,7 @@ export function RebalanceSettings({ account, onDone }: { account: `0x${string}`;
       feeBlocked={isConnected && fee.state === "unsupported"}
       feeLoading={fee.loading}
       busy={agents.busy || saving.busy}
+      waiting={saving.registering}
       phase={saving.phase}
       error={saving.error}
       prep={saving.prep}
@@ -129,6 +130,7 @@ export function RebalanceSettingsView({
   feeBlocked,
   feeLoading,
   busy,
+  waiting = false,
   phase,
   error,
   prep,
@@ -150,6 +152,8 @@ export function RebalanceSettingsView({
   feeBlocked: boolean;
   feeLoading: boolean;
   busy: boolean;
+  /** This sheet's grant waits for its batch: Save sends it (useManageSave `registering`). */
+  waiting?: boolean;
   phase: TxPhase;
   error: string | null;
   /** The write's store (useManageSave's `prep`) and the `setMix` batch for a mix, so Save's batch is ready before the tap. */
@@ -189,11 +193,14 @@ export function RebalanceSettingsView({
     feeBlocked,
     feeLoading,
     busy,
+    waiting,
   });
-  // Save's first JAW sheet is the mix when it changed: its batch is prepared while the body is idle, so the tap opens it.
+  // Save's only JAW sheet is the mix when it changed and nothing is granted or waiting (else the mix rides in the batch
+  // after the grant): its batch is prepared while the body is idle, so the tap opens it.
+  const mixAlone = plan.mixChanged && !plan.needsGrant && !waiting;
   const prepared = usePrepare(
     prep,
-    plan.canSave && limitTyped && !preview && plan.mixChanged && settingPlan ? settingPlan(weights) : null,
+    plan.canSave && limitTyped && !preview && mixAlone && settingPlan ? settingPlan(weights) : null,
   );
 
   const notInMix = EQUITIES.filter((e) => !rows.some((r) => r.reserveId === e.reserveId));

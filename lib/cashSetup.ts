@@ -1,5 +1,5 @@
 import { erc20Abi, isAddressEqual } from "viem";
-import { GRANT_SHEETS, type AgentStatus } from "@/lib/agents/status";
+import { changeSheets, type AgentStatus } from "@/lib/agents/status";
 import { CHAIN_ID } from "@/lib/chain";
 import { formatCoin, formatUsdTrim } from "@/lib/formatting";
 import { startEarningMinRaw } from "@/lib/startEarning";
@@ -45,7 +45,7 @@ export const saveGrantFollows = (save: AgentStatus, live: boolean) => live && sa
  * "3 steps".
  */
 export const startEarningSteps = (save: AgentStatus, live: boolean) =>
-  saveGrantFollows(save, live) ? 1 + GRANT_SHEETS : 1;
+  saveGrantFollows(save, live) ? 1 + changeSheets(1) : 1;
 
 /**
  * The card's words (board 2g): money that just arrived, "Your $100 arrived · Start earning 4.6% on it."; with savings

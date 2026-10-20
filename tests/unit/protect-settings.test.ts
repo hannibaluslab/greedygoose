@@ -6,6 +6,7 @@ import {
   savedChoice,
   sellLimitsFor,
   stepCount,
+  withRegistration,
   type ProtectSaved,
 } from "@/lib/agents/protect";
 import { readAgentGrant, sellGrant, stockLimitsRaw, type ListedPermission } from "@/lib/agents/permissions";
@@ -79,8 +80,8 @@ describe("protectSteps", () => {
       { kind: "grant", job: "protect", capRaw: CAP_MAX },
       { kind: "grant", job: "sell", capRaw: CAP_MAX, limitsRaw: sellLimitsFor(CAP_MAX, PRICES, [TESLA]) },
     ]);
-    // Each grant is two JAW sheets: the grant, then its registration with the executor.
-    expect(stepCount(steps, 0)).toBe(4);
+    // A sheet per grant, then one batch that registers both (Adrian, 2026-10-20: "Batch those into one").
+    expect(stepCount(steps, 0)).toBe(3);
     // Selling still on from before, its repay grant ended: repaying goes back on first.
     const sellOnly: ProtectSaved = { ...fullOn, repayOn: false };
     expect(protectSteps(sellOnly, savedChoice(sellOnly), ctx).steps).toEqual([
@@ -151,5 +152,44 @@ describe("protectSteps", () => {
     if (sell.kind !== "grant" || sell.job !== "sell") throw new Error("no sell grant");
     expect(sell.limitsRaw).toEqual(EQUITIES.map(() => (2n ** 32n - 1n) * 10_000n));
     expect(sellGrant(sell.capRaw, sell.limitsRaw).spends).toHaveLength(2 + EQUITIES.length);
+  });
+});
+
+describe('withRegistration: a save\'s grants, then one batch (Adrian, 2026-10-20: "Batch those into one")', () => {
+  const grantP = { kind: "grant" as const, job: "protect" as const, capRaw: CAP_MAX };
+  const grantS = {
+    kind: "grant" as const,
+    job: "sell" as const,
+    capRaw: CAP_MAX,
+    limitsRaw: sellLimitsFor(CAP_MAX, PRICES, []),
+  };
+
+  it("moves Sells first into the batch that registers what the save granted", () => {
+    expect(withRegistration([{ kind: "keepMix", on: true }, grantP, grantS])).toEqual([
+      grantP,
+      grantS,
+      { kind: "register", jobs: ["protect", "sell"], keepMix: true },
+    ]);
+    expect(stepCount([{ kind: "keepMix", on: true }, grantP, grantS], 0)).toBe(3);
+  });
+
+  it("leaves a save with nothing to register as it was: Sells first on its own, then the revoke", () => {
+    const steps = [
+      { kind: "keepMix" as const, on: false },
+      { kind: "revoke" as const, job: "sell" as const },
+    ];
+    expect(withRegistration(steps)).toEqual(steps);
+    expect(stepCount(steps, 2)).toBe(3);
+  });
+
+  it("registers a job still waiting from a save that stopped, but never one the save revokes", () => {
+    expect(withRegistration([{ kind: "keepMix", on: true }], ["protect"])).toEqual([
+      { kind: "register", jobs: ["protect"], keepMix: true },
+    ]);
+    expect(withRegistration([{ kind: "revoke", job: "sell" }], ["sell"])).toEqual([{ kind: "revoke", job: "sell" }]);
+    expect(withRegistration([{ kind: "revoke", job: "sell" }], ["protect", "sell"])).toEqual([
+      { kind: "revoke", job: "sell" },
+      { kind: "register", jobs: ["protect"] },
+    ]);
   });
 });
