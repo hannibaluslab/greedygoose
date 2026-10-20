@@ -10,8 +10,9 @@ import { FeedCard, FeedDays } from "@/components/gg/activity/Activity";
 import { AgentSheet } from "@/components/gg/AgentSheet";
 import { ProtectSettings } from "@/components/gg/agents/ProtectSettings";
 import { RebalanceSettings } from "@/components/gg/agents/RebalanceSettings";
-import { AgentRow, AgentsFeed, AgentsView, AttentionCard, MixBar } from "@/components/gg/Agents";
+import { AgentsFeed, AgentsView, AttentionCard } from "@/components/gg/Agents";
 import { ProtectCardSkeleton, ProtectCardView } from "@/components/gg/agents/ProtectCard";
+import { RebalanceCard } from "@/components/gg/agents/RebalanceCard";
 import { useAgentFeed } from "@/hooks/useAgentFeed";
 import { useActWarning } from "@/hooks/useActWarning";
 import { useAgentRun, type AgentStep } from "@/hooks/useAgentRun";
@@ -34,7 +35,6 @@ import {
   longDateText,
   protectWarnings,
   type Agent,
-  type AgentItem,
   type Next,
   type SheetAction,
 } from "@/lib/agents/list";
@@ -54,7 +54,6 @@ const byJob = <T,>(f: (job: AgentJob) => T) =>
 const LOADING = Object.fromEntries(AGENTS.map((a) => [a, { idle: "…" }])) as Record<Agent, Next>;
 
 const PREVIEW = "Preview mode. Sign in to do this.";
-const SHORT_DATE = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
 
 /** A job or an agent that runs: on, or starting (its grant is in JAW's list, not yet in the registry). */
 const runs = (s: string) => s === "on" || s === "starting";
@@ -110,7 +109,6 @@ function Agents({ address }: { address: `0x${string}` }) {
    * is read nothing is granted, and the rules run on the largest a grant could hold.
    */
   const startCap = (job: AgentJob) => startCapRaw(job, capMax ?? maxUint160);
-  const mixSet = !!settings?.mixBps.some((w) => w > 0);
 
   const numbers = settings?.numbers ?? defaultNumbers(rebalanceOptions());
   const next = position
@@ -177,18 +175,6 @@ function Agents({ address }: { address: `0x${string}` }) {
     targetHf: numbers.targetHf,
   });
   const warnings = protectWarnings({ act: actCard, weekend });
-  /**
-   * The Rebalancer's row line, until its own card lands: failed runs while Protect's card doesn't say so (Protect off),
-   * and a stop on its own, which the old tab's cards said.
-   */
-  const rebalanceStop = stoppedAt("rebalance");
-  const rebalanceLine = (line: string) =>
-    rebalanceStop !== null
-      ? `Stopped on ${SHORT_DATE.format(rebalanceStop * 1000)}`
-      : !protectRuns && runs(agents.status.rebalance) && agents.fails >= 3
-        ? `Its last ${agents.fails} runs didn’t go through. Nothing moved.`
-        : line;
-
   /** The cap an agent's switch grants: the Rebalancer's limit on its row; Protect's CAP_MAX (no amount limit). */
   const switchCap = (agent: Agent) => {
     const usd = items.find((i) => i.agent === agent)!.limitUsd;
@@ -279,10 +265,6 @@ function Agents({ address }: { address: `0x${string}` }) {
     setOpen(agent);
     setShown(true);
   };
-  const onSwitch = (agent: Agent, on: boolean) => {
-    if (on && agent === "rebalance" && !mixSet) openSheet(agent);
-    else act(agent, on ? "on" : "off");
-  };
 
   const sheet = open && sheetFor(open);
   function sheetFor(agent: Agent) {
@@ -347,19 +329,7 @@ function Agents({ address }: { address: `0x${string}` }) {
             <ProtectCardView model={protect} onOpen={() => openSheet("protect")} />
           )
         }
-        rebalance={items
-          .filter((item: AgentItem) => item.agent === "rebalance")
-          .map((item: AgentItem) => (
-            <AgentRow
-              key={item.agent}
-              item={{ ...item, line: rebalanceLine(item.line) }}
-              live={live}
-              switchable={live && item.status !== "loading" && !runner.running}
-              onOpen={() => openSheet(item.agent)}
-              onSwitch={(on) => onSwitch(item.agent, on)}
-              extra={mixSet && settings ? <MixBar mixBps={settings.mixBps} /> : undefined}
-            />
-          ))}
+        rebalance={<RebalanceCard account={address} onOpen={() => openSheet("rebalance")} />}
         feed={
           <AgentsFeed
             empty="Nothing yet. What your agents do, and why, shows up here."
