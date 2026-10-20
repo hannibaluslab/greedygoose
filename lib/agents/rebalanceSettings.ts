@@ -37,6 +37,8 @@ export type SavePlan = {
   canSave: boolean;
   /** Why it can't save, under the button; null when it can. */
   note: string | null;
+  /** What the Face ID lets Rebalance do (`rebalanceAllows`), above Save while it grants; null otherwise. */
+  allows: string | null;
 };
 
 type SaveInput = {
@@ -90,7 +92,12 @@ export function rebalanceSave(p: SaveInput): SavePlan {
   const keepMissing = !!topUps && topUps.chosen.on && topUps.chosen.keepUsd === null;
   const note = saveNote(p, whole, keepMissing);
   const canSave = p.connected && note === null && steps > 0 && p.capMaxRaw !== null && !p.feeLoading && !p.busy;
-  return { mixChanged, topUpsChanged: topUpsMoved, needsGrant, steps, canSave, note };
+  // Said only while Save grants, and not while Keep is empty: the line would name an amount nobody typed.
+  const allows =
+    needsGrant && !keepMissing
+      ? rebalanceAllows(topUps?.chosen.on ? { keepUsd: topUps.chosen.keepUsd ?? 0 } : undefined)
+      : null;
+  return { mixChanged, topUpsChanged: topUpsMoved, needsGrant, steps, canSave, note, allows };
 }
 
 /**

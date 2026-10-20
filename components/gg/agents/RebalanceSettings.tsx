@@ -20,7 +20,7 @@ import { aprToApy } from "@/lib/aave/math";
 import { AGENTS_LIVE } from "@/lib/agents/config";
 import { mixWeights, startingMix, type MixHolding, type MixRow } from "@/lib/agents/mix";
 import { stockLimitsRaw } from "@/lib/agents/permissions";
-import { rebalanceAllows, rebalanceSave, type RebalanceTerms, type SavePlan } from "@/lib/agents/rebalanceSettings";
+import { rebalanceSave, type RebalanceTerms, type SavePlan } from "@/lib/agents/rebalanceSettings";
 import {
   TOP_UPS_NOT_YET,
   choiceFrom,
@@ -220,10 +220,6 @@ export function RebalanceSettingsView({
   // JAW's sheet with nothing awaited first.
   const request: SaveRequest = { weights, capRaw, plan, topUps: topUpsSetting };
   const prepared = usePrepare(prep, plan.canSave && !preview && planFor ? planFor(request) : null);
-  // JAW's batch sheet shows no words of ours: what the Face ID lets Rebalance do, said before the tap when it grants.
-  const allows = plan.needsGrant
-    ? rebalanceAllows(topUpsSetting?.on ? { keepUsd: topUpsSetting.keepUsd } : undefined)
-    : null;
 
   return (
     <div className="flex flex-col gap-3 leading-[normal]">
@@ -239,7 +235,6 @@ export function RebalanceSettingsView({
       {configured ? (
         <SaveArea
           plan={plan}
-          allows={allows}
           // "Turn on" while it's off: saving switches it on.
           action={running ? "Save" : "Turn on"}
           phase={phase}
@@ -261,11 +256,11 @@ export function RebalanceSettingsView({
 
 /**
  * Save at the foot of the sheet, only when something changed (`plan.steps` > 0): one batch, one Face ID, whatever it
- * carries. Above it, what a new grant lets Rebalance do (`allows`) and the last write's error.
+ * carries. Above it, what a new grant lets Rebalance do (`plan.allows`: JAW's batch sheet shows no words of ours) and
+ * the last write's error.
  */
 function SaveArea({
   plan,
-  allows,
   action,
   phase,
   error,
@@ -275,8 +270,6 @@ function SaveArea({
   onClick,
 }: {
   plan: SavePlan;
-  /** What the Face ID lets Rebalance do, while Save grants; null otherwise. */
-  allows: string | null;
   action: string;
   phase: TxPhase;
   error: string | null;
@@ -288,7 +281,7 @@ function SaveArea({
   if (plan.steps === 0 && !error) return null;
   return (
     <div className="flex flex-col gap-2 pt-1">
-      {allows && plan.steps > 0 && <p className="m-0 px-1 text-[13px] leading-[1.4] text-ink-2">{allows}</p>}
+      {plan.allows && plan.steps > 0 && <p className="m-0 px-1 text-[13px] leading-[1.4] text-ink-2">{plan.allows}</p>}
       <TxError error={error} />
       {plan.steps > 0 && (
         <TxButton

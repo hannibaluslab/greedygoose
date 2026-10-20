@@ -31,6 +31,7 @@ describe("rebalanceSave", () => {
       steps: 0,
       canSave: false,
       note: "Not live yet",
+      allows: null,
     });
   });
 
@@ -83,6 +84,14 @@ describe("rebalanceSave", () => {
       canSave: true,
       note: null,
     });
+  });
+
+  it("says what the Face ID lets Rebalance do above Save only while Save grants", () => {
+    const capped = { ...base, terms: { capRaw: usdc(100), limitsRaw: limits } };
+    expect(rebalanceSave(capped).allows).toBe(rebalanceAllows());
+    expect(rebalanceSave({ ...base, terms: null, running: false }).allows).toBe(rebalanceAllows());
+    expect(rebalanceSave({ ...base, weights: [5_000, 0, 0, 0, 0, 2_500, 2_500] }).allows).toBeNull();
+    expect(rebalanceSave(base).allows).toBeNull();
   });
 
   it("stays disabled until the mix adds up to 100%", () => {
@@ -163,7 +172,11 @@ describe("rebalanceSave: Top-ups go into my mix", () => {
       steps: 1,
       canSave: true,
       note: null,
+      allows: rebalanceAllows({ keepUsd: 500 }),
     });
+    expect(rebalanceSave({ ...base, topUps: { saved: off, chosen: { on: true, keepUsd: 0 } } }).allows).toMatch(
+      /put every top-up into it/,
+    );
   });
 
   it("takes a new grant without the withdraw to turn them off: one batch, the old grant revoked in it", () => {
@@ -171,6 +184,8 @@ describe("rebalanceSave: Top-ups go into my mix", () => {
       topUpsChanged: true,
       needsGrant: true,
       steps: 1,
+      // The new grant has no withdraw, so the line says it never spends cash.
+      allows: rebalanceAllows(),
     });
   });
 
@@ -181,13 +196,21 @@ describe("rebalanceSave: Top-ups go into my mix", () => {
       needsGrant: false,
       steps: 1,
       canSave: true,
+      allows: null,
     });
   });
 
-  it("waits for an amount while Keep is empty", () => {
+  it("waits for an amount while Keep is empty, and says nothing it allows until one is typed", () => {
     expect(
       rebalanceSave({ ...withWithdraw, topUps: { saved: on, chosen: { on: true, keepUsd: null } } }),
     ).toMatchObject({ steps: 1, canSave: false, note: "Enter an amount" });
+    // Turning them on with Keep emptied: a new grant, but no "every top-up" for an amount nobody typed.
+    expect(rebalanceSave({ ...base, topUps: { saved: off, chosen: { on: true, keepUsd: null } } })).toMatchObject({
+      needsGrant: true,
+      canSave: false,
+      note: "Enter an amount",
+      allows: null,
+    });
   });
 
   it("grants again when the grant lost the withdraw while top-ups are on", () => {
