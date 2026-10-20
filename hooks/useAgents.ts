@@ -130,6 +130,28 @@ const stopPlan = (account: `0x${string}`, why: string): TxPlan => ({
   calls: () => Promise.reject(new TxStop(why)),
 });
 
+type TopUpsSwitch = ReturnType<typeof useTopUpsSwitch>;
+
+/**
+ * Rebalance's turn-off switches top-ups off too: it waits (null) while the switch is first read, and says why when Base
+ * doesn't answer rather than wait for ever. Undefined when it may go ahead.
+ */
+const topUpsOffGate = (
+  account: `0x${string}`,
+  off: readonly AgentJob[] | undefined,
+  topUps: TopUpsSwitch,
+): TxPlan | null | undefined => {
+  if (!off?.includes("rebalance")) return undefined;
+  if (topUps === undefined) return null;
+  return topUps === "unreadable" ? stopPlan(account, CANT_CHECK_AGENTS) : undefined;
+};
+
+/** `setTopUps(false)` when Rebalance turns off with top-ups on, so nothing is left counting. */
+const topUpsOffCalls = (account: `0x${string}`, off: readonly AgentJob[] | undefined, topUps: TopUpsSwitch): Call[] =>
+  off?.includes("rebalance") && typeof topUps === "object" && topUps?.on
+    ? buildSetTopUpsCalls(account, false, topUps.keepRaw)
+    : [];
+
 /**
  * One account's agents. A change is one batch, one Face ID (D14 dropped, Adrian 2026-10-20: "the permission, the cash
  * move and the registration in one signature like Leo's Guardian"): its new grants approved in JAW's manager and
@@ -584,8 +606,8 @@ export function useAgents(account: `0x${string}`) {
     prefix?: ChangePrefix;
   }): TxPlan | null {
     if (!executor || !client || !stored || !onChain) return null;
-    // Rebalance's turn-off switches top-ups off too, so it waits for the switch's first read.
-    if (change.off?.includes("rebalance") && topUpsSwitch === undefined) return null;
+    const gate = topUpsOffGate(account, change.off, topUpsSwitch);
+    if (gate !== undefined) return gate;
     const asked = change.grants ?? [];
     const jobs = [...new Set([...asked.map((g) => g.job), ...(change.off ?? [])])];
     // Nothing is granted or revoked on a guess: what Base or JAW's list would have said could be left behind.
@@ -603,8 +625,7 @@ export function useAgents(account: `0x${string}`) {
         const detail = jobGrant(g.job, g.capRaw, g.limitsRaw, g.topUps);
         return jawPermission(account, executor, pick.start + GRANT_SECONDS, detail, pick);
       });
-      if (change.off?.includes("rebalance") && topUpsSwitch?.on)
-        settings = [...settings, ...buildSetTopUpsCalls(account, false, topUpsSwitch.keepRaw)];
+      settings = [...settings, ...topUpsOffCalls(account, change.off, topUpsSwitch)];
     } catch {
       // A grant its job's template can't hold (a Rebalancer with no stock it may sell): said, never thrown in render.
       return stopPlan(account, REGISTER_FALLBACK);

@@ -28,7 +28,7 @@ const NONE: TopUpsAnswer = { status: "failure" };
  * available either. Undefined until Base answers: Base not answering (a 429, a dropped call) is never read as a revert
  * (`topUpsAnswerOf`), and a refetch that fails keeps the last answer.
  */
-function useTopUpsAnswer(account: `0x${string}`): TopUpsAnswer | undefined {
+function useTopUpsQuery(account: `0x${string}`): { answer: TopUpsAnswer | undefined; unreadable: boolean } {
   const executor = GOOSE_EXECUTOR;
   const q = useReadContract({
     address: executor ?? zeroAddress,
@@ -39,17 +39,25 @@ function useTopUpsAnswer(account: `0x${string}`): TopUpsAnswer | undefined {
     query: { enabled: !!executor, refetchInterval: 20_000, retry: (n, e) => n < 3 && !topUpsReverted(e) },
   });
   const answer = useMemo(() => topUpsAnswerOf(q.data, q.error), [q.data, q.error]);
-  return executor ? answer : NONE;
+  if (!executor) return { answer: NONE, unreadable: false };
+  // Base didn't answer after its retries and nothing was read before: not loading any more, and not a revert.
+  return { answer, unreadable: answer === undefined && q.isError && q.fetchStatus === "idle" };
+}
+
+function useTopUpsAnswer(account: `0x${string}`): TopUpsAnswer | undefined {
+  return useTopUpsQuery(account).answer;
 }
 
 /**
  * The account's own top-ups switch and Keep as cash (USDC units) as the executor has them, for a turn-off's batch:
- * undefined until Base answers (a turn-off waits rather than leave top-ups on), null on an executor that doesn't count
- * top-ups.
+ * undefined while Base is still answering (a turn-off waits rather than leave top-ups on), "unreadable" when Base
+ * didn't answer (a turn-off then says why at the button), null on an executor that doesn't count top-ups.
  */
-export function useTopUpsSwitch(account: `0x${string}`): { on: boolean; keepRaw: bigint } | null | undefined {
-  const answer = useTopUpsAnswer(account);
-  if (!answer) return undefined;
+export function useTopUpsSwitch(
+  account: `0x${string}`,
+): { on: boolean; keepRaw: bigint } | null | undefined | "unreadable" {
+  const { answer, unreadable } = useTopUpsQuery(account);
+  if (!answer) return unreadable ? "unreadable" : undefined;
   if (answer.status !== "success") return null;
   const [on, , keep] = answer.result;
   return { on, keepRaw: BigInt(keep) };
