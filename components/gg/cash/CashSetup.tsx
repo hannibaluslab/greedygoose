@@ -191,25 +191,19 @@ export function ArrivedCard({
 }
 
 /**
- * "Turn into cash" where other dollars show (Home, the Top up sheet): the card, signing from its own button, then "It's
- * cash now" once the batch lands. While the agents are live and nothing converts on its own yet, the same Face ID also
- * has the next ones convert on their own (Adrian, 2026-10-20: "turn into cash means next time automatically"): the
- * Entry grant rides in the conversion's batch (useCashSetup `automaticPlan`), and the card says so before the tap. The
- * card keeps the coins it was signed for while JAW's sheet is open, so it doesn't change under the user as balances
- * re-read.
+ * Turn into cash's state, for whichever screen shows its card (Home's menu, the Top up sheet): the card's props while
+ * there's something to convert (null otherwise), and once its batch lands what came in. While the agents are live and
+ * nothing converts on its own yet, the same Face ID also has the next ones convert on their own (Adrian, 2026-10-20:
+ * "turn into cash means next time automatically"): the Entry grant rides in the conversion's batch (useCashSetup
+ * `automaticPlan`). The card keeps the coins it was signed for while JAW's sheet is open, so it doesn't change under
+ * the user as balances re-read. `active` false (the sheet it sits in is closed or sliding away): nothing is prepared.
  */
-export function TurnIntoCash({
-  user,
-  view,
-  setup,
+export function useTurnIntoCash(
+  user: `0x${string}`,
+  view: ArrivedView,
+  setup: ReturnType<typeof useCashSetup>,
   active = true,
-}: {
-  user: `0x${string}`;
-  view: ArrivedView;
-  setup: ReturnType<typeof useCashSetup>;
-  /** False while the sheet it sits in slides away: nothing is prepared then. */
-  active?: boolean;
-}) {
+) {
   const tx = useConvert();
   // What was signed for, and whether it also converts the next ones: settled at the tap, so the grant switching it on
   // doesn't change the words under the user.
@@ -235,35 +229,54 @@ export function TurnIntoCash({
     setHeld(null);
     tx.reset();
   };
-  return (
-    <>
-      {shown && !landed && (
-        <ArrivedCard
-          text={shown.text}
-          quotes={quotes.data ?? (quotes.isError ? [] : null)}
-          phase={tx.phase}
+  const card: Parameters<typeof ArrivedCard>[0] | null =
+    shown && !landed
+      ? {
+          text: shown.text,
+          quotes: quotes.data ?? (quotes.isError ? [] : null),
+          phase: tx.phase,
           // A batch with the Entry grant waits for what it's built from (the executor's registry): checking until then.
-          checking={plan ? prep.checking : !!convert}
-          blocked={prep.blocked}
-          error={tx.error ?? prep.error}
-          preview={setup.preview}
-          setsUp={!!(pinned ? held?.auto : auto)}
-          onConvert={() => {
+          checking: plan ? prep.checking : !!convert,
+          blocked: prep.blocked,
+          error: tx.error ?? prep.error,
+          preview: setup.preview,
+          setsUp: !!(pinned ? held?.auto : auto),
+          onConvert: () => {
             if (!plan) return;
             if (tx.phase === "failed") tx.reset();
             const all = quotes.data ?? [];
             setHeld({ text: shown.text, coins: shown.coins, sent: all.filter((q) => q.fair), auto });
             void tx.sign(plan);
-          }}
-        />
-      )}
-      <ConvertedSheet open={landed} held={held} txHash={tx.txHash} onClose={close} />
+          },
+        }
+      : null;
+  return { card, landed, held, txHash: tx.txHash, close };
+}
+
+/** "Turn into cash" in a screen of its own (the Top up sheet): its card, then "It's cash now" once it lands. */
+export function TurnIntoCash({
+  user,
+  view,
+  setup,
+  active = true,
+}: {
+  user: `0x${string}`;
+  view: ArrivedView;
+  setup: ReturnType<typeof useCashSetup>;
+  /** False while the sheet it sits in slides away: nothing is prepared then. */
+  active?: boolean;
+}) {
+  const t = useTurnIntoCash(user, view, setup, active);
+  return (
+    <>
+      {t.card && <ArrivedCard {...t.card} />}
+      <ConvertedSheet open={t.landed} held={t.held} txHash={t.txHash} onClose={t.close} />
     </>
   );
 }
 
 /** Once the conversion lands: "It's cash now" with what came in, and that the next ones convert on their own if so. */
-function ConvertedSheet({
+export function ConvertedSheet({
   open,
   held,
   txHash,
