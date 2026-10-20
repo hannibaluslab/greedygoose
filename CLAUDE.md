@@ -5,6 +5,9 @@ Next.js version notes: @AGENTS.md
 An invest-and-earn app on Base. Cash earns in Aave V3 savings, the seven Coinbase tokenized stocks can be bought, sold
 and traded, credit is USDC on Aave V4's Equities spoke backed by those stocks, and agents (Save, Entry, Protect,
 Rebalance) act on-chain in GooseExecutor under permissions the user grants. Accounts are JAW passkey smart accounts.
+The agents are not live yet. Until GooseExecutor is deployed and `NEXT_PUBLIC_AGENTS_LIVE=1` (`lib/agents/config.ts`),
+the app shows them as Coming soon. Mobile-first web, installable to the home screen, with iPhone Safari and passkeys as
+the primary target (D5, `app/manifest.ts`).
 
 ## Read first
 
@@ -28,15 +31,17 @@ the code, SPEC.md or the decisions log.
 
 - Non-custodial. The app never holds keys or money. No seed phrases, no private-key inputs.
 - No server and no database of ours (D12). Agents run on-chain in GooseExecutor and the app reads Base. The only server
-  code is the stateless price route (`app/api/prices`). The runner (KeeperHub's wallet, outside this repo) only wakes
-  the executor: it holds no money and sits in no permission (DEPLOYMENTS.md).
+  code is the stateless price route (`app/api/prices`). The runners (KeeperHub's wallet, outside this repo, and later
+  Chainlink CRE through `GooseReceiver`) only wake the executor: they hold no money and sit in no permission
+  (DEPLOYMENTS.md).
 - JAW is the only wallet (`lib/jaw/config.ts`). Don't add MetaMask, WalletConnect, Coinbase Wallet or any other. The
   rehearsal's fork signer is for development only and never ships (`npm run rehearsal:check-build`).
 - Agents act only under JAW permissions the user grants to GooseExecutor, approved and registered in the same batch as
   the change. Turning an agent off revokes its grants in one batch (`manager.revoke`), never through JAW's revoke sheet.
 - Keys are never printed. `.env.local` and the deployer key stay private. Every `NEXT_PUBLIC_*` value ships in the
   page, so no secret goes in one.
-- Never log signatures, keys or personal data (the lint allows no console logging in the app).
+- Never log signatures, keys or personal data. The app's lint refuses `console.log`; only `console.warn` and
+  `console.error` pass (`eslint.config.mjs`).
 - Claude never moves real money. The owner signs every real step.
 
 ### Transaction safety
@@ -44,8 +49,9 @@ the code, SPEC.md or the decisions log.
 Every user write goes through `useTx` (`hooks/useTx.ts`), the one write path:
 
 ```text
-build the batch from fresh reads → allowlist (lib/allowlist.ts, in each builder) → simulate on Base (eth_simulateV1,
-with Aave's health read after) → JAW's sheet, one signature → wait for the receipt → re-read state
+build the batch from fresh reads → allowlist (lib/allowlist.ts, in each builder) → simulate on Base (eth_simulateV1;
+a batch that takes credit or frees stock also reads Aave's health after) → JAW's sheet, one signature → wait for the
+receipt → re-read state
 ```
 
 - One signature per change (D14 dropped, 2026-10-20). No screen sends a transaction another way, and there is no
@@ -54,10 +60,17 @@ with Aave's health read after) → JAW's sheet, one signature → wait for the r
   `useAgents.changePlan` (`lib/tx/plans/agents.ts`, `agentChangePlan`). Never a second sheet for a registration.
 - Safari opens JAW's popup only inside the tap itself. Prepare the batch in render while the sheet shows
   (`useTx(…, plan)`, or `usePrepare(tx.prep, plan)` in a child), so the tap sends it with nothing awaited first.
-- The allowlist checks every batch before it is simulated (`assertAllowed`). A new call shape gets its own narrow rule
-  and tests there, never a looser one.
+- The allowlist checks every batch before it is simulated (`assertAllowed`). It pins each target, function and
+  argument, so money moves only between the user's own pockets. The one exception is a Send's single transfer to the
+  recipient its batch declares. A new call shape gets its own narrow rule and tests there, never a looser one.
+- A batch is keyed by every input that shapes it (`txKey`, `lib/tx/prepared.ts`). One prepared for some inputs is never
+  signed for others. JAW signs on Base only (`CHAIN_ID`).
+- Batch only what's honest (D7). A batch never hides an asset movement. JAW's sheet lists every call, and Buy, Sell,
+  Trade, Send, Repay, Credit Buy and Earn with stocks name every move in their small print.
 - Targets come only from the typed registries (`lib/aave/addresses.ts`, `lib/tokens/registry.ts`,
   `lib/protocols/config.ts`, `lib/swap/venues.ts`). Never from a URL, a query string, user input or a quote's response.
+  GooseExecutor and GooseBoard are the exceptions: each comes from its `NEXT_PUBLIC_*` setting, checked as an address
+  (`lib/agents/config.ts`, `lib/board/config.ts`).
 - Approvals are exact, never unlimited, and a repay sets the allowance back to 0 (SPEC.md › Money rules).
 - Taking credit and freeing stock never end below 1.12 (`CREDIT_CAP.minHf`). For those batches, a simulated health
   under 1.10 stops them.
@@ -66,16 +79,19 @@ with Aave's health read after) → JAW's sheet, one signature → wait for the r
 
 ### Swaps
 
-- Venues only from `lib/swap/venues.ts` (Aerodrome Slipstream, Uniswap v3).
+- Venues only from `lib/swap/venues.ts`. Stocks trade on Aerodrome Slipstream and Uniswap v3. Each cash coin has its
+  own venue and pool (`lib/tokens/stables.ts`).
 - Held to Aave's price in the batch itself (SPEC.md › Money rules). `BUY_LIMITS` (`lib/swap/buy.ts`) and
-  `SELL_LIMITS` (`lib/swap/sell.ts`): 1% slippage, a warning 2% off Aave's price, a block 10% off it.
+  `SELL_LIMITS` (`lib/swap/sell.ts`): 1% slippage, a 10-minute deadline, a warning 2% off Aave's price, a block 10% off
+  it.
 - Every swap is simulated first. A revert blocks it with a plain explanation.
 
 ### Market hours and pauses
 
 - Stock prices are Chainlink 24/5 feeds. On weekends and holidays Aave holds the last price and interest keeps
   accruing. The Invest page says so (`components/ui/MarketBanner.tsx`).
-- Taking credit on a weekend is allowed, because Aave allows it. The review says the price may move when markets reopen.
+- Buying, selling, trading and taking credit on a weekend are allowed, because the pools trade and Aave allows it. Each
+  of those screens says the price can jump when markets reopen.
 - Protect never sells while prices are held.
 - A paused, frozen, capped or empty reserve disables the action and says why in plain words.
 
@@ -104,7 +120,8 @@ be shown for information, labelled as such, and never used for limits.
   clone (DEPLOYMENTS.md).
 - Deploys are the owner's, each recorded in DEPLOYMENTS.md. A test deploy is capped at $5 (D13) and never goes in
   production config.
-- B20 stock code can't run in Foundry. Fork tests use `ForkBase.sol`'s stand-ins (MANAGER-NOTES.md § 8).
+- B20 stock code can't run in Foundry. Fork tests use the stand-ins in `contracts/test/ForkBase.sol` (MANAGER-NOTES.md
+  § 8).
 
 ### Git, checks and deploys
 
@@ -112,16 +129,18 @@ be shown for information, labelled as such, and never used for limits.
   remote.
 - Run `npm run check` (lint, types, Prettier, knip, unit tests) before every commit. CI also runs `npm run build` and
   forge.
-- Node 22 (`.nvmrc`).
+- Node 22 (`.nvmrc`) and npm (`package-lock.json`).
 - Focused commits, `type(scope): what changed, in plain words` (feat, fix, test, docs, chore, refactor). Stage only
   the paths you mean, never `.env.local`. Formatting-only commits go in `.git-blame-ignore-revs`.
 - An approved screen never changes as a side effect. Big product calls are asked first.
 
 ## Words and errors
 
-- The words are SPEC.md › Words. Never on screen: borrow, loan, lock, locked, unlock, collateral, room. Use credit,
-  backs credit, free up, in use, cash. No em dashes, no colon joining two sentences, and a copy edit never makes a
-  string longer.
+- The words are SPEC.md › Words. Never on screen: borrow, loan, lock, locked, unlock, collateral, room, protocol names
+  in instructions. Use credit, backs credit, free up, in use, cash. No em dashes, no colon joining two sentences, and a
+  copy edit never makes a string longer.
+- Credit always shows its rate and its monthly cost (Home's Credit card, the Repay sheet). Never write "max leverage"
+  and never use fake urgency.
 - New code uses the product's words too. Aave's ABIs and the contracts keep their own names (ARCHITECTURE.md).
 - Errors are plain words, with the technical detail apart. Never show `execution reverted` (`lib/aave/errors.ts`,
   `explainRevert`).
@@ -134,6 +153,9 @@ be shown for information, labelled as such, and never used for limits.
   Fonts are Geist and Geist Mono (`app/layout.tsx`).
 - Build from the kit (`components/gg/kit/`): Button, AmountField, AssetPicker, SheetShell, Switch. Every picker is the
   AssetPicker. One stock order everywhere (`byStockOrder`).
+- The status always shows its label (Safe, Watch, Act), so colour is never the only signal. Real `<button>`s, never
+  `role="button"` spans, and touch targets of at least 44px.
+- No mock numbers on real screens. The dev gallery's fixtures (`app/dev`) are a 404 in production.
 
 ## Facts on Base (re-verify on-chain before use)
 
@@ -145,21 +167,24 @@ be shown for information, labelled as such, and never used for limits.
   holidays.
 - Splits and dividends change a stock's `uiMultiplier()`. Shares shown are raw × `uiMultiplier` ÷ 1e18
   (`lib/tokens/b20.ts`); do the maths in raw units.
-- B20 stocks can have pauses and transfer policies, so every write is simulated first.
+- B20 stocks can have pauses and transfer policies, so every write is simulated first. All seven used transfer policy
+  ID 5 on B20's PolicyRegistry (`0x8453…0002`), which acts like a blocklist, so a fresh address passes (read
+  2026-10-12). Verify the full registry address before adding an `isAuthorized` pre-check.
+- If a source contradicts these facts, the on-chain state wins. Update this section and note the date.
 
 ## Decisions
 
 `docs/JUSTALAB-DECISIONS.md` holds every decision, its date and why. The ones an agent must never break, beyond the
 rules above:
 
-- **Thresholds** live in `config/risk.ts` only: Safe 1.5 and above, Watch 1.1 to 1.5, Act under 1.1.
-- **Act is the line.** Act is a warning only. Ending in Watch asks for one tick.
+- **Thresholds** live in `config/risk.ts` only (D2): Safe 1.5 and above, Watch 1.1 to 1.5, Act under 1.1.
+- **Act is the line.** Act is a warning only. Ending in Watch asks for one tick (D2's extra confirmation).
 - **Protect** acts only under 1.03: it repays from cash, then sells backing stock at once, back to 1.12. Protect,
   Rebalance and Save have no amount limit (their grants at the executor's `CAP_MAX`).
-- **Network fees** are paid in USDC through JAW's `feeToken` (D4, `useFeeSupport`). Never silently require ETH, and
-  never say "gasless" or "no fees".
+- **Network fees** are paid in USDC through JAW's `feeToken` (D4, `useFeeSupport`). When USDC can't pay the fee, the
+  action is blocked with a plain message. Never silently require ETH, and never say "gasless" or "no fees".
 - **Names** take their parent from `NEXT_PUBLIC_ENS_PARENT`, `justan.id` by default (D6).
-- **Save and Receive are invisible** (D20): no agent row, switch or limit on screen. Their grants ride in Start
-  earning and Turn into cash.
+- **Save and Receive are invisible** (D20): no agent row, switch or limit on screen. Once the agents are live, their
+  grants ride in Start earning and Turn into cash.
 
 The code layout is in ARCHITECTURE.md, the environment in `.env.example`.
