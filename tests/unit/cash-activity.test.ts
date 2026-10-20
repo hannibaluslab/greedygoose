@@ -220,6 +220,17 @@ describe("executorCashRow: the executor's moves in the cash", () => {
     ]);
   });
 
+  it("top-ups Rebalance put into the mix, out of the cash", () => {
+    const r = executorCashRow(
+      exec({ kind: "top-up-invested", amountRaw: usdc(300), boughtRaw: [0n, 0n, 0n, 0n, 0n, 1n, 0n] }),
+    )!;
+    expect([r.title, r.line, r.mark]).toEqual([
+      "Top-ups went into your mix",
+      "−$300.00",
+      { kind: "agent", agent: "Rebalance" },
+    ]);
+  });
+
   it("a sale or a trade only when its swaps left the cash up by a cent or more", () => {
     const sold: AgentEvent = {
       kind: "sold",

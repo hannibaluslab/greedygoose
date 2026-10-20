@@ -176,10 +176,19 @@ function soldMove(e: Extract<AgentEvent, { kind: "sold" }>, ctx: MoveContext): A
   };
 }
 
+/** Top-ups switched on (with Keep as cash) or off, from Rebalance's sheet. */
+const topUpsSetLine = (e: Extract<AgentEvent, { kind: "top-ups-set" }>) =>
+  !e.on
+    ? "Top-ups stay in your cash."
+    : e.keepRaw > 0n
+      ? `Top-ups above ${usd(e.keepRaw)} go into your mix.`
+      : "Every top-up goes into your mix.";
+
 /**
  * The Agents board's words for one executor event at `time` (seconds). Plain words and dollars, no health factor but
  * Protect's line and target (D17's words too); null for what isn't a move from the user's side: a run deferred to the
- * next block, Save's and Entry's switches, and a coin waiting for a fair price (the Cash card says it's arriving).
+ * next block, Save's and Entry's switches, a coin waiting for a fair price (the Cash card says it's arriving), and
+ * Save counting a top-up (its arrival is the cash's own row).
  */
 export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext = {}): AgentMove | null {
   switch (e.kind) {
@@ -267,12 +276,23 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
         ],
       };
     }
+    case "top-up-invested":
+      // Top-ups go into my mix: the savings it took are the cash's own (D15), so the row says what went in and where.
+      return {
+        by: "Rebalance",
+        line: [`Put ${usd(e.amountRaw)} of top-ups into your mix.`],
+        details: [
+          { label: "Why", value: ["Top-ups above what you keep as cash go into your mix."] },
+          { label: "Bought", value: [names(held(e.boughtRaw))] },
+          { label: "My cash", value: [`${usd(e.amountRaw)} used`] },
+        ],
+      };
+    case "top-ups-set":
+      return { by: "Rebalance", line: [topUpsSetLine(e)], details: [] };
     case "entry-waiting":
     case "run-deferred":
-    // Top-ups go into my mix: their rows come with the app's wiring for the executor that counts them.
-    case "top-ups-set":
+    // Save counting a top-up is under the hood: the money's arrival is its row ("saved"), and it waits to go in.
     case "top-up-counted":
-    case "top-up-invested":
       return null;
     case "run-failed":
       return {

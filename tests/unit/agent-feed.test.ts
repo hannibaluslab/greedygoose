@@ -108,6 +108,37 @@ describe("describeAgentEvent: the Agents board's rows", () => {
     });
   });
 
+  it("draws top-ups going into the mix: how much, what it bought and the cash it used", () => {
+    const r = row({
+      kind: "top-up-invested",
+      amountRaw: usdc(300),
+      boughtRaw: sevenWith(5, 166_666_666n),
+    });
+    expect(r).toEqual({
+      by: "Rebalance",
+      line: "Put $300 of top-ups into your mix.",
+      details: {
+        Why: "Top-ups above what you keep as cash go into your mix.",
+        Bought: "NVIDIA",
+        "My cash": "$300 used",
+      },
+    });
+    const two = row({ kind: "top-up-invested", amountRaw: usdc(1_250.5), boughtRaw: [1n, 0n, 0n, 0n, 0n, 1n, 0n] });
+    expect(two.line).toBe("Put $1,250.50 of top-ups into your mix.");
+    expect(two.details.Bought).toBe("Apple and NVIDIA");
+  });
+
+  it("says top-ups switched on with Keep, on with Keep $0, or off; a top-up counted makes no row", () => {
+    expect(row({ kind: "top-ups-set", on: true, keepRaw: usdc(500) })).toEqual({
+      by: "Rebalance",
+      line: "Top-ups above $500 go into your mix.",
+      details: {},
+    });
+    expect(row({ kind: "top-ups-set", on: true, keepRaw: 0n }).line).toBe("Every top-up goes into your mix.");
+    expect(row({ kind: "top-ups-set", on: false, keepRaw: usdc(500) }).line).toBe("Top-ups stay in your cash.");
+    expect(describeAgentEvent({ kind: "top-up-counted", amountRaw: usdc(300), waitingRaw: usdc(300) }, at)).toBeNull();
+  });
+
   it("reads a Save as money arriving, with no agent and no limit (D20)", () => {
     const r = row({ kind: "saved", amountRaw: usdc(40) });
     expect(r).toEqual({
@@ -195,6 +226,9 @@ describe("describeAgentEvent: the Agents board's rows", () => {
       { kind: "rebalance-skipped" },
       { kind: "sale-skipped" },
       { kind: "converted", coin: ENTRY_COINS[3].address, amountInRaw: 1n, usdcOutRaw: 1n },
+      { kind: "top-up-invested", amountRaw: 1n, boughtRaw: sevenWith(5, 1n) },
+      { kind: "top-ups-set", on: true, keepRaw: 1n },
+      { kind: "top-ups-set", on: false, keepRaw: 0n },
     ];
     for (const e of events) {
       const m = describeAgentEvent(e, at)!;
