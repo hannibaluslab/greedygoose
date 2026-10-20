@@ -6,7 +6,6 @@ import {
   arrivedText,
   arrivedView,
   askAutomatic,
-  automaticText,
   earningLine,
   MIN_START_USD,
   rateText,
@@ -34,7 +33,7 @@ describe("start earning: when Home offers it", () => {
     for (const save of ["unconfigured", "off"] as const) {
       expect(startEarningShown(save, 0n)).toBe(false);
       expect(startEarningShown(save, usdc(CASH.feeBufferUsd))).toBe(false);
-      expect(startEarningShown(save, usdc(0.42))).toBe(true);
+      expect(startEarningShown(save, usdc(CASH.feeBufferUsd + 0.32))).toBe(true);
       expect(startEarningShown(save, startEarningMinRaw - 1n)).toBe(false);
       expect(startEarningShown(save, startEarningMinRaw)).toBe(true);
       expect(startEarningShown(save, usdc(100))).toBe(true);
@@ -113,8 +112,6 @@ describe("other dollars in the account", () => {
     expect(STATUSES.filter((s) => askAutomatic(s, false))).toEqual([]);
     expect(AGENTS_LIVE).toBe(false);
     expect(askAutomatic("off", AGENTS_LIVE)).toBe(false);
-    // Said on the card before its one Face ID.
-    expect(automaticText("$1,000")).toBe("Next time it happens on its own, up to $1,000 a day.");
   });
 
   it("never name an agent, a limit or a savings pot", () => {

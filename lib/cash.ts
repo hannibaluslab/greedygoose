@@ -3,7 +3,7 @@ import { CASH } from "@/config/risk";
 import { assertAllowed, type AllowContext } from "@/lib/allowlist";
 import type { Call } from "@/lib/aave/tx";
 import { JOBS } from "@/lib/agents/permissions";
-import { floorCents, formatUsd } from "@/lib/formatting";
+import { formatUsd } from "@/lib/formatting";
 import { buildWithdrawSavingsCalls } from "@/lib/savings";
 import { USDC } from "@/lib/tokens/registry";
 
@@ -20,12 +20,6 @@ export const feeBufferRaw = usdcRaw(CASH.feeBufferUsd);
 export const cashRaw = (c: Cash) => c.walletRaw + c.savingsRaw;
 /** The cash can't keep the network-fee buffer, so a sale (Trade's stock → stock, Repay's) pays its own fee. */
 export const feeFromSale = (cash: Cash) => cashRaw(cash) < feeBufferRaw;
-/**
- * How much of the fuel tank (the cash kept back for network fees) is there, in whole cents rounded down: a tank a
- * fraction of a cent short never reads full.
- */
-export const fuelTankUsd = (cashUsd: number) =>
-  Math.min(floorCents(cashUsd), Math.round(CASH.feeBufferUsd * 100) / 100);
 export const toUsd = (raw: bigint) => Number(raw) / 10 ** USDC.decimals;
 
 /** Whether Save runs for the account, from the job bits of GooseExecutor's `accounts(account)`. */

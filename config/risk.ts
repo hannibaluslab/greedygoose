@@ -122,10 +122,11 @@ export const CASH = {
   /** Wallet USDC that Save never sweeps into savings, so a batch can count on it (the executor's `keepBack`). */
   keepBackUsd: 1,
   /**
-   * Left in the wallet after a spend for the network fee, which JAW charges in USDC after the batch. $0.10 (Adrian,
-   * 2026-10-15): ten times the largest fee measured on Base mainnet ($0.0095, $0.007 and under a cent). It was $0.50,
-   * which left an account with $1.36 of cash and $4 owed unable to repay at all. Every figure and line that names the
-   * buffer reads it from here.
+   * The fuel tank: left in the wallet after a spend for the network fee, which JAW charges in USDC after the batch, and
+   * what "Fill up" brings the wallet back to from savings. $0.50 (Adrian, 2026-10-20: "the tank should be 0.5 not
+   * 0.1"), about fifty of the largest fees measured on Base mainnet ($0.0095). It was $0.10 from 2026-10-15, after
+   * $0.50 had left an account with $1.36 of cash and $4 owed unable to repay at all; the user can now fill the tank from
+   * their cash when it runs low (lib/fuelTank.ts). Every figure and line that names the buffer reads it from here.
    */
-  feeBufferUsd: 0.1,
+  feeBufferUsd: 0.5,
 } as const;

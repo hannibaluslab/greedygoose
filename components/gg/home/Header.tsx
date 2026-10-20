@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 import { GooseMark } from "../kit/GooseMark";
-import { MenuButton } from "../MenuButton";
+import { MenuButton, type MenuExtra } from "../MenuButton";
 import { useAccountName } from "@/hooks/useAccountName";
 import { firstName } from "@/lib/jaw/name";
 import { shortAddress } from "@/lib/formatting";
@@ -14,7 +14,7 @@ import { shortAddress } from "@/lib/formatting";
  * is the GreedyGoose logo on ink (Adrian, 2026-10-14), not the name's initial. A tap on the name copies it
  * ("sam.justan.id"), or the address when there's no name, and a toast says so.
  */
-export function Header({ address, aside }: { address: `0x${string}`; aside?: ReactNode }) {
+export function Header({ address, aside, menu }: { address: `0x${string}`; aside?: ReactNode; menu?: MenuExtra }) {
   const { data: name, isPending } = useAccountName(address);
   return (
     <header className="flex items-center justify-between px-5 pt-[calc(env(safe-area-inset-top)+2px)]">
@@ -41,7 +41,7 @@ export function Header({ address, aside }: { address: `0x${string}`; aside?: Rea
       </div>
       <div className="flex items-center gap-2">
         {aside}
-        <MenuButton />
+        <MenuButton extra={menu} />
       </div>
     </header>
   );

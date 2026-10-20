@@ -85,9 +85,11 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
 
 ## Money rules
 
-- **Fuel tank:** $0.10 of cash stays back for network fees; every spend from cash leaves it. Buying power is cash minus
-  the fuel tank, in cents. Settings shows how full it is. No screen of ours lists the network fee: JAW's sheet shows
-  it.
+- **Fuel tank:** $0.50 of wallet cash for network fees (Adrian, 2026-10-20); every spend from cash leaves it full, and
+  each fee takes a little out. Buying power is cash minus the fuel tank, in cents. Home's Cash card and Settings show
+  how full it is; Settings has "Fill up" (savings back into the wallet up to a full tank) whenever it isn't full, and
+  under half full it waits in Home's menu too, with a number over the menu button. No screen of ours lists the
+  network fee: JAW's sheet shows it.
 - **The Cash sheet splits the cash** into My cash, From credit (credit backed by stocks that came in as cash: Earn
   with stocks, or credit taken alone) and the fuel tank. Nothing on chain says which dollars are credit, so the rule
   is a convention: credit that came in as cash adds to it, a repay pays it back first, and it is never more than
@@ -186,7 +188,8 @@ the free shares' value. A stock whose shares all back credit is listed but can't
 - Until the agents go live (`NEXT_PUBLIC_AGENTS_LIVE=1`), "Coming soon" stands where the switches and
   Save are; the figures are real. The invisible grants wait too: Start earning is its batch alone (no Save grant), and
   Turn into cash is the conversion alone (no Receive grant). Once live, Turn into cash's one Face ID also has the next
-  ones convert on their own, and the card says so before the tap.
+  ones convert on their own ("You received 120 USDT · Finish setting up · Turn into cash", the same card as Start
+  earning).
 - The Agents feed shows the agents' moves only. Each agent turns off from its own sheet.
 - Rebalance only moves stocks that don't back credit, and never spends cash beyond the network fee. Its mix never adds
   up to more than 100%: a target stops where the other stocks' leave off.

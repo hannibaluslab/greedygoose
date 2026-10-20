@@ -7,8 +7,6 @@ import { useFeeSupport } from "@/hooks/useFeeSupport";
 import type { TxPlan } from "@/hooks/useTx";
 import { AGENTS_LIVE } from "@/lib/agents/config";
 import { LIMIT_USD, limitRaw } from "@/lib/agents/permissions";
-import { formatUsdTrim } from "@/lib/formatting";
-import { USDC } from "@/lib/tokens/registry";
 import type { ChangePrefix } from "@/lib/tx/plans";
 
 /** The cap each grant carries: Save at CAP_MAX (P2, no amount limit), Entry at its one limit, never above CAP_MAX. */
@@ -44,11 +42,6 @@ export function useCashSetup(account: `0x${string}`) {
       ? null
       : agents.changePlan({ grants: [{ job, capRaw: capOf(job, capMax) }], prefix });
 
-  /** "$1,000": Entry's daily limit as its grant carries it (a D13 test deploy holds it to CAP_MAX). */
-  const entryLimitText = formatUsdTrim(
-    Number(limitRaw(LIMIT_USD.entry.start, capMax ?? 2n ** 160n)) / 10 ** USDC.decimals,
-  );
-
   return {
     /** Earning: "unconfigured" with no executor, then off, starting or on. */
     save: agents.status.save,
@@ -63,8 +56,6 @@ export function useCashSetup(account: `0x${string}`) {
     earningBlocked: blocked,
     /** Earning's grant (the Save job) in one batch, after `prefix` (Start earning's supply); null while it can't be. */
     earningPlan: (prefix?: ChangePrefix) => grantPlan("save", prefix),
-    /** Entry's daily limit, as the line before its Face ID says it (Save has none). */
-    entryLimitText,
     /**
      * Converting automatically (the Entry job) in one batch after `prefix` (Turn into cash's conversion); null while it
      * can't be signed.

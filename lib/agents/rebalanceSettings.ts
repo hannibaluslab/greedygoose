@@ -5,7 +5,6 @@ import type { RebalanceCardModel, Side } from "@/lib/agents/rebalanceCard";
 import { buildSetMixCalls, buildSetTopUpsCalls } from "@/lib/agents/settings";
 import type { AgentStatus } from "@/lib/agents/status";
 import { keepRawOf, keepText, topUpsChanged, type TopUpsChoice, type TopUpsSetting } from "@/lib/agents/topUps";
-import { earningAllowsText } from "@/lib/cashSetup";
 import { formatUsdTrim } from "@/lib/formatting";
 import { EQUITIES } from "@/lib/tokens/registry";
 
@@ -166,19 +165,23 @@ function allowsLine(p: SaveInput, chosen: TopUpsChoice | null): string {
 }
 
 /**
+ * What the same Face ID lets earning do when a Save grants it too (P3): the words Start earning's card said before its
+ * own line went (2026-10-20, "One card, nothing else"), which Rebalance's sheet keeps. Save has no amount limit (P2).
+ */
+const EARNING_ALLOWS = "New cash that arrives moves into savings on its own.";
+
+/**
  * What a Save's one Face ID lets Rebalance do when it grants (JAW's batch sheet shows no words of ours). With top-ups
  * on, it also puts the cash above what the user keeps into the mix (all of it with Keep $0), so the line says so. With
- * `earning`, earning's words (Start earning's, no amount limit) come before the turn-off, which ends the line and then
- * names Rebalance, since its "it" would read as earning.
+ * `earning`, earning's words (`EARNING_ALLOWS`) come before the turn-off, which ends the line and then names
+ * Rebalance, since its "it" would read as earning.
  */
 export function rebalanceAllows(topUps?: { keepUsd: number }, earning = false): string {
   const into = topUps && (topUps.keepUsd > 0 ? `your top-ups above ${keepText(topUps.keepUsd)}` : "every top-up");
   const can = into
     ? `Rebalance can trade your stocks toward your mix, and put ${into} into it, for a year.`
     : "Rebalance can trade your stocks toward your mix, for a year. It never spends your cash.";
-  return earning
-    ? `${can} ${earningAllowsText()} You can turn Rebalance off here.`
-    : `${can} You can turn it off here.`;
+  return earning ? `${can} ${EARNING_ALLOWS} You can turn Rebalance off here.` : `${can} You can turn it off here.`;
 }
 
 /** A grant in a change's batch, as useAgents `changePlan` takes it (its GrantStep). */

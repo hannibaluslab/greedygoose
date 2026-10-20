@@ -685,6 +685,25 @@ Adrian (2026-10-20): "go with just one face id to earn, on agent". An account JA
 Adrian (2026-10-20): "Turn into cash and 'Do this automatically next time' should be one Face ID too", and, on how the card asks: "abstract the switch, turn into cash means next time automatically". This supersedes "Do this automatically next time?" in D20's row (:20), "Other dollars…" (:143), "D20's screens follow the sweep's rules" (:165) and "'Turn into cash' is one screen" (:166), for that question; those keep their meaning for their day.
 
 - **One batch, one Face ID:** while the agents are live and nothing converts on its own yet (`askAutomatic`), "Turn into cash" signs the conversion and the Entry grant together (useCashSetup `automaticPlan`, the conversion as the change's first calls). No switch, no second question, no opt-out on the card.
-- **The card says it before the tap**, above its button: "Next time it happens on its own, up to $1,000 a day." (Entry's limit as its grant carries it). Once it lands: "It's cash now · About $119.83 is in your cash. Next time it happens on its own."
+- **The card says it before the tap**, above its button: "Next time it happens on its own, up to $1,000 a day." (Entry's limit as its grant carries it). Once it lands: "It's cash now · About $119.83 is in your cash. Next time it happens on its own." *(Superseded the same day by "One card, nothing else": no line above the button.)*
 - Otherwise (agents not live, or the next ones already convert on their own) the card and its batch are as before: the conversion alone.
+
+## 2026-10-20 · One card, nothing else
+
+Adrian (2026-10-20, on Turn into cash): "the ui is horrible, just the same card, you received, finish set up, cta. that is it". Turn into cash takes Start earning's card exactly (board 2g): an icon, "You received 120 USDT", one line, and its button. Both cards share one component (`SetupCard`, components/gg/cash/CashSetup.tsx).
+
+- **Turn into cash:** "You received 120 USDT" · "Finish setting up" while its one Face ID also has the next ones convert on their own, else "Not in your cash yet" · "Turn into cash". The coins and what they bring, the least it all brings, the small print of every move (D7's) and the note on a coin under 99.5% are no longer on the card; the batch still holds each coin to 99.5% of face value or better, and a coin under it stays as it is. Under the card only an error, or why it can't go ahead.
+- **Start earning** loses the line added under it today ("New cash that arrives moves into savings on its own."): the card is board 2g as approved. This takes back, for these two cards, "The clear line" in "One signature per change" above; Protect's and Rebalance's sheets keep theirs.
+
+## 2026-10-20 · "You received" waits in the menu, with a number over it
+
+Adrian (2026-10-20): "this should be placed in the burger menu you received usdt", and "we need something like a notification point or number over the burger menu icon when something is needed from the user". Turn into cash leaves Home: its card ("You received 120 USDT · Finish setting up · Turn into cash") sits at the top of Home's menu, above Activity, Guide and Settings, and the menu button carries a number while it waits (1 today; anything else that needs the user counts there too). Its tap goes to JAW's sheet and closes the menu; "It's cash now" opens over Home once it lands. Its state lives on Home (`useTurnIntoCash`), so closing the menu while JAW's sheet confirms loses nothing. The Top up sheet keeps its own Turn into cash card.
+
+## 2026-10-20 · A $0.50 fuel tank, filled from cash
+
+Adrian (2026-10-20): "a user needs to be able to fill up the fuel tank from cash when he needs to, and the tank should be 0.5 not 0.1". This supersedes the $0.10 of "the fuel tank" (config/risk.ts `CASH.feeBufferUsd`, 2026-10-15) and SPEC's fuel tank line.
+
+- **$0.50,** about fifty of the largest fees measured on Base. Every spend from cash leaves it in the wallet, as before. The $0.10 was set after $0.50 had left an account with $1.36 of cash and $4 owed unable to repay at all; that holds again for such an account, and filling up doesn't change it (the tank is part of the cash).
+- **What the tank shows is the wallet's USDC up to $0.50** (lib/fuelTank.ts `tankLevelUsd`), on Home's Cash card, the Cash sheet and Settings: each fee takes a little out, and a batch that moves no cash (an agent's settings, a turn-off) can only pay from it.
+- **Fill up:** one batch, savings back into the wallet up to a full tank plus two cents for its own fee (`fillTankPlan`, through useTx), in Settings whenever the tank isn't full, and in Home's menu while it's under half full, counted in the number over the menu button.
 

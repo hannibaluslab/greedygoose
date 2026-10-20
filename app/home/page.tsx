@@ -11,7 +11,13 @@ import { CashCard, YieldCard } from "@/components/gg/home/Cards";
 import { LiveEarning } from "@/components/gg/home/LiveEarning";
 import { useTotalEarned, type TotalEarned } from "@/hooks/useTotalEarned";
 import { usePnl } from "@/hooks/usePnl";
-import { StartEarningCard, TurnIntoCash } from "@/components/gg/cash/CashSetup";
+import {
+  ArrivedCard,
+  ConvertedSheet,
+  FuelTankCard,
+  StartEarningCard,
+  useTurnIntoCash,
+} from "@/components/gg/cash/CashSetup";
 import { AddStockCard, HoldingCard } from "@/components/gg/stock/Holding";
 import { CashSheet } from "@/components/gg/cash/CashSheet";
 import { useMoneySheets } from "@/components/gg/cash/MoneySheets";
@@ -32,7 +38,8 @@ import { homeStatus } from "@/lib/risk/status";
 import { leverageOf, leverageText } from "@/lib/leverage";
 import { toast } from "sonner";
 import { StatusPill } from "@/components/gg/Status";
-import { fuelTankUsd } from "@/lib/cash";
+import { tankLevelUsd, tankLow } from "@/lib/fuelTank";
+import { useFillTank } from "@/hooks/useFillTank";
 import { formatUsd, formatUsdTrim, monthlyCostText } from "@/lib/formatting";
 import { EQUITIES } from "@/lib/tokens/registry";
 import { dayChange, weekValue } from "@/lib/prices/market";
@@ -67,6 +74,14 @@ function Home({ address }: { address: `0x${string}` }) {
   const apy = data ? aprToApy(data.savingsApr) : 0;
   const setup = useCashSetup(address);
   const arrived = arrivedView(arrivedCoins(useCashCoinBalances(address)), setup.entry);
+  // Other dollars to turn into cash wait in the menu, with a number over its button (Adrian, 2026-10-20). Their state
+  // lives here, so closing the menu while JAW's sheet confirms loses nothing; the card prepares only while it shows.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const convert = useTurnIntoCash(address, arrived, setup, menuOpen);
+  // The fuel tank under half full waits there too: "Fill up" brings it back from savings (Adrian, 2026-10-20).
+  const fill = useFillTank(address, data?.cash, menuOpen);
+  const low = !!data && tankLow(data.cash) && fill.phase !== "pending";
+  const converts = arrived.kind === "ask" && !convert.held;
   const earn = useStartEarning({
     account: address,
     cash: data?.cash,
@@ -77,7 +92,44 @@ function Home({ address }: { address: `0x${string}` }) {
 
   return (
     <div className="relative flex min-h-dvh flex-col">
-      <Header address={address} aside={data && <LeverageTag data={data} onOpen={() => setSheet("leverage")} />} />
+      <Header
+        address={address}
+        aside={data && <LeverageTag data={data} onOpen={() => setSheet("leverage")} />}
+        menu={{
+          open: menuOpen,
+          onOpenChange: setMenuOpen,
+          // Each tap goes to JAW's sheet, and the menu closes behind it: "It's cash now" opens over Home once it lands.
+          top: (convert.card || low) && (
+            <>
+              {convert.card && (
+                <ArrivedCard
+                  {...convert.card}
+                  onConvert={() => {
+                    convert.card?.onConvert();
+                    setMenuOpen(false);
+                  }}
+                />
+              )}
+              {low && data && (
+                <FuelTankCard
+                  levelUsd={tankLevelUsd(data.cash.walletRaw)}
+                  phase={fill.phase}
+                  checking={fill.checking}
+                  blocked={fill.blocked}
+                  error={fill.error}
+                  preview={setup.preview}
+                  onFill={() => {
+                    fill.fill();
+                    setMenuOpen(false);
+                  }}
+                />
+              )}
+            </>
+          ),
+          waiting: (converts ? 1 : 0) + (low ? 1 : 0),
+        }}
+      />
+      <ConvertedSheet open={convert.landed} held={convert.held} txHash={convert.txHash} onClose={convert.close} />
 
       {isError && !data && (
         <div className="mx-5 mt-4 rounded-[22px] bg-card p-4 shadow-card-elev">
@@ -106,7 +158,6 @@ function Home({ address }: { address: `0x${string}` }) {
           dim={earn.visible}
           cards={
             <>
-              <TurnIntoCash user={address} view={arrived} setup={setup} />
               {earn.visible && (
                 <StartEarningCard
                   title={earn.title}
@@ -114,7 +165,6 @@ function Home({ address }: { address: `0x${string}` }) {
                   phase={earn.phase}
                   checking={earn.checking}
                   blocked={earn.blocked}
-                  allows={earn.allows}
                   note={earn.note}
                   error={earn.error}
                   preview={earn.preview}
@@ -294,7 +344,7 @@ function Loaded({
       <section className="grid grid-cols-2 gap-2.5 px-5 pt-[18px]">
         <CashCard
           cashUsd={data.cashUsd}
-          line={`Fuel tank: ${formatUsd(fuelTankUsd(data.cashUsd))}`}
+          line={`Fuel tank: ${formatUsd(tankLevelUsd(data.cash.walletRaw))}`}
           dim={dim}
           note={arrived.kind === "arriving" ? `${arrived.text} arriving` : undefined}
           onClick={() => open("cash")}

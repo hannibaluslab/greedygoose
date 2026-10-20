@@ -40,12 +40,6 @@ export function startEarningShown(save: AgentStatus, walletRaw: bigint): boolean
 export const saveGrantFollows = (save: AgentStatus, live: boolean) => live && save === "off";
 
 /**
- * What Start earning's one Face ID lets the app do when it grants earning, said on the card before the tap. Save has
- * no amount limit (P2, Adrian 2026-10-20), so the line names none.
- */
-export const earningAllowsText = () => "New cash that arrives moves into savings on its own.";
-
-/**
  * The card's words (board 2g): money that just arrived, "Your $100 arrived · Start earning 4.6% on it."; with savings
  * already earning and new idle cash beside them, "$40 isn't earning". `walletUsd` is the wallet's USDC, cents kept.
  */
@@ -128,12 +122,6 @@ export function arrivedView(list: readonly Arrived[], entry: AgentStatus): Arriv
  * live (`live`: AGENTS_LIVE), with an executor, and no Entry grant yet.
  */
 export const askAutomatic = (entry: AgentStatus, live: boolean) => live && entry === "off";
-
-/**
- * What Turn into cash's one Face ID also lets the app do when it asks (`askAutomatic`), said on the card before the tap
- * (Adrian, 2026-10-20: "turn into cash means next time automatically"). `limit` is Entry's daily limit ("$1,000").
- */
-export const automaticText = (limit: string) => `Next time it happens on its own, up to ${limit} a day.`;
 
 /**
  * The Cash card's line: "Always earning" with the Save agent on; otherwise what's in savings does earn (Earn with

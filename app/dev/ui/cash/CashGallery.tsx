@@ -1,18 +1,19 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { TopUpSheetView } from "@/components/gg/cash/AddMoney";
 import { AgentsFeed } from "@/components/gg/Agents";
 import { BalanceHero, TodayChange } from "@/components/gg/home/BalanceHero";
 import { CashCard, CreditCard } from "@/components/gg/home/Cards";
-import { ArrivedCard, StartEarningCard } from "@/components/gg/cash/CashSetup";
+import { ArrivedCard, FuelTankCard, StartEarningCard } from "@/components/gg/cash/CashSetup";
 import { QuickAction } from "@/components/gg/home/QuickAction";
 import { TabHeader } from "@/components/gg/Screen";
 import { TabBar } from "@/components/gg/TabBar";
 import { TxDone } from "@/components/gg/TxUi";
 import { CreditIcon, MenuIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/kit/icons";
+import { MenuButton } from "@/components/gg/MenuButton";
 import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
 import type { FeedRow } from "@/components/gg/activity/Activity";
 import type { ActivityRow } from "@/hooks/useActivity";
@@ -20,7 +21,7 @@ import type { ConvertQuote } from "@/lib/tx/plans";
 import { useNowSec } from "@/hooks/useNowSec";
 import type { AgentEvent } from "@/lib/agents/events";
 import { describeAgentEvent, type MoveContext } from "@/lib/agents/feed";
-import { arrivedCoins, arrivedView, automaticText, rateText, startEarningText } from "@/lib/cashSetup";
+import { arrivedCoins, arrivedView, rateText, startEarningText } from "@/lib/cashSetup";
 import { convertFloorRaw } from "@/lib/swap/entry";
 import { CASH_COINS } from "@/lib/tokens/stables";
 import { CashSheetDemo, SHEET_VIEWS, type SheetView } from "./CashSheetDemo";
@@ -28,15 +29,15 @@ import { CashSheetDemo, SHEET_VIEWS, type SheetView } from "./CashSheetDemo";
 /*
  * Dev only: earning and other dollars becoming cash (D20), in each state, from fixtures run through the app's own
  * rules and words (arrivedView, arrivedText, describeAgentEvent). Nothing here reads the chain or signs.
- *   /dev/ui/cash?view=home        Home with "120 USDT arrived · Turn into cash" (its one screen) and "Your $100 arrived ·
- *                                 Start earning"
- *   ?view=start                   Start earning's other states: "$40 isn't earning" with earning granted in the same
- *                                 Face ID (its line), and confirming on Base
+ *   /dev/ui/cash?view=home        Home with "Your $100 arrived · Start earning", and a 1 over the menu: "You received
+ *                                 120 USDT · Turn into cash" waits there
+ *   ?view=start                   Start earning's other states: "$40 isn't earning", and confirming on Base
  *   ?view=arriving                Home once other dollars convert on their own: the Cash card says "arriving"
- *   ?view=convert                 "Turn into cash" with one coin under the floor: it stays as it is
- *   ?view=auto                    "Turn into cash" while nothing converts on its own yet: its one Face ID converts the
- *                                 next ones too, and the card says so
+ *   ?view=convert                 the menu open on "Turn into cash" with one coin under the floor: it stays as it is
+ *   ?view=auto                    the menu open on "You received 120 USDT · Finish setting up": its one Face ID
+ *                                 converts the next ones too
  *   ?view=done                    converted, with nothing to ask (no executor, or it already converts on its own)
+ *   ?view=tank                    the menu open on "Your fuel tank is low · $0.12 of $0.50 · Fill up", a 1 over it
  *   ?view=pay | pay-setup         the Top up sheet over Home, while the cash earns and before earning is set up
  *   ?view=activity                Activity with the cash's own events
  * The Cash sheet (CashSheetDemo), over Home:
@@ -69,7 +70,18 @@ const UNFAIR: ConvertQuote = {
 const ZERO_TX = `0x${"0".repeat(64)}` as const;
 const noop = () => toast("Dev gallery: nothing is signed");
 
-type View = "home" | "start" | "arriving" | "convert" | "auto" | "done" | "pay" | "pay-setup" | "activity" | SheetView;
+type View =
+  | "home"
+  | "start"
+  | "arriving"
+  | "convert"
+  | "auto"
+  | "done"
+  | "tank"
+  | "pay"
+  | "pay-setup"
+  | "activity"
+  | SheetView;
 const VIEWS: View[] = [
   "home",
   "start",
@@ -77,6 +89,7 @@ const VIEWS: View[] = [
   "convert",
   "auto",
   "done",
+  "tank",
   "pay",
   "pay-setup",
   "activity",
@@ -115,14 +128,7 @@ export function CashGallery() {
       <HomeFixture
         cards={
           <>
-            <StartEarningCard
-              {...IDLE}
-              phase="idle"
-              allows="New cash that arrives moves into savings on its own."
-              error={null}
-              preview={false}
-              onStart={noop}
-            />
+            <StartEarningCard {...IDLE} phase="idle" error={null} preview={false} onStart={noop} />
             <StartEarningCard {...ARRIVED} phase="pending" error={null} preview={false} onStart={noop} />
           </>
         }
@@ -140,29 +146,34 @@ export function CashGallery() {
         <TxDone title="It’s cash now" body="About $119.83 is in your cash." txHash={ZERO_TX} onDone={noop} />
       </Sheet>
     ) : null;
+  // Other dollars to turn into cash wait in the menu, with a number over its button (Adrian, 2026-10-20); the
+  // conversion views open it.
+  const waits = arrived.kind === "ask" && view !== "done" && view !== "arriving" && view !== "tank";
+  const card = waits ? (
+    <ArrivedCard
+      text={view === "convert" ? "120 USDT and 50 USDe" : arrived.text}
+      quotes={view === "convert" ? [...QUOTES, UNFAIR] : QUOTES}
+      phase="idle"
+      error={null}
+      preview={false}
+      setsUp={view === "auto"}
+      onConvert={noop}
+    />
+  ) : null;
   return (
     <HomeFixture
       note={arrived.kind === "arriving" ? `${arrived.text} arriving` : undefined}
+      menu={
+        view === "tank"
+          ? {
+              top: <FuelTankCard levelUsd={0.12} phase="idle" error={null} preview={false} onFill={noop} />,
+              waiting: 1,
+              openFirst: true,
+            }
+          : { top: card, waiting: waits ? 1 : 0, openFirst: view === "convert" || view === "auto" }
+      }
       cards={
-        view !== "arriving" && (
-          <>
-            {/* Once a conversion lands the coins are cash, so the card is gone behind "done". */}
-            {arrived.kind === "ask" && view !== "done" && (
-              <ArrivedCard
-                text={view === "convert" ? "120 USDT and 50 USDe" : arrived.text}
-                quotes={view === "convert" ? [...QUOTES, UNFAIR] : QUOTES}
-                phase="idle"
-                error={null}
-                preview={false}
-                allows={view === "auto" ? automaticText("$1,000") : null}
-                onConvert={noop}
-              />
-            )}
-            {view === "home" && (
-              <StartEarningCard {...ARRIVED} phase="idle" error={null} preview={false} onStart={noop} />
-            )}
-          </>
-        )
+        view === "home" && <StartEarningCard {...ARRIVED} phase="idle" error={null} preview={false} onStart={noop} />
       }
       sheet={sheet}
     />
@@ -180,7 +191,19 @@ function Sheet({ title, children }: { title: string; children: ReactNode }) {
 }
 
 /** Home's top half with the boards' sample figures (HomeUpliftRail): the hero, the quick actions, the cash cards. */
-function HomeFixture({ note, cards, sheet }: { note?: string; cards: ReactNode; sheet: ReactNode }) {
+function HomeFixture({
+  note,
+  cards,
+  sheet,
+  menu,
+}: {
+  note?: string;
+  cards: ReactNode;
+  sheet: ReactNode;
+  /** What Home's menu holds: the card, how many wait, and whether the view opens it. */
+  menu?: { top: ReactNode; waiting: number; openFirst: boolean };
+}) {
+  const [menuOpen, setMenuOpen] = useState(menu?.openFirst ?? false);
   return (
     <div className="relative min-h-dvh">
       <header className="flex items-center justify-between px-5 pt-[calc(env(safe-area-inset-top)+8px)]">
@@ -196,9 +219,13 @@ function HomeFixture({ note, cards, sheet }: { note?: string; cards: ReactNode; 
             <span className="num text-xs text-subtle">sam.justan.id</span>
           </div>
         </div>
-        <span className="-mr-2 flex size-10 items-center justify-center">
-          <MenuIcon />
-        </span>
+        {menu ? (
+          <MenuButton extra={{ open: menuOpen, onOpenChange: setMenuOpen, top: menu.top, waiting: menu.waiting }} />
+        ) : (
+          <span className="-mr-2 flex size-10 items-center justify-center">
+            <MenuIcon />
+          </span>
+        )}
       </header>
       <section className="flex flex-col gap-2.5 px-5 pt-[18px]">
         <BalanceHero
@@ -216,7 +243,7 @@ function HomeFixture({ note, cards, sheet }: { note?: string; cards: ReactNode; 
       </section>
       <section className="flex flex-col gap-2.5 px-5 pt-[18px] empty:hidden">{cards}</section>
       <section className="grid grid-cols-2 gap-2.5 px-5 pt-[18px]">
-        <CashCard cashUsd={400} line="Fuel tank: $0.10" note={note} href="#" />
+        <CashCard cashUsd={400} line="Fuel tank: $0.50" note={note} href="#" />
         <CreditCard debtUsd={600} status="safe" monthlyCostUsd={3} availableUsd={800} href="#" />
       </section>
       <TabBar />

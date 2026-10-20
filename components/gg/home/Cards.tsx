@@ -10,7 +10,7 @@ const CARD = "flex flex-col gap-2 rounded-[22px] px-4 py-3.5 leading-[normal]";
 
 /**
  * The dark Cash card on Home (board 2f): cash is savings plus wallet USDC (D15), with a USDC chip and one line under
- * it, the fuel tank ("Fuel tank: $0.10", Adrian 2026-10-18); `note` ("120 USDT arriving") takes the line's place.
+ * it, the fuel tank ("Fuel tank: $0.50", Adrian 2026-10-18; $0.50 since 2026-10-20); `note` ("120 USDT arriving") takes the line's place.
  * `dim`: board 2g, money is in but earning isn't on yet, so the card sits at 60% with no shadow.
  */
 export function CashCard({
@@ -22,7 +22,7 @@ export function CashCard({
   onClick,
 }: {
   cashUsd: number;
-  /** The line under the amount: "Fuel tank: $0.10". */ line: string;
+  /** The line under the amount: "Fuel tank: $0.50". */ line: string;
   note?: string;
   dim?: boolean;
   href?: string;
