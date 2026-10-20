@@ -6,8 +6,7 @@ import { buildSetMixCalls, buildSetTopUpsCalls } from "@/lib/agents/settings";
 import type { AgentStatus } from "@/lib/agents/status";
 import { keepRawOf, keepText, topUpsChanged, type TopUpsChoice, type TopUpsSetting } from "@/lib/agents/topUps";
 import { earningAllowsText } from "@/lib/cashSetup";
-import { formatUsdTrim } from "@/lib/formatting";
-import { USDC, EQUITIES } from "@/lib/tokens/registry";
+import { EQUITIES } from "@/lib/tokens/registry";
 
 /**
  * Rebalance's sheet (boards 7e–7h): its line under the title, My mix, Top-ups go into my mix, and what saving takes
@@ -104,19 +103,15 @@ export function rebalanceSave(p: SaveInput): SavePlan {
   return { mixChanged, topUpsChanged: topUpsMoved, needsGrant, steps, canSave, note, allows };
 }
 
-/** "$1,000": earning's daily limit as its grant carries it (Start earning's, held to CAP_MAX). */
-const saveLimitText = (capMaxRaw: bigint) =>
-  formatUsdTrim(Number(startCapRaw("save", capMaxRaw)) / 10 ** USDC.decimals);
-
 /**
  * The allows line for a Save that grants: Rebalance's (`rebalanceAllows`), and while top-ups are on and earning is
- * off, earning's own line after it (Start earning's words), since the same Face ID grants earning too (P3,
- * `rebalanceChange`).
+ * off, earning's own line after it (Start earning's words, with no amount limit: P2), since the same Face ID grants
+ * earning too (P3, `rebalanceChange`).
  */
 function allowsLine(p: SaveInput, chosen: TopUpsChoice | null): string {
   const line = rebalanceAllows(chosen?.on ? { keepUsd: chosen.keepUsd ?? 0 } : undefined);
-  const earningToo = !!chosen?.on && !!p.earningOff && p.capMaxRaw !== null;
-  return earningToo ? `${line} ${earningAllowsText(saveLimitText(p.capMaxRaw!))}` : line;
+  const earningToo = !!chosen?.on && !!p.earningOff;
+  return earningToo ? `${line} ${earningAllowsText()}` : line;
 }
 
 /**

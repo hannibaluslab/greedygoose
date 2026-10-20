@@ -182,10 +182,11 @@ describe("rebalanceSave: Top-ups go into my mix", () => {
   it("says earning turns on too when top-ups turn on while it's off: the same Face ID grants it (P3)", () => {
     const plan = rebalanceSave({ ...base, earningOff: true, topUps: { saved: off, chosen: on } });
     expect(plan).toMatchObject({ needsGrant: true, steps: 1, canSave: true });
-    // Earning's limit on this $10,000 test cap is its own $1,000 a day.
+    // Earning has no amount limit (P2): its line names none.
     expect(plan.allows).toBe(
-      `${rebalanceAllows({ keepUsd: 500 })} New cash that arrives moves into savings on its own, up to $1,000 a day.`,
+      `${rebalanceAllows({ keepUsd: 500 })} New cash that arrives moves into savings on its own.`,
     );
+    expect(plan.allows).not.toMatch(/a day/);
     // A new grant with top-ups already on (a stock added to the mix) grants earning too while it's off.
     const weights = [2_500, 0, 0, 0, 2_500, 2_500, 2_500];
     expect(

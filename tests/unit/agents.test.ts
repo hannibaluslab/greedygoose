@@ -586,30 +586,35 @@ describe("jobStatus", () => {
 });
 
 describe("limitRaw and startCapRaw (the cap a switch turns a job on with)", () => {
-  it("starts Save and Entry on $1,000 a day", () => {
-    expect(limitRaw(LIMIT_USD.save.start, 10n ** 12n)).toBe(1_000_000_000n);
+  it("starts Entry on $1,000 a day", () => {
     expect(limitRaw(LIMIT_USD.entry.start, 10n ** 12n)).toBe(1_000_000_000n);
-    expect(startCapRaw("save", 10n ** 12n)).toBe(1_000_000_000n);
+    expect(startCapRaw("entry", 10n ** 12n)).toBe(1_000_000_000n);
   });
 
-  it("gives Protect, selling and the Rebalancer no amount limit: their grants carry the executor's CAP_MAX", () => {
-    expect(NO_LIMIT_JOBS).toEqual(["protect", "sell", "rebalance"]);
+  it("gives earning, Protect, selling and the Rebalancer no amount limit: their grants carry the executor's CAP_MAX", () => {
+    expect(NO_LIMIT_JOBS).toEqual(["save", "protect", "sell", "rebalance"]);
     expect((["save", "protect", "sell", "rebalance", "entry"] as const).map(hasLimit)).toEqual([
-      true,
+      false,
       false,
       false,
       false,
       true,
     ]);
-    expect(Object.keys(LIMIT_USD).sort()).toEqual(["entry", "save"]);
+    // P2: a $5,000 top-up is counted by one save, not over five days.
+    expect(startCapRaw("save", 10n ** 12n)).toBe(10n ** 12n);
+    expect(startCapRaw("save", 5_000_000n)).toBe(5_000_000n);
     expect(startCapRaw("protect", 10n ** 12n)).toBe(10n ** 12n);
     expect(startCapRaw("sell", 5_000_000n)).toBe(5_000_000n);
     expect(startCapRaw("rebalance", 10n ** 12n)).toBe(10n ** 12n);
     expect(startCapRaw("rebalance", 5_000_000n)).toBe(5_000_000n);
   });
 
+  it("keeps Save's day: its grant at CAP_MAX is still the template the executor rebuilds", () => {
+    const g = jobGrant("save", 10n ** 12n);
+    expect(g.spends).toEqual([{ token: USDC.address, allowance: (10n ** 12n).toString(), unit: "day" }]);
+  });
+
   it("never asks for more than the executor's CAP_MAX, so a $5 test deploy registers the grant", () => {
-    expect(limitRaw(LIMIT_USD.save.start, 5_000_000n)).toBe(5_000_000n);
     expect(limitRaw(LIMIT_USD.entry.start, 5_000_000n)).toBe(5_000_000n);
   });
 });

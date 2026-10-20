@@ -36,7 +36,8 @@ abstract contract OneTapGrantForkBase is ForkBase {
     GooseExecutor x;
     address owner = makeAddr("owner");
     address forwarder = makeAddr("forwarder");
-    /// Save's starting limit, $1,000 a day, held to CAP_MAX (lib/agents/permissions.ts startCapRaw).
+    /// Save's limit a day: the executor's CAP_MAX, since earning has no amount limit (lib/agents/permissions.ts
+    /// startCapRaw, P2).
     uint160 cap;
     uint256 salts;
 
@@ -52,7 +53,7 @@ abstract contract OneTapGrantForkBase is ForkBase {
         f[0] = forwarder;
         vm.prank(owner);
         x.bootstrap(f);
-        cap = x.CAP_MAX() < 1_000e6 ? x.CAP_MAX() : 1_000e6;
+        cap = x.CAP_MAX();
     }
 
     /// Save's template as the app builds it (lib/agents/permissions.ts, checker 0 as JAW grants it): approve USDC and

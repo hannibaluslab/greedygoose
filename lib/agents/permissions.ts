@@ -25,7 +25,7 @@ export type JawPermission = {
 /** The agents' jobs, in GooseExecutor's order (enum Job): the index is the job's id on-chain. */
 export const JOBS = ["save", "protect", "sell", "rebalance", "entry"] as const;
 export type AgentJob = (typeof JOBS)[number];
-/** The Cash Agent's two jobs (the Agents switches): one daily USDC limit each. */
+/** The Cash Agent's two jobs (the Agents switches): one USDC limit a day each, at the executor's CAP_MAX. */
 export const CASH_JOBS = ["save", "protect"] as const;
 type CashJob = (typeof CASH_JOBS)[number];
 /** The jobs whose grant carries a limit per stock: Protect · sell (a day) and the Rebalancer (a week). */
@@ -51,7 +51,7 @@ const CALLS: Record<CashJob, readonly { target: Address; selector: Hex }[]> = {
 /**
  * The tokens each job's daily limit covers, all at the same cap. Protect needs aUSDC as well as USDC: with checker 0,
  * a withdrawal of savings to someone else moves no USDC from the account, so a USDC limit alone would charge it
- * nothing (contracts/docs/MANAGER-NOTES.md §1). Protect's cap is the executor's CAP_MAX (`NO_LIMIT_JOBS`).
+ * nothing (contracts/docs/MANAGER-NOTES.md §1). Both caps are the executor's CAP_MAX (`NO_LIMIT_JOBS`).
  */
 const LIMITED: Record<CashJob, readonly Address[]> = {
   save: [USDC.address],
@@ -59,20 +59,23 @@ const LIMITED: Record<CashJob, readonly Address[]> = {
 };
 
 /**
- * The jobs with no amount limit: Protect's two and the Rebalancer. Like DeFi Saver, each is limited by what it does,
- * not by how much. Protect acts below 1.03, goes back to 1.12, and no move lands past the target; the Rebalancer trades
- * only a stock past its band, partway back, once a market day. Their grants carry the executor's CAP_MAX, the most a
- * grant may hold (a D13 test deploy allows $5), and the user types no limit.
+ * The jobs with no amount limit: earning (Save), Protect's two and the Rebalancer. Like DeFi Saver, each is limited by
+ * what it does, not by how much. Save only moves the account's own cash into its own savings, so a top-up is counted in
+ * one go (P2); Protect acts below 1.03, goes back to 1.12, and no move lands past the target; the Rebalancer trades only
+ * a stock past its band, partway back, once a market day. Their grants carry the executor's CAP_MAX, the most a grant
+ * may hold (a D13 test deploy allows $5), and the user types no limit. Save keeps its period (a day), so its template
+ * and its hash are the ones the executor rebuilds.
  */
-export const NO_LIMIT_JOBS = ["protect", "sell", "rebalance"] as const;
+export const NO_LIMIT_JOBS = ["save", "protect", "sell", "rebalance"] as const;
 type LimitedJob = Exclude<AgentJob, (typeof NO_LIMIT_JOBS)[number]>;
 export const hasLimit = (job: AgentJob): job is LimitedJob => !(NO_LIMIT_JOBS as readonly AgentJob[]).includes(job);
 
 /**
- * The limit each other job is switched on with, in dollars a day. Save and Entry run under the hood (D20), each at
- * $1,000 a day with no other offer. Both wait on the calibration pass (plan item 6 step 9).
+ * The limit a job that has one is switched on with, in dollars a day: Entry, under the hood (D20), at $1,000 a day with
+ * no other offer, pending the calibration pass (plan item 6 step 9). `save` stays only while Cash setup
+ * (hooks/useCashSetup.ts) still grants earning from this table; Save has no amount limit (`startCapRaw` gives CAP_MAX).
  */
-export const LIMIT_USD: Record<LimitedJob, { start: number }> = {
+export const LIMIT_USD: Record<LimitedJob | "save", { start: number }> = {
   save: { start: 1_000 },
   entry: { start: 1_000 },
 };

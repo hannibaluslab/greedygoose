@@ -48,9 +48,14 @@ export const saveGrantFollows = (save: AgentStatus, live: boolean) => live && sa
 export const startEarningSteps = (save: AgentStatus, live: boolean, deployed: boolean) =>
   saveGrantFollows(save, live) && !deployed ? 2 : 1;
 
-/** What Start earning's one Face ID lets the app do when it grants earning, said on the card before the tap. */
-export const earningAllowsText = (limit: string) =>
-  `New cash that arrives moves into savings on its own, up to ${limit} a day.`;
+/**
+ * What a Face ID that grants earning lets the app do, said before the tap. Earning has no amount limit (P2): without
+ * `limit` the line names none. `limit` ("$1,000") is only for a grant that still carries a daily one.
+ */
+export const earningAllowsText = (limit?: string) =>
+  limit
+    ? `New cash that arrives moves into savings on its own, up to ${limit} a day.`
+    : "New cash that arrives moves into savings on its own.";
 
 /**
  * The card's words (board 2g): money that just arrived, "Your $100 arrived · Start earning 4.6% on it."; with savings
