@@ -30,7 +30,7 @@ type AddMoneyProps = {
  * that they arrive as cash, and the rate they earn once earning is set up (`rate`, the live one; nothing about earning
  * before then). `arrived` is the "Turn into cash" card for other dollars nothing converts on its own. The name is the
  * one to copy (Adrian, 2026-10-19), with the hex under it for wallets that don't read names; the QR is the hex, which
- * every scanner reads. Auto top up is parked (PARKED.md).
+ * every scanner reads. Auto top up isn't built: the Agents tab shows it as Coming soon (docs/SPEC.md, Agents).
  *
  * No SheetSteps around it: "Turn into cash" opens its own sheet once it lands ("Do this automatically next time?"),
  * which a step host would fold into this one without its title.

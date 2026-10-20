@@ -1,6 +1,6 @@
 # GreedyGoose spec
 
-The product rules for v2, in one place. Where this file and `CLAUDE.md`, `docs/PARKED.md` or `docs/JUSTALAB-DECISIONS.md`
+The product rules for v2, in one place. Where this file and `CLAUDE.md`, `docs/archive/mvp-parked.md` or `docs/JUSTALAB-DECISIONS.md`
 disagree, this file wins. The decisions log stays as the record of why each rule exists.
 
 - Design reference: the GreedyGoose canvases (core boards; the Repay + free up canvas, boards 1–14). The coded UI matches

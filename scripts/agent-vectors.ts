@@ -1,6 +1,6 @@
 /**
- * Test vectors that tie GooseExecutor's Solidity to the TypeScript reference (contracts/docs/GooseExecutor.md §5, §7,
- * §11). Inputs come from keccak256(abi.encode(tag, i, field)) on both sides (contracts/test/Vectors.sol), so the
+ * Test vectors that tie GooseExecutor's Solidity to the TypeScript reference (docs/archive/goose-executor-plan.md §5,
+ * §7, §11). Inputs come from keccak256(abi.encode(tag, i, field)) on both sides (contracts/test/Vectors.sol), so the
  * JSON only carries what TypeScript decided. Forge reads it with vm.parseJson.
  *
  *   npm run contracts:vectors   # rewrite contracts/test/vectors/*.json after changing a rule

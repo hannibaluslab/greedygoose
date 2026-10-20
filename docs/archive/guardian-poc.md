@@ -1,6 +1,8 @@
 # Guardian
 
-> *Superseded in part by "Act is the line (Adrian, 2026-10-15)", Protect, in [JUSTALAB-DECISIONS.md](./JUSTALAB-DECISIONS.md): Guardian steps in only in Act (health under 1.10) and repays back to Watch at 1.20, not "Watch → repay to HF 1.65"; Weekend Shield no longer repays (`lib/guardian/plan.ts`).*
+> **Archived 2026-10-20.** Leo's POC design for Guardian (a keeper server and GuardianChecker). Its code is no longer in this repo. Protect in GooseExecutor replaced it: [GooseExecutor-as-built.md](../../contracts/docs/GooseExecutor-as-built.md). See [README.md](README.md).
+
+> *Superseded in part by "Act is the line (Adrian, 2026-10-15)", Protect, in [JUSTALAB-DECISIONS.md](../JUSTALAB-DECISIONS.md): Guardian steps in only in Act (health under 1.10) and repays back to Watch at 1.20, not "Watch → repay to HF 1.65"; Weekend Shield no longer repays (`lib/guardian/plan.ts`).*
 
 Guardian keeps a loan **Safe** by repaying part of it from the user's own savings, so Aave's liquidators never get to sell their stocks at a discount. It never sells, moves or locks stocks, and it never touches the user's cash.
 

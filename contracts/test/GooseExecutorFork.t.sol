@@ -329,11 +329,11 @@ contract GooseExecutorForkTest is ExecutorForkBase {
         assertEq(_jobs(alice), 2, "registered while paused");
     }
 
-    /// GooseExecutor.md §3: the app's grant (lib/agents/permissions.ts, hashed in scripts/agent-vectors.ts) and the
-    /// executor's template give the same manager hash on 50 random inputs per kind: the Cash Agent's jobs, Protect ·
-    /// sell and the Rebalancer with their stock limits, Entry, and the Rebalancer with top-ups. And the registration the
-    /// app sends for each kind's first input (lib/agents/register.ts) is abi.encode of that same template, what
-    /// registerApproved decodes.
+    /// docs/archive/goose-executor-plan.md §3: the app's grant (lib/agents/permissions.ts, hashed in
+    /// scripts/agent-vectors.ts) and the executor's template give the same manager hash on 50 random inputs per kind:
+    /// the Cash Agent's jobs, Protect · sell and the Rebalancer with their stock limits, Entry, and the Rebalancer with
+    /// top-ups. And the registration the app sends for each kind's first input (lib/agents/register.ts) is abi.encode
+    /// of that same template, what registerApproved decodes.
     function test_templates_hash_like_the_apps_builder() public {
         vm.etch(Vectors.HASH_SPENDER, address(x).code);
         ExecutorHarness h = ExecutorHarness(Vectors.HASH_SPENDER);

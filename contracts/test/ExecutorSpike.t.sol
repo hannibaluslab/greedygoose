@@ -7,7 +7,7 @@ import {ForkBase} from "./ForkBase.sol";
 import {FakeAccount} from "./FakeAccount.sol";
 import {IJustaPermissionManager as PM, ISpokeLite, IERC20Lite} from "./IJustaPermissionManager.sol";
 
-/// Spike for GooseExecutor (contracts/docs/GooseExecutor.md), test code only. The smallest contract that can be the
+/// Spike for GooseExecutor (docs/archive/goose-executor-plan.md), test code only. The smallest contract that can be the
 /// spender of a JAW permission: only the forwarder starts a run, and each account runs in its own sub-call with a gas
 /// cap, so a failure rolls back that account alone. A permission granted through JAW's screen has no checker, so the
 /// harness builds every call itself and pins it to the account.

@@ -17,7 +17,7 @@ import {SaveJob} from "./jobs/SaveJob.sol";
 import {SellJob} from "./jobs/SellJob.sol";
 
 /// @title GooseExecutor
-/// @notice The GreedyGoose agent contract (contracts/docs/GooseExecutor.md). It is the spender of every agent
+/// @notice The GreedyGoose agent contract (contracts/docs/GooseExecutor-as-built.md). It is the spender of every agent
 ///         permission an account grants through JAW's own screen (D14), keeps the on-chain list of which accounts have
 ///         which agent on, runs each agent's rule, builds every call itself, sends it through JAW's permission
 ///         manager and checks the result. Its runners call it: a Chainlink CRE workflow through GooseReceiver, and

@@ -1,6 +1,6 @@
 # JustaLab decisions
 
-These records extend Leo's `CLAUDE.md` (D1–D10) and `docs/PARKED.md`. Where they conflict, this file wins.
+These records extend Leo's `CLAUDE.md` (D1–D10) and `docs/PARKED.md` (now `docs/archive/mvp-parked.md`). Where they conflict, this file wins.
 
 Full plan: [GreedyGoose final build plan](https://claude.ai/code/artifact/48f85d80-d936-4ed1-a55b-6d49c5dbde8d). Visual reference: the GreedyGoose design canvas (the boards are a reference for the front; they are not edited to track decisions).
 
@@ -8,8 +8,8 @@ Full plan: [GreedyGoose final build plan](https://claude.ai/code/artifact/48f85d
 
 | # | Decision | Replaces |
 |---|---|---|
-| D11 | **Agents are in scope.** Cash Agent (Save; Protect = repay from savings, then sell backing stock), Entry agent, Rebalancer. Credit Buy, selling, Results and Friends are un-parked. | `CLAUDE.md:11` ("…or run agents"), `PARKED.md` agents, selling, Credit Buy, Results, Friends |
-| D12 | **No server, no database.** Agents run in the `GooseExecutor` contract, triggered by Chainlink Automation. The app reads everything from the chain. The only off-chain piece is a stateless price route (and a push service for the heads-up). | D8 (keeper), `docs/guardian.md` keeper hosting |
+| D11 | **Agents are in scope.** Cash Agent (Save; Protect = repay from savings, then sell backing stock), Entry agent, Rebalancer. Credit Buy, selling, Results and Friends are un-parked. | `CLAUDE.md:11` ("…or run agents"), `PARKED.md` (`docs/archive/mvp-parked.md`) agents, selling, Credit Buy, Results, Friends |
+| D12 | **No server, no database.** Agents run in the `GooseExecutor` contract, triggered by Chainlink Automation. The app reads everything from the chain. The only off-chain piece is a stateless price route (and a push service for the heads-up). | D8 (keeper), `docs/archive/guardian-poc.md` keeper hosting |
 | D13 | **Test deploys before the audit** are only for throwaway accounts with caps ≤ $5, and are never wired into the production app config. | D10 |
 | D14 | **Permissions go through JAW's own screens.** Grant with `useGrantPermissions`, list with `usePermissions`, revoke with `useRevokePermissions`. The spender is `GooseExecutor`. The app sends no raw `addOwnerAddress` or `manager.approve`. The executor builds every call itself and pins "this account only"; JAW enforces the allowed functions and spend caps. | `hooks/useGuardian.ts` raw grant |
 | D15 | **Cash is savings.** The cash balance is the Aave V3 savings balance plus wallet USDC. Buys and repays withdraw from savings inside the same Face ID. | D9 |
@@ -394,7 +394,7 @@ It replaces, in D2 (`CLAUDE.md`, now marked there and named in its pointer to th
 
 ### Protect
 
-This replaces, for Protect, D2's use of the Safe line as the trigger in Leo's Guardian (`docs/guardian.md`'s "Watch → repay to HF 1.65; Fri 14–20 ET → Weekend Shield"; its text is Leo's and stays, with a superseded marker, and `CLAUDE.md`'s pointer to this file names this part), plan item 1's sale lines (a heads-up below 1.25, at once below 1.10, back to 1.40), and Weekend Shield's repay. The bullets above marked as superseded by this section keep their meaning for their day.
+This replaces, for Protect, D2's use of the Safe line as the trigger in Leo's Guardian (`docs/archive/guardian-poc.md`'s "Watch → repay to HF 1.65; Fri 14–20 ET → Weekend Shield"; its text is Leo's and stays, with a superseded marker, and `CLAUDE.md`'s pointer to this file names this part), plan item 1's sale lines (a heads-up below 1.25, at once below 1.10, back to 1.40), and Weekend Shield's repay. The bullets above marked as superseded by this section keep their meaning for their day.
 
 - **Protect steps in only in Act** (health under 1.10, `RISK.watchMin`). In Safe and in Watch it does nothing: no repay, no heads-up, no sale, no weekend move. In Act it repays from cash first; it sells backing stock only if the cash can't bring the credit out of Act.
 - **It brings the credit back to Watch, at 1.20, not to Safe** (`CASH_AGENT.targetHf`, `PROTECT_SELL.targetHf`: one target for a repay and a sale). Why 1.20: it leaves an 8% cushion (1 − 1.10/1.20) before the credit is back in Act, so a normal day's move doesn't set Protect off again on the next run; and it spends far less than reaching Safe: from 1.05 it repays an eighth of what's owed (12.5%) where Safe would take 30%, and the protect-panel sale (Tesla, NVIDIA and Apple behind $6,200 at 1.049) sells $1,839 of stock instead of $3,164 at the old 1.40, and keeps the Apple. Was 1.50 → 1.65 for a repay and 1.40 for a sale.

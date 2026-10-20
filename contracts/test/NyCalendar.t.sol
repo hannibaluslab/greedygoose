@@ -10,8 +10,9 @@ import {DeployExecutor} from "../script/DeployExecutor.s.sol";
 import {ExecutorHarness} from "./ExecutorHarness.sol";
 import {Vectors} from "./Vectors.sol";
 
-/// The executor's New York calendar (GooseExecutor.md §7): time-zone switches, the Friday window in summer and
-/// winter, holidays, and agreement with Leo's inWeekendWindow and the app's marketState on 10,000 timestamps.
+/// The executor's New York calendar (docs/archive/goose-executor-plan.md §7): time-zone switches, the Friday window in
+/// summer and winter, holidays, and agreement with Leo's inWeekendWindow and the app's marketState on 10,000
+/// timestamps.
 contract NyCalendarTest is Test {
     ExecutorHarness x;
     /// The calendar for the library's own functions (`x` keeps its own).
@@ -168,8 +169,8 @@ contract NyCalendarTest is Test {
         }
     }
 
-    /// GooseExecutor.md §7: with no holiday and a 6-hour window, the weekend heads-up's window is Leo's inWeekendWindow
-    /// (plan.ts) and `frozen` is the app's "markets closed" (lib/market-hours).
+    /// docs/archive/goose-executor-plan.md §7: with no holiday and a 6-hour window, the weekend heads-up's window is
+    /// Leo's inWeekendWindow (plan.ts) and `frozen` is the app's "markets closed" (lib/market-hours).
     function test_agrees_with_the_app_on_10000_timestamps() public view {
         string memory json = vm.readFile("test/vectors/calendar.json");
         bytes memory window = vm.parseJsonBytes(json, ".window");

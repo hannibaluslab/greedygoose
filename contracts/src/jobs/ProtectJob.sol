@@ -8,10 +8,10 @@ import {CashRules, ProtectCase, Thresholds, TopUps} from "../CashRules.sol";
 import {JobBase} from "./JobBase.sol";
 
 /// @title ProtectJob
-/// @notice Protect from savings (GooseExecutor.md §5.2): credit that slips below Protect's line (1.03) is repaid from
-///         the account's Aave V3 savings back to the target (1.12, in Watch). When savings can't get it there, the
-///         rescue goes on (`Account.rescueAt`): Protect · sell takes over, and savings that arrive meanwhile repay first,
-///         until the credit is back at the target (Adrian, 2026-10-19).
+/// @notice Protect from savings (docs/archive/goose-executor-plan.md §5.2): credit that slips below Protect's line
+///         (1.03) is repaid from the account's Aave V3 savings back to the target (1.12, in Watch). When savings can't
+///         get it there, the rescue goes on (`Account.rescueAt`): Protect · sell takes over, and savings that arrive
+///         meanwhile repay first, until the credit is back at the target (Adrian, 2026-10-19).
 /// @dev A linked library: its code runs as GooseExecutor, the spender, exactly as if it were inlined there.
 library ProtectJob {
     /// The template the user approved: withdraw savings, approve USDC, repay. Both daily limits use the one cap:

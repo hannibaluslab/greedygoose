@@ -9,10 +9,10 @@ import {NyCalendar} from "../NyCalendar.sol";
 import {JobBase} from "./JobBase.sol";
 
 /// @title SaveJob
-/// @notice Save (GooseExecutor.md §5.3): wallet USDC above the keep-back goes into the account's Aave V3 savings,
-///         within today's limit and the daily number of saves. Only Save counts top-ups: with top-ups on and Rebalance on,
-///         what it puts in savings, less the agents' own change, is a top-up waiting to go into the mix
-///         (CashRules.topUpCounted).
+/// @notice Save (docs/archive/goose-executor-plan.md §5.3): wallet USDC above the keep-back goes into the account's
+///         Aave V3 savings, within today's limit and the daily number of saves. Only Save counts top-ups: with top-ups
+///         on and Rebalance on, what it puts in savings, less the agents' own change, is a top-up waiting to go into
+///         the mix (CashRules.topUpCounted).
 /// @dev A linked library: its code runs as GooseExecutor, the spender, exactly as if it were inlined there.
 library SaveJob {
     /// The template the user approved: approve USDC, supply it to savings.

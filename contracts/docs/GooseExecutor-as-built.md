@@ -1,6 +1,6 @@
 # GooseExecutor as built (M2, then Protect · sell, the Rebalancer and Entry)
 
-What `src/GooseExecutor.sol` does differently from [GooseExecutor.md](./GooseExecutor.md), and why. The spec is unchanged; read the two together.
+What `src/GooseExecutor.sol` does differently from its design plan, [goose-executor-plan.md](../../docs/archive/goose-executor-plan.md) (archived 2026-10-20), and why. The plan is unchanged; read the two together, this file winning where they differ.
 
 | Spec | As built | Why |
 | --- | --- | --- |
@@ -58,7 +58,7 @@ Plan item 1, steps 10–12: when savings can't keep the credit Safe, Protect sel
 
 | Plan | As built | Why |
 | --- | --- | --- |
-| ProtectSellChecker pins every argument | No checker; the executor builds every call and its post-checks revert anything else | D14: JAW's screen grants with checker 0 (GooseExecutor.md §12). |
+| ProtectSellChecker pins every argument | No checker; the executor builds every call and its post-checks revert anything else | D14: JAW's screen grants with checker 0 (goose-executor-plan.md §12). |
 | Sell on Aerodrome or Uniswap | Aerodrome Slipstream only, tick spacing 10 | Its stock pools hold $0.44M–1.57M of USDC; Uniswap's hold $0–53k (read 2026-10-14). A second router in the grant would be reach that is never used. |
 | USDC limit on the repay leg | USDC and aUSDC, at the same cap | The manager meters only the tokens a permission lists. Nothing in a sale touches savings; the aUSDC limit bounds what a batch could move through an allowance the account gave elsewhere. |
 | "Keep my mix" from the registry | The same share of each holding for sale, then the usual order for what limits leave | The Rebalancer's target mix doesn't exist yet (item 9). |
@@ -123,7 +123,7 @@ Plan item 9, steps 2 and 3: once a market day, 30 to 60 minutes after the open, 
 
 | Plan | As built | Why |
 | --- | --- | --- |
-| RebalanceChecker pins the recipient, the floor and the routers | No checker; the executor builds every call and its post-checks revert anything else | D14 (GooseExecutor.md §12). |
+| RebalanceChecker pins the recipient, the floor and the routers | No checker; the executor builds every call and its post-checks revert anything else | D14 (goose-executor-plan.md §12). |
 | Floor: Aave's price − 0.3% | Aave's price − 0.5%, the same as the pool gap | With pools allowed 0.5% off, a 0.3% floor would fail every sale into a pool 0.3–0.5% under Aave's price, and every buy out of one as far over. At 0.5% the gap check and the floor agree; a batch that still can't fill skips the day. |
 | "Only the stock that broke out" | Only it goes back to half its band; the other side comes from the in-band stocks furthest from target | The backtest (eval rebal/backtest.py) spread the other side over every in-band stock by weight: about seven swaps a rebalance, most under $20. Furthest-first needs one or two, and never moves a stock past its target. |
 | Skip the day if the pool is > 0.5% off | It waits while the pool is off; the window ends the day | Recording the skip would cost a run for every account every day a pool is off. A pool that comes back within the window trades at a fair price. |

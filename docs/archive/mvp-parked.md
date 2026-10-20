@@ -1,5 +1,7 @@
 # Parked — do not build
 
+> **Archived 2026-10-20.** Leo's MVP parked list. Several items in it are built now (the agents with Protect's selling and the Rebalancer, cash that earns, selling stocks, the Leaderboard). Don't follow it: [SPEC.md](../SPEC.md) says what the product is and what is still to build. See [README.md](README.md).
+
 Everything here comes from the "Invest and Earn" brief (`docs/archive/original-ideas.md`) or the GreedyGoose design canvas. None of it is in the MVP. **Do not implement, scaffold or stub any of it** unless the user explicitly un-parks an item. Then move that item into `CLAUDE.md` with its decisions.
 
 | Item | Why it's parked / what must be true first |

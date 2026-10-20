@@ -4,7 +4,7 @@ Next.js version notes: @AGENTS.md
 
 > **v2: read @docs/SPEC.md first.** It holds the product rules and wins over this file and the decisions log. @docs/ARCHITECTURE.md holds the code conventions; run `npm run check` before every commit.
 
-> **JustaLab decisions come first.** Read @docs/JUSTALAB-DECISIONS.md before anything below. Where it conflicts with this file or `docs/PARKED.md`, it wins (agents in scope, no server, JAW permission screens, cash is savings and one pot on screen, Save and Receive invisible, five tabs, no "borrow" or "lock" on screen, and "Act is the line": every way of taking credit, and Free up, stops at health 1.12 and never ends in Act, which replaces D2's "no cap below Aave's"; and Protect's line (2026-10-19): Protect, Guardian included, acts only under 1.03, repays from cash then sells at once, and goes on until the credit is back at 1.12, with no amount limit; Act is a warning only; and Rebalance (2026-10-20): no amount limit either, its grant at the executor's CAP_MAX, and top-ups go into my mix when the user turns it on, to build).
+> **JustaLab decisions come first.** Read @docs/JUSTALAB-DECISIONS.md before anything below. Where it conflicts with this file or `docs/archive/mvp-parked.md`, it wins (agents in scope, no server, JAW permission screens, cash is savings and one pot on screen, Save and Receive invisible, five tabs, no "borrow" or "lock" on screen, and "Act is the line": every way of taking credit, and Free up, stops at health 1.12 and never ends in Act, which replaces D2's "no cap below Aave's"; and Protect's line (2026-10-19): Protect, Guardian included, acts only under 1.03, repays from cash then sells at once, and goes on until the credit is back at 1.12, with no amount limit; Act is a warning only; and Rebalance (2026-10-20): no amount limit either, its grant at the executor's CAP_MAX, and top-ups go into my mix when the user turns it on, to build).
 
 ## Mission
 
@@ -24,7 +24,7 @@ We build the experience. We do not build a lending protocol, hold user funds, or
 | Custody | The user's JAW smart account |
 | Experience | This app (Next.js, mobile-first) |
 
-Anything not in the MVP scope below is **parked**. See `docs/PARKED.md`, and **do not build anything listed there** unless the user explicitly un-parks it.
+Anything not in the MVP scope below is **parked**. See `docs/archive/mvp-parked.md` (archived 2026-10-20: much of it is built now), and **do not build anything listed there** unless the user explicitly un-parks it.
 
 ---
 
@@ -80,7 +80,7 @@ Buy them in-app with USDC (above), or bring your own: from another JAW app (the 
 | D7 | **Batch only what's honest.** Approve + supply can be one signature. Supply + borrow can be one signature only if the confirm screen lists both steps. Never batch in a way that hides an asset movement. |
 | D8 | **Guardian (feat/guardian, 2026-10-13): one minimal backend.** A keeper holds a spender key whose powers are limited on-chain (see D10). It holds no user funds or keys, and its only call is `JustaPermissionManager.executeBatch`. This replaces "no backend" for Guardian only. |
 | D9 | **Savings buffer in Aave V3 (un-parked for Guardian).** USDC supplied by the user to Aave V3 on Base. It's Guardian's only funding source. Show the variable rate; never call it "interest on cash" in marketing. |
-| D10 | **GuardianChecker contract (needs audit before mainnet).** A stateless, immutable `ICallChecker` that pins arguments: withdraw to the account, approve only the spoke, repay reserve 7 for the account. Combined with a daily USDC cap. Not deployed until an independent audit; the app and keeper stay disabled until `NEXT_PUBLIC_GUARDIAN_CHECKER` is set. See `docs/guardian.md`. |
+| D10 | **GuardianChecker contract (needs audit before mainnet).** A stateless, immutable `ICallChecker` that pins arguments: withdraw to the account, approve only the spoke, repay reserve 7 for the account. Combined with a daily USDC cap. Not deployed until an independent audit; the app and keeper stay disabled until `NEXT_PUBLIC_GUARDIAN_CHECKER` is set. See `docs/archive/guardian-poc.md`. |
 
 ---
 
@@ -229,7 +229,7 @@ lib/eligibility/
 lib/market-hours/
 config/         risk.ts
 tests/          unit/  fork/  e2e/
-docs/           PARKED.md  archive/
+docs/           SPEC.md  ARCHITECTURE.md  JUSTALAB-DECISIONS.md  archive/
 ```
 
 ### Environment

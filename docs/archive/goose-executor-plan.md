@@ -1,5 +1,7 @@
 # GooseExecutor spec
 
+> **Archived 2026-10-20** (was `contracts/docs/GooseExecutor.md`). The design plan, built on D14 (grants through JAW's screens, registration by a log trigger). The contract truth is [GooseExecutor-as-built.md](../../contracts/docs/GooseExecutor-as-built.md), which still lists its changes against this plan's sections. D14 was dropped on 2026-10-20 (JUSTALAB-DECISIONS.md, "One signature per change"). See [README.md](README.md).
+
 GooseExecutor is the agent contract. It keeps the on-chain list of which accounts have which agent on, runs each agent's rules, builds the calls, sends them through JAW's permission manager and checks the result. Chainlink Automation calls it. There is no server and no database of ours (D12).
 
 This spec covers what M2 builds: registration, the Cash lane (Save and Protect · savings), the run loop, post-checks, events, admin and the New York calendar. Protect · sell, the Rebalancer and Entry come later and are sketched at the end.
@@ -8,7 +10,7 @@ Inputs:
 
 - the final build plan (§3 "GooseExecutor", item 1) and the readiness audit;
 - `docs/JUSTALAB-DECISIONS.md`: D12 (no server), D13 (test deploys capped at $5), D14 (JAW's screens), D17 (words), D18 (thresholds on-chain with bounds), and product decision 2 (who triggers);
-- [MANAGER-NOTES.md](./MANAGER-NOTES.md): how the manager works, with line refs;
+- [MANAGER-NOTES.md](../../contracts/docs/MANAGER-NOTES.md): how the manager works, with line refs;
 - `test/ExecutorSpike.t.sol`: a contract spender on a Base fork, measured.
 
 ## 1. Shape
@@ -448,10 +450,10 @@ If we go back to Leo's direct `manager.approve` through `wallet_sendCalls` (`hoo
 - The permission carries checkers again (GuardianChecker unchanged for Protect · savings), so arguments are pinned twice: by the manager and by the executor.
 - The app picks the salt and `start = now − 300`, and can put `executor.register` in the same Face ID. The log-trigger upkeep and `checkLog` go away.
 - The grant doesn't show in JAW's permission list and can't be revoked from JAW's screens. The app revokes with a direct `manager.revoke`.
-- Whether JAW's signing screen accepts a direct `manager.approve` is still unverified (`docs/guardian.md:44`).
+- Whether JAW's signing screen accepts a direct `manager.approve` is still unverified (`docs/archive/guardian-poc.md:44`).
 
 A third option: JAW's relay already stores a checker per call, and only the grant request type drops it (MANAGER-NOTES §7). If JAW's SDK and popup accepted an optional `checker`, we would keep JAW's screens and get the checkers back.
 
 ---
 
-**Superseded in part (2026-10-15): Act is the line.** Protect steps in only below 1.10 and brings the credit back to 1.20; Weekend Shield no longer repays (§5.2's `WeekendShield` branch and `_inPreFreezeWindow` in the runs are gone), and the threshold table's defaults and bounds for `triggerHf` and `targetHf` are replaced. See [GooseExecutor-as-built.md](./GooseExecutor-as-built.md), "Act is the line", and JUSTALAB-DECISIONS.md.
+**Superseded in part (2026-10-15): Act is the line.** Protect steps in only below 1.10 and brings the credit back to 1.20; Weekend Shield no longer repays (§5.2's `WeekendShield` branch and `_inPreFreezeWindow` in the runs are gone), and the threshold table's defaults and bounds for `triggerHf` and `targetHf` are replaced. See [GooseExecutor-as-built.md](../../contracts/docs/GooseExecutor-as-built.md), "Act is the line", and JUSTALAB-DECISIONS.md.

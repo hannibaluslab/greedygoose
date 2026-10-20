@@ -41,7 +41,10 @@ export type MoveContext = {
 /** Whether a move's row reads what was owed and the cash around it. */
 export const movesMoney = (e: AgentEvent) => e.kind === "repaid" || e.kind === "sold" || e.kind === "rebalanced";
 
-/** GooseExecutor's BASE_COOLDOWN and MAX_FAILS (GooseExecutor.md §6): 10 minutes after a failed run, doubling, and off at eight. */
+/**
+ * GooseExecutor's BASE_COOLDOWN and MAX_FAILS (docs/archive/goose-executor-plan.md §6): 10 minutes after a failed run,
+ * doubling, and off at eight.
+ */
 const FIRST_COOLDOWN_SEC = 600;
 const MAX_FAILS = 8;
 
