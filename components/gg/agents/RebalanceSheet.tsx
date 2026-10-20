@@ -119,11 +119,12 @@ export function RebalanceSheetBody({
           {line.renew && (
             <>
               {" "}
+              {/* Inline in the line, it takes taps 45 tall (13px above and below its text), the 44px touch target. */}
               <button
                 type="button"
                 disabled={!live || busy}
                 onClick={() => onAction("renew")}
-                className="font-semibold text-ink underline-offset-2 hover:underline disabled:opacity-45"
+                className="relative font-semibold text-ink underline-offset-2 before:absolute before:-inset-x-2 before:-inset-y-[13px] hover:underline disabled:opacity-45"
               >
                 Renew
               </button>
