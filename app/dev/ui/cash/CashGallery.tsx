@@ -121,7 +121,7 @@ export function CashGallery() {
             <StartEarningCard
               {...IDLE}
               phase="idle"
-              allows="New cash that arrives moves into savings on its own, up to $1,000 a day."
+              allows="New cash that arrives moves into savings on its own."
               error={null}
               preview={false}
               onStart={noop}

@@ -12,6 +12,10 @@ import { formatUsdTrim } from "@/lib/formatting";
 import { USDC } from "@/lib/tokens/registry";
 import type { ChangePrefix } from "@/lib/tx/plans";
 
+/** The cap each grant carries: Save at CAP_MAX (P2, no amount limit), Entry at its one limit, never above CAP_MAX. */
+const capOf = (job: "save" | "entry", capMax: bigint) =>
+  job === "save" ? capMax : limitRaw(LIMIT_USD.entry.start, capMax);
+
 /** Why a grant can't be signed now; null when it can. */
 const FEE_BLOCKED = "Your account can’t pay network fees from your cash right now.";
 
@@ -29,8 +33,9 @@ export type GrantView = {
 };
 
 /**
- * The two grants that run under the hood (D20): earning (the Save job) and turning other dollars into cash on their own
- * (the Entry job), each at its one limit (LIMIT_USD), never above the executor's CAP_MAX, each one batch, one Face ID
+ * The two grants that run under the hood (D20): earning (the Save job), at the executor's CAP_MAX with no amount limit
+ * (P2, Adrian 2026-10-20), and turning other dollars into cash on their own (the Entry job), at its one limit
+ * (LIMIT_USD), never above CAP_MAX. Each is one batch, one Face ID
  * (useAgents `changePlan`, Adrian 2026-10-20). No agent, limit or switch is shown for them. Earning rides in Start
  * earning's own batch (useStartEarning, `earningPlan`); "convert automatically" is its own write, prepared while its
  * question shows (`automatic.prep` with `automatic.plan`).
@@ -52,7 +57,7 @@ export function useCashSetup(account: `0x${string}`) {
   const grantPlan = (job: "save" | "entry", prefix?: ChangePrefix): TxPlan | null =>
     !AGENTS_LIVE || capMax === null
       ? null
-      : agents.changePlan({ grants: [{ job, capRaw: limitRaw(LIMIT_USD[job].start, capMax) }], prefix });
+      : agents.changePlan({ grants: [{ job, capRaw: capOf(job, capMax) }], prefix });
 
   // "Convert automatically" landed: its caller hears once, and the write goes back to idle.
   const onAutomatic = useRef<(() => void) | null>(null);
@@ -65,9 +70,10 @@ export function useCashSetup(account: `0x${string}`) {
     resetAutomatic();
   }, [automatic.phase, resetAutomatic]);
   const automaticPlan = grantPlan("entry");
-  /** "$1,000": a job's daily limit as its grant carries it (a D13 test deploy holds it to CAP_MAX). */
-  const limitText = (job: "save" | "entry") =>
-    formatUsdTrim(Number(limitRaw(LIMIT_USD[job].start, capMax ?? 2n ** 160n)) / 10 ** USDC.decimals);
+  /** "$1,000": Entry's daily limit as its grant carries it (a D13 test deploy holds it to CAP_MAX). */
+  const entryLimitText = formatUsdTrim(
+    Number(limitRaw(LIMIT_USD.entry.start, capMax ?? 2n ** 160n)) / 10 ** USDC.decimals,
+  );
 
   return {
     /** Earning: "unconfigured" with no executor, then off, starting or on. */
@@ -83,8 +89,8 @@ export function useCashSetup(account: `0x${string}`) {
     earningBlocked: blocked,
     /** Earning's grant (the Save job) in one batch, after `prefix` (Start earning's supply); null while it can't be. */
     earningPlan: (prefix?: ChangePrefix) => grantPlan("save", prefix),
-    /** Each grant's daily limit, as the line before its Face ID says it. */
-    limitText,
+    /** Entry's daily limit, as the line before its Face ID says it (Save has none). */
+    entryLimitText,
     /** "Do this automatically next time?": other dollars turn into cash on their own. */
     automatic: {
       view: {
