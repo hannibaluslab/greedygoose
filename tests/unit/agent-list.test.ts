@@ -13,7 +13,7 @@ import {
   TAB_JOBS,
   type Next,
 } from "@/lib/agents/list";
-import { JOBS, type AgentJob } from "@/lib/agents/permissions";
+import type { AgentJob } from "@/lib/agents/permissions";
 import type { AgentStatus } from "@/lib/agents/status";
 
 const jobs = (s: AgentStatus): Record<AgentJob, AgentStatus> => ({
@@ -23,7 +23,6 @@ const jobs = (s: AgentStatus): Record<AgentJob, AgentStatus> => ({
   rebalance: s,
   entry: s,
 });
-const none = Object.fromEntries(JOBS.map((j) => [j, null])) as Record<AgentJob, null>;
 const idle = (idle: string): Next => ({ idle });
 const repays: Next = { will: "repays $40 from your cash", would: "Would repay $40 from your cash" };
 const nexts = { protect: repays, rebalance: idle("No mix yet") };
@@ -33,7 +32,7 @@ const ON_SCREEN = /borrow|lock|permission|executor|upkeep|registry|spender|savin
 
 describe("the two agents", () => {
   it("are Protect and Rebalance, each saying what it does in under six words and what it never does", () => {
-    const items = agentItems({ status: jobs("off"), capRaw: none, next: nexts });
+    const items = agentItems({ status: jobs("off"), next: nexts });
     expect(items.map((i) => [i.name, i.does])).toEqual([
       ["Protect", "Steps in under 1.03"],
       ["Rebalance", "Keeps your mix on target"],
@@ -75,7 +74,7 @@ describe("the two agents", () => {
     expect(nextLine("starting", repays)).toBe("Starting");
     expect(nextLine("loading", repays)).toBe("…");
     expect(nextLine("on", idle("Safe. Nothing to do."))).toBe("Safe. Nothing to do.");
-    const items = agentItems({ status: { ...jobs("on"), rebalance: "off" }, capRaw: none, next: nexts });
+    const items = agentItems({ status: { ...jobs("on"), rebalance: "off" }, next: nexts });
     expect(items.map((i) => [i.on, i.line])).toEqual([
       [true, "Next: repays $40 from your cash"],
       [false, "No mix yet"],

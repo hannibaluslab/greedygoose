@@ -22,7 +22,6 @@ import {
 } from "@/lib/agents/permissions";
 import { buildRegisterCalls, decodePermission, encodePermission } from "@/lib/agents/register";
 import { changeSheets } from "@/lib/agents/status";
-import { stepSheets, withRegistration } from "@/hooks/useAgentRun";
 import { buildSetKeepMixCalls, buildSetMixCalls } from "@/lib/agents/settings";
 import { assertAllowed } from "@/lib/allowlist";
 import { registerPlan } from "@/lib/tx/plans";
@@ -202,20 +201,9 @@ describe("a change's last batch: its settings and its registrations, in one shee
     );
   });
 
-  it("counts a sheet per grant, then the one batch", () => {
+  it("counts one batch for a change that grants anything, however many grants it carries", () => {
     expect(changeSheets(0)).toBe(0);
-    expect(changeSheets(1)).toBe(2);
-    expect(changeSheets(2)).toBe(3);
-  });
-
-  it("ends an agent change that grants anything with one registration of every job it granted", () => {
-    const grantP = { grant: { job: "protect" as const, capRaw: 1n } };
-    const grantS = { grant: { job: "sell" as const, capRaw: 1n, limitsRaw: sellLimits } };
-    expect(withRegistration([grantP, grantS])).toEqual([grantP, grantS, { register: ["protect", "sell"] }]);
-    expect(stepSheets([grantP, grantS])).toBe(3);
-    expect(withRegistration([{ off: "sell" }])).toEqual([{ off: "sell" }]);
-    expect(stepSheets([{ off: "sell" }, { off: "protect" }])).toBe(2);
-    // A change that already ends in its batch (a retry's rest) is left as it is.
-    expect(withRegistration([{ register: ["protect"] }])).toEqual([{ register: ["protect"] }]);
+    expect(changeSheets(1)).toBe(1);
+    expect(changeSheets(2)).toBe(1);
   });
 });

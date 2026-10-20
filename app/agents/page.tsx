@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { isAddressEqual, maxUint160 } from "viem";
 import { useAccount } from "wagmi";
@@ -15,15 +15,14 @@ import { ProtectCardSkeleton, ProtectCardView } from "@/components/gg/agents/Pro
 import { RebalanceCard } from "@/components/gg/agents/RebalanceCard";
 import { useAgentFeed } from "@/hooks/useAgentFeed";
 import { useActWarning } from "@/hooks/useActWarning";
-import { useAgentRun, type AgentStep } from "@/hooks/useAgentRun";
-import { TAP_AGAIN, useTx } from "@/hooks/useTx";
-import { GRANT_SECONDS, useAgents } from "@/hooks/useAgents";
+import { useTx } from "@/hooks/useTx";
+import { GRANT_SECONDS, useAgents, type GrantStep } from "@/hooks/useAgents";
 import { useAgentSettings } from "@/hooks/useAgentSettings";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
-import type { GrantStep } from "@/hooks/useManageSave";
 import { useNextFreeze } from "@/hooks/useNextFreeze";
 import { useNowSec } from "@/hooks/useNowSec";
 import { usePosition, type PositionData } from "@/hooks/usePosition";
+import { useSteadyPrices } from "@/hooks/useSteadyPrices";
 import { AGENTS_LIVE } from "@/lib/agents/config";
 import {
   AGENT_JOBS,
@@ -36,14 +35,12 @@ import {
   protectWarnings,
   type Agent,
   type Next,
-  type SheetAction,
 } from "@/lib/agents/list";
 import { rebalanceOptions } from "@/lib/agents/mix";
 import { agentNexts, defaultNumbers, pricesHeldAt, weekendCard } from "@/lib/agents/next";
-import { hasLimit, JOBS, limitRaw, startCapRaw, stockLimitsRaw, type AgentJob } from "@/lib/agents/permissions";
+import { hasLimit, JOBS, startCapRaw, stockLimitsRaw, type AgentJob } from "@/lib/agents/permissions";
 import { protectCard } from "@/lib/agents/protectCard";
-import { offSteps } from "@/lib/agents/status";
-import { EQUITIES, USDC } from "@/lib/tokens/registry";
+import { EQUITIES } from "@/lib/tokens/registry";
 
 export default function AgentsPage() {
   return <RequireAccount>{(address) => <Agents address={address} />}</RequireAccount>;
@@ -67,12 +64,11 @@ const registryInput = (settings: ReturnType<typeof useAgentSettings>) => ({
 });
 
 /**
- * The Agents tab (Adrian, 2026-10-15): Protect and Rebalance. Each agent's state is the executor's registry and JAW's
- * list (useAgents, D14); its next move is the executor's `planOf` or its TypeScript rule on live data
- * (lib/agents/next.ts); the cards come from a plain health check, the executor's events and registry. Every switch,
- * Renew and Turn off opens JAW's own sheet straight away (its Review and Face ID), once a grant or revoke: the row or
- * the sheet already says what it does (Protect's grants are at the executor's CAP_MAX, with no amount limit; the
- * Rebalancer's at the limit it shows), so there is no confirm step of ours. Until the agents are live (AGENTS_LIVE),
+ * The Agents tab (Adrian, 2026-10-15): Protect and Rebalance. Each agent's state is read on Base (useAgents: the
+ * executor's registry and the manager); its next move is the executor's `planOf` or its TypeScript rule on live data
+ * (lib/agents/next.ts); the cards come from a plain health check, the executor's events and registry. Renew and Turn
+ * off in an agent's sheet are one batch each, one Face ID (useAgents `changePlan`), prepared while the sheet is open
+ * so the tap opens JAW's sheet at once; switching on is the sheet's own Save. Until the agents are live (AGENTS_LIVE),
  * everything renders with real data and Coming soon stands where the switches are. The feed is the agents' moves only
  * (ruling 15). Earning and turning other dollars into cash run under the hood and have no place here (D20).
  */
@@ -85,7 +81,6 @@ function Agents({ address }: { address: `0x${string}` }) {
   const feed = useAgentFeed(address);
   const nowSec = useNowSec();
   const freezeAt = useNextFreeze(nowSec);
-  const runner = useAgentRun(agents);
   // The Finish card's write: the registrations of grants the executor doesn't run yet, prepared while the card shows.
   const finish = useTx("This didn’t go through on Base. Try again to finish turning it on.", agents.finishPlan);
   const resetFinish = finish.reset;
@@ -103,7 +98,6 @@ function Agents({ address }: { address: `0x${string}` }) {
   const [shown, setShown] = useState(!!linked);
 
   const capMax = agents.capMaxRaw;
-  const capOf = (usd: number) => limitRaw(usd, capMax ?? BigInt(usd) * 10n ** BigInt(USDC.decimals));
   /**
    * The cap a job starts on: CAP_MAX for Protect's two jobs (no amount limit), else its starting limit. Until CAP_MAX
    * is read nothing is granted, and the rules run on the largest a grant could hold.
@@ -128,7 +122,7 @@ function Agents({ address }: { address: `0x${string}` }) {
         pricesHeld: pricesHeldAt(nowSec, freezeAt),
       })
     : LOADING;
-  const items = agentItems({ status: agents.status, capRaw: byJob((job) => agents.terms[job]?.capRaw ?? null), next });
+  const items = agentItems({ status: agents.status, next });
 
   // The Act warning: a plain health check, Protect on or off (Adrian, 2026-10-19). A card only.
   const protectRuns = runs(agentStatus("protect", agents.status));
@@ -175,20 +169,23 @@ function Agents({ address }: { address: `0x${string}` }) {
     targetHf: numbers.targetHf,
   });
   const warnings = protectWarnings({ act: actCard, weekend });
-  /** The cap an agent's switch grants: the Rebalancer's limit on its row; Protect's CAP_MAX (no amount limit). */
-  const switchCap = (agent: Agent) => {
-    const usd = items.find((i) => i.agent === agent)!.limitUsd;
-    return usd === null ? startCap(AGENT_JOBS[agent][0]) : capOf(usd);
-  };
+  // A renewed grant's stock limits follow Aave's prices held steady, so its batch stays prepared while the sheet is open.
+  const steady = useSteadyPrices(EQUITIES.map((e) => position?.holdings[e.reserveId].priceRaw ?? 0n));
 
-  /** A job's grant at `capRaw`; a job that sells stock takes a limit per stock it may sell, at Aave's price now. */
+  /** A job's grant at `capRaw`; a job that sells stock takes a limit per stock it may sell, at Aave's price. */
   const grantFor = (job: AgentJob, capRaw: bigint, data: PositionData): GrantStep => {
     if (job !== "sell" && job !== "rebalance") return { job, capRaw };
+    // The Rebalancer sells what's in its mix; until the mix is read, what its running grant may sell.
+    const mixSet = !!settings?.mixBps.some((w) => w > 0);
     const sellable =
       job === "rebalance"
-        ? EQUITIES.map((e) => (settings?.mixBps[e.reserveId] ?? 0) > 0)
+        ? EQUITIES.map((e) =>
+            mixSet
+              ? (settings?.mixBps[e.reserveId] ?? 0) > 0
+              : (agents.terms.rebalance?.limitsRaw?.[e.reserveId] ?? 0n) > 0n,
+          )
         : EQUITIES.map((e) => (agents.lastTerms.sell?.limitsRaw?.[e.reserveId] ?? 1n) > 0n);
-    const prices = EQUITIES.map((e) => data.holdings[e.reserveId].priceRaw);
+    const prices = EQUITIES.map((e, r) => (steady[r] > 0n ? steady[r] : data.holdings[e.reserveId].priceRaw));
     return { job, capRaw, limitsRaw: stockLimitsRaw(capRaw, capMax!, prices, sellable) };
   };
 
@@ -198,27 +195,6 @@ function Agents({ address }: { address: `0x${string}` }) {
    */
   const renewCapRaw = (job: AgentJob) =>
     hasLimit(job) ? (agents.terms[job]?.capRaw ?? agents.lastTerms[job]?.capRaw ?? startCap(job)) : startCap(job);
-
-  /** Turning `jobs` off: a revoke for each with a grant to revoke, or why it can't go ahead (the list is unreadable). */
-  const offFor = (jobs: readonly AgentJob[]) =>
-    offSteps(
-      jobs,
-      (j) => agents.status[j],
-      (j) => agents.faceIdsOff([j]),
-      agents.listUnreadable,
-    );
-
-  /** The JAW sheets a change takes. */
-  const stepsFor = (agent: Agent, action: SheetAction, jobs?: AgentJob[]): AgentStep[] => {
-    const main = AGENT_JOBS[agent][0];
-    if (action === "off") return offFor(AGENT_JOBS[agent]).steps;
-    if (!position || capMax === null) return [];
-    if (action === "renew")
-      return (jobs ?? AGENT_JOBS[agent].filter((j) => agents.terms[j])).map((j) => ({
-        grant: grantFor(j, renewCapRaw(j), position),
-      }));
-    return [{ grant: grantFor(main, switchCap(agent), position) }];
-  };
 
   // The dev preview (`?as=`) reads another account: nothing can be signed for it.
   const preview = !signer || !isAddressEqual(signer, address);
@@ -232,33 +208,48 @@ function Agents({ address }: { address: `0x${string}` }) {
           ? PREVIEW
           : null;
 
-  /**
-   * Runs `steps` on JAW's own sheets; an error shows in the open sheet, or as a toast from a row, a card or the tab.
-   * `stop`: why the change can't go ahead at all (turning off while the list can't be read), said instead of nothing.
-   */
-  const start = (key: string, agent: Agent | null, steps: AgentStep[], message: string, stop?: string | null) => {
-    if (blocked) return void toast(blocked);
-    if (stop) return void toast.error(stop);
-    if (steps.length === 0) return;
-    void runner
-      .run(key, steps, () => toast.success(message))
-      .then((error) => {
-        if (!error || (agent && shown && open === agent)) return;
-        // A sheet JAW couldn't open isn't a failure: the same control opens it on the next tap.
-        if (error.endsWith(TAP_AGAIN)) toast(error);
-        else toast.error(error);
-      });
-  };
+  // The open sheet's two writes, each one batch prepared while it shows: Turn off (every live grant of its jobs
+  // revoked) and Renew (each of its running jobs granted again for a year, the grant it replaces revoked).
+  const sheetAgent = shown && open && live && !blocked ? open : null;
+  const offJobs = sheetAgent ? AGENT_JOBS[sheetAgent] : [];
+  // A plan that says why when Base or JAW's list can't be read (useAgents), so Turn off never does nothing in silence.
+  const offPlan =
+    sheetAgent && offJobs.some((j) => runs(agents.status[j])) ? agents.changePlan({ off: offJobs }) : null;
+  const renewJobs = sheetAgent ? AGENT_JOBS[sheetAgent].filter((j) => agents.terms[j]) : [];
+  const renewPlan =
+    sheetAgent && position && capMax !== null && renewJobs.length > 0
+      ? agents.changePlan({ grants: renewJobs.map((j) => grantFor(j, renewCapRaw(j), position)) })
+      : null;
+  const turnOff = useTx("This didn’t go through on Base. Nothing changed. Try again.", offPlan);
+  const renew = useTx("This didn’t go through on Base. Nothing changed. Try again.", renewPlan);
+  // Which agent each write was tapped for: its toast, its busy state and its error belong to that agent's sheet.
+  const [tapped, setTapped] = useState<{ off: Agent | null; renew: Agent | null }>({ off: null, renew: null });
+  // Each landed: said once, for the agent it was tapped for, and the write goes back to idle for the next time.
+  const said = useRef<{ off: boolean; renew: boolean }>({ off: false, renew: false });
+  useEffect(() => {
+    if (turnOff.phase !== "done") return void (said.current.off = false);
+    if (said.current.off || !tapped.off) return;
+    said.current.off = true;
+    toast.success(`${AGENT_NAME[tapped.off]} is off`);
+    turnOff.reset();
+  }, [turnOff, tapped.off]);
+  useEffect(() => {
+    if (renew.phase !== "done") return void (said.current.renew = false);
+    if (said.current.renew || !tapped.renew) return;
+    said.current.renew = true;
+    toast.success(`${AGENT_NAME[tapped.renew]} runs until ${longDateText(nowSec + GRANT_SECONDS)}`);
+    renew.reset();
+    // The date is said as it lands.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [renew, tapped.renew]);
 
-  const act = (agent: Agent, action: SheetAction, jobs?: AgentJob[]) => {
-    const name = AGENT_NAME[agent];
-    const message = {
-      on: `${name} is on`,
-      off: `${name} is off`,
-      renew: `${name} runs until ${longDateText(nowSec + GRANT_SECONDS)}`,
-    }[action];
-    const stop = action === "off" ? offFor(AGENT_JOBS[agent]).error : null;
-    start(`${agent}:${action}`, agent, stepsFor(agent, action, jobs), message, stop);
+  const act = (action: "off" | "renew") => {
+    if (blocked) return void toast(blocked);
+    const plan = action === "off" ? offPlan : renewPlan;
+    // Shown on with nothing left to revoke: a turn-off this page sent is still on its way to Base.
+    if (!plan) return void toast(action === "off" ? "It’s turning off. This can take a moment." : "One moment…");
+    setTapped((t) => ({ ...t, [action]: open }));
+    void (action === "off" ? turnOff.sign() : renew.sign());
   };
 
   const openSheet = (agent: Agent) => {
@@ -278,9 +269,8 @@ function Agents({ address }: { address: `0x${string}` }) {
         onClose={() => setShown(false)}
         item={item}
         live={live}
-        busy={runner.running}
-        error={runner.errorFor(`${agent}:`)}
-        offSteps={agents.faceIdsOff(AGENT_JOBS[agent])}
+        busy={(turnOff.busy && tapped.off === agent) || (renew.busy && tapped.renew === agent)}
+        error={(tapped.off === agent ? turnOff.error : null) ?? (tapped.renew === agent ? renew.error : null)}
         stops={ends.length ? longDateText(Math.min(...ends)) : null}
         // Each settings body carries Save, which switches it on too (and the Rebalancer's, its limit).
         settings={agent === "protect" ? <ProtectSettings account={address} /> : <RebalanceSettings account={address} />}
@@ -297,7 +287,7 @@ function Agents({ address }: { address: `0x${string}` }) {
             )}
           </FeedCard>
         }
-        onAction={(action) => act(agent, action)}
+        onAction={(action) => action !== "on" && act(action)}
         warnings={
           agent === "protect" && warnings.length > 0
             ? warnings.map((c) => <AttentionCard key={c.key} card={c} onLeave={() => setShown(false)} />)
@@ -321,7 +311,6 @@ function Agents({ address }: { address: `0x${string}` }) {
     <>
       <AgentsView
         live={live}
-        signed={!!agents.terms.rebalance}
         protect={
           !position || (live && agents.status.protect === "loading") ? (
             <ProtectCardSkeleton onOpen={() => openSheet("protect")} />

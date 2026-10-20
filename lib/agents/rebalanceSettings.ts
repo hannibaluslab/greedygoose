@@ -1,32 +1,25 @@
 import { MIX_WHOLE } from "@/lib/agents/mix";
 import type { StockLimits } from "@/lib/agents/permissions";
 import type { RebalanceCardModel, Side } from "@/lib/agents/rebalanceCard";
-import { topUpsChanged, type TopUpsChoice, type TopUpsSetting } from "@/lib/agents/topUps";
+import { keepText, topUpsChanged, type TopUpsChoice, type TopUpsSetting } from "@/lib/agents/topUps";
 import { EQUITIES } from "@/lib/tokens/registry";
 
 /**
  * Rebalance's sheet (boards 7e–7h): its line under the title, My mix, Top-ups go into my mix, and what saving takes
- * (`rebalanceSteps`). A new grant (none yet, one capped below the executor's CAP_MAX from before the Rebalancer had no
- * amount limit, a stock in the mix it has no sell limit for, or top-ups switched on or off, since the grant carries
- * Aave's savings withdraw only while they're on) opens JAW's sheet, then one batch carries the settings that changed
- * and the grant's registration; with no grant, the settings alone (Adrian, 2026-10-20: "Batch those into one").
+ * (`rebalanceSteps`). Saving is one batch, one Face ID (Adrian, 2026-10-20: "the permission, the cash move and the
+ * registration in one signature"): the settings that changed (`setMix` and, once the executor counts top-ups,
+ * `setTopUps`) and a new grant when one is needed (none yet, one capped below the executor's CAP_MAX from before the
+ * Rebalancer had no amount limit, a stock in the mix it has no sell limit for, or top-ups switched on or off, since the
+ * grant carries Aave's savings withdraw only while they're on), approved and registered, with the grant it replaces
+ * revoked.
  */
 
 /**
- * What saving runs, one JAW sheet each: the grant then the batch, the batch alone when this sheet's grant is still
- * waiting for it (`waiting`: a batch that didn't go through), the settings alone ("mix": `setMix` and, once the executor
- * counts top-ups, `setTopUps`, whichever changed), or nothing. useManageSave runs exactly these, so the count the
- * button shows is what opens.
+ * What saving runs: one batch when anything changed (a new grant, the mix, top-ups), else nothing. useManageSave sends
+ * exactly it.
  */
-export function rebalanceSteps(p: {
-  needsGrant: boolean;
-  mixChanged: boolean;
-  topUpsChanged?: boolean;
-  waiting: boolean;
-}): ("grant" | "batch" | "mix")[] {
-  if (p.needsGrant) return ["grant", "batch"];
-  if (p.waiting) return ["batch"];
-  return p.mixChanged || p.topUpsChanged ? ["mix"] : [];
+export function rebalanceSteps(p: { needsGrant: boolean; mixChanged: boolean; topUpsChanged?: boolean }): "batch"[] {
+  return p.needsGrant || p.mixChanged || p.topUpsChanged ? ["batch"] : [];
 }
 
 /**
@@ -39,10 +32,10 @@ export type SavePlan = {
   mixChanged: boolean;
   topUpsChanged: boolean;
   needsGrant: boolean;
-  /** How many times saving opens JAW's sheet (0 when there is nothing to save: the button doesn't show). */
+  /** How many batches saving sends: 1, or 0 when there is nothing to save (the button doesn't show). */
   steps: number;
   canSave: boolean;
-  /** Why it can't save, under the button; null when it can (the button says "2 steps" itself). */
+  /** Why it can't save, under the button; null when it can. */
   note: string | null;
 };
 
@@ -58,8 +51,6 @@ type SaveInput = {
   capMaxRaw: bigint | null;
   /** Whether the Rebalancer runs now (on, or registering). */
   running: boolean;
-  /** This sheet's grant landed and its batch didn't: Save sends that batch (useManageSave `registering`). */
-  waiting?: boolean;
   /** Top-ups go into my mix: what the executor has (null until it counts top-ups) and what's on screen. */
   topUps?: { saved: TopUpsSetting | null; chosen: TopUpsChoice };
   feeBlocked: boolean;
@@ -95,11 +86,23 @@ export function rebalanceSave(p: SaveInput): SavePlan {
   const topUps = p.configured && p.topUps?.saved ? p.topUps : null;
   const topUpsMoved = !!topUps && topUpsChanged(topUps.saved, topUps.chosen);
   const needsGrant = p.configured && grantNeeded(p, topUps ? topUps.chosen.on : null);
-  const steps = rebalanceSteps({ needsGrant, mixChanged, topUpsChanged: topUpsMoved, waiting: !!p.waiting }).length;
+  const steps = rebalanceSteps({ needsGrant, mixChanged, topUpsChanged: topUpsMoved }).length;
   const keepMissing = !!topUps && topUps.chosen.on && topUps.chosen.keepUsd === null;
   const note = saveNote(p, whole, keepMissing);
   const canSave = p.connected && note === null && steps > 0 && p.capMaxRaw !== null && !p.feeLoading && !p.busy;
   return { mixChanged, topUpsChanged: topUpsMoved, needsGrant, steps, canSave, note };
+}
+
+/**
+ * What a Save's one Face ID lets Rebalance do when it grants (JAW's batch sheet shows no words of ours). With top-ups
+ * on, it also puts the cash above what the user keeps into the mix (all of it with Keep $0), so the line says so
+ * (`topUps`, wired in M5).
+ */
+export function rebalanceAllows(topUps?: { keepUsd: number }): string {
+  if (!topUps)
+    return "Rebalance can trade your stocks toward your mix, for a year. It never spends your cash. You can turn it off here.";
+  const into = topUps.keepUsd > 0 ? `your top-ups above ${keepText(topUps.keepUsd)}` : "every top-up";
+  return `Rebalance can trade your stocks toward your mix, and put ${into} into it, for a year. You can turn it off here.`;
 }
 
 /** "tomorrow 10:00 AM" back from the card's capitalised "Tomorrow 10:00 AM" (a weekday keeps its capital). */

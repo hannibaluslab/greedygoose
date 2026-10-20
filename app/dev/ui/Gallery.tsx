@@ -250,7 +250,7 @@ export function Gallery() {
       <Section title="Buttons" kit="buttons">
         <div className="flex flex-col gap-2.5">
           <TxButton label="Repay" phase="idle" onClick={noop} />
-          <TxButton label="Switch on" phase="idle" size="md" steps={2} onClick={noop} />
+          <TxButton label="Start earning" phase="idle" size="md" steps={2} onClick={noop} />
           <Button variant="dark" onClick={noop}>
             Continue
           </Button>

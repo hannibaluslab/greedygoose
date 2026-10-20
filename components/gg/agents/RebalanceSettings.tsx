@@ -11,15 +11,16 @@ import { TopUpsCard } from "./TopUpsCard";
 import { useAgents } from "@/hooks/useAgents";
 import { useAgentSettings } from "@/hooks/useAgentSettings";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
-import { useManageSave } from "@/hooks/useManageSave";
+import { useManageSave, type MixSave } from "@/hooks/useManageSave";
 import { useNowSec } from "@/hooks/useNowSec";
 import { usePosition } from "@/hooks/usePosition";
+import { useSteadyPrices } from "@/hooks/useSteadyPrices";
 import { usePrepare, type TxPhase, type TxPlan, type TxPrep } from "@/hooks/useTx";
 import { aprToApy } from "@/lib/aave/math";
 import { AGENTS_LIVE } from "@/lib/agents/config";
 import { mixWeights, startingMix, type MixHolding, type MixRow } from "@/lib/agents/mix";
 import { stockLimitsRaw } from "@/lib/agents/permissions";
-import { rebalanceSave, type RebalanceTerms, type SavePlan } from "@/lib/agents/rebalanceSettings";
+import { rebalanceAllows, rebalanceSave, type RebalanceTerms, type SavePlan } from "@/lib/agents/rebalanceSettings";
 import {
   TOP_UPS_NOT_YET,
   choiceFrom,
@@ -40,8 +41,9 @@ type TopUpsChain = Pick<TopUpsFacts, "available" | "earningFirst" | "saved" | "w
  * shows only when something changed. It has no amount limit: its grant is at the executor's CAP_MAX, with no field to
  * type. While it's off, saving turns it on. Everything comes from hooks, so it drops into the sheet with
  * `<RebalanceSettings account={account} />`.
- * Saving is a new grant on JAW's own screen when needed, then one batch with the settings and its registration, or the
- * settings alone through useTx (useManageSave). Without an executor it renders live data and saves nothing.
+ * Saving is one batch, one Face ID (useManageSave, useAgents `changePlan`): the mix when it changed and a new grant
+ * when one is needed, approved and registered, with the grant it replaces revoked. The body prepares it in render, so
+ * the tap opens JAW's sheet with nothing awaited first. Without an executor it renders live data and saves nothing.
  * Top-ups wait for the executor that counts them (M4): until `topUps` says they're available, the switch says so.
  */
 export function RebalanceSettings({
@@ -66,6 +68,29 @@ export function RebalanceSettings({
   const saving = useManageSave(account, agents, onSaved);
   const configured = AGENTS_LIVE;
   const status = agents.status.rebalance;
+  // The grant's stock limits follow Aave's prices held steady, so the batch prepared for a Save isn't rebuilt on every read.
+  const steady = useSteadyPrices(EQUITIES.map((e) => data?.holdings[e.reserveId].priceRaw ?? 0n));
+  /**
+   * What a Save sends: the mix when it changed, and a new grant (at CAP_MAX, a limit per stock in the mix) when needed.
+   * M5 passes `topUps` on: setTopUps in the batch when it changed, and the grant's withdraw while it's on.
+   */
+  const toSave = ({ weights, capRaw, plan }: SaveRequest): MixSave => ({
+    weights,
+    mixChanged: plan.mixChanged,
+    grant:
+      plan.needsGrant && agents.capMaxRaw !== null
+        ? {
+            job: "rebalance",
+            capRaw,
+            limitsRaw: stockLimitsRaw(
+              capRaw,
+              agents.capMaxRaw,
+              steady,
+              weights.map((w) => w > 0),
+            ),
+          }
+        : null,
+  });
 
   if (!data || (configured && (!settings || status === "loading"))) return <RebalanceSettingsSkeleton />;
   const holdings = data.holdings;
@@ -88,31 +113,12 @@ export function RebalanceSettings({
       }}
       feeBlocked={isConnected && fee.state === "unsupported"}
       feeLoading={fee.loading}
-      busy={agents.busy || saving.busy}
-      waiting={saving.registering}
+      busy={saving.busy}
       phase={saving.phase}
       error={saving.error}
       prep={saving.prep}
-      settingPlan={saving.settingPlan}
-      // M5 passes `topUps` on: setTopUps in the batch when it changed, and the grant's withdraw while it's on.
-      onSave={({ weights, capRaw, plan }) =>
-        saving.save({
-          weights,
-          mixChanged: plan.mixChanged,
-          grant: plan.needsGrant
-            ? {
-                job: "rebalance",
-                capRaw,
-                limitsRaw: stockLimitsRaw(
-                  capRaw,
-                  agents.capMaxRaw!,
-                  EQUITIES.map((e) => holdings[e.reserveId].priceRaw),
-                  weights.map((w) => w > 0),
-                ),
-              }
-            : null,
-        })
-      }
+      planFor={(r) => saving.planFor(toSave(r))}
+      onSave={(r) => saving.save(toSave(r))}
     />
   );
 }
@@ -153,11 +159,10 @@ export function RebalanceSettingsView({
   feeBlocked,
   feeLoading,
   busy,
-  waiting = false,
   phase,
   error,
   prep,
-  settingPlan,
+  planFor,
   onSave,
   draft,
   draftTopUps,
@@ -177,16 +182,11 @@ export function RebalanceSettingsView({
   feeBlocked: boolean;
   feeLoading: boolean;
   busy: boolean;
-  /** This sheet's grant waits for its batch: Save sends it (useManageSave `registering`). */
-  waiting?: boolean;
   phase: TxPhase;
   error: string | null;
-  /**
-   * The write's store (useManageSave's `prep`) and the settings batch, so Save's batch is ready before the tap: the mix,
-   * and top-ups when they changed (null otherwise).
-   */
+  /** The write's store (useManageSave's `prep`) and the Save's one batch, so it's ready before the tap. */
   prep?: TxPrep;
-  settingPlan?: (weights: readonly number[], topUps: TopUpsSetting | null) => TxPlan | null;
+  planFor?: (r: SaveRequest) => TxPlan | null;
   onSave: (r: SaveRequest) => void;
   /** Opens on an edit (the dev gallery's states). */
   draft?: MixRow[];
@@ -211,22 +211,19 @@ export function RebalanceSettingsView({
     terms,
     capMaxRaw,
     running,
-    waiting,
     topUps: { saved: topUps.saved, chosen: choice },
     feeBlocked,
     feeLoading,
     busy,
   });
-  // Save's only JAW sheet is the settings when they changed and nothing is granted or waiting (else they ride in the
-  // batch after the grant): their batch is prepared while the body is idle, so the tap opens it. Top-ups ride in it
-  // only when they changed.
-  const settingsAlone = (plan.mixChanged || plan.topUpsChanged) && !plan.needsGrant && !waiting;
-  const prepared = usePrepare(
-    prep,
-    plan.canSave && !preview && settingsAlone && settingPlan
-      ? settingPlan(weights, plan.topUpsChanged ? topUpsSetting : null)
-      : null,
-  );
+  // Save's one batch (the settings that changed and any new grant) is prepared while the body is idle, so the tap opens
+  // JAW's sheet with nothing awaited first.
+  const request: SaveRequest = { weights, capRaw, plan, topUps: topUpsSetting };
+  const prepared = usePrepare(prep, plan.canSave && !preview && planFor ? planFor(request) : null);
+  // JAW's batch sheet shows no words of ours: what the Face ID lets Rebalance do, said before the tap when it grants.
+  const allows = plan.needsGrant
+    ? rebalanceAllows(topUpsSetting?.on ? { keepUsd: topUpsSetting.keepUsd } : undefined)
+    : null;
 
   return (
     <div className="flex flex-col gap-3 leading-[normal]">
@@ -242,6 +239,7 @@ export function RebalanceSettingsView({
       {configured ? (
         <SaveArea
           plan={plan}
+          allows={allows}
           // "Turn on" while it's off: saving switches it on.
           action={running ? "Save" : "Turn on"}
           phase={phase}
@@ -249,7 +247,7 @@ export function RebalanceSettingsView({
           checking={prepared.checking}
           disabled={!plan.canSave || busy || prepared.blocked}
           preview={preview}
-          onClick={() => onSave({ weights, capRaw, plan, topUps: topUpsSetting })}
+          onClick={() => onSave(request)}
         />
       ) : (
         // Ruling 22: no Save while the agents aren't live.
@@ -262,11 +260,12 @@ export function RebalanceSettingsView({
 }
 
 /**
- * Save at the foot of the sheet, only when something changed (`plan.steps` > 0), with "· 2 steps" in it when a new
- * grant opens JAW's sheet twice (board 7f); the last write's error above it.
+ * Save at the foot of the sheet, only when something changed (`plan.steps` > 0): one batch, one Face ID, whatever it
+ * carries. Above it, what a new grant lets Rebalance do (`allows`) and the last write's error.
  */
 function SaveArea({
   plan,
+  allows,
   action,
   phase,
   error,
@@ -276,6 +275,8 @@ function SaveArea({
   onClick,
 }: {
   plan: SavePlan;
+  /** What the Face ID lets Rebalance do, while Save grants; null otherwise. */
+  allows: string | null;
   action: string;
   phase: TxPhase;
   error: string | null;
@@ -287,10 +288,11 @@ function SaveArea({
   if (plan.steps === 0 && !error) return null;
   return (
     <div className="flex flex-col gap-2 pt-1">
+      {allows && plan.steps > 0 && <p className="m-0 px-1 text-[13px] leading-[1.4] text-ink-2">{allows}</p>}
       <TxError error={error} />
       {plan.steps > 0 && (
         <TxButton
-          label={plan.steps > 1 ? `${action} · ${plan.steps} steps` : action}
+          label={action}
           phase={phase}
           checking={checking}
           note={plan.note}

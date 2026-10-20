@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { isAddressEqual, type Address } from "viem";
 import {
   neverSellOf,
+  protectAllows,
+  protectBatch,
   protectSteps,
   savedChoice,
   sellLimitsFor,
-  stepCount,
-  withRegistration,
   type ProtectSaved,
 } from "@/lib/agents/protect";
 import { readAgentGrant, sellGrant, stockLimitsRaw, type ListedPermission } from "@/lib/agents/permissions";
@@ -80,8 +80,8 @@ describe("protectSteps", () => {
       { kind: "grant", job: "protect", capRaw: CAP_MAX },
       { kind: "grant", job: "sell", capRaw: CAP_MAX, limitsRaw: sellLimitsFor(CAP_MAX, PRICES, [TESLA]) },
     ]);
-    // A sheet per grant, then one batch that registers both (Adrian, 2026-10-20: "Batch those into one").
-    expect(stepCount(steps, 0)).toBe(3);
+    // Both grants in one batch, one Face ID (Adrian, 2026-10-20).
+    expect(protectBatch(steps)?.grants.map((g) => g.job)).toEqual(["protect", "sell"]);
     // Selling still on from before, its repay grant ended: repaying goes back on first.
     const sellOnly: ProtectSaved = { ...fullOn, repayOn: false };
     expect(protectSteps(sellOnly, savedChoice(sellOnly), ctx).steps).toEqual([
@@ -103,10 +103,10 @@ describe("protectSteps", () => {
     ]);
   });
 
-  it("switching selling off revokes it, one JAW sheet for each grant JAW lists", () => {
+  it("switching selling off revokes it, in the same one batch as everything else", () => {
     const { steps } = protectSteps(fullOn, { ...savedChoice(fullOn), sellOn: false }, ctx);
     expect(steps).toEqual([{ kind: "revoke", job: "sell" }]);
-    expect(stepCount(steps, 2)).toBe(2);
+    expect(protectBatch(steps)).toEqual({ grants: [], off: ["sell"] });
   });
 
   it("a changed never-sell list is a new sell grant; the same set in another order is not", () => {
@@ -155,7 +155,7 @@ describe("protectSteps", () => {
   });
 });
 
-describe('withRegistration: a save\'s grants, then one batch (Adrian, 2026-10-20: "Batch those into one")', () => {
+describe('protectBatch: a save in one batch, one Face ID (Adrian, 2026-10-20: "in one signature")', () => {
   const grantP = { kind: "grant" as const, job: "protect" as const, capRaw: CAP_MAX };
   const grantS = {
     kind: "grant" as const,
@@ -164,32 +164,40 @@ describe('withRegistration: a save\'s grants, then one batch (Adrian, 2026-10-20
     limitsRaw: sellLimitsFor(CAP_MAX, PRICES, []),
   };
 
-  it("moves Sells first into the batch that registers what the save granted", () => {
-    expect(withRegistration([{ kind: "keepMix", on: true }, grantP, grantS])).toEqual([
-      grantP,
-      grantS,
-      { kind: "register", jobs: ["protect", "sell"], keepMix: true },
-    ]);
-    expect(stepCount([{ kind: "keepMix", on: true }, grantP, grantS], 0)).toBe(3);
+  it("carries every grant, selling's revoke and Sells first together; nothing to save is no batch", () => {
+    expect(protectBatch([{ kind: "keepMix", on: true }, grantP, grantS])).toEqual({
+      grants: [
+        { job: "protect", capRaw: CAP_MAX },
+        { job: "sell", capRaw: CAP_MAX, limitsRaw: grantS.limitsRaw },
+      ],
+      off: [],
+      keepMix: true,
+    });
+    expect(
+      protectBatch([
+        { kind: "keepMix", on: false },
+        { kind: "revoke", job: "sell" },
+      ]),
+    ).toEqual({
+      grants: [],
+      off: ["sell"],
+      keepMix: false,
+    });
+    expect(protectBatch([])).toBeNull();
   });
 
-  it("leaves a save with nothing to register as it was: Sells first on its own, then the revoke", () => {
-    const steps = [
-      { kind: "keepMix" as const, on: false },
-      { kind: "revoke" as const, job: "sell" as const },
-    ];
-    expect(withRegistration(steps)).toEqual(steps);
-    expect(stepCount(steps, 2)).toBe(3);
-  });
-
-  it("registers a job still waiting from a save that stopped, but never one the save revokes", () => {
-    expect(withRegistration([{ kind: "keepMix", on: true }], ["protect"])).toEqual([
-      { kind: "register", jobs: ["protect"], keepMix: true },
-    ]);
-    expect(withRegistration([{ kind: "revoke", job: "sell" }], ["sell"])).toEqual([{ kind: "revoke", job: "sell" }]);
-    expect(withRegistration([{ kind: "revoke", job: "sell" }], ["protect", "sell"])).toEqual([
-      { kind: "revoke", job: "sell" },
-      { kind: "register", jobs: ["protect"] },
-    ]);
+  it("says what the Face ID lets Protect do when it grants, never the machinery, and nothing when it doesn't", () => {
+    expect(protectAllows([grantP], "1.03", null)).toBe(
+      "Protect can repay from your cash if your credit falls under 1.03, for a year. You can turn it off here.",
+    );
+    expect(protectAllows([grantP, grantS], "1.03", "Tesla")).toBe(
+      "Protect can repay from your cash if your credit falls under 1.03, for a year. If cash isn’t enough, it can also sell stock that backs your credit, never Tesla. You can turn it off here.",
+    );
+    // Selling's grant alone: repaying keeps its own grant and end, so the line says only what this Face ID allows.
+    expect(protectAllows([grantS], "1.03", null)).toBe(
+      "If cash isn’t enough, Protect can also sell stock that backs your credit, for a year. You can turn it off here.",
+    );
+    expect(protectAllows([{ kind: "revoke", job: "sell" }], "1.03", null)).toBeNull();
+    expect(protectAllows([grantP, grantS], "1.03", null)).not.toMatch(/borrow|lock|permission|grant|executor/i);
   });
 });

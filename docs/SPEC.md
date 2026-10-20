@@ -174,7 +174,11 @@ the free shares' value. A stock whose shares all back credit is listed but can't
   Coming soon, with nothing to open yet. DCA and Top-ups go into my mix are either/or. DCA isn't built.
 - Invisible: earning on idle cash (Save) and turning other dollars into cash (Receive). Their permissions are asked
   when money first arrives.
-- Permissions go through JAW's own screens; the spender is `GooseExecutor`. Protect and Rebalance have no amount limit:
+- Each change is one batch, one Face ID (D14 dropped, Adrian 2026-10-20): its permissions approved in JAW's manager and
+  registered with the executor, the ones they replace (or a turn-off's) revoked, with the settings and any cash move,
+  then recorded in JAW's list. The card says what its Face ID allows before the tap. The spender is `GooseExecutor`.
+  An account JAW hasn't deployed yet takes two on its first Start earning (the batch, then earning's permission).
+  Protect and Rebalance have no amount limit:
   their grants (Protect's repay from cash and sell, Rebalance's trades) are at the executor's CAP_MAX, with no field to
   type. Each is limited by its rules. A Rebalance grant capped below CAP_MAX, from before, is granted again at the
   next Save.
@@ -182,7 +186,7 @@ the free shares' value. A stock whose shares all back credit is listed but can't
 - Until the agents go live (`NEXT_PUBLIC_AGENTS_LIVE=1`), "Coming soon" stands where the switches and
   Save are; the figures are real. The invisible grants wait too: Start earning is its batch alone (no Save grant), and
   "Do this automatically next time?" (the Receive grant) isn't asked.
-- The Agents feed shows the agents' moves only. "Turn off all agents" shows only while one is on.
+- The Agents feed shows the agents' moves only. Each agent turns off from its own sheet.
 - Rebalance only moves stocks that don't back credit, and never spends cash beyond the network fee. Its mix never adds
   up to more than 100%: a target stops where the other stocks' leave off.
 - **Top-ups go into my mix (to build)**, a Rebalance setting, off by default, with **Keep $X as cash** ($500 by default,

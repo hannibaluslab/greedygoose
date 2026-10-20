@@ -1,6 +1,7 @@
 import {
   decodeAbiParameters,
   decodeFunctionData,
+  encodeAbiParameters,
   erc20Abi,
   isAddressEqual,
   toFunctionSelector,
@@ -12,6 +13,8 @@ import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import { isMix } from "@/lib/agents/mix";
+import { agentJobOf } from "@/lib/agents/agentJob";
+import { GRANT_SECONDS, type JawPermission } from "@/lib/agents/permissions";
 import { gooseBoardAbi } from "@/lib/board/abi";
 import { GOOSE_BOARD } from "@/lib/board/config";
 import { recipientBlock } from "@/lib/contracts";
@@ -26,7 +29,7 @@ import {
   MAX_LIST_OPS,
 } from "@/lib/efp/efp";
 import { PROTOCOLS } from "@/lib/protocols/config";
-import { aaveV3PoolAbi, permissionTuple } from "@/lib/protocols/abis";
+import { aaveV3PoolAbi, justanAccountAbi, permissionManagerAbi, permissionTuple } from "@/lib/protocols/abis";
 import { aeroRouterAbi, psm3Abi, swapRouter02Abi } from "@/lib/swap/abis";
 import { AERODROME, AERODROME_V1, ROUTERS, SPARK_PSM3, UNISWAP } from "@/lib/swap/venues";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
@@ -166,18 +169,44 @@ const savingsApprove: ArgsCheck = (args, user, ctx) =>
   is(args[0], PROTOCOLS.AAVE_V3_POOL) &&
   args[1] === ctx.saveRaw;
 
+/** A permission that is `user`'s own grant to GooseExecutor, exactly one job's template (lib/agents/permissions.ts). */
+const isOwnAgentGrant = (p: unknown, user: Address): boolean =>
+  !!GOOSE_EXECUTOR && !!p && typeof p === "object" && agentJobOf(p as JawPermission, user, GOOSE_EXECUTOR) !== null;
+
 /**
  * GooseExecutor's registerApproved(approved): the permission it carries (abi.encode(permission), as the manager logs
- * it) is the user's own, granted to this executor. It moves no money; the executor still checks the manager approved it.
+ * it) is the user's own, granted to this executor, and exactly one job's template. It moves no money; the executor
+ * still checks the manager approved it.
  */
 const registersOwnGrant: ArgsCheck = (args, user, ctx) => {
   try {
     const [p] = decodeAbiParameters([permissionTuple], args[0] as Hex);
-    return is(p.account, user) && is(p.spender, ctx.to);
+    return is(ctx.to, GOOSE_EXECUTOR ?? "0x") && isOwnAgentGrant(p, user);
   } catch {
     return false;
   }
 };
+
+/** How far ahead of the device's clock a new grant may start: a clock a little fast, nothing more. */
+const START_AHEAD_SEC = 600;
+
+/**
+ * JAW's permission manager: approve(permission) only for the user's own grant to GooseExecutor, exactly one job's
+ * template, for a year from a start no later than now (D14 dropped, Adrian 2026-10-20: the permission, the cash move
+ * and the registration in one signature). JAW's batch sheet shows no window, so the allowlist holds it. It moves no
+ * money itself; every agent run is still held to the template and its limits.
+ */
+const approvesOwnAgent: ArgsCheck = (args, user) => {
+  const p = args[0] as JawPermission | undefined;
+  return (
+    isOwnAgentGrant(p, user) &&
+    p!.end - p!.start === GRANT_SECONDS &&
+    p!.start <= Math.floor(Date.now() / 1000) + START_AHEAD_SEC
+  );
+};
+
+/** revoke(permission): only a grant of the user's own to GooseExecutor (a job turned off, or one a new grant replaces). */
+const revokesOwnAgent: ArgsCheck = (args, user) => isOwnAgentGrant(args[0], user);
 
 /** GooseBoard.join(): exactly its selector, nothing after it. */
 const JOIN = toFunctionSelector("join()");
@@ -247,6 +276,11 @@ const RULES: readonly Rule[] = [
   ...(GOOSE_EXECUTOR
     ? [
         {
+          targets: [PROTOCOLS.PERMISSION_MANAGER],
+          abi: permissionManagerAbi,
+          functions: { approve: approvesOwnAgent, revoke: revokesOwnAgent },
+        },
+        {
           targets: [GOOSE_EXECUTOR],
           abi: gooseExecutorAbi,
           functions: {
@@ -305,7 +339,44 @@ export function assertAllowed<C extends { to: Address; data: Hex; value: bigint 
   const batch = { listSlots: listSlotsOf(calls, own), sendTo, saveTo, saveRaw };
   const count = { transfers: 0, savingsApproves: 0 };
   for (const c of calls) assertCall(c, user, batch, count);
+  assertGrantsPaired(user, calls);
   return calls;
+}
+
+/**
+ * A batch's agent grants, as a whole: each approve in the manager is registered later in the same batch, exactly as
+ * approved (a grant approved and left unregistered could be switched on by anyone once its job is off), at most one
+ * approve a job, and the owner call (addOwnerAddress(manager)) only once, before the first approve of a batch that has
+ * one.
+ */
+function assertGrantsPaired(user: Address, calls: readonly { to: Address; data: Hex }[]) {
+  if (!GOOSE_EXECUTOR) return;
+  const executor = GOOSE_EXECUTOR;
+  const approves: { index: number; encoded: Hex; job: string }[] = [];
+  const registers: { index: number; encoded: Hex }[] = [];
+  const owners: number[] = [];
+  calls.forEach((c, index) => {
+    if (isAddressEqual(c.to, user)) owners.push(index);
+    else if (isAddressEqual(c.to, PROTOCOLS.PERMISSION_MANAGER)) {
+      const { functionName, args } = decodeFunctionData({ abi: permissionManagerAbi, data: c.data });
+      if (functionName !== "approve") return;
+      const p = args[0] as JawPermission;
+      const encoded = encodeAbiParameters([permissionTuple], [p]).toLowerCase() as Hex;
+      approves.push({ index, encoded, job: agentJobOf(p, user, executor) ?? "" });
+    } else if (isAddressEqual(c.to, executor)) {
+      const { functionName, args } = decodeFunctionData({ abi: gooseExecutorAbi, data: c.data });
+      if (functionName === "registerApproved")
+        registers.push({ index, encoded: (args[0] as Hex).toLowerCase() as Hex });
+    }
+  });
+  if (new Set(approves.map((a) => a.job)).size !== approves.length)
+    throw new Error("Blocked: two grants for one agent");
+  for (const a of approves) {
+    if (!registers.some((r) => r.index > a.index && r.encoded === a.encoded))
+      throw new Error("Blocked: a grant that isn’t switched on in the same batch");
+  }
+  if (owners.length > 1 || (owners.length === 1 && (approves.length === 0 || owners[0] > approves[0].index)))
+    throw new Error("Blocked: unexpected owner change");
 }
 
 /** The list slots a batch may write to: the user's own, as read from Base, and any slot a call in the batch mints. */
@@ -335,6 +406,7 @@ function assertCall(
   batch: Omit<BatchContext, "to" | "data">,
   count: { transfers: number; savingsApproves: number },
 ) {
+  if (isAddressEqual(c.to, user)) return assertOwnerCall(c);
   const rule = RULES.find((r) => r.targets.some((t) => isAddressEqual(t, c.to)));
   if (!rule) throw new Error(`Blocked: unexpected target ${c.to}`);
   if (c.value !== 0n) throw new Error("Blocked: unexpected value");
@@ -354,15 +426,35 @@ function assertCall(
   ) {
     throw new Error(`Blocked: unexpected call to ${c.to}`);
   }
-  if (call.functionName === "approve" && !limitedApprove(call.args?.[1])) {
+  // A token's approve (the manager's approve takes a permission, not an amount).
+  const tokenApprove = call.functionName === "approve" && rule.abi === erc20Abi;
+  if (tokenApprove && !limitedApprove(call.args?.[1])) {
     throw new Error(`Blocked: unexpected unlimited approve to ${call.args?.[0]}`);
   }
   if (call.functionName === "transfer" && ++count.transfers > 1) throw new Error("Blocked: more than one transfer");
-  if (call.functionName === "approve" && is(call.args?.[0], PROTOCOLS.AAVE_V3_POOL) && ++count.savingsApproves > 1) {
+  if (tokenApprove && is(call.args?.[0], PROTOCOLS.AAVE_V3_POOL) && ++count.savingsApproves > 1) {
     throw new Error("Blocked: more than one savings approval");
   }
   if (!check(call.args ?? [], user, { ...batch, to: c.to, data: c.data })) {
     throw new Error(blockedArgs(call.functionName, call.args?.[0], c.to));
+  }
+}
+
+/**
+ * A call to the user's own account: only addOwnerAddress(the permission manager), the call JAW's SDK puts first when
+ * the manager doesn't own the account yet, so agent runs can go through it (lib/agents/oneTapGrant.ts
+ * `managerOwnerCalls`). No other owner, and nothing else on the account.
+ */
+function assertOwnerCall(c: { to: Address; data: Hex; value: bigint }) {
+  if (c.value !== 0n) throw new Error("Blocked: unexpected value");
+  let call: { functionName: string; args?: readonly unknown[] };
+  try {
+    call = decodeFunctionData({ abi: justanAccountAbi, data: c.data });
+  } catch {
+    throw new Error("Blocked: unexpected call to your account");
+  }
+  if (call.functionName !== "addOwnerAddress" || !is(call.args?.[0], PROTOCOLS.PERMISSION_MANAGER)) {
+    throw new Error("Blocked: unexpected owner change");
   }
 }
 

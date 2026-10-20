@@ -490,7 +490,11 @@ describe("jobStatus", () => {
   it("reads each job's own bit, the Rebalancer's at 1 << 3", () => {
     const rebalance = { ...grant, job: "rebalance" as const };
     expect(jobStatus("rebalance", 1 << 3, stored, [rebalance], 500, false)).toBe("on");
-    expect(jobStatus("rebalance", 1 << 2, stored, [rebalance], 500, false)).toBe("starting");
+    // Not its bit: the grant the executor kept is off; only a newer listed one waits to start.
+    expect(jobStatus("rebalance", 1 << 2, stored, [rebalance], 500, false)).toBe("off");
+    expect(jobStatus("rebalance", 1 << 2, stored, [{ ...rebalance, start: rebalance.start + 1 }], 500, false)).toBe(
+      "starting",
+    );
   });
   it("trusts the registry when JAW's list can't be read", () => {
     expect(jobStatus("save", 1, stored, [], 500, true)).toBe("on");

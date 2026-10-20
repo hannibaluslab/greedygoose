@@ -9,17 +9,17 @@ import { RebalanceSettings } from "./RebalanceSettings";
 import { useAgents } from "@/hooks/useAgents";
 import { useRebalanceCard } from "@/hooks/useRebalanceCard";
 import { AGENTS_LIVE } from "@/lib/agents/config";
-import { AGENT_JOBS, type SheetAction } from "@/lib/agents/list";
+import type { SheetAction } from "@/lib/agents/list";
 import type { RebalanceCardModel } from "@/lib/agents/rebalanceCard";
 import { sheetLine } from "@/lib/agents/rebalanceSettings";
-import { stepsNote } from "@/lib/formatting";
 
 /*
  * Rebalance's sheet (boards 7e–7h, Adrian 2026-10-20: "The Rebalance sheet keeps only my mix and the top-ups
  * setting"): its pill and one line under the title, from the same model as its overview card; My mix and Top-ups go
  * into my mix with their Save (RebalanceSettings); and a quiet Turn off Rebalance. What it did lives on the overview.
- * Turn off and Renew go through the Agents page's runner (`onAction`), as Protect's sheet does; Finish too (`finish`),
- * which stands where the line is while JAW granted it and the executor doesn't run it yet.
+ * Turn off and Renew go through the Agents page's runner (`onAction`), as Protect's sheet does, each one batch, one
+ * Face ID (useAgents `changePlan`); Finish too (`finish`), which stands where the line is while JAW granted it and the
+ * executor doesn't run it yet.
  */
 
 export function RebalanceSheet({
@@ -57,7 +57,6 @@ export function RebalanceSheet({
         on={status === "on" || status === "starting"}
         busy={busy}
         error={error}
-        offSteps={agents.faceIdsOff(AGENT_JOBS.rebalance)}
         onAction={onAction}
         finish={finish}
         settings={<RebalanceSettings account={account} />}
@@ -73,7 +72,6 @@ export function RebalanceSheetBody({
   on,
   busy,
   error,
-  offSteps,
   onAction,
   finish,
   settings,
@@ -84,8 +82,6 @@ export function RebalanceSheetBody({
   on: boolean;
   busy: boolean;
   error: string | null;
-  /** JAW sheets Turn off opens: one per grant JAW lists. */
-  offSteps: number;
   onAction: (a: Exclude<SheetAction, "on">) => void;
   finish?: FinishState;
   settings: ReactNode;
@@ -121,7 +117,7 @@ export function RebalanceSheetBody({
 
       <TxError error={error} />
       {on && (
-        <div className="flex flex-col items-center">
+        <div className="flex justify-center">
           <button
             type="button"
             disabled={!live || busy}
@@ -131,7 +127,6 @@ export function RebalanceSheetBody({
           >
             Turn off Rebalance
           </button>
-          {stepsNote(offSteps) && <span className="text-xs text-subtle">{stepsNote(offSteps)}</span>}
         </div>
       )}
     </div>

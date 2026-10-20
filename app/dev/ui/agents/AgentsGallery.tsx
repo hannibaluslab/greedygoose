@@ -189,11 +189,7 @@ export function AgentsGallery() {
   // Without an executor there's no registry, so no mix.
   const input = nextInput(nowSec, { mixBps: live ? MIX : null });
   const nexts = agentNexts(input);
-  const items = agentItems({
-    status,
-    capRaw: live ? byJob((job) => (status[job] === "off" ? null : caps[job])) : byJob(() => null),
-    next: nexts,
-  });
+  const items = agentItems({ status, next: nexts });
   const protectAt = (over: Partial<ProtectCardInput>) =>
     protectCard({
       live,
@@ -230,7 +226,6 @@ export function AgentsGallery() {
     <>
       <AgentsView
         live={live}
-        signed={live && status.rebalance !== "off"}
         protect={
           view === "protect" ? (
             protectStates(nowSec).map(([label, over]) => (
@@ -293,7 +288,7 @@ function RowStates({ nowSec, row }: { nowSec: number; row: (item: AgentItem) => 
   return states.map(([label, s]) => (
     <div key={s} className="flex flex-col gap-2">
       <span className="label px-1">{label}</span>
-      {agentItems({ status: all(s), capRaw: byJob((job) => (s === "on" || s === "starting" ? caps[job] : null)), next })
+      {agentItems({ status: all(s), next })
         .filter((i) => i.agent === "rebalance")
         .map(row)}
     </div>
@@ -325,7 +320,6 @@ function GallerySheet({
       live={live}
       busy={false}
       error={null}
-      offSteps={AGENT_JOBS[agent].length}
       stops={item.on ? longDateText(nowSec + 200 * 86_400) : null}
       settings={
         // The real settings bodies, drawn from their fixtures (ProtectDemos, RebalanceDemo).

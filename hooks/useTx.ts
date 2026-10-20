@@ -24,6 +24,7 @@ import {
   type SignDeps,
   type TxPhase,
   type TxPlan,
+  type TxReceipt,
 } from "@/lib/tx/prepared";
 
 export { TAP_AGAIN, TxStop, txKey } from "@/lib/tx/prepared";
@@ -32,7 +33,7 @@ export type { TxPhase, TxPlan } from "@/lib/tx/prepared";
 type Client = NonNullable<ReturnType<typeof usePublicClient>>;
 
 /** How a batch is checked, at the tap and in the background alike: join() when due, then eth_simulateV1 from the user. */
-export const checkDeps = (client: Client | undefined): CheckDeps => ({
+const checkDeps = (client: Client | undefined): CheckDeps => ({
   join: (user, batch) => withBoardJoin(client!, user, batch),
   simulate: async (user, batch) =>
     (await client!.simulateCalls({ account: user, calls: batch.map(({ to, data }) => ({ to, data })) })).results,
@@ -169,6 +170,8 @@ export function useTx(
   // An error, and the inputs it was for: "Tap again to open JAW." holds only while those inputs are on screen.
   const [error, setError] = useState<{ text: string; key: string | null } | null>(null);
   const [record, setRecord] = useState<{ user: `0x${string}`; id: string } | null>(null);
+  // The plan JAW took last, by its calls id: its `landed` runs once that batch lands.
+  const sentPlan = useRef<{ plan: TxPlan; id: string } | null>(null);
   const [store] = useState(() => new PreparedTx());
 
   const callsStatus = status.data?.status;
@@ -188,6 +191,7 @@ export function useTx(
   const shownError =
     effective === "failed" && phase === "pending" ? failedOnChain : (tapError ?? (busy ? null : own.error));
 
+  const receipts = status.data?.receipts as readonly TxReceipt[] | undefined;
   const txHash = status.data?.receipts?.at(-1)?.transactionHash;
   // A batch landed or failed on Base: every store on the page prepares again (a batch from before may be stale).
   const sentId = send.data?.id;
@@ -196,6 +200,15 @@ export function useTx(
     if (!sentId || (callsStatus !== "success" && callsStatus !== "failure") || moved.current === sentId) return;
     moved.current = sentId;
     chainMoved();
+    const sent = sentPlan.current;
+    // What it records off-chain never fails the write: it landed. A record that didn't save waits for its catch-up.
+    const landed = sent?.plan.landed;
+    if (callsStatus === "success" && sent?.id === sentId && landed)
+      void Promise.resolve()
+        .then(() => landed(receipts ?? []))
+        .catch(() => undefined);
+    // The receipts come with the status that says it landed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [callsStatus, sentId]);
   useEffect(() => {
     if (callsStatus === "success") void queryClient.invalidateQueries();
@@ -220,6 +233,7 @@ export function useTx(
         setPhase,
         setError: (text) => setError(text === null ? null : { text, key: target?.key ?? null }),
         onSent: (x, id) => {
+          sentPlan.current = { plan: x, id };
           if (!x.activity) return;
           addLocal(x.user, { id, time: Date.now(), items: x.activity, status: "pending" });
           setRecord({ user: x.user, id });

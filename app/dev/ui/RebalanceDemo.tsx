@@ -46,7 +46,7 @@ const previewAs = () => {
 
 const STATES = [
   { key: "not-live", title: "Not live yet (no executor)", configured: false, saved: null, terms: null, draft: TARGET },
-  { key: "one-step", title: "New mix · one step", configured: true, saved: SAVED, terms: TERMS, draft: TARGET },
+  { key: "new-mix", title: "New mix · Save", configured: true, saved: SAVED, terms: TERMS, draft: TARGET },
   {
     key: "not-whole",
     title: "Not 100% yet",
@@ -65,7 +65,7 @@ const STATES = [
   },
   {
     key: "capped",
-    title: "A capped grant from before · two steps",
+    title: "A capped grant from before · a new grant, one Face ID",
     configured: true,
     saved: SAVED,
     terms: CAPPED,

@@ -71,7 +71,7 @@ type Fixture = {
 const STATES: Record<string, Fixture> = {
   "top-ups-off": { title: "7e · Top-ups off, nothing changed", topUps: { saved: OFF } },
   "turn-on": {
-    title: "7f · Turning top-ups on: a new grant · 2 steps",
+    title: "7f · Turning top-ups on: a new grant, one Face ID",
     topUps: { saved: OFF },
     draftTopUps: { on: true, keepUsd: 500 },
   },
@@ -85,13 +85,13 @@ const STATES: Record<string, Fixture> = {
     draftTopUps: { on: true, keepUsd: 0 },
   },
   "warning-turn-on": {
-    title: "Turning on with Keep $0 while owing: the warning comes first · 2 steps",
+    title: "Turning on with Keep $0 while owing: the warning comes first",
     topUps: { saved: OFF, protectSells: false },
     draftTopUps: { on: true, keepUsd: 0 },
   },
   "on-unchanged": { title: "On, nothing changed: no Save", topUps: { saved: ON } },
   "keep-only": {
-    title: "Only Keep changed: Save, one step",
+    title: "Only Keep changed: Save, no new grant",
     topUps: { saved: ON },
     draftTopUps: { on: true, keepUsd: 1_000 },
   },
@@ -107,7 +107,7 @@ const STATES: Record<string, Fixture> = {
     draftTopUps: { on: true, keepUsd: null },
   },
   "turn-off": {
-    title: "Turning top-ups off: a new grant without the withdraw · 2 steps",
+    title: "Turning top-ups off: a new grant without the withdraw",
     topUps: { saved: ON },
     draftTopUps: { on: false, keepUsd: 500 },
   },
@@ -117,7 +117,7 @@ const STATES: Record<string, Fixture> = {
     topUps: { saved: OFF, earningFirst: true },
   },
   "new-mix": {
-    title: "A new mix: Save, one step",
+    title: "A new mix: Save",
     topUps: { saved: OFF },
     draft: [
       { reserveId: 0, bps: 3_000 },
@@ -146,7 +146,7 @@ const STATES: Record<string, Fixture> = {
   },
   retrying: { title: "Retrying: the last 3 runs didn’t go through", card: { fails: 3 }, topUps: { saved: OFF } },
   stopped: {
-    title: "Stopped on its own: Turn on · 2 steps",
+    title: "Stopped on its own: Turn on",
     card: { status: "off", stoppedAt: -2 * DAY },
     terms: null,
     topUps: { saved: OFF },
@@ -157,7 +157,7 @@ const STATES: Record<string, Fixture> = {
     card: { endsAt: 4 * DAY },
   },
   "rebalance-off": {
-    title: "Rebalance off: Turn on · 2 steps",
+    title: "Rebalance off: Turn on",
     card: { status: "off" },
     terms: null,
     topUps: { saved: OFF },
@@ -241,7 +241,6 @@ function stateOf(nowSec: number, f: Fixture) {
       on={running}
       busy={false}
       error={null}
-      offSteps={1}
       onAction={NOTHING_SIGNED}
       finish={f.finish ? { onFinish: NOTHING_SIGNED, busy: false, waiting: false, error: null } : undefined}
       settings={

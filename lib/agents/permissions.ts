@@ -6,6 +6,9 @@ import { AERODROME, AERODROME_V1, SPARK_PSM3, UNISWAP } from "@/lib/swap/venues"
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 
+/** A grant lasts a year: its end is its start plus this, and the allowlist approves no other window. */
+export const GRANT_SECONDS = 365 * 86_400;
+
 /** PeriodUnit enum in JustaPermissionManager (JustaPermissionManager.sol:206-213). There is no Year. */
 export const PERIOD = { Minute: 0, Hour: 1, Day: 2, Week: 3, Month: 4, Forever: 5 } as const;
 

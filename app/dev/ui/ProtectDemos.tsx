@@ -31,7 +31,6 @@ export function ProtectDemo({ state }: { state: "not-live" | "off" | "on" | "sel
     backsUsd: BACKS,
     pricesRaw: PRICES,
     capMaxRaw: state === "not-live" ? null : CAP_MAX,
-    sellGrants: state === "on" ? 1 : 0,
     feeBlocked: false,
     phase: "idle",
     error: null,

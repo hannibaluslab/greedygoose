@@ -132,7 +132,11 @@ export function SellChoices({
 }
 
 /** What Save (or Switch on) does, one line per change; nothing with no change. */
-export function SaveSummary({ off, lines }: { off: boolean; lines: string[] }) {
+/**
+ * What saving does, line by line, and, when the save's one Face ID lets Protect act (`allows`), what it lets it do:
+ * JAW's batch sheet shows no words of ours, so this card says it before the tap (Adrian, 2026-10-20).
+ */
+export function SaveSummary({ off, lines, allows }: { off: boolean; lines: string[]; allows?: string | null }) {
   if (lines.length === 0) return null;
   return (
     <div className="flex flex-col gap-1.5 rounded-[16px] bg-card-bone px-[13px] pb-3 pt-[11px] text-[13px]">
@@ -142,6 +146,7 @@ export function SaveSummary({ off, lines }: { off: boolean; lines: string[] }) {
           <li key={l}>{l}</li>
         ))}
       </ul>
+      {allows && <p className="m-0 border-t border-hairline pt-2 leading-[1.4] text-ink-2">{allows}</p>}
     </div>
   );
 }

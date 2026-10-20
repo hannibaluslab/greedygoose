@@ -3,7 +3,7 @@ import { rebalanceOptions, type MixHolding } from "@/lib/agents/mix";
 import { rebalanceCheckAt, rebalanceOutlook, whenText, type OutlookInput } from "@/lib/agents/next";
 import type { StockLimits } from "@/lib/agents/permissions";
 import { rebalanceCard, type RebalanceCardInput } from "@/lib/agents/rebalanceCard";
-import { rebalanceSave, rebalanceSteps, sheetLine } from "@/lib/agents/rebalanceSettings";
+import { rebalanceAllows, rebalanceSave, rebalanceSteps, sheetLine } from "@/lib/agents/rebalanceSettings";
 
 const usdc = (usd: number) => BigInt(usd) * 10n ** 6n;
 
@@ -38,7 +38,7 @@ describe("rebalanceSave", () => {
     expect(rebalanceSave(base)).toMatchObject({ steps: 0, canSave: false, note: null });
   });
 
-  it("takes one step for a new mix in stocks it may already sell", () => {
+  it("takes one batch for a new mix in stocks it may already sell", () => {
     const weights = [5_000, 0, 0, 0, 0, 2_500, 2_500];
     expect(rebalanceSave({ ...base, weights })).toMatchObject({
       mixChanged: true,
@@ -49,12 +49,12 @@ describe("rebalanceSave", () => {
     });
   });
 
-  it("needs a new grant at CAP_MAX for a capped grant from before: two JAW sheets, the grant and its registration", () => {
+  it("needs a new grant at CAP_MAX for a capped grant from before: one batch, approved and registered", () => {
     const capped = { ...base, terms: { capRaw: usdc(100), limitsRaw: limits } };
     expect(rebalanceSave(capped)).toMatchObject({
       mixChanged: false,
       needsGrant: true,
-      steps: 2,
+      steps: 1,
       canSave: true,
       note: null,
     });
@@ -62,24 +62,24 @@ describe("rebalanceSave", () => {
     expect(rebalanceSave({ ...capped, capMaxRaw: null })).toMatchObject({ needsGrant: false, canSave: false });
   });
 
-  it("takes two steps for a stock the grant can't sell yet: the grant, then the mix and its registration in one batch", () => {
+  it("takes one batch for a stock the grant can't sell yet: the new grant and the mix together", () => {
     const weights = [2_500, 2_500, 0, 0, 0, 2_500, 2_500];
     expect(rebalanceSave({ ...base, weights })).toMatchObject({
       mixChanged: true,
       needsGrant: true,
-      steps: 2,
+      steps: 1,
       note: null,
     });
   });
 
   it("switches it on with the first mix", () => {
     expect(rebalanceSave({ ...base, saved: [0, 0, 0, 0, 0, 0, 0], terms: null, running: false })).toMatchObject({
-      steps: 2,
+      steps: 1,
       canSave: true,
       note: null,
     });
     expect(rebalanceSave({ ...base, terms: null, running: false })).toMatchObject({
-      steps: 2,
+      steps: 1,
       canSave: true,
       note: null,
     });
@@ -106,40 +106,29 @@ describe("rebalanceSave", () => {
   });
 });
 
-describe('rebalanceSteps: what Save runs is what it counts (Adrian, 2026-10-20: "Batch those into one")', () => {
-  it("grants, then one batch; or the batch alone while this sheet's grant waits; or the mix alone", () => {
-    expect(rebalanceSteps({ needsGrant: true, mixChanged: true, waiting: false })).toEqual(["grant", "batch"]);
-    expect(rebalanceSteps({ needsGrant: true, mixChanged: false, waiting: true })).toEqual(["grant", "batch"]);
-    expect(rebalanceSteps({ needsGrant: false, mixChanged: true, waiting: true })).toEqual(["batch"]);
-    expect(rebalanceSteps({ needsGrant: false, mixChanged: false, waiting: true })).toEqual(["batch"]);
-    expect(rebalanceSteps({ needsGrant: false, mixChanged: true, waiting: false })).toEqual(["mix"]);
-    expect(rebalanceSteps({ needsGrant: false, mixChanged: false, waiting: false })).toEqual([]);
+describe('rebalanceSteps: Save is one batch, one Face ID (Adrian, 2026-10-20: "in one signature")', () => {
+  it("one batch when the grant or the mix changed, nothing otherwise", () => {
+    expect(rebalanceSteps({ needsGrant: true, mixChanged: true })).toEqual(["batch"]);
+    expect(rebalanceSteps({ needsGrant: true, mixChanged: false })).toEqual(["batch"]);
+    expect(rebalanceSteps({ needsGrant: false, mixChanged: true })).toEqual(["batch"]);
+    expect(rebalanceSteps({ needsGrant: false, mixChanged: false })).toEqual([]);
   });
 
-  it("sends a top-ups change alone like a mix, one batch through useTx", () => {
+  it("sends a top-ups change in the same one batch, alone or with a new grant", () => {
     const only = { needsGrant: false, mixChanged: false, topUpsChanged: true };
-    expect(rebalanceSteps({ ...only, waiting: false })).toEqual(["mix"]);
-    expect(rebalanceSteps({ ...only, waiting: true })).toEqual(["batch"]);
-    expect(rebalanceSteps({ ...only, needsGrant: true, waiting: false })).toEqual(["grant", "batch"]);
+    expect(rebalanceSteps(only)).toEqual(["batch"]);
+    expect(rebalanceSteps({ ...only, needsGrant: true })).toEqual(["batch"]);
+    expect(rebalanceSteps({ ...only, mixChanged: true })).toEqual(["batch"]);
+    expect(rebalanceSteps({ ...only, topUpsChanged: false })).toEqual([]);
   });
 
-  it("keeps Save on while a batch this sheet owes is left, and counts it", () => {
-    const mix = [2_500, 0, 0, 0, 0, 5_000, 2_500];
-    const base = {
-      configured: true,
-      connected: true,
-      saved: mix,
-      weights: mix,
-      terms: { capRaw: usdc(10_000), limitsRaw: [1n, 0n, 0n, 0n, 0n, 1n, 1n] },
-      capMaxRaw: usdc(10_000),
-      running: true,
-      feeBlocked: false,
-      feeLoading: false,
-      busy: false,
-    };
-    const waiting = rebalanceSave({ ...base, waiting: true });
-    expect(waiting).toMatchObject({ steps: 1, canSave: true });
-    expect(rebalanceSave({ ...base })).toMatchObject({ steps: 0, canSave: false });
+  it("says what the Face ID lets Rebalance do, and that it never spends cash until top-ups are on", () => {
+    expect(rebalanceAllows()).toBe(
+      "Rebalance can trade your stocks toward your mix, for a year. It never spends your cash. You can turn it off here.",
+    );
+    expect(rebalanceAllows({ keepUsd: 500 })).toMatch(/put your top-ups above \$500 into it/);
+    expect(rebalanceAllows({ keepUsd: 500 })).not.toMatch(/never spends/);
+    expect(rebalanceAllows({ keepUsd: 0 })).toMatch(/put every top-up into it/);
   });
 });
 
@@ -167,25 +156,25 @@ describe("rebalanceSave: Top-ups go into my mix", () => {
     expect(rebalanceSave({ ...withWithdraw, topUps: { saved: on, chosen: on } })).toMatchObject({ steps: 0 });
   });
 
-  it("takes a new grant to turn them on, with the savings withdraw in it: Save · 2 steps (board 7f)", () => {
+  it("takes a new grant to turn them on, with the savings withdraw in it: Save, one batch (board 7f)", () => {
     expect(rebalanceSave({ ...base, topUps: { saved: off, chosen: on } })).toMatchObject({
       topUpsChanged: true,
       needsGrant: true,
-      steps: 2,
+      steps: 1,
       canSave: true,
       note: null,
     });
   });
 
-  it("takes a new grant without the withdraw to turn them off: 2 steps, the old grant left for Turn off (P7)", () => {
+  it("takes a new grant without the withdraw to turn them off: one batch, the old grant revoked in it", () => {
     expect(rebalanceSave({ ...withWithdraw, topUps: { saved: on, chosen: off } })).toMatchObject({
       topUpsChanged: true,
       needsGrant: true,
-      steps: 2,
+      steps: 1,
     });
   });
 
-  it("saves Keep alone in one step (board 7h)", () => {
+  it("saves Keep alone as a settings-only change, no new grant (board 7h)", () => {
     expect(rebalanceSave({ ...withWithdraw, topUps: { saved: on, chosen: { on: true, keepUsd: 0 } } })).toMatchObject({
       mixChanged: false,
       topUpsChanged: true,
@@ -205,7 +194,7 @@ describe("rebalanceSave: Top-ups go into my mix", () => {
     expect(rebalanceSave({ ...base, topUps: { saved: on, chosen: on } })).toMatchObject({
       topUpsChanged: false,
       needsGrant: true,
-      steps: 2,
+      steps: 1,
     });
   });
 
