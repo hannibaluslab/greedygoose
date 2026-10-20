@@ -123,8 +123,13 @@ export function protectBatch(steps: readonly ProtectStep[]): {
 export function protectAllows(steps: readonly ProtectStep[], line: string, never: string | null): string | null {
   const grants = protectBatch(steps)?.grants ?? [];
   if (grants.length === 0) return null;
-  const repay = `Protect can repay from your cash if your credit falls under ${line}, for a year. You can turn it off here.`;
-  if (!grants.some((g) => g.job === "sell")) return repay;
-  const sell = `If cash isn’t enough, it can also sell stock that backs your credit${never ? `, never ${never}` : ""}.`;
-  return `${repay} ${sell}`;
+  const repays = grants.some((g) => g.job === "protect");
+  const sells = grants.some((g) => g.job === "sell");
+  const not = never ? `, never ${never}` : "";
+  const repay = `Protect can repay from your cash if your credit falls under ${line}, for a year.`;
+  if (!sells) return `${repay} You can turn it off here.`;
+  // Selling's grant alone: repaying keeps the grant it has, with its own end.
+  if (!repays)
+    return `If cash isn’t enough, Protect can also sell stock that backs your credit${not}, for a year. You can turn it off here.`;
+  return `${repay} If cash isn’t enough, it can also sell stock that backs your credit${not}. You can turn it off here.`;
 }

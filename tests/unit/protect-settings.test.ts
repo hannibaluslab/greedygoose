@@ -191,7 +191,11 @@ describe('protectBatch: a save in one batch, one Face ID (Adrian, 2026-10-20: "i
       "Protect can repay from your cash if your credit falls under 1.03, for a year. You can turn it off here.",
     );
     expect(protectAllows([grantP, grantS], "1.03", "Tesla")).toBe(
-      "Protect can repay from your cash if your credit falls under 1.03, for a year. You can turn it off here. If cash isn’t enough, it can also sell stock that backs your credit, never Tesla.",
+      "Protect can repay from your cash if your credit falls under 1.03, for a year. If cash isn’t enough, it can also sell stock that backs your credit, never Tesla. You can turn it off here.",
+    );
+    // Selling's grant alone: repaying keeps its own grant and end, so the line says only what this Face ID allows.
+    expect(protectAllows([grantS], "1.03", null)).toBe(
+      "If cash isn’t enough, Protect can also sell stock that backs your credit, for a year. You can turn it off here.",
     );
     expect(protectAllows([{ kind: "revoke", job: "sell" }], "1.03", null)).toBeNull();
     expect(protectAllows([grantP, grantS], "1.03", null)).not.toMatch(/borrow|lock|permission|grant|executor/i);

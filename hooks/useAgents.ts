@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { isAddressEqual, zeroAddress, type Hex } from "viem";
 import { useAccount, usePublicClient, useReadContract, useReadContracts } from "wagmi";
 import { usePermissions } from "@jaw.id/wagmi";
@@ -30,12 +30,13 @@ import {
   type StockLimits,
 } from "@/lib/agents/permissions";
 import { pickFor } from "@/lib/agents/picks";
+import { encodePermission, REGISTER_FALLBACK } from "@/lib/agents/register";
 import { deleteFromRelay, recordInRelay, relayPermission, type RelayDeps } from "@/lib/agents/relay";
 import { jobStatus, type AgentStatus, type Stored } from "@/lib/agents/status";
 import { PROTOCOLS } from "@/lib/protocols/config";
 import { justanAccountAbi, permissionManagerAbi } from "@/lib/protocols/abis";
 import { agentChangePlan, registerPlan, type ChangePrefix } from "@/lib/tx/plans";
-import { txKey, type TxPlan, type TxReceipt } from "@/lib/tx/prepared";
+import { TxStop, txKey, type TxPlan, type TxReceipt } from "@/lib/tx/prepared";
 import { useNowSec } from "@/hooks/useNowSec";
 
 export { GRANT_SECONDS } from "@/lib/agents/permissions";
@@ -73,6 +74,51 @@ const revoked = new Map<string, number>();
  */
 const recording = new Map<string, number>();
 const RETRY_MS = 60_000;
+
+/** What the manager says of one struct: its id (the manager's hash) and whether it's approved and revoked. */
+type ManagerRead = { id: Hex; approved: boolean; revoked: boolean };
+
+/**
+ * The manager's answers by struct, for every screen: a new read for the same grants (a new list, the registry after a
+ * change) never sends a screen back to loading. A change this page landed is written in at once, and a read that says
+ * otherwise in the next half minute is taken as Base's public node not there yet.
+ */
+const managerCache = new Map<string, ManagerRead & { seededAt?: number }>();
+const owners = new Map<string, boolean>();
+const SEEDED_MS = 30_000;
+/** How long after a landed change the registry is read once more, for a public node a block behind JAW's. */
+const REREAD_MS = 3_000;
+const cacheKey = (p: JawPermission) => encodePermission(p).toLowerCase();
+function readManager(p: JawPermission, r: ManagerRead) {
+  const key = cacheKey(p);
+  const had = managerCache.get(key);
+  const differs = had && (had.approved !== r.approved || had.revoked !== r.revoked);
+  if (had?.seededAt && differs && Date.now() - had.seededAt < SEEDED_MS) return;
+  managerCache.set(key, r);
+}
+
+/**
+ * Grants this page just landed (salts), and when: never shown as waiting for a Finish while Base's public node is
+ * still a block behind (the registry read again catches up within seconds).
+ */
+const justLanded = new Map<string, number>();
+const LANDED_MS = 60_000;
+const landedRecently = (salt: bigint) => {
+  const at = justLanded.get(salt.toString());
+  return at !== undefined && Date.now() - at < LANDED_MS;
+};
+
+/** Said when Base can't be read for the manager: nothing is built on a guess. */
+const CANT_CHECK_AGENTS = "We couldn’t check your agents with Base right now. Nothing changed. Try again.";
+/** Said when JAW's list can't be read: a grant only it knows of could be left behind, so nothing changes. */
+const LIST_UNREADABLE = "We couldn’t check what’s switched on right now, so nothing changed. Try again.";
+
+/** A change that can't go ahead now, said at the button (useTx shows a TxStop's words and waits). */
+const stopPlan = (account: `0x${string}`, why: string): TxPlan => ({
+  key: txKey("agents-stop", account, why),
+  user: account,
+  calls: () => Promise.reject(new TxStop(why)),
+});
 
 /**
  * One account's agents. A change is one batch, one Face ID (D14 dropped, Adrian 2026-10-20: "the permission, the cash
@@ -151,19 +197,33 @@ export function useAgents(account: `0x${string}`) {
   );
 
   /**
-   * On Base, in one read: each registered job's id and whether the manager revoked it, whether the manager still owns
-   * the account, and for each listed record the manager's hash of its struct and whether it's approved and not revoked.
+   * The jobs whose grant the executor keeps (`permissionOf`): registered, or switched off by the executor with its grant
+   * kept until it ends. Read on Base whatever the job's bit says: a grant the executor switched off can still be
+   * approved, and anyone could register it again, so a turn-off or a new grant revokes it too.
    */
-  const heldJobs = stored?.registered ?? [];
-  const reads = [
-    ...heldJobs.flatMap((job) => {
-      const p = stored!.permissions[JOBS.indexOf(job)];
-      return [
-        { address: MANAGER, abi: permissionManagerAbi, functionName: "getHash", args: [p], chainId: CHAIN_ID },
-        { address: MANAGER, abi: permissionManagerAbi, functionName: "isRevoked", args: [p], chainId: CHAIN_ID },
-      ] as const;
-    }),
-    ...(heldJobs.length > 0
+  const minute = Math.floor(nowSec / 60);
+  const kept = useMemo(
+    () =>
+      stored
+        ? JOBS.filter((job) => {
+            const g = stored.grants[job];
+            return g.end > 0 && (stored.registered.includes(job) || g.end >= minute * 60);
+          })
+        : [],
+    [stored, minute],
+  );
+  const keptPermission = (job: AgentJob) => stored!.permissions[JOBS.indexOf(job)];
+  const managerReads = (p: JawPermission) =>
+    [
+      { address: MANAGER, abi: permissionManagerAbi, functionName: "getHash", args: [p], chainId: CHAIN_ID },
+      { address: MANAGER, abi: permissionManagerAbi, functionName: "isApproved", args: [p], chainId: CHAIN_ID },
+      { address: MANAGER, abi: permissionManagerAbi, functionName: "isRevoked", args: [p], chainId: CHAIN_ID },
+    ] as const;
+  // On Base: each kept grant's id, whether the manager has it approved and not revoked, and whether the manager still
+  // owns the account; then, apart (one record that can't be read never blocks the rest), each listed record's.
+  const keptContracts = [
+    ...kept.flatMap((job) => managerReads(keptPermission(job))),
+    ...(kept.length > 0
       ? ([
           {
             address: account,
@@ -174,44 +234,76 @@ export function useAgents(account: `0x${string}`) {
           },
         ] as const)
       : []),
-    ...candidates.flatMap(
-      ({ p }) =>
-        [
-          { address: MANAGER, abi: permissionManagerAbi, functionName: "getHash", args: [p], chainId: CHAIN_ID },
-          { address: MANAGER, abi: permissionManagerAbi, functionName: "isApproved", args: [p], chainId: CHAIN_ID },
-          { address: MANAGER, abi: permissionManagerAbi, functionName: "isRevoked", args: [p], chainId: CHAIN_ID },
-        ] as const,
-    ),
   ];
-  const chain = useReadContracts({
-    contracts: reads,
+  const keptRead = useReadContracts({
+    contracts: keptContracts,
     allowFailure: false,
-    query: { enabled: !!executor && !!stored && reads.length > 0, refetchInterval: 20_000 },
+    query: { enabled: !!executor && kept.length > 0, refetchInterval: 20_000 },
   });
+  const listRead = useReadContracts({
+    contracts: candidates.flatMap(({ p }) => managerReads(p)),
+    allowFailure: true,
+    query: { enabled: !!executor && candidates.length > 0, refetchInterval: 20_000 },
+  });
+
+  /**
+   * What Base says, from the reads above through the page's cache of them (so a new read for the same grants never
+   * sends a screen back to loading, and a change this page just landed reads as landed at once): the grants the manager
+   * has approved and not revoked (`held`), whether each job runs (`alive`), the listed records that are ours
+   * (`verified`), and why a change can't be built now (`error`).
+   */
   const onChain = useMemo(() => {
     if (!stored) return null;
-    if (reads.length === 0) return { held: [] as Held[], alive: byJob(() => false), verified: [] as AgentGrant[] };
-    if (!chain.data) return null;
-    const d = chain.data as readonly unknown[];
-    const owns = heldJobs.length > 0 ? (d[2 * heldJobs.length] as boolean) : false;
+    if (keptRead.data) {
+      const d = keptRead.data as readonly unknown[];
+      kept.forEach((job, k) =>
+        readManager(keptPermission(job), { id: d[3 * k] as Hex, approved: !!d[3 * k + 1], revoked: !!d[3 * k + 2] }),
+      );
+      if (kept.length > 0) owners.set(account.toLowerCase(), !!d[3 * kept.length]);
+    }
+    if (listRead.data) {
+      candidates.forEach(({ p }, k) => {
+        const r = listRead.data!.slice(3 * k, 3 * k + 3);
+        if (r.length === 3 && r.every((x) => x.status === "success"))
+          readManager(p, { id: r[0].result as Hex, approved: !!r[1].result, revoked: !!r[2].result });
+      });
+    }
+    const keptInfo = kept.map((job) => managerCache.get(cacheKey(keptPermission(job))));
+    const owns = kept.length > 0 ? owners.get(account.toLowerCase()) : true;
+    const keptKnown = keptInfo.every(Boolean) && owns !== undefined;
+    if (!keptKnown && !keptRead.isError) return null;
+    const listKnown = candidates.every(({ p }) => managerCache.has(cacheKey(p))) || !!listRead.data;
+    if (!listKnown && !listRead.isError) return null;
+
     const held: Held[] = [];
-    const alive = byJob(() => false);
-    heldJobs.forEach((job, k) => {
-      const isRevoked = d[2 * k + 1] as boolean;
-      if (!isRevoked) held.push({ id: d[2 * k] as Hex, job, p: stored.permissions[JOBS.indexOf(job)] });
-      alive[job] = !isRevoked && owns;
+    const alive = byJob((job) => (keptKnown ? false : stored.registered.includes(job)));
+    kept.forEach((job, k) => {
+      const info = keptInfo[k];
+      if (!info) return;
+      if (info.approved && !info.revoked) held.push({ id: info.id, job, p: keptPermission(job) });
+      alive[job] = stored.registered.includes(job) && !info.revoked && owns === true;
     });
-    const base = 2 * heldJobs.length + (heldJobs.length > 0 ? 1 : 0);
     const verified = candidates
-      .filter((_, k) => {
-        const [hash, approved, isRevoked] = d.slice(base + 3 * k, base + 3 * k + 3) as [Hex, boolean, boolean];
-        return approved && !isRevoked && hash.toLowerCase() === candidates[k].g.permissionId.toLowerCase();
+      .filter(({ g, p }) => {
+        const info = managerCache.get(cacheKey(p));
+        return !!info && info.approved && !info.revoked && info.id.toLowerCase() === g.permissionId.toLowerCase();
       })
       .map(({ g }) => g);
-    return { held, alive, verified };
-    // `reads` and heldJobs follow `stored` and `candidates`.
+    const error = !keptKnown ? CANT_CHECK_AGENTS : !listKnown || listed.isError ? LIST_UNREADABLE : null;
+    return { held, alive, verified, error };
+    // keptPermission follows `stored`; the caches follow the reads.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chain.data, stored, candidates]);
+  }, [
+    stored,
+    kept,
+    candidates,
+    keptRead.data,
+    keptRead.isError,
+    listRead.data,
+    listRead.isError,
+    listed.isError,
+    account,
+  ]);
 
   /** Our grants in JAW's list: records whose id is the manager's hash of them, approved and not revoked. */
   const granted = useMemo(() => onChain?.verified ?? [], [onChain]);
@@ -220,13 +312,11 @@ export function useAgents(account: `0x${string}`) {
     () =>
       byJob((job): AgentStatus => {
         if (!executor) return "unconfigured";
-        if (!stored || listed.isLoading) return "loading";
-        // Base couldn't be read for the manager: the registry alone decides, as when the list can't be read.
-        const alive = chain.isError && !chain.data ? true : onChain?.alive[job];
-        if (alive === undefined) return "loading";
-        return jobStatus(job, stored.jobs, stored.grants[job], granted, nowSec, listed.isError, alive);
+        if (!stored || listed.isLoading || !onChain) return "loading";
+        // Base couldn't be read for the manager: the registry alone decides (`alive` follows the job's bit).
+        return jobStatus(job, stored.jobs, stored.grants[job], granted, nowSec, listed.isError, onChain.alive[job]);
       }),
-    [executor, stored, listed.isLoading, listed.isError, chain.isError, chain.data, onChain, granted, nowSec],
+    [executor, stored, listed.isLoading, listed.isError, onChain, granted, nowSec],
   );
 
   /** Each job's grants JAW lists that haven't ended, newest first. */
@@ -312,7 +402,7 @@ export function useAgents(account: `0x${string}`) {
     [periods.data, spends],
   );
 
-  const refetch = () => Promise.all([listed.refetch(), registry.refetch(), chain.refetch()]);
+  const refetch = () => Promise.all([listed.refetch(), registry.refetch(), keptRead.refetch(), listRead.refetch()]);
 
   /**
    * Each job's newest grant JAW lists that the executor hasn't registered and that is newer than the one it holds: one
@@ -325,7 +415,7 @@ export function useAgents(account: `0x${string}`) {
         const newest = live[job][0];
         if (!newest || !stored) return null;
         const g = stored.grants[job];
-        return newest.salt !== g.salt && newest.start > g.start ? newest : null;
+        return newest.salt !== g.salt && newest.start > g.start && !landedRecently(newest.salt) ? newest : null;
       }),
     [live, stored],
   );
@@ -341,8 +431,9 @@ export function useAgents(account: `0x${string}`) {
       : null;
 
   /**
-   * Every grant of `job` the manager has approved and not revoked, that hasn't ended: the one the executor holds and
-   * each JAW lists. What a turn-off takes back, and what a new grant replaces, so nothing old stays approved.
+   * Every grant of `job` the manager has approved and not revoked, that hasn't ended: the one the executor keeps (its
+   * bit set or not) and each JAW lists. What a turn-off takes back, and what a new grant replaces, so nothing old stays
+   * approved for anyone to register.
    */
   const liveGrants = (job: AgentJob): Held[] => {
     const out: Held[] = [];
@@ -395,10 +486,15 @@ export function useAgents(account: `0x${string}`) {
   function landedFor(grants: readonly Permission[], revokes: readonly Held[]) {
     return async (receipts: readonly TxReceipt[]) => {
       const now = Date.now();
-      for (const h of revokes) revoked.set(h.id.toLowerCase(), now);
+      for (const h of revokes) {
+        revoked.set(h.id.toLowerCase(), now);
+        managerCache.set(cacheKey(h.p), { id: h.id, approved: true, revoked: true, seededAt: now });
+      }
       void Promise.all(revokes.map((h) => deleteFromRelay(h.id, API_KEY)));
+      // The registry again now, and once more a few seconds on: Base's public node can be a block behind JAW's.
       void registry.refetch();
-      if (grants.length === 0 || !client) return void chain.refetch();
+      setTimeout(() => void registry.refetch(), REREAD_MS);
+      if (grants.length === 0 || !client) return;
       const logs = receipts.flatMap((r) => r.logs ?? []);
       const ids = await Promise.all(
         grants.map(async (p) => {
@@ -414,8 +510,16 @@ export function useAgents(account: `0x${string}`) {
           }
         }),
       );
+      grants.forEach((p, k) => {
+        managerCache.set(cacheKey(contractPermission(p)), {
+          id: ids[k],
+          approved: true,
+          revoked: false,
+          seededAt: now,
+        });
+        justLanded.set(p.salt.toString(), now);
+      });
       await record(grants.map((p, k) => ({ id: ids[k], p })));
-      void chain.refetch();
     };
   }
 
@@ -426,23 +530,34 @@ export function useAgents(account: `0x${string}`) {
     if (!own || !stored || !onChain || listed.isLoading || listed.isError) return [];
     const ids = new Set(onChain.verified.map((g) => g.permissionId.toLowerCase()));
     return onChain.held.flatMap((h) => {
-      if (h.p.end < nowSec || ids.has(h.id.toLowerCase()) || revoked.has(h.id.toLowerCase())) return [];
+      if (!stored.registered.includes(h.job) || h.p.end < nowSec) return [];
+      if (ids.has(h.id.toLowerCase()) || revoked.has(h.id.toLowerCase())) return [];
       const relay = relayPermission(h.p);
       return relay ? [{ id: h.id, p: relay }] : [];
     });
   }, [own, stored, onChain, listed.isLoading, listed.isError, nowSec]);
   const missingKey = missing.map((m) => m.id).join(",");
+  const latestMissing = useRef(missing);
   useEffect(() => {
-    if (missing.length > 0) void record(missing);
-    // `missing` follows its ids; record reads the latest list.
+    latestMissing.current = missing;
+  });
+  // At once, then a minute on while any is still missing (a try Base's public node wasn't ready for, or the relay
+  // refused, is tried again; `record` keeps one write at a time across screens).
+  useEffect(() => {
+    if (!missingKey) return;
+    void record(latestMissing.current);
+    const again = setInterval(() => void record(latestMissing.current), RETRY_MS + 1_000);
+    return () => clearInterval(again);
+    // record reads the latest list and client; `missing` follows its ids.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [missingKey]);
 
   /**
-   * A change's one batch, for useTx (null when the agents aren't available or there's nothing to do): `grants` (each
-   * job's new grant, its start and salt picked once per terms and per the grant the executor holds, lib/agents/picks.ts),
-   * `off` (jobs turned off), the registry `settings`, and `prefix` first (Start earning's supply). Each job granted
-   * anew or turned off has every live grant of it revoked in the same batch.
+   * A change's one batch, for useTx: `grants` (each job's new grant, its start and salt picked once per terms and per
+   * the grant the executor holds, lib/agents/picks.ts), `off` (jobs turned off), the registry `settings`, and `prefix`
+   * first (Start earning's supply). Each job granted anew or turned off has every live grant of it revoked in the same
+   * batch. Null while the agents' reads load (the screens wait on "loading") or with nothing to do; a plan that says
+   * why at the button when Base or JAW's list can't be read, or the grant can't be built.
    */
   function changePlan(change: {
     grants?: readonly GrantStep[];
@@ -453,14 +568,23 @@ export function useAgents(account: `0x${string}`) {
     if (!executor || !client || !stored || !onChain) return null;
     const asked = change.grants ?? [];
     const jobs = [...new Set([...asked.map((g) => g.job), ...(change.off ?? [])])];
+    // Nothing is granted or revoked on a guess: what Base or JAW's list would have said could be left behind.
+    if (jobs.length > 0 && onChain.error) return stopPlan(account, onChain.error);
     const revokes = jobs.flatMap(liveGrants);
     if (asked.length === 0 && revokes.length === 0 && (change.settings?.length ?? 0) === 0 && !change.prefix)
       return null;
-    const grants = asked.map((g) => {
-      const held = stored.grants[g.job];
-      const pick = pickFor(account, g.job, txKey(g.capRaw, g.limitsRaw, held.salt, held.start), held.start + 1);
-      return jawPermission(account, executor, pick.start + GRANT_SECONDS, jobGrant(g.job, g.capRaw, g.limitsRaw), pick);
-    });
+    let grants: Permission[];
+    try {
+      grants = asked.map((g) => {
+        const held = stored.grants[g.job];
+        const pick = pickFor(account, g.job, txKey(g.capRaw, g.limitsRaw, held.salt, held.start), held.start + 1);
+        const detail = jobGrant(g.job, g.capRaw, g.limitsRaw);
+        return jawPermission(account, executor, pick.start + GRANT_SECONDS, detail, pick);
+      });
+    } catch {
+      // A grant its job's template can't hold (a Rebalancer with no stock it may sell): said, never thrown in render.
+      return stopPlan(account, REGISTER_FALLBACK);
+    }
     return agentChangePlan(
       account,
       { grants, revokes: revokes.map((h) => h.p), settings: change.settings, prefix: change.prefix },

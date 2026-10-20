@@ -225,6 +225,15 @@ describe("picks: one start and salt per account, job and terms, until the execut
     expect(pickFor(someoneElse, "protect", "terms-a", 1, at)).not.toBe(a);
   });
 
+  it("picks again after ten minutes, so a grant signed later still runs about a year from then", () => {
+    const at = 1_900_000_000_000;
+    const a = pickFor(user, "rebalance", "t", 1, at);
+    expect(pickFor(user, "rebalance", "t", 1, at + 9 * 60_000)).toBe(a);
+    const b = pickFor(user, "rebalance", "t", 1, at + 11 * 60_000);
+    expect(b).not.toBe(a);
+    expect(b.start).toBe((at + 11 * 60_000) / 1000 - 300);
+  });
+
   it("picks again when the grant the executor holds started later, never at or before it", () => {
     const at = 1_800_000_000_000;
     const a = pickFor(user, "sell", "t", 1, at);
@@ -249,7 +258,11 @@ describe("jobStatus reads Base: registered, not ended, and alive", () => {
   it("is on while alive, whatever JAW's list says, and off once revoked", () => {
     expect(jobStatus("protect", bit, stored, [], NOW, false, true)).toBe("on");
     expect(jobStatus("protect", bit, stored, [], NOW, false, false)).toBe("off");
-    expect(jobStatus("protect", bit, stored, [grant], NOW, false, false)).toBe("starting");
+    // The grant the executor kept, switched off: off, not waiting to start. Only a newer listed one is.
+    expect(jobStatus("protect", bit, stored, [grant], NOW, false, false)).toBe("off");
+    expect(jobStatus("protect", 0, stored, [{ ...grant, start: NOW - 10, salt: 2n }], NOW, false, false)).toBe(
+      "starting",
+    );
     expect(jobStatus("protect", 0, stored, [], NOW, false, true)).toBe("off");
     expect(jobStatus("protect", bit, { ...stored, end: NOW - 1 }, [], NOW, false, true)).toBe("off");
   });

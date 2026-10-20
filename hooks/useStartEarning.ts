@@ -48,7 +48,9 @@ export function useStartEarning(p: {
   const grantTx = useTx("This didn’t go through on Base. Try again to start earning on new cash.");
   const [held, setHeld] = useState<Held | null>(null);
   const [stage, setStage] = useState<StartEarningStage | null>(null);
-  // The grant after a landed batch starts once; the toast is said once.
+  // What the tap asked for (whether earning's grant follows on its own), kept apart from the card's state, which goes
+  // the moment Home reads the wallet again: the grant after a landed batch starts once, and the toast is said once.
+  const tapped = useRef<{ grant: boolean } | null>(null);
   const launched = useRef(false);
 
   // The grant on its own (from the landed batch, or a later tap) landed: all through; it stopped (cancelled, or a sheet
@@ -58,7 +60,7 @@ export function useStartEarning(p: {
   const grantDone = asked && grantTx.phase === "done";
   const grantStopped = asked && (grantTx.phase === "failed" || (grantTx.phase === "idle" && !!grantTx.error));
   const current: StartEarningStage | null = grantDone ? "landed" : grantStopped ? "grant-left" : stage;
-  const { deposited, granting, landed, pinned, phase } = startEarningFlow({
+  const { granting, landed, pinned, phase } = startEarningFlow({
     stage: current,
     phase: tx.phase,
     busy: tx.busy,
@@ -101,27 +103,27 @@ export function useStartEarning(p: {
   });
   const said = () => toast.success(startedEarningText(live.current.rate));
 
-  // The grant on its own landed: said once.
+  // The grant on its own landed: said once. Read off its write, not the card, which may already have gone.
   const grantSaid = useRef(false);
   useEffect(() => {
-    if (!grantDone || grantSaid.current) return;
+    if (grantTx.phase !== "done" || grantSaid.current) return;
     grantSaid.current = true;
     said();
-  }, [grantDone]);
+  }, [grantTx.phase]);
 
-  // The batch landed: earning's grant on its own when one follows, once (it shows as granting from here); else it's
-  // done, and says so.
+  // The batch landed: earning's grant on its own when the tap asked for it, once (the card shows it as granting);
+  // else it's done, and says so. Read off the write, not the card, which may already have gone.
   useEffect(() => {
-    if (!deposited || launched.current) return;
+    if (tx.phase !== "done" || !tapped.current || launched.current) return;
     launched.current = true;
-    if (held?.grant) {
+    if (tapped.current.grant) {
       grantSaid.current = false;
       grantTx.reset();
       void grantTx.sign(live.current.setup.earningPlan());
     } else said();
     // said and the grant's plan read the latest setup and rate from `live`; grantTx's calls are stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deposited, held]);
+  }, [tx.phase]);
 
   // Cleared after it landed: the write goes back to idle, so new money's batch is prepared again.
   useEffect(() => {
@@ -140,6 +142,7 @@ export function useStartEarning(p: {
     if (tx.phase === "failed") tx.reset();
     grantTx.reset();
     launched.current = false;
+    tapped.current = { grant: grants && !together };
     setHeld({ title: words.title, line: words.line, steps, walletRaw: cash.walletRaw, grant: grants && !together });
     setStage("deposit");
     void tx.sign(plan);
@@ -165,7 +168,8 @@ export function useStartEarning(p: {
     /** What its Face ID lets the app do when it grants earning; null when it doesn't. */
     allows: grants ? earningAllowsText(setup.limitText("save")) : null,
     phase,
-    checking: left ? grantPrep.checking : plan ? prep.checking : false,
+    // A batch that grants earning waits for what it's built from (the executor's registry): checking until then.
+    checking: left ? grantPrep.checking : plan ? prep.checking : !!supply,
     blocked: left ? grantPrep.blocked : plan ? prep.blocked : false,
     error,
     note,

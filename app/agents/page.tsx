@@ -175,9 +175,15 @@ function Agents({ address }: { address: `0x${string}` }) {
   /** A job's grant at `capRaw`; a job that sells stock takes a limit per stock it may sell, at Aave's price. */
   const grantFor = (job: AgentJob, capRaw: bigint, data: PositionData): GrantStep => {
     if (job !== "sell" && job !== "rebalance") return { job, capRaw };
+    // The Rebalancer sells what's in its mix; until the mix is read, what its running grant may sell.
+    const mixSet = !!settings?.mixBps.some((w) => w > 0);
     const sellable =
       job === "rebalance"
-        ? EQUITIES.map((e) => (settings?.mixBps[e.reserveId] ?? 0) > 0)
+        ? EQUITIES.map((e) =>
+            mixSet
+              ? (settings?.mixBps[e.reserveId] ?? 0) > 0
+              : (agents.terms.rebalance?.limitsRaw?.[e.reserveId] ?? 0n) > 0n,
+          )
         : EQUITIES.map((e) => (agents.lastTerms.sell?.limitsRaw?.[e.reserveId] ?? 1n) > 0n);
     const prices = EQUITIES.map((e, r) => (steady[r] > 0n ? steady[r] : data.holdings[e.reserveId].priceRaw));
     return { job, capRaw, limitsRaw: stockLimitsRaw(capRaw, capMax!, prices, sellable) };
@@ -206,7 +212,9 @@ function Agents({ address }: { address: `0x${string}` }) {
   // revoked) and Renew (each of its running jobs granted again for a year, the grant it replaces revoked).
   const sheetAgent = shown && open && live && !blocked ? open : null;
   const offJobs = sheetAgent ? AGENT_JOBS[sheetAgent] : [];
-  const offPlan = sheetAgent && agents.toTurnOff(offJobs) > 0 ? agents.changePlan({ off: offJobs }) : null;
+  // A plan that says why when Base or JAW's list can't be read (useAgents), so Turn off never does nothing in silence.
+  const offPlan =
+    sheetAgent && offJobs.some((j) => runs(agents.status[j])) ? agents.changePlan({ off: offJobs }) : null;
   const renewJobs = sheetAgent ? AGENT_JOBS[sheetAgent].filter((j) => agents.terms[j]) : [];
   const renewPlan =
     sheetAgent && position && capMax !== null && renewJobs.length > 0
@@ -214,28 +222,33 @@ function Agents({ address }: { address: `0x${string}` }) {
       : null;
   const turnOff = useTx("This didn’t go through on Base. Nothing changed. Try again.", offPlan);
   const renew = useTx("This didn’t go through on Base. Nothing changed. Try again.", renewPlan);
-  // Each landed: said once, and the write goes back to idle for the next time.
+  // Which agent each write was tapped for: its toast, its busy state and its error belong to that agent's sheet.
+  const [tapped, setTapped] = useState<{ off: Agent | null; renew: Agent | null }>({ off: null, renew: null });
+  // Each landed: said once, for the agent it was tapped for, and the write goes back to idle for the next time.
   const said = useRef<{ off: boolean; renew: boolean }>({ off: false, renew: false });
-  const sheetName = open ? AGENT_NAME[open] : "";
   useEffect(() => {
     if (turnOff.phase !== "done") return void (said.current.off = false);
-    if (said.current.off) return;
+    if (said.current.off || !tapped.off) return;
     said.current.off = true;
-    toast.success(`${sheetName} is off`);
+    toast.success(`${AGENT_NAME[tapped.off]} is off`);
     turnOff.reset();
-  }, [turnOff, sheetName]);
+  }, [turnOff, tapped.off]);
   useEffect(() => {
     if (renew.phase !== "done") return void (said.current.renew = false);
-    if (said.current.renew) return;
+    if (said.current.renew || !tapped.renew) return;
     said.current.renew = true;
-    toast.success(`${sheetName} runs until ${longDateText(nowSec + GRANT_SECONDS)}`);
+    toast.success(`${AGENT_NAME[tapped.renew]} runs until ${longDateText(nowSec + GRANT_SECONDS)}`);
     renew.reset();
     // The date is said as it lands.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [renew, sheetName]);
+  }, [renew, tapped.renew]);
 
   const act = (action: "off" | "renew") => {
     if (blocked) return void toast(blocked);
+    const plan = action === "off" ? offPlan : renewPlan;
+    // Shown on with nothing left to revoke: a turn-off this page sent is still on its way to Base.
+    if (!plan) return void toast(action === "off" ? "It’s turning off. This can take a moment." : "One moment…");
+    setTapped((t) => ({ ...t, [action]: open }));
     void (action === "off" ? turnOff.sign() : renew.sign());
   };
 
@@ -256,8 +269,8 @@ function Agents({ address }: { address: `0x${string}` }) {
         onClose={() => setShown(false)}
         item={item}
         live={live}
-        busy={turnOff.busy || renew.busy}
-        error={turnOff.error ?? renew.error}
+        busy={(turnOff.busy && tapped.off === agent) || (renew.busy && tapped.renew === agent)}
+        error={(tapped.off === agent ? turnOff.error : null) ?? (tapped.renew === agent ? renew.error : null)}
         stops={ends.length ? longDateText(Math.min(...ends)) : null}
         // Each settings body carries Save, which switches it on too (and the Rebalancer's, its limit).
         settings={agent === "protect" ? <ProtectSettings account={address} /> : <RebalanceSettings account={address} />}

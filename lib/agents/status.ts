@@ -34,11 +34,10 @@ export function jobStatus(
   alive?: boolean,
 ): Exclude<AgentStatus, "unconfigured" | "loading"> {
   const live = granted.filter((g) => g.job === job && g.end >= nowSec);
+  const isStored = (g: AgentGrant) => g.start === stored.start && g.end === stored.end && g.capRaw === stored.cap;
   const registered = (jobs & (1 << JOBS.indexOf(job))) !== 0 && stored.end >= nowSec;
-  const stillGranted =
-    alive === undefined
-      ? listUnreadable || live.some((g) => g.start === stored.start && g.end === stored.end && g.capRaw === stored.cap)
-      : alive;
+  const stillGranted = alive === undefined ? listUnreadable || live.some(isStored) : alive;
   if (registered && stillGranted) return "on";
-  return live.length > 0 ? "starting" : "off";
+  // The grant the executor switched off (or that was revoked) isn't one waiting to start: only a newer one is.
+  return live.some((g) => !isStored(g)) ? "starting" : "off";
 }
