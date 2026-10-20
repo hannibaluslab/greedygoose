@@ -4,10 +4,21 @@ import { useState } from "react";
 import { ManageCard, MixSlider } from "@/components/gg/Manage";
 import { StockAvatar, tickerOf } from "@/components/gg/kit/StockAvatar";
 import { PlusIcon } from "@/components/gg/kit/icons";
-import { MIX_WHOLE, mixWeights, nowPercents, setMixRow, type MixHolding, type MixRow } from "@/lib/agents/mix";
+import {
+  MIX_WHOLE,
+  inHomeOrder,
+  mixWeights,
+  nowPercents,
+  setMixRow,
+  type MixHolding,
+  type MixRow,
+} from "@/lib/agents/mix";
 import { EQUITIES } from "@/lib/tokens/registry";
 
-/** My mix: a target for each stock, which never adds up past 100%, and the share of the free stock each holds now. */
+/**
+ * My mix: a target for each stock, which never adds up past 100%, and the share of the free stock each holds now. Its
+ * rows keep Home's order (boards 7e–7h), an added stock too.
+ */
 export function MixCard({
   holdings,
   rows,
@@ -23,7 +34,7 @@ export function MixCard({
   const now = nowPercents(holdings, rows);
   const notInMix = EQUITIES.filter((e) => !rows.some((r) => r.reserveId === e.reserveId));
   const add = (reserveId: number) => {
-    onRows([...rows, { reserveId, bps: 0 }]);
+    onRows(inHomeOrder([...rows, { reserveId, bps: 0 }]));
     setAdding(false);
   };
   return (

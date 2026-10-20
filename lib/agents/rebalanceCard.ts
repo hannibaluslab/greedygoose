@@ -48,7 +48,7 @@ export function mixSlots(p: {
 }): MixSlot[] {
   const mix = p.mixBps?.some((w) => w > 0) ? p.mixBps : null;
   if (!mix) {
-    const held = startingMix(p.holdings, null).sort((a, b) => a.reserveId - b.reserveId);
+    const held = startingMix(p.holdings, null);
     if (held.length === 0)
       return EQUITIES.map((e) => ({ reserveId: e.reserveId, targetBps: null, offset: 0, side: null }));
     return held.map((r) => ({ reserveId: r.reserveId, targetBps: r.bps, offset: 0, side: null }));
