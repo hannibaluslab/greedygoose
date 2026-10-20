@@ -724,3 +724,7 @@ Adrian (2026-10-20): "deploy the contract and runner for a team-only preview. Pr
 ## 2026-10-20 · The executor review's 14 findings: all takes agreed
 
 Adrian (2026-10-20): "I agree with all 14 takes as you wrote them. Plan the fixes for the next deploy." The findings and the takes are in `contracts/docs/REVIEW-2026-10-20-adversarial.md`. In short: no way to take funds was found. Fix H1–H5, M2, M4, L1 and L4; fix H6 once Aave V4's source confirms it; M1 in part (sales below the line go first, and each account's share of a stock's sale window is capped); M3 by tightening the price band. L2 (the owner's instant pause) and L3 (a pool nudge that only delays the Rebalancer) stay as they are. The fixes ship in the next deploy; the preview deploy at `0x686c…F02D` keeps today's code.
+
+## 2026-10-20 · Agents on in production, for the presentation
+
+Adrian (2026-10-20, about 40 minutes before presenting the app and the agents): "Yes: deploy latest main to production greedygoose.vercel.app with the agents on (executor 0x686c…F02D) now. I accept that it's public and uncapped." This goes beyond "The team-only preview runs the uncapped executor" above: the public production link (`dpl_4KYRYJnzhQiDCqoqUzcvtmi89bTy`) now lets anyone switch agents on against the unaudited, uncapped preview executor, with the review's findings still unfixed (REVIEW-2026-10-20-adversarial.md). To undo it, promote `dpl_CQ6odX8zRJiczdxy9UTRe1YfwM7H`.
