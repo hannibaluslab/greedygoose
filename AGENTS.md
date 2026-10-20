@@ -1,3 +1,5 @@
+Project rules for every coding agent: [CLAUDE.md](CLAUDE.md). The product truth: [docs/SPEC.md](docs/SPEC.md).
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 ## This is NOT the Next.js you know

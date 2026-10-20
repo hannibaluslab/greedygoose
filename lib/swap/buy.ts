@@ -6,7 +6,7 @@ import { assertAllowed } from "@/lib/allowlist";
 import type { CHAIN } from "@/lib/chain";
 import { USDC, type ReserveAsset } from "@/lib/tokens/registry";
 
-/** Buy guardrails (CLAUDE.md › Buy stocks). */
+/** Buy guardrails (CLAUDE.md › Swaps). */
 export const BUY_LIMITS = {
   /** Max slippage between quote and execution, in bps. */
   slippageBps: 100,

@@ -707,3 +707,8 @@ Adrian (2026-10-20): "a user needs to be able to fill up the fuel tank from cash
 - **What the tank shows is the wallet's USDC up to $0.50** (lib/fuelTank.ts `tankLevelUsd`), on Home's Cash card, the Cash sheet and Settings: each fee takes a little out, and a batch that moves no cash (an agent's settings, a turn-off) can only pay from it.
 - **Fill up:** one batch, savings back into the wallet up to a full tank plus two cents for its own fee (`fillTankPlan`, through useTx), in Settings whenever the tank isn't full, and in Home's menu while it's under half full, counted in the number over the menu button.
 
+## 2026-10-20 · CLAUDE.md rewritten, outdated docs archived
+
+Adrian (2026-10-20, "clean it up as proposed"): `CLAUDE.md` is rewritten to the rules still true in the code and SPEC.md, and four outdated docs move to `docs/archive/` (`docs/archive/README.md` lists each and what supersedes it). This supersedes "Don't edit Leo's docs beyond the pointer at the top of `CLAUDE.md`" (Working rules) for `CLAUDE.md` and the archived docs.
+
+- **Leo's `CLAUDE.md` stays in git** (54fae99 and before). The `CLAUDE.md:NN` citations in this log, its D1–D10 table and the markers this log put on D2 and D3 refer to that version. The rules in force from it are in the new `CLAUDE.md`.

@@ -3,7 +3,7 @@ import { ORACLE_DECIMALS } from "@/lib/aave/addresses";
 import { BUY_LIMITS, buildSwapCalls, minOut, type BuyQuote, type Call } from "./buy";
 import { USDC, type ReserveAsset } from "@/lib/tokens/registry";
 
-/** Sell guardrails: the buy's, mirrored (CLAUDE.md › Buy stocks). Slippage is the buy's 1% (`minOut`). */
+/** Sell guardrails: the buy's, mirrored (CLAUDE.md › Swaps). Slippage is the buy's 1% (`minOut`). */
 export const SELL_LIMITS = {
   /** Never sell more than this far under Aave's oracle price, in bps: the buy blocks this far over it. */
   floorBps: 1_000,

@@ -98,7 +98,7 @@ function isConversion(call: { to: `0x${string}`; data: Hex }): boolean {
   return !!swap && OTHER_COINS.some((c) => isAddressEqual(c.address, swap.params.tokenIn));
 }
 
-/** Turn a revert into consumer language (CLAUDE.md › Error handling). `call` is the call that reverted. */
+/** Turn a revert into consumer language (CLAUDE.md › Words and errors). `call` is the call that reverted. */
 export function explainRevert(raw: Hex | undefined, fallback: string, call?: { to: `0x${string}`; data: Hex }): string {
   if (call && isSavingsWithdrawal(call)) return CASH_STUCK;
   const data = raw && unwrapExecuteError(raw);

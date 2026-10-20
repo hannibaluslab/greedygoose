@@ -14,8 +14,7 @@ anything that changes the repo. Bash is for reading only: `git log`, `git diff`,
 
 1. `docs/ARCHITECTURE.md`: the layers, the conventions and the clean-up table. It is the target.
 2. `docs/SPEC.md`: what the product does. Structure serves it, never the other way round.
-3. `CLAUDE.md` › Hard rules (never guess, custody, transaction safety). Its "Product and copy" section is the first
-   MVP's and outdated: SPEC.md's Words section wins.
+3. `CLAUDE.md` › Hard rules (never guess, custody, transaction safety). The words are SPEC.md's Words section.
 
 ## The shape the code must have
 
