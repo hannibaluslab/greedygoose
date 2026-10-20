@@ -274,12 +274,15 @@ function Agents({ address }: { address: `0x${string}` }) {
     const ends = AGENT_JOBS[agent].map((j) => agents.terms[j]?.end ?? null).filter((e): e is number => e !== null);
     const activity = feed.rows.filter((r) => r.by === name);
     const busy = (turnOff.busy && tapped.off === agent) || (renew.busy && tapped.renew === agent);
+    const confirming =
+      (turnOff.phase === "pending" && tapped.off === agent) || (renew.phase === "pending" && tapped.renew === agent);
     const error = (tapped.off === agent ? turnOff.error : null) ?? (tapped.renew === agent ? renew.error : null);
     const finishing =
       live && AGENT_JOBS[agent].some((j) => agents.toFinish.includes(j))
         ? {
             onFinish: () => void finish.sign(),
             busy: finish.busy,
+            confirming: finish.phase === "pending",
             waiting: finish.checking || finish.blocked,
             error: finish.error,
           }
@@ -292,6 +295,7 @@ function Agents({ address }: { address: `0x${string}` }) {
           open={shown}
           onClose={() => setShown(false)}
           busy={busy}
+          confirming={confirming}
           error={error}
           onAction={act}
           finish={finishing}
@@ -304,6 +308,7 @@ function Agents({ address }: { address: `0x${string}` }) {
         item={item}
         live={live}
         busy={busy}
+        confirming={confirming}
         error={error}
         stops={ends.length ? longDateText(Math.min(...ends)) : null}
         // Its settings body carries Save, which switches it on too.

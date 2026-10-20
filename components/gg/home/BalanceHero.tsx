@@ -41,21 +41,23 @@ export function BalanceHero({
 
       {even ? <ScaledMoney value={value} k={fit(value)} /> : <FitMoney value={value} />}
       {/* 8px under its label (Adrian: not tight under it, not down on the big figure's foot); stretched so the
-          hairline runs on. */}
-      <Divided className="flex items-start justify-center self-stretch pt-2">
+          hairline runs on. Smaller when it wouldn't fit its column (cents on what's owed, Adrian 2026-10-21). */}
+      <Divided className="min-w-0 self-stretch pt-2">
         {side.onClick ? (
           <button
             type="button"
             aria-label={side.onClick.label}
             onClick={side.onClick.run}
-            className="flex items-baseline gap-1 text-ink"
+            className="block w-full text-ink"
           >
-            <SideFigure side={side} />
+            <FitLine align="center">
+              <SideFigure side={side} />
+            </FitLine>
           </button>
         ) : (
-          <span className="flex items-baseline gap-1">
+          <FitLine align="center">
             <SideFigure side={side} />
-          </span>
+          </FitLine>
         )}
       </Divided>
 
@@ -111,10 +113,10 @@ function FitLine({ children, align }: { children: ReactNode; align: "start" | "c
 
 /** The right column's figure and its unit ("$600 owed"). */
 const SideFigure = ({ side }: { side: { value: ReactNode; unit?: string } }) => (
-  <>
+  <span className="flex items-baseline gap-1">
     <span className="text-[30px] font-semibold leading-none tracking-[-0.03em]">{side.value}</span>
     {side.unit && <span className="text-[13px] font-medium text-subtle">{side.unit}</span>}
-  </>
+  </span>
 );
 
 const ScaledMoney = ({ value, k }: { value: number; k: number }) => (

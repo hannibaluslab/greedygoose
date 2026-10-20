@@ -1,6 +1,16 @@
 "use client";
 
-import { createContext, useContext, useEffect, useRef, type CSSProperties, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { ArrowLeftIcon, CloseIcon } from "@/components/gg/kit/icons";
 import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
 import { useBodyScrollLock, useKeyboardLift } from "@/hooks/useSheetViewport";
@@ -49,6 +59,9 @@ type SheetShellProps = {
    *  in its own buttons, and a tap outside or Escape closes it. 18px between
    *  parts with a lead, 16px without. */
   look?: "flow" | "info";
+  /** A change made from this sheet is confirming on Base: the whole body waits (SheetConfirming). A TxButton inside
+   *  says so on its own (useSheetConfirming); this is for a sheet whose buttons are its own. */
+  confirming?: boolean;
   children: ReactNode;
 };
 
@@ -58,6 +71,21 @@ type SheetShellProps = {
  * drawer, the header and the scroll area.
  */
 const SheetHostContext = createContext(false);
+
+/**
+ * The host drawer's count of changes confirming on Base. Each one adds itself while it confirms and takes itself off
+ * after, so a sheet with several buttons waits while any of them does.
+ */
+const SheetConfirmingContext = createContext<(() => () => void) | null>(null);
+
+/**
+ * Once JAW's sheet hands back, the change confirms on Base: the whole sheet shows it, not only the button (Adrian,
+ * 2026-10-21). Call it where the button is; outside a sheet (a page) it does nothing.
+ */
+export function useSheetConfirming(on: boolean) {
+  const add = useContext(SheetConfirmingContext);
+  useEffect(() => (on && add ? add() : undefined), [on, add]);
+}
 
 /**
  * Step container for a multi-step flow that lives in ONE drawer.
@@ -131,6 +159,7 @@ export function SheetShell({
   contentHeightPx,
   flushBottom = false,
   look = "flow",
+  confirming = false,
   children,
 }: SheetShellProps) {
   const info = look === "info";
@@ -145,6 +174,13 @@ export function SheetShell({
   useBodyScrollLock(open && !embedded);
   useKeyboardLift(open && !embedded);
   const dragToClose = useDragToClose(() => onOpenChange(false));
+  const [count, setCount] = useState(0);
+  const add = useCallback(() => {
+    setCount((n) => n + 1);
+    return () => setCount((n) => n - 1);
+  }, []);
+  const scroll = useRef<HTMLDivElement>(null);
+  const waits = !embedded && (confirming || count > 0);
 
   // As a step: contribute the body only. The host owns the drawer, the
   // header (title / back / close) and the scroll area, so the chrome props
@@ -248,17 +284,49 @@ export function SheetShell({
             </div>
           </div>
           <div
+            ref={scroll}
             data-sheet-scroll
+            inert={waits}
+            aria-busy={waits || undefined}
             className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-5 ${flushBottom ? "" : "pb-[max(34px,env(safe-area-inset-bottom))]"}`}
             // flex none while locked: `flex-1` would let the drawer's layout
             // renegotiate the height the lock is meant to pin.
             style={contentHeightPx ? { height: contentHeightPx, flex: "0 0 auto" } : undefined}
           >
-            {children}
+            <SheetConfirmingContext.Provider value={add}>{children}</SheetConfirmingContext.Provider>
           </div>
+          {waits && <SheetConfirming scroll={scroll} />}
         </DrawerContent>
       </Drawer>
     </>
+  );
+}
+
+/**
+ * The sheet while its change confirms on Base: over the body (the header's Close still works), the content fades
+ * behind a veil and one line says what it waits for. Placed on the scroll area as it is now, and again if it resizes.
+ */
+function SheetConfirming({ scroll }: { scroll: React.RefObject<HTMLDivElement | null> }) {
+  const [box, setBox] = useState<{ top: number; height: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = scroll.current;
+    if (!el) return;
+    const place = () => setBox({ top: el.offsetTop, height: el.offsetHeight });
+    place();
+    const seen = new ResizeObserver(place);
+    seen.observe(el);
+    return () => seen.disconnect();
+  }, [scroll]);
+  if (!box) return null;
+  return (
+    <div
+      role="status"
+      className="absolute inset-x-0 z-10 flex flex-col items-center justify-center gap-3 bg-sheet/80 backdrop-blur-[2px] animate-in fade-in-0 duration-200"
+      style={box}
+    >
+      <span aria-hidden className="size-7 animate-spin rounded-full border-[2.5px] border-ink/15 border-t-ink" />
+      <span className="text-[15px] font-semibold text-ink">Confirming on Base…</span>
+    </div>
   );
 }
 

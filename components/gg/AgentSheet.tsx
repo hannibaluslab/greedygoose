@@ -32,6 +32,7 @@ export function AgentSheet({
   item,
   live,
   busy,
+  confirming = false,
   error,
   stops,
   settings,
@@ -46,6 +47,8 @@ export function AgentSheet({
   live: boolean;
   /** JAW's sheet is open for one of this sheet's changes: its buttons wait. */
   busy: boolean;
+  /** Turn off or Renew is confirming on Base: the whole sheet waits. */
+  confirming?: boolean;
   /** What went wrong with the last change, if it didn't go through. */
   error: string | null;
   /** "Oct 15, 2027": when its grant ends, while it has one. */
@@ -68,7 +71,13 @@ export function AgentSheet({
   const copy = AGENT_COPY[item.agent];
   const on = item.status === "on" || item.status === "starting";
   return (
-    <SheetShell open={open} onOpenChange={(next) => !next && onClose()} title={item.name} description={copy.lead}>
+    <SheetShell
+      open={open}
+      onOpenChange={(next) => !next && onClose()}
+      title={item.name}
+      description={copy.lead}
+      confirming={confirming}
+    >
       <SheetSteps stepKey="main" className="flex flex-col gap-3.5">
         <p className="m-0 flex items-start gap-2 rounded-[16px] bg-card-bone px-3 py-2.5 text-[13px] leading-[1.4] text-ink-2">
           <ShieldIcon size={14} className="mt-0.5 shrink-0 text-pos" />

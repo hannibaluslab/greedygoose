@@ -86,11 +86,7 @@ export function StatusSheet({
       <SheetSteps stepKey="status" className="num flex flex-col gap-3 leading-[normal]">
         {health !== null && (
           <Card>
-            <div className="flex items-baseline justify-between">
-              <span className="text-[14px] font-medium text-ink-mid">Health</span>
-              <span className="text-[30px] font-semibold tracking-[-0.03em]">{hf(health)}</span>
-            </div>
-            <StatusBar healthFactor={health} label={`Now ${STATUS_LABEL[status]}`} />
+            <HealthScore health={health} status={status} />
             <p className="m-0 text-[14px] font-medium leading-snug text-ink">{marginLine(health)}</p>
           </Card>
         )}
@@ -154,6 +150,19 @@ export function StatusSheet({
         </Button>
       </SheetSteps>
     </SheetShell>
+  );
+}
+
+/** The credit's health, big, and where it sits on the Safe / Watch / Act bar: here and in "My leverage". */
+export function HealthScore({ health, status }: { health: number; status: Status }) {
+  return (
+    <>
+      <div className="flex items-baseline justify-between">
+        <span className="text-[14px] font-medium text-ink-mid">Health</span>
+        <span className="text-[30px] font-semibold tracking-[-0.03em]">{hf(health)}</span>
+      </div>
+      <StatusBar healthFactor={health} label={`Now ${STATUS_LABEL[status]}`} />
+    </>
   );
 }
 

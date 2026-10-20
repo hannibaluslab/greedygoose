@@ -17,7 +17,7 @@ import { useFeeSupport } from "@/hooks/useFeeSupport";
 import type { PositionData } from "@/hooks/usePosition";
 import type { AgentStatus } from "@/lib/agents/status";
 import { aprToApy } from "@/lib/aave/math";
-import { tankLevelUsd } from "@/lib/fuelTank";
+import { cashWithoutTankUsd, tankLevelUsd } from "@/lib/fuelTank";
 import { cashFromCreditUsd, owedBeside } from "@/lib/cashActivity";
 import { formatUsd } from "@/lib/formatting";
 import { earningLine, type ArrivedView } from "@/lib/cashSetup";
@@ -44,8 +44,9 @@ export function cashLead(save: AgentStatus, apy: number): string {
 }
 
 /**
- * The cash, big, as the kit draws money, with the Cash card's own line under it; then what it's made of (`split`,
- * CashSplit); and what's owed on credit in the same card under a hairline (Adrian: one section).
+ * The cash, big, as the kit draws money and as Home's Cash card counts it (no fuel tank), with the Cash card's own line
+ * under it; then what it's made of (`split`, CashSplit); and what's owed on credit in the same card under a hairline
+ * (Adrian: one section).
  */
 function CashAmount({ data, arrived, split }: { data: PositionData; arrived: ArrivedView; split?: ReactNode }) {
   const owed = owedBeside(data.debtUsd, data.cash);
@@ -57,7 +58,7 @@ function CashAmount({ data, arrived, split }: { data: PositionData; arrived: Arr
           USDC
         </span>
       </div>
-      <Money value={data.cashUsd} size={38} />
+      <Money value={cashWithoutTankUsd(data)} size={38} />
       <span className="text-[13px] text-ink-mid">
         {arrived.kind === "arriving" ? `${arrived.text} arriving` : earningLine(data.cash.saveOn, data.savingsUsd)}
       </span>
@@ -78,8 +79,9 @@ function CashAmount({ data, arrived, split }: { data: PositionData; arrived: Arr
 /** The cash that came from credit (cashFromCreditUsd, from Activity), or 0 until Activity is read. */
 function useFromCredit(account: `0x${string}`, data: PositionData) {
   const history = useActivity(account);
-  const spendable = Math.max(0, data.cashUsd - tankLevelUsd(data.cash.walletRaw));
-  return history.isLoading || history.isError ? 0 : cashFromCreditUsd(history.rows, data.debtUsd, spendable);
+  return history.isLoading || history.isError
+    ? 0
+    : cashFromCreditUsd(history.rows, data.debtUsd, cashWithoutTankUsd(data));
 }
 
 /**
@@ -119,27 +121,38 @@ function EarnCardLive({
 }
 
 /**
- * What the cash is made of: my own cash, the part that came from credit backed by stocks (Earn with stocks,
- * cashFromCreditUsd, read from Activity) and the fuel tank kept for network fees. Mounted only while the sheet is open;
- * until Activity is read (or if it can't be), no credit row, and the rest is my cash.
+ * What the cash is made of: my own cash and the part that came from credit backed by stocks (Earn with stocks,
+ * cashFromCreditUsd, read from Activity), which add up to the cash above; then, apart under a hairline, the fuel tank
+ * kept for network fees, which the cash doesn't count (Adrian, 2026-10-21). Mounted only while the sheet is open; until
+ * Activity is read (or if it can't be), no credit row, and the rest is my cash.
  */
 function CashSplit({ account, data }: { account: `0x${string}`; data: PositionData }) {
-  const tank = tankLevelUsd(data.cash.walletRaw);
-  const spendable = Math.max(0, data.cashUsd - tank);
   const credit = useFromCredit(account, data);
   return (
     <dl aria-label="What my cash is" className="m-0 mt-1.5 flex flex-col gap-2 border-t border-line-field pt-3">
-      <SplitRow label="My cash" value={spendable - credit} />
+      <SplitRow label="My cash" value={cashWithoutTankUsd(data) - credit} />
       {credit >= 0.01 && <SplitRow label="From credit" sub="Earn with stocks" value={credit} />}
-      <SplitRow label="Fuel tank" sub="Kept for network fees" value={tank} />
+      <SplitRow label="Fuel tank" sub="Kept for network fees" value={tankLevelUsd(data.cash.walletRaw)} apart />
     </dl>
   );
 }
 
-/** One part of the cash: what it is, a line under it when it needs one, and how much. */
-function SplitRow({ label, sub, value }: { label: string; sub?: string; value: number }) {
+/** One part of the cash: what it is, a line under it when it needs one, and how much. `apart`: under a hairline. */
+function SplitRow({
+  label,
+  sub,
+  value,
+  apart = false,
+}: {
+  label: string;
+  sub?: string;
+  value: number;
+  apart?: boolean;
+}) {
   return (
-    <div className="flex items-start justify-between gap-3">
+    <div
+      className={`flex items-start justify-between gap-3 ${apart ? "mt-0.5 border-t border-line-field pt-2.5" : ""}`}
+    >
       <dt className="flex min-w-0 flex-col gap-0.5">
         <span className="text-[14px] text-ink-mid">{label}</span>
         {sub && <span className="text-[12px] text-subtle">{sub}</span>}

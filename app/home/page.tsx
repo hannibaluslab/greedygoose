@@ -38,9 +38,9 @@ import { homeStatus } from "@/lib/risk/status";
 import { leverageOf, leverageText } from "@/lib/leverage";
 import { toast } from "sonner";
 import { StatusPill } from "@/components/gg/Status";
-import { tankLevelUsd, tankLow } from "@/lib/fuelTank";
+import { cashWithoutTankUsd, tankLevelUsd, tankLow } from "@/lib/fuelTank";
 import { useFillTank } from "@/hooks/useFillTank";
-import { formatUsd, formatUsdTrim, monthlyCostText } from "@/lib/formatting";
+import { ceilCents, formatUsd, formatUsdTrim, monthlyCostText } from "@/lib/formatting";
 import { EQUITIES } from "@/lib/tokens/registry";
 import { dayChange, weekValue } from "@/lib/prices/market";
 import { RetryButton } from "@/components/gg/kit/RetryButton";
@@ -198,6 +198,7 @@ function Home({ address }: { address: `0x${string}` }) {
             holdUsd={data.stocksUsd + data.cashUsd}
             owedUsd={data.debtUsd}
             status={data.status}
+            healthFactor={data.healthFactor}
           />
           <YieldSheet
             open={sheet === "yield"}
@@ -294,13 +295,9 @@ function Loaded({
             // which is Repay's (with nothing owed it says only that).
             info: { label: "What your credit status means", onClick: () => open("status") },
             onClick: { label: "Open your credit", run: () => money.repay() },
-            // The "$" drawn as the total balance draws it (Adrian): smaller, in the mid ink.
-            value: (
-              <>
-                <span className="text-[22px] font-medium tracking-normal text-ink-mid">$</span>
-                {formatUsdTrim(Math.ceil(data.debtUsd)).replace("$", "")}
-              </>
-            ),
+            // The "$" and the cents drawn as the total balance draws them (Adrian): smaller, in the mid ink. Rounded up
+            // to the cent, never shown as less than is owed.
+            value: <OwedFigure usd={data.debtUsd} />,
             unit: "owed",
             // Board 2f: the status and what the credit costs a month, always (Safe and $0 / month with none taken).
             sub: (
@@ -342,8 +339,9 @@ function Loaded({
       <section className="flex flex-col gap-2.5 px-5 pt-[18px] empty:hidden">{cards}</section>
 
       <section className="grid grid-cols-2 gap-2.5 px-5 pt-[18px]">
+        {/* Cash is what earns, without the fuel tank, which shows on its own line under it (Adrian, 2026-10-21). */}
         <CashCard
-          cashUsd={data.cashUsd}
+          cashUsd={cashWithoutTankUsd(data)}
           line={`Fuel tank: ${formatUsd(tankLevelUsd(data.cash.walletRaw))}`}
           dim={dim}
           note={arrived.kind === "arriving" ? `${arrived.text} arriving` : undefined}
@@ -454,6 +452,18 @@ function EmptyPortfolio() {
         Buy your first stock
       </Link>
     </div>
+  );
+}
+
+/** What's owed in the hero: "$8.04", the "$" and the cents smaller and in the mid ink, as the total balance draws them. */
+function OwedFigure({ usd }: { usd: number }) {
+  const [int, cents] = ceilCents(usd).toFixed(2).split(".");
+  return (
+    <>
+      <span className="text-[22px] font-medium tracking-normal text-ink-mid">$</span>
+      {Number(int).toLocaleString("en-US")}
+      <span className="text-[19px] font-medium tracking-normal text-ink-mid">.{cents}</span>
+    </>
   );
 }
 

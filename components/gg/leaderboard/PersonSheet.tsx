@@ -51,6 +51,7 @@ export function PersonSheet({
       onOpenChange={(next) => !next && onClose()}
       title={personLabel(person, person.you)}
       description={person.you || person.name ? shortAddress(person.account) : undefined}
+      confirming={phase === "pending"}
     >
       <SheetSteps stepKey={person.account} className="flex flex-col gap-3.5">
         <WhiteCard className="flex flex-col gap-1 px-4 py-3.5">

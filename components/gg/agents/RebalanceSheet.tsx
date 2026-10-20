@@ -27,6 +27,7 @@ export function RebalanceSheet({
   open,
   onClose,
   busy,
+  confirming = false,
   error,
   onAction,
   finish,
@@ -36,6 +37,8 @@ export function RebalanceSheet({
   onClose: () => void;
   /** JAW's sheet is open for Turn off, Renew or Finish: their buttons wait. */
   busy: boolean;
+  /** Turn off or Renew is confirming on Base: the whole sheet waits. */
+  confirming?: boolean;
   /** What stopped the last Turn off or Renew. */
   error: string | null;
   onAction: (a: Exclude<SheetAction, "on">) => void;
@@ -50,6 +53,7 @@ export function RebalanceSheet({
       onOpenChange={(next) => !next && onClose()}
       title="Rebalance"
       titleAccessory={<RebalancePill model={model} />}
+      confirming={confirming}
     >
       <RebalanceSheetBody
         model={model}

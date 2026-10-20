@@ -18,6 +18,14 @@ const FILL_MARGIN_RAW = 20_000n;
 /** What's in the tank: wallet USDC up to the tank's size, in whole cents rounded down (never reads full a cent short). */
 export const tankLevelUsd = (walletRaw: bigint) => Math.min(floorCents(toUsd(walletRaw)), CASH.feeBufferUsd);
 
+/**
+ * Cash as Home's Cash card and the Cash sheet show it: everything but the fuel tank, which has its own line (Adrian,
+ * 2026-10-21: "cash is only what earns"). What a top-up leaves in the wallet past the tank counts as cash. In whole
+ * cents rounded down, as the "$X earning" line under it is, so the two agree.
+ */
+export const cashWithoutTankUsd = (p: { cashUsd: number; cash: Pick<Cash, "walletRaw"> }) =>
+  Math.max(0, floorCents(p.cashUsd - tankLevelUsd(p.cash.walletRaw)));
+
 /** Under half full with cash in savings to fill it: Home's menu asks for it, with a number over its button. */
 export const tankLow = (c: Cash) => c.walletRaw * 2n < feeBufferRaw && c.savingsRaw > 0n;
 

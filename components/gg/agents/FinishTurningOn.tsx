@@ -1,13 +1,21 @@
 "use client";
 
 import { TxError } from "../TxUi";
+import { useSheetConfirming } from "../kit/SheetShell";
 import { useAgents } from "@/hooks/useAgents";
 import { useTx } from "@/hooks/useTx";
 import { AGENTS_LIVE } from "@/lib/agents/config";
 import type { AgentJob } from "@/lib/agents/permissions";
 
 /** The Finish write's state: what its button waits on, and what stopped it. */
-export type FinishState = { onFinish: () => void; busy: boolean; waiting: boolean; error: string | null };
+export type FinishState = {
+  onFinish: () => void;
+  busy: boolean;
+  /** Back from JAW's sheet, confirming on Base: the sheet around it waits. */
+  confirming?: boolean;
+  waiting: boolean;
+  error: string | null;
+};
 
 /**
  * A grant JAW made that the executor doesn't run yet: one more Face ID, the batch that registers it (useAgents'
@@ -25,6 +33,7 @@ export function FinishBlock({
   title?: string;
   sub?: string;
 }) {
+  useSheetConfirming(!!finish.confirming);
   return (
     <div className="flex flex-col gap-2 rounded-[22px] bg-card px-4 py-3.5 shadow-card-elev">
       <p className="m-0 text-[15px] font-semibold">{title}</p>
@@ -65,7 +74,13 @@ export function FinishTurningOn({
     <FinishBlock
       title={title}
       sub={sub}
-      finish={{ onFinish: () => void tx.sign(), busy: tx.busy, waiting: tx.checking || tx.blocked, error: tx.error }}
+      finish={{
+        onFinish: () => void tx.sign(),
+        busy: tx.busy,
+        confirming: tx.phase === "pending",
+        waiting: tx.checking || tx.blocked,
+        error: tx.error,
+      }}
     />
   );
 }

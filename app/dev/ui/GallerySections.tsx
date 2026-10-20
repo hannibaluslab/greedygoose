@@ -10,6 +10,7 @@ import { TxButton } from "@/components/gg/TxUi";
 import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
 import type { ActivityRow } from "@/hooks/useActivity";
 import type { Status } from "@/lib/risk/status";
+import type { TxPhase } from "@/lib/tx/prepared";
 import { formatUsd } from "@/lib/formatting";
 
 // Sample figures for the gallery only, the boards' own (HomeUpliftRail, PortfolioPage, F1-4, F2-5, F2-6, F2-7).
@@ -102,9 +103,15 @@ export function BuyDemoSheet({ open, onOpenChange }: { open: boolean; onOpenChan
   const usd = Number(amount) || 0;
   const shares = (usd / NVDA.price).toFixed(4);
 
+  // The tap stands for JAW's sheet handing back: the sheet confirms on Base for a few seconds, then it's bought.
+  const [phase, setPhase] = useState<TxPhase>("idle");
   const finish = () => {
-    onOpenChange(false);
-    toast.success(`Bought ${shares} ${NVDA.symbol}`);
+    setPhase("pending");
+    setTimeout(() => {
+      setPhase("idle");
+      onOpenChange(false);
+      toast.success(`Bought ${shares} ${NVDA.symbol}`);
+    }, 3000);
   };
 
   return (
@@ -126,7 +133,7 @@ export function BuyDemoSheet({ open, onOpenChange }: { open: boolean; onOpenChan
               That’s more than your cash ({formatUsd(CASH)})
             </Button>
           )}
-          <TxButton label="Buy" phase="idle" size="md" disabled={usd <= 0 || usd > CASH} onClick={finish} />
+          <TxButton label="Buy" phase={phase} size="md" disabled={usd <= 0 || usd > CASH} onClick={finish} />
         </div>
       </SheetSteps>
     </SheetShell>

@@ -10,6 +10,7 @@ import { formatUsd, formatUsdTrim } from "@/lib/formatting";
 import { leverageOf, leverageText } from "@/lib/leverage";
 import { type Status } from "@/lib/risk/status";
 import { StatusPill } from "./Status";
+import { HealthScore } from "./CreditStatusSheet";
 
 const CASH_DOT = "#1f6a4a";
 const STOCKS_DOT = "#76b900";
@@ -180,7 +181,8 @@ function Total({ label, value }: { label: string; value: ReactNode }) {
 
 /**
  * "Your leverage" (canvas board 13, no greed points): what the 1.7x on Home means, as one division, what you hold ÷
- * what's yours, and the bar of the two: yours, and what runs on credit. Its status pill follows the credit.
+ * what's yours, and the bar of the two: yours, and what runs on credit. Its status pill follows the credit, and the
+ * credit's health sits under it, as "My credit status" draws it (Adrian, 2026-10-21).
  */
 export function LeverageSheet({
   open,
@@ -188,12 +190,15 @@ export function LeverageSheet({
   holdUsd,
   owedUsd,
   status,
+  healthFactor,
 }: {
   open: boolean;
   onClose: () => void;
   holdUsd: number;
   owedUsd: number;
   status: Status;
+  /** null when nothing is owed. */
+  healthFactor: number | null;
 }) {
   const x = leverageOf({ holdUsd, owedUsd });
   const yours = Math.max(0, holdUsd - owedUsd);
@@ -247,6 +252,11 @@ export function LeverageSheet({
             </span>
           </div>
         </div>
+        {owedUsd > 0 && healthFactor !== null && (
+          <div className="flex flex-col gap-3 rounded-[22px] bg-card p-4 shadow-card-elev">
+            <HealthScore health={healthFactor} status={status} />
+          </div>
+        )}
         <Button variant="dark" onClick={onClose} className="w-full">
           Got it
         </Button>

@@ -5,6 +5,7 @@ import { txUrl } from "@/lib/chain";
 import { TAP_AGAIN, type TxPhase } from "@/lib/tx/prepared";
 import { stepsNote } from "@/lib/formatting";
 import { buttonClass, type ButtonSize } from "./kit/Button";
+import { useSheetConfirming } from "./kit/SheetShell";
 
 /**
  * The one button that opens JAW's own sheet (its Review and Face ID), lime, named for the action only: "Buy", "Repay",
@@ -37,6 +38,8 @@ export function TxButton({
 }) {
   const busy = phase === "simulating" || phase === "signing" || phase === "pending";
   const waiting = checking && !busy && phase !== "done";
+  // Back from JAW's sheet, the whole sheet it sits in waits for Base, not only this button.
+  useSheetConfirming(phase === "pending");
   const text = phase === "simulating" || waiting ? "Checking…" : phase === "pending" ? "Confirming on Base…" : label;
   // "done" too: a sheet that closes on success (BuySheet) still shows the button while it slides out.
   const off = disabled || preview || busy || waiting || phase === "done";
