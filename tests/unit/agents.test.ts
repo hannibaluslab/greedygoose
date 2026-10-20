@@ -5,6 +5,7 @@ import type { PermissionsDetail } from "@jaw.id/wagmi";
 import {
   agentGrant,
   agentPermission,
+  carriesTopUps,
   entryGrant,
   entryPermission,
   hasLimit,
@@ -14,6 +15,7 @@ import {
   NO_LIMIT_JOBS,
   readAgentGrant,
   readStockLimits,
+  grantPermission,
   rebalanceGrant,
   rebalancePermission,
   sellGrant,
@@ -445,7 +447,89 @@ describe("stockLimitsRaw (a grant's limit per stock, from its dollar limit)", ()
     );
     expect(readStockLimits("sell", sellGrant(300_000_000n, l).spends!)).toEqual(l);
     expect(readStockLimits("rebalance", rebalanceGrant(300_000_000n, l).spends!)).toEqual(l);
-    expect(readStockLimits("rebalance", sellGrant(300_000_000n, l).spends!)).toBeNull(); // aUSDC isn't a stock
+    // With top-ups aUSDC follows USDC, and the stocks start one later.
+    expect(readStockLimits("rebalance", rebalanceGrant(300_000_000n, l, true).spends!)).toEqual(l);
+    const withAusdcLast = [...rebalanceGrant(300_000_000n, l).spends!, { token: PROTOCOLS.AUSDC, allowance: "1" }];
+    expect(readStockLimits("rebalance", withAusdcLast)).toBeNull(); // aUSDC anywhere else isn't a stock
+  });
+});
+
+describe("the Rebalancer's two grant shapes (top-ups: the savings withdraw and aUSDC's limit)", () => {
+  const prices = EQUITIES.map(() => 200n * 10n ** 8n);
+  const l = stockLimitsRaw(
+    maxUint160,
+    maxUint160,
+    prices,
+    EQUITIES.map((e) => e.symbol === "NVDAc" || e.symbol === "AAPLc"),
+  );
+  const listedOf = (grant: PermissionsDetail): ListedPermission => ({
+    permissionId: "0x" + "ab".repeat(32),
+    spender: executor,
+    start: 100,
+    end: 200,
+    salt: toHex(9n),
+    calls: grant.calls!.map((c) => ({ target: c.target, selector: c.selector!, checker: zeroAddress })),
+    spends: grant.spends!.map((s) => ({
+      token: s.token,
+      allowance: toHex(BigInt(s.allowance)),
+      unit: s.unit,
+      multiplier: 1,
+    })),
+  });
+
+  it("names top-ups by aUSDC's limit right after USDC's, as the executor reads its TOP_UPS flag", () => {
+    expect(carriesTopUps(rebalanceGrant(maxUint160, l, true).spends!)).toBe(true);
+    expect(carriesTopUps(rebalanceGrant(maxUint160, l).spends!)).toBe(false);
+    expect(carriesTopUps([])).toBe(false);
+  });
+
+  it("jobGrant builds either, and only the Rebalancer reads the flag", () => {
+    expect(jobGrant("rebalance", maxUint160, l, true)).toEqual(rebalanceGrant(maxUint160, l, true));
+    expect(jobGrant("rebalance", maxUint160, l)).toEqual(rebalanceGrant(maxUint160, l));
+    expect(jobGrant("sell", maxUint160, l, true)).toEqual(sellGrant(maxUint160, l));
+    expect(jobGrant("save", 1n, undefined, true)).toEqual(agentGrant("save", 1n));
+  });
+
+  it("reads each back as the Rebalancer, with its stock limits and whether it carries top-ups", () => {
+    const flagged = readAgentGrant(listedOf(rebalanceGrant(maxUint160, l, true)), executor);
+    expect(flagged).toMatchObject({ job: "rebalance", capRaw: maxUint160, limitsRaw: l, topUps: true });
+    const plain = readAgentGrant(listedOf(rebalanceGrant(maxUint160, l)), executor);
+    expect(plain).toMatchObject({ job: "rebalance", capRaw: maxUint160, limitsRaw: l });
+    expect(plain!.topUps).toBeUndefined();
+  });
+
+  it("rebuilds the exact struct the manager approved, in either shape (grantPermission)", () => {
+    const g = readAgentGrant(listedOf(rebalanceGrant(maxUint160, l, true)), executor)!;
+    const want = rebalancePermission({
+      account,
+      spender: executor,
+      start: 100,
+      end: 200,
+      salt: 9n,
+      capRaw: maxUint160,
+      limitsRaw: l,
+      topUps: true,
+    });
+    expect(grantPermission(g, account, executor)).toEqual(want);
+    expect(grantPermission({ ...g, topUps: undefined }, account, executor)).toEqual({
+      ...want,
+      calls: want.calls.slice(1),
+      spends: [want.spends[0], ...want.spends.slice(2)],
+    });
+  });
+
+  it("never reads Protect · sell as a Rebalancer with top-ups, nor the reverse: same spends' start, other calls and period", () => {
+    expect(readAgentGrant(listedOf(sellGrant(maxUint160, l)), executor)?.job).toBe("sell");
+    expect(readAgentGrant(listedOf(rebalanceGrant(maxUint160, l, true)), executor)?.job).toBe("rebalance");
+    const flagged = listedOf(rebalanceGrant(maxUint160, l, true));
+    // The withdraw without aUSDC's limit, or aUSDC's limit without the withdraw, is no grant of ours.
+    expect(readAgentGrant({ ...flagged, calls: flagged.calls.slice(1) }, executor)).toBeNull();
+    expect(
+      readAgentGrant({ ...flagged, spends: [flagged.spends[0], ...flagged.spends.slice(2)] }, executor),
+    ).toBeNull();
+    // aUSDC at a limit unlike USDC's.
+    const off = { ...flagged, spends: flagged.spends.map((x, i) => (i === 1 ? { ...x, allowance: toHex(1n) } : x)) };
+    expect(readAgentGrant(off, executor)).toBeNull();
   });
 });
 

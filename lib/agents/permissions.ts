@@ -368,12 +368,15 @@ export function entryPermission(p: {
  * Every job, as JAW's screen grants it and lists it.
  */
 
-/** What the app sends to JAW's `useGrantPermissions` to switch `job` on: its limit, and one a stock for a StockJob. */
-export function jobGrant(job: AgentJob, capRaw: bigint, limitsRaw?: StockLimits): PermissionsDetail {
+/**
+ * What the app sends to JAW's `useGrantPermissions` to switch `job` on: its limit, one a stock for a StockJob, and for
+ * the Rebalancer with `topUps` the savings withdraw that puts top-ups into the mix (no other job reads it).
+ */
+export function jobGrant(job: AgentJob, capRaw: bigint, limitsRaw?: StockLimits, topUps = false): PermissionsDetail {
   if (job === "save" || job === "protect") return agentGrant(job, capRaw);
   if (job === "entry") return entryGrant(capRaw);
   if (!limitsRaw) throw new Error("One limit per stock");
-  return job === "sell" ? sellGrant(capRaw, limitsRaw) : rebalanceGrant(capRaw, limitsRaw);
+  return job === "sell" ? sellGrant(capRaw, limitsRaw) : rebalanceGrant(capRaw, limitsRaw, topUps);
 }
 
 /**
@@ -387,7 +390,7 @@ export function grantPermission(g: AgentGrant, account: Address, spender: Addres
   if (!g.limitsRaw) throw new Error("One limit per stock");
   return g.job === "sell"
     ? sellPermission({ ...signed, limitsRaw: g.limitsRaw })
-    : rebalancePermission({ ...signed, limitsRaw: g.limitsRaw });
+    : rebalancePermission({ ...signed, limitsRaw: g.limitsRaw, topUps: !!g.topUps });
 }
 
 /**
@@ -462,18 +465,31 @@ export type AgentGrant = {
   salt: bigint;
   /** Protect · sell and the Rebalancer: each stock's limit in raw shares, by reserve id; 0 = it may not sell it. */
   limitsRaw?: StockLimits;
+  /** The Rebalancer only: its grant carries the savings withdraw, so it puts top-ups into the mix. */
+  topUps?: boolean;
 };
 
-/** Where a job's stock limits start among its spends: after USDC and aUSDC (Protect · sell), USDC (the Rebalancer). */
-const FIRST_STOCK_SPEND: Record<StockJob, number> = { sell: 2, rebalance: 1 };
+/**
+ * Whether a Rebalancer grant's spends carry top-ups (GooseExecutor's `RebalanceJob.TOP_UPS`): aUSDC's limit right
+ * after USDC's, as `rebalanceSpends` puts it with the savings withdraw. The executor reads the flag off the same place.
+ */
+export const carriesTopUps = (spends: readonly { token: string }[]) =>
+  spends.length > 1 && isAddressEqual(spends[1].token as Address, PROTOCOLS.AUSDC);
 
-/** The stock limits a `job` grant's spends carry, by reserve id; null if one of them isn't a stock. */
+/**
+ * Where a job's stock limits start among its spends: after USDC and aUSDC (Protect · sell, and the Rebalancer with
+ * top-ups), after USDC (the Rebalancer without).
+ */
+const firstStockSpend = (job: StockJob, spends: readonly { token: string }[]) =>
+  job === "sell" || carriesTopUps(spends) ? 2 : 1;
+
+/** The stock limits a `job` grant's spends carry, by reserve id, in either Rebalancer shape; null if one isn't a stock. */
 export function readStockLimits(
   job: StockJob,
   spends: readonly { token: string; allowance: string | bigint }[],
 ): StockLimits | null {
   const limits: bigint[] = EQUITIES.map(() => 0n);
-  for (const s of spends.slice(FIRST_STOCK_SPEND[job])) {
+  for (const s of spends.slice(firstStockSpend(job, spends))) {
     const stock = EQUITIES.find((e) => isAddressEqual(e.address, s.token as Address));
     if (!stock) return null;
     limits[stock.reserveId] = BigInt(s.allowance);
@@ -481,16 +497,22 @@ export function readStockLimits(
   return limits;
 }
 
-/** The limit and the stock limits a job's grant would carry, read off its spends; null if they can't be a job's. */
+/**
+ * The limit and the stock limits a job's grant would carry, read off its spends, and for the Rebalancer whether it
+ * carries top-ups (both shapes); null if they can't be a job's.
+ */
 function readTerms(
   job: AgentJob,
   spends: ListedPermission["spends"],
-): { capRaw: bigint; limitsRaw?: StockLimits } | null {
+): { capRaw: bigint; limitsRaw?: StockLimits; topUps?: boolean } | null {
   const first = BigInt(spends[0].allowance);
   if (job === "save" || job === "protect") return { capRaw: first };
   if (job === "entry") return { capRaw: first / 10n ** BigInt(ENTRY_COINS[0].decimals - USDC.decimals) };
   const limitsRaw = readStockLimits(job, spends);
-  return limitsRaw && { capRaw: first, limitsRaw };
+  if (!limitsRaw) return null;
+  return job === "rebalance" && carriesTopUps(spends)
+    ? { capRaw: first, limitsRaw, topUps: true }
+    : { capRaw: first, limitsRaw };
 }
 
 /** True when a listed permission is exactly `want`, as JAW's screen grants it: checker 0 and × 1 everywhere. */
@@ -518,7 +540,8 @@ function isTemplate(p: ListedPermission, want: PermissionsDetail): boolean {
 
 /**
  * Reads a listed permission as one of ours: the executor as spender and exactly one job's template, rebuilt from the
- * limits it lists (`jobGrant`), so a grant JAW stored for anything else never counts as an agent.
+ * limits it lists (`jobGrant`), so a grant JAW stored for anything else never counts as an agent. A Rebalancer grant
+ * is read in the shape its spends say (with top-ups when aUSDC follows USDC) and must be exactly that template.
  */
 export function readAgentGrant(p: ListedPermission, executor: Address): AgentGrant | null {
   if (!isAddressEqual(p.spender as Address, executor) || p.spends.length === 0) return null;
@@ -527,7 +550,7 @@ export function readAgentGrant(p: ListedPermission, executor: Address): AgentGra
     if (!terms || terms.capRaw <= 0n) continue;
     let want: PermissionsDetail;
     try {
-      want = jobGrant(job, terms.capRaw, terms.limitsRaw);
+      want = jobGrant(job, terms.capRaw, terms.limitsRaw, terms.topUps);
     } catch {
       continue; // not this job's shape (a stock limit off the unit, no stock to sell)
     }
@@ -540,6 +563,7 @@ export function readAgentGrant(p: ListedPermission, executor: Address): AgentGra
       end: p.end,
       salt: BigInt(p.salt),
       ...(terms.limitsRaw && { limitsRaw: terms.limitsRaw }),
+      ...(terms.topUps && { topUps: true }),
     };
   }
   return null;
