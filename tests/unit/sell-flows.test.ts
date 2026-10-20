@@ -324,7 +324,7 @@ describe("planSell: repay by selling a holding (step 9)", () => {
   });
 
   it("a small sale that would repay less than its shares back and end in Act is blocked (Act is the line)", async () => {
-    // The rule, at a $0.50 buffer (where it was set): $10 owed against 0.063 NVDA ($15.75 at 70%), health 1.1025, in
+    // The rule, at a $0.50 buffer (today's, Adrian 2026-10-20): $10 owed against 0.063 NVDA ($15.75 at 70%), health 1.1025, in
     // Watch. $1.20 of it repays its floor less $0.50, about $0.68, and takes $0.84 of backing out: about 1.09, in Act.
     vi.resetModules();
     vi.doMock("@/config/risk", async (importOriginal) => {
@@ -365,9 +365,16 @@ describe("planSell: repay by selling a holding (step 9)", () => {
     }
   });
 
-  it("at today's fee buffer the same $1.20 sale stays in Watch: the fee no longer outweighs the backing it frees", () => {
+  it("at a $0.10 buffer the same $1.20 sale stays in Watch: the fee no longer outweighs the backing it frees", async () => {
     // From Watch, a sale of v dollars ends in Act only if v < 1.1 × buffer ÷ (1.1 × 0.98 − collateral factor): under
-    // $0.30 at 70% and a $0.10 buffer, so under the $1 smallest sale. The rule above stays for a larger buffer.
+    // $0.30 at 70% and a $0.10 buffer, so under the $1 smallest sale. The rule above holds for today's $0.50.
+    vi.resetModules();
+    vi.doMock("@/config/risk", async (importOriginal) => {
+      const actual = await importOriginal<typeof import("@/config/risk")>();
+      return { ...actual, CASH: { ...actual.CASH, feeBufferUsd: 0.1 } };
+    });
+    const at10 = await import("@/lib/sell");
+    const fee10 = 100_000n;
     const thin: SellPosition = {
       totalBackingUsd: 15.75,
       avgCf: 0.7,
@@ -382,11 +389,24 @@ describe("planSell: repay by selling a holding (step 9)", () => {
       backingUsd: 15.75,
       paused: false,
     };
-    const p = plan("repay", { ...quote, amountIn: shares(0.0048), amountOut: usd(1.194) }, thin, h);
-    expect(p.repayRaw).toBe(minOut(usd(1.194)) - fee);
-    expect(p.hfAfter!).toBeCloseTo((15.75 * 0.7 - 1.2 * 0.7) / (10 - Number(minOut(usd(1.194)) - fee) / 1e6), 6);
-    expect(p.after).toBe("watch");
-    expect(p.block).toBeUndefined();
+    try {
+      const p = at10.planSell({
+        from: "repay",
+        stock: nvda,
+        holding: h,
+        cf: 0.7,
+        position: thin,
+        quote: { ...quote, amountIn: shares(0.0048), amountOut: usd(1.194) },
+        now: tuesday,
+      });
+      expect(p.repayRaw).toBe(minOut(usd(1.194)) - fee10);
+      expect(p.hfAfter!).toBeCloseTo((15.75 * 0.7 - 1.2 * 0.7) / (10 - Number(minOut(usd(1.194)) - fee10) / 1e6), 6);
+      expect(p.after).toBe("watch");
+      expect(p.block).toBeUndefined();
+    } finally {
+      vi.doUnmock("@/config/risk");
+      vi.resetModules();
+    }
   });
 
   it("repaying all of it ends with no credit", () => {

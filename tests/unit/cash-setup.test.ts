@@ -33,7 +33,7 @@ describe("start earning: when Home offers it", () => {
     for (const save of ["unconfigured", "off"] as const) {
       expect(startEarningShown(save, 0n)).toBe(false);
       expect(startEarningShown(save, usdc(CASH.feeBufferUsd))).toBe(false);
-      expect(startEarningShown(save, usdc(0.42))).toBe(true);
+      expect(startEarningShown(save, usdc(CASH.feeBufferUsd + 0.32))).toBe(true);
       expect(startEarningShown(save, startEarningMinRaw - 1n)).toBe(false);
       expect(startEarningShown(save, startEarningMinRaw)).toBe(true);
       expect(startEarningShown(save, usdc(100))).toBe(true);

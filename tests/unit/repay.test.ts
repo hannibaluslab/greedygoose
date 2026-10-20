@@ -283,7 +283,8 @@ describe("Amount: 0 to start, All in the field, quick picks, never more than owe
   });
 
   it("typing what's owed by hand is All: it repays all of it, so every stock comes back", () => {
-    const d = data({ debt: 0.9187, wallet: 1.13 });
+    // Enough cash to repay all of it and keep the fuel tank.
+    const d = data({ debt: 0.9187, wallet: 0.93 + B });
     const cash = cashOf(d);
     const typed = repayForm(REPAY_FORM, { type: "amount", value: "0.92", max: repayMax(cash, d) });
     expect(typed.all).toBe(true);
@@ -476,10 +477,10 @@ describe("Pay with a stock held free: the plan", () => {
   });
 
   it("a sale whose floor repays nothing (all of it is the fee buffer it pays) says the smallest repay", () => {
-    // No cash for the fee and $0.20 of Apple free. The quote for all of it pays well over Aave's price ($250 a share),
+    // No cash for the fee and $0.80 of Apple free. The quote for all of it pays well over Aave's price ($250 a share),
     // so $0.01 is sized as a small sale; its own quote pays $181 (9.5% under Aave's $200: allowed), so its floor is
-    // Aave's less 10%, about $0.08, all of it the $0.10 buffer: the sale would repay nothing.
-    const poor = data({ wallet: underB, holdings: [holding("AAPLc", "Apple", 200, 0.001, 0)] });
+    // Aave's less 10%, all of it the fuel tank it pays for: the sale would repay nothing.
+    const poor = data({ wallet: underB, holdings: [holding("AAPLc", "Apple", 200, 0.004, 0)] });
     const src = repaySources(poor, cfs).find((x) => x.id === "free:AAPLc")!;
     expect(src.feeFromSale).toBe(true);
     const form = { source: src.id, amount: "0.01", all: false };

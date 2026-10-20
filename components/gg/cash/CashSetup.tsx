@@ -4,11 +4,12 @@ import { useState, type ReactNode } from "react";
 import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
 import { ActivityAvatar } from "../activity/Activity";
 import { TxDone, TxError } from "../TxUi";
-import { TrendUpIcon } from "../kit/icons";
+import { RefreshIcon, TrendUpIcon } from "../kit/icons";
 import { useConvert, useConvertQuotes } from "@/hooks/useConvert";
 import { NOT_FAIR, planPrefix, type ConvertQuote } from "@/lib/tx/plans";
 import type { useCashSetup } from "@/hooks/useCashSetup";
 import { usePrepare, type TxPhase } from "@/hooks/useTx";
+import { CASH } from "@/config/risk";
 import { AGENTS_LIVE } from "@/lib/agents/config";
 import { askAutomatic, type Arrived, type ArrivedView } from "@/lib/cashSetup";
 import { formatUsd } from "@/lib/formatting";
@@ -137,6 +138,49 @@ export function StartEarningCard({
       error={error}
       preview={preview}
       onTap={onStart}
+    />
+  );
+}
+
+/**
+ * The fuel tank running low, in Home's menu (Adrian, 2026-10-20): the same card, "Your fuel tank is low", how much is
+ * left of it, and "Fill up" (savings back into the wallet up to a full tank, useFillTank).
+ */
+export function FuelTankCard({
+  levelUsd,
+  phase,
+  checking,
+  blocked,
+  error,
+  preview,
+  onFill,
+}: {
+  /** What's in the tank now (lib/fuelTank.ts `tankLevelUsd`). */
+  levelUsd: number;
+  phase: TxPhase;
+  checking?: boolean;
+  blocked?: boolean;
+  error: string | null;
+  preview: boolean;
+  onFill: () => void;
+}) {
+  return (
+    <SetupCard
+      aria="Your fuel tank is low"
+      icon={
+        <span aria-hidden className="flex size-8 shrink-0 items-center justify-center rounded-full bg-chip text-ink">
+          <RefreshIcon size={15} />
+        </span>
+      }
+      title="Your fuel tank is low"
+      line={`${formatUsd(levelUsd)} of ${formatUsd(CASH.feeBufferUsd)} for network fees`}
+      action="Fill up"
+      phase={phase}
+      checking={checking}
+      blocked={blocked}
+      error={error}
+      preview={preview}
+      onTap={onFill}
     />
   );
 }

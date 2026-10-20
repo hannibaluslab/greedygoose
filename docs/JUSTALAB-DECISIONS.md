@@ -654,3 +654,11 @@ Adrian (2026-10-20, on Turn into cash): "the ui is horrible, just the same card,
 
 Adrian (2026-10-20): "this should be placed in the burger menu you received usdt", and "we need something like a notification point or number over the burger menu icon when something is needed from the user". Turn into cash leaves Home: its card ("You received 120 USDT · Finish setting up · Turn into cash") sits at the top of Home's menu, above Activity, Guide and Settings, and the menu button carries a number while it waits (1 today; anything else that needs the user counts there too). Its tap goes to JAW's sheet and closes the menu; "It's cash now" opens over Home once it lands. Its state lives on Home (`useTurnIntoCash`), so closing the menu while JAW's sheet confirms loses nothing. The Top up sheet keeps its own Turn into cash card.
 
+## 2026-10-20 · A $0.50 fuel tank, filled from cash
+
+Adrian (2026-10-20): "a user needs to be able to fill up the fuel tank from cash when he needs to, and the tank should be 0.5 not 0.1". This supersedes the $0.10 of "the fuel tank" (config/risk.ts `CASH.feeBufferUsd`, 2026-10-15) and SPEC's fuel tank line.
+
+- **$0.50,** about fifty of the largest fees measured on Base. Every spend from cash leaves it in the wallet, as before. The $0.10 was set after $0.50 had left an account with $1.36 of cash and $4 owed unable to repay at all; that holds again for such an account, and filling up doesn't change it (the tank is part of the cash).
+- **What the tank shows is the wallet's USDC up to $0.50** (lib/fuelTank.ts `tankLevelUsd`), on Home's Cash card, the Cash sheet and Settings: each fee takes a little out, and a batch that moves no cash (an agent's settings, a turn-off) can only pay from it.
+- **Fill up:** one batch, savings back into the wallet up to a full tank plus two cents for its own fee (`fillTankPlan`, through useTx), in Settings whenever the tank isn't full, and in Home's menu while it's under half full, counted in the number over the menu button.
+

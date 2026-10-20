@@ -17,7 +17,7 @@ import { useFeeSupport } from "@/hooks/useFeeSupport";
 import type { PositionData } from "@/hooks/usePosition";
 import type { AgentStatus } from "@/lib/agents/status";
 import { aprToApy } from "@/lib/aave/math";
-import { fuelTankUsd } from "@/lib/cash";
+import { tankLevelUsd } from "@/lib/fuelTank";
 import { cashFromCreditUsd, owedBeside } from "@/lib/cashActivity";
 import { formatUsd } from "@/lib/formatting";
 import { earningLine, type ArrivedView } from "@/lib/cashSetup";
@@ -78,7 +78,7 @@ function CashAmount({ data, arrived, split }: { data: PositionData; arrived: Arr
 /** The cash that came from credit (cashFromCreditUsd, from Activity), or 0 until Activity is read. */
 function useFromCredit(account: `0x${string}`, data: PositionData) {
   const history = useActivity(account);
-  const spendable = Math.max(0, data.cashUsd - fuelTankUsd(data.cashUsd));
+  const spendable = Math.max(0, data.cashUsd - tankLevelUsd(data.cash.walletRaw));
   return history.isLoading || history.isError ? 0 : cashFromCreditUsd(history.rows, data.debtUsd, spendable);
 }
 
@@ -124,7 +124,7 @@ function EarnCardLive({
  * until Activity is read (or if it can't be), no credit row, and the rest is my cash.
  */
 function CashSplit({ account, data }: { account: `0x${string}`; data: PositionData }) {
-  const tank = fuelTankUsd(data.cashUsd);
+  const tank = tankLevelUsd(data.cash.walletRaw);
   const spendable = Math.max(0, data.cashUsd - tank);
   const credit = useFromCredit(account, data);
   return (

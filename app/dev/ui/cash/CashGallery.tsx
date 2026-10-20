@@ -7,7 +7,7 @@ import { TopUpSheetView } from "@/components/gg/cash/AddMoney";
 import { AgentsFeed } from "@/components/gg/Agents";
 import { BalanceHero, TodayChange } from "@/components/gg/home/BalanceHero";
 import { CashCard, CreditCard } from "@/components/gg/home/Cards";
-import { ArrivedCard, StartEarningCard } from "@/components/gg/cash/CashSetup";
+import { ArrivedCard, FuelTankCard, StartEarningCard } from "@/components/gg/cash/CashSetup";
 import { QuickAction } from "@/components/gg/home/QuickAction";
 import { TabHeader } from "@/components/gg/Screen";
 import { TabBar } from "@/components/gg/TabBar";
@@ -37,6 +37,7 @@ import { CashSheetDemo, SHEET_VIEWS, type SheetView } from "./CashSheetDemo";
  *   ?view=auto                    the menu open on "You received 120 USDT · Finish setting up": its one Face ID
  *                                 converts the next ones too
  *   ?view=done                    converted, with nothing to ask (no executor, or it already converts on its own)
+ *   ?view=tank                    the menu open on "Your fuel tank is low · $0.12 of $0.50 · Fill up", a 1 over it
  *   ?view=pay | pay-setup         the Top up sheet over Home, while the cash earns and before earning is set up
  *   ?view=activity                Activity with the cash's own events
  * The Cash sheet (CashSheetDemo), over Home:
@@ -69,7 +70,18 @@ const UNFAIR: ConvertQuote = {
 const ZERO_TX = `0x${"0".repeat(64)}` as const;
 const noop = () => toast("Dev gallery: nothing is signed");
 
-type View = "home" | "start" | "arriving" | "convert" | "auto" | "done" | "pay" | "pay-setup" | "activity" | SheetView;
+type View =
+  | "home"
+  | "start"
+  | "arriving"
+  | "convert"
+  | "auto"
+  | "done"
+  | "tank"
+  | "pay"
+  | "pay-setup"
+  | "activity"
+  | SheetView;
 const VIEWS: View[] = [
   "home",
   "start",
@@ -77,6 +89,7 @@ const VIEWS: View[] = [
   "convert",
   "auto",
   "done",
+  "tank",
   "pay",
   "pay-setup",
   "activity",
@@ -135,7 +148,7 @@ export function CashGallery() {
     ) : null;
   // Other dollars to turn into cash wait in the menu, with a number over its button (Adrian, 2026-10-20); the
   // conversion views open it.
-  const waits = arrived.kind === "ask" && view !== "done" && view !== "arriving";
+  const waits = arrived.kind === "ask" && view !== "done" && view !== "arriving" && view !== "tank";
   const card = waits ? (
     <ArrivedCard
       text={view === "convert" ? "120 USDT and 50 USDe" : arrived.text}
@@ -150,7 +163,15 @@ export function CashGallery() {
   return (
     <HomeFixture
       note={arrived.kind === "arriving" ? `${arrived.text} arriving` : undefined}
-      menu={{ top: card, waiting: waits ? 1 : 0, openFirst: view === "convert" || view === "auto" }}
+      menu={
+        view === "tank"
+          ? {
+              top: <FuelTankCard levelUsd={0.12} phase="idle" error={null} preview={false} onFill={noop} />,
+              waiting: 1,
+              openFirst: true,
+            }
+          : { top: card, waiting: waits ? 1 : 0, openFirst: view === "convert" || view === "auto" }
+      }
       cards={
         view === "home" && <StartEarningCard {...ARRIVED} phase="idle" error={null} preview={false} onStart={noop} />
       }
@@ -222,7 +243,7 @@ function HomeFixture({
       </section>
       <section className="flex flex-col gap-2.5 px-5 pt-[18px] empty:hidden">{cards}</section>
       <section className="grid grid-cols-2 gap-2.5 px-5 pt-[18px]">
-        <CashCard cashUsd={400} line="Fuel tank: $0.10" note={note} href="#" />
+        <CashCard cashUsd={400} line="Fuel tank: $0.50" note={note} href="#" />
         <CreditCard debtUsd={600} status="safe" monthlyCostUsd={3} availableUsd={800} href="#" />
       </section>
       <TabBar />
