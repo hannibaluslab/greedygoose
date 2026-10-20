@@ -209,6 +209,13 @@ describe("rebalanceChange (what Rebalance's Save puts in its batch)", () => {
     expect(c.settings.map((x) => fnOf(x.data))).toEqual([{ functionName: "setTopUps", args: [false, 500_000_000] }]);
   });
 
+  it("turns them off alone after Rebalance stopped: the setting only, no grant, earning untouched", () => {
+    const p = { ...base, topUps: { on: false, keepUsd: 500 }, topUpsChanged: true };
+    const c = rebalanceChange(user, p, { save: "off", capMaxRaw: maxUint160 })!;
+    expect(c.grants).toEqual([]);
+    expect(c.settings.map((x) => fnOf(x.data))).toEqual([{ functionName: "setTopUps", args: [false, 500_000_000] }]);
+  });
+
   it("puts the mix first, then top-ups, in the same batch", () => {
     const p = { ...base, mixChanged: true, topUps: { on: true, keepUsd: 0 }, topUpsChanged: true };
     const c = rebalanceChange(user, p, on)!;

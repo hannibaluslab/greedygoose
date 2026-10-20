@@ -176,6 +176,19 @@ const STATES: Record<string, Fixture> = {
     terms: null,
     topUps: { saved: OFF },
   },
+  "stopped-top-ups-on": {
+    title: "Stopped with top-ups still on: Turn on",
+    card: { status: "off", stoppedAt: -2 * DAY },
+    terms: null,
+    topUps: { saved: ON },
+  },
+  "stopped-top-ups-off": {
+    title: "Stopped, switching top-ups off: Save, the setting alone",
+    card: { status: "off", stoppedAt: -2 * DAY },
+    terms: null,
+    topUps: { saved: ON },
+    draftTopUps: { on: false, keepUsd: 500 },
+  },
   "ends-soon": {
     title: "Ends soon: Renew in the line",
     topUps: { saved: OFF },

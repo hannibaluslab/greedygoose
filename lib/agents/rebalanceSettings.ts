@@ -74,17 +74,26 @@ type SaveInput = {
   busy: boolean;
 };
 
+/** Top-ups once the executor's setting is read: what it has and what's on screen. Null before (nothing counts). */
+type ReadTopUps = { saved: TopUpsSetting; chosen: TopUpsChoice } | null;
+
+const readTopUpsOf = (p: SaveInput): ReadTopUps =>
+  p.configured && p.topUps?.saved ? { saved: p.topUps.saved, chosen: p.topUps.chosen } : null;
+
 /**
  * Whether saving takes a new grant: none yet; one capped below CAP_MAX, from before the Rebalancer had no amount limit;
- * a stock in the mix it can't sell yet; or top-ups switched on or off (`topUpsOn`, null while they don't count), since
- * the withdraw rides in the grant only while they're on.
+ * a stock in the mix it can't sell yet; or top-ups switched on or off (null while they don't count), since the withdraw
+ * rides in the grant only while they're on. While Rebalance isn't running (its grant ran out or was stopped), switching
+ * top-ups off alone takes none: it's the setting only (`setTopUps(false)`), so stopping Save counting them never makes
+ * the user turn Rebalance on.
  */
-function grantNeeded(p: SaveInput, topUpsOn: boolean | null): boolean {
+function grantNeeded(p: SaveInput, topUps: ReadTopUps, mixChanged: boolean): boolean {
+  if (!p.running && !mixChanged && topUps?.saved.on && !topUps.chosen.on) return false;
   const t = p.terms;
   if (!t) return true;
   if (p.capMaxRaw !== null && t.capRaw !== p.capMaxRaw) return true;
   if (p.weights.some((w, r) => w > 0 && !((t.limitsRaw?.[r] ?? 0n) > 0n))) return true;
-  return topUpsOn !== null && topUpsOn !== !!t.topUps;
+  return !!topUps && topUps.chosen.on !== !!t.topUps;
 }
 
 /** The app's own wait word: Save holds until the top-ups switch is read. */
@@ -98,12 +107,6 @@ function saveNote(p: SaveInput, whole: boolean, wait: { keepMissing: boolean; un
   if (wait.unread) return ONE_MOMENT;
   return wait.keepMissing ? "Enter an amount" : null;
 }
-
-/** Top-ups once the executor's setting is read: what it has and what's on screen. Null before (nothing counts). */
-type ReadTopUps = { saved: TopUpsSetting; chosen: TopUpsChoice } | null;
-
-const readTopUpsOf = (p: SaveInput): ReadTopUps =>
-  p.configured && p.topUps?.saved ? { saved: p.topUps.saved, chosen: p.topUps.chosen } : null;
 
 /**
  * What Save waits for: an amount in an empty Keep, or the switch's read while the grant running now carries top-ups
@@ -132,7 +135,7 @@ export function rebalanceSave(p: SaveInput): SavePlan {
   const mixChanged = p.configured && p.saved !== null && p.weights.some((w, r) => w !== p.saved![r]);
   const topUps = readTopUpsOf(p);
   const topUpsMoved = !!topUps && topUpsChanged(topUps.saved, topUps.chosen);
-  const needsGrant = p.configured && grantNeeded(p, topUps ? topUps.chosen.on : null);
+  const needsGrant = p.configured && grantNeeded(p, topUps, mixChanged);
   const steps = rebalanceSteps({ needsGrant, mixChanged, topUpsChanged: topUpsMoved }).length;
   const wait = waitsFor(p, topUps, needsGrant);
   const note = saveNote(p, whole, wait);

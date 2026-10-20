@@ -241,8 +241,8 @@ export function RebalanceSettingsView({
       {configured ? (
         <SaveArea
           plan={plan}
-          // "Turn on" while it's off: saving switches it on.
-          action={running ? "Save" : "Turn on"}
+          // "Turn on" while it's off and saving grants it, which switches it on; switching top-ups off alone is a Save.
+          action={running || !plan.needsGrant ? "Save" : "Turn on"}
           phase={phase}
           error={error ?? prepared.error}
           checking={prepared.checking}

@@ -322,6 +322,24 @@ describe("rebalanceSave: Top-ups go into my mix", () => {
     expect(rebalanceSave({ ...withWithdraw, ...waiting, topUps: { saved: on, chosen: on } }).keeps).toBeNull();
   });
 
+  it("switches top-ups off alone while Rebalance isn't running: the setting only, no grant", () => {
+    const stopped = { ...base, terms: null, running: false };
+    expect(rebalanceSave({ ...stopped, topUps: { saved: on, chosen: off } })).toMatchObject({
+      topUpsChanged: true,
+      needsGrant: false,
+      steps: 1,
+      canSave: true,
+      allows: null,
+    });
+    // Turning Rebalance on stays a grant: nothing changed, the mix changed too, or top-ups left on.
+    expect(rebalanceSave({ ...stopped, topUps: { saved: on, chosen: on } })).toMatchObject({ needsGrant: true });
+    expect(
+      rebalanceSave({ ...stopped, weights: [5_000, 0, 0, 0, 0, 2_500, 2_500], topUps: { saved: on, chosen: off } }),
+    ).toMatchObject({ needsGrant: true });
+    // Running, switching them off is still a new grant without the withdraw.
+    expect(rebalanceSave({ ...withWithdraw, topUps: { saved: on, chosen: off } })).toMatchObject({ needsGrant: true });
+  });
+
   it("puts a mix change and a top-ups change in the same batch", () => {
     const weights = [5_000, 0, 0, 0, 0, 2_500, 2_500];
     expect(
