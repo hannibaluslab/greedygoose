@@ -12,7 +12,7 @@ import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { statusFor } from "@/lib/risk/status";
 import { PROTOCOLS } from "@/lib/protocols/config";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
-import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
+import { executorAccountsAbi } from "@/lib/agents/abis/accounts";
 import { cashRaw, saveRuns, toUsd, type Cash } from "@/lib/cash";
 import { creditWith } from "@/lib/creditBuy";
 
@@ -102,7 +102,7 @@ export function usePosition(user: `0x${string}` | undefined) {
       { address: PROTOCOLS.AAVE_V3_POOL, abi: v3ReserveAbi, functionName: "getReserveData", args: [USDC.address] },
       // The Cash Agent's switches, once the executor is deployed: whether Save runs decides the keep-back.
       ...(GOOSE_EXECUTOR
-        ? [{ address: GOOSE_EXECUTOR, abi: gooseExecutorAbi, functionName: "accounts", args: [who] } as const]
+        ? [{ address: GOOSE_EXECUTOR, abi: executorAccountsAbi, functionName: "accounts", args: [who] } as const]
         : []),
     ] as const;
   }, [user]);

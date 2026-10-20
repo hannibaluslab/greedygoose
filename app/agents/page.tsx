@@ -246,8 +246,12 @@ function Agents({ address }: { address: `0x${string}` }) {
   const act = (action: "off" | "renew") => {
     if (blocked) return void toast(blocked);
     const plan = action === "off" ? offPlan : renewPlan;
-    // Shown on with nothing left to revoke: a turn-off this page sent is still on its way to Base.
-    if (!plan) return void toast(action === "off" ? "It’s turning off. This can take a moment." : "One moment…");
+    // No batch yet: still reading what it's built from, or, shown on with nothing left to revoke, a turn-off this page
+    // sent is still on its way to Base.
+    if (!plan) {
+      const sent = action === "off" && open !== null && agents.toTurnOff(AGENT_JOBS[open]) === 0;
+      return void toast(sent ? "It’s turning off. This can take a moment." : "One moment…");
+    }
     setTapped((t) => ({ ...t, [action]: open }));
     void (action === "off" ? turnOff.sign() : renew.sign());
   };
