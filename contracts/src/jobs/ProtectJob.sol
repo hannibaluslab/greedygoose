@@ -4,7 +4,7 @@ pragma solidity 0.8.28;
 import {GooseExecutor} from "../GooseExecutor.sol";
 import {IJustaPermissionManager as PM} from "../IJustaPermissionManager.sol";
 import {IAaveV3Pool, IERC20, ISpoke} from "../IProtocols.sol";
-import {CashRules, ProtectCase, Thresholds} from "../CashRules.sol";
+import {CashRules, ProtectCase, Thresholds, TopUps} from "../CashRules.sol";
 import {JobBase} from "./JobBase.sol";
 
 /// @title ProtectJob
@@ -46,24 +46,26 @@ library ProtectJob {
         GooseExecutor.Env memory e,
         GooseExecutor.Ctx memory c,
         GooseExecutor.Account storage acc,
-        mapping(uint256 => GooseExecutor.PoolUse) storage
+        mapping(address => TopUps) storage
     ) public view returns (GooseExecutor.Plan memory) {
         return _plan(e, c, acc.rescueAt != 0, permission(e, c.account, c.grant, c.salt, 0));
     }
 
     /// Plans, and repays when there is something to repay. A repay that leaves the credit under the target starts (or
-    /// keeps) the rescue; one that reaches it ends the rescue.
+    /// keeps) the rescue; one that reaches it ends the rescue. What it withdrew but didn't repay stays in the wallet as
+    /// the agents' own change, which Save never counts as a top-up (P1).
     function run(
         GooseExecutor.Env memory e,
         GooseExecutor.Ctx memory c,
         GooseExecutor.Account storage acc,
-        mapping(uint256 => GooseExecutor.PoolUse) storage
+        mapping(address => TopUps) storage topUps
     ) external returns (GooseExecutor.Plan memory p) {
         PM.Permission memory perm = permission(e, c.account, c.grant, c.salt, 0);
         p = _plan(e, c, acc.rescueAt != 0, perm);
         if (p.action != GooseExecutor.Action.Repay) return p;
-        (uint256 hfAfter, bool owes) = _repay(e, c.account, perm, p, c.thresholds.targetHf);
+        (uint256 hfAfter, bool owes, uint256 change) = _repay(e, c.account, perm, p, c.thresholds.targetHf);
         acc.rescueAt = JobBase.rescueAfter(acc.rescueAt, owes, hfAfter, c.thresholds.targetHf);
+        JobBase.addOwn(topUps[c.account], change);
     }
 
     /// A port of planGuardian (lib/guardian/plan.ts). Cheap reads first: most accounts owe nothing or are
@@ -115,14 +117,14 @@ library ProtectJob {
     }
 
     /// Savings → loan: withdraw to the account, approve the spoke, repay the account's own loan. Returns the health
-    /// after, and whether anything is still owed.
+    /// after, whether anything is still owed, and what the repay left in the wallet.
     function _repay(
         GooseExecutor.Env memory e,
         address account,
         PM.Permission memory perm,
         GooseExecutor.Plan memory p,
         uint256 targetHf
-    ) internal returns (uint256 hfAfter, bool owes) {
+    ) internal returns (uint256 hfAfter, bool owes, uint256 change) {
         uint256 debtBefore = e.spoke.getUserTotalDebt(e.usdcReserveId, account);
         uint256 savingsBefore = e.aUsdc.balanceOf(account);
         uint256 cashBefore = e.usdc.balanceOf(account);
@@ -146,7 +148,9 @@ library ProtectJob {
             revert GooseExecutor.SavingsMoved();
         }
         // If the debt was smaller than the amount, the spoke took less; the rest stays in the wallet for Save.
-        if (e.usdc.balanceOf(account) < cashBefore) revert GooseExecutor.CashLower();
+        uint256 cash = e.usdc.balanceOf(account);
+        if (cash < cashBefore) revert GooseExecutor.CashLower();
+        change = cash - cashBefore;
         emit GooseExecutor.ProtectRepaid(account, p.amount, p.hf, hfAfter, ProtectCase(p.reason));
     }
 }

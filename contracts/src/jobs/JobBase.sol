@@ -4,11 +4,12 @@ pragma solidity 0.8.28;
 import {GooseExecutor} from "../GooseExecutor.sol";
 import {IJustaPermissionManager as PM} from "../IJustaPermissionManager.sol";
 import {IAeroFactory, IAeroPool, IAeroRouter, IJustanAccount} from "../IProtocols.sol";
-import {CashRules} from "../CashRules.sol";
+import {CashRules, TopUps} from "../CashRules.sol";
 
 /// @title JobBase
 /// @notice What the executor and every job share: a permission's status, what is left of its limits, the stock
-///         limits Protect · sell and the Rebalancer pack into a grant's terms, and a stock pool's price.
+///         limits Protect · sell and the Rebalancer pack into a grant's terms, a stock pool's price, and the agents' own
+///         change that top-ups leave out.
 library JobBase {
     /// Most gas the manager's batch may use for one Cash move (one Protect batch measured at about 404k).
     uint256 internal constant ACCOUNT_GAS = 1_000_000;
@@ -58,6 +59,12 @@ library JobBase {
     /// Back at the target, give or take Aave's rounding (CashRules.RESCUE_DONE_GAP).
     function rescueDone(uint256 hf, uint256 targetHf) internal pure returns (bool) {
         return hf + CashRules.RESCUE_DONE_GAP >= targetHf;
+    }
+
+    /// Top-ups (P1): what an agent's move left in the wallet is its own change, which Save then puts into savings without
+    /// counting it as a top-up. Kept only while top-ups are on; turning them on starts it at the wallet's cash.
+    function addOwn(TopUps storage t, uint256 change) internal {
+        if (t.on && change > 0) t.own += change;
     }
 
     /// What's left of the current period's limit on spend `i`.

@@ -193,6 +193,46 @@ describe("rebalanceGrant (the Rebalancer, its own JAW grant)", () => {
     ).toThrow(/Rebalancer needs at least one/);
     expect(() => rebalanceGrant(0n, limits)).toThrow(/positive/);
   });
+
+  it("with top-ups, may also take savings out first, under an aUSDC limit at the same cap, a week each", () => {
+    expect(rebalanceGrant(500_000_000n, limits, true)).toEqual({
+      calls: [
+        { target: PROTOCOLS.AAVE_V3_POOL, selector: SEL.withdraw },
+        { target: nvda, selector: SEL.approve },
+        { target: tsla, selector: SEL.approve },
+        { target: USDC.address, selector: SEL.approve },
+        { target: AERODROME.ROUTER, selector: SEL.aeroSwap },
+      ],
+      spends: [
+        { token: USDC.address, allowance: "500000000", unit: "week" },
+        { token: PROTOCOLS.AUSDC, allowance: "500000000", unit: "week" },
+        { token: nvda, allowance: "250000000", unit: "week" },
+        { token: tsla, allowance: "100000000", unit: "week" },
+      ],
+    });
+    const p = rebalancePermission({
+      account,
+      spender: executor,
+      start: 1,
+      end: 2,
+      salt: 7n,
+      capRaw: 500_000_000n,
+      limitsRaw: limits,
+      topUps: true,
+    });
+    expect(p.calls[0]).toEqual({ target: PROTOCOLS.AAVE_V3_POOL, selector: SEL.withdraw, checker: zeroAddress });
+    expect(p.spends.map((s) => [s.token, s.unit, s.multiplier])).toEqual([
+      [USDC.address, PERIOD.Week, 1],
+      [PROTOCOLS.AUSDC, PERIOD.Week, 1],
+      [nvda, PERIOD.Week, 1],
+      [tsla, PERIOD.Week, 1],
+    ]);
+    expect(rebalancePermission({ ...p, capRaw: 500_000_000n, limitsRaw: limits })).toEqual({
+      ...p,
+      calls: p.calls.slice(1),
+      spends: [p.spends[0], ...p.spends.slice(2)],
+    });
+  });
 });
 
 describe("entryGrant (the Entry agent on Base, its own JAW grant)", () => {

@@ -63,7 +63,7 @@ abstract contract SellForkBase is ExecutorForkBase {
     function _sellOn(address a, uint256 t, uint160 cap) internal returns (PM.Permission memory p) {
         p = _sellPermission(a, t, cap);
         _grantThroughAccount(p);
-        x.register(GooseExecutor.Job.ProtectSell, a, p.start, p.end, p.salt, cap, t);
+        x.registerApproved(abi.encode(p));
     }
 
     function _sellPermission(address a, uint256 t) internal returns (PM.Permission memory) {
@@ -595,20 +595,17 @@ contract ProtectSellForkTest is SellForkBase {
 
     // ================================================================== registration
 
+    /// Registration reads the job and its terms from the approved permission itself, so a grant can only register as
+    /// the job whose template it is, with the limits it carries; a stock limit past its bound refuses it.
     function test_registration_checks_the_stock_limits() public {
         address a = _newJawAccount("a");
-        PM.Permission memory p = _sellPermission(a, _limits(NVDA, 5e8));
-        _grantThroughAccount(p);
-        vm.expectRevert(GooseExecutor.BadTerms.selector);
-        x.register(GooseExecutor.Job.ProtectSell, a, p.start, p.end, p.salt, 1_000e6, 0);
-        vm.expectRevert(GooseExecutor.BadTerms.selector);
-        x.register(GooseExecutor.Job.Protect, a, p.start, p.end, p.salt, 1_000e6, _limits(NVDA, 5e8));
-
         // $2,290 of NVIDIA a day: more than two $1,000 caps at Aave's price.
         PM.Permission memory big = _sellPermission(a, _limits(NVDA, 10e8));
         _grantThroughAccount(big);
-        vm.expectRevert(GooseExecutor.BadTerms.selector);
-        x.register(GooseExecutor.Job.ProtectSell, a, big.start, big.end, big.salt, 1_000e6, _limits(NVDA, 10e8));
+        (bool refused,,,) = x.registrationOf(abi.encode(big));
+        assertFalse(refused, "past its bound: not a grant of ours");
+        vm.expectRevert(GooseExecutor.NotApproved.selector);
+        x.registerApproved(abi.encode(big));
 
         vm.recordLogs();
         _grantThroughAccount(_sellPermission(a, _limits(NVDA, 4e8)));

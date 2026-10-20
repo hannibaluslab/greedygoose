@@ -6,6 +6,7 @@ import {console} from "forge-std/console.sol";
 import {GooseExecutor} from "../src/GooseExecutor.sol";
 import {IAeroFactory, IAeroPool, IAeroRouter} from "../src/IProtocols.sol";
 import {ProtectCase, Thresholds} from "../src/CashRules.sol";
+import {RebalanceJob} from "../src/jobs/RebalanceJob.sol";
 import {DeployExecutor} from "../script/DeployExecutor.s.sol";
 import {ExecutorHarness} from "./ExecutorHarness.sol";
 import {FakeAccount} from "./FakeAccount.sol";
@@ -55,8 +56,20 @@ abstract contract ExecutorForkBase is ForkBase {
         _register(job, p, cap);
     }
 
-    function _register(GooseExecutor.Job job, PM.Permission memory p, uint160 cap) internal {
-        x.register(job, p.account, p.start, p.end, p.salt, cap, 0);
+    /// The way the app registers (lib/agents/register.ts): the permission as approved, abi-encoded. The executor finds
+    /// the job and the cap in it.
+    function _register(GooseExecutor.Job, PM.Permission memory p, uint160) internal {
+        x.registerApproved(abi.encode(p));
+    }
+
+    /// The account's job switches (`Account.jobs`).
+    function _jobs(address account) internal view returns (uint8 jobs) {
+        (jobs,,,,,,,,,) = x.accounts(account);
+    }
+
+    /// The cap the account's stored grant for `job` carries.
+    function _cap(address account, GooseExecutor.Job job) internal view returns (uint160) {
+        return x.permissionOf(account, job).spends[0].allowance;
     }
 
     /// $100 of savings and credit at health 1.02, under Protect's line, with Protect on.
@@ -86,8 +99,9 @@ abstract contract ExecutorForkBase is ForkBase {
         uint48 start = uint48(vm.getBlockTimestamp());
         GooseExecutor.Grant memory g = GooseExecutor.Grant(start, start + 365 days, 5e6);
         uint256 salt = uint256(keccak256(abi.encode(++salts)));
-        _grantThroughAccount(x.permissionFor(GooseExecutor.Job.ProtectSell, account, g, salt, t));
-        x.register(GooseExecutor.Job.ProtectSell, account, g.start, g.end, salt, g.cap, t);
+        PM.Permission memory p = x.permissionFor(GooseExecutor.Job.ProtectSell, account, g, salt, t);
+        _grantThroughAccount(p);
+        x.registerApproved(abi.encode(p));
     }
 
     function _withSavings(address account, uint256 amount) internal {
@@ -179,9 +193,8 @@ contract GooseExecutorForkTest is ExecutorForkBase {
         vm.prank(attacker); // anyone: it moves no money and checks everything
         x.registerApproved(approved);
 
-        (uint8 jobs,, GooseExecutor.Grant memory protect,,) = x.jobsOf(alice);
-        assertEq(jobs, 2);
-        assertEq(protect.cap, 5e6);
+        assertEq(_jobs(alice), 2);
+        assertEq(_cap(alice, GooseExecutor.Job.Protect), 5e6);
         assertEq(x.memberCount(), 1);
         assertEq(x.protectMemberCount(), 1, "on the Protect list");
         assertEq(abi.encode(x.permissionOf(alice, GooseExecutor.Job.Protect)), abi.encode(p), "rebuilt exactly");
@@ -221,6 +234,9 @@ contract GooseExecutorForkTest is ExecutorForkBase {
         assertFalse(_includes(onPrice, bob), "Save alone isn't scanned on a price update");
     }
 
+    /// Registration takes the permission as approved: one that isn't an exact grant of ours (a cap of 0 or past
+    /// CAP_MAX, a window that's empty or over, a limit or a job she didn't sign) is refused as not approved before
+    /// anything else; one that is goes through each on-chain check with its own error.
     function test_registration_checks_every_condition_with_its_own_error() public {
         address alice = _newJawAccount("alice");
         PM.Permission memory p = _permission(alice, GooseExecutor.Job.Save, 5e6);
@@ -238,20 +254,22 @@ contract GooseExecutorForkTest is ExecutorForkBase {
         _register(GooseExecutor.Job.Save, p, 5e6);
 
         p.account = alice;
-        uint160 tooMuch = x.CAP_MAX() + 1;
-        vm.expectRevert(GooseExecutor.CapOutOfBounds.selector);
-        _register(GooseExecutor.Job.Save, p, 0);
-        vm.expectRevert(GooseExecutor.CapOutOfBounds.selector);
-        _register(GooseExecutor.Job.Save, p, tooMuch);
+        uint160[3] memory caps = [0, x.CAP_MAX() + 1, 4e6]; // none, past CAP_MAX, not the limit Alice signed
+        for (uint256 i; i < caps.length; ++i) {
+            p.spends[0].allowance = caps[i];
+            vm.expectRevert(GooseExecutor.NotApproved.selector);
+            _register(GooseExecutor.Job.Save, p, caps[i]);
+        }
+        p.spends[0].allowance = 5e6;
+        PM.Permission memory protect = _permission(alice, GooseExecutor.Job.Protect, 5e6);
+        (protect.start, protect.end, protect.salt) = (p.start, p.end, p.salt);
         vm.expectRevert(GooseExecutor.NotApproved.selector);
-        _register(GooseExecutor.Job.Save, p, 4e6); // not the limit Alice signed
-        vm.expectRevert(GooseExecutor.NotApproved.selector);
-        _register(GooseExecutor.Job.Protect, p, 5e6); // not the job she signed
+        _register(GooseExecutor.Job.Protect, protect, 5e6); // not the job she signed
 
         uint48 start = p.start;
         p.start = p.end;
-        vm.expectRevert(GooseExecutor.BadWindow.selector);
-        _register(GooseExecutor.Job.Save, p, 5e6);
+        vm.expectRevert(GooseExecutor.NotApproved.selector);
+        _register(GooseExecutor.Job.Save, p, 5e6); // an empty window
         p.start = start;
 
         _register(GooseExecutor.Job.Save, p, 5e6);
@@ -260,8 +278,8 @@ contract GooseExecutorForkTest is ExecutorForkBase {
         assertEq(vm.getRecordedLogs().length, 0, "the same grant again changes nothing");
 
         vm.warp(p.end + 1);
-        vm.expectRevert(GooseExecutor.BadWindow.selector);
-        _register(GooseExecutor.Job.Save, p, 5e6);
+        vm.expectRevert(GooseExecutor.NotApproved.selector);
+        _register(GooseExecutor.Job.Save, p, 5e6); // over
     }
 
     function test_an_older_grant_cannot_replace_a_newer_one() public {
@@ -275,8 +293,7 @@ contract GooseExecutorForkTest is ExecutorForkBase {
         _register(GooseExecutor.Job.Save, newer, 2e6);
         vm.expectRevert(GooseExecutor.StaleGrant.selector);
         _register(GooseExecutor.Job.Save, older, 5e6);
-        (, GooseExecutor.Grant memory save,,,) = x.jobsOf(alice);
-        assertEq(save.cap, 2e6);
+        assertEq(_cap(alice, GooseExecutor.Job.Save), 2e6);
     }
 
     function test_after_a_revoke_the_job_goes_off_and_a_new_grant_brings_it_back() public {
@@ -294,9 +311,8 @@ contract GooseExecutorForkTest is ExecutorForkBase {
 
         vm.warp(vm.getBlockTimestamp() + 1);
         _turnOn(alice, GooseExecutor.Job.Save, 3e6);
-        (uint8 jobs, GooseExecutor.Grant memory save,,,) = x.jobsOf(alice);
-        assertEq(jobs, 1);
-        assertEq(save.cap, 3e6);
+        assertEq(_jobs(alice), 1);
+        assertEq(_cap(alice, GooseExecutor.Job.Save), 3e6);
         assertEq(x.memberCount(), 1, "still one member");
     }
 
@@ -310,20 +326,20 @@ contract GooseExecutorForkTest is ExecutorForkBase {
         x.pause();
         _grantThroughAccount(p);
         x.registerApproved(abi.encode(p));
-        (uint8 jobs,,,,) = x.jobsOf(alice);
-        assertEq(jobs, 2, "registered while paused");
+        assertEq(_jobs(alice), 2, "registered while paused");
     }
 
     /// GooseExecutor.md §3: the app's grant (lib/agents/permissions.ts, hashed in scripts/agent-vectors.ts) and the
     /// executor's template give the same manager hash on 50 random inputs per kind: the Cash Agent's jobs, Protect ·
-    /// sell and the Rebalancer with their stock limits, and Entry. And the registration the app sends for each kind's
-    /// first input (lib/agents/register.ts) is abi.encode of that same template, what registerApproved decodes.
+    /// sell and the Rebalancer with their stock limits, Entry, and the Rebalancer with top-ups. And the registration the
+    /// app sends for each kind's first input (lib/agents/register.ts) is abi.encode of that same template, what
+    /// registerApproved decodes.
     function test_templates_hash_like_the_apps_builder() public {
         vm.etch(Vectors.HASH_SPENDER, address(x).code);
         ExecutorHarness h = ExecutorHarness(Vectors.HASH_SPENDER);
         string memory json = vm.readFile("test/vectors/permissions.json");
         bytes[] memory registrations = vm.parseJsonBytesArray(json, ".registrations");
-        assertEq(registrations.length, 4);
+        assertEq(registrations.length, 5);
         bytes32[] memory hashes = vm.parseJsonBytes32Array(json, ".hashes");
         assertEq(hashes.length, 50);
         for (uint256 i; i < hashes.length; ++i) {
@@ -371,6 +387,20 @@ contract GooseExecutorForkTest is ExecutorForkBase {
             );
             assertEq(MANAGER.getHash(p), entryHashes[i], string.concat("entry vector ", vm.toString(i)));
             if (i == 0) assertEq(abi.encode(p), registrations[3], "the app's entry registration");
+        }
+        bytes32[] memory topUpsHashes = vm.parseJsonBytes32Array(json, ".rebalanceTopUpsHashes");
+        assertEq(topUpsHashes.length, 50);
+        for (uint256 i; i < topUpsHashes.length; ++i) {
+            Vectors.RebalanceHash memory v = Vectors.rebalanceHashInput(i);
+            uint256 t = RebalanceJob.TOP_UPS;
+            for (uint256 r; r < 7; ++r) {
+                t |= v.limits[r] / 1e4 << (32 * r);
+            }
+            PM.Permission memory p = h.permissionFor(
+                GooseExecutor.Job.Rebalance, v.account, GooseExecutor.Grant(v.start, v.end, v.cap), v.salt, t
+            );
+            assertEq(MANAGER.getHash(p), topUpsHashes[i], string.concat("top-ups vector ", vm.toString(i)));
+            if (i == 0) assertEq(abi.encode(p), registrations[4], "the app's registration with top-ups");
         }
     }
 
@@ -627,7 +657,7 @@ contract GooseExecutorForkTest is ExecutorForkBase {
         _run(work);
 
         assertGt(SPOKE.getUserAccountData(alice).healthFactor, 1.11e18, "alice repaid");
-        (,,, uint8 fails, uint48 cooldownUntil) = x.jobsOf(address(fake));
+        (,, uint8 fails, uint48 cooldownUntil,,,,,,) = x.accounts(address(fake));
         assertEq(fails, 1);
         assertEq(cooldownUntil, vm.getBlockTimestamp() + 10 minutes);
         assertEq(_check().length, 0, "the fake one cools down");

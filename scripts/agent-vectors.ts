@@ -15,6 +15,7 @@ import { planEntry, type EntryCoin } from "@/lib/agents/rules/entry";
 import { inWeekendWindow, planProtect, planSave } from "@/lib/agents/rules/protect";
 import { planRebalance, rebalanceTrades, type RebalanceHolding } from "@/lib/agents/rules/rebalance";
 import { planSell, sellAmounts, sellsNow, type SellBook } from "@/lib/agents/rules/protectSell";
+import { investTrades, topUpCounted, topUpInvested, topUpsReady, type TopUpsState } from "@/lib/agents/rules/topUps";
 import { marketState } from "@/lib/market-hours";
 import {
   agentPermission,
@@ -47,6 +48,7 @@ const between = (r: bigint, lo: bigint, hi: bigint) => lo + (r % (hi - lo + 1n))
 /** A wide spread of magnitudes: (1 to 9) × 10^(lo to hi). */
 const spread = (r1: bigint, r2: bigint, lo: bigint, hi: bigint) => (1n + (r1 % 9n)) * 10n ** between(r2, lo, hi);
 const ceilDiv = (a: bigint, b: bigint) => (a === 0n ? 0n : (a - 1n) / b + 1n);
+const sub = (a: bigint, b: bigint) => (a > b ? a - b : 0n);
 const toFloat = (v: bigint, unit: bigint) => Number(v) / Number(unit);
 const hex = (bytes: number[]) => toHex(Uint8Array.from(bytes));
 
@@ -63,6 +65,8 @@ export const SELL_COUNT = 600;
 export const TIMING_COUNT = 1000;
 export const REBALANCE_COUNT = 800;
 export const ENTRY_COUNT = 1000;
+export const INVEST_COUNT = 600;
+export const TOPUPS_COUNT = 1000;
 /** Where Vectors.sol's hash test puts the executor, so both sides know the spender. */
 export const HASH_SPENDER: Address = "0x0000000000000000000000000000000000600dE5";
 
@@ -203,6 +207,61 @@ export function rebalanceInput(i: number) {
     floorBps: between(r(27), 10n, 300n),
     minTradeRaw: between(r(28), 10n ** 6n, 100n * 10n ** 6n),
     maxSliceRaw: between(r(29), 100n * 10n ** 6n, 50_000n * 10n ** 6n),
+  };
+}
+
+/** Top-ups' buys: the Rebalancer's book and options from `rebalanceInput`, and an amount from $1 to $90k. A tenth of the
+ *  mixes hold nothing yet, and a fifth sit on target ($10k at their weights). Mirrors Vectors.investInput. */
+export function investInput(i: number) {
+  const r = (f: number) => rand("invest", i, f);
+  const v = rebalanceInput(i);
+  const empty = r(2) % 10n === 0n;
+  const onTarget = r(3) % 5n === 0n;
+  const stocks = v.book.stocks.map((h) =>
+    empty
+      ? { ...h, sharesRaw: 0n }
+      : onTarget && h.weightBps > 0n
+        ? { ...h, sharesRaw: (((10n ** 10n * h.weightBps) / 10_000n) * 10n ** 10n) / h.price }
+        : h,
+  );
+  return { ...v, book: { ...v.book, stocks }, amountRaw: spread(r(0), r(1), 6n, 10n) };
+}
+
+/** Top-ups' counts: a state with Keep, what's ready and today, the mark and the agents' own change each 0 some of the
+ *  time; then a save that finds savings at, under or over the mark, on the same day or the next; then a check on that
+ *  day or the next with savings at, under or over the count's, and an invest of 0 to 100% of what's ready, with Aave's
+ *  rounding. Mirrors Vectors.topUpsInput. */
+export function topUpsInput(i: number) {
+  const r = (f: number) => rand("topups", i, f);
+  const some = (k: number, odds: bigint, lo: bigint, hi: bigint) =>
+    r(k) % odds === 0n ? 0n : spread(r(k + 1), r(k + 2), lo, hi);
+  const t: TopUpsState = {
+    day: 20_000 + Number(r(0) % 3n),
+    keepRaw: some(1, 4n, 6n, 10n),
+    readyRaw: some(4, 3n, 5n, 10n),
+    todayRaw: some(7, 3n, 5n, 10n),
+    markRaw: some(10, 5n, 6n, 11n),
+    ownRaw: some(13, 2n, 3n, 8n),
+  };
+  const near = (at: bigint, k: number) => {
+    const move = spread(r(k + 1), r(k + 2), 4n, 10n);
+    const kind = r(k) % 3n;
+    return kind === 0n ? at : kind === 1n ? sub(at, move) : at + move;
+  };
+  const countDay = t.day + Number(r(16) % 2n);
+  const beforeRaw = near(t.markRaw, 17);
+  const savedRaw = spread(r(20), r(21), 5n, 10n);
+  const savingsRaw = sub(beforeRaw + savedRaw, r(22) % 3n);
+  return {
+    t,
+    countDay,
+    beforeRaw,
+    savedRaw,
+    savingsRaw,
+    checkDay: countDay + Number(r(23) % 2n),
+    checkSavingsRaw: near(savingsRaw, 24),
+    investPct: r(27) % 101n,
+    roundingRaw: r(28) % 3n,
   };
 }
 
@@ -408,6 +467,58 @@ function rebalanceVectors() {
   return { counts: hex(counts), planned: hex(planned), reserves: hex(reserves), buys: hex(buys), amountIns, minOuts };
 }
 
+/** What investTrades decides for each input, flattened: every trade is a buy. */
+function investVectors() {
+  const counts: number[] = [];
+  const reserves: number[] = [];
+  const amountIns: string[] = [];
+  const minOuts: string[] = [];
+  for (let i = 0; i < INVEST_COUNT; i++) {
+    const v = investInput(i);
+    const trades = investTrades(v.book, v.amountRaw, v);
+    counts.push(trades.length);
+    for (const t of trades) {
+      reserves.push(t.reserveId);
+      amountIns.push(t.amountIn.toString());
+      minOuts.push(t.minOut.toString());
+    }
+  }
+  return { counts: hex(counts), reserves: hex(reserves), amountIns, minOuts };
+}
+
+/** For each input: Save's count (what it counted, and the state after), then the check's ready amount, then the state
+ *  after it invests. */
+function topUpsVectors() {
+  const out = {
+    counted: [] as string[],
+    countReady: [] as string[],
+    countToday: [] as string[],
+    countMark: [] as string[],
+    countOwn: [] as string[],
+    ready: [] as string[],
+    investReady: [] as string[],
+    investToday: [] as string[],
+    investMark: [] as string[],
+  };
+  for (let i = 0; i < TOPUPS_COUNT; i++) {
+    const v = topUpsInput(i);
+    const a = topUpCounted(v.t, v.countDay, v.beforeRaw, v.savedRaw, v.savingsRaw);
+    const b = topUpsReady(a.state, v.checkDay, v.checkSavingsRaw);
+    const investRaw = (b.readyRaw * v.investPct) / 100n;
+    const c = topUpInvested(b.state, investRaw, sub(v.checkSavingsRaw, investRaw + v.roundingRaw));
+    out.counted.push(a.countedRaw.toString());
+    out.countReady.push(a.state.readyRaw.toString());
+    out.countToday.push(a.state.todayRaw.toString());
+    out.countMark.push(a.state.markRaw.toString());
+    out.countOwn.push(a.state.ownRaw.toString());
+    out.ready.push(b.readyRaw.toString());
+    out.investReady.push(c.readyRaw.toString());
+    out.investToday.push(c.todayRaw.toString());
+    out.investMark.push(c.markRaw.toString());
+  }
+  return out;
+}
+
 /** What planEntry decides for each input: the coin (255 for none), what it swaps and the floor. */
 function entryVectors() {
   const indexes: number[] = [];
@@ -540,8 +651,36 @@ function hashVectors() {
       ),
     );
   }
+  // The Rebalancer with top-ups: the same inputs, with the savings withdraw and the aUSDC limit.
+  const rebalanceTopUpsHashes = [];
+  for (let i = 0; i < HASH_COUNT; i++) {
+    const v = rebalanceHashInput(i);
+    rebalanceTopUpsHashes.push(
+      hashed(
+        i,
+        rebalancePermission({
+          account: v.account,
+          spender: HASH_SPENDER,
+          start: Number(v.start),
+          end: Number(v.end),
+          salt: v.salt,
+          capRaw: v.cap,
+          limitsRaw: v.limitsRaw,
+          topUps: true,
+        }),
+      ),
+    );
+  }
   const registrations = firsts.map(encodePermission);
-  return { spender: HASH_SPENDER, hashes, sellHashes, rebalanceHashes, entryHashes, registrations };
+  return {
+    spender: HASH_SPENDER,
+    hashes,
+    sellHashes,
+    rebalanceHashes,
+    entryHashes,
+    rebalanceTopUpsHashes,
+    registrations,
+  };
 }
 
 /** config/risk.ts in on-chain units: the executor's deploy defaults must match. */
@@ -589,6 +728,8 @@ export function agentVectors(): Record<string, unknown> {
     "calendar.json": calendarVectors(),
     "sell.json": sellVectors(),
     "rebalance.json": rebalanceVectors(),
+    "invest.json": investVectors(),
+    "topups.json": topUpsVectors(),
     "entry.json": entryVectors(),
     "permissions.json": hashVectors(),
     "defaults.json": defaultsVector(),

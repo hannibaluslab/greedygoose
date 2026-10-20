@@ -112,11 +112,9 @@ abstract contract OneTapGrantForkBase is ForkBase {
     function _assertSaveOn(address a, PM.Permission memory p) internal view {
         assertTrue(MANAGER.isApproved(p), "approved in JAW's manager");
         assertFalse(MANAGER.isRevoked(p));
-        (uint8 jobs, GooseExecutor.Grant memory save,,,) = x.jobsOf(a);
+        (uint8 jobs,,,,,,,,,) = x.accounts(a);
         assertEq(jobs, 1, "Save on, nothing else");
-        assertEq(save.cap, cap);
-        assertEq(save.start, p.start);
-        assertEq(save.end, p.end);
+        // The registry holds the grant: its cap, start, end and salt rebuild the approved permission exactly.
         assertEq(abi.encode(x.permissionOf(a, GooseExecutor.Job.Save)), abi.encode(p), "the registry holds the grant");
     }
 
@@ -282,7 +280,7 @@ contract OneTapGrantForkTest is OneTapGrantForkBase {
 
     function _assertNothingHappened(address a, PM.Permission memory p) internal view {
         assertFalse(MANAGER.isApproved(p), "not approved");
-        (uint8 jobs,,,,) = x.jobsOf(a);
+        (uint8 jobs,,,,,,,,,) = x.accounts(a);
         assertEq(jobs, 0, "not registered");
         assertEq(x.memberCount(), 0);
         assertEq(AUSDC.balanceOf(a), 0, "nothing in savings");

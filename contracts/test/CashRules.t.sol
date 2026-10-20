@@ -2,11 +2,12 @@
 pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
-import {Amounts, CashRules, ProtectCase, SaveCase, Thresholds} from "../src/CashRules.sol";
+import {Amounts, CashRules, ProtectCase, SaveCase, Thresholds, TopUps} from "../src/CashRules.sol";
 import {Vectors} from "./Vectors.sol";
 
-/// The Solidity rules against the TypeScript reference (planGuardian and planSave in lib/guardian/plan.ts), on the
-/// vectors scripts/agent-vectors.ts exported, plus properties that hold for any input.
+/// The Solidity rules against the TypeScript reference (planGuardian and planSave in lib/guardian/plan.ts, and the
+/// top-ups' counts in lib/agents/rules/topUps.ts), on the vectors scripts/agent-vectors.ts exported, plus properties that
+/// hold for any input.
 contract CashRulesTest is Test {
     uint256 constant CENT = 10_000; // USDC units
 
@@ -171,6 +172,170 @@ contract CashRulesTest is Test {
         (, uint256 amount) = CashRules.protectAmount(why, need, debt, 1_000e6, type(uint128).max, 0.05e6);
         assertApproxEqAbs(amount, 113.795519e6, 1, "$113.80");
         assertApproxEqAbs(power * 1e18 / (debt - amount * 1e20), 1.12e18, 1e9, "back to 1.12");
+    }
+
+    // ================================================================== top-ups (P1, P4, Keep, the day)
+
+    /// What the TypeScript rule decided, per vector (topups.json).
+    struct TopUpsWant {
+        uint256[] counted;
+        uint256[] countReady;
+        uint256[] countToday;
+        uint256[] countMark;
+        uint256[] countOwn;
+        uint256[] ready;
+        uint256[] investReady;
+        uint256[] investToday;
+        uint256[] investMark;
+    }
+
+    /// Save's count, the check's ready amount and the state after an invest, against topUpCounted, topUpsReady and
+    /// topUpInvested on 1,000 vectors.
+    function test_top_ups_agree_with_the_typescript_rule() public view {
+        string memory json = vm.readFile("test/vectors/topups.json");
+        TopUpsWant memory w;
+        w.counted = vm.parseJsonUintArray(json, ".counted");
+        w.countReady = vm.parseJsonUintArray(json, ".countReady");
+        w.countToday = vm.parseJsonUintArray(json, ".countToday");
+        w.countMark = vm.parseJsonUintArray(json, ".countMark");
+        w.countOwn = vm.parseJsonUintArray(json, ".countOwn");
+        w.ready = vm.parseJsonUintArray(json, ".ready");
+        w.investReady = vm.parseJsonUintArray(json, ".investReady");
+        w.investToday = vm.parseJsonUintArray(json, ".investToday");
+        w.investMark = vm.parseJsonUintArray(json, ".investMark");
+        assertEq(w.counted.length, 1000);
+        uint256 some;
+        uint256 trimmed;
+        for (uint256 i; i < w.counted.length; ++i) {
+            Vectors.TopUpsCase memory v = Vectors.topUpsInput(i);
+            _checkTopUps(i, v, w);
+            if (w.counted[i] > 0) ++some;
+            if (w.counted[i] > 0 && w.counted[i] < v.saved) ++trimmed;
+        }
+        assertGt(some, 400, "most saves count");
+        assertGt(trimmed, 100, "Keep, the agents' change and falls take their share");
+    }
+
+    function _checkTopUps(uint256 i, Vectors.TopUpsCase memory v, TopUpsWant memory w) internal pure {
+        string memory at = string.concat("vector ", vm.toString(i));
+        TopUps memory t = v.t;
+        assertEq(CashRules.topUpCounted(t, v.countDay, v.before, v.saved, v.savings), w.counted[i], at);
+        assertEq(t.ready, w.countReady[i], at);
+        assertEq(t.today, w.countToday[i], at);
+        assertEq(t.mark, w.countMark[i], at);
+        assertEq(t.own, w.countOwn[i], at);
+        uint256 got = CashRules.topUpsReady(t, v.checkDay, v.checkSavings);
+        assertEq(got, w.ready[i], at);
+        uint256 invest = got * v.investPct / 100;
+        uint256 left = v.checkSavings > invest + v.rounding ? v.checkSavings - invest - v.rounding : 0;
+        CashRules.topUpInvested(t, invest, left);
+        assertEq(t.ready, w.investReady[i], at);
+        assertEq(t.today, w.investToday[i], at);
+        assertEq(t.mark, w.investMark[i], at);
+    }
+
+    /// Keep fills first: $300 in savings, Keep $500, a $400 top-up counts $200. Then a $1,000 one counts it all.
+    function test_a_top_up_fills_keep_first() public pure {
+        TopUps memory t = _topUps(500e6);
+        assertEq(CashRules.topUpCounted(t, DAY, 300e6, 400e6, 700e6), 200e6);
+        assertEq(CashRules.topUpCounted(t, DAY, 700e6, 1_000e6, 1_700e6), 1_000e6);
+        assertEq(t.today, 1_200e6);
+        t = _topUps(0);
+        assertEq(CashRules.topUpCounted(t, DAY, 0, 400e6, 400e6), 400e6, "Keep $0: all of it");
+    }
+
+    /// P1: the agents' own change in what Save puts away is left out exactly, then counting goes on.
+    function test_the_agents_own_change_is_never_a_top_up() public pure {
+        TopUps memory t = _topUps(0);
+        t.own = 5e6;
+        assertEq(CashRules.topUpCounted(t, DAY, 1_000e6, 3e6, 1_003e6), 0, "Protect's $3 of change");
+        assertEq(t.own, 2e6);
+        assertEq(CashRules.topUpCounted(t, DAY, 1_003e6, 300e6, 1_303e6), 298e6, "the rest of the change, then $298");
+        assertEq(t.own, 0);
+    }
+
+    /// The day guard: what's counted today isn't ready until the next New York day.
+    function test_a_top_up_never_goes_in_the_day_it_arrived() public pure {
+        TopUps memory t = _topUps(0);
+        CashRules.topUpCounted(t, DAY, 0, 300e6, 300e6);
+        TopUps memory same = _copy(t);
+        assertEq(CashRules.topUpsReady(same, DAY, 300e6), 0, "the same day: waits");
+        assertEq(CashRules.topUpsReady(t, DAY + 3, 300e6), 300e6, "the next market day (Friday to Monday too)");
+    }
+
+    /// P4: a fall in savings after a count comes out of what's waiting, what's ready first; a rise never adds to it.
+    function test_a_fall_comes_out_of_what_is_waiting_and_a_rise_never_adds() public pure {
+        TopUps memory t = _topUps(0);
+        CashRules.topUpCounted(t, DAY, 1_000e6, 300e6, 1_300e6); // ready tomorrow
+        CashRules.topUpCounted(t, DAY + 1, 1_300e6, 200e6, 1_500e6); // today
+        assertEq(abi.encode(t.ready, t.today), abi.encode(uint56(300e6), uint56(200e6)));
+        TopUps memory risen = _copy(t);
+        assertEq(CashRules.topUpsReady(risen, DAY + 1, 9_000e6), 300e6, "a rise (a sale into savings) adds nothing");
+        assertEq(CashRules.topUpsReady(t, DAY + 1, 1_100e6), 0, "a $400 fall: the $300 ready first");
+        assertEq(t.today, 100e6, "then $100 of today's");
+        assertEq(t.mark, 1_100e6);
+    }
+
+    /// The P4 example: top up $300, spend $300 (seen by Save's next look), then a sale's $300 lands in savings: nothing
+    /// of the sale goes in.
+    function test_spent_then_refilled_by_a_sale_invests_nothing() public pure {
+        TopUps memory t = _topUps(0);
+        CashRules.topUpCounted(t, DAY, 1_000e6, 300e6, 1_300e6);
+        CashRules.topUpCounted(t, DAY, 1_000e6, 5e6, 1_005e6); // the $300 spent, then $5 arrives
+        assertEq(uint256(t.today), 5e6);
+        assertEq(CashRules.topUpsReady(t, DAY + 1, 1_305e6), 5e6, "the sale's $300 isn't a top-up");
+    }
+
+    /// After an invest, what's ready drops by it and the invest's own fall isn't read as one.
+    function test_an_invest_comes_out_of_what_is_ready() public pure {
+        TopUps memory t = _topUps(500e6);
+        CashRules.topUpCounted(t, DAY, 500e6, 1_000e6, 1_500e6);
+        assertEq(CashRules.topUpsReady(t, DAY + 1, 1_500e6), 1_000e6);
+        CashRules.topUpInvested(t, 700e6, 800e6 - 2); // Aave's rounding
+        assertEq(t.ready, 300e6 - 2, "within savings above Keep");
+        assertEq(CashRules.topUpsReady(t, DAY + 1, 800e6 - 2), 300e6 - 2, "no fall read from the invest");
+    }
+
+    /// Up to $1B a number: USDC's whole supply is under 2^56 units, so the counts never pass their 56 bits.
+    function testFuzz_what_waits_never_passes_savings_above_keep(
+        uint256 keep,
+        uint256 ready,
+        uint256 today,
+        uint256 mark,
+        uint256 before,
+        uint256 saved,
+        uint256 checkSavings
+    ) public pure {
+        TopUps memory t = TopUps(
+            true,
+            uint32(DAY),
+            uint48(bound(keep, 0, 1e15)),
+            uint56(bound(ready, 0, 1e15)),
+            uint56(bound(today, 0, 1e15)),
+            uint56(bound(mark, 0, 1e15)),
+            0
+        );
+        before = bound(before, 0, 1e15);
+        saved = bound(saved, 0, 1e15);
+        checkSavings = bound(checkSavings, 0, 1e15);
+        keep = t.keep;
+        uint256 savings = before + saved;
+        uint256 counted = CashRules.topUpCounted(t, DAY, before, saved, savings);
+        assertLe(counted, saved, "never more than Save put away");
+        assertLe(uint256(t.ready) + t.today, savings > keep ? savings - keep : 0, "within savings above Keep");
+        uint256 got = CashRules.topUpsReady(t, DAY + 1, checkSavings);
+        assertLe(got, checkSavings > keep ? checkSavings - keep : 0, "ready within savings above Keep");
+        assertLe(uint256(t.ready) + t.today, checkSavings > keep ? checkSavings - keep : 0);
+    }
+
+    uint256 constant DAY = 20_400;
+
+    function _topUps(uint48 keep) internal pure returns (TopUps memory t) {
+        (t.on, t.day, t.keep) = (true, uint32(DAY), keep);
+    }
+
+    function _copy(TopUps memory t) internal pure returns (TopUps memory) {
+        return TopUps(t.on, t.day, t.keep, t.ready, t.today, t.mark, t.own);
     }
 
     function _protect(Vectors.Protect memory v) internal pure returns (ProtectCase, uint256) {

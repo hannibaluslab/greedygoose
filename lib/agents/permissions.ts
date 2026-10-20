@@ -216,40 +216,48 @@ export function stockTerms(limitsRaw: StockLimits): bigint {
 
 /*
  * The Rebalancer (GooseExecutor's Job.Rebalance, id 3): keeps the mix of free stock on target, selling what grew too
- * big to buy what fell short. Its own JAW grant. It has no Aave call at all, so savings and backing are out of its
- * reach; the executor's post-checks keep the wallet's USDC from going down and every stock it buys in the mix.
+ * big to buy what fell short. Its own JAW grant. Without top-ups it has no Aave call at all, so savings and backing are
+ * out of its reach. With top-ups (`topUps`), it may also take savings out to the account, under an aUSDC limit, to put
+ * top-ups into the mix; backing stays out of reach. The executor's post-checks keep the wallet's USDC from going down,
+ * savings from falling by more than what goes into the mix, and every stock it buys in the mix.
  */
 
 /**
- * What the Rebalancer may call, in GooseExecutor's order (RebalanceJob.permission): approve each stock it may sell to
- * Aerodrome's router, approve USDC for the buys, swap. A stock with no limit can still be bought into the mix, but
- * never sold.
+ * What the Rebalancer may call, in GooseExecutor's order (RebalanceJob.permission): with top-ups, Aave V3's savings
+ * withdraw first; approve each stock it may sell to Aerodrome's router, approve USDC for the buys, swap. A stock with
+ * no limit can still be bought into the mix, but never sold.
  */
-function rebalanceCalls(limitsRaw: StockLimits) {
+function rebalanceCalls(limitsRaw: StockLimits, topUps: boolean) {
   return [
+    ...(topUps ? [{ target: PROTOCOLS.AAVE_V3_POOL, selector: SEL.withdraw }] : []),
     ...sellable(limitsRaw, "The Rebalancer").map(({ stock }) => ({ target: stock, selector: SEL.approve })),
     { target: USDC.address, selector: SEL.approve },
     { target: AERODROME.ROUTER, selector: SEL.aeroSwap },
-  ] as const;
+  ];
 }
 
 /**
  * The spends, a week each (`PeriodUnit.Week`, which keeps the template's hash): USDC on the buy leg at the executor's
- * CAP_MAX (no amount limit, `NO_LIMIT_JOBS`), then each stock's own, in shares.
+ * CAP_MAX (no amount limit, `NO_LIMIT_JOBS`), with top-ups aUSDC at the same cap (the manager meters a savings
+ * withdraw only through it), then each stock's own, in shares.
  */
-function rebalanceSpends(capRaw: bigint, limitsRaw: StockLimits) {
+function rebalanceSpends(capRaw: bigint, limitsRaw: StockLimits, topUps: boolean) {
   return [
     { token: USDC.address, allowance: capRaw },
+    ...(topUps ? [{ token: PROTOCOLS.AUSDC, allowance: capRaw }] : []),
     ...sellable(limitsRaw, "The Rebalancer").map(({ stock, limitRaw }) => ({ token: stock, allowance: limitRaw })),
   ];
 }
 
-/** What the app sends to JAW's `useGrantPermissions` to switch the Rebalancer on, with a limit per stock to sell. */
-export function rebalanceGrant(capRaw: bigint, limitsRaw: StockLimits): PermissionsDetail {
+/**
+ * What the app sends to JAW's `useGrantPermissions` to switch the Rebalancer on, with a limit per stock to sell, and
+ * with `topUps` the savings withdraw that puts top-ups into the mix.
+ */
+export function rebalanceGrant(capRaw: bigint, limitsRaw: StockLimits, topUps = false): PermissionsDetail {
   if (capRaw <= 0n) throw new Error("USDC limit must be positive");
   return {
-    calls: rebalanceCalls(limitsRaw).map(({ target, selector }) => ({ target, selector })),
-    spends: rebalanceSpends(capRaw, limitsRaw).map(({ token, allowance }) => ({
+    calls: rebalanceCalls(limitsRaw, topUps).map(({ target, selector }) => ({ target, selector })),
+    spends: rebalanceSpends(capRaw, limitsRaw, topUps).map(({ token, allowance }) => ({
       token,
       allowance: allowance.toString(),
       unit: "week",
@@ -257,7 +265,9 @@ export function rebalanceGrant(capRaw: bigint, limitsRaw: StockLimits): Permissi
   };
 }
 
-/** The permission JAW's grant puts on-chain for `rebalanceGrant(capRaw, limitsRaw)`; GooseExecutor rebuilds it. */
+/**
+ * The permission JAW's grant puts on-chain for `rebalanceGrant(capRaw, limitsRaw, topUps)`; GooseExecutor rebuilds it.
+ */
 export function rebalancePermission(p: {
   account: Address;
   spender: Address;
@@ -266,15 +276,21 @@ export function rebalancePermission(p: {
   salt: bigint;
   capRaw: bigint;
   limitsRaw: StockLimits;
+  topUps?: boolean;
 }): JawPermission {
+  const topUps = p.topUps ?? false;
   return {
     account: p.account,
     spender: p.spender,
     start: p.start,
     end: p.end,
     salt: p.salt,
-    calls: rebalanceCalls(p.limitsRaw).map(({ target, selector }) => ({ target, selector, checker: zeroAddress })),
-    spends: rebalanceSpends(p.capRaw, p.limitsRaw).map(({ token, allowance }) => ({
+    calls: rebalanceCalls(p.limitsRaw, topUps).map(({ target, selector }) => ({
+      target,
+      selector,
+      checker: zeroAddress,
+    })),
+    spends: rebalanceSpends(p.capRaw, p.limitsRaw, topUps).map(({ token, allowance }) => ({
       token,
       allowance,
       unit: PERIOD.Week,

@@ -4,13 +4,15 @@ pragma solidity 0.8.28;
 import {GooseExecutor} from "../GooseExecutor.sol";
 import {IJustaPermissionManager as PM} from "../IJustaPermissionManager.sol";
 import {IAaveV3Pool, IERC20} from "../IProtocols.sol";
-import {Amounts, CashRules, SaveCase} from "../CashRules.sol";
+import {Amounts, CashRules, SaveCase, TopUps} from "../CashRules.sol";
 import {NyCalendar} from "../NyCalendar.sol";
 import {JobBase} from "./JobBase.sol";
 
 /// @title SaveJob
 /// @notice Save (GooseExecutor.md §5.3): wallet USDC above the keep-back goes into the account's Aave V3 savings,
-///         within today's limit and the daily number of saves.
+///         within today's limit and the daily number of saves. Only Save counts top-ups: with top-ups on and Rebalance on,
+///         what it puts in savings, less the agents' own change, is a top-up waiting to go into the mix
+///         (CashRules.topUpCounted).
 /// @dev A linked library: its code runs as GooseExecutor, the spender, exactly as if it were inlined there.
 library SaveJob {
     /// The template the user approved: approve USDC, supply it to savings.
@@ -42,28 +44,48 @@ library SaveJob {
         GooseExecutor.Env memory e,
         GooseExecutor.Ctx memory c,
         GooseExecutor.Account storage acc,
-        mapping(uint256 => GooseExecutor.PoolUse) storage
+        mapping(address => TopUps) storage
     ) public view returns (GooseExecutor.Plan memory) {
         return _plan(e, c, permission(e, c.account, c.grant, c.salt, 0), _savesToday(acc));
     }
 
-    /// Plans, and saves when there is something to save. Counts the save against today's number.
+    /// Plans, and saves when there is something to save. Counts the save against today's number, and what it put away
+    /// as a top-up when the account has them on with Rebalance on.
     function run(
         GooseExecutor.Env memory e,
         GooseExecutor.Ctx memory c,
         GooseExecutor.Account storage acc,
-        mapping(uint256 => GooseExecutor.PoolUse) storage
+        mapping(address => TopUps) storage topUps
     ) external returns (GooseExecutor.Plan memory p) {
         PM.Permission memory perm = permission(e, c.account, c.grant, c.salt, 0);
         p = _plan(e, c, perm, _savesToday(acc));
         if (p.action != GooseExecutor.Action.Save) return p;
-        _save(e, c.account, perm, p.amount);
+        (uint256 before, uint256 savings) = _save(e, c.account, perm, p.amount);
         uint32 today = uint32(NyCalendar.day(block.timestamp));
         if (acc.savesDay != today) {
             acc.savesDay = today;
             acc.savesToday = 0;
         }
         ++acc.savesToday;
+        if (acc.jobs & 1 << uint8(GooseExecutor.Job.Rebalance) != 0) {
+            _count(topUps, c.account, today, before, p.amount, savings);
+        }
+    }
+
+    /// The top-up in what Save put away (CashRules.topUpCounted), with top-ups on.
+    function _count(
+        mapping(address => TopUps) storage topUps,
+        address account,
+        uint256 day,
+        uint256 before,
+        uint256 saved,
+        uint256 savings
+    ) internal {
+        TopUps memory t = topUps[account];
+        if (!t.on) return;
+        uint256 counted = CashRules.topUpCounted(t, day, before, saved, savings);
+        topUps[account] = t;
+        if (counted > 0) emit GooseExecutor.TopUpCounted(account, counted, uint256(t.ready) + t.today);
     }
 
     function _plan(
@@ -93,10 +115,13 @@ library SaveJob {
         return acc.savesDay == NyCalendar.day(block.timestamp) ? acc.savesToday : 0;
     }
 
-    /// Wallet → savings: approve the pool exactly, supply for the account.
-    function _save(GooseExecutor.Env memory e, address account, PM.Permission memory perm, uint256 amount) internal {
+    /// Wallet → savings: approve the pool exactly, supply for the account. Returns the savings before and after.
+    function _save(GooseExecutor.Env memory e, address account, PM.Permission memory perm, uint256 amount)
+        internal
+        returns (uint256 savingsBefore, uint256 savings)
+    {
         uint256 cashBefore = e.usdc.balanceOf(account);
-        uint256 savingsBefore = e.aUsdc.balanceOf(account);
+        savingsBefore = e.aUsdc.balanceOf(account);
 
         PM.Call[] memory calls = new PM.Call[](2);
         calls[0] = PM.Call(address(e.usdc), 0, abi.encodeCall(IERC20.approve, (address(e.aaveV3Pool), amount)));
@@ -106,9 +131,8 @@ library SaveJob {
         e.manager.executeBatch{gas: JobBase.ACCOUNT_GAS}(perm, calls);
 
         if (e.usdc.balanceOf(account) + amount != cashBefore) revert GooseExecutor.WrongAmount();
-        if (e.aUsdc.balanceOf(account) + JobBase.SAVINGS_ROUNDING < savingsBefore + amount) {
-            revert GooseExecutor.SavingsNotUp();
-        }
+        savings = e.aUsdc.balanceOf(account);
+        if (savings + JobBase.SAVINGS_ROUNDING < savingsBefore + amount) revert GooseExecutor.SavingsNotUp();
         emit GooseExecutor.Saved(account, amount);
     }
 }

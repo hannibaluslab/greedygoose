@@ -4,7 +4,7 @@ pragma solidity 0.8.28;
 import {GooseExecutor} from "../GooseExecutor.sol";
 import {IJustaPermissionManager as PM} from "../IJustaPermissionManager.sol";
 import {IAeroRouter, IERC20, ISpoke} from "../IProtocols.sol";
-import {CashRules} from "../CashRules.sol";
+import {CashRules, TopUps} from "../CashRules.sol";
 import {Book, Holding, SellLimits, SellRules, Slice} from "../SellRules.sol";
 import {JobBase} from "./JobBase.sol";
 
@@ -108,12 +108,14 @@ library SellJob {
 
     /// Plans, then sells. A sale that wouldn't fit in the gas left is deferred to the next run. A sale that leaves the
     /// credit under the target starts (or keeps) the rescue, so the next runs go on selling without waiting for the
-    /// line again; one that reaches the target ends it.
+    /// line again; one that reaches the target ends it. What the swaps paid over their minimums stays in the wallet as
+    /// the agents' own change, which Save never counts as a top-up (P1).
     function run(
         GooseExecutor.Env memory e,
         GooseExecutor.Ctx memory c,
         GooseExecutor.Account storage acc,
-        mapping(uint256 => GooseExecutor.PoolUse) storage pools
+        mapping(uint256 => GooseExecutor.PoolUse) storage pools,
+        mapping(address => TopUps) storage topUps
     ) external returns (GooseExecutor.Plan memory p) {
         if (gasleft() < PLAN_GAS && _mightSell(e, c, acc)) {
             p.job = GooseExecutor.Job.ProtectSell;
@@ -127,8 +129,10 @@ library SellJob {
             p.action = GooseExecutor.Action.Defer;
             return p;
         }
+        uint256 cash = e.usdc.balanceOf(c.account);
         (bool done, uint256 hfAfter, bool owes) = _sell(e, c.account, sale, p.hf, c.thresholds.targetHf);
         if (!done) return p; // the batch couldn't run: nothing moved, the next run tries again
+        JobBase.addOwn(topUps[c.account], e.usdc.balanceOf(c.account) - cash); // never lower: `check`
         // Counted once per stock, as the rule budgets it: a rounding up per slice could pass the cap by a unit.
         uint256[7] memory sold;
         for (uint256 i; i < sale.slices.length; ++i) {

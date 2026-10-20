@@ -5,11 +5,12 @@ import {Test} from "forge-std/Test.sol";
 import {GooseExecutor} from "../src/GooseExecutor.sol";
 import {IJustaPermissionManager as PM} from "../src/IJustaPermissionManager.sol";
 import {IAaveOracle, IAaveV3Pool, IERC20, ISpoke} from "../src/IProtocols.sol";
-import {Amounts, Thresholds} from "../src/CashRules.sol";
+import {Amounts, Thresholds, TopUps} from "../src/CashRules.sol";
 import {EntryLimits} from "../src/EntryRules.sol";
 import {RebalanceLimits} from "../src/RebalanceRules.sol";
 import {SellLimits} from "../src/SellRules.sol";
 import {NyCalendar} from "../src/NyCalendar.sol";
+import {RebalanceJob} from "../src/jobs/RebalanceJob.sol";
 import {DeployExecutor} from "../script/DeployExecutor.s.sol";
 import {ExecutorHarness} from "./ExecutorHarness.sol";
 
@@ -17,6 +18,8 @@ import {ExecutorHarness} from "./ExecutorHarness.sol";
 /// who may run, and which permissions register. Runs and registration against the real manager are in
 /// GooseExecutorFork.t.sol.
 contract GooseExecutorTest is Test {
+    /// `topUps`' storage slot (forge inspect GooseExecutor storageLayout).
+    uint256 constant TOP_UPS_SLOT = 6;
     ExecutorHarness x;
     DeployExecutor deploy = new DeployExecutor();
     address owner = makeAddr("owner");
@@ -399,6 +402,43 @@ contract GooseExecutorTest is Test {
         assertEq(x.mixes(account), 0, "cleared");
     }
 
+    /// Top-ups go into my mix: only the account itself switches them and sets Keep. A new Keep keeps the counts;
+    /// switching on or off starts them again from nothing, and the wallet's cash past Save's $1 keep-back when they go
+    /// on is marked as not a top-up.
+    function test_only_the_account_itself_sets_top_ups_and_keep() public {
+        _mockCash(account, 1e6);
+        vm.expectEmit(true, false, false, true, address(x));
+        emit GooseExecutor.TopUpsSet(account, true, 500e6);
+        vm.prank(account);
+        x.setTopUps(true, 500e6);
+        assertEq(abi.encode(_topUps(account)), abi.encode(TopUps(true, 0, 500e6, 0, 0, 0, 0)));
+        assertEq(abi.encode(_topUps(stranger)), abi.encode(TopUps(false, 0, 0, 0, 0, 0, 0)), "a stranger sets its own");
+
+        // Save counted $300 ready and $200 today, with $3 of the agents' change.
+        _storeCounts(account, TopUps(true, 20_400, 500e6, 300e6, 200e6, 1_000e6, 3e6));
+        vm.prank(account);
+        x.setTopUps(true, 0);
+        assertEq(
+            abi.encode(_topUps(account)), abi.encode(TopUps(true, 20_400, 0, 300e6, 200e6, 1_000e6, 3e6)), "Keep only"
+        );
+        vm.prank(account);
+        x.setTopUps(false, 0);
+        assertEq(abi.encode(_topUps(account)), abi.encode(TopUps(false, 0, 0, 0, 0, 0, 0)), "off: nothing waits");
+        _storeCounts(account, TopUps(false, 20_400, 0, 300e6, 200e6, 1_000e6, 3e6));
+        _mockCash(account, 501e6);
+        vm.prank(account);
+        x.setTopUps(true, 700e6);
+        assertEq(
+            abi.encode(_topUps(account)),
+            abi.encode(TopUps(true, 0, 700e6, 0, 0, 0, 500e6)),
+            "on: the $500 in the wallet stays as it is, from the next top-up"
+        );
+    }
+
+    function _mockCash(address a, uint256 cash) internal {
+        vm.mockCall(address(x.USDC()), abi.encodeCall(IERC20.balanceOf, (a)), abi.encode(cash));
+    }
+
     function test_only_the_account_itself_sets_keep_my_mix() public {
         vm.expectEmit(true, false, false, true, address(x));
         emit GooseExecutor.KeepMixSet(account, true);
@@ -496,6 +536,67 @@ contract GooseExecutorTest is Test {
         _ignored(p, "a daily limit");
     }
 
+    /// The Rebalancer's grant with top-ups: Aave V3's savings withdraw first and an aUSDC limit at the same cap as USDC's,
+    /// a week each, then the stocks' limits. Its terms carry TOP_UPS; without the withdraw and aUSDC it's the plain
+    /// shape, and a Protect · sell grant, whose spends start the same way, never reads as one, nor the reverse.
+    function test_registrationOf_names_an_exact_rebalance_grant_with_top_ups() public {
+        _mockPrices(200e8);
+        uint256 t = _terms(0.02e8, 0.03e8) | RebalanceJob.TOP_UPS;
+        PM.Permission memory p = _grantWith(GooseExecutor.Job.Rebalance, 5e6, t);
+        assertEq(p.calls.length, 5, "withdraw, two approves, USDC's approve, swap");
+        assertEq(
+            abi.encode(p.calls[0]),
+            abi.encode(PM.CallPermission(address(x.AAVE_V3_POOL()), IAaveV3Pool.withdraw.selector, address(0)))
+        );
+        assertEq(p.spends.length, 4, "USDC, aUSDC and the two stocks");
+        assertEq(abi.encode(p.spends[1]), abi.encode(PM.SpendLimit(address(x.AUSDC()), 5e6, PM.PeriodUnit.Week, 1)));
+        assertEq(p.spends[2].token, x.stocks()[5], "the stocks' limits start at spends[2]");
+        _registers(p, GooseExecutor.Job.Rebalance, 5e6, t);
+        _registers(
+            _grantWith(GooseExecutor.Job.Rebalance, 5e6, _terms(0.02e8, 0.03e8)),
+            GooseExecutor.Job.Rebalance,
+            5e6,
+            _terms(0.02e8, 0.03e8)
+        );
+
+        PM.Permission memory q = _grantWith(GooseExecutor.Job.Rebalance, 5e6, t);
+        q.spends[1].allowance = 4e6;
+        _ignored(q, "an aUSDC limit unlike USDC's");
+        q = _grantWith(GooseExecutor.Job.Rebalance, 5e6, t);
+        q.calls[0].target = stranger;
+        _ignored(q, "a withdraw on another target");
+        q = _grantWith(GooseExecutor.Job.Rebalance, 5e6, t);
+        q.calls[0].selector = IAaveV3Pool.supply.selector;
+        _ignored(q, "another call on the pool");
+        q = _grantWith(GooseExecutor.Job.Rebalance, 5e6, t);
+        (q.spends[1], q.spends[2], q.spends[3]) = (q.spends[2], q.spends[3], q.spends[1]);
+        _ignored(q, "aUSDC's limit out of place");
+        q = _grantWith(GooseExecutor.Job.Rebalance, 5e6, t);
+        PM.SpendLimit[] memory noAUsdc = new PM.SpendLimit[](3);
+        (noAUsdc[0], noAUsdc[1], noAUsdc[2]) = (q.spends[0], q.spends[2], q.spends[3]);
+        q.spends = noAUsdc;
+        _ignored(q, "the withdraw without aUSDC's limit");
+        q = _grantWith(GooseExecutor.Job.Rebalance, 5e6, _terms(0.02e8, 0.03e8));
+        PM.SpendLimit[] memory withAUsdc = new PM.SpendLimit[](4);
+        (withAUsdc[0], withAUsdc[1], withAUsdc[2], withAUsdc[3]) =
+        (q.spends[0], PM.SpendLimit(address(x.AUSDC()), 5e6, PM.PeriodUnit.Week, 1), q.spends[1], q.spends[2]);
+        q.spends = withAUsdc;
+        _ignored(q, "aUSDC's limit without the withdraw");
+        q = _grantWith(GooseExecutor.Job.Rebalance, 5e6, t);
+        for (uint256 i; i < q.spends.length; ++i) {
+            q.spends[i].unit = PM.PeriodUnit.Day;
+        }
+        _ignored(q, "daily limits on the Rebalancer's calls");
+
+        // Protect · sell's grant has the same spends' start (USDC, aUSDC, stocks): it still registers as itself.
+        PM.Permission memory sell = _sellGrant(5e6, _terms(0.02e8, 0.03e8));
+        _registers(sell, GooseExecutor.Job.ProtectSell, 5e6, _terms(0.02e8, 0.03e8));
+        for (uint256 i; i < sell.spends.length; ++i) {
+            sell.spends[i].unit = PM.PeriodUnit.Week;
+        }
+        _ignored(sell, "the sell calls with weekly limits");
+    }
+
     /// Entry's grant: four coins, each with a daily limit at the same face value, and the three venues' swaps.
     function test_registrationOf_names_an_exact_entry_grant() public {
         PM.Permission memory p = _grant(GooseExecutor.Job.Entry, 5e6);
@@ -582,6 +683,20 @@ contract GooseExecutorTest is Test {
             x.permissionFor(
                 job, account, GooseExecutor.Grant(start, start + 365 days, cap), uint256(keccak256("salt")), t
             );
+    }
+
+    function _topUps(address a) internal view returns (TopUps memory t) {
+        (t.on, t.day, t.keep, t.ready, t.today, t.mark, t.own) = x.topUps(a);
+    }
+
+    /// Writes an account's top-ups as Save would leave them: `topUps` sits at slot 6 of its storage.
+    function _storeCounts(address a, TopUps memory t) internal {
+        bytes32 slot = keccak256(abi.encode(a, uint256(TOP_UPS_SLOT)));
+        uint256 first = (t.on ? 1 : 0) | uint256(t.day) << 8 | uint256(t.keep) << 40 | uint256(t.ready) << 88
+            | uint256(t.today) << 144 | uint256(t.mark) << 200;
+        vm.store(address(x), slot, bytes32(first));
+        vm.store(address(x), bytes32(uint256(slot) + 1), bytes32(t.own));
+        assertEq(abi.encode(_topUps(a)), abi.encode(t), "the slot layout");
     }
 
     function _mockPrices(uint256 price) internal {

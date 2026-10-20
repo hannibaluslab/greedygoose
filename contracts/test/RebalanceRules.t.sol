@@ -5,9 +5,10 @@ import {Test} from "forge-std/Test.sol";
 import {RebalanceBook, RebalanceHolding, RebalanceLimits, RebalanceRules, Trade} from "../src/RebalanceRules.sol";
 import {Vectors} from "./Vectors.sol";
 
-/// The Rebalancer's rule against the TypeScript reference (rebalanceTrades and planRebalance in
-/// lib/guardian/rebalance.ts), on the vectors scripts/agent-vectors.ts exported, plus the band examples from the plan:
-/// 50/50 drifted to 56/44, 55/45, targets of 17.1% and 11.4%, and the Manage board's 50/25/25.
+/// The Rebalancer's rules against the TypeScript reference (rebalanceTrades and planRebalance in
+/// lib/agents/rules/rebalance.ts, investTrades in lib/agents/rules/topUps.ts), on the vectors scripts/agent-vectors.ts
+/// exported, plus the band examples from the plan: 50/50 drifted to 56/44, 55/45, targets of 17.1% and 11.4%, and the
+/// Manage board's 50/25/25; and the top-ups' buys: furthest below target first, pro rata on target.
 contract RebalanceRulesTest is Test {
     uint256 constant ALL = 1e18; // a weekly limit that never binds
     uint256 constant NVDA = 5;
@@ -75,6 +76,125 @@ contract RebalanceRulesTest is Test {
             assertLe(cashOut, v.book.usdcLeft, "within the USDC limit");
             if (got.length > 0) assertGt(cashOut, 0, "never sells to cash alone");
         }
+    }
+
+    // ================================================================== top-ups into the mix
+
+    function test_invest_agrees_with_investTrades() public view {
+        string memory json = vm.readFile("test/vectors/invest.json");
+        bytes memory counts = vm.parseJsonBytes(json, ".counts");
+        bytes memory reserves = vm.parseJsonBytes(json, ".reserves");
+        uint256[] memory amountIns = vm.parseJsonUintArray(json, ".amountIns");
+        uint256[] memory minOuts = vm.parseJsonUintArray(json, ".minOuts");
+        assertEq(counts.length, 600);
+        uint256 s;
+        uint256 bought;
+        uint256 several;
+        for (uint256 i; i < counts.length; ++i) {
+            Vectors.Invest memory v = Vectors.investInput(i);
+            string memory at = string.concat("vector ", vm.toString(i));
+            Trade[] memory got = RebalanceRules.invest(v.book, v.amount, v.l);
+            assertEq(got.length, uint8(counts[i]), at);
+            for (uint256 k; k < got.length; ++k) {
+                assertEq(got[k].reserveId, uint8(reserves[s]), at);
+                assertTrue(got[k].buy, at);
+                assertEq(got[k].amountIn, amountIns[s], at);
+                assertEq(got[k].minOut, minOuts[s++], at);
+            }
+            if (got.length > 0) ++bought;
+            if (got.length > 2) ++several;
+        }
+        assertEq(s, amountIns.length, "every buy compared");
+        assertGt(bought, 300, "most vectors buy");
+        assertGt(several, 50, "and many buy several stocks");
+    }
+
+    /// Every buy set: only buys, only mix stocks, one a stock, each at least the minimum, at most a slice and never past
+    /// its target with the top-up in; together never more than the amount.
+    function test_invest_only_buys_within_the_amount_and_never_past_a_target() public pure {
+        for (uint256 i; i < 600; ++i) {
+            Vectors.Invest memory v = Vectors.investInput(i);
+            Trade[] memory got = RebalanceRules.invest(v.book, v.amount, v.l);
+            uint256 total = v.amount;
+            for (uint256 r; r < 7; ++r) {
+                if (v.book.stocks[r].weight > 0) total += _worth(v.book.stocks[r]);
+            }
+            uint256 spent;
+            bool[7] memory seen;
+            for (uint256 k; k < got.length; ++k) {
+                Trade memory t = got[k];
+                RebalanceHolding memory h = v.book.stocks[t.reserveId];
+                assertTrue(t.buy, "never sells");
+                assertGt(h.weight, 0, "only the mix");
+                assertFalse(seen[t.reserveId], "one buy a stock");
+                seen[t.reserveId] = true;
+                assertGe(t.amountIn, v.l.minTrade, "worth a trade");
+                assertLe(t.amountIn, v.l.maxSlice, "a slice at most");
+                assertLe(_worth(h) + t.amountIn, total * h.weight / 1e4, "never past its target");
+                spent += t.amountIn;
+            }
+            assertLe(spent, v.amount, "within the amount");
+        }
+    }
+
+    /// 50/25/25 NVIDIA/Apple/Tesla at $5,000 / $3,000 / $2,000 and a $1,000 top-up: the targets with it in are $5,500,
+    /// $2,750 and $2,750. Tesla is furthest below ($750) and gets it first; NVIDIA the $250 left; Apple, over, nothing.
+    function test_a_top_up_buys_the_stock_furthest_below_its_target_first() public pure {
+        RebalanceBook memory b = _book();
+        b.stocks[NVDA] = _holding(5_000e6, 200e8, 5_000);
+        b.stocks[AAPL] = _holding(3_000e6, 250e8, 2_500);
+        b.stocks[TSLA] = _holding(2_000e6, 400e8, 2_500);
+        Trade[] memory t = RebalanceRules.invest(b, 1_000e6, _limits());
+        assertEq(t.length, 2);
+        assertEq(abi.encode(t[0].reserveId, t[0].amountIn), abi.encode(uint8(NVDA), uint256(250e6)));
+        assertEq(abi.encode(t[1].reserveId, t[1].amountIn), abi.encode(uint8(TSLA), uint256(750e6)));
+        assertEq(t[1].minOut, uint256(750e6) * 1e10 * 9_950 / (400e8 * 1e4), "Aave's price less the floor");
+
+        // $100: all of it to Tesla, never past its target, nothing left over.
+        t = RebalanceRules.invest(b, 100e6, _limits());
+        assertEq(t.length, 1);
+        assertEq(abi.encode(t[0].reserveId, t[0].amountIn), abi.encode(uint8(TSLA), uint256(100e6)));
+    }
+
+    /// On target, a top-up buys pro rata to the mix; into a mix that holds nothing yet, too.
+    function test_on_target_or_empty_a_top_up_buys_pro_rata() public pure {
+        RebalanceBook memory b = _book();
+        b.stocks[NVDA] = _holding(5_000e6, 200e8, 5_000);
+        b.stocks[AAPL] = _holding(2_500e6, 250e8, 2_500);
+        b.stocks[TSLA] = _holding(2_500e6, 300e8, 2_500);
+        Trade[] memory t = RebalanceRules.invest(b, 1_000e6, _limits());
+        assertEq(t.length, 3);
+        assertApproxEqAbs(t[0].amountIn, 250e6, 1, "Apple 25%");
+        assertApproxEqAbs(t[1].amountIn, 500e6, 1, "NVIDIA 50%");
+        assertApproxEqAbs(t[2].amountIn, 250e6, 1, "Tesla 25%");
+
+        RebalanceBook memory empty = _book();
+        empty.stocks[NVDA] = _holding(0, 200e8, 5_000);
+        empty.stocks[AAPL] = _holding(0, 250e8, 5_000);
+        t = RebalanceRules.invest(empty, 300e6, _limits());
+        assertEq(abi.encode(t[0].amountIn, t[1].amountIn), abi.encode(uint256(150e6), uint256(150e6)));
+    }
+
+    /// A buy is at most a slice ($25k): $60k into one stock buys $25k today and leaves the rest waiting. Legs under the
+    /// minimum ($20) wait too: $100 over seven stocks on target ($14 each) buys nothing yet, $150 ($21 each) all seven.
+    function test_a_top_up_waits_for_what_a_slice_or_the_minimum_leaves() public pure {
+        RebalanceBook memory b = _book();
+        b.stocks[NVDA] = _holding(0, 200e8, 10_000);
+        Trade[] memory t = RebalanceRules.invest(b, 60_000e6, _limits());
+        assertEq(t.length, 1);
+        assertEq(t[0].amountIn, 25_000e6);
+
+        b = _book();
+        for (uint256 r; r < 7; ++r) {
+            uint256 w = r < 6 ? 1_430 : 1_420;
+            b.stocks[r] = _holding(7_000e6 * w / 1e4, 100e8, w);
+        }
+        assertEq(RebalanceRules.invest(b, 100e6, _limits()).length, 0, "$14 a stock: under $20");
+        assertEq(RebalanceRules.invest(b, 150e6, _limits()).length, 7, "$21 a stock");
+    }
+
+    function _worth(RebalanceHolding memory h) internal pure returns (uint256) {
+        return h.shares * h.price / 1e10;
     }
 
     // ================================================================== the band examples (plan item 9 step 3)

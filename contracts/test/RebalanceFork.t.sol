@@ -51,7 +51,7 @@ abstract contract RebalanceForkBase is SellForkBase {
             t
         );
         _grantThroughAccount(p);
-        x.register(GooseExecutor.Job.Rebalance, a, p.start, p.end, p.salt, 1_000e6, t);
+        x.registerApproved(abi.encode(p));
     }
 
     /// The account's free stock in `r`, in USDC units at Aave's price.
@@ -251,7 +251,7 @@ contract RebalanceForkTest is RebalanceForkBase {
     /// post-checks for `trades`.
     function rebalanceWith(address account, Trade[] calldata trades, PM.Call[] calldata calls) external {
         PM.Permission memory p = x.permissionOf(account, GooseExecutor.Job.Rebalance);
-        RebalanceJob.Before memory b = RebalanceJob.snapshot(x.env(), account, trades);
+        RebalanceJob.Before memory b = RebalanceJob.snapshot(x.env(), account, trades, 0);
         vm.prank(address(x));
         MANAGER.executeBatch(p, calls);
         RebalanceJob.check(x.env(), account, b);

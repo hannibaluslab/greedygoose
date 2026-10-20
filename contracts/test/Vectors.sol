@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.28;
 
-import {Thresholds} from "../src/CashRules.sol";
+import {Thresholds, TopUps} from "../src/CashRules.sol";
 import {Coin} from "../src/EntryRules.sol";
 import {RebalanceBook, RebalanceHolding, RebalanceLimits} from "../src/RebalanceRules.sol";
 import {Book, Holding} from "../src/SellRules.sol";
@@ -82,6 +82,24 @@ library Vectors {
         uint16 floorBps;
         uint64 minEntry;
         uint64 maxSwap;
+    }
+
+    struct Invest {
+        RebalanceBook book;
+        RebalanceLimits l;
+        uint256 amount;
+    }
+
+    struct TopUpsCase {
+        TopUps t;
+        uint256 countDay;
+        uint256 before;
+        uint256 saved;
+        uint256 savings;
+        uint256 checkDay;
+        uint256 checkSavings;
+        uint256 investPct;
+        uint256 rounding;
     }
 
     struct RebalanceHash {
@@ -254,6 +272,57 @@ library Vectors {
         uint256 kind = rand("rebalance", i, f + 5) % 4;
         if (kind == 1) h.sellLeft = spread(rand("rebalance", i, f + 6), rand("rebalance", i, f + 7), 4, 9);
         else if (kind > 1) h.sellLeft = 1e18;
+    }
+
+    /// Top-ups' buys: the Rebalancer's book and limits from `rebalanceInput`, and an amount from $1 to $90k. A tenth of
+    /// the mixes hold nothing yet, and a fifth sit on target ($10k at their weights).
+    function investInput(uint256 i) internal pure returns (Invest memory v) {
+        Rebalance memory r = rebalanceInput(i);
+        (v.book, v.l) = (r.book, r.l);
+        bool empty = rand("invest", i, 2) % 10 == 0;
+        bool onTarget = rand("invest", i, 3) % 5 == 0;
+        for (uint256 k; k < 7; ++k) {
+            RebalanceHolding memory h = v.book.stocks[k];
+            if (empty) h.shares = 0;
+            else if (onTarget && h.weight > 0) h.shares = 1e10 * h.weight / 10_000 * 1e10 / h.price;
+        }
+        v.amount = spread(rand("invest", i, 0), rand("invest", i, 1), 6, 10);
+    }
+
+    /// Top-ups' counts: a state with Keep, what's ready and today, the mark and the agents' own change each 0 some of
+    /// the time; then a save that finds savings at, under or over the mark, on the same day or the next; then a check
+    /// on that day or the next with savings at, under or over the count's, and an invest of 0 to 100% of what's ready,
+    /// with Aave's rounding.
+    function topUpsInput(uint256 i) internal pure returns (TopUpsCase memory v) {
+        v.t.day = uint32(20_000 + rand("topups", i, 0) % 3);
+        v.t.keep = uint48(_some(i, 1, 4, 6, 10));
+        v.t.ready = uint56(_some(i, 4, 3, 5, 10));
+        v.t.today = uint56(_some(i, 7, 3, 5, 10));
+        v.t.mark = uint56(_some(i, 10, 5, 6, 11));
+        v.t.own = _some(i, 13, 2, 3, 8);
+        v.countDay = v.t.day + rand("topups", i, 16) % 2;
+        v.before = _near(i, v.t.mark, 17);
+        v.saved = spread(rand("topups", i, 20), rand("topups", i, 21), 5, 10);
+        v.savings = _sub(v.before + v.saved, rand("topups", i, 22) % 3);
+        v.checkDay = v.countDay + rand("topups", i, 23) % 2;
+        v.checkSavings = _near(i, v.savings, 24);
+        v.investPct = rand("topups", i, 27) % 101;
+        v.rounding = rand("topups", i, 28) % 3;
+    }
+
+    function _some(uint256 i, uint256 k, uint256 odds, uint256 lo, uint256 hi) private pure returns (uint256) {
+        return rand("topups", i, k) % odds == 0 ? 0 : spread(rand("topups", i, k + 1), rand("topups", i, k + 2), lo, hi);
+    }
+
+    /// `at`, or under or over it by $0.01 to $90k.
+    function _near(uint256 i, uint256 at, uint256 k) private pure returns (uint256) {
+        uint256 move = spread(rand("topups", i, k + 1), rand("topups", i, k + 2), 4, 10);
+        uint256 kind = rand("topups", i, k) % 3;
+        return kind == 0 ? at : kind == 1 ? _sub(at, move) : at + move;
+    }
+
+    function _sub(uint256 a, uint256 b) private pure returns (uint256) {
+        return a > b ? a - b : 0;
     }
 
     /// The four coins with balances from dust to $900k, daily limits that bind half the time, a coin waiting a fifth of

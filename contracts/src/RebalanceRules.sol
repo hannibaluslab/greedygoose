@@ -17,13 +17,13 @@ struct RebalanceHolding {
     uint256 shares; // raw shares in the wallet: free stock, not backing the credit
     uint256 price; // Aave's oracle price, 8 decimals
     uint256 weight; // target weight in BPS; 0 = not in the mix, never traded
-    uint256 sellLeft; // raw shares this week's sell limit still allows; 0 = can't be sold
+    uint256 sellLeft; // raw shares the grant's sell limit still allows this period; 0 = can't be sold
 }
 
 /// What the rule reads for one account.
 struct RebalanceBook {
     RebalanceHolding[7] stocks;
-    uint256 usdcLeft; // USDC units this week's limit on the buy leg still allows
+    uint256 usdcLeft; // USDC units the grant's limit on the buy leg still allows this period
 }
 
 /// One swap. A sale swaps `amountIn` raw shares for at least `minOut` USDC units; a buy swaps `amountIn` USDC units for
@@ -36,9 +36,9 @@ struct Trade {
 }
 
 /// @title RebalanceRules
-/// @notice The Rebalancer's rule, ported from the TypeScript reference (lib/guardian/rebalance.ts) line for line:
-///         test/RebalanceRules.t.sol runs both on the vectors scripts/agent-vectors.ts exports, and they must agree
-///         exactly.
+/// @notice The Rebalancer's rules, ported from the TypeScript reference line for line: the band trades from
+///         lib/agents/rules/rebalance.ts and the top-ups' buys from lib/agents/rules/topUps.ts. test/RebalanceRules.t.sol
+///         runs both on the vectors scripts/agent-vectors.ts exports, and they must agree exactly.
 /// @dev Integer maths only. Shares and prices with 8 decimals, USDC units with 6, weights in BPS. A holding is worth
 ///      shares × price / 1e10 USDC units at Aave's price.
 library RebalanceRules {
@@ -72,7 +72,7 @@ library RebalanceRules {
     /// target than the smaller of `bandBps` of the target and `bandMaxBps` points; it is traded back to half the band,
     /// and only it. The other side of the trade goes to the stocks still in their band that are furthest from their
     /// target (to their target, no further), so the sales and the buys match at Aave's price. Each trade is held to
-    /// `maxSlice`, a sale to the stock's weekly sell limit, the buys to the weekly USDC limit; trades under `minTrade`
+    /// `maxSlice`, a sale to the stock's sell limit, the buys to the grant's USDC limit; trades under `minTrade`
     /// are skipped, and the other side shrinks to match. Nothing to sell or nothing to buy means no trade: the
     /// Rebalancer never sells to cash or buys with it. Sales come first; the buys spend exactly what the sales'
     /// minimums bring in, so the wallet's USDC is never lower.
@@ -87,6 +87,48 @@ library RebalanceRules {
         _otherSide(l.minTrade, g);
         if (!_match(g, l.minTrade, b.usdcLeft)) return new Trade[](0);
         return _swaps(b, l.floorBps, g);
+    }
+
+    /// Top-ups into the mix (investTrades): `amount` USDC units from savings buy the mix's stocks, the one furthest below
+    /// its target first, each target taken against the mix with the top-up in (`total + amount`), ties to the lower
+    /// reserve id. Each buy is at least `minTrade`, at most `maxSlice` and never past its target, so a mix on target buys
+    /// pro rata. It never sells. The buys spend exactly their `amountIn`, and what they leave of `amount` waits for the
+    /// next check, so the invest is their sum.
+    function invest(RebalanceBook memory b, uint256 amount, RebalanceLimits memory l)
+        internal
+        pure
+        returns (Trade[] memory out)
+    {
+        uint256 total = amount;
+        for (uint256 i; i < 7; ++i) {
+            if (b.stocks[i].weight > 0) total += _value(b.stocks[i]);
+        }
+        uint256[7] memory gap;
+        bool[7] memory mix;
+        for (uint256 i; i < 7; ++i) {
+            RebalanceHolding memory h = b.stocks[i];
+            if (h.weight == 0) continue;
+            mix[i] = true;
+            uint256 target = total * h.weight / BPS;
+            uint256 value = _value(h);
+            if (target > value) gap[i] = target - value;
+        }
+        (uint8[7] memory o, uint256 n) = _byGap(gap, mix);
+        uint256[7] memory buy;
+        uint256 count;
+        for (uint256 k; k < n && amount > 0; ++k) {
+            uint8 i = o[k];
+            uint256 leg = _min(amount, _min(gap[i], l.maxSlice));
+            if (leg < l.minTrade) continue;
+            buy[i] = leg;
+            amount -= leg;
+            ++count;
+        }
+        out = new Trade[](count);
+        count = 0;
+        for (uint8 i; i < 7; ++i) {
+            if (buy[i] > 0) out[count++] = _buy(i, buy[i], b.stocks[i].price, l.floorBps);
+        }
     }
 
     /// Whether a pool's price sits within `gapBps` of Aave's (poolInLine). Both prices with 8 decimals.
@@ -116,7 +158,7 @@ library RebalanceRules {
     struct Legs {
         uint256[7] sell;
         uint256[7] buy;
-        uint256[7] sellable; // the most a sale may be: the weekly limit left, and maxSlice
+        uint256[7] sellable; // the most a sale may be: the sell limit left, and maxSlice
         uint256[7] above; // in its band: how far above target
         uint256[7] below; // in its band: how far below target
         bool[7] inBand;

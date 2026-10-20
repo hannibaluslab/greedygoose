@@ -40,6 +40,18 @@ enum SaveCase {
     Save
 }
 
+/// Top-ups go into my mix (GooseExecutor.topUps): the account's own switch and Keep, and what Save counted that
+/// Rebalance hasn't put in yet. USDC units; every amount is under USDC's total supply, far below 2^56. Two slots.
+struct TopUps {
+    bool on; // the account's own switch (GooseExecutor.setTopUps)
+    uint32 day; // the New York day `today` was counted on
+    uint48 keep; // Keep $X as cash: savings up to it never go into the mix
+    uint56 ready; // counted on an earlier day: goes in at the next market morning's check
+    uint56 today; // counted on `day`: never goes in the day it arrived
+    uint56 mark; // savings when the executor last looked: a fall under it comes out of what's waiting
+    uint256 own; // wallet cash that isn't a top-up (the agents' change, the wallet when switched on): Save leaves it out
+}
+
 /// @title CashRules
 /// @notice The Cash Agent's rules, ported line for line from Leo's `planGuardian` and our `planSave`
 ///         (lib/guardian/plan.ts). The TypeScript versions stay the reference: test/CashRules.t.sol runs both on the
@@ -140,6 +152,70 @@ library CashRules {
         amount = _min(idle, capLeft);
         if (amount < a.minSave) return (SaveCase.TooSmall, 0);
         return (SaveCase.Save, amount);
+    }
+
+    // ================================================================== top-ups (lib/agents/rules/topUps.ts)
+
+    /// Save's count: `saved` went from the wallet into savings, which held `before` and now hold `savings`. The agents'
+    /// own change in it is left out (P1); the rest is a top-up, counted today after any fall since the executor last
+    /// looked (P4) and within savings above Keep, so it fills Keep first. Returns what was counted.
+    function topUpCounted(TopUps memory t, uint256 day, uint256 before, uint256 saved, uint256 savings)
+        internal
+        pure
+        returns (uint256 counted)
+    {
+        roll(t, day);
+        fall(t, before);
+        uint256 mine = _min(saved, t.own);
+        t.own -= mine;
+        uint256 waiting = uint256(t.ready) + t.today;
+        t.today += uint56(saved - mine);
+        clamp(t, savings);
+        t.mark = uint56(savings);
+        counted = _sub(uint256(t.ready) + t.today, waiting);
+    }
+
+    /// What Rebalance may put into the mix at today's check, with `savings` now: what was counted on an earlier New York
+    /// day, less any fall since the executor last looked, within savings above Keep.
+    function topUpsReady(TopUps memory t, uint256 day, uint256 savings) internal pure returns (uint256) {
+        roll(t, day);
+        fall(t, savings);
+        clamp(t, savings);
+        return t.ready;
+    }
+
+    /// After `invest` went from savings into the mix, savings hold `savings`: it comes out of what's ready, and the mark
+    /// moves to the savings after, so the invest itself isn't read as a fall.
+    function topUpInvested(TopUps memory t, uint256 invest, uint256 savings) internal pure {
+        t.ready -= uint56(invest);
+        clamp(t, savings);
+        t.mark = uint56(savings);
+    }
+
+    /// Today's count joins what's ready once its New York day is over.
+    function roll(TopUps memory t, uint256 day) internal pure {
+        if (t.day == day) return;
+        t.ready += t.today;
+        t.today = 0;
+        t.day = uint32(day);
+    }
+
+    /// P4: a fall in savings since the executor last looked comes out of what's waiting, what's ready first. Rises never
+    /// add to it. The mark moves to `savings` either way.
+    function fall(TopUps memory t, uint256 savings) internal pure {
+        uint256 f = _sub(t.mark, savings);
+        uint256 r = _min(f, t.ready);
+        t.ready -= uint56(r);
+        t.today -= uint56(_min(f - r, t.today));
+        t.mark = uint56(savings);
+    }
+
+    /// What's waiting is never more than savings above Keep, so putting it all in leaves Keep as cash. Today's count is
+    /// trimmed first.
+    function clamp(TopUps memory t, uint256 savings) internal pure {
+        uint256 room = _sub(savings, t.keep);
+        if (t.ready > room) t.ready = uint56(room);
+        if (t.today > room - t.ready) t.today = uint56(room - t.ready);
     }
 
     function _ceilDiv(uint256 a, uint256 b) private pure returns (uint256) {

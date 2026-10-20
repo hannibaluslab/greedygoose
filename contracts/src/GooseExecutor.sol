@@ -4,7 +4,7 @@ pragma solidity 0.8.28;
 import {AutomationCompatibleInterface} from "chainlink/automation/interfaces/AutomationCompatibleInterface.sol";
 import {IJustaPermissionManager as PM} from "./IJustaPermissionManager.sol";
 import {IAaveOracle, IAaveV3Pool, IERC20, ISpoke} from "./IProtocols.sol";
-import {Amounts, ProtectCase, Thresholds} from "./CashRules.sol";
+import {Amounts, ProtectCase, Thresholds, TopUps} from "./CashRules.sol";
 import {EntryLimits} from "./EntryRules.sol";
 import {NyCalendar} from "./NyCalendar.sol";
 import {RebalanceLimits} from "./RebalanceRules.sol";
@@ -28,8 +28,8 @@ import {SellJob} from "./jobs/SellJob.sol";
 ///         Protect · sell (when savings can't get it there, some of the stock that backs it is sold to repay, at once).
 ///         Once Protect steps in, the rescue goes on until the credit is back at the target (Adrian, 2026-10-19). It
 ///         also runs the Rebalancer (once a market day, the mix of free stock is brought back when a stock breaks its
-///         band) and the Entry agent (a whitelisted stablecoin in the wallet becomes USDC at 99.5% of face value or
-///         better).
+///         band, and with top-ups on, what Save counted as a top-up goes into the mix from savings) and the Entry agent
+///         (a whitelisted stablecoin in the wallet becomes USDC at 99.5% of face value or better).
 ///
 ///         JAW's screen grants with every checker set to 0, so the manager only enforces targets, selectors, the
 ///         spender and the daily limits. Every argument is pinned here: each call is built for the account alone, and
@@ -117,7 +117,7 @@ contract GooseExecutor is AutomationCompatibleInterface {
         uint256 amount; // USDC units (Repay, Save; Sell: what the sale repays; Rebalance: what the buys spend;
         // Convert: the least USDC the swap brings in)
         uint256 hf; // health factor before the move, WAD, or as the job read it (max: nothing owed)
-        uint8 reason; // Repay: a ProtectCase, Act. Convert: the coin's index in EntryJob
+        uint8 reason; // Repay: a ProtectCase, Act. Convert: the coin's index in EntryJob. Rebalance: 1 puts top-ups in
         OffReason off; // Prune
     }
 
@@ -236,13 +236,16 @@ contract GooseExecutor is AutomationCompatibleInterface {
     mapping(address account => Account) public accounts;
     mapping(address account => mapping(Job => Grant)) internal grants;
     mapping(address account => mapping(Job => uint256)) internal salts;
-    /// What else the user signed, packed by the job: Protect · sell's daily and the Rebalancer's weekly limit per stock
-    /// (JobBase).
+    /// What else the user signed, packed by the job: Protect · sell's and the Rebalancer's limit per stock (JobBase),
+    /// and whether the Rebalancer's grant takes top-ups from savings (RebalanceJob.TOP_UPS).
     mapping(address account => mapping(Job => uint256)) internal terms;
     /// The Rebalancer's target mix, set only by the account: a weight in BPS per stock, 16 bits each by reserve id.
     mapping(address account => uint256) public mixes;
     /// Entry: when each coin that couldn't meet the floor may be tried again, 32 bits each in EntryJob's order.
     mapping(address account => uint256) public entryWaits;
+    /// Top-ups go into my mix: the account's own switch and Keep (`setTopUps`), what Save counted and Rebalance hasn't
+    /// put in yet, and the agents' own change (CashRules.TopUps).
+    mapping(address account => TopUps) public topUps;
     /// Append-only. Page p is members[p * PAGE_SIZE, (p + 1) * PAGE_SIZE).
     address[] public members;
     /// Append-only, paged the same way: the accounts that ever had Protect or Protect · sell on. A price update scans
@@ -282,6 +285,11 @@ contract GooseExecutor is AutomationCompatibleInterface {
     event SaleSkipped(address indexed account);
     event KeepMixSet(address indexed account, bool on);
     event MixSet(address indexed account, uint16[7] weights);
+    event TopUpsSet(address indexed account, bool on, uint48 keep);
+    /// Save put away `amount` of top-ups; `waiting` is all that waits to go into the mix.
+    event TopUpCounted(address indexed account, uint256 amount, uint256 waiting);
+    /// Rebalance put `amount` of top-ups from savings into the mix; `bought` in shares by reserve id.
+    event TopUpInvested(address indexed account, uint256 amount, uint256[7] bought);
     /// Shares by reserve id: what the sales sold and the buys bought.
     event Rebalanced(address indexed account, uint256[7] sold, uint256[7] bought);
     /// A batch that couldn't meet its floors: nothing moved, and the Rebalancer is done for the day.
@@ -306,10 +314,7 @@ contract GooseExecutor is AutomationCompatibleInterface {
 
     error AccountNotAllowed();
     error ManagerNotOwner();
-    error CapOutOfBounds();
-    error BadWindow();
     error NotApproved();
-    error BadTerms();
     error StaleGrant();
     error JobNotOn();
     error StillOn();
@@ -393,26 +398,16 @@ contract GooseExecutor is AutomationCompatibleInterface {
 
     // ================================================================== registry
 
-    /// Switches `job` on for `account` with the permission it approved through JAW's screen. Anyone may call it: it
-    /// moves no money and checks everything on-chain. A newer grant for the same job replaces the stored one; the same
-    /// grant again changes nothing. `t` is the job's terms: the limit per stock for Protect · sell and the Rebalancer
-    /// (JobBase), 0 for the other jobs.
-    function register(Job job, address account, uint48 start, uint48 end, uint256 salt, uint160 cap, uint256 t)
-        external
-        nonReentrant
-    {
-        _register(job, account, start, end, salt, cap, t);
-    }
-
     /// Switches a job on from the permission exactly as JAW's manager approved it. `approved` is the manager's
     /// PermissionApproved data as logged, abi.encode(permission): one `bytes` argument, so a runner that can't build a
-    /// nested struct (KeeperHub) passes it through as is. Anyone may call it: it moves no money, and `_register` checks
-    /// everything again on-chain.
+    /// nested struct (KeeperHub) passes it through as is. Anyone may call it: it moves no money, `_match` finds it to be
+    /// exactly a job's template, and `_register` checks the account and the manager's approval on-chain. A newer grant for
+    /// the same job replaces the stored one; the same grant again changes nothing.
     function registerApproved(bytes calldata approved) external nonReentrant {
         PM.Permission memory p = abi.decode(approved, (PM.Permission));
         (bool ok, Job job, uint160 cap, uint256 t) = _match(p);
         if (!ok) revert NotApproved();
-        _register(job, p.account, p.start, p.end, p.salt, cap, t);
+        _register(job, p, cap, t);
     }
 
     /// "Keep my mix" for Protect · sell: sell the same share of each holding instead of the most safety per dollar
@@ -427,6 +422,20 @@ contract GooseExecutor is AutomationCompatibleInterface {
     function setMix(uint16[7] calldata weights) external nonReentrant {
         mixes[msg.sender] = RebalanceJob.mixOf(weights);
         emit MixSet(msg.sender, weights);
+    }
+
+    /// Top-ups go into my mix, and Keep $X as cash (USDC units). Only the account itself sets it. Switching it on or off
+    /// starts the counts again from nothing, and the cash already there stays as it is: what the wallet holds past Save's
+    /// keep-back when they go on counts as the agents' own, so Save puts it away without counting it.
+    function setTopUps(bool on, uint48 keep) external nonReentrant {
+        TopUps storage t = topUps[msg.sender];
+        if (t.on != on) {
+            delete topUps[msg.sender];
+            uint256 cash = USDC.balanceOf(msg.sender);
+            if (on && cash > amounts.keepBack) t.own = cash - amounts.keepBack;
+        }
+        (t.on, t.keep) = (on, keep);
+        emit TopUpsSet(msg.sender, on, keep);
     }
 
     /// Switches `job` off once its permission is dead: revoked, past its end, or the manager no longer owns the account.
@@ -584,16 +593,6 @@ contract GooseExecutor is AutomationCompatibleInterface {
 
     // ================================================================== views
 
-    /// The account's switches, grants and failure state. Replaces the app's browser-only record.
-    function jobsOf(address account)
-        external
-        view
-        returns (uint8 jobs, Grant memory save, Grant memory protect, uint8 fails, uint48 cooldownUntil)
-    {
-        Account memory a = accounts[account];
-        return (a.jobs, grants[account][Job.Save], grants[account][Job.Protect], a.fails, a.cooldownUntil);
-    }
-
     /// The permission the account approved for `job`, rebuilt from the template, its grant, its salt and its terms.
     function permissionOf(address account, Job job) external view returns (PM.Permission memory) {
         return _permission(job, account, grants[account][job], salts[account][job], terms[account][job]);
@@ -725,25 +724,22 @@ contract GooseExecutor is AutomationCompatibleInterface {
 
     // ================================================================== internals: registry
 
-    function _register(Job job, address account, uint48 start, uint48 end, uint256 salt, uint160 cap, uint256 t)
-        internal
-    {
+    /// `p` is exactly `job`'s template (`_match`): this spender, a cap within CAP_MAX, a window not over, terms within
+    /// their bounds.
+    function _register(Job job, PM.Permission memory p, uint160 cap, uint256 t) internal {
+        address account = p.account;
+        uint256 salt = p.salt;
         if (!allowedCodehash[account.codehash]) revert AccountNotAllowed();
         if (!JobBase.managerOwns(MANAGER, account)) revert ManagerNotOwner();
-        if (cap == 0 || cap > CAP_MAX) revert CapOutOfBounds();
-        if (start >= end || block.timestamp > end) revert BadWindow();
-        if (!_termsOk(job, t)) revert BadTerms();
-        Grant memory g = Grant(start, end, cap);
-        PM.Permission memory p = _permission(job, account, g, salt, t);
         if (!MANAGER.isApproved(p) || MANAGER.isRevoked(p)) revert NotApproved();
-        if (!_isNewer(job, account, start, salt)) {
+        if (!_isNewer(job, account, p.start, salt)) {
             if (accounts[account].jobs & _bit(job) != 0 && salts[account][job] == salt) return; // already on
             revert StaleGrant();
         }
 
         Account storage a = accounts[account];
         bool newGrant = salts[account][job] != salt;
-        grants[account][job] = g;
+        grants[account][job] = Grant(p.start, p.end, cap);
         salts[account][job] = salt;
         terms[account][job] = t;
         a.jobs |= _bit(job);
@@ -753,6 +749,8 @@ contract GooseExecutor is AutomationCompatibleInterface {
             a.cooldownUntil = 0;
             // A new Protect grant starts from Protect's line, never from a rescue an older grant left under way.
             if (job == Job.Protect || job == Job.ProtectSell) a.rescueAt = 0;
+            // A new Rebalance grant starts with no top-up waiting: what was counted before it stays cash.
+            else if (job == Job.Rebalance) (topUps[account].ready, topUps[account].today) = (0, 0);
         }
         if (a.index == 0) {
             if (members.length % PAGE_SIZE == 0) emit PageOpened(uint32(members.length / PAGE_SIZE));
@@ -763,7 +761,7 @@ contract GooseExecutor is AutomationCompatibleInterface {
             protectMembers.push(account);
             a.protectIndex = uint32(protectMembers.length);
         }
-        emit JobOn(account, job, MANAGER.getHash(p), cap, end);
+        emit JobOn(account, job, MANAGER.getHash(p), cap, p.end);
     }
 
     /// A grant can be registered when the job is off, or when it is a different grant that started no earlier than
@@ -811,14 +809,16 @@ contract GooseExecutor is AutomationCompatibleInterface {
         view
         returns (PM.Permission memory)
     {
-        if (job == Job.Save) return SaveJob.permission(_env(), account, g, salt, t);
-        if (job == Job.Protect) return ProtectJob.permission(_env(), account, g, salt, t);
-        if (job == Job.ProtectSell) return SellJob.permission(_env(), account, g, salt, t);
-        if (job == Job.Rebalance) return RebalanceJob.permission(_env(), account, g, salt, t);
-        return EntryJob.permission(_env(), account, g, salt, t);
+        Env memory e = _env();
+        if (job == Job.Save) return SaveJob.permission(e, account, g, salt, t);
+        if (job == Job.Protect) return ProtectJob.permission(e, account, g, salt, t);
+        if (job == Job.ProtectSell) return SellJob.permission(e, account, g, salt, t);
+        if (job == Job.Rebalance) return RebalanceJob.permission(e, account, g, salt, t);
+        return EntryJob.permission(e, account, g, salt, t);
     }
 
-    /// Protect · sell and the Rebalancer carry a limit per stock, within its bounds; the other jobs none.
+    /// Protect · sell and the Rebalancer carry a limit per stock, within its bounds, and the Rebalancer whether it takes
+    /// top-ups (RebalanceJob.termsOk); the other jobs none.
     function _termsOk(Job job, uint256 t) internal view returns (bool) {
         if (job == Job.ProtectSell) return SellJob.termsOk(_env(), t);
         if (job == Job.Rebalance) return RebalanceJob.termsOk(_env(), t);
@@ -838,20 +838,24 @@ contract GooseExecutor is AutomationCompatibleInterface {
             return p;
         }
         Ctx memory c = _ctx(account, job, g, frozen_, hf);
-        if (job == Job.Save) return SaveJob.plan(_env(), c, accounts[account], pools);
-        if (job == Job.Protect) return ProtectJob.plan(_env(), c, accounts[account], pools);
-        if (job == Job.ProtectSell) return SellJob.plan(_env(), c, accounts[account], pools);
-        if (job == Job.Rebalance) return RebalanceJob.plan(_env(), c, accounts[account], mixes);
-        return EntryJob.plan(_env(), c, accounts[account], entryWaits);
+        Env memory e = _env();
+        Account storage a = accounts[account];
+        if (job == Job.Save) return SaveJob.plan(e, c, a, topUps);
+        if (job == Job.Protect) return ProtectJob.plan(e, c, a, topUps);
+        if (job == Job.ProtectSell) return SellJob.plan(e, c, a, pools);
+        if (job == Job.Rebalance) return RebalanceJob.plan(e, c, a, mixes, topUps);
+        return EntryJob.plan(e, c, a, entryWaits);
     }
 
     /// Plans the job again from fresh reads and makes its move, if any, through its library.
     function _runJob(Job job, Ctx memory c) internal returns (Plan memory) {
-        if (job == Job.Save) return SaveJob.run(_env(), c, accounts[c.account], pools);
-        if (job == Job.Protect) return ProtectJob.run(_env(), c, accounts[c.account], pools);
-        if (job == Job.ProtectSell) return SellJob.run(_env(), c, accounts[c.account], pools);
-        if (job == Job.Rebalance) return RebalanceJob.run(_env(), c, accounts[c.account], mixes);
-        return EntryJob.run(_env(), c, accounts[c.account], entryWaits);
+        Env memory e = _env();
+        Account storage a = accounts[c.account];
+        if (job == Job.Save) return SaveJob.run(e, c, a, topUps);
+        if (job == Job.Protect) return ProtectJob.run(e, c, a, topUps);
+        if (job == Job.ProtectSell) return SellJob.run(e, c, a, pools, topUps);
+        if (job == Job.Rebalance) return RebalanceJob.run(e, c, a, mixes, topUps);
+        return EntryJob.run(e, c, a, entryWaits);
     }
 
     function _ctx(address account, Job job, Grant memory g, bool frozen_, uint256 hf)
