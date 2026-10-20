@@ -1,5 +1,55 @@
 # Deployments
 
+## Base mainnet — team-only preview deploy (2026-10-20)
+
+The no-limit executor (`CAP_MAX` = max uint160), unaudited, for a team-only preview (Adrian, 2026-10-20). Production stays off until the audit or Adrian's go (D13): greedygoose.vercel.app doesn't point at it, only the preview build below does. It supersedes the D13 test deploy for the preview; that one stays un-bootstrapped.
+
+| What | Value |
+|---|---|
+| GooseExecutor | `0x686cd88F248DE3F9FC0835566DB798D93881F02D` (24,365 bytes), block 52851406 (10:29 UTC), tx `0x6d72103a695c6a050e31723e752fee1627e10ca2c6bf17251fe5ba243af23396` |
+| Jobs (CREATE2) | EntryJob `0x603bffe6a5b569fcf124a484849e8d9feece1185`, SellJob `0xc27c004732513263964c6d8e03a642dcba39c56f`, SaveJob `0x123a088007aeba6dbe12c0212e8d207f21b31f5c`, RebalanceJob `0xde81fd75a1efe49c30ad7785c5f9b8b5038ee3a5`, ProtectJob `0xeeb9f7afe0e48ed4de31de0558dd61a308cf0f62` (blocks 52851401–52851405) |
+| Owner (preview only) | `0xF3bBaa5f6BEAF49732c28D2bdd2b772AA01031aD`, the JustaLab test deployer |
+| Built from | `main` @ `54fae99` (`958c84a` changes comments and docs only) |
+| Deploy cost | 0.000101 ETH for the six transactions (19.7M gas) |
+| JAW clone allowed | `allowedCodehash(0xc79e…1848)` = true, factory implementation still `0xbb4f…cBCd` (the check under "Check after the next deploy" below) |
+
+### Bootstrap
+
+`bootstrap([0x9c74d428Ff2707e0E9cB576AFFFD87c1b1eF3E93])`, KeeperHub's wallet alone (`GooseReceiver` still waits on Chainlink; add it later through the 7-day `AddForwarder`): tx `0x37bf2b1c31eb70336cd079cffac5d18330d77c9171d79215f83d1c5103d191de`, block 52851439, 0.0000004 ETH. `isForwarder(0x9c74…3E93)` = true.
+
+### NYSE holidays queued (each waits 7 days)
+
+Twelve `queueChange(SetHoliday, abi.encode(uint32 day, true))` from the owner; `changeNonce` is now 12. All twelve read back from `queued(id)` on 2026-10-20. The first ETA is 1793097069 (2026-10-27 10:31:09 UTC), the last 1793097119 (10:31:59 UTC).
+
+| Nonce | Day | Date | ETA |
+|---|---|---|---|
+| 0 | 20783 | 2026-11-26 | 1793097069 |
+| 1 | 20819 | 2027-01-01 | 1793097071 |
+| 2 | 20864 | 2027-02-15 | 1793097073 |
+| 3 | 20903 | 2027-03-26 | 1793097075 |
+| 4 | 20987 | 2027-06-18 | 1793097077 |
+| 5 | 21067 | 2027-09-06 | 1793097079 |
+| 6 | 21147 | 2027-11-25 | 1793097081 |
+| 7 | 20812 | 2026-12-25 | 1793097111 |
+| 8 | 20836 | 2027-01-18 | 1793097113 |
+| 9 | 20969 | 2027-05-31 | 1793097115 |
+| 10 | 21004 | 2027-07-05 | 1793097117 |
+| 11 | 21176 | 2027-12-24 | 1793097119 |
+
+After the ETA, the owner applies each one (nonce and day from the table):
+
+```sh
+cast send 0x686cd88F248DE3F9FC0835566DB798D93881F02D 'applyChange(uint8,bytes,uint256)' 3 $(cast abi-encode 'f(uint32,bool)' <day> true) <nonce> --rpc-url https://base-rpc.publicnode.com <signer flags>
+# Still queued? id = keccak256(abi.encode(uint8(3), abi.encode(uint32 day, true), nonce)); 0 means applied or never queued.
+cast call 0x686cd88F248DE3F9FC0835566DB798D93881F02D 'queued(bytes32)(uint48)' $(cast keccak $(cast abi-encode 'f(uint8,bytes,uint256)' 3 $(cast abi-encode 'f(uint32,bool)' <day> true) <nonce>)) --rpc-url https://base-rpc.publicnode.com
+```
+
+### Runner and preview
+
+- KeeperHub round workflow `q5vdv47dieyabhg4toiue` points all four Web3 steps at `0x686c…F02D` and is **enabled** (2026-10-20 10:42 UTC, every 10 minutes, sponsored gas, 5,500,000 gas limit). With no members, `checkUpkeep(abi.encode(0,1))` returns false, so a run is one read and no write. The runner wallet holds 0 ETH; KeeperHub's $1 monthly credit pays the first writes (go-live checklist step 11 is still open).
+- Preview build: `main` @ `54fae99` with `NEXT_PUBLIC_GOOSE_EXECUTOR=0x686c…F02D`, `NEXT_PUBLIC_GOOSE_EXECUTOR_BLOCK=52851406`, `NEXT_PUBLIC_AGENTS_LIVE=1` and the JAW key: deployment `dpl_8C2uCha7T65SHJVnekfVN3KbX6az`, aliased to greedygoose-preview.vercel.app (behind Vercel login). Production (greedygoose.vercel.app) has no executor set, so the agents stay off there.
+- Still open: cancel the D13 deploy's two pending Automation requests (0.0008 WETH back, the deployer signs), and the adversarial review's findings before any production use.
+
 ## Base mainnet — D13 test deploy (2026-10-15)
 
 Daily limits capped at $5 (`TEST_CAP_MAX`), for throwaway accounts only. Not wired into any production config; the app reads it only from a developer's `.env.local` (`NEXT_PUBLIC_GOOSE_EXECUTOR`).
