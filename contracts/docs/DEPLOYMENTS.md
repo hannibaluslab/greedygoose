@@ -40,7 +40,7 @@ Act is the line (JUSTALAB-DECISIONS.md, "Act is the line (Adrian, 2026-10-15)"):
 | Bounds: trigger · Protect target | 1.20–2.00 · up to 2.50 | pinned at 1.10 · 1.15 to 1.40 |
 | Bounds: heads-up · at once · sale target | 1.10–1.50 · 1.02 up to the heads-up · up to 2.00 | pinned at 1.10 · 1.05 to 1.08 · 1.15 to 1.40 |
 
-When it is redeployed: point `NEXT_PUBLIC_GOOSE_EXECUTOR` and `NEXT_PUBLIC_GOOSE_EXECUTOR_BLOCK` at the new address in the developer's `.env.local`, register the two upkeeps again, and record the deploy here. Grants made to this deploy name it as spender and don't carry over: each test account switches its agents on again.
+When it is redeployed: point `NEXT_PUBLIC_GOOSE_EXECUTOR` and `NEXT_PUBLIC_GOOSE_EXECUTOR_BLOCK` at the new address in the developer's `.env.local`, register the two upkeeps again, and record the deploy here. Grants made to this deploy name it as spender and don't carry over: each test account switches its agents on again. *(For the next deploy, superseded by the runner switch below: there are no upkeeps to register, since its runners are `GooseReceiver` and KeeperHub's wallet.)*
 
 ### The next deploy carries Protect's line and the runner switch (2026-10-19)
 
@@ -65,7 +65,8 @@ Adds to the runner switch's next deploy above (GooseExecutor-as-built.md, "Rebal
 |---|---|---|
 | Top-ups into the mix | none | `setTopUps(on, keep)`, `topUps(account)`; Save counts, Rebalance puts in from savings at the next market morning |
 | Rebalance's grant | no Aave call | with top-ups: Aave V3's savings withdraw (to the account only) and an aUSDC limit at spends[1], a week, at CAP_MAX |
-| Save's grant | $1,000 a day | CAP_MAX, a day (P2): Rebalance's Save grants it so; Start earning still grants $1,000 a day until Cash setup moves to `startCapRaw` |
+| Save's grant | $1,000 a day | CAP_MAX, a day (P2), from Rebalance's Save and from Start earning alike (`hooks/useCashSetup.ts`, c1e5e75) |
+| Save's keep-back | $1, bounds $0 to $5 | $1, bounds $0.60 to $5 (`CashRules.KEEP_BACK_MIN`, 49ce111): no change through the delay can set it under the $0.50 fuel tank plus Fill up's 2-cent margin, so Save never sweeps a fill-up back into savings and counts it as a top-up |
 | Registration | `register(...)` and `registerApproved` | `registerApproved` only |
 | Reads | `jobsOf` | gone: the app reads `accounts`, which both executors have |
 | Events | | `TopUpsSet`, `TopUpCounted`, `TopUpInvested` |
@@ -145,7 +146,7 @@ A sponsored KeeperHub write is a type-4 (EIP-7702) transaction: relayer `0x6331e
 | Workflow | Id | What it does | State |
 |---|---|---|---|
 | GreedyGoose round (Base) | `q5vdv47dieyabhg4toiue` | Every 10 min (`*/10 * * * *`): `checkUpkeep(abi.encode(0, 1))` → if `upkeepNeeded`, `performUpkeep(performData)`, then the same check and run once more (a rescue left unfinished goes on in the same run). Gas 5,500,000 on each write, sponsored | Built, off. Its executor address is the old test deploy as a placeholder: point it at the new executor before switching it on |
-| GreedyGoose registration (Base) | `a0t6mjkoezs3k5fdm2k03` | On JAW's manager `PermissionApproved` (`0xf1b40E3D5701C04d86F7828f0EB367B9C90901D8`): `registrationOf(permission)` → if ok, `registerApproved(permission)` | Draft, off, **blocked**: KeeperHub's form can't fill the permission's `calls[]` and `spends[]` from the event (they take only fixed objects). Unblocked by an executor entry that takes the permission as one `bytes` value, fed by a KeeperHub "Run Code" step, or by CRE |
+| GreedyGoose registration (Base) | `a0t6mjkoezs3k5fdm2k03` | On JAW's manager `PermissionApproved` (`0xf1b40E3D5701C04d86F7828f0EB367B9C90901D8`): `registrationOf(permission)` → if ok, `registerApproved(permission)` | Draft, off, **blocked**: KeeperHub's form can't fill the permission's `calls[]` and `spends[]` from the event (they take only fixed objects). Unblocked by an executor entry that takes the permission as one `bytes` value, fed by a KeeperHub "Run Code" step, or by CRE. *(Superseded by "Registration route" below: the app registers, and this draft stays off.)* |
 
 Budget: the round runs 4,464 times in a 31-day month. Each `PermissionApproved` on Base adds one run, from any JAW app (measured 0 in 6 hours on 2026-10-19). That leaves about 536 runs a month. If registrations grow, move the round to every 12 minutes (3,720 runs). *(With the registration workflow off, "Registration route" below, no `PermissionApproved` adds a run: the round is the whole budget.)* Gas: a Protect repay costs about 1 cent, a seven-stock sale about 7 cents, and a check that finds nothing costs nothing.
 
@@ -157,16 +158,16 @@ Protect timing with the round alone: Protect acts below 1.03 and Aave liquidates
 |---|---|---|---|
 | 1 | KeeperHub account, wallet, caps at 0, sender check | Adrian, Claude | Done |
 | 2 | `jl/runner-switch` lands on v2: money-safety review, fork tests on a public RPC (never the app's Alchemy key) | Runner session, Adrian's OK | Done: on main (30e2b3d and the runner switch's commits before it) |
-| 3 | Registration route for KeeperHub (the registration workflow above) | Runner session | Asked |
+| 3 | Registration route for KeeperHub (the registration workflow above) | Runner session | Done another way: the app registers each grant in the grant's own batch ("Registration route" below) |
 | 4 | Pre-launch values: pin the executor's address and code hash in the app; production `CAP_MAX` (`EXECUTOR_CAPS=none`); EntryJob's coins = `CASH_COINS` (USDT, USDe, USDS, DAI, EURC; USDbC out); Protect below 1.03 → 1.12, selling at once, the rescue going on to the target | Runner session | EntryJob still lists USDbC and no DAI/EURC on main (`contracts/src/jobs/EntryJob.sol`, 4 coins) |
 | 5 | Top up the deployer if needed (it holds 0.0011 ETH; the redeploy is about 26M gas, about 0.00016 ETH at 0.006 gwei plus the L1 fee) | Adrian | Open |
-| 6 | Deploy the executor | Adrian signs | Open |
+| 6 | Deploy the executor, then the clone check above (`allowedCodehash` of JAW's clone is true) before step 13 points the app at it | Adrian signs | Open |
 | 7 | `GooseReceiver`: needs the CRE workflow's owner address, known once CRE deploy access lands. If it's not known by then, bootstrap KeeperHub alone and add the receiver later through the 7-day `AddForwarder` | Adrian signs | Waiting on Chainlink |
 | 8 | `bootstrap([KeeperHub wallet(, receiver)])`, once | Adrian signs | Open |
 | 9 | Queue the NYSE holidays (`SetHoliday`, 7 days each), then apply them | Adrian signs | Open |
 | 10 | Cancel the two Automation requests above (0.0008 WETH back to the deployer) | Adrian signs | Open |
 | 11 | Optional gas backup: a little ETH (or USDC, which KeeperHub converts) in the runner wallet for when the $1 credit runs out | Adrian | Open |
-| 12 | Point both workflows at the new executor, then switch them on | Claude, with Adrian's OK | Open |
+| 12 | Point the round workflow at the new executor, then switch it on. The registration draft stays off ("Registration route" below) | Claude, with Adrian's OK | Open |
 | 13 | Vercel: `NEXT_PUBLIC_GOOSE_EXECUTOR` (and `_BLOCK`) and `NEXT_PUBLIC_AGENTS_LIVE=1`; `NEXT_PUBLIC_ALCHEMY_KEY` added in the dashboard by Adrian (or `--build-env`); deploy per HANDOVER-2026-10-19.md (the owner's handover, kept outside this repo) | Adrian's OK | Open |
 | 14 | Check: read `planOf` and `checkUpkeep` for a test account, then a first real run while Adrian watches (KeeperHub's run log and Basescan) | Adrian, Claude | Open |
 
