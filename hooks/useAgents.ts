@@ -127,7 +127,7 @@ const stopPlan = (account: `0x${string}`, why: string): TxPlan => ({
  * anything that goes first (`changePlan`, signed through useTx). Once it lands the app puts each new grant in JAW's
  * relay as JAW's own grant does, so JAW lists it (`usePermissions`), and takes revoked ones out.
  *
- * Whether a job runs is read on Base: registered in the executor (`jobsOf`, `permissionOf`), not past its end, not
+ * Whether a job runs is read on Base: registered in the executor (`accounts`, `permissionOf`), not past its end, not
  * revoked in the manager, and the manager still an owner of the account, so a list that's late or a record that
  * didn't save never shows a running agent as off. A listed record counts only when the manager's hash of it is its
  * id and the manager has it approved and not revoked: JAW's relay takes writes from anyone with the app's public key.
@@ -146,7 +146,8 @@ export function useAgents(account: `0x${string}`) {
     }) as const;
   const registry = useReadContracts({
     contracts: [
-      { address: at, abi: gooseExecutorAbi, functionName: "jobsOf", args: [account], chainId: CHAIN_ID },
+      // `accounts`, not `jobsOf`: the top-ups executor drops jobsOf to fit 24 KB; both have this getter, jobs first.
+      { address: at, abi: gooseExecutorAbi, functionName: "accounts", args: [account], chainId: CHAIN_ID },
       permissionOf(0),
       permissionOf(1),
       permissionOf(2),
@@ -172,7 +173,7 @@ export function useAgents(account: `0x${string}`) {
   /** The registry: the job bits, failures in a row and the back-off, and each job's stored grant (with its stock limits). */
   const stored = useMemo(() => {
     if (!registry.data) return undefined;
-    const [[jobs, , , fails, cooldownUntil], ...raw] = registry.data;
+    const [[jobs, , fails, cooldownUntil], ...raw] = registry.data;
     const permissions = raw.map((p) => ({ ...p, calls: [...p.calls], spends: [...p.spends] }) as JawPermission);
     const grants = byJob((job): Stored & { limitsRaw?: StockLimits; salt: bigint } => {
       const p = permissions[JOBS.indexOf(job)];

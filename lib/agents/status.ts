@@ -18,7 +18,7 @@ export const changeSheets = (grants: number) => (grants > 0 ? 1 : 0);
 export type Stored = { start: number; end: number; cap: bigint };
 
 /**
- * Whether the executor runs `job`: registered (its bit in `jobs`, GooseExecutor.jobsOf), not past its end, and alive
+ * Whether the executor runs `job`: registered (its bit in `jobs`, GooseExecutor.accounts), not past its end, and alive
  * (`alive`, read on Base: not revoked in the manager, where a revoke shows at once while the registry only learns of
  * it on the next run, and the manager still an owner of the account). A one-signature grant reaches JAW's list after
  * its batch, so the list doesn't decide. Without that read (`alive` undefined), that same grant still in JAW's list
