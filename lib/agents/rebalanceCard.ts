@@ -80,6 +80,12 @@ export function portfolioSlots(holdings: readonly MixHolding[]): MixSlot[] {
   return mixSlots({ holdings: whole, mixBps: null, options: { bandBps: 0n, bandMaxBps: 0n }, trades: [] });
 }
 
+/** Up to this many stocks, the card draws its slots bigger (Adrian, 2026-10-20, board 7l). */
+export const BIG_MIX_MAX = 4;
+
+/** How much bigger the card draws its slots, logos and targets: ×1.5 for 1–4 stocks, today's size for 5–7. */
+export const mixScale = (count: number): number => (count <= BIG_MIX_MAX ? 1.5 : 1);
+
 /** The pill's colours: running, neutral (off, paused, coming soon), needs the user, and a trade or a date due. */
 export type PillTone = "on" | "neutral" | "needs" | "due";
 

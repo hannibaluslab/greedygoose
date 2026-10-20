@@ -4,7 +4,14 @@ import { AgentMark } from "../activity/Activity";
 import { ChevronRight } from "../kit/icons";
 import { StockAvatar } from "../kit/StockAvatar";
 import { useRebalanceCard } from "@/hooks/useRebalanceCard";
-import type { MixSlot, PillTone, RebalanceCardModel, RebalanceFooter, Side } from "@/lib/agents/rebalanceCard";
+import {
+  mixScale,
+  type MixSlot,
+  type PillTone,
+  type RebalanceCardModel,
+  type RebalanceFooter,
+  type Side,
+} from "@/lib/agents/rebalanceCard";
 import { EQUITIES } from "@/lib/tokens/registry";
 
 /*
@@ -84,27 +91,34 @@ const pctText = (bps: number) => `${Number((bps / 100).toFixed(2))}%`;
 /**
  * The mix: each stock's target on top, its slot (tinted when the next check sells or buys it), the dashed target line
  * through the slots' middles, a ghost where a traded stock goes back to, its logo placed by its drift in bands, and
- * BUY or SELL under a traded slot. All from the model, so it reads the same at every phone width.
+ * BUY or SELL under a traded slot. All from the model, so it reads the same at every phone width. With 1–4 stocks
+ * everything is drawn ×1.5 (`mixScale`, board 7l); 5–7 keep the boards' size.
  */
 function MixPicture({ slots, faded }: { slots: readonly MixSlot[]; faded: boolean }) {
+  const k = mixScale(slots.length);
   const labelled = slots.some((s) => s.side !== null);
-  const top = labelled ? 24 : 20;
-  const mid = top + 36;
-  const x = (i: number) => `${50 + (i - (slots.length - 1) / 2) * STEP_PCT}%`;
+  const pctLine = k > 1 ? 18 : 16;
+  const slotW = 34 * k;
+  const slotH = 72 * k;
+  const logo = Math.round(25 * k);
+  const ghost = 26 * k;
+  const top = pctLine + (labelled ? 8 : 4);
+  const mid = top + slotH / 2;
+  const x = (i: number) => `${50 + (i - (slots.length - 1) / 2) * STEP_PCT * k}%`;
   const at = (i: number, half: number) => ({ left: `calc(${x(i)} - ${half}px)` });
   return (
     <span
       aria-hidden
       className={`num relative mt-4 block w-full ${faded ? "opacity-60" : ""}`}
-      style={{ height: labelled ? 116 : 96 }}
+      style={{ height: top + slotH + (labelled ? 20 : 4) }}
     >
       {slots.map(
         (s, i) =>
           s.targetBps !== null && (
             <span
               key={s.reserveId}
-              className="absolute w-12 text-center font-mono text-[13px] font-bold leading-4 tracking-[0.4px]"
-              style={{ ...at(i, 24), top: top - 18 }}
+              className="absolute w-12 text-center font-mono font-bold tracking-[0.4px]"
+              style={{ ...at(i, 24), top: top - pctLine - 2, fontSize: k > 1 ? 15 : 13, lineHeight: `${pctLine}px` }}
             >
               {pctText(s.targetBps)}
             </span>
@@ -113,8 +127,8 @@ function MixPicture({ slots, faded }: { slots: readonly MixSlot[]; faded: boolea
       {slots.map((s, i) => (
         <span
           key={s.reserveId}
-          className={`absolute h-[72px] w-[34px] rounded-[17px] ${FILL[s.side ?? "none"]}`}
-          style={{ ...at(i, 17), top }}
+          className={`absolute ${FILL[s.side ?? "none"]}`}
+          style={{ ...at(i, slotW / 2), top, width: slotW, height: slotH, borderRadius: slotW / 2 }}
         />
       ))}
       <svg className="absolute inset-x-0" style={{ top: mid - 0.5 }} width="100%" height="1">
@@ -123,8 +137,21 @@ function MixPicture({ slots, faded }: { slots: readonly MixSlot[]; faded: boolea
       {slots.map(
         (s, i) =>
           s.side && (
-            <svg key={s.reserveId} className="absolute" style={{ ...at(i, 13), top: mid - 13 }} width="26" height="26">
-              <circle cx="13" cy="13" r="12.5" fill="var(--bg-card)" stroke="var(--ink-mid)" strokeDasharray="2 2.2" />
+            <svg
+              key={s.reserveId}
+              className="absolute"
+              style={{ ...at(i, ghost / 2), top: mid - ghost / 2 }}
+              width={ghost}
+              height={ghost}
+            >
+              <circle
+                cx={ghost / 2}
+                cy={ghost / 2}
+                r={ghost / 2 - 0.5}
+                fill="var(--bg-card)"
+                stroke="var(--ink-mid)"
+                strokeDasharray="2 2.2"
+              />
             </svg>
           ),
       )}
@@ -132,9 +159,9 @@ function MixPicture({ slots, faded }: { slots: readonly MixSlot[]; faded: boolea
         <span
           key={s.reserveId}
           className="absolute rounded-full ring-1 ring-card"
-          style={{ ...at(i, 12.5), top: mid - 12.5 - s.offset * BAND_PX }}
+          style={{ ...at(i, logo / 2), top: mid - logo / 2 - s.offset * BAND_PX * k }}
         >
-          <StockAvatar symbol={EQUITIES[s.reserveId].symbol} size={25} />
+          <StockAvatar symbol={EQUITIES[s.reserveId].symbol} size={logo} />
         </span>
       ))}
       {slots.map(
@@ -142,8 +169,8 @@ function MixPicture({ slots, faded }: { slots: readonly MixSlot[]; faded: boolea
           s.side && (
             <span
               key={s.reserveId}
-              className={`absolute top-[101px] w-12 text-center font-mono text-[10px] font-bold leading-3 tracking-[0.6px] ${s.side === "buy" ? "text-pos" : "text-neg"}`}
-              style={at(i, 24)}
+              className={`absolute w-12 text-center font-mono font-bold leading-3 tracking-[0.6px] ${s.side === "buy" ? "text-pos" : "text-neg"}`}
+              style={{ ...at(i, 24), top: top + slotH + 5, fontSize: k > 1 ? 11 : 10 }}
             >
               {s.side === "buy" ? "BUY" : "SELL"}
             </span>

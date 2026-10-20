@@ -3,6 +3,7 @@ import { mixBpsNow, rebalanceOptions, type MixHolding } from "@/lib/agents/mix";
 import { nyDay, rebalanceCheckAt, rebalanceOutlook, whenText, type OutlookInput } from "@/lib/agents/next";
 import {
   investDue,
+  mixScale,
   mixSlots,
   OFFSET_MAX,
   rebalanceCard,
@@ -264,6 +265,11 @@ describe("rebalanceCard: the first state that applies, in board 7's order, with 
     expect(card({ live: false, holdings: held }).slots).toEqual(owned);
     // On, it still draws the mix it keeps: free shares against their targets.
     expect(card({ holdings: held }).slots.map((x) => x.reserveId)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+  });
+
+  it("slots draw ×1.5 for 1–4 stocks and at the boards' size for 5–7 (board 7l)", () => {
+    expect([1, 2, 3, 4].map(mixScale)).toEqual([1.5, 1.5, 1.5, 1.5]);
+    expect([5, 6, 7].map(mixScale)).toEqual([1, 1, 1]);
   });
 
   it("stopped on its own: before Off, faded", () => {
