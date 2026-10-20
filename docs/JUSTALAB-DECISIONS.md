@@ -640,6 +640,13 @@ Adrian (2026-10-20): "go with just one face id to earn, on agent". An account JA
 Adrian (2026-10-20): "Turn into cash and 'Do this automatically next time' should be one Face ID too", and, on how the card asks: "abstract the switch, turn into cash means next time automatically". This supersedes "Do this automatically next time?" in D20's row (:20), "Other dollars…" (:143), "D20's screens follow the sweep's rules" (:165) and "'Turn into cash' is one screen" (:166), for that question; those keep their meaning for their day.
 
 - **One batch, one Face ID:** while the agents are live and nothing converts on its own yet (`askAutomatic`), "Turn into cash" signs the conversion and the Entry grant together (useCashSetup `automaticPlan`, the conversion as the change's first calls). No switch, no second question, no opt-out on the card.
-- **The card says it before the tap**, above its button: "Next time it happens on its own, up to $1,000 a day." (Entry's limit as its grant carries it). Once it lands: "It's cash now · About $119.83 is in your cash. Next time it happens on its own."
+- **The card says it before the tap**, above its button: "Next time it happens on its own, up to $1,000 a day." (Entry's limit as its grant carries it). Once it lands: "It's cash now · About $119.83 is in your cash. Next time it happens on its own." *(Superseded the same day by "One card, nothing else": no line above the button.)*
 - Otherwise (agents not live, or the next ones already convert on their own) the card and its batch are as before: the conversion alone.
+
+## 2026-10-20 · One card, nothing else
+
+Adrian (2026-10-20, on Turn into cash): "the ui is horrible, just the same card, you received, finish set up, cta. that is it". Turn into cash takes Start earning's card exactly (board 2g): an icon, "You received 120 USDT", one line, and its button. Both cards share one component (`SetupCard`, components/gg/cash/CashSetup.tsx).
+
+- **Turn into cash:** "You received 120 USDT" · "Finish setting up" while its one Face ID also has the next ones convert on their own, else "Not in your cash yet" · "Turn into cash". The coins and what they bring, the least it all brings, the small print of every move (D7's) and the note on a coin under 99.5% are no longer on the card; the batch still holds each coin to 99.5% of face value or better, and a coin under it stays as it is. Under the card only an error, or why it can't go ahead.
+- **Start earning** loses the line added under it today ("New cash that arrives moves into savings on its own."): the card is board 2g as approved. This takes back, for these two cards, "The clear line" in "One signature per change" above; Protect's and Rebalance's sheets keep theirs.
 

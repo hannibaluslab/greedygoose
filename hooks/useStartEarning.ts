@@ -9,13 +9,7 @@ import { toUsd, type Cash } from "@/lib/cash";
 import { readCash } from "@/lib/cash/read";
 import { CHAIN_ID } from "@/lib/chain";
 import { AGENTS_LIVE } from "@/lib/agents/config";
-import {
-  earningAllowsText,
-  saveGrantFollows,
-  startedEarningText,
-  startEarningShown,
-  startEarningText,
-} from "@/lib/cashSetup";
+import { saveGrantFollows, startedEarningText, startEarningShown, startEarningText } from "@/lib/cashSetup";
 import { startEarningFlow, startEarningPlan, startEarningPrefix, type StartEarningStage } from "@/lib/startEarning";
 
 /** What the card said at the tap: kept while JAW's sheet is open, so it doesn't change under the user. */
@@ -108,8 +102,6 @@ export function useStartEarning(p: {
     visible,
     title,
     line,
-    /** What its Face ID lets the app do when it grants earning; null when it doesn't. */
-    allows: grants ? earningAllowsText() : null,
     phase,
     // A batch that grants earning waits for what it's built from (the executor's registry): checking until then.
     checking: plan ? prep.checking : !!supply,

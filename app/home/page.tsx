@@ -114,7 +114,6 @@ function Home({ address }: { address: `0x${string}` }) {
                   phase={earn.phase}
                   checking={earn.checking}
                   blocked={earn.blocked}
-                  allows={earn.allows}
                   note={earn.note}
                   error={earn.error}
                   preview={earn.preview}

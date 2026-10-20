@@ -20,7 +20,7 @@ import type { ConvertQuote } from "@/lib/tx/plans";
 import { useNowSec } from "@/hooks/useNowSec";
 import type { AgentEvent } from "@/lib/agents/events";
 import { describeAgentEvent, type MoveContext } from "@/lib/agents/feed";
-import { arrivedCoins, arrivedView, automaticText, rateText, startEarningText } from "@/lib/cashSetup";
+import { arrivedCoins, arrivedView, rateText, startEarningText } from "@/lib/cashSetup";
 import { convertFloorRaw } from "@/lib/swap/entry";
 import { CASH_COINS } from "@/lib/tokens/stables";
 import { CashSheetDemo, SHEET_VIEWS, type SheetView } from "./CashSheetDemo";
@@ -30,12 +30,11 @@ import { CashSheetDemo, SHEET_VIEWS, type SheetView } from "./CashSheetDemo";
  * rules and words (arrivedView, arrivedText, describeAgentEvent). Nothing here reads the chain or signs.
  *   /dev/ui/cash?view=home        Home with "120 USDT arrived · Turn into cash" (its one screen) and "Your $100 arrived ·
  *                                 Start earning"
- *   ?view=start                   Start earning's other states: "$40 isn't earning" with earning granted in the same
- *                                 Face ID (its line), and confirming on Base
+ *   ?view=start                   Start earning's other states: "$40 isn't earning", and confirming on Base
  *   ?view=arriving                Home once other dollars convert on their own: the Cash card says "arriving"
  *   ?view=convert                 "Turn into cash" with one coin under the floor: it stays as it is
- *   ?view=auto                    "Turn into cash" while nothing converts on its own yet: its one Face ID converts the
- *                                 next ones too, and the card says so
+ *   ?view=auto                    "You received 120 USDT · Finish setting up": its one Face ID converts the next ones
+ *                                 too
  *   ?view=done                    converted, with nothing to ask (no executor, or it already converts on its own)
  *   ?view=pay | pay-setup         the Top up sheet over Home, while the cash earns and before earning is set up
  *   ?view=activity                Activity with the cash's own events
@@ -115,14 +114,7 @@ export function CashGallery() {
       <HomeFixture
         cards={
           <>
-            <StartEarningCard
-              {...IDLE}
-              phase="idle"
-              allows="New cash that arrives moves into savings on its own."
-              error={null}
-              preview={false}
-              onStart={noop}
-            />
+            <StartEarningCard {...IDLE} phase="idle" error={null} preview={false} onStart={noop} />
             <StartEarningCard {...ARRIVED} phase="pending" error={null} preview={false} onStart={noop} />
           </>
         }
@@ -154,7 +146,7 @@ export function CashGallery() {
                 phase="idle"
                 error={null}
                 preview={false}
-                allows={view === "auto" ? automaticText("$1,000") : null}
+                setsUp={view === "auto"}
                 onConvert={noop}
               />
             )}

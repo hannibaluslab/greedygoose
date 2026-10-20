@@ -6,7 +6,6 @@ import {
   arrivedText,
   arrivedView,
   askAutomatic,
-  automaticText,
   earningLine,
   MIN_START_USD,
   rateText,
@@ -113,8 +112,6 @@ describe("other dollars in the account", () => {
     expect(STATUSES.filter((s) => askAutomatic(s, false))).toEqual([]);
     expect(AGENTS_LIVE).toBe(false);
     expect(askAutomatic("off", AGENTS_LIVE)).toBe(false);
-    // Said on the card before its one Face ID.
-    expect(automaticText("$1,000")).toBe("Next time it happens on its own, up to $1,000 a day.");
   });
 
   it("never name an agent, a limit or a savings pot", () => {

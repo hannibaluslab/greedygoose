@@ -1,27 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
 import { ActivityAvatar } from "../activity/Activity";
-import { Summary, type SummaryRow } from "../home/Summary";
-import { TxButton, TxDone, TxError } from "../TxUi";
+import { TxDone, TxError } from "../TxUi";
 import { TrendUpIcon } from "../kit/icons";
 import { useConvert, useConvertQuotes } from "@/hooks/useConvert";
 import { NOT_FAIR, planPrefix, type ConvertQuote } from "@/lib/tx/plans";
 import type { useCashSetup } from "@/hooks/useCashSetup";
 import { usePrepare, type TxPhase } from "@/hooks/useTx";
 import { AGENTS_LIVE } from "@/lib/agents/config";
-import { askAutomatic, automaticText, type Arrived, type ArrivedView } from "@/lib/cashSetup";
-import { formatCoin, formatUsd, inWords } from "@/lib/formatting";
+import { askAutomatic, type Arrived, type ArrivedView } from "@/lib/cashSetup";
+import { formatUsd } from "@/lib/formatting";
 import { USDC } from "@/lib/tokens/registry";
-import type { EntryVenue } from "@/lib/tokens/stables";
 
 /*
- * Earning and other dollars becoming cash, where the user meets them (D20): "Your $100 arrived · Start earning" on Home
- * while the wallet's cash isn't earning (board 2g; its batch puts it in savings, Adrian 2026-10-15), and "120 USDT arrived · Turn into cash" on Home and Pay, then "Do this
- * automatically next time?". No agent, limit or switch, and no confirm step of ours: each button names its action and
- * opens JAW's own sheet straight away, which shows the Review and asks for Face ID. Plain values in, so the dev gallery
- * draws every state.
+ * Earning and other dollars becoming cash, where the user meets them (D20), on one card each: "Your $100 arrived · Start
+ * earning" on Home while the wallet's cash isn't earning (board 2g; its batch puts it in savings, Adrian 2026-10-15),
+ * and "You received 120 USDT · Finish setting up · Turn into cash" on Home and Pay. No agent, limit or switch, and no
+ * confirm step of ours: each button names its action and opens JAW's own sheet straight away, which shows the Review
+ * and asks for Face ID. Plain values in, so the dev gallery draws every state.
  */
 
 const usd = (raw: bigint) => formatUsd(Number(raw) / 10 ** USDC.decimals);
@@ -31,56 +29,55 @@ const PILL =
   "flex h-9 shrink-0 items-center gap-1.5 rounded-[18px] bg-ink px-3.5 text-sm font-semibold text-on-ink disabled:opacity-45";
 
 /**
- * Home's card while the wallet's cash isn't earning (board 2g): "Your $100 arrived · Start earning 4.6% on it.", or
- * "$40 isn't earning" beside savings that already earn. Its button moves that cash into savings in one batch on JAW's
- * sheet (useStartEarning), named for the action only. When the same Face ID also has new cash earn on its own, one line
- * says so before the tap (`allows`: JAW's batch sheet shows no words of ours). While JAW's sheet is open, the card adds nothing.
+ * The one card D20's two moments share (board 2g, Adrian 2026-10-20: "just the same card, you received, finish set up,
+ * cta. that is it"): an icon, a title, one line and the button that names its action, straight to JAW's sheet. Under it
+ * only an error, or why it can't go ahead. While JAW's sheet is open, the card adds nothing.
  */
-export function StartEarningCard({
+function SetupCard({
+  aria,
+  icon,
   title,
   line,
+  action,
   phase,
   checking = false,
   blocked = false,
-  allows = null,
   note,
   error,
   preview,
-  onStart,
+  onTap,
 }: {
+  aria: string;
+  icon: ReactNode;
   title: string;
   line: string;
+  action: string;
   phase: TxPhase;
   /** The batch is still being prepared (useTx): "Checking…" until it's ready. */
   checking?: boolean;
   /** The batch can't go ahead (`error` says why). */
   blocked?: boolean;
-  /** What its Face ID lets the app do beyond this cash (earning on new cash); null when nothing. */
-  allows?: string | null;
   /** Why it can't be signed now; null when it can. */
   note?: string | null;
   error: string | null;
   preview: boolean;
-  onStart: () => void;
+  onTap: () => void;
 }) {
   const busy = phase === "simulating" || phase === "signing" || phase === "pending";
   const waiting = checking && !busy && phase !== "done";
-  const label =
-    phase === "simulating" || waiting ? "Checking…" : phase === "pending" ? "Confirming on Base…" : "Start earning";
+  const label = phase === "simulating" || waiting ? "Checking…" : phase === "pending" ? "Confirming on Base…" : action;
   const small = preview ? "Preview mode. Sign in to do this." : note;
   return (
-    <section aria-label="Start earning" className={SMALL_CARD}>
+    <section aria-label={aria} className={SMALL_CARD}>
       <div className="flex items-center gap-2.5">
-        <span aria-hidden className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand text-ink">
-          <TrendUpIcon size={15} />
-        </span>
+        {icon}
         <span className="flex min-w-0 grow flex-col gap-0.5">
           <span className="num text-[15px] font-semibold leading-[1.3]">{title}</span>
           <span className="num text-[13px] leading-[1.3] text-ink-2">{line}</span>
         </span>
         <button
           type="button"
-          onClick={onStart}
+          onClick={onTap}
           disabled={busy || waiting || blocked || preview || !!note || phase === "done"}
           aria-busy={busy || waiting}
           data-tx={waiting ? "checking" : busy ? phase : undefined}
@@ -89,37 +86,83 @@ export function StartEarningCard({
           {label}
         </button>
       </div>
-      {allows && <p className="m-0 text-xs leading-[1.4] text-ink-2">{allows}</p>}
       <TxError error={error} />
-      {small && <p className={`m-0 text-xs text-subtle ${!preview && !note ? "text-right" : ""}`}>{small}</p>}
+      {small && <p className="m-0 text-xs text-subtle">{small}</p>}
     </section>
   );
 }
 
-const VENUE: Record<EntryVenue["kind"], string> = { aerodrome: "Aerodrome", uniswap: "Uniswap", psm3: "Spark" };
-
-/** "120 USDT", from a quote. */
-const coinText = (q: ConvertQuote) => `${formatCoin(Number(q.amountIn) / 10 ** q.coin.decimals)} ${q.coin.symbol}`;
+/**
+ * Home's card while the wallet's cash isn't earning (board 2g): "Your $100 arrived · Start earning 4.6% on it.", or
+ * "$40 isn't earning" beside savings that already earn. Its button moves that cash into savings in one batch on JAW's
+ * sheet (useStartEarning), named for the action only; while the agents are live the same Face ID has new cash earn on
+ * its own.
+ */
+export function StartEarningCard({
+  title,
+  line,
+  phase,
+  checking,
+  blocked,
+  note,
+  error,
+  preview,
+  onStart,
+}: {
+  title: string;
+  line: string;
+  phase: TxPhase;
+  checking?: boolean;
+  blocked?: boolean;
+  note?: string | null;
+  error: string | null;
+  preview: boolean;
+  onStart: () => void;
+}) {
+  return (
+    <SetupCard
+      aria="Start earning"
+      icon={
+        <span aria-hidden className="flex size-8 shrink-0 items-center justify-center rounded-full bg-brand text-ink">
+          <TrendUpIcon size={15} />
+        </span>
+      }
+      title={title}
+      line={line}
+      action="Start earning"
+      phase={phase}
+      checking={checking}
+      blocked={blocked}
+      note={note}
+      error={error}
+      preview={preview}
+      onTap={onStart}
+    />
+  );
+}
 
 /**
- * Other dollars in the account that nothing converts on its own, and turning them into cash on one screen: what they
- * become and the least they bring, the network fee and every move in small print (D7), then one button to JAW's sheet
- * (one user-signed batch, lib/swap/entry.ts). No review of ours before it.
+ * Other dollars in the account that nothing converts on its own, on the same card: "You received 120 USDT", "Finish
+ * setting up" while its one Face ID also has the next ones convert on their own (else "Not in your cash yet"), and
+ * "Turn into cash" (one user-signed batch, lib/swap/entry.ts, at 99.5% of face value or better; a coin under that stays
+ * as it is). Nothing else on the card.
  */
 export function ArrivedCard({
   text,
   quotes,
+  setsUp = false,
   phase,
   checking = false,
   blocked = false,
   error,
   preview,
-  allows = null,
   onConvert,
 }: {
   text: string;
   /** null while the venues are read. */
   quotes: readonly ConvertQuote[] | null;
+  /** Its Face ID also has the next ones convert on their own (useCashSetup `automaticPlan`). */
+  setsUp?: boolean;
   phase: TxPhase;
   /** The batch is still being prepared (useTx): "Checking…" until it's ready. */
   checking?: boolean;
@@ -127,64 +170,23 @@ export function ArrivedCard({
   blocked?: boolean;
   error: string | null;
   preview: boolean;
-  /**
-   * What its one Face ID also lets the app do, said before the tap (JAW's batch sheet shows no words of ours): convert
-   * the next ones on their own. Null when it doesn't (agents not live, or they already convert on their own).
-   */
-  allows?: string | null;
   onConvert: () => void;
 }) {
   const fair = quotes?.filter((q) => q.fair) ?? [];
-  const waiting = quotes?.filter((q) => !q.fair) ?? [];
-  const sum = (f: (q: ConvertQuote) => bigint) => fair.reduce((t, q) => t + f(q), 0n);
-  const rows: SummaryRow[] = [
-    ...fair.map((q) => ({ label: coinText(q), value: `about ${usd(q.outRaw)}` })),
-    { label: "You get at least", value: usd(sum((q) => q.minOut)) },
-  ];
-  const moves = fair.map(
-    (q) => `exactly ${coinText(q)} is approved for ${VENUE[q.coin.venue.kind]} and swapped into USDC`,
-  );
   return (
-    <section aria-label={`${text} arrived`} className={SMALL_CARD}>
-      <div className="flex items-center gap-2.5">
-        <ActivityAvatar symbol={USDC.symbol} size={32} />
-        <span className="flex min-w-0 grow flex-col gap-0.5">
-          <span className="num text-[15px] font-semibold leading-[1.3]">{text} arrived</span>
-          <span className="text-[13px] leading-[1.3] text-ink-2">Not in your cash yet</span>
-        </span>
-      </div>
-      {!quotes ? (
-        <div aria-busy className="flex flex-col gap-1.5">
-          <span className="text-[13px] text-ink-mid">Checking today’s price…</span>
-          <div className="h-[74px] animate-pulse rounded-[12px] bg-chip" />
-        </div>
-      ) : (
-        fair.length > 0 && <Summary rows={rows} />
-      )}
-      {waiting.length > 0 && (
-        <p className="m-0 text-[13px] leading-[1.4] text-ink-mid">
-          {inWords(waiting.map((q) => q.coin.symbol))} {waiting.length === 1 ? "isn’t" : "aren’t"} at a fair price right
-          now, so {waiting.length === 1 ? "it stays" : "they stay"} as {waiting.length === 1 ? "it is" : "they are"}.
-        </p>
-      )}
-      {fair.length > 0 && (
-        <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">
-          In one go: {inWords(moves)}, at 99.5% of face value or better. If a price falls below that, nothing is
-          swapped.
-        </p>
-      )}
-      {allows && fair.length > 0 && <p className="m-0 text-xs leading-[1.4] text-ink-2">{allows}</p>}
-      <TxError error={error ?? (quotes && fair.length === 0 ? NOT_FAIR : null)} />
-      <TxButton
-        label="Turn into cash"
-        size="md"
-        phase={phase}
-        checking={checking}
-        preview={preview}
-        disabled={!quotes || fair.length === 0 || blocked}
-        onClick={onConvert}
-      />
-    </section>
+    <SetupCard
+      aria={`You received ${text}`}
+      icon={<ActivityAvatar symbol={USDC.symbol} size={32} />}
+      title={`You received ${text}`}
+      line={setsUp ? "Finish setting up" : "Not in your cash yet"}
+      action="Turn into cash"
+      phase={phase}
+      checking={checking || !quotes}
+      blocked={blocked || (!!quotes && fair.length === 0)}
+      error={error ?? (quotes && fair.length === 0 ? NOT_FAIR : null)}
+      preview={preview}
+      onTap={onConvert}
+    />
   );
 }
 
@@ -245,7 +247,7 @@ export function TurnIntoCash({
           blocked={prep.blocked}
           error={tx.error ?? prep.error}
           preview={setup.preview}
-          allows={(pinned ? held?.auto : auto) ? automaticText(setup.entryLimitText) : null}
+          setsUp={!!(pinned ? held?.auto : auto)}
           onConvert={() => {
             if (!plan) return;
             if (tx.phase === "failed") tx.reset();
