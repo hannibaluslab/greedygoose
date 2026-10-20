@@ -123,22 +123,24 @@ library CashRules {
         why = ProtectCase.Act;
     }
 
-    /// Protect, second half (plan.ts `planGuardian`): the repay in USDC units, within savings and what's left of
-    /// today's limit. `why` is the first half's `Act`, returned unchanged when there is a repay.
+    /// Protect, second half: the repay in USDC units, from the cash Protect may spend, wallet first (`wallet`: USDC
+    /// above the keep-back), then savings (`savings`: what Aave V3 can pay out now), within what's left of today's
+    /// limit. Returns `why` unchanged when there is a repay, the amount, and the part that comes from savings.
     function protectAmount(
         ProtectCase why,
         uint256 need,
         uint256 debt,
+        uint256 wallet,
         uint256 savings,
         uint256 capLeft,
         uint256 minRepay
-    ) internal pure returns (ProtectCase, uint256 amount) {
-        if (savings == 0) return (ProtectCase.NoSavings, 0);
-        if (capLeft == 0) return (ProtectCase.NoCap, 0);
+    ) internal pure returns (ProtectCase, uint256 amount, uint256 fromSavings) {
+        if (wallet + savings == 0) return (ProtectCase.NoSavings, 0, 0);
+        if (capLeft == 0) return (ProtectCase.NoCap, 0, 0);
         amount = _ceilDiv(_min(need, debt), VALUE_PER_USDC_UNIT);
-        amount = _min(_min(amount, savings), capLeft);
-        if (amount < minRepay) return (ProtectCase.TooSmall, 0);
-        return (why, amount);
+        amount = _min(_min(amount, wallet + savings), capLeft);
+        if (amount < minRepay) return (ProtectCase.TooSmall, 0, 0);
+        return (why, amount, _sub(amount, wallet));
     }
 
     /// Save (planSave): wallet USDC above the keep-back goes into savings, within today's limit and the daily number

@@ -60,7 +60,8 @@ contract GooseExecutor is AutomationCompatibleInterface {
         EndRescue, // a rescue that reached the target, or nothing owed: no money moves
         Defer, // a batch that doesn't fit in the gas left waits for the next run
         Rebalance,
-        Convert
+        Convert,
+        RepayThenSell // run only: Protect's repay ended short of the target, or its batch couldn't run; Protect · sell next
     }
 
     enum OffReason {
@@ -282,7 +283,12 @@ contract GooseExecutor is AutomationCompatibleInterface {
     /// `shares` by reserve id; `repaid` in USDC units.
     event ProtectSold(address indexed account, uint256[7] shares, uint256 repaid, uint256 hfBefore, uint256 hfAfter);
     /// A sale whose batch couldn't run (a swap under its floor): nothing moved, and the next run tries again.
-    event SaleSkipped(address indexed account);
+    /// `reason`: the failed post-check's error, 0 when the batch itself reverted; `retryAt`: when the sale tries again.
+    event SaleSkipped(address indexed account, bytes4 reason, uint32 retryAt);
+    /// A repay whose batch couldn't run: nothing moved, and Protect · sell gets its turn in the same run.
+    event RepaySkipped(address indexed account);
+    /// A save Aave refused (its supply cap, a frozen or paused reserve): nothing moved; it counts as one of today's saves.
+    event SaveSkipped(address indexed account, uint256 amount);
     event KeepMixSet(address indexed account, bool on);
     event MixSet(address indexed account, uint16[7] weights);
     event TopUpsSet(address indexed account, bool on, uint48 keep);
@@ -488,7 +494,7 @@ contract GooseExecutor is AutomationCompatibleInterface {
         uint256 owned = (pages - shard - 1) / shards + 1;
         uint256 from = (shard + shards * (block.number % owned)) * PAGE_SIZE;
         uint256 size = list.length - from < PAGE_SIZE ? list.length - from : PAGE_SIZE;
-        uint256 first = block.number / owned % size;
+        uint256 first = _scanStart(block.number / owned, size);
 
         address[] memory work = new address[](MAX_WORK);
         uint256[] memory order = new uint256[](MAX_WORK);
@@ -527,30 +533,40 @@ contract GooseExecutor is AutomationCompatibleInterface {
             address account = list[i];
             Account memory a = accounts[account];
             if (!_due(a) || _seenBefore(list, i)) continue;
-            if (gasleft() < RUN_GAS + RESERVE_GAS) {
-                emit RunDeferred(account); // the next check lists it again
-                return;
-            }
-            // Each account runs in its own capped sub-call: a revert anywhere in it, the manager's spend bookkeeping
-            // included, rolls back that account alone. RESERVE_GAS always stays behind for the catch.
-            uint256 gas = gasleft() - RESERVE_GAS;
-            try this.runAccount{gas: gas < MAX_RUN_GAS ? gas : MAX_RUN_GAS}(account, frozen_) returns (bool deferred) {
-                // A deferred sale doesn't hold up the accounts after it: the next check lists it again.
-                if (deferred) emit RunDeferred(account);
-                else if (a.fails != 0) accounts[account].fails = 0;
-            } catch (bytes memory reason) {
-                _fail(account, reason);
-            }
+            // A repay that hands over (2) is followed by Protect · sell alone, in a sub-call of its own: the sale gets
+            // its own gas, and a sale that reverts can't undo the repay (H1, H3). runAccount(saleOnly) never returns 2.
+            bool saleOnly;
+            do {
+                if (gasleft() < RUN_GAS + RESERVE_GAS) {
+                    emit RunDeferred(account); // the next check lists it again
+                    return;
+                }
+                // Each account runs in its own capped sub-call: a revert anywhere in it, the manager's spend
+                // bookkeeping included, rolls back that account alone. RESERVE_GAS always stays behind for the catch.
+                uint256 gas = gasleft() - RESERVE_GAS;
+                uint8 s;
+                try this.runAccount{gas: gas < MAX_RUN_GAS ? gas : MAX_RUN_GAS}(account, frozen_, saleOnly) returns (
+                    uint8 r
+                ) {
+                    s = r;
+                    // A deferred sale doesn't hold up the accounts after it: the next check lists it again.
+                    if (r == 1) emit RunDeferred(account);
+                    else if (a.fails != 0) accounts[account].fails = 0;
+                } catch (bytes memory reason) {
+                    _fail(account, reason);
+                }
+                saleOnly = s == 2;
+            } while (saleOnly);
         }
     }
 
     /// One account's run: Protect from savings, then by selling, the Rebalancer, Entry, then Save, and at most one move. A dead permission
     /// switches its job off on the way. Returns true when a sale didn't fit in the gas left. Only callable by this
     /// contract, from `performUpkeep`.
-    function runAccount(address account, bool frozen_) external returns (bool deferred) {
+    function runAccount(address account, bool frozen_, bool saleOnly) external returns (uint8) {
         if (msg.sender != address(this)) revert OnlySelf();
         uint256 hf; // read by the first job that needs it, then passed on
-        for (uint8 j; j < JOBS; ++j) {
+        for (uint8 j = saleOnly ? 1 : 0; j < (saleOnly ? 2 : JOBS); ++j) {
             Job job = _priority(j);
             if (accounts[account].jobs & _bit(job) == 0) continue;
             Grant memory g = grants[account][job];
@@ -571,9 +587,9 @@ contract GooseExecutor is AutomationCompatibleInterface {
                 accounts[account].rescueAt = 0; // bookkeeping only: the run goes on to the next job
                 continue;
             }
-            if (p.action == Action.Defer) return true;
+            if (p.action == Action.Defer) return 1;
             _checkOwnBalances(mine);
-            return false;
+            return p.action == Action.RepayThenSell ? 2 : 0;
         }
     }
 
@@ -729,7 +745,8 @@ contract GooseExecutor is AutomationCompatibleInterface {
     function _register(Job job, PM.Permission memory p, uint160 cap, uint256 t) internal {
         address account = p.account;
         uint256 salt = p.salt;
-        if (!allowedCodehash[account.codehash]) revert AccountNotAllowed();
+        // A delegated EOA (EIP-7702, 23 bytes of code) can change its code after it registers: never allowed (H4).
+        if (account.code.length == 23 || !allowedCodehash[account.codehash]) revert AccountNotAllowed();
         if (!JobBase.managerOwns(MANAGER, account)) revert ManagerNotOwner();
         if (!MANAGER.isApproved(p) || MANAGER.isRevoked(p)) revert NotApproved();
         if (!_isNewer(job, account, p.start, salt)) {
@@ -767,8 +784,9 @@ contract GooseExecutor is AutomationCompatibleInterface {
     /// A grant can be registered when the job is off, or when it is a different grant that started no earlier than
     /// the stored one. So an older grant the user never revoked can't replace a newer one.
     function _isNewer(Job job, address account, uint48 start, uint256 salt) internal view returns (bool) {
-        if (accounts[account].jobs & _bit(job) == 0) return true;
-        return salts[account][job] != salt && start >= grants[account][job].start;
+        uint48 newest = grants[account][job].start; // never cleared by _jobOff: the newest start this job has seen
+        if (start != newest) return start > newest;
+        return salts[account][job] == salt && accounts[account].jobs & _bit(job) == 0; // the same grant, back on
     }
 
     /// Which job, cap and terms a permission approved by the manager is a grant of: the template it matches exactly,
@@ -777,7 +795,9 @@ contract GooseExecutor is AutomationCompatibleInterface {
     function _match(PM.Permission memory p) internal view returns (bool ok, Job job, uint160 cap, uint256 t) {
         if (p.spender != address(this) || p.spends.length == 0) return (false, job, 0, 0);
         cap = p.spends[0].allowance;
-        if (cap == 0 || cap > CAP_MAX || p.start >= p.end || block.timestamp > p.end) return (false, job, 0, 0);
+        if (cap == 0 || cap > CAP_MAX || p.start >= p.end || p.start > block.timestamp || block.timestamp > p.end) {
+            return (false, job, 0, 0);
+        }
         bytes32 signed = keccak256(abi.encode(p));
         for (uint8 j; j < JOBS; ++j) {
             job = Job(j);
@@ -842,7 +862,7 @@ contract GooseExecutor is AutomationCompatibleInterface {
         Account storage a = accounts[account];
         if (job == Job.Save) return SaveJob.plan(e, c, a, topUps);
         if (job == Job.Protect) return ProtectJob.plan(e, c, a, topUps);
-        if (job == Job.ProtectSell) return SellJob.plan(e, c, a, pools);
+        if (job == Job.ProtectSell) return SellJob.plan(e, c, a, pools, entryWaits);
         if (job == Job.Rebalance) return RebalanceJob.plan(e, c, a, mixes, topUps);
         return EntryJob.plan(e, c, a, entryWaits);
     }
@@ -853,7 +873,7 @@ contract GooseExecutor is AutomationCompatibleInterface {
         Account storage a = accounts[c.account];
         if (job == Job.Save) return SaveJob.run(e, c, a, topUps);
         if (job == Job.Protect) return ProtectJob.run(e, c, a, topUps);
-        if (job == Job.ProtectSell) return SellJob.run(e, c, a, pools, topUps);
+        if (job == Job.ProtectSell) return SellJob.run(e, c, a, pools, topUps, entryWaits);
         if (job == Job.Rebalance) return RebalanceJob.run(e, c, a, mixes, topUps);
         return EntryJob.run(e, c, a, entryWaits);
     }
@@ -906,11 +926,15 @@ contract GooseExecutor is AutomationCompatibleInterface {
         Account storage a = accounts[account];
         uint8 fails = a.fails < MAX_FAILS ? a.fails + 1 : MAX_FAILS;
         a.fails = fails;
-        a.cooldownUntil = uint48(block.timestamp) + (BASE_COOLDOWN << (fails - 1));
+        a.cooldownUntil = uint48(block.timestamp) + (BASE_COOLDOWN << (fails < 3 ? fails - 1 : 2));
         emit RunFailed(account, bytes4(reason), fails);
-        if (fails < MAX_FAILS) return;
-        for (uint8 j; j < JOBS; ++j) {
-            if (a.jobs & _bit(Job(j)) != 0) _jobOff(account, Job(j), OffReason.Stuck);
+    }
+
+    /// Where pass `pass` over a page of `size` starts: pass × the golden ratio, scaled to the page (a Weyl sequence), so
+    /// any run of passes spreads its starts over the page however far each pass gets (M4).
+    function _scanStart(uint256 pass, uint256 size) internal pure returns (uint256 first) {
+        unchecked {
+            first = (pass * 0x9E3779B9 & 0xffffffff) * size >> 32;
         }
     }
 

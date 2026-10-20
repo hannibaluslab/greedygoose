@@ -32,12 +32,29 @@ library SellJob {
     /// A stock is for sale only while its pool sits no more than the floor less this under Aave's price: the room for
     /// the pools' 0.05% fee and a slice's price impact (a $5,000 slice moves each pool under 0.01%, 2026-10-14).
     uint256 internal constant POOL_ROOM_BPS = 25;
+    /// M3: a stock is for sale only while its pool sits at most this far under Aave's price (or the floor less
+    /// POOL_ROOM_BPS, if that is closer), so a runner that moves the pool first can take at most this much.
+    uint256 internal constant POOL_BAND_BPS = 100;
+    /// M1: a rescue above Protect's line may use at most this share of a stock's window; the rest is kept for sales
+    /// below the line.
+    uint256 internal constant RESCUE_SHARE_BPS = 5_000;
+    /// M1: while a window is in its first half, one account may use at most this share of it.
+    uint256 internal constant ACCOUNT_SHARE_BPS = 5_000;
+    /// A sale whose batch couldn't run waits this long, doubling with each skip in a row (2, 4, 8, then 16 minutes).
+    uint256 internal constant SALE_RETRY = 2 minutes;
+    uint256 internal constant MAX_SKIPS = 4;
+    /// Where the sale's wait sits in the account's word in `GooseExecutor.entryWaits`, after Entry's four coins (bits
+    /// 0-127): the retry time at bits 128-159, the skips in a row at 160-167.
+    uint256 internal constant RETRY_AT = 128;
+    uint256 internal constant SKIPS_AT = 160;
 
     /// What a planned sale carries to its batch.
     struct Sale {
         PM.Permission perm;
         Slice[] slices;
         uint256[7] prices;
+        uint256 hf; // H6: the model's health before the sale, on each reserve's latest config (what Aave applies once the
+        // first withdrawal refreshes the position)
     }
 
     // ================================================================== permission
@@ -101,9 +118,10 @@ library SellJob {
         GooseExecutor.Env memory e,
         GooseExecutor.Ctx memory c,
         GooseExecutor.Account storage acc,
-        mapping(uint256 => GooseExecutor.PoolUse) storage pools
+        mapping(uint256 => GooseExecutor.PoolUse) storage pools,
+        mapping(address => uint256) storage waits
     ) public view returns (GooseExecutor.Plan memory p) {
-        (p,) = _plan(e, c, acc, pools);
+        (p,) = _plan(e, c, acc, pools, waits[c.account]);
     }
 
     /// Plans, then sells. A sale that wouldn't fit in the gas left is deferred to the next run. A sale that leaves the
@@ -115,33 +133,54 @@ library SellJob {
         GooseExecutor.Ctx memory c,
         GooseExecutor.Account storage acc,
         mapping(uint256 => GooseExecutor.PoolUse) storage pools,
-        mapping(address => TopUps) storage topUps
+        mapping(address => TopUps) storage topUps,
+        mapping(address => uint256) storage waits
     ) external returns (GooseExecutor.Plan memory p) {
-        if (gasleft() < PLAN_GAS && _mightSell(e, c, acc)) {
+        if (gasleft() < PLAN_GAS && _retryAt(waits[c.account]) <= block.timestamp && _mightSell(e, c, acc)) {
             p.job = GooseExecutor.Job.ProtectSell;
             p.action = GooseExecutor.Action.Defer;
             return p;
         }
         Sale memory sale;
-        (p, sale) = _plan(e, c, acc, pools);
+        (p, sale) = _plan(e, c, acc, pools, waits[c.account]);
         if (p.action != GooseExecutor.Action.Sell) return p;
         if (gasleft() < SELL_GAS + CHECKS_GAS) {
             p.action = GooseExecutor.Action.Defer;
             return p;
         }
         uint256 cash = e.usdc.balanceOf(c.account);
-        (bool done, uint256 hfAfter, bool owes) = _sell(e, c.account, sale, p.hf, c.thresholds.targetHf);
-        if (!done) return p; // the batch couldn't run: nothing moved, the next run tries again
+        (bool done, uint256 hfAfter, bool owes) = _sell(e, c.account, sale, c.thresholds.targetHf);
+        _wait(waits, c.account, done, hfAfter);
+        if (!done) return p;
         JobBase.addOwn(topUps[c.account], e.usdc.balanceOf(c.account) - cash); // never lower: `check`
         // Counted once per stock, as the rule budgets it: a rounding up per slice could pass the cap by a unit.
         uint256[7] memory sold;
+        uint256 repay;
         for (uint256 i; i < sale.slices.length; ++i) {
             sold[sale.slices[i].reserveId] += sale.slices[i].shares;
+            repay += sale.slices[i].minOut;
         }
+        emit GooseExecutor.ProtectSold(c.account, sold, repay, p.hf, hfAfter);
         for (uint256 r; r < 7; ++r) {
-            if (sold[r] > 0) _usePool(pools[r], JobBase.ceilDiv(sold[r] * sale.prices[r], 1e10));
+            if (sold[r] > 0) _usePool(pools, r, c.account, JobBase.ceilDiv(sold[r] * sale.prices[r], 1e10));
         }
         acc.rescueAt = JobBase.rescueAfter(acc.rescueAt, owes, hfAfter, c.thresholds.targetHf);
+    }
+
+    /// A skipped sale waits SALE_RETRY, doubling with each skip in a row up to 16 minutes, so a batch that keeps
+    /// failing can't take every run's gas; it is never a failure. A sale that ran clears the wait. On a skip `why`
+    /// is the failed post-check's selector (0: the batch itself reverted).
+    function _wait(mapping(address => uint256) storage waits, address account, bool done, uint256 why) private {
+        uint256 w = waits[account];
+        if (done) {
+            if (w >> SKIPS_AT & 0xff != 0) waits[account] = w & ~(uint256(type(uint40).max) << RETRY_AT);
+            return;
+        }
+        uint256 skips = (w >> SKIPS_AT & 0xff) + 1;
+        if (skips > MAX_SKIPS) skips = MAX_SKIPS;
+        uint32 retryAt = uint32(block.timestamp + (SALE_RETRY << (skips - 1)));
+        waits[account] = w & ~(uint256(type(uint40).max) << RETRY_AT) | (uint256(retryAt) | skips << 32) << RETRY_AT;
+        emit GooseExecutor.SaleSkipped(account, bytes4(uint32(why)), retryAt);
     }
 
     /// The cheap part of `_plan`: whether this run may sell, before paying for a sale's plan.
@@ -160,7 +199,8 @@ library SellJob {
         GooseExecutor.Env memory e,
         GooseExecutor.Ctx memory c,
         GooseExecutor.Account storage acc,
-        mapping(uint256 => GooseExecutor.PoolUse) storage pools
+        mapping(uint256 => GooseExecutor.PoolUse) storage pools,
+        uint256 w
     ) internal view returns (GooseExecutor.Plan memory p, Sale memory sale) {
         p.job = GooseExecutor.Job.ProtectSell;
         p.hf = c.hf != 0 ? c.hf : JobBase.health(e, c.account);
@@ -173,14 +213,16 @@ library SellJob {
         if (!SellRules.sellsNow(p.hf, rescuing, c.frozen, c.thresholds.triggerHf, c.thresholds.targetHf)) {
             return (p, sale);
         }
+        if (_retryAt(w) > block.timestamp) return (p, sale); // a skipped sale waits
 
         // Only worth it if there is something Protect may sell now.
         sale.perm = permission(e, c.account, c.grant, c.salt, c.terms);
         uint256 usdcLeft = JobBase.capLeft(e.manager, sale.perm, 0);
         if (usdcLeft == 0 || e.spoke.getReserve(e.usdcReserveId).flags & JobBase.PAUSED != 0) return (p, sale);
         uint256 floor = c.sellLimits.floorBps;
-        Book memory b = _book(e, c, sale, pools, usdcLeft, floor);
+        Book memory b = _book(e, c, sale, pools, usdcLeft, floor, p.hf < c.thresholds.triggerHf);
         b.debt = JobBase.ceilDiv(e.spoke.getUserAccountData(c.account).totalDebtValueRay, 1e27);
+        sale.hf = SellRules.power(b.stocks) * 1e14 / b.debt;
         uint256[7] memory take = SellRules.amounts(b, c.thresholds.targetHf, floor, acc.keepMix);
         sale.slices = SellRules.slices(b, take, floor, c.sellLimits.maxSlice);
         for (uint256 i; i < sale.slices.length; ++i) {
@@ -209,7 +251,8 @@ library SellJob {
         Sale memory sale,
         mapping(uint256 => GooseExecutor.PoolUse) storage pools,
         uint256 usdcLeft,
-        uint256 floor
+        uint256 floor,
+        bool urgent
     ) internal view returns (Book memory b) {
         b.usdcPrice = e.oracle.getReservePrice(e.usdcReserveId);
         b.usdcLeft = usdcLeft;
@@ -221,7 +264,7 @@ library SellJob {
             if (JobBase.stockLimit(c.terms, r) == 0) continue;
             if (b.stocks[r].shares > 0 && !paused && _fills(e, r, b.stocks[r].price, floor)) {
                 b.stocks[r].limit = JobBase.capLeft(e.manager, sale.perm, spend);
-                b.stocks[r].poolLeft = _poolLeft(pools[r], c.sellLimits.poolCap);
+                b.stocks[r].poolLeft = _poolLeft(pools, r, c.account, c.sellLimits.poolCap, urgent);
             }
             ++spend;
         }
@@ -253,7 +296,8 @@ library SellJob {
         view
         returns (bool)
     {
-        return JobBase.poolPrice(e, r) * SellRules.BPS >= price * (SellRules.BPS + POOL_ROOM_BPS - floorBps);
+        uint256 band = floorBps < POOL_BAND_BPS + POOL_ROOM_BPS ? floorBps - POOL_ROOM_BPS : POOL_BAND_BPS;
+        return JobBase.poolPrice(e, r) * SellRules.BPS >= price * (SellRules.BPS - band);
     }
 
     /// Takes each slice's stock out of Aave, swaps exactly that on Aerodrome to the account with Aave's price minus the
@@ -262,9 +306,9 @@ library SellJob {
     /// moved the pool) moves nothing and is skipped, like the Rebalancer's, rather than counted as a failure: repeated,
     /// failures would switch Protect off. The post-checks still revert anything a batch that did run got wrong.
     /// Returns whether it sold, the health after, and whether anything is still owed.
-    function _sell(GooseExecutor.Env memory e, address account, Sale memory sale, uint256 hfBefore, uint256 targetHf)
+    function _sell(GooseExecutor.Env memory e, address account, Sale memory sale, uint256 targetHf)
         internal
-        returns (bool, uint256 hfAfter, bool owes)
+        returns (bool, uint256, bool)
     {
         uint256[7] memory sold;
         uint256 repay;
@@ -272,26 +316,39 @@ library SellJob {
             sold[sale.slices[i].reserveId] += sale.slices[i].shares;
             repay += sale.slices[i].minOut;
         }
-        Before memory b = snapshot(e, account, sold, hfBefore);
-        if (!_batch(e, sale.perm, _calls(e, account, sale.slices, sold, repay))) {
-            emit GooseExecutor.SaleSkipped(account);
-            return (false, hfBefore, true);
+        bytes memory batch =
+            abi.encodeCall(PM.executeBatch, (sale.perm, _calls(e, account, sale.slices, sold, repay)));
+        // The batch and its post-checks in one frame: a post-check that fails rolls the batch back with it, as a skip.
+        (bool ok, bytes memory ret) = address(SellJob).delegatecall{gas: SELL_GAS + CHECKS_GAS}(
+            abi.encodeWithSelector(SellJob.settle.selector, e, account, batch, sold, sale.hf, targetHf)
+        );
+        if (!ok) {
+            uint256 why; // the failed post-check's selector; 0 when the batch itself reverted
+            assembly ("memory-safe") {
+                if gt(mload(ret), 3) { why := shr(224, mload(add(ret, 0x20))) }
+            }
+            return (false, why, true);
         }
-        (hfAfter, owes) = check(e, account, b, targetHf);
-        emit GooseExecutor.ProtectSold(account, sold, repay, hfBefore, hfAfter);
+        (uint256 hfAfter, bool owes) = abi.decode(ret, (uint256, bool));
         return (true, hfAfter, owes);
     }
 
-    /// The sale's batch through the manager; false when it reverts, which moves nothing.
-    function _batch(GooseExecutor.Env memory e, PM.Permission memory perm, PM.Call[] memory calls)
-        internal
-        returns (bool)
-    {
-        try e.manager.executeBatch{gas: SELL_GAS}(perm, calls) {
-            return true;
-        } catch {
-            return false;
-        }
+    /// The sale's batch through the manager, then its post-checks. Only ever reached by SellJob's own delegatecall
+    /// from `_sell` (a library's state-changing function refuses a direct call), so it runs as GooseExecutor.
+    /// H6: health is compared with the model's health on the latest config (`hf`), which the first withdrawal moves
+    /// the position to.
+    function settle(
+        GooseExecutor.Env memory e,
+        address account,
+        bytes memory batch,
+        uint256[7] memory sold,
+        uint256 hf,
+        uint256 targetHf
+    ) external returns (uint256, bool) {
+        Before memory b = snapshot(e, account, sold, hf);
+        (bool ok,) = address(e.manager).call{gas: SELL_GAS}(batch);
+        if (!ok) revert();
+        return check(e, account, b, targetHf);
     }
 
     /// What a sale's post-checks compare with.
@@ -318,8 +375,8 @@ library SellJob {
         b.savings = e.aUsdc.balanceOf(account);
         for (uint256 r; r < 7; ++r) {
             b.wallet[r] = IERC20(e.stocks[r]).balanceOf(account);
-            if (sold[r] == 0) b.backing[r] = e.spoke.getUserSuppliedAssets(r, account);
-            else b.mine[r] = IERC20(e.stocks[r]).balanceOf(address(this));
+            b.backing[r] = e.spoke.getUserSuppliedAssets(r, account);
+            if (sold[r] != 0) b.mine[r] = IERC20(e.stocks[r]).balanceOf(address(this));
         }
     }
 
@@ -341,10 +398,13 @@ library SellJob {
         if (owes && hf > targetHf + CashRules.OVERSHOOT_HF) revert GooseExecutor.Overshoot();
         for (uint256 r; r < 7; ++r) {
             if (IERC20(e.stocks[r]).balanceOf(account) != b.wallet[r]) revert GooseExecutor.StockMoved();
+            uint256 left = e.spoke.getUserSuppliedAssets(r, account);
             if (b.sold[r] == 0) {
-                if (e.spoke.getUserSuppliedAssets(r, account) != b.backing[r]) revert GooseExecutor.BackingMoved();
-            } else if (IERC20(e.stocks[r]).balanceOf(address(this)) > b.mine[r]) {
-                revert GooseExecutor.ExecutorGotFunds();
+                if (left != b.backing[r]) revert GooseExecutor.BackingMoved();
+            } else {
+                // At least what the sale sold came out of Aave (H4): measured, not taken from the plan.
+                if (left + b.sold[r] > b.backing[r]) revert GooseExecutor.BackingMoved();
+                if (IERC20(e.stocks[r]).balanceOf(address(this)) > b.mine[r]) revert GooseExecutor.ExecutorGotFunds();
             }
         }
         if (e.aUsdc.balanceOf(account) < b.savings) revert GooseExecutor.SavingsMoved();
@@ -390,20 +450,55 @@ library SellJob {
         }
     }
 
-    // ================================================================== the pool cap
-
-    /// What all accounts may still sell into a stock's pool in the current window, in USDC at Aave's price.
-    function _poolLeft(GooseExecutor.PoolUse memory u, uint256 cap) internal view returns (uint256) {
-        if (block.timestamp >= u.start + POOL_WINDOW) return cap;
-        return cap > u.sold ? cap - u.sold : 0;
+    function _retryAt(uint256 w) internal pure returns (uint256) {
+        return w >> RETRY_AT & type(uint32).max;
     }
 
-    function _usePool(GooseExecutor.PoolUse storage u, uint256 amount) internal {
-        if (block.timestamp >= u.start + POOL_WINDOW) {
-            u.start = uint48(block.timestamp);
-            u.sold = 0;
+    // ================================================================== the pool cap
+
+    /// What this account may still sell into stock r's pool in the current window, in USDC at Aave's price (M1): what
+    /// all accounts together have left, a rescue above Protect's line only up to RESCUE_SHARE_BPS of the cap, and,
+    /// while the window is in its first half, at most ACCOUNT_SHARE_BPS of it for one account. Keys 0-6 of `pools` hold
+    /// each stock's window for all accounts; key account << 8 | r holds that account's own use of it.
+    function _poolLeft(
+        mapping(uint256 => GooseExecutor.PoolUse) storage pools,
+        uint256 r,
+        address account,
+        uint256 cap,
+        bool urgent
+    ) internal view returns (uint256 left) {
+        GooseExecutor.PoolUse memory all = pools[r];
+        bool open = block.timestamp < all.start + POOL_WINDOW;
+        uint256 used = open ? all.sold : 0;
+        uint256 limit = urgent ? cap : cap * RESCUE_SHARE_BPS / SellRules.BPS;
+        left = limit > used ? limit - used : 0;
+        if (open && block.timestamp >= all.start + POOL_WINDOW / 2) return left;
+        GooseExecutor.PoolUse memory mine = pools[_key(account, r)];
+        uint256 mineUsed = open && mine.start == all.start ? mine.sold : 0;
+        uint256 share = cap * ACCOUNT_SHARE_BPS / SellRules.BPS;
+        share = share > mineUsed ? share - mineUsed : 0;
+        if (share < left) left = share;
+    }
+
+    function _usePool(
+        mapping(uint256 => GooseExecutor.PoolUse) storage pools,
+        uint256 r,
+        address account,
+        uint256 amount
+    ) internal {
+        GooseExecutor.PoolUse storage all = pools[r];
+        if (block.timestamp >= all.start + POOL_WINDOW) {
+            all.start = uint48(block.timestamp);
+            all.sold = 0;
         }
-        u.sold += uint208(amount);
+        all.sold += uint208(amount);
+        uint256 k = _key(account, r);
+        GooseExecutor.PoolUse memory mine = pools[k];
+        pools[k] = GooseExecutor.PoolUse(all.start, (mine.start == all.start ? mine.sold : 0) + uint208(amount));
+    }
+
+    function _key(address account, uint256 r) internal pure returns (uint256) {
+        return uint256(uint160(account)) << 8 | r;
     }
 
 }

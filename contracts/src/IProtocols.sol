@@ -12,11 +12,35 @@ import {IJustaPermissionManager} from "./IJustaPermissionManager.sol";
 interface IERC20 {
     function balanceOf(address who) external view returns (uint256);
     function approve(address spender, uint256 amount) external returns (bool);
+    function totalSupply() external view returns (uint256);
 }
 
 interface IAaveV3Pool {
     function supply(address asset, uint256 amount, address onBehalfOf, uint16 referralCode) external;
     function withdraw(address asset, uint256 amount, address to) external returns (uint256);
+    /// ReserveConfigurationMap: bit 56 active, 57 frozen, 60 paused, 116-151 supply cap (whole tokens).
+    function getConfiguration(address asset) external view returns (uint256);
+    /// What the reserve can pay out now (v3.7 virtual accounting); a withdrawal above it reverts.
+    function getVirtualUnderlyingBalance(address asset) external view returns (uint128);
+    /// Aave V3's ReserveDataLegacy.
+    struct ReserveData {
+        uint256 configuration;
+        uint128 liquidityIndex;
+        uint128 currentLiquidityRate;
+        uint128 variableBorrowIndex;
+        uint128 currentVariableBorrowRate;
+        uint128 currentStableBorrowRate;
+        uint40 lastUpdateTimestamp;
+        uint16 id;
+        address aTokenAddress;
+        address stableDebtTokenAddress;
+        address variableDebtTokenAddress;
+        address interestRateStrategyAddress;
+        uint128 accruedToTreasury;
+        uint128 unbacked;
+        uint128 isolationModeTotalDebt;
+    }
+    function getReserveData(address asset) external view returns (ReserveData memory);
 }
 
 interface ISpoke {

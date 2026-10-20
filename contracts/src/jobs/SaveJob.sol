@@ -15,6 +15,15 @@ import {JobBase} from "./JobBase.sol";
 ///         the mix (CashRules.topUpCounted).
 /// @dev A linked library: its code runs as GooseExecutor, the spender, exactly as if it were inlined there.
 library SaveJob {
+    /// Aave V3's ReserveConfiguration bits: active, frozen, paused, and the supply cap in whole tokens (36 bits).
+    uint256 internal constant V3_ACTIVE = 56;
+    uint256 internal constant V3_FROZEN = 57;
+    uint256 internal constant V3_PAUSED = 60;
+    uint256 internal constant V3_SUPPLY_CAP = 116;
+    uint256 internal constant V3_CAP_MASK = (1 << 36) - 1;
+    /// Kept under the cap: the treasury's accrual since Aave's last update, and rounding ($1,000).
+    uint256 internal constant SUPPLY_SLACK = 1_000e6;
+
     /// The template the user approved: approve USDC, supply it to savings.
     function permission(
         GooseExecutor.Env memory e,
@@ -60,14 +69,14 @@ library SaveJob {
         PM.Permission memory perm = permission(e, c.account, c.grant, c.salt, 0);
         p = _plan(e, c, perm, _savesToday(acc));
         if (p.action != GooseExecutor.Action.Save) return p;
-        (uint256 before, uint256 savings) = _save(e, c.account, perm, p.amount);
+        (bool done, uint256 before, uint256 savings) = _save(e, c.account, perm, p.amount);
         uint32 today = uint32(NyCalendar.day(block.timestamp));
         if (acc.savesDay != today) {
             acc.savesDay = today;
             acc.savesToday = 0;
         }
-        ++acc.savesToday;
-        if (acc.jobs & 1 << uint8(GooseExecutor.Job.Rebalance) != 0) {
+        ++acc.savesToday; // a refused save counts too, so Aave refusing all day costs at most maxSavesPerDay tries
+        if (done && acc.jobs & 1 << uint8(GooseExecutor.Job.Rebalance) != 0) {
             _count(topUps, c.account, today, before, p.amount, savings);
         }
     }
@@ -99,7 +108,9 @@ library SaveJob {
         uint256 cash = e.usdc.balanceOf(c.account);
         if (cash < uint256(a.keepBack) + a.minSave) return p;
         SaveCase kind;
-        (kind, p.amount) = CashRules.planSave(cash, JobBase.capLeft(e.manager, perm, 0), savesToday, a);
+        uint256 left = JobBase.capLeft(e.manager, perm, 0);
+        uint256 room = _room(e);
+        (kind, p.amount) = CashRules.planSave(cash, left < room ? left : room, savesToday, a);
         if (kind != SaveCase.Save) return p;
         (bool alive, GooseExecutor.OffReason off) = JobBase.alive(e.manager, perm);
         if (!alive) {
@@ -111,6 +122,19 @@ library SaveJob {
         p.action = GooseExecutor.Action.Save;
     }
 
+    /// What Aave V3 still takes as USDC savings now: 0 when the reserve is inactive, frozen or paused, else the room
+    /// under its supply cap, counted the way its supply check counts it (aUSDC plus the treasury's accrual) less a
+    /// slack for interest since its last update. Unlimited when it has no cap.
+    function _room(GooseExecutor.Env memory e) internal view returns (uint256) {
+        IAaveV3Pool.ReserveData memory d = e.aaveV3Pool.getReserveData(address(e.usdc));
+        uint256 cfg = d.configuration;
+        if (cfg >> V3_ACTIVE & 1 == 0 || cfg >> V3_FROZEN & 1 != 0 || cfg >> V3_PAUSED & 1 != 0) return 0;
+        uint256 cap = (cfg >> V3_SUPPLY_CAP & V3_CAP_MASK) * 1e6;
+        if (cap == 0) return type(uint256).max;
+        uint256 used = e.aUsdc.totalSupply() + uint256(d.accruedToTreasury) * d.liquidityIndex / 1e27 + SUPPLY_SLACK;
+        return cap > used ? cap - used : 0;
+    }
+
     function _savesToday(GooseExecutor.Account storage acc) internal view returns (uint256) {
         return acc.savesDay == NyCalendar.day(block.timestamp) ? acc.savesToday : 0;
     }
@@ -118,7 +142,7 @@ library SaveJob {
     /// Wallet → savings: approve the pool exactly, supply for the account. Returns the savings before and after.
     function _save(GooseExecutor.Env memory e, address account, PM.Permission memory perm, uint256 amount)
         internal
-        returns (uint256 savingsBefore, uint256 savings)
+        returns (bool, uint256 savingsBefore, uint256 savings)
     {
         uint256 cashBefore = e.usdc.balanceOf(account);
         savingsBefore = e.aUsdc.balanceOf(account);
@@ -128,11 +152,16 @@ library SaveJob {
         calls[1] = PM.Call(
             address(e.aaveV3Pool), 0, abi.encodeCall(IAaveV3Pool.supply, (address(e.usdc), amount, account, 0))
         );
-        e.manager.executeBatch{gas: JobBase.ACCOUNT_GAS}(perm, calls);
+        try e.manager.executeBatch{gas: JobBase.ACCOUNT_GAS}(perm, calls) {}
+        catch {
+            emit GooseExecutor.SaveSkipped(account, amount);
+            return (false, savingsBefore, savingsBefore);
+        }
 
         if (e.usdc.balanceOf(account) + amount != cashBefore) revert GooseExecutor.WrongAmount();
         savings = e.aUsdc.balanceOf(account);
         if (savings + JobBase.SAVINGS_ROUNDING < savingsBefore + amount) revert GooseExecutor.SavingsNotUp();
         emit GooseExecutor.Saved(account, amount);
+        return (true, savingsBefore, savings);
     }
 }
