@@ -104,26 +104,27 @@ export function rebalanceSave(p: SaveInput): SavePlan {
 }
 
 /**
- * The allows line for a Save that grants: Rebalance's (`rebalanceAllows`), and while top-ups are on and earning is
- * off, earning's own line after it (Start earning's words, with no amount limit: P2), since the same Face ID grants
- * earning too (P3, `rebalanceChange`).
+ * The allows line for a Save that grants (`rebalanceAllows`): with earning's own words too while top-ups are on and
+ * earning is off, since the same Face ID grants earning (P3, `rebalanceChange`).
  */
 function allowsLine(p: SaveInput, chosen: TopUpsChoice | null): string {
-  const line = rebalanceAllows(chosen?.on ? { keepUsd: chosen.keepUsd ?? 0 } : undefined);
-  const earningToo = !!chosen?.on && !!p.earningOff;
-  return earningToo ? `${line} ${earningAllowsText()}` : line;
+  return rebalanceAllows(chosen?.on ? { keepUsd: chosen.keepUsd ?? 0 } : undefined, !!chosen?.on && !!p.earningOff);
 }
 
 /**
  * What a Save's one Face ID lets Rebalance do when it grants (JAW's batch sheet shows no words of ours). With top-ups
- * on, it also puts the cash above what the user keeps into the mix (all of it with Keep $0), so the line says so
- * (`topUps`, wired in M5).
+ * on, it also puts the cash above what the user keeps into the mix (all of it with Keep $0), so the line says so. With
+ * `earning`, earning's words (Start earning's, no amount limit) come before the turn-off, which ends the line and then
+ * names Rebalance, since its "it" would read as earning.
  */
-export function rebalanceAllows(topUps?: { keepUsd: number }): string {
-  if (!topUps)
-    return "Rebalance can trade your stocks toward your mix, for a year. It never spends your cash. You can turn it off here.";
-  const into = topUps.keepUsd > 0 ? `your top-ups above ${keepText(topUps.keepUsd)}` : "every top-up";
-  return `Rebalance can trade your stocks toward your mix, and put ${into} into it, for a year. You can turn it off here.`;
+export function rebalanceAllows(topUps?: { keepUsd: number }, earning = false): string {
+  const into = topUps && (topUps.keepUsd > 0 ? `your top-ups above ${keepText(topUps.keepUsd)}` : "every top-up");
+  const can = into
+    ? `Rebalance can trade your stocks toward your mix, and put ${into} into it, for a year.`
+    : "Rebalance can trade your stocks toward your mix, for a year. It never spends your cash.";
+  return earning
+    ? `${can} ${earningAllowsText()} You can turn Rebalance off here.`
+    : `${can} You can turn it off here.`;
 }
 
 /** A grant in a change's batch, as useAgents `changePlan` takes it (its GrantStep). */

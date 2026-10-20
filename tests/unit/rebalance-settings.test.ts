@@ -139,6 +139,14 @@ describe('rebalanceSteps: Save is one batch, one Face ID (Adrian, 2026-10-20: "i
     expect(rebalanceAllows({ keepUsd: 500 })).not.toMatch(/never spends/);
     expect(rebalanceAllows({ keepUsd: 0 })).toMatch(/put every top-up into it/);
   });
+
+  it("ends on the turn-off, naming Rebalance only when earning's words come before it", () => {
+    expect(rebalanceAllows({ keepUsd: 500 })).toMatch(/for a year\. You can turn it off here\.$/);
+    expect(rebalanceAllows({ keepUsd: 0 }, true)).toBe(
+      "Rebalance can trade your stocks toward your mix, and put every top-up into it, for a year. " +
+        "New cash that arrives moves into savings on its own. You can turn Rebalance off here.",
+    );
+  });
 });
 
 describe("rebalanceSave: Top-ups go into my mix", () => {
@@ -182,11 +190,12 @@ describe("rebalanceSave: Top-ups go into my mix", () => {
   it("says earning turns on too when top-ups turn on while it's off: the same Face ID grants it (P3)", () => {
     const plan = rebalanceSave({ ...base, earningOff: true, topUps: { saved: off, chosen: on } });
     expect(plan).toMatchObject({ needsGrant: true, steps: 1, canSave: true });
-    // Earning has no amount limit (P2): its line names none.
+    // Earning's words before the turn-off, which ends the line and names Rebalance; no amount limit (P2).
     expect(plan.allows).toBe(
-      `${rebalanceAllows({ keepUsd: 500 })} New cash that arrives moves into savings on its own.`,
+      "Rebalance can trade your stocks toward your mix, and put your top-ups above $500 into it, for a year. " +
+        "New cash that arrives moves into savings on its own. You can turn Rebalance off here.",
     );
-    expect(plan.allows).not.toMatch(/a day/);
+    expect(plan.allows).toBe(rebalanceAllows({ keepUsd: 500 }, true));
     // A new grant with top-ups already on (a stock added to the mix) grants earning too while it's off.
     const weights = [2_500, 0, 0, 0, 2_500, 2_500, 2_500];
     expect(
