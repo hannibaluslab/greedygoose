@@ -160,8 +160,12 @@ export function rebalanceCard(i: RebalanceCardInput): RebalanceCardModel | null 
   }
 
   const o = i.outlook;
-  // The executor backs a failing account off: its next check is the first window after that.
-  const checkAt = i.cooldownUntil > o.checkAt ? rebalanceCheckAt(i.cooldownUntil, i.rebalanceDay) : o.checkAt;
+  // The executor backs a failing account off: its next check is the first window after that, and never before the
+  // back-off ends (one that ends inside a window checks then, not at the window's open).
+  const checkAt =
+    i.cooldownUntil > o.checkAt
+      ? Math.max(i.cooldownUntil, rebalanceCheckAt(i.cooldownUntil, i.rebalanceDay))
+      : o.checkAt;
   const when = whenText(checkAt, i.nowSec);
   const due = o.waitsInAct ? [] : o.trades;
   const moving = slots(due);

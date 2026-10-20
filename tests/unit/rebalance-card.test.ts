@@ -9,6 +9,8 @@ const CAP_MAX = usdc(1_000_000);
 /** Wednesday 2025-10-15 12:00 New York (16:00 UTC, daylight time). */
 const WED_NOON = Date.UTC(2025, 9, 15, 16) / 1000;
 const DAY = 86_400;
+/** A date as the card writes it, in the viewer's own time zone ("Oct 19" in New York is "Oct 20" in Tokyo). */
+const dateOf = (sec: number) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(sec * 1000);
 
 /** Aave's prices, by reserve id: Apple, Amazon, Alphabet, Meta, Microsoft, NVIDIA, Tesla. */
 const PRICES = [250, 220, 180, 700, 500, 180, 400];
@@ -184,7 +186,7 @@ describe("rebalanceCard: the first state that applies, in board 7's order, with 
     expect(m.pill).toEqual({ text: "Ends soon", tone: "due" });
     expect(m.footer).toEqual({
       kind: "words",
-      line1: "Ends on Oct 19. Then nothing trades.",
+      line1: `Ends on ${dateOf(WED_NOON + 4 * DAY)}. Then nothing trades.`,
       line2: `On target. Checks ${next}.`,
     });
   });
@@ -214,6 +216,11 @@ describe("rebalanceCard: the first state that applies, in board 7's order, with 
     expect(backedOff.footer).toMatchObject({
       line2: `Nothing moved. Next check ${whenText(rebalanceCheckAt(later, 0), WED_NOON)}.`,
     });
+    // A back-off that ends inside the window: the check waits for it, as the executor does, not the window's open.
+    const midWindow = rebalanceCheckAt(WED_NOON, 0) + 10 * 60;
+    expect(card({ fails: 3, cooldownUntil: midWindow }).footer).toMatchObject({
+      line2: `Nothing moved. Next check ${whenText(midWindow, WED_NOON)}.`,
+    });
     expect(card({ fails: 2 }).pill.text).toBe("On");
   });
 
@@ -232,7 +239,11 @@ describe("rebalanceCard: the first state that applies, in board 7's order, with 
     const m = card({ status: "off", stoppedAt: WED_NOON - 2 * DAY, fails: 8 });
     expect(m.pill).toEqual({ text: "Stopped", tone: "needs" });
     expect(m.faded).toBe(true);
-    expect(m.footer).toEqual({ kind: "words", line1: "Stopped on Oct 13. Nothing trades now.", line2: null });
+    expect(m.footer).toEqual({
+      kind: "words",
+      line1: `Stopped on ${dateOf(WED_NOON - 2 * DAY)}. Nothing trades now.`,
+      line2: null,
+    });
   });
 
   it("needs you: a grant whose registration is still to go comes first, faded", () => {
