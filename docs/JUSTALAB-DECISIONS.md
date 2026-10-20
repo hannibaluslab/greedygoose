@@ -712,3 +712,11 @@ Adrian (2026-10-20): "a user needs to be able to fill up the fuel tank from cash
 Adrian (2026-10-20, "clean it up as proposed"): `CLAUDE.md` is rewritten to the rules still true in the code and SPEC.md, and four outdated docs move to `docs/archive/` (`docs/archive/README.md` lists each and what supersedes it). This supersedes "Don't edit Leo's docs beyond the pointer at the top of `CLAUDE.md`" (Working rules) for `CLAUDE.md` and the archived docs.
 
 - **Leo's `CLAUDE.md` stays in git** (54fae99 and before). The `CLAUDE.md:NN` citations in this log, its D1–D10 table and the markers this log put on D2 and D3 refer to that version. The rules in force from it are in the new `CLAUDE.md`.
+
+## 2026-10-20 · The team-only preview runs the uncapped executor
+
+Adrian (2026-10-20): "deploy the contract and runner for a team-only preview. Production waits for the audit or my go", asked right after "what you think of the no limit contract, is it safe?". The other session pointed out that this contract has no amount cap, and that D13 limits test deploys before the audit to caps ≤ $5. Asked whether the preview should cap agent permissions at $5 until the review is done, Adrian answered: "Keep the preview uncapped; it's team-only and I accept the risk." This is an exception to D13's cap for this one preview deploy. D13 still holds for production: the production app config never points at an unaudited executor.
+
+- **The deploy:** GooseExecutor `0x686cd88F248DE3F9FC0835566DB798D93881F02D` on Base, `CAP_MAX` = max uint160, owned by the test deployer and bootstrapped with KeeperHub's wallet, with the runner enabled (`contracts/docs/DEPLOYMENTS.md`, "team-only preview deploy").
+- **Where it's wired in:** only the preview build (greedygoose-preview.vercel.app, behind Vercel login), with `NEXT_PUBLIC_AGENTS_LIVE=1`. greedygoose.vercel.app has no executor set, so its agents stay off.
+- **What's still open:** the adversarial review's findings, then the audit, before production or any wider preview.
