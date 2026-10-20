@@ -41,8 +41,9 @@ abstract contract OneTapGrantForkBase is ForkBase {
     uint160 cap;
     uint256 salts;
 
-    /// config/risk.ts CASH.feeBufferUsd: Start earning leaves this in the wallet for JAW's USDC fee after the batch.
-    uint256 constant FEE_BUFFER = 0.1e6;
+    /// config/risk.ts CASH.feeBufferUsd ($0.50 since 2026-10-20, the fuel tank): Start earning leaves this in the
+    /// wallet for JAW's USDC fee after the batch.
+    uint256 constant FEE_BUFFER = 0.5e6;
     /// The dev preview account's idle cash in tests/onchain/start-earning.test.ts.
     uint256 constant WALLET = 42.25e6;
 
