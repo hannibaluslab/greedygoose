@@ -70,6 +70,16 @@ export function mixSlots(p: {
   });
 }
 
+/**
+ * The whole portfolio as it is now, for the card while Rebalance is off (Adrian, 2026-10-20): every stock held, free
+ * and backing credit, at its share of all the stock now, all on target. Rebalance trades free shares only, but while
+ * it's off the card shows what the user owns. Nothing held: the seven stocks, with no target.
+ */
+export function portfolioSlots(holdings: readonly MixHolding[]): MixSlot[] {
+  const whole = holdings.map((h) => ({ ...h, freeRaw: h.freeRaw + (h.backingRaw ?? 0n) }));
+  return mixSlots({ holdings: whole, mixBps: null, options: { bandBps: 0n, bandMaxBps: 0n }, trades: [] });
+}
+
 /** The pill's colours: running, neutral (off, paused, coming soon), needs the user, and a trade or a date due. */
 export type PillTone = "on" | "neutral" | "needs" | "due";
 
@@ -248,7 +258,10 @@ export function rebalanceCard(i: RebalanceCardInput): RebalanceCardModel | null 
   const words = (line1: string, line2: string | null = null): RebalanceFooter => ({ kind: "words", line1, line2 });
   const faded = { faded: true };
 
-  if (!i.live) return card("Coming soon", "neutral", words(...OFF_WORDS), faded);
+  // Off and Coming soon draw what the user owns now, not the mix: nothing keeps a mix while it's off.
+  const owned = { faded: true, slots: portfolioSlots(i.holdings) };
+
+  if (!i.live) return card("Coming soon", "neutral", words(...OFF_WORDS), owned);
   // 1. JAW granted it and the executor doesn't run it yet: its registration is still to go.
   if (i.waiting || i.status === "starting")
     return card("Needs you", "needs", words("One more Face ID turns it on.", "Until then, nothing trades."), faded);
@@ -257,7 +270,7 @@ export function rebalanceCard(i: RebalanceCardInput): RebalanceCardModel | null 
     if (i.stoppedAt !== null)
       return card("Stopped", "needs", words(`Stopped on ${date(i.stoppedAt)}. Nothing trades now.`), faded);
     // 3. Off.
-    return card("Off", "neutral", words(...OFF_WORDS), faded);
+    return card("Off", "neutral", words(...OFF_WORDS), owned);
   }
 
   const o = i.outlook;

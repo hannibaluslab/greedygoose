@@ -17,8 +17,11 @@ export type MixRow = { reserveId: number; bps: number };
 /** Home's stock order, the one every list uses (SPEC, One stock order): the registry's, so by reserve id. */
 export const inHomeOrder = (rows: readonly MixRow[]): MixRow[] => [...rows].sort((a, b) => a.reserveId - b.reserveId);
 
-/** A stock as the mix sees it: free shares only (shares backing credit stay put) at Aave's price. */
-export type MixHolding = { reserveId: number; freeRaw: bigint; priceRaw: bigint };
+/**
+ * A stock as the mix sees it: free shares only (shares backing credit stay put) at Aave's price. `backingRaw`, the
+ * shares backing credit, only draws the whole portfolio on Rebalance's card while it's off (`portfolioSlots`).
+ */
+export type MixHolding = { reserveId: number; freeRaw: bigint; priceRaw: bigint; backingRaw?: bigint };
 
 /** Weights `setMix` takes: one per stock by reserve id, whole BPS, adding up to 100% (or all 0, which clears it). */
 export function isMix(weights: readonly number[]): boolean {

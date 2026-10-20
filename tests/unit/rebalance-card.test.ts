@@ -245,6 +245,27 @@ describe("rebalanceCard: the first state that applies, in board 7's order, with 
     });
   });
 
+  it("off and coming soon: the whole portfolio now, backing shares included, not the saved mix", () => {
+    // Free: NVIDIA only. Backing credit: Apple, Alphabet and Tesla (Oulina's account, 2026-10-20).
+    const held: MixHolding[] = holdings([0, 0, 0, 0, 0, 25, 0]).map((h) => ({
+      ...h,
+      backingRaw:
+        h.reserveId === 0 || h.reserveId === 2 || h.reserveId === 6
+          ? holdings([25, 0, 25, 0, 0, 0, 25])[h.reserveId].freeRaw
+          : 0n,
+    }));
+    const owned = [
+      { reserveId: 0, targetBps: 2_500, offset: 0, side: null },
+      { reserveId: 2, targetBps: 2_500, offset: 0, side: null },
+      { reserveId: 5, targetBps: 2_500, offset: 0, side: null },
+      { reserveId: 6, targetBps: 2_500, offset: 0, side: null },
+    ];
+    expect(card({ status: "off", holdings: held }).slots).toEqual(owned);
+    expect(card({ live: false, holdings: held }).slots).toEqual(owned);
+    // On, it still draws the mix it keeps: free shares against their targets.
+    expect(card({ holdings: held }).slots.map((x) => x.reserveId)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+  });
+
   it("stopped on its own: before Off, faded", () => {
     const m = card({ status: "off", stoppedAt: WED_NOON - 2 * DAY, fails: 8 });
     expect(m.pill).toEqual({ text: "Stopped", tone: "needs" });
