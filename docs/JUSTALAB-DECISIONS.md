@@ -662,3 +662,12 @@ Adrian decided P2 on 2026-10-20: Save has no amount limit, like Protect and Reba
 - **Top-ups off once Rebalance has stopped** (its grant ran out or the executor stopped it) are the setting alone, `[setTopUps(false, Keep)]`, with Save, not Turn on.
 - **The toast** says what was saved: "Your mix is saved" only when the mix changed, "Top-ups saved" for the switch or Keep alone, "Rebalance is on" when the Save turned it on, else "Saved" (copy pending Adrian).
 - **A top-up going in shows on the card and the sheet's line,** worked out with the contract's rule (`investDue`: what was counted before the check's day, within savings above Keep and the grant's limits, then `investTrades`): BUY marks on the stocks it buys, "$300 going in" and the time; "$300 going in tomorrow 10:00 AM. Buys NVIDIA." When band trades are due too, the invest shows, since the executor puts it in first and band trades wait a day. In Act it's Paused.
+
+## 2026-10-20 · Three more top-ups calls (Adrian)
+
+Adrian took the three defaults offered after the M4 and M3 reviews ("Yes, take your defaults on all 3"):
+
+- **P4 is exact only when the executor looks.** A fall in cash comes out of the waiting top-up at each Save count and each Rebalance run. A spend from savings and a sale landing between two looks net out, so some sale money can go into the mix. Accepted: the executor looks about every 10 minutes, and an exact count needs every spend batch to call the executor, which the core has no bytes for.
+- **"Repay all" leaves Aave's buffer in the wallet** (0.05%, about $25 on $50,000 owed), and Save counts it as a top-up. Accepted: it is small and stays the user's own money, now in their mix.
+- **Renew shows in the grant's last week whatever else the sheet shows** (trades due, top-ups going in, paused in Act), so a grant never runs out unnoticed. Built: `RebalanceCardModel.endsSoon`, `sheetLine` returns `renew` from it.
+- **P7's update** (turning top-ups off revokes the grant it replaces in the same batch) was told to Adrian on 2026-10-20: the extra JAW sheet it once needed is gone with the one signature.

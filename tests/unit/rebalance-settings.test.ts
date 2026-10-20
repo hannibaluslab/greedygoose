@@ -383,14 +383,14 @@ describe("sheetLine: the line under the sheet's title, from Rebalance's card", (
       freeRaw: BigInt(Math.round(((pcts[reserveId] / 100) * 10_000 * 1e8) / p)),
     }));
   const options = rebalanceOptions();
-  const card = (over: Partial<RebalanceCardInput> = {}, pcts = [20, 10, 10, 10, 15, 26, 9]) => {
+  const card = (over: Partial<RebalanceCardInput> = {}, pcts = [20, 10, 10, 10, 15, 26, 9], debtUsd = 600) => {
     const o: OutlookInput = {
       nowSec: WED_NOON,
       holdings: holdings(pcts),
       mixBps: MIX,
       capMaxRaw: usdc(1_000_000),
       rebalanceDay: 0,
-      debtUsd: 600,
+      debtUsd,
       totalBackingUsd: 2_000,
       avgCf: 0.7,
       left: { rebalance: null },
@@ -433,6 +433,18 @@ describe("sheetLine: the line under the sheet's title, from Rebalance's card", (
     expect(sheetLine(card({ endsAt: WED_NOON + 4 * DAY })).text).toMatch(
       /^Ends on .+\. Then nothing trades\. On target/,
     );
+    expect(sheetLine(card({ endsAt: WED_NOON + 8 * DAY }))).toMatchObject({ renew: false });
+  });
+
+  it("offers Renew in the grant's last week even behind trades due or a pause (Adrian, 2026-10-20)", () => {
+    const ends = { endsAt: WED_NOON + 4 * DAY };
+    const due = sheetLine(card(ends, [16, 10, 10, 8, 15, 32, 9]));
+    expect(due.text).toMatch(/^3 trades /);
+    expect(due.renew).toBe(true);
+    // $1,300 owed against $2,000 backing at 70%: health about 1.08, in Act, so the trades due wait.
+    const paused = sheetLine(card(ends, [16, 10, 10, 8, 15, 32, 9], 1_300));
+    expect(paused.text).toMatch(/^Waits until your credit is out of Act/);
+    expect(paused.renew).toBe(true);
   });
 
   it("says the state's own words otherwise", () => {

@@ -243,18 +243,19 @@ const names = (model: RebalanceCardModel, side: Side) => {
 /**
  * The line under the sheet's title, from Rebalance's card (lib/agents/rebalanceCard.ts), so the two never disagree:
  * "On target. Checks tomorrow 10:00 AM." (board 7e), the top-ups going in or the trades due and which stocks, or the
- * state's own words. Renew
- * sits after it while the grant ends within the week.
+ * state's own words. Renew sits after it whenever the grant ends within the week, whatever the line says (Adrian,
+ * 2026-10-20), so a grant never runs out unnoticed behind trades due or a pause.
  */
 export function sheetLine(model: RebalanceCardModel): { text: string; renew: boolean } {
   const f = model.footer;
-  if (f.kind === "on-target") return { text: `On target. Checks ${lower(f.next)}.`, renew: false };
+  const renew = model.endsSoon;
+  if (f.kind === "on-target") return { text: `On target. Checks ${lower(f.next)}.`, renew };
   // Trades due, or top-ups going in ("$300 going in tomorrow 10:00 AM. Buys NVIDIA."): what it sells and buys.
   if (f.kind === "trades" || f.kind === "invest") {
     const sells = names(model, "sell");
     const buys = names(model, "buy");
     const what = `${sells ? ` Sells ${sells}.` : ""}${buys ? ` Buys ${buys}.` : ""}`;
-    return { text: `${f.text} ${lower(f.when)}.${what}`, renew: false };
+    return { text: `${f.text} ${lower(f.when)}.${what}`, renew };
   }
-  return { text: f.line2 ? `${f.line1} ${f.line2}` : f.line1, renew: model.pill.text === "Ends soon" };
+  return { text: f.line2 ? `${f.line1} ${f.line2}` : f.line1, renew };
 }

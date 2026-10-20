@@ -88,6 +88,8 @@ export type RebalanceCardModel = {
   footer: RebalanceFooter;
   /** The whole card's name for screen readers: name, pill, then what it does now. */
   label: string;
+  /** Its grant ends within a week: the sheet offers Renew whatever else it shows (Adrian, 2026-10-20). */
+  endsSoon: boolean;
 };
 
 export type RebalanceCardInput = {
@@ -241,6 +243,7 @@ export function rebalanceCard(i: RebalanceCardInput): RebalanceCardModel | null 
     slots: over.slots ?? still,
     footer,
     label: `Rebalance, ${pill.toLowerCase()}. ${over.say ?? (footer.kind === "words" ? footer.line1 : "")}`.trim(),
+    endsSoon: i.endsAt !== null && i.endsAt - i.nowSec <= ENDS_SOON_SEC,
   });
   const words = (line1: string, line2: string | null = null): RebalanceFooter => ({ kind: "words", line1, line2 });
   const faded = { faded: true };
