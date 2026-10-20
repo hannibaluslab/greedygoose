@@ -137,33 +137,19 @@ export const NOT_LIVE = "Coming soon: the agents open once their automation is a
  * Cards: only when something needs the user, one sentence and one or two actions each.
  */
 
-const DATE = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
 const YEAR = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
 const TIME = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" });
-const dateText = (sec: number) => DATE.format(sec * 1000);
 /** "Oct 15, 2027", for a grant's end a year out. */
 export const longDateText = (sec: number) => YEAR.format(sec * 1000);
 export const timeText = (sec: number) => TIME.format(sec * 1000);
 
-/** A grant this close to its end gets a card. */
-const EXPIRING_SEC = 7 * 86_400;
-/** Failed runs in a row before a card says so (the executor switches the account off at eight). */
-const FAILS_CARD = 3;
-const MAX_FAILS = 8;
-
-/**
- * A card's button: the Top up or Repay sheet over the tab, Renew (JAW's own sheet), or Finish (the registrations of
- * grants JAW made that the executor doesn't run yet, in one JAW sheet).
- */
-export type CardAction =
-  | { kind: "sheet"; label: string; sheet: "top-up" | "repay" }
-  | { kind: "renew"; agent: Agent; jobs: AgentJob[] }
-  | { kind: "finish" };
+/** A warning's button: the Top up or Repay sheet over the screen. */
+export type CardAction = { kind: "sheet"; label: string; sheet: "top-up" | "repay" };
 
 export type AgentCard = {
   key: string;
-  /** The warnings wear the credit's colour (Act's, the weekend's Watch); the rest are plain. */
-  tone: "watch" | "act" | "plain";
+  /** A warning wears the credit's colour: Act's, or the weekend's Watch. */
+  tone: "watch" | "act";
   agent: AgentName;
   text: string;
   sub?: string;
@@ -183,130 +169,34 @@ export type ActCard = { addUsd: number; protectOn: boolean };
  */
 export type WeekendCard = { addUsd: number; dropPct: number; when: string };
 
-export type CardsInput = {
-  nowSec: number;
-  act: ActCard | null;
-  /** Only while Protect runs (on or starting), as Weekend Shield did. */
-  weekend: WeekendCard | null;
-  status: Readonly<Record<AgentJob, AgentStatus>>;
-  /** Each job's grant end while it has a live one (on or starting). */
-  ends: Readonly<Record<AgentJob, number | null>>;
-  /**
-   * When each job stopped without the user turning it off: its grant ran out (JAW's list) or the executor switched it
-   * off (`JobOff`, not revoked). Null when it didn't, or it has been switched on since.
-   */
-  stopped: Readonly<Record<AgentJob, number | null>>;
-  /** Failed runs in a row, and when the executor tries again. */
-  fails: number;
-  cooldownUntil: number;
-  /** Jobs JAW granted that the executor doesn't run yet: their registration didn't go through (useAgents `toFinish`). */
-  finish: readonly AgentJob[];
-};
-
-/** What the Finish card calls each job: its agent, or what it does for the two that run under the hood (D20). */
-const FINISH_NAME: Record<AgentJob, string> = {
-  protect: "Protect",
-  sell: "Protect",
-  rebalance: "Rebalance",
-  save: "Earning",
-  entry: "Turning other dollars into cash",
-};
-
 /**
- * The Finish card: grants JAW made that the executor doesn't run yet (a registration sheet that didn't open, or was
- * cancelled, or the app was closed before it), each named once, and the one tap that registers them all.
+ * Protect's warnings, with their Top up and Repay, in Protect's sheet (Adrian, 2026-10-20: the Agents tab is an
+ * overview, and every action lives in the sheet; Protect's card says the same in its pill and lines). Act first.
  */
-function finishCard(jobs: readonly AgentJob[]): AgentCard | null {
-  if (jobs.length === 0) return null;
-  const names = [...new Set(jobs.map((j) => FINISH_NAME[j]))];
-  const agents = [...new Set(jobs.map(agentOf))];
-  const one = names.length === 1;
-  return {
-    key: "finish",
-    tone: "plain",
-    agent: agents.length === 1 && agents[0] ? AGENT_NAME[agents[0]] : "Agents",
-    text: `${one ? names[0] : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`} ${one ? "isn’t" : "aren’t"} running yet.`,
-    sub: `One more Face ID finishes turning ${one ? "it" : "them"} on.`,
-    actions: [{ kind: "finish" }],
-  };
-}
-
-/** The cards, most urgent first: the warnings, agents still to finish, failed runs, stopped agents, agents about to stop. */
-export function agentCards(i: CardsInput): AgentCard[] {
+export function protectWarnings(i: { act: ActCard | null; weekend: WeekendCard | null }): AgentCard[] {
+  const money: CardAction[] = [
+    { kind: "sheet", label: "Top up", sheet: "top-up" },
+    { kind: "sheet", label: "Repay", sheet: "repay" },
+  ];
   const cards: AgentCard[] = [];
-  if (i.act) {
-    const a = i.act;
+  if (i.act)
     cards.push({
       key: "act",
       tone: "act",
       agent: "Protect",
       text: "Your credit is in Act.",
-      sub: `${a.protectOn ? `Protect steps in at ${LINE}.` : "Protect is off."} Repaying ${formatUsdTrim(a.addUsd)} now brings it back to Watch.`,
-      actions: [
-        { kind: "sheet", label: "Top up", sheet: "top-up" },
-        { kind: "sheet", label: "Repay", sheet: "repay" },
-      ],
+      sub: `${i.act.protectOn ? `Protect steps in at ${LINE}.` : "Protect is off."} Repaying ${formatUsdTrim(i.act.addUsd)} now brings it back to Watch.`,
+      actions: money,
     });
-  }
-  if (i.weekend) {
-    const w = i.weekend;
+  if (i.weekend)
     cards.push({
       key: "weekend",
       tone: "watch",
       agent: "Protect",
-      text: `Prices pause ${w.when}. If stocks reopen ${w.dropPct}% lower, Aave can sell part of them.`,
-      sub: `Repaying ${formatUsdTrim(w.addUsd)} now keeps your credit over Aave’s line.`,
-      // As the Act warning's: the last action is the lime one, and here it is the repay the line names.
-      actions: [
-        { kind: "sheet", label: "Top up", sheet: "top-up" },
-        { kind: "sheet", label: "Repay", sheet: "repay" },
-      ],
+      text: `Prices pause ${i.weekend.when}. If stocks reopen ${i.weekend.dropPct}% lower, Aave can sell part of them.`,
+      sub: `Repaying ${formatUsdTrim(i.weekend.addUsd)} now keeps your credit over Aave’s line.`,
+      actions: money,
     });
-  }
-  const finish = finishCard(i.finish);
-  if (finish) cards.push(finish);
-  // Runs fail for the whole account; with neither agent running, they were earning's or converting's (D20): no card.
-  const running = AGENTS.some((a) => ["on", "starting"].includes(agentStatus(a, i.status)));
-  if (i.fails >= FAILS_CARD && running) {
-    const retry =
-      i.cooldownUntil > i.nowSec ? `They try again at ${timeText(i.cooldownUntil)}` : "They try again on the next run";
-    cards.push({
-      key: "fails",
-      tone: "plain",
-      agent: "Agents",
-      text: `Your agents’ last ${i.fails} runs didn’t go through. Nothing moved.`,
-      sub: `${retry}. At ${MAX_FAILS} in a row they stop, and you can switch them back on here.`,
-      actions: [],
-    });
-  }
-  for (const agent of AGENTS) {
-    if (agentStatus(agent, i.status) !== "off") continue;
-    const jobs = AGENT_JOBS[agent].filter((j) => i.stopped[j] !== null);
-    if (jobs.length === 0) continue;
-    const at = Math.max(...jobs.map((j) => i.stopped[j]!));
-    cards.push({
-      key: `stopped-${agent}`,
-      tone: "plain",
-      agent: AGENT_NAME[agent],
-      text: `${AGENT_NAME[agent]} stopped on ${dateText(at)}. Switch it back on?`,
-      actions: [{ kind: "renew", agent, jobs }],
-    });
-  }
-  for (const agent of AGENTS) {
-    const jobs = AGENT_JOBS[agent].filter((j) => {
-      const end = i.ends[j];
-      return end !== null && end - i.nowSec <= EXPIRING_SEC;
-    });
-    if (jobs.length === 0) continue;
-    const end = Math.min(...jobs.map((j) => i.ends[j]!));
-    cards.push({
-      key: `expiring-${agent}`,
-      tone: "plain",
-      agent: AGENT_NAME[agent],
-      text: `${AGENT_NAME[agent]} stops on ${dateText(end)}.`,
-      actions: [{ kind: "renew", agent, jobs }],
-    });
-  }
   return cards;
 }
 

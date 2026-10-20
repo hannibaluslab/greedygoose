@@ -5,24 +5,17 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { FeedCard, FeedDays } from "@/components/gg/activity/Activity";
 import { AgentSheet } from "@/components/gg/AgentSheet";
-import { AgentRow, AgentsFeed, AgentsView, AttentionCard, MixBar, TurnOffAll } from "@/components/gg/Agents";
+import { AgentRow, AgentsFeed, AgentsView, MixBar } from "@/components/gg/Agents";
+import { ProtectCardView } from "@/components/gg/agents/ProtectCard";
 import type { AgentRow as FeedAgentRow } from "@/hooks/useAgentFeed";
 import { useNowSec } from "@/hooks/useNowSec";
 import type { AgentEvent } from "@/lib/agents/events";
 import { describeAgentEvent, type MoveContext } from "@/lib/agents/feed";
-import {
-  AGENT_JOBS,
-  AGENT_NAME,
-  agentCards,
-  agentItems,
-  longDateText,
-  TAB_JOBS,
-  type Agent,
-  type AgentItem,
-} from "@/lib/agents/list";
+import { AGENT_JOBS, AGENT_NAME, agentItems, longDateText, type Agent, type AgentItem } from "@/lib/agents/list";
 import { rebalanceOptions } from "@/lib/agents/mix";
 import { agentNexts, defaultNumbers, type NextInput } from "@/lib/agents/next";
 import { JOBS, startCapRaw, type AgentJob } from "@/lib/agents/permissions";
+import { protectCard, type ProtectCardInput } from "@/lib/agents/protectCard";
 import type { AgentStatus } from "@/lib/agents/status";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 import { ProtectDemo } from "../ProtectDemos";
@@ -30,10 +23,10 @@ import { RebalanceStateBody } from "../RebalanceDemo";
 
 /*
  * Dev only: the Agents tab in each state it can be in, with fixtures run through the app's own rules and words
- * (agentNexts, agentItems, agentCards, describeAgentEvent). Nothing here reads the chain or the executor.
- *   /dev/ui/agents                live, all fine: no cards
- *   ?view=cards                   every card
- *   ?view=rows                    each row state
+ * (agentNexts, agentItems, protectCard, describeAgentEvent). Nothing here reads the chain or the executor.
+ *   /dev/ui/agents                live, all fine
+ *   ?view=protect                 every state of Protect's card, the first that applies
+ *   ?view=rows                    each state of the Rebalancer's row
  *   ?view=notlive                 today: no executor configured
  *   &sheet=protect|rebalance      a sheet open
  * Every switch, Renew and Turn off goes straight to JAW's own sheet in the app; here it only says so.
@@ -141,14 +134,47 @@ function feedRows(nowMs: number): FeedAgentRow[] {
   }));
 }
 
-type View = "live" | "cards" | "rows" | "notlive";
+type View = "live" | "protect" | "rows" | "notlive";
+
+/** Protect's card states, as board 7 lists them (the first that applies), plus nothing owed and not live yet. */
+function protectStates(nowSec: number): [string, Partial<ProtectCardInput>][] {
+  return [
+    ["1 · Granted, not running yet", { status: "starting", waiting: "protect" }],
+    ["1 · Selling granted, not running yet", { waiting: "sell" }],
+    ["2 · Stopped on its own", { status: "off", stoppedAt: nowSec - 2 * 86_400 }],
+    ["3 · Off, and the credit is in Act", { status: "off", hf: 1.06, act: { addUsd: 54, protectOn: false } }],
+    ["4 · Off", { status: "off" }],
+    [
+      "5 · Bringing the credit back",
+      {
+        rescuing: true,
+        hf: 1.01,
+        next: { will: "repays $98.22 from your cash", would: "Would repay $98.22 from your cash" },
+      },
+    ],
+    ["6 · Runs failing", { fails: 3, cooldownUntil: nowSec + 20 * 60, hf: 1.01 }],
+    [
+      "Under the line, about to step in",
+      { hf: 1.02, next: { will: "repays $40 from your cash", would: "Would repay $40 from your cash" } },
+    ],
+    ["Under the line, held back", { hf: 1.02, next: { idle: "Act. No cash to repay with" } }],
+    ["7 · Credit in Act", { hf: 1.07, act: { addUsd: 45, protectOn: true } }],
+    ["8 · Weekend risk", { hf: 1.16, weekend: { addUsd: 96, dropPct: 15, when: "at 8:00 PM" } }],
+    ["9 · Ends within 7 days", { endsAt: nowSec + 4 * 86_400 }],
+    ["10 · All good", {}],
+    ["Nothing owed", { hf: null }],
+    ["Not live yet", { live: false }],
+  ];
+}
 
 export function AgentsGallery() {
   const params = useSearchParams();
   const router = useRouter();
   const nowSec = useNowSec();
   const nowMs = nowSec * 1000;
-  const view = (["cards", "rows", "notlive"].includes(params.get("view") ?? "") ? params.get("view") : "live") as View;
+  const view = (
+    ["protect", "rows", "notlive"].includes(params.get("view") ?? "") ? params.get("view") : "live"
+  ) as View;
   const [sheet, setSheet] = useState<Agent | null>(() => {
     const a = params.get("sheet") as Agent | null;
     return a && a in AGENT_JOBS ? a : null;
@@ -159,43 +185,35 @@ export function AgentsGallery() {
   const rows = feedRows(nowMs);
 
   // Each view's agents: their jobs' states, and what the rules say they do next.
-  const cardsView = view === "cards";
-  const status: Record<AgentJob, AgentStatus> = !live
-    ? all("unconfigured")
-    : cardsView
-      ? { ...all("on"), rebalance: "off" }
-      : all("on");
+  const status: Record<AgentJob, AgentStatus> = !live ? all("unconfigured") : all("on");
   // Without an executor there's no registry, so no mix.
   const input = nextInput(nowSec, { mixBps: live ? MIX : null });
+  const nexts = agentNexts(input);
   const items = agentItems({
     status,
     capRaw: live ? byJob((job) => (status[job] === "off" ? null : caps[job])) : byJob(() => null),
-    next: agentNexts(input),
+    next: nexts,
   });
+  const protectAt = (over: Partial<ProtectCardInput>) =>
+    protectCard({
+      live,
+      nowSec,
+      status: "on",
+      waiting: null,
+      hf: 1.62,
+      rescuing: false,
+      fails: 0,
+      cooldownUntil: 0,
+      stoppedAt: null,
+      endsAt: nowSec + 200 * 86_400,
+      act: null,
+      weekend: null,
+      next: nexts.protect,
+      triggerHf: input.numbers.triggerHf,
+      targetHf: input.numbers.targetHf,
+      ...over,
+    });
 
-  const cards = cardsView
-    ? agentCards({
-        nowSec,
-        act: { addUsd: 120, protectOn: true },
-        weekend: { addUsd: 40, dropPct: 15, when: "at 8:00 PM" },
-        status,
-        ends: byJob((job) =>
-          job === "protect" || job === "sell"
-            ? nowSec + 5 * 86_400
-            : status[job] === "off"
-              ? null
-              : nowSec + 200 * 86_400,
-        ),
-        stopped: byJob((job) => (job === "rebalance" ? nowSec - 2 * 86_400 : null)),
-        fails: 3,
-        cooldownUntil: nowSec + 20 * 60,
-        // Earning's grant whose registration didn't go through: the Finish card.
-        finish: ["save"],
-      })
-    : [];
-
-  // One JAW sheet for each of Protect's and Rebalance's grants that's on: Protect's two on the cards view, all three otherwise.
-  const allOffSteps = live ? TAB_JOBS.filter((j) => status[j] !== "off").length : 0;
   const row = (item: AgentItem, mix = live) => (
     <AgentRow
       key={`${item.agent}-${item.status}`}
@@ -213,14 +231,23 @@ export function AgentsGallery() {
       <AgentsView
         live={live}
         signed={live && status.rebalance !== "off"}
-        cards={cards.map((c) => (
-          <AttentionCard key={c.key} card={c} onRenew={NOTHING_SIGNED} />
-        ))}
-        rows={
+        protect={
+          view === "protect" ? (
+            protectStates(nowSec).map(([label, over]) => (
+              <div key={label} className="flex flex-col gap-2">
+                <span className="label px-1">{label}</span>
+                <ProtectCardView model={protectAt(over)} onOpen={() => setSheet("protect")} />
+              </div>
+            ))
+          ) : (
+            <ProtectCardView model={protectAt({})} onOpen={() => setSheet("protect")} />
+          )
+        }
+        rebalance={
           view === "rows" ? (
             <RowStates nowSec={nowSec} row={(item) => row(item, false)} />
           ) : (
-            items.map((item) => row(item))
+            items.filter((item) => item.agent === "rebalance").map((item) => row(item))
           )
         }
         feed={
@@ -235,7 +262,6 @@ export function AgentsGallery() {
             onShowEarlier={() => {}}
           />
         }
-        turnOffAll={allOffSteps > 0 && <TurnOffAll steps={allOffSteps} disabled={false} onClick={NOTHING_SIGNED} />}
       />
       {sheet && (
         <GallerySheet
@@ -254,7 +280,7 @@ export function AgentsGallery() {
   );
 }
 
-/** Each state a row can be in, each with the line the app gives it. */
+/** Each state the Rebalancer's row can be in, each with the line the app gives it. */
 function RowStates({ nowSec, row }: { nowSec: number; row: (item: AgentItem) => ReactNode }) {
   const next = agentNexts(nextInput(nowSec, { mixBps: null }));
   const states: [string, AgentStatus][] = [
@@ -268,7 +294,7 @@ function RowStates({ nowSec, row }: { nowSec: number; row: (item: AgentItem) => 
     <div key={s} className="flex flex-col gap-2">
       <span className="label px-1">{label}</span>
       {agentItems({ status: all(s), capRaw: byJob((job) => (s === "on" || s === "starting" ? caps[job] : null)), next })
-        .filter((i) => s !== "on" || i.agent !== "rebalance")
+        .filter((i) => i.agent === "rebalance")
         .map(row)}
     </div>
   ));
