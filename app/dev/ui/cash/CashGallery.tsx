@@ -7,7 +7,7 @@ import { TopUpSheetView } from "@/components/gg/cash/AddMoney";
 import { AgentsFeed } from "@/components/gg/Agents";
 import { BalanceHero, TodayChange } from "@/components/gg/home/BalanceHero";
 import { CashCard, CreditCard } from "@/components/gg/home/Cards";
-import { ArrivedCard, AutomaticStep, cashNowText, StartEarningCard } from "@/components/gg/cash/CashSetup";
+import { ArrivedCard, StartEarningCard } from "@/components/gg/cash/CashSetup";
 import { QuickAction } from "@/components/gg/home/QuickAction";
 import { TabHeader } from "@/components/gg/Screen";
 import { TabBar } from "@/components/gg/TabBar";
@@ -16,12 +16,11 @@ import { CreditIcon, MenuIcon, PlusIcon, RepayIcon, TradeIcon } from "@/componen
 import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
 import type { FeedRow } from "@/components/gg/activity/Activity";
 import type { ActivityRow } from "@/hooks/useActivity";
-import type { GrantView } from "@/hooks/useCashSetup";
 import type { ConvertQuote } from "@/lib/tx/plans";
 import { useNowSec } from "@/hooks/useNowSec";
 import type { AgentEvent } from "@/lib/agents/events";
 import { describeAgentEvent, type MoveContext } from "@/lib/agents/feed";
-import { arrivedCoins, arrivedView, rateText, startEarningText } from "@/lib/cashSetup";
+import { arrivedCoins, arrivedView, automaticText, rateText, startEarningText } from "@/lib/cashSetup";
 import { convertFloorRaw } from "@/lib/swap/entry";
 import { CASH_COINS } from "@/lib/tokens/stables";
 import { CashSheetDemo, SHEET_VIEWS, type SheetView } from "./CashSheetDemo";
@@ -35,7 +34,8 @@ import { CashSheetDemo, SHEET_VIEWS, type SheetView } from "./CashSheetDemo";
  *                                 Face ID (its line), and confirming on Base
  *   ?view=arriving                Home once other dollars convert on their own: the Cash card says "arriving"
  *   ?view=convert                 "Turn into cash" with one coin under the floor: it stays as it is
- *   ?view=auto                    once it lands, "Do this automatically next time?"
+ *   ?view=auto                    "Turn into cash" while nothing converts on its own yet: its one Face ID converts the
+ *                                 next ones too, and the card says so
  *   ?view=done                    converted, with nothing to ask (no executor, or it already converts on its own)
  *   ?view=pay | pay-setup         the Top up sheet over Home, while the cash earns and before earning is set up
  *   ?view=activity                Activity with the cash's own events
@@ -66,7 +66,6 @@ const UNFAIR: ConvertQuote = {
   outRaw: usdc(49.1),
   fair: false,
 };
-const GRANT: GrantView = { phase: "idle", busy: false, checking: false, error: null, blocked: null, preview: false };
 const ZERO_TX = `0x${"0".repeat(64)}` as const;
 const noop = () => toast("Dev gallery: nothing is signed");
 
@@ -136,11 +135,7 @@ export function CashGallery() {
   // Home: before other dollars convert on their own they're asked about; after, the Cash card says they're arriving.
   const arrived = arrivedView(arrivedCoins(BALANCES), view === "arriving" ? "on" : "off");
   const sheet =
-    view === "auto" ? (
-      <Sheet title="Do this automatically next time?">
-        <AutomaticStep landed={cashNowText(QUOTES)} grant={GRANT} limit="$1,000" onYes={noop} onNo={noop} />
-      </Sheet>
-    ) : view === "done" ? (
+    view === "done" ? (
       <Sheet title="Turn into cash">
         <TxDone title="It’s cash now" body="About $119.83 is in your cash." txHash={ZERO_TX} onDone={noop} />
       </Sheet>
@@ -151,14 +146,15 @@ export function CashGallery() {
       cards={
         view !== "arriving" && (
           <>
-            {/* Once a conversion lands the coins are cash, so the card is gone behind "auto" and "done". */}
-            {arrived.kind === "ask" && view !== "auto" && view !== "done" && (
+            {/* Once a conversion lands the coins are cash, so the card is gone behind "done". */}
+            {arrived.kind === "ask" && view !== "done" && (
               <ArrivedCard
                 text={view === "convert" ? "120 USDT and 50 USDe" : arrived.text}
                 quotes={view === "convert" ? [...QUOTES, UNFAIR] : QUOTES}
                 phase="idle"
                 error={null}
                 preview={false}
+                allows={view === "auto" ? automaticText("$1,000") : null}
                 onConvert={noop}
               />
             )}

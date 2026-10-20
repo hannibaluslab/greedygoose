@@ -635,3 +635,11 @@ Adrian (2026-10-20): "go with just one face id to earn, on agent". An account JA
 - **If it ever failed** (a new executor that doesn't allow JAW's clone, a recipe change at JAW), the whole batch reverts on Base: no money moves, the user pays the network fee and sees the error. The next executor must allow the same codehash.
 - The same holds for any agent change from an account JAW hasn't deployed yet, though in practice Start earning is that account's first batch.
 
+## 2026-10-20 · Turn into cash means next time automatically
+
+Adrian (2026-10-20): "Turn into cash and 'Do this automatically next time' should be one Face ID too", and, on how the card asks: "abstract the switch, turn into cash means next time automatically". This supersedes "Do this automatically next time?" in D20's row (:20), "Other dollars…" (:143), "D20's screens follow the sweep's rules" (:165) and "'Turn into cash' is one screen" (:166), for that question; those keep their meaning for their day.
+
+- **One batch, one Face ID:** while the agents are live and nothing converts on its own yet (`askAutomatic`), "Turn into cash" signs the conversion and the Entry grant together (useCashSetup `automaticPlan`, the conversion as the change's first calls). No switch, no second question, no opt-out on the card.
+- **The card says it before the tap**, above its button: "Next time it happens on its own, up to $1,000 a day." (Entry's limit as its grant carries it). Once it lands: "It's cash now · About $119.83 is in your cash. Next time it happens on its own."
+- Otherwise (agents not live, or the next ones already convert on their own) the card and its batch are as before: the conversion alone.
+
