@@ -17,8 +17,8 @@ export function HeroLine({
     return (
       <ValueLine
         points={pnl}
-        // 44px, as the week's line.
-        height={44}
+        // 40px, as the week's line.
+        height={40}
         loading={false}
         onRetry={() => {}}
         label="Your profit or loss since your first money in, at the end of each day"
@@ -26,7 +26,7 @@ export function HeroLine({
         zero
       />
     );
-  if (pnlReading) return <ValueLine points={null} height={44} loading onRetry={() => {}} />;
+  if (pnlReading) return <ValueLine points={null} height={40} loading onRetry={() => {}} />;
   return <BalanceLine {...week} />;
 }
 
@@ -53,8 +53,8 @@ function BalanceLine({
   return (
     <ValueLine
       points={points}
-      // 44px, down from the board's 68 (Adrian: smaller).
-      height={44}
+      // 40px: down from the board's 68 (Adrian: smaller), then 44 → 40 so Home fits above the tab bar (2026-10-22).
+      height={40}
       loading={held && loading}
       onRetry={onRetry}
       label="What your total balance was worth over the last 7 days: what you hold now, at market prices"

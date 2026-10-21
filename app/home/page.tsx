@@ -260,9 +260,12 @@ function Loaded({
 
   return (
     <>
-      {/* Spacing (Adrian, 2026-10-21): the hero 2px lower, the gaps under it 0.5 + 0.5 + 1px tighter, so Portfolio stayed
-          put; then the graph-to-buttons gap 1px tighter on its own (everything under it 1px higher). */}
-      <section className="flex flex-col gap-2.5 px-5 pt-[14px]">
+      {/* Spacing (Adrian, 2026-10-22, proposal B): one 4px scale, one value per role. 12 from the header to the hero,
+          16 from section to section, 8 inside a block (title or figures to what they head) and between cards. With the
+          week's line 40px (was 44) and the stock cards' padding 10px (was 11), Home is 20px shorter; the header then sits
+          2px lower, so 18px net. At 402x709 (an iPhone 17 Safari tab) the last cards clear the tab bar and its lime
+          button. Replaces the 0.5–2px tweaks of 2026-10-21. */}
+      <section className="flex flex-col gap-2 px-5 pt-3">
         <BalanceHero
           label="Total balance"
           // The whole Total balance column opens what's in it (Adrian, 2026-10-21: no ⓘ on Home).
@@ -317,7 +320,7 @@ function Loaded({
         />
       </section>
 
-      <section className="grid grid-cols-4 gap-2 px-5 pt-[20.5px]">
+      <section className="grid grid-cols-4 gap-2 px-5 pt-4">
         <QuickAction onClick={money.topUp} label="Top up" icon={<PlusIcon />} />
         <QuickAction onClick={openTrade} label="Trade" icon={<TradeIcon />} />
         <QuickAction onClick={openCreditBuy} label="Credit Buy" icon={<CreditIcon />} />
@@ -330,9 +333,9 @@ function Loaded({
         />
       </section>
 
-      <section className="flex flex-col gap-2.5 px-5 pt-[18px] empty:hidden">{cards}</section>
+      <section className="flex flex-col gap-2 px-5 pt-4 empty:hidden">{cards}</section>
 
-      <section className="grid grid-cols-2 gap-2.5 px-5 pt-[17.5px]">
+      <section className="grid grid-cols-2 gap-2 px-5 pt-4">
         {/* Cash is what earns, without the fuel tank, which shows on its own line under it (Adrian, 2026-10-21). */}
         <CashCard
           cashUsd={cashWithoutTankUsd(data)}
@@ -363,7 +366,7 @@ function Loaded({
       </section>
 
       {/* With no stocks, the empty state takes the room down to the tab bar. */}
-      <section className={`flex flex-col gap-2.5 px-5 pt-[16px] leading-[normal] ${held.length === 0 ? "grow" : ""}`}>
+      <section className={`flex flex-col gap-1.5 px-5 pt-4 leading-[normal] ${held.length === 0 ? "grow" : ""}`}>
         <div className="flex h-[22px] items-center justify-between">
           <Link href="/portfolio" className="flex items-baseline gap-2 no-underline">
             <span className="text-lg font-semibold tracking-[-0.015em]">Portfolio</span>
@@ -410,7 +413,7 @@ function Loaded({
 
 function Skeleton() {
   return (
-    <div aria-busy className="flex flex-col gap-4 px-5 pt-[18px]">
+    <div aria-busy className="flex flex-col gap-4 px-5 pt-4">
       <div className="h-[92px] animate-pulse rounded-[22px] bg-chip" />
       <div className="grid grid-cols-4 gap-2">
         {[0, 1, 2, 3].map((i) => (
