@@ -98,3 +98,35 @@ export function assertSaleCoversSave(user: Address, calls: Call[], walletRaw: bi
     throw new Error("Blocked: the savings approval is not exact");
   return calls;
 }
+
+/**
+ * Multi trade's savings supply (lib/tx/plans/multiTrade.ts) puts in only what the list's sales into cash are sure to
+ * bring. Throws unless the batch's last `sales` swaps pay USDC to the user, one savings supply comes after them, the
+ * supply is no more than their floors together, and every USDC approve to Aave V3's pool is exactly the supply. The
+ * wallet's network fee needs no holding back here: the withdrawal before the buys keeps it (payFromCash).
+ */
+export function assertSalesCoverSave(user: Address, calls: Call[], sales: number): Call[] {
+  const supplies = calls
+    .map((c, i) => ({ i, raw: supplyOf(c) }))
+    .filter((x): x is { i: number; raw: bigint } => x.raw !== null);
+  const swaps = calls.map((c, i) => ({ i, swap: swapOf(c) })).filter((x) => x.swap !== null);
+  const last = swaps.slice(-sales);
+  if (sales < 1 || supplies.length !== 1 || last.length !== sales)
+    throw new Error("Blocked: a Multi trade's savings supply rides on its sales");
+  const save = supplies[0];
+  if (
+    last.some(
+      (x) =>
+        !isAddressEqual(x.swap!.params.tokenOut, USDC.address) ||
+        !isAddressEqual(x.swap!.params.recipient, user) ||
+        x.i > save.i,
+    )
+  )
+    throw new Error("Blocked: the savings supply must come after sales into USDC for the user");
+  const floorRaw = last.reduce((sum, x) => sum + x.swap!.params.amountOutMinimum, 0n);
+  if (save.raw <= 0n || save.raw > floorRaw)
+    throw new Error("Blocked: the savings supply is more than the sales are sure to bring");
+  if (usdcApprovesTo(calls, PROTOCOLS.AAVE_V3_POOL).some((a) => a !== save.raw))
+    throw new Error("Blocked: the savings approval is not exact");
+  return calls;
+}

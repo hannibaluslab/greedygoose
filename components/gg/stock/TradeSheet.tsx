@@ -14,13 +14,13 @@ import { StockAvatar, tickerOf } from "../kit/StockAvatar";
 import { Summary } from "../home/Summary";
 import { TxButton, TxDone, TxError } from "../TxUi";
 import { useBoughtHome } from "@/hooks/useBoughtHome";
-import { useBuyQuote, useBuyQuoteRaw } from "@/hooks/useBuyQuote";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { useMenuGuard } from "@/hooks/useMenuGuard";
 import type { PositionData } from "@/hooks/usePosition";
-import { useSellQuote } from "@/hooks/useSell";
 import { useTrade } from "@/hooks/useTrade";
-import type { TradeSign } from "@/lib/tx/plans";
+import { MultiHeader, MultiList, RowButtons } from "./MultiTrade";
+import { useTradeList } from "./tradeList";
+import { tradeSign, useTradeView } from "./tradeView";
 import { formatShares } from "@/lib/formatting";
 import { minOut, quoteEconomics } from "@/lib/swap/buy";
 import { VENUE_LABEL } from "@/lib/swap/venues";
@@ -30,12 +30,11 @@ import {
   defaultLegs,
   emptyLine,
   fromOptions,
-  planTrade,
   swapSmallPrint,
   toOptions,
-  tradeAmount,
   tradeForm,
   type AssetOption,
+  type planTrade,
   type TradeAction,
   type TradeAsset,
   type TradeForm,
@@ -108,7 +107,19 @@ export function TradeSheet({
   const feeBlocked = isConnected && fee.state === "unsupported";
   // What the button would sign now, per route, prepared while the sheet is idle so the tap opens JAW's sheet at once.
   const toPriceUsd = data.holdings.find((h) => h.symbol === to)?.priceUsd ?? 0;
-  const signable = open && !feeBlocked ? tradeSign(view, user, data.debtRaw, toPriceUsd) : null;
+  const could = tradeSign(view, user, data.debtRaw, toPriceUsd);
+  // Multi trade: the list of trades the editor below fills, signed together (tradeList.ts). In it, nothing here signs.
+  const list = useTradeList({
+    open,
+    user,
+    data,
+    fee: { blocked: feeBlocked, loading: fee.loading },
+    trade: { from, to, amount, all },
+    could,
+    setForm,
+    onClose,
+  });
+  const signable = list.single;
   const { sign: signTrade, phase, error, reset, busy, txHash, checking, blocked } = useTrade(signable);
 
   // Once a buy or a trade lands: Home, with "Bought 0.4554 NVDA" or "Traded NVDA for 0.0086 AAPL" from the receipt.
@@ -163,9 +174,43 @@ export function TradeSheet({
   };
 
   return (
-    <SheetShell open={open} onOpenChange={onOpenChange} title={TRADE_COPY.title}>
-      <SheetSteps stepKey={doneSale ? "done" : "trade"} className="flex flex-col gap-3">
-        {doneSale && signed ? (
+    <SheetShell
+      open={open}
+      onOpenChange={onOpenChange}
+      title={list.title}
+      // In the list's editor, Back drops the draft and returns to the list; Done is the only way in.
+      onBack={list.back}
+      hideClose={list.editingRow}
+      headerRight={
+        <MultiHeader
+          show={list.header(!!legs && phase === "idle")}
+          onEnter={list.enter}
+          onExit={list.exit}
+          busy={list.tx.busy}
+        />
+      }
+    >
+      <SheetSteps stepKey={doneSale ? "done" : list.stepKey} className="flex flex-col gap-3">
+        {list.list ? (
+          <MultiList
+            rows={list.rows}
+            reports={list.reports}
+            onReport={list.report}
+            onOpen={list.openRow}
+            onAdd={() => list.openRow(null)}
+            settledId={list.settledId}
+            user={user}
+            data={data}
+            nameOf={nameOf}
+            block={list.block}
+            phase={list.tx.phase}
+            checking={list.tx.checking}
+            error={list.tx.error}
+            preview={!isConnected}
+            canSign={list.canSign}
+            onSign={() => void list.tx.sign()}
+          />
+        ) : doneSale && signed ? (
           <SoldDone signed={signed} data={data} decimals={view.fromStock?.decimals} txHash={txHash} onDone={onClose} />
         ) : !legs ? (
           <div className="flex flex-col items-start gap-3 pt-1">
@@ -220,18 +265,17 @@ export function TradeSheet({
                 {TRADE_COPY.feeUnsupported}
               </p>
             )}
-            <TxError error={error} />
-            <div className="mt-1">
-              <TxButton
-                label={view.button}
-                size="md"
-                phase={phase}
-                checking={checking}
-                preview={!isConnected}
-                disabled={!signable || fee.loading || blocked || phase === "done"}
-                onClick={sign}
-              />
-            </div>
+            <TradeFoot
+              list={list}
+              label={view.button}
+              ready={!!could}
+              error={error}
+              phase={phase}
+              checking={checking}
+              preview={!isConnected}
+              disabled={!signable || fee.loading || blocked}
+              onSign={sign}
+            />
           </>
         )}
       </SheetSteps>
@@ -239,49 +283,46 @@ export function TradeSheet({
   );
 }
 
-/** What the Trade sheet signs for the route on screen, once it's ready (the quotes and the plan its screen shows). */
-function tradeSign(
-  view: ReturnType<typeof planTrade>,
-  user: `0x${string}`,
-  debtRaw: bigint,
-  toPriceUsd: number,
-): TradeSign | null {
-  if (!view.ready) return null;
-  const { route, fromStock, toStock, fromHolding, sellQuote: sq, sellPlan, buyQuote: bq } = view;
-  if (route === "buy" && toStock && bq) return { route, user, stock: toStock, quote: bq, oraclePriceUsd: toPriceUsd };
-  if (route === "sell" && fromStock && fromHolding && sq && sellPlan)
-    return { route, user, stock: fromStock, quote: sq, plan: sellPlan, oraclePriceUsd: fromHolding.priceUsd, debtRaw };
-  if (route === "swap" && fromStock && toStock && fromHolding && sq && sellPlan && bq)
-    return {
-      route,
-      user,
-      from: fromStock,
-      to: toStock,
-      sellQuote: sq,
-      plan: sellPlan,
-      buyQuote: bq,
-      oraclePriceUsd: fromHolding.priceUsd,
-      toPriceUsd,
-      feeFromSale: view.feeFromSale,
-    };
-  return null;
-}
-
-/**
- * The quotes each route needs and the plan from them: the sale's for its shares (debounced), the buy's for the typed
- * dollars (debounced), and a swap's buy for the sale's floor once the sale's quote is in. Nothing is quoted without legs.
- */
-function useTradeView(input: Omit<Parameters<typeof planTrade>[0], "buy" | "sell">, hasLegs: boolean) {
-  const a = tradeAmount(input);
-  const selling = a.route === "sell" || a.route === "swap";
-  const sellQuote = useSellQuote(hasLegs && selling ? a.fromStock : undefined, a.sharesRaw);
-  const swapIn = planTrade({ ...input, sell: sellQuote }).buyInRaw;
-  const cashBuyQuote = useBuyQuote(hasLegs && a.route === "buy" ? a.toStock : undefined, a.amountUsd);
-  const swapBuyQuote = useBuyQuoteRaw(
-    hasLegs && a.route === "swap" ? a.toStock : undefined,
-    a.route === "swap" ? swapIn : 0n,
+/** The editor's foot: on a plain trade, its error and the button that opens JAW's sheet; in the list, Remove and Done. */
+function TradeFoot({
+  list,
+  label,
+  ready,
+  error,
+  phase,
+  checking,
+  preview,
+  disabled,
+  onSign,
+}: {
+  list: ReturnType<typeof useTradeList>;
+  label: string;
+  ready: boolean;
+  error: string | null;
+  phase: ReturnType<typeof useTrade>["phase"];
+  checking: boolean;
+  preview: boolean;
+  disabled: boolean;
+  onSign: () => void;
+}) {
+  if (list.editingRow)
+    return <RowButtons canRemove={list.editingSaved} ready={ready} onRemove={list.remove} onDone={list.commit} />;
+  return (
+    <>
+      <TxError error={error} />
+      <div className="mt-1">
+        <TxButton
+          label={label}
+          size="md"
+          phase={phase}
+          checking={checking}
+          preview={preview}
+          disabled={disabled || phase === "done"}
+          onClick={onSign}
+        />
+      </div>
+    </>
   );
-  return planTrade({ ...input, sell: sellQuote, buy: a.route === "buy" ? cashBuyQuote : swapBuyQuote });
 }
 
 /** A sale that landed: what was sold, and that the money is in the cash. */

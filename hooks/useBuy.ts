@@ -4,24 +4,13 @@ import { txKey, useTx, type TxPlan } from "./useTx";
 import { useSigningQuote } from "./useBuyQuote";
 import { creditBuyPlan, useCreditBuyBatch } from "./useCreditBuy";
 import { useSigningCash } from "./useSigningCash";
-import { buildBuyCalls, quoteKey, type BuyQuote } from "@/lib/swap/buy";
+import { buildBuyCalls, buyActivity, quoteKey, type BuyQuote } from "@/lib/swap/buy";
 import { payFromCash } from "@/lib/cash";
-import type { ActivityItem } from "@/lib/activity/decode";
 import type { CreditPlan } from "@/lib/creditBuy";
-import { USDC, type ReserveAsset } from "@/lib/tokens/registry";
+import type { ReserveAsset } from "@/lib/tokens/registry";
 
 const BUY_FALLBACK =
   "This buy would fail right now. The price may have moved or the stock may be paused. Try again in a moment.";
-
-/** What Activity shows while a buy confirms. */
-const buyActivity = (stock: ReserveAsset, quote: BuyQuote): ActivityItem[] => [
-  {
-    kind: "buy",
-    symbol: stock.symbol,
-    amount: Number(quote.amountOut) / 10 ** stock.decimals,
-    paidUsd: Number(quote.amountIn) / 10 ** USDC.decimals,
-  },
-];
 
 type CashBuyInput = {
   user: `0x${string}`;

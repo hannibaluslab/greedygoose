@@ -12,3 +12,4 @@ export * from "./earn";
 export * from "./agents";
 export * from "./convert";
 export * from "./contacts";
+export * from "./multiTrade";

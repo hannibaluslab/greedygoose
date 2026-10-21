@@ -297,7 +297,7 @@ describe("Start earning in Activity and the Cash sheet: one row, not money leavi
   });
 });
 
-describe("the savings supply stays Earn with stocks', Start earning's and a sale into cash's alone", () => {
+describe("the savings supply stays Earn with stocks', Start earning's and sales into cash's alone", () => {
   const cash: Cash = { walletRaw: usdc(40), savingsRaw: 0n, saveOn: false };
   const save = buildStartEarningCalls({ user, walletRaw: usdc(10) });
 
@@ -313,7 +313,7 @@ describe("the savings supply stays Earn with stocks', Start earning's and a sale
     expect(() => assertAllowed(user, save)).toThrow(/unexpected/);
   });
 
-  it("only those three builders declare saveTo", () => {
+  it("only those builders declare saveTo (a sale into cash, or Multi trade's sales)", () => {
     const root = join(__dirname, "..", "..");
     const files: string[] = [];
     const walk = (dir: string) => {
@@ -344,6 +344,7 @@ describe("the savings supply stays Earn with stocks', Start earning's and a sale
       join("lib", "earnWithStocks.ts"),
       join("lib", "sell.ts"),
       join("lib", "startEarning.ts"),
+      join("lib", "tx", "plans", "multiTrade.ts"),
     ]);
   });
 });

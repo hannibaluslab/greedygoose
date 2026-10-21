@@ -1,4 +1,5 @@
 import { encodeFunctionData, erc20Abi, parseUnits, type Hex, type PublicClient, type Transport } from "viem";
+import type { ActivityItem } from "@/lib/activity/decode";
 import { AERODROME, UNISWAP, type Venue } from "./venues";
 import { aeroQuoterAbi, aeroRouterAbi, quoterV2Abi, swapRouter02Abi } from "./abis";
 import { ORACLE_DECIMALS } from "@/lib/aave/addresses";
@@ -254,3 +255,13 @@ export const buildBuyCalls = (p: {
   oraclePriceUsd: number;
   nowSec?: number;
 }): Call[] => buildSwapCalls({ ...p, side: "buy", amountOutMinimum: buyMinOut(p.quote, p.stock, p.oraclePriceUsd) });
+
+/** What Activity shows while a buy confirms (a Buy, a Trade's cash → stock, a row of a multi trade). */
+export const buyActivity = (stock: ReserveAsset, quote: BuyQuote): ActivityItem[] => [
+  {
+    kind: "buy",
+    symbol: stock.symbol,
+    amount: Number(quote.amountOut) / 10 ** stock.decimals,
+    paidUsd: Number(quote.amountIn) / 10 ** USDC.decimals,
+  },
+];

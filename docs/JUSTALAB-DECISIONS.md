@@ -1002,3 +1002,22 @@ shows alone. When JAW answers, ours comes back: as the goose page while the chan
 Nothing was sent." The flag is set in the one write path (`lib/tx/prepared.ts` submit, `lib/tx/jawSheet.ts`), so every
 sheet that signs does it. **Tests:** `prepared-tx` (up from the send to JAW's answer, for sent, cancelled and blocked;
 never up for a batch that doesn't reach JAW).
+
+## 2026-10-21 · Multi trade, in the Trade sheet
+
+Adrian: bring NYM's multi mode to GreedyGoo, "in the trade sheet", called Multi trade. The Trade sheet's header has a
+lime **Multi trade** pill; it opens a list (NYM's MoveSheet multi mode): the total, "2 trades · one signature", one row
+per trade (both marks, "Meta → Cash", what it gets, its dollars), dashed places up to the two a list needs, then Add and
+"Make 2 trades". The trade on screen comes along as the first row when it could sign. Tapping a row opens it in the
+Trade sheet's own editor ("Trade 2 of 3", Back drops the edit, Remove, Done); Add opens "New trade · #3". Up to 5
+trades. Cancel leaves the list.
+
+Each row is any trade the sheet makes (cash → stock, stock → cash, stock → stock), from cash and free shares only:
+no credit, as in the plain Trade sheet. Each row prices itself live, as the editor does. The rows go ahead together only
+when the buys fit the cash with the network fee kept back, and no stock is sold for more than its free shares across the
+rows (`multiBlock`); a row that can't go ahead says why on the row. One batch for all (`lib/tx/plans/multiTrade.ts`),
+from fresh quotes: any savings withdrawal the buys need, the buys, the stock-to-stock trades (each stops with
+QUOTE_MOVED if its fresh sale no longer covers its buy), the sales, then one savings supply of what the sales are sure
+to bring. That supply is checked from the decoded calls, as a single sale's is (`assertSalesCoverSave` in
+`lib/sell/covers.ts`), and Multi trade joins the builders allowed to declare `saveTo`. Done: "2 trades done", and the
+sheet closes. **Tests:** `multi-trade` (11), the `saveTo` guard in `start-earning`.
