@@ -8,11 +8,16 @@ import { LeaveForRepay } from "./CreditBuyBacking";
 import { CreditHero, StockLists } from "./CreditBuyStocks";
 import { CreditBuyBackStep, LostPick, useBackingPick } from "./CreditBuyBackStep";
 import { CreditBuyAmountStep } from "./CreditBuyAmountStep";
+import { CreditBuyCashStep } from "./CreditBuyCashStep";
 import { useCreditBuyAmount } from "./useCreditBuyAmount";
+import { useCreditBuyCash } from "./useCreditBuyCash";
 import { useAgents } from "@/hooks/useAgents";
 import { useBoughtHome } from "@/hooks/useBoughtHome";
 import { useBackingFactorsRead, type PositionData } from "@/hooks/usePosition";
+import { aprToApy } from "@/lib/aave/math";
 import { backingForBuy, creditLine, planCredit, type BackingPick } from "@/lib/creditBuy";
+import { cashRowLine } from "@/lib/creditBuy/toCash";
+import { earnTenths } from "@/lib/earnWithStocks";
 import { EQUITIES, USDC, type ReserveAsset } from "@/lib/tokens/registry";
 
 /**
@@ -23,14 +28,19 @@ type Step = "back" | "pick" | "amount";
 const ORDER: Step[] = ["back", "pick", "amount"];
 
 /**
- * The sheet's title and the step Back goes to: the stock being bought names it from step 3. The stock picker is never
- * skipped, even from a stock's sheet (Adrian, 2026-10-19: a stock put in use buys any stock, chosen on the market
- * list), so Back from the amount always returns to it.
+ * What the credit goes to: a stock, or cash (the Cash row: straight into savings, where it earns).
  */
-function navOf(step: Step, stock: ReserveAsset | null) {
-  const named = step === "amount" ? stock : null;
+type Target = ReserveAsset | "cash";
+
+/**
+ * The sheet's title and the step Back goes to: what's being bought names it from step 3 ("Credit Buy Cash" for the
+ * Cash row). The stock picker is never skipped, even from a stock's sheet (Adrian, 2026-10-19: a stock put in use buys
+ * any stock, chosen on the market list), so Back from the amount always returns to it.
+ */
+function navOf(step: Step, target: Target | null) {
+  const named = step === "amount" && target ? (target === "cash" ? "Cash" : target.name) : null;
   const back: Step | null = step === "pick" ? "back" : step === "amount" ? "pick" : null;
-  return { title: named ? `Credit Buy ${named.name}` : "Credit Buy", back };
+  return { title: named ? `Credit Buy ${named}` : "Credit Buy", back };
 }
 
 /**
@@ -73,7 +83,9 @@ export function CreditBuySheet({
 
   const [step, setStep] = useState<Step>("back");
   const [direction, setDirection] = useState<"forward" | "back">("forward");
-  const [stock, setStock] = useState<ReserveAsset | null>(preset);
+  const [target, setTarget] = useState<Target | null>(preset);
+  const stock = target === "cash" ? null : target;
+  const toCash = target === "cash";
   const [picked, setPicked] = useState<string | null>(null);
   const [raw, setRaw] = useState("");
   const [ack, setAck] = useState(false);
@@ -113,7 +125,7 @@ export function CreditBuySheet({
 
   const buy = useCreditBuyAmount({
     open,
-    onAmountStep: step === "amount",
+    onAmountStep: step === "amount" && !toCash,
     user,
     stock,
     amount,
@@ -125,8 +137,21 @@ export function CreditBuySheet({
     chosen,
     priceOf,
   });
-  const { tx } = buy;
-  const { phase, reset, busy, txHash } = tx;
+  const cash = useCreditBuyCash({
+    open,
+    onCashStep: step === "amount" && toCash,
+    user,
+    data,
+    plan,
+    amount,
+    ack,
+    pickGone,
+    reachUsd,
+    chosen,
+    onClose,
+  });
+  const tx = toCash ? cash.tx : buy.tx;
+  const { phase, reset, busy } = tx;
   const lostPick = pickGone && !busy && phase !== "done";
   const close = () => {
     onClose();
@@ -140,19 +165,26 @@ export function CreditBuySheet({
   };
 
   // F2-5 → F2-7: once the batch lands, Home with "Bought … with Credit Buy", the shares read from the receipt.
-  useBoughtHome({ phase, user, symbol: stock?.symbol ?? "", txHash, credit: true, onClose });
+  useBoughtHome({
+    phase: buy.tx.phase,
+    user,
+    symbol: stock?.symbol ?? "",
+    txHash: buy.tx.txHash,
+    credit: true,
+    onClose,
+  });
 
   /** Step 1's pick: another one starts the amount empty again. */
   const choose = (key: string | null) => {
     if (key !== picked) setRaw("");
     setPicked(key);
   };
-  const pickStock = (s: ReserveAsset) => {
-    setStock(s);
+  const pickTarget = (t: Target) => {
+    setTarget(t);
     go("amount");
   };
 
-  const { title, back } = navOf(step, stock);
+  const { title, back } = navOf(step, target);
   const leave = step === "back" && preset ? onBack : undefined;
 
   return (
@@ -215,9 +247,45 @@ export function CreditBuySheet({
                 priceOf={priceOf}
                 withCash={false}
                 othersFirst
-                onPick={pickStock}
+                cash={{
+                  line: cashRowLine(earnTenths(aprToApy(data.savingsApr))),
+                  onPick: () => pickTarget("cash"),
+                }}
+                onPick={pickTarget}
               />
             </div>
+          ) : step === "amount" && toCash ? (
+            <CreditBuyCashStep
+              quote={cash.quote}
+              blocker={cash.blocker}
+              ready={cash.ready}
+              feeBlocked={cash.feeBlocked}
+              feeLoading={cash.feeLoading}
+              signable={cash.signable}
+              data={data}
+              chosen={chosen}
+              pick={pick}
+              reachUsd={reachUsd}
+              raw={raw}
+              setRaw={setRaw}
+              ack={ack}
+              setAck={setAck}
+              amount={amount}
+              plan={plan}
+              protect={agentStatus.protect}
+              sell={agentStatus.sell}
+              preview={!cash.isConnected}
+              tx={{
+                phase: cash.tx.phase,
+                error: cash.tx.error,
+                checking: cash.tx.checking,
+                blocked: cash.tx.blocked,
+                onSign: () => {
+                  if (cash.tx.phase !== "idle") cash.tx.reset();
+                  void cash.tx.sign();
+                },
+              }}
+            />
           ) : step === "amount" && stock ? (
             <CreditBuyAmountStep
               {...buy}

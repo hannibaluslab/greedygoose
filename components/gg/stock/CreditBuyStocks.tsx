@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { CashMark } from "../kit/AssetPicker";
 import { StockAvatar } from "../kit/StockAvatar";
 import { ChevronRight } from "../kit/icons";
 import { RetryButton } from "../kit/RetryButton";
@@ -13,9 +14,9 @@ import { EQUITIES, type ReserveAsset } from "@/lib/tokens/registry";
 const valueOf = (h: Holding) => h.freeUsd + h.backingUsd;
 
 /**
- * Step 3's lists (F2-3): the holdings, then the other stocks. `othersFirst` (the stock to buy): the other stocks on
- * top, since a Credit Buy usually buys something new, and the holdings under them. `withCash`: the $0 state, where a
- * tap buys with cash.
+ * Step 3's lists (F2-3): the holdings, then the other stocks. `othersFirst` (the stock to buy): the available stocks on
+ * top, since a Credit Buy usually buys something new, then `cash` (the credit straight into savings), and the holdings
+ * under them. `withCash`: the $0 state, where a tap buys with cash.
  */
 export function StockLists({
   held,
@@ -23,6 +24,7 @@ export function StockLists({
   priceOf,
   withCash,
   othersFirst = false,
+  cash,
   onPick,
 }: {
   held: Holding[];
@@ -30,6 +32,8 @@ export function StockLists({
   priceOf: (symbol: string) => number;
   withCash: boolean;
   othersFirst?: boolean;
+  /** The Cash row: what the cash earns ("Earns 3.8% in savings") and its tap. */
+  cash?: { line: string; onPick: () => void };
   onPick: (s: ReserveAsset) => void;
 }) {
   const heldList = held.length > 0 && (
@@ -52,7 +56,7 @@ export function StockLists({
     </PickList>
   );
   const othersList = others.length > 0 && (
-    <PickList title={withCash ? "Buy with cash" : held.length > 0 ? "Other stocks" : "Stocks"}>
+    <PickList title={withCash ? "Buy with cash" : held.length > 0 ? "Available stocks" : "Stocks"}>
       {others.map((e) => (
         <PickRow
           key={e.symbol}
@@ -66,9 +70,23 @@ export function StockLists({
       ))}
     </PickList>
   );
+  const cashList = cash && (
+    <PickList title="Cash">
+      <PickRow
+        symbol="USDC"
+        name="Cash"
+        mark={<CashMark size={40} />}
+        sub={cash.line}
+        withCash={false}
+        disabled={false}
+        onClick={cash.onPick}
+      />
+    </PickList>
+  );
   return othersFirst ? (
     <>
       {othersList}
+      {cashList}
       {heldList}
     </>
   ) : (
@@ -179,13 +197,15 @@ function PickList({ title, children }: { title: string; children: ReactNode }) {
 /**
  * A stock to Credit Buy (F2-3): badge, name ("You own $X" for a holding), its price. Stocks earn no yield (D19), so
  * "per share" sits where the board had the APY. `withCash`: with $0 to use it opens a Buy with cash, and its name says so.
- * `disabled` until the number is known.
+ * `disabled` until the number is known. The Cash row passes its own `mark` and `sub`, and no price.
  */
 function PickRow({
   symbol,
   name,
   owned,
   priceUsd,
+  mark,
+  sub,
   withCash,
   disabled,
   onClick,
@@ -193,7 +213,9 @@ function PickRow({
   symbol: string;
   name: string;
   owned?: number;
-  priceUsd: number;
+  priceUsd?: number;
+  mark?: ReactNode;
+  sub?: string;
   withCash: boolean;
   disabled: boolean;
   onClick: () => void;
@@ -206,7 +228,7 @@ function PickRow({
       className="group flex min-h-16 w-full items-stretch pl-4 text-left text-ink"
     >
       <span className="flex items-center py-2.5">
-        <StockAvatar symbol={symbol} size={40} font={9.5} weight={800} />
+        {mark ?? <StockAvatar symbol={symbol} size={40} font={9.5} weight={800} />}
       </span>
       <span className="ml-3 flex min-w-0 flex-1 items-center gap-3 border-b border-line-field py-2.5 pr-4 group-last:border-b-0">
         <span className="flex min-w-0 flex-1 flex-col gap-1">
@@ -216,11 +238,14 @@ function PickRow({
               You own <b className="font-semibold text-ink">{formatUsd(owned)}</b>
             </span>
           )}
+          {sub && <span className="num truncate text-[13px] font-medium leading-[18px] text-ink-mid">{sub}</span>}
         </span>
-        <span className="num flex shrink-0 flex-col items-end gap-1 whitespace-nowrap">
-          <span className="text-[15px] font-semibold leading-[18px]">{formatUsd(priceUsd)}</span>
-          <span className="text-[12px] font-medium leading-4 text-ink-mid">per share</span>
-        </span>
+        {priceUsd !== undefined && (
+          <span className="num flex shrink-0 flex-col items-end gap-1 whitespace-nowrap">
+            <span className="text-[15px] font-semibold leading-[18px]">{formatUsd(priceUsd)}</span>
+            <span className="text-[12px] font-medium leading-4 text-ink-mid">per share</span>
+          </span>
+        )}
         <ChevronRight strokeWidth={2.2} className="shrink-0 text-ink-faint" />
         {withCash && <span className="sr-only">, buy with cash</span>}
       </span>

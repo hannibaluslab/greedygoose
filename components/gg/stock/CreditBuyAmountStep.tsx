@@ -32,13 +32,13 @@ import { leverageOf, leverageText } from "@/lib/leverage";
 /** What a backing is worth, rounded up so it's never shown as less than goes in: cents under $100, dollars above. */
 const backedText = (n: number) => (n < 100 ? formatUsd(ceilCents(n)) : formatUsdTrim(Math.ceil(n)));
 /** MAX's amount: the most there is, to the cent, rounded down ("0.69", "417.35"). */
-const maxText = (n: number) => String(floorCents(Math.max(0, n)));
+export const maxText = (n: number) => String(floorCents(Math.max(0, n)));
 
 /**
  * What backs it once it lands: what this buy puts in use (the picked holding first) and what's in use already.
  * Under the amount: what backs it, "Backed by 1.16 Apple · $290", all of it, or nothing new (Credit ready).
  */
-function backingLineOf(data: PositionData, chosen: BackingOption | null, pick: BackingPick): string {
+export function backingLineOf(data: PositionData, chosen: BackingOption | null, pick: BackingPick): string {
   const chosenHolding = chosen ? (data.holdings.find((h) => h.symbol === chosen.stock.symbol) ?? null) : null;
   const backedShares =
     chosen && chosenHolding ? rawToShares(pick.raw, chosenHolding.multiplier, chosen.stock.decimals) : 0;
@@ -210,8 +210,21 @@ export function CreditBuyAmountStep({
   );
 }
 
-/** Board 34 (Adrian: say how much it moves): the bar from now to after, and the status change. */
-function CreditMove({ data, plan, amount }: { data: PositionData; plan: CreditPlan; amount: number }) {
+/**
+ * Board 34 (Adrian: say how much it moves): the bar from now to after, and the status change. `cost` replaces the Cost
+ * cell's rate and monthly cost (the Cash row: what this credit costs beside what the cash earns).
+ */
+export function CreditMove({
+  data,
+  plan,
+  amount,
+  cost,
+}: {
+  data: PositionData;
+  plan: CreditPlan;
+  amount: number;
+  cost?: string;
+}) {
   // What you hold ÷ your own money, now and once the buy lands (the credit comes in as stock): "1.1x → 1.2x".
   const holdUsd = data.stocksUsd + data.cashUsd;
   const leverageNow = leverageText(leverageOf({ holdUsd, owedUsd: data.debtUsd }) ?? 1);
@@ -242,7 +255,7 @@ function CreditMove({ data, plan, amount }: { data: PositionData; plan: CreditPl
         <span className="flex min-w-0 flex-col gap-0.5">
           <span className="text-subtle">Cost</span>
           <span className="truncate font-semibold text-ink-2">
-            {(data.apr * 100).toFixed(1)}% · {monthlyCostText(monthlyCost(amount, data.apr))}
+            {cost ?? `${(data.apr * 100).toFixed(1)}% · ${monthlyCostText(monthlyCost(amount, data.apr))}`}
           </span>
         </span>
         <span className="flex min-w-0 flex-col gap-0.5 border-l border-line-field pl-3">

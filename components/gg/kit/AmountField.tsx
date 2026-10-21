@@ -235,13 +235,17 @@ export function YouGetShares({
   );
 }
 
-/** What a sale pays (canvas board 9): the cash badge and the dollars, nothing beside them. `usd` null while quoting. */
-export function YouGetCash({ usd, source }: { usd: number | null; source?: ReactNode }) {
+/**
+ * What a sale pays (canvas board 9): the cash badge and the dollars, nothing beside them. `usd` null while quoting.
+ * `line` goes under the dollars (Credit Buy's Cash row: where it goes and what it earns).
+ */
+export function YouGetCash({ usd, source, line }: { usd: number | null; source?: ReactNode; line?: string }) {
   return (
     <Arrives
       mark={<AmountBadge kind="cash" />}
       amount={usd === null ? null : formatUsd(usd)}
       unit="Cash"
+      line={line}
       source={source}
     />
   );

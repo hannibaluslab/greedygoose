@@ -10,6 +10,12 @@ import { formatUsd } from "@/lib/formatting";
 import { BUY_LIMITS, quoteEconomics } from "@/lib/swap/buy";
 import type { ReserveAsset } from "@/lib/tokens/registry";
 
+/** More than step 1's pick can back: say how far it goes, and where more comes from. */
+export const overReach = (chosen: BackingOption | null, reachUsd: number) =>
+  chosen
+    ? `${chosen.stock.name} can back up to ${wholeUsd(reachUsd)}. Pick another stock for more.`
+    : `Credit ready goes up to ${wholeUsd(reachUsd)}. Back new credit with a stock for more.`;
+
 /** Why the amount can't be bought yet, first reason only; none when it can. */
 function amountBlocker({
   pickGone,
@@ -32,10 +38,7 @@ function amountBlocker({
 }): string | null {
   if (pickGone) return "That stock can’t back credit right now.";
   if (amount > 0 && amount < BUY_LIMITS.minUsd) return `Minimum buy is ${formatUsd(BUY_LIMITS.minUsd)}.`;
-  if (amount > reachUsd + 1e-9)
-    return chosen
-      ? `${chosen.stock.name} can back up to ${wholeUsd(reachUsd)}. Pick another stock for more.`
-      : `Credit ready goes up to ${wholeUsd(reachUsd)}. Back new credit with a stock for more.`;
+  if (amount > reachUsd + 1e-9) return overReach(chosen, reachUsd);
   if (amount > 0 && plan.block) return CREDIT_BLOCKED[plan.block];
   if (stock && amount > 0 && quote.isSuccess && (quote.data ?? null) === null)
     return `There’s no market for ${stock.name} right now.`;
