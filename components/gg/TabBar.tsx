@@ -48,7 +48,8 @@ export function TabBar() {
         {TABS.map(({ href, label, Icon, match }) => {
           const active = match.some((m) => path.startsWith(m));
           // Agents, the middle tab, is a lime button docked in the bar (Adrian: yellow, round, bigger, higher). Done the
-          // way docked centre buttons are: raised half out of the bar, a ring in the page's colour so it sits in a
+          // way docked centre buttons are: raised 4px out of the bar (Adrian, 2026-10-22: lower, so it clears Home's last
+          // cards), a ring in the page's colour so it sits in a
           // notch rather than on top of the bar, a soft shadow instead of a glow.
           if (href === "/agents") {
             return (
@@ -60,7 +61,7 @@ export function TabBar() {
                 aria-current={active ? "page" : undefined}
                 className="relative flex items-center justify-center"
               >
-                <span className="absolute left-1/2 top-0 grid size-[52px] -translate-x-1/2 -translate-y-[14px] place-items-center rounded-full bg-brand text-ink shadow-[0_6px_14px_-4px_rgba(14,13,11,0.35)] ring-[5px] ring-ground transition active:scale-95">
+                <span className="absolute left-1/2 top-0 grid size-[52px] -translate-x-1/2 -translate-y-[4px] place-items-center rounded-full bg-brand text-ink shadow-[0_6px_14px_-4px_rgba(14,13,11,0.35)] ring-[5px] ring-ground transition active:scale-95">
                   <Icon size={24} />
                 </span>
               </Link>

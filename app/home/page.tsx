@@ -264,11 +264,10 @@ function Loaded({
           16 from section to section, 8 inside a block (title or figures to what they head) and between cards. With the
           week's line 40px (was 44) and the stock cards' padding 10px (was 11), Home is 20px shorter; the header then sits
           2px lower, so 18px net. At 402x709 (an iPhone 17 Safari tab) the last cards clear the tab bar and its lime
-          button. Replaces the 0.5–2px tweaks of 2026-10-21. Dark only (Adrian, 2026-10-22): the header is the booth's band
-          (50px with its hairline, the logo 2px from the top, 12px above the line) and the hero starts 22px under it;
-          the week's line to the buttons is 12, not 16 (Adrian: the 4px went above Total balance).
-          The lime button clears the cards by 12. */}
-      <section className="flex flex-col gap-2 px-5 pt-[10px] dark:pt-[22px]">
+          button. Replaces the 0.5–2px tweaks of 2026-10-21. Both themes since 2026-10-22 (Adrian): the header is the booth's band
+          (50px with its hairline, the logo 2px from the top, 12px above the line), the hero starts 22px under it, and the
+          week's line sits 12px above the buttons. The lime button clears the cards by 12 (dark) / 8 (light). */}
+      <section className="flex flex-col gap-2 px-5 pt-[22px]">
         <BalanceHero
           label="Total balance"
           // The whole Total balance column opens what's in it (Adrian, 2026-10-21: no ⓘ on Home).
@@ -323,7 +322,7 @@ function Loaded({
         />
       </section>
 
-      <section className="grid grid-cols-4 gap-2 px-5 pt-4 dark:pt-3">
+      <section className="grid grid-cols-4 gap-2 px-5 pt-3">
         <QuickAction onClick={money.topUp} label="Top up" icon={<PlusIcon />} />
         <QuickAction onClick={openTrade} label="Trade" icon={<TradeIcon />} />
         <QuickAction onClick={openCreditBuy} label="Credit Buy" icon={<CreditIcon />} />
