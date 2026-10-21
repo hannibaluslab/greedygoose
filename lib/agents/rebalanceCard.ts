@@ -1,5 +1,6 @@
 import { mixBpsNow, startingMix, type MixHolding } from "@/lib/agents/mix";
 import {
+  BACKING_RULE,
   blockedWords,
   nyDay,
   rebalanceCheckAt,
@@ -14,7 +15,7 @@ import {
   type RebalanceOptions,
   type RebalanceTrade,
 } from "@/lib/agents/rules/rebalance";
-import { investTrades, topUpsReady, type TopUpsState } from "@/lib/agents/rules/topUps";
+import { investTrades, sendToFixRaw, topUpsReady, type TopUpsState } from "@/lib/agents/rules/topUps";
 import type { AgentStatus } from "@/lib/agents/status";
 import { formatUsdTrim } from "@/lib/formatting";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
@@ -278,6 +279,29 @@ function dueFooter(
   return { footer: { kind: "trades", text, when: capital(when) }, say: `${text} ${when}.${what.join("")}` };
 }
 
+/** How much to send to fix the mix (`sendToFixRaw`), USDC units; null when nothing to send or no amount does it. */
+function sendToFix(i: RebalanceCardInput): bigint | null {
+  if (!i.mixBps) return null;
+  const mix = i.mixBps;
+  const stocks = EQUITIES.map((e) => {
+    const h = i.holdings.find((x) => x.reserveId === e.reserveId);
+    return {
+      sharesRaw: h?.freeRaw ?? 0n,
+      backingRaw: h?.backingRaw ?? 0n,
+      price: h?.priceRaw ?? 0n,
+      weightBps: BigInt(mix[e.reserveId]),
+    };
+  });
+  const raw = sendToFixRaw(stocks, i.options);
+  return raw && raw > 0n ? raw : null;
+}
+
+/** "Send $210 to fix your mix.", then why sending is the way (or that top-ups have to be on for it to go in). */
+function sendWords(raw: bigint, topUpsOn: boolean): [string, string] {
+  const usd = formatUsdTrim(Math.ceil(Number(raw) / 10 ** USDC.decimals));
+  return [`Send ${usd} to fix your mix.`, topUpsOn ? BACKING_RULE : "Turn on top-ups so it goes in."];
+}
+
 /** What the card says while off and before the agents are live. */
 const OFF_WORDS = ["When on, it keeps your mix on target.", "Checks once a market day, after the US open."] as const;
 
@@ -360,8 +384,13 @@ export function rebalanceCard(i: RebalanceCardInput): RebalanceCardModel | null 
     });
   // On, with no mix saved: nothing to keep on target yet.
   if (o.noMix) return card("On", "on", words(standing));
-  // 8. Off target (or none of the mix held), and nothing trades: what holds it back (Adrian, 2026-10-21).
-  if (blocked) return card("On", "on", words(...blocked), { say: blocked.join(" "), marks: true });
+  // 8. Off target (or none of the mix held), and nothing trades: what holds it back (Adrian, 2026-10-21). Where it's the
+  // stock backing credit, how much to send so today's top-ups put the whole portfolio back in its bands (2026-10-22).
+  if (blocked) {
+    const send = o.blocked === "credit" || o.blocked === "too-small-backing" ? sendToFix(i) : null;
+    const say = send ? sendWords(send, !!i.topUps) : blocked;
+    return card("On", "on", words(...say), { say: say.join(" "), marks: true });
+  }
   // 9. All good: the whole portfolio is in its band.
   return card("On", "on", { kind: "on-target", next: capital(when) }, { say: `On target. Next check ${when}.` });
 }

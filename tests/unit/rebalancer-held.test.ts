@@ -203,11 +203,19 @@ describe("rebalanceCard: off target with nothing to trade", () => {
     const m = card(adrian(1_000), {}, { debtUsd: 3_000, totalBackingUsd: 7_420 });
     expect(m.pill).toEqual({ text: "On", tone: "on" });
     expect(m.faded).toBe(false);
-    // Freeing up is what takes stock out of backing: a repay alone leaves it there.
-    expect(m.footer).toEqual({ kind: "words", line1: BACKING_RULE, line2: "Free up some to let it trade." });
+    // What to send so today's top-ups put the whole portfolio back in its bands (Adrian, 2026-10-22); with top-ups
+    // off, sending alone doesn't go in.
+    expect(m.footer).toEqual({
+      kind: "words",
+      line1: "Send $203,408 to fix your mix.",
+      line2: "Turn on top-ups so it goes in.",
+    });
     expect(BACKING_RULE).toBe("Stock that backs your credit isn’t rebalanced.");
-    expect(m.label).toBe(`Rebalancer, on. ${BACKING_RULE} Free up some to let it trade.`);
-    expect(sheetLine(m)).toEqual({ text: `${BACKING_RULE} Free up some to let it trade.`, renew: false });
+    expect(m.label).toBe("Rebalancer, on. Send $203,408 to fix your mix. Turn on top-ups so it goes in.");
+    expect(sheetLine(m)).toEqual({
+      text: "Send $203,408 to fix your mix. Turn on top-ups so it goes in.",
+      renew: false,
+    });
     // Apple 29% of the mix's stock against 3%, Amazon 35% against 25%, Alphabet 21% against 14%: over. Microsoft 15%
     // against 58%: under. Nothing trades, so no side and no BUY or SELL.
     expect(outs(m)).toEqual([
@@ -221,20 +229,31 @@ describe("rebalanceCard: off target with nothing to trade", () => {
 
   it("held by credit with nothing owed, or in Act: the same words, freeing up is what lets it trade", () => {
     const owesNothing = card(adrian(1_000), {}, { debtUsd: 0, totalBackingUsd: 7_420 });
-    expect(owesNothing.footer).toEqual({ kind: "words", line1: BACKING_RULE, line2: "Free up some to let it trade." });
+    expect(owesNothing.footer).toEqual({
+      kind: "words",
+      line1: "Send $203,408 to fix your mix.",
+      line2: "Turn on top-ups so it goes in.",
+    });
     const inAct = card(adrian(1_000), {}, { debtUsd: 5_000, totalBackingUsd: 7_420 });
     expect(inAct.pill).toEqual({ text: "On", tone: "on" });
-    expect(inAct.footer).toEqual({ kind: "words", line1: BACKING_RULE, line2: "Free up some to let it trade." });
+    expect(inAct.footer).toEqual({
+      kind: "words",
+      line1: "Send $203,408 to fix your mix.",
+      line2: "Turn on top-ups so it goes in.",
+    });
   });
 
-  it("Adrian's own account: too small to trade, and the rule, since all of his mix backs credit", () => {
+  it("Adrian's own account: all of his mix backs credit, so what to send to fix it", () => {
     const m = card(adrian());
     expect(m.pill).toEqual({ text: "On", tone: "on" });
-    expect(m.footer).toEqual({ kind: "words", line1: TOO_SMALL, line2: BACKING_RULE });
+    expect(m.footer).toEqual({
+      kind: "words",
+      line1: "Send $204 to fix your mix.",
+      line2: "Turn on top-ups so it goes in.",
+    });
     expect(TOO_SMALL).toBe("Off target, but too small to trade.");
     expect(outs(m).map(([, out]) => out)).toEqual(["over", "over", "over", "under"]);
-    // The sheet's line says the rule already, so the sheet doesn't say it twice.
-    expect(sheetLine(m).text).toBe(`${TOO_SMALL} ${BACKING_RULE}`);
+    expect(sheetLine(m).text).toBe("Send $204 to fix your mix. Turn on top-ups so it goes in.");
   });
 
   it("too small with free stock in the mix: said with the smallest trade", () => {

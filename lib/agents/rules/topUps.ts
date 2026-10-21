@@ -9,7 +9,12 @@
  * and the buys in RebalanceRules.invest. test/CashRules.t.sol and test/RebalanceRules.t.sol run both on the vectors from
  * scripts/agent-vectors.ts. Units: USDC units with 6 decimals, New York days counted from 1970-01-01.
  */
-import type { RebalanceBook, RebalanceOptions, RebalanceTrade } from "@/lib/agents/rules/rebalance";
+import {
+  bandBreaks,
+  type RebalanceBook,
+  type RebalanceOptions,
+  type RebalanceTrade,
+} from "@/lib/agents/rules/rebalance";
 
 /** What GooseExecutor keeps for one account (`topUps(account)`), less the switch: the counts and Keep. */
 export type TopUpsState = {
@@ -133,4 +138,45 @@ export function investTrades(
         ]
       : [],
   );
+}
+
+/**
+ * How much has to be sent for the Rebalancer, as it is today, to put the whole portfolio back in its bands (Adrian,
+ * 2026-10-22: "how much he needs to send for his mix to be fixed"). Stock that backs credit can't be sold, so only
+ * growth fixes it: a top-up goes in as `investTrades` puts it in, against the free stock alone, so it also buys the
+ * stocks already too big. The smallest amount (USDC units, to the cent) where the free stock after those buys, plus
+ * the backing, breaks no band; 0 when nothing is out; null when no amount up to `capRaw` does it. The buys are taken
+ * as if made at once (no smallest trade, no largest slice), so it is what has to arrive, not one check's trades.
+ */
+export function sendToFixRaw(
+  stocks: readonly { sharesRaw: bigint; backingRaw: bigint; price: bigint; weightBps: bigint }[],
+  o: Pick<RebalanceOptions, "bandBps" | "bandMaxBps" | "floorBps">,
+  capRaw = 1_000_000n * 10n ** 6n,
+): bigint | null {
+  const whole = (free: readonly bigint[]) =>
+    stocks.map((s, i) => ({ sharesRaw: free[i] + s.backingRaw, price: s.price, weightBps: s.weightBps }));
+  const fixedWith = (amountRaw: bigint) => {
+    const buys = investTrades({ stocks: stocks.map((s) => ({ ...s, sellLeftRaw: 0n })) }, amountRaw, {
+      floorBps: 0n,
+      minTradeRaw: 0n,
+      maxSliceRaw: amountRaw,
+    });
+    const free = stocks.map((s) => s.sharesRaw);
+    for (const t of buys) free[t.reserveId] += (t.amountIn * 10n ** 10n) / stocks[t.reserveId].price;
+    return bandBreaks(whole(free), o).every((b) => b === null);
+  };
+  if (stocks.every((s) => s.weightBps === 0n)) return 0n;
+  // A mix stock with no price can't be valued or bought: no amount can be said.
+  if (stocks.some((s) => s.weightBps > 0n && s.price === 0n)) return null;
+  if (fixedWith(0n)) return 0n;
+  const CENT = 10n ** 4n;
+  if (!fixedWith(capRaw)) return null;
+  let lo = 0n;
+  let hi = capRaw / CENT;
+  while (hi - lo > 1n) {
+    const mid = (lo + hi) / 2n;
+    if (fixedWith(mid * CENT)) hi = mid;
+    else lo = mid;
+  }
+  return hi * CENT;
 }
