@@ -182,7 +182,7 @@ The script prints the address and the block. Optionally verify the source (`forg
 | Built from | `main` @ `90519eb` |
 | Deploy cost | about 0.0000025 ETH |
 | Logs RPC | A PublicNode personal token (free, made on Allnodes' portfolio page) as `NEXT_PUBLIC_BASE_RPC_URL`. Checked 2026-10-20: 10,000-block `eth_getLogs` from about 4 months back, past state, `eth_simulateV1`, open CORS; `tests/onchain/board.test.ts` passes through it. Every keyless Base RPC tried refuses logs older than about 10,000 blocks, and Alchemy's free tier answers 10 blocks a request. |
-| Production | `dpl_DaDFZ25PXB9Cq2gT2UQmuMD4rpLw` (`main` @ `90519eb`): the agents' three settings, `NEXT_PUBLIC_ALCHEMY_KEY`, `NEXT_PUBLIC_BASE_RPC_URL` and `NEXT_PUBLIC_GOOSE_BOARD`, all passed as `--build-env`. A deploy without the last two puts the Leaderboard back to "opens soon" and drops `join()`. The deploy before the board: `dpl_B8yuNVKFMtFo5oseoNUecP8W9f7R`. |
+| Production | `dpl_76ALyxPYpRuLcoPiryTcLooYu9su` (`main` @ `8945f31`, 2026-10-21, also at app.greedygoo.com): the agents' three settings, `NEXT_PUBLIC_ALCHEMY_KEY`, `NEXT_PUBLIC_BASE_RPC_URL` and `NEXT_PUBLIC_GOOSE_BOARD`, all passed as `--build-env`. A deploy without the last two puts the Leaderboard back to "opens soon" and drops `join()`. Rollbacks: `dpl_Fn3ZjofxFEWg2qhrGbXP2RTNrMKK` (`main` @ `b14ef51`, before the Home cents, cash-without-fuel and confirming-sheet changes); before the board, `dpl_B8yuNVKFMtFo5oseoNUecP8W9f7R`. |
 | Bytecode | about 1.9 KB (`forge inspect GooseBoard deployedBytecode`) |
 | Rehearsed | Base fork: `GooseBoardForkTest` (JAW account batch: EFP mint + follow + join), `scripts/board-e2e.ts` (anvil) |
 
