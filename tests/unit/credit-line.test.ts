@@ -20,7 +20,7 @@ import { EQUITIES } from "@/lib/tokens/registry";
 
 /*
  * The credit line (Adrian, 2026-10-21): once Greedy Fatalities is open, credit and free up may go down toward Aave's
- * line, 1.05 with Protector on and 1.01 with it off, and a move that ends in Act asks for the tick. Until then, every
+ * line, 1.05 with Protector on and Aave's 1.0 with it off, and a move that ends in Act asks for the tick. Until then, every
  * flow is held to ACT_LINE as before (the plan tables' snapshots pin that).
  */
 
@@ -40,9 +40,9 @@ describe("the line", () => {
     expect(ACT_LINE).toEqual({ capHf: 1.12, stopHf: 1.1, intoAct: false });
   });
 
-  it("with the Wall open: 1.05 over Protector's 1.03 while it runs, 1.01 over Aave's 1.0 when it doesn't", () => {
+  it("with the Wall open: 1.05 over Protector's 1.03 while it runs, Aave's own 1.0 when it doesn't", () => {
     expect(ON).toEqual({ capHf: 1.05, stopHf: 1.03, intoAct: true });
-    expect(OFF).toEqual({ capHf: 1.01, stopHf: 1, intoAct: true });
+    expect(OFF).toEqual({ capHf: 1, stopHf: 1, intoAct: true });
   });
 
   it("past the stop: only a real health under it", () => {
@@ -76,7 +76,7 @@ describe("taking credit (planCredit)", () => {
   it("the MAX is the most that keeps the health at the line's cap", () => {
     expect(plan(0, at(1_000)).maxUsd).toBe(250); // 1,400 ÷ 1.12 − 1,000
     expect(plan(0, at(1_000, ON)).maxUsd).toBe(333.33); // 1,400 ÷ 1.05 − 1,000
-    expect(plan(0, at(1_000, OFF)).maxUsd).toBe(386.13); // 1,400 ÷ 1.01 − 1,000
+    expect(plan(0, at(1_000, OFF)).maxUsd).toBe(400); // 1,400 ÷ 1.0 − 1,000
   });
 
   it("ending in Act: blocked under ACT_LINE; asks for the tick once the line allows it", () => {

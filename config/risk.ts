@@ -49,20 +49,19 @@ export type CreditLine = {
 /** Act is the line (2026-10-15): 1.12, the batch stopped in Act. The line until Greedy Fatalities opens. */
 export const ACT_LINE: CreditLine = { capHf: CREDIT_CAP.minHf, stopHf: RISK.watchMin, intoAct: false };
 
-/** Over Aave's line with Protector off: a hundredth, so a plan at the cap isn't sold the block it lands. */
-const AAVE_MARGIN_HF = 0.01;
-
 /**
  * Down toward Aave's line (Adrian, 2026-10-21), once Greedy Fatalities is open (its rule is what a move into Act
  * confirms): with Protector on, 1.05, its line plus the same margin as 1.12 over Act, so Protector doesn't sell straight
- * back what was just taken; with it off, 1.01. Until the Wall opens, ACT_LINE.
+ * back what was just taken; with it off, Aave's own line, 1.0: as much as Aave lends, and nothing steps in before Aave
+ * sells (Adrian, 2026-10-21: "without the protector let the user get liquidated by aave"). Until the Wall opens,
+ * ACT_LINE.
  */
 export function creditLineFor(p: { wallOpen: boolean; protectOn: boolean }): CreditLine {
   if (!p.wallOpen) return ACT_LINE;
   const round = (hf: number) => Math.round(hf * 100) / 100;
   return p.protectOn
     ? { capHf: round(CASH_AGENT.triggerHf + CAP_MARGIN_HF), stopHf: CASH_AGENT.triggerHf, intoAct: true }
-    : { capHf: round(AAVE_LINE_HF + AAVE_MARGIN_HF), stopHf: AAVE_LINE_HF, intoAct: true };
+    : { capHf: AAVE_LINE_HF, stopHf: AAVE_LINE_HF, intoAct: true };
 }
 
 /** Under the line's stop: no more credit or free up until it's back over it. */

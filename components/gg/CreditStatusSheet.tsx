@@ -21,29 +21,39 @@ const pct = (f: number) => `${Math.floor(f * 100 + 1e-9)}%`;
  */
 const scaleFor = (
   line: CreditLine,
-): { key: string; status: Exclude<Status, "none">; range: string; line: string }[] => [
-  { key: "safe", status: "safe", range: `${RISK.safeMin} and up`, line: "Nothing to do." },
-  {
-    key: "watch",
-    status: "watch",
-    range: `${RISK.watchMin} to ${RISK.safeMin}`,
-    line: line.intoAct ? "Nothing is sold." : `Nothing is sold. New credit and free up stop at ${line.capHf}.`,
-  },
-  {
-    key: "act",
-    status: "act",
-    range: `Under ${RISK.watchMin}`,
-    line: line.intoAct
-      ? `A warning. New credit and free up stop at ${line.capHf}. Protector steps in at ${PROTECT_LINE}.`
-      : `A warning. Protector steps in at ${PROTECT_LINE}.`,
-  },
-  {
-    key: "protect",
-    status: "act",
-    range: `Under ${PROTECT_LINE}`,
-    line: "Protector repays from your cash, then sells if needed.",
-  },
-];
+): { key: string; status: Exclude<Status, "none">; range: string; line: string }[] => {
+  // Protector off, the Wall open: credit goes down to Aave's own line and nothing steps in before Aave sells.
+  const unguarded = line.intoAct && line.stopHf <= AAVE_LINE_HF;
+  return [
+    { key: "safe", status: "safe", range: `${RISK.safeMin} and up`, line: "Nothing to do." },
+    {
+      key: "watch",
+      status: "watch",
+      range: `${RISK.watchMin} to ${RISK.safeMin}`,
+      line: line.intoAct ? "Nothing is sold." : `Nothing is sold. New credit and free up stop at ${line.capHf}.`,
+    },
+    {
+      key: "act",
+      status: "act",
+      range: `Under ${RISK.watchMin}`,
+      line: unguarded
+        ? "A warning. Protector is off: nothing steps in before Aave’s line."
+        : line.intoAct
+          ? `A warning. New credit and free up stop at ${line.capHf}. Protector steps in at ${PROTECT_LINE}.`
+          : `A warning. Protector steps in at ${PROTECT_LINE}.`,
+    },
+    ...(unguarded
+      ? []
+      : [
+          {
+            key: "protect",
+            status: "act" as const,
+            range: `Under ${PROTECT_LINE}`,
+            line: "Protector repays from your cash, then sells if needed.",
+          },
+        ]),
+  ];
+};
 
 /** How far the stocks can fall, together, before Aave's line (and Act, while the credit is above it). */
 function marginLine(health: number): string {

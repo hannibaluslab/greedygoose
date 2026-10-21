@@ -1089,3 +1089,10 @@ The space kept under the pages shrinks to match.
 
 Adrian: "save 2px in the height of stocks under portfolio … in a balanced way". 1px off the top and 1px off the bottom
 (padding 12 → 11, sides stay 12): 171 → 169px, nothing inside moves.
+
+## 2026-10-21 · With Protector off, credit goes down to Aave's line
+
+Adrian: "without the protector let the user get liquidated by aave". Once the Wall is open and Protector is off, the
+credit line is Aave's own, 1.0 (it was 1.01): as much as Aave lends, and nothing of ours steps in before Aave sells.
+The credit status scale says so ("Protector is off: nothing steps in before Aave's line") and drops Protector's row.
+With Protector on, nothing changes (1.05). **Tests:** `credit-line`.
