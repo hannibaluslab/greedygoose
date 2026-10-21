@@ -260,7 +260,8 @@ function Loaded({
 
   return (
     <>
-      <section className="flex flex-col gap-2.5 px-5 pt-3">
+      {/* Spacing (Adrian, 2026-10-21): the hero 2px lower, the gaps under it 0.5 + 0.5 + 1px tighter, so Portfolio stays put. */}
+      <section className="flex flex-col gap-2.5 px-5 pt-[14px]">
         <BalanceHero
           label="Total balance"
           // The whole Total balance column opens what's in it (Adrian, 2026-10-21: no ⓘ on Home).
@@ -315,7 +316,7 @@ function Loaded({
         />
       </section>
 
-      <section className="grid grid-cols-4 gap-2 px-5 pt-[22px]">
+      <section className="grid grid-cols-4 gap-2 px-5 pt-[21.5px]">
         <QuickAction onClick={money.topUp} label="Top up" icon={<PlusIcon />} />
         <QuickAction onClick={openTrade} label="Trade" icon={<TradeIcon />} />
         <QuickAction onClick={openCreditBuy} label="Credit Buy" icon={<CreditIcon />} />
@@ -330,7 +331,7 @@ function Loaded({
 
       <section className="flex flex-col gap-2.5 px-5 pt-[18px] empty:hidden">{cards}</section>
 
-      <section className="grid grid-cols-2 gap-2.5 px-5 pt-[18px]">
+      <section className="grid grid-cols-2 gap-2.5 px-5 pt-[17.5px]">
         {/* Cash is what earns, without the fuel tank, which shows on its own line under it (Adrian, 2026-10-21). */}
         <CashCard
           cashUsd={cashWithoutTankUsd(data)}
@@ -361,7 +362,7 @@ function Loaded({
       </section>
 
       {/* With no stocks, the empty state takes the room down to the tab bar. */}
-      <section className={`flex flex-col gap-2.5 px-5 pt-[17px] leading-[normal] ${held.length === 0 ? "grow" : ""}`}>
+      <section className={`flex flex-col gap-2.5 px-5 pt-[16px] leading-[normal] ${held.length === 0 ? "grow" : ""}`}>
         <div className="flex h-[22px] items-center justify-between">
           <Link href="/portfolio" className="flex items-baseline gap-2 no-underline">
             <span className="text-lg font-semibold tracking-[-0.015em]">Portfolio</span>

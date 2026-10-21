@@ -1096,3 +1096,9 @@ Adrian: "without the protector let the user get liquidated by aave". Once the Wa
 credit line is Aave's own, 1.0 (it was 1.01): as much as Aave lends, and nothing of ours steps in before Aave sells.
 The credit status scale says so ("Protector is off: nothing steps in before Aave's line") and drops Protector's row.
 With Protector on, nothing changes (1.05). **Tests:** `credit-line`.
+
+## 2026-10-21 · Home's top section, 2px lower
+
+Adrian: the section from Total balance to the Cash card 2px lower, the top bar unmoved; 0.5px less over the buttons,
+0.5px less over the Cash card, 1px less over Portfolio. Measured at 402px: labels 54 → 56, buttons 220.7 → 222.2, Cash
+325.2 → 326.2, Portfolio 432.7 unchanged, header 0 unchanged.
