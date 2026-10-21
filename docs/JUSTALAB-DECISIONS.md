@@ -736,3 +736,46 @@ Adrian (2026-10-20): "Yes: add it to the next contract. A saved mix trades at th
 ## 2026-10-20 · The Leaderboard is live
 
 Adrian (2026-10-20) chose to make the Leaderboard live, then "go with the PublicNode token". GooseBoard is deployed (`0x0E10…FcA1`, DEPLOYMENTS.md) and production reads it, so every account joins on its next move. This closes "Not deployed" and the RPC item under "Open" in "The Leaderboard" above. The board's logs come from a free PublicNode personal token in `NEXT_PUBLIC_BASE_RPC_URL`, because every keyless Base RPC refuses logs older than about 10,000 blocks (measured 2026-10-20) and Alchemy's free tier answers 10 blocks a request. Still open there: each phone reads every member's history, and SPEC's two items to build (Greedy Fatalities, the leverage tag on rows).
+
+## 2026-10-21 · The Rebalancer's honest card, times with GMT, and the agents' names
+
+Adrian (2026-10-21), after "the Rebalancer is not working, the 5 PM never came" on jawegg.justan.id: a saved mix of
+Apple 3, Amazon 25, Alphabet 14, Microsoft 58 (%), $7.42 of his $7.74 of stock backing credit and $0.32 of Meta free.
+KeeperHub's rounds asked GooseExecutor `0x686c…` at 14:00, 14:10 and 14:20 GMT and got `upkeepNeeded = false`, which
+is right: the Rebalancer never trades stock that backs credit, and no top-up was counted. The card said "On target.
+Next check today 5:00 PM" with no marks, so it looked broken. This supersedes, for the two visible agents' names,
+"Four agents, one name each, everywhere on screen" in "From the Agents redesign: the frame" (:115).
+
+- **On target only when the whole portfolio is.** The card measures the whole portfolio, free and backing, with the
+  rule's own band (`bandBreaks`, as `rebalanceTrades` and `RebalanceRules._primary` measure it) and draws each logo
+  by it. When nothing trades and the whole portfolio is out of band, the pill stays On and the footer says why: held by
+  credit when the rule would trade if the backing stock were free ("Stock that backs your credit isn’t rebalanced." /
+  "Repay or free up some to let it trade."), else too small ("Off target, but too small to trade." / "Trades start at
+  $20.", the executor's `minTrade`). A stock past its band is tinted over (red) or under (green), with no ghost and no
+  BUY or SELL; faded cards mark nothing. Ends soon says the rule as its second line when credit holds it. Every other
+  state is as it was. Adrian's suggested first line ("Your stocks back your credit, so it can't trade them.") became
+  the rule itself, so the card says the rule where it blocks without a third line.
+- **Adrian's own account reads "too small", not "held by credit".** Read on Base on 2026-10-21 through a keyless RPC,
+  the executor's `rebalanceLimits()` is band 20% / 5 points, floor 0.5%, smallest trade $20, largest $25,000. On $7.74
+  every trade the mix needs is under $20, so even with all of it free nothing would trade; repaying would not make the
+  Rebalancer act, and the card says so. At 1,000 times the size, the same account reads "held by credit".
+- **The rule, visible:** the Rebalancer's sheet always says "Stock that backs your credit isn’t rebalanced." under its
+  line, unless the line already says it.
+- **Times with GMT:** every time an agent will act at (the Rebalancer's card, its sheet's line, the top-ups note, the
+  Agents list's next line, the Protector's "They try again at", its weekend card, the feed's "Tries again") is the
+  viewer's clock and its offset then: "Today 5:00 PM GMT+3", "GMT" alone at no offset, "GMT+5:30" for half hours
+  (`lib/clock.ts`). The How it works sheet keeps "at 10:00 AM New York", which names its zone.
+- **Names:** Protect is **Protector** and Rebalance is **Rebalancer** wherever a user sees them: the Agents page,
+  cards, sheets, pills, toasts, activity and Cash rows, the guide, How it works, aria-labels, the credit scale, Credit
+  Buy's and Earn with stocks' risk lines. Code identifiers, URLs (`/agents?agent=protect`) and comments keep the old
+  names, and "isn’t rebalanced" stays a verb.
+
+**In this repo:** `lib/agents/rules/rebalance.ts` `bandBreaks`; `lib/agents/next.ts` `rebalanceOutlook` (`offTarget`,
+`heldByCredit`, `wholePortfolio`, `BACKING_RULE`, `TOO_SMALL`) and `whenText` on `lib/clock.ts`; `lib/agents/rebalanceCard.ts`
+(`MixSlot.out`, the held states); `RebalanceCard.tsx` tints `out`; `RebalanceSheet.tsx` the rule line; `AgentName` is
+"Protector" | "Rebalancer" | "Agents". Galleries: the card's and the sheet's "Held by credit" and "Too small to trade"
+(app/dev/ui/agents/measuredAccount.ts), the Agents page `?view=held`.
+
+**Tests:** `rebalancer-held` (the band check against the trades, the outlook, the states on Adrian's account and at
+1,000×, the whole-portfolio slots, the list's line), `clock` (offsets, today, tomorrow, the weekday, a viewer's own
+calendar, a clock change), and the suites that name the agents.

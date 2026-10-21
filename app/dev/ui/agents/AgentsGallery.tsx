@@ -7,25 +7,37 @@ import { FeedCard, FeedDays } from "@/components/gg/activity/Activity";
 import { AgentSheet } from "@/components/gg/AgentSheet";
 import { AgentRow, AgentsFeed, AgentsView, MixBar } from "@/components/gg/Agents";
 import { ProtectCardView } from "@/components/gg/agents/ProtectCard";
+import { RebalanceCardView } from "@/components/gg/agents/RebalanceCard";
 import type { AgentRow as FeedAgentRow } from "@/hooks/useAgentFeed";
 import { useNowSec } from "@/hooks/useNowSec";
 import type { AgentEvent } from "@/lib/agents/events";
 import { describeAgentEvent, type MoveContext } from "@/lib/agents/feed";
-import { AGENT_JOBS, AGENT_NAME, agentItems, longDateText, type Agent, type AgentItem } from "@/lib/agents/list";
+import {
+  AGENT_JOBS,
+  AGENT_NAME,
+  agentItems,
+  longDateText,
+  timeText,
+  type Agent,
+  type AgentItem,
+} from "@/lib/agents/list";
 import { rebalanceOptions } from "@/lib/agents/mix";
-import { agentNexts, defaultNumbers, type NextInput } from "@/lib/agents/next";
+import { agentNexts, defaultNumbers, rebalanceOutlook, type NextInput } from "@/lib/agents/next";
 import { JOBS, startCapRaw, type AgentJob } from "@/lib/agents/permissions";
 import { protectCard, type ProtectCardInput } from "@/lib/agents/protectCard";
+import { rebalanceCard } from "@/lib/agents/rebalanceCard";
 import type { AgentStatus } from "@/lib/agents/status";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 import { ProtectDemo } from "../ProtectDemos";
 import { RebalanceStateBody } from "../RebalanceDemo";
+import { MEASURED_MIX, measuredAccount } from "./measuredAccount";
 
 /*
  * Dev only: the Agents tab in each state it can be in, with fixtures run through the app's own rules and words
  * (agentNexts, agentItems, protectCard, describeAgentEvent). Nothing here reads the chain or the executor.
  *   /dev/ui/agents                live, all fine
  *   ?view=protect                 every state of Protect's card, the first that applies
+ *   ?view=held                    the Rebalancer held by credit (Adrian's measured account, at 1,000×)
  *   ?view=rows                    each state of the Rebalancer's row
  *   ?view=notlive                 today: no executor configured
  *   &sheet=protect|rebalance      a sheet open
@@ -134,7 +146,10 @@ function feedRows(nowMs: number): FeedAgentRow[] {
   }));
 }
 
-type View = "live" | "protect" | "rows" | "notlive";
+type View = "live" | "protect" | "held" | "rows" | "notlive";
+
+/** Aave's prices for the measured account (?view=held), by reserve id. */
+const HELD_PRICES = [250, 220, 180, 700, 500, 180, 400];
 
 /** Protect's card states, as board 7 lists them (the first that applies), plus nothing owed and not live yet. */
 function protectStates(nowSec: number): [string, Partial<ProtectCardInput>][] {
@@ -159,7 +174,10 @@ function protectStates(nowSec: number): [string, Partial<ProtectCardInput>][] {
     ],
     ["Under the line, held back", { hf: 1.02, next: { idle: "Act. No cash to repay with" } }],
     ["7 · Credit in Act", { hf: 1.07, act: { addUsd: 45, protectOn: true } }],
-    ["8 · Weekend risk", { hf: 1.16, weekend: { addUsd: 96, dropPct: 15, when: "at 8:00 PM" } }],
+    [
+      "8 · Weekend risk",
+      { hf: 1.16, weekend: { addUsd: 96, dropPct: 15, when: `at ${timeText(nowSec + 3 * 3_600)}` } },
+    ],
     ["9 · Ends within 7 days", { endsAt: nowSec + 4 * 86_400 }],
     ["10 · All good", {}],
     ["Nothing owed", { hf: null }],
@@ -173,7 +191,7 @@ export function AgentsGallery() {
   const nowSec = useNowSec();
   const nowMs = nowSec * 1000;
   const view = (
-    ["protect", "rows", "notlive"].includes(params.get("view") ?? "") ? params.get("view") : "live"
+    ["protect", "held", "rows", "notlive"].includes(params.get("view") ?? "") ? params.get("view") : "live"
   ) as View;
   const [sheet, setSheet] = useState<Agent | null>(() => {
     const a = params.get("sheet") as Agent | null;
@@ -210,6 +228,27 @@ export function AgentsGallery() {
       ...over,
     });
 
+  // The Rebalancer's card as the Agents page draws it (RebalanceCard): the gallery's mix, or the measured account.
+  const rebalanceAt = (held: boolean) => {
+    const holdings = held ? measuredAccount(HELD_PRICES, 1_000) : HOLDINGS;
+    const mixBps = !live ? null : held ? MEASURED_MIX : MIX;
+    return rebalanceCard({
+      live,
+      nowSec,
+      status: live ? "on" : "unconfigured",
+      waiting: false,
+      stoppedAt: null,
+      endsAt: nowSec + 200 * 86_400,
+      fails: 0,
+      cooldownUntil: 0,
+      rebalanceDay: 0,
+      holdings,
+      mixBps,
+      options: input.numbers.rebalance,
+      outlook: rebalanceOutlook(nextInput(nowSec, { holdings, mixBps })),
+    });
+  };
+
   const row = (item: AgentItem, mix = live) => (
     <AgentRow
       key={`${item.agent}-${item.status}`}
@@ -242,7 +281,7 @@ export function AgentsGallery() {
           view === "rows" ? (
             <RowStates nowSec={nowSec} row={(item) => row(item, false)} />
           ) : (
-            items.filter((item) => item.agent === "rebalance").map((item) => row(item))
+            <RebalanceCardView model={rebalanceAt(view === "held")} onOpen={() => setSheet("rebalance")} />
           )
         }
         feed={

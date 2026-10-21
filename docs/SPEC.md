@@ -173,8 +173,10 @@ the free shares' value. A stock whose shares all back credit is listed but can't
 
 ## Agents
 
-- Visible: **Protect** and **Rebalance**, on the Agents tab. Under them, **DCA**, **Auto top up** and **JAW MCP** show as
-  Coming soon, with nothing to open yet. DCA and Top-ups go into my mix are either/or. DCA isn't built.
+- Visible: **Protect** and **Rebalance**, on the Agents tab, named **Protector** and **Rebalancer** wherever a user sees
+  them (Adrian, 2026-10-21; the code keeps `protect` and `rebalance`). Under them, **DCA**, **Auto top up** and
+  **JAW MCP** show as Coming soon, with nothing to open yet. DCA and Top-ups go into my mix are either/or. DCA isn't
+  built.
 - Invisible: earning on idle cash (Save) and turning other dollars into cash (Receive). Their permissions are asked
   when money first arrives.
 - Each change is one batch, one Face ID (D14 dropped, Adrian 2026-10-20): its permissions approved in JAW's manager and
@@ -192,6 +194,14 @@ the free shares' value. A stock whose shares all back credit is listed but can't
   ones convert on their own ("You received 120 USDT · Finish setting up · Turn into cash", the same card as Start
   earning).
 - The Agents feed shows the agents' moves only. Each agent turns off from its own sheet.
+- Every time an agent will act at shows on the viewer's own clock with its GMT offset: "Today 5:00 PM GMT+3",
+  "Tomorrow 5:00 PM GMT+3", "Mon 5:00 PM GMT+3" ("GMT" alone at no offset, "GMT+5:30" for half hours).
+- The Rebalancer's card draws the whole portfolio (free and backing credit) against the mix. "On target" only while all
+  of it sits inside its band, by the rule's own band. Past it with nothing to trade, the card stays On and says why:
+  "Stock that backs your credit isn’t rebalanced. Repay or free up some to let it trade." when the rule would trade
+  that stock if it were free, else "Off target, but too small to trade. Trades start at $20." (the executor's smallest
+  trade). A stock past its band is tinted over or under when nothing trades. Its sheet always says "Stock that backs
+  your credit isn’t rebalanced."
 - Rebalance only moves stocks that don't back credit, and never spends cash beyond the network fee. Its mix never adds
   up to more than 100%: a target stops where the other stocks' leave off.
 - **Top-ups go into my mix**, a Rebalance setting, off by default, with **Keep $X as cash** ($500 by default,
