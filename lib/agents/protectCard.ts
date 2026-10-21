@@ -19,6 +19,8 @@ export type ProtectCardModel = {
   pill: { text: string; tone: PillTone };
   /** The credit health (Aave's health factor); null when nothing is owed. */
   hf: number | null;
+  /** Its change over the past 24 hours, in points ("+0.02"); null when either end is missing. */
+  dayChange: string | null;
   /** The status word beside it: Safe, Watch or Act; null when nothing is owed. */
   word: "Safe" | "Watch" | "Act" | null;
   /**
@@ -43,6 +45,8 @@ export type ProtectCardInput = {
   waiting: "protect" | "sell" | null;
   /** The credit health; null when nothing is owed. */
   hf: number | null;
+  /** The credit health 24 hours ago (useHealthDayAgo); null when unknown or nothing was owed. */
+  hfDayAgo?: number | null;
   /** A rescue is under way: Protect acts below the target until it's back. */
   rescuing: boolean;
   /** Failed runs in a row (the account's), and when the runner tries again. */
@@ -81,6 +85,14 @@ function nextLine(next: Next): string {
   return /[.!?]$/.test(text) ? text : `${text}.`;
 }
 
+/** The change in points, as the big number rounds it (two decimals): "+0.02", "−0.05", "0.00". */
+export function dayChange(now: number | null, dayAgo: number | null): string | null {
+  if (now === null || dayAgo === null) return null;
+  const d = Math.round(now * 100) / 100 - Math.round(dayAgo * 100) / 100;
+  const r = Math.round(d * 100) / 100;
+  return r > 0 ? `+${r.toFixed(2)}` : r < 0 ? `−${(-r).toFixed(2)}` : "0.00";
+}
+
 export function protectCard(i: ProtectCardInput): ProtectCardModel {
   const status = statusFor(i.hf);
   const word = status === "none" ? null : (STATUS_LABEL[status] as "Safe" | "Watch" | "Act");
@@ -98,6 +110,7 @@ export function protectCard(i: ProtectCardInput): ProtectCardModel {
   const card = (pill: string, tone: PillTone, line1: string, line2: string | null, over = {}): ProtectCardModel => ({
     pill: { text: pill, tone },
     hf: i.hf,
+    dayChange: dayChange(i.hf, i.hfDayAgo ?? null),
     word,
     bar: bar(over),
     line1,
@@ -174,6 +187,9 @@ export function protectCard(i: ProtectCardInput): ProtectCardModel {
 
 /** The card's one-line description for screen readers: name, pill, number, first line. */
 export function protectCardLabel(m: ProtectCardModel): string {
-  const health = m.hf === null ? "Nothing owed" : `Your credit health ${two(m.hf)}, ${m.word}`;
+  const health =
+    m.hf === null
+      ? "Nothing owed"
+      : `Your credit health ${two(m.hf)}, ${m.word}${m.dayChange ? `, ${m.dayChange} in 24 hours` : ""}`;
   return `Protector, ${m.pill.text.toLowerCase()}. ${health}. ${m.line1}`;
 }

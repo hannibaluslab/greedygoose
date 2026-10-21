@@ -55,6 +55,14 @@ export function ProtectCardView({ model, onOpen }: { model: ProtectCardModel; on
             {model.hf.toFixed(2)}
           </span>
           {model.word && <span className={`text-[17px] font-semibold ${WORD[model.word]}`}>{model.word}</span>}
+          {/* The change over the past 24 hours (Adrian, 2026-10-22): up in green, down in red. */}
+          {model.dayChange && (
+            <span
+              className={`num ml-auto text-[13px] font-semibold ${model.dayChange.startsWith("+") ? "text-pos" : model.dayChange.startsWith("−") ? "text-neg" : "text-ink-mid"}`}
+            >
+              {model.dayChange} <span className="font-medium text-ink-mid">in 24h</span>
+            </span>
+          )}
         </span>
       )}
       <LevelBar bar={model.bar} />

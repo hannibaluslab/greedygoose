@@ -1,5 +1,6 @@
 "use client";
 
+import { useHealthDayAgo } from "@/hooks/useHealthDayAgo";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { isAddressEqual, maxUint160 } from "viem";
@@ -78,6 +79,7 @@ function Agents({ address }: { address: `0x${string}` }) {
   const agents = useAgents(address);
   const settings = useAgentSettings(address);
   const { data: position } = usePosition(address);
+  const hfDayAgo = useHealthDayAgo(address);
   const feed = useAgentFeed(address);
   const nowSec = useNowSec();
   const freezeAt = useNextFreeze(nowSec);
@@ -157,6 +159,7 @@ function Agents({ address }: { address: `0x${string}` }) {
     status: agentStatus("protect", agents.status),
     waiting: (["protect", "sell"] as const).find((j) => agents.toFinish.includes(j)) ?? null,
     hf: position?.healthFactor ?? null,
+    hfDayAgo,
     rescuing: settings?.rescuing === true,
     fails: agents.fails,
     cooldownUntil: agents.cooldownUntil,

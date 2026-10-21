@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { protectCard, protectCardLabel, type ProtectCardInput } from "@/lib/agents/protectCard";
+import { dayChange, protectCard, protectCardLabel, type ProtectCardInput } from "@/lib/agents/protectCard";
 
 const NOW = 1_760_000_000;
 const DAY = 86_400;
@@ -27,6 +27,7 @@ describe("Protector's card on the Agents overview: one pill, the credit health, 
     expect(card({})).toEqual({
       pill: { text: "On", tone: "on" },
       hf: 1.62,
+      dayChange: null,
       word: "Safe",
       bar: { hf: 1.62, line: 1.03, target: 1.12, guarded: true, working: false, dropPct: null },
       line1: "Steps in only under 1.03.",
@@ -167,5 +168,21 @@ describe("Protector's card on the Agents overview: one pill, the credit health, 
       .flatMap((c) => [c.pill.text, c.line1, c.line2 ?? ""])
       .join(" ");
     expect(words).not.toMatch(/borrow|lock|permission|executor|registry|register|grant/i);
+  });
+});
+
+describe("the credit health's change over the past 24 hours", () => {
+  it("in points, as the big number rounds it, with its sign", () => {
+    expect(dayChange(1.132, 1.1315)).toBe("0.00");
+    expect(dayChange(1.15, 1.13)).toBe("+0.02");
+    expect(dayChange(1.08, 1.13)).toBe("−0.05");
+    expect(dayChange(1.13, null)).toBeNull();
+    expect(dayChange(null, 1.13)).toBeNull();
+  });
+
+  it("on the card and in what a screen reader hears", () => {
+    const c = card({ hf: 1.15, hfDayAgo: 1.13 });
+    expect(c.dayChange).toBe("+0.02");
+    expect(protectCardLabel(c)).toContain("Your credit health 1.15, Watch, +0.02 in 24 hours");
   });
 });
