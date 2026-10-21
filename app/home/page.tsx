@@ -260,14 +260,10 @@ function Loaded({
 
   return (
     <>
-      {/* Spacing (Adrian, 2026-10-22, proposal B): one 4px scale, one value per role. 12 from the header to the hero,
-          16 from section to section, 8 inside a block (title or figures to what they head) and between cards. With the
-          week's line 40px (was 44) and the stock cards' padding 10px (was 11), Home is 20px shorter; the header then sits
-          2px lower, so 18px net. At 402x709 (an iPhone 17 Safari tab) the last cards clear the tab bar and its lime
-          button. Replaces the 0.5–2px tweaks of 2026-10-21. Both themes since 2026-10-22 (Adrian): the header is the booth's band
-          (50px with its hairline, the logo 2px from the top, 12px above the line), the hero starts 22px under it (18 in light, so its
-          pill's lime button clears the cards by 13 too), and the
-          week's line sits 12px above the buttons. The lime button clears the cards by 12 (dark) / 8 (light). */}
+      {/* Spacing (Adrian, 2026-10-22): one 4px scale, one value per role — 16 between sections, 8 inside a block and
+          between cards, 12 from the week's line (40px) to the buttons. The header band sits above (Header.tsx); the hero
+          starts 18px under its line in light and 22px in dark, so at 402x709 (an iPhone 17 Safari tab) the lime button
+          clears the last cards by 13px in both themes. */}
       <section className="flex flex-col gap-2 px-5 pt-[18px] dark:pt-[22px]">
         <BalanceHero
           label="Total balance"

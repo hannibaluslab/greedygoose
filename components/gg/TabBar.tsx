@@ -47,10 +47,9 @@ export function TabBar() {
       >
         {TABS.map(({ href, label, Icon, match }) => {
           const active = match.some((m) => path.startsWith(m));
-          // Agents, the middle tab, is a lime button docked in the bar (Adrian: yellow, round, bigger, higher). Done the
-          // way docked centre buttons are: raised 4px out of the bar (Adrian, 2026-10-22: lower, so it clears Home's last
-          // cards), a ring in the page's colour so it sits in a
-          // notch rather than on top of the bar, a soft shadow instead of a glow.
+          // Agents, the middle tab, is a lime button docked in the bar (Adrian: yellow, round, bigger). Done the way docked
+          // centre buttons are: raised out of the bar (4px since 2026-10-22, so it clears Home's last cards), a ring in the
+          // page's colour so it sits in a notch rather than on top of the bar, a soft shadow instead of a glow.
           if (href === "/agents") {
             return (
               // No label under it (Adrian: the word looked odd there), as the booth's centre button; screen readers get it.
@@ -89,7 +88,7 @@ export function TabBar() {
 /**
  * Dark: the booth's tab bar, exactly (Adrian, 2026-10-21: "same footer nav as jaw-booth-mainnet"; hannibaluslab/
  * jaw-booth-revamp src/components/ui.tsx TabBar), with GreedyGoo's own tabs and icons. Full width and fixed to the
- * bottom, the ground at 90% with a blur and a hairline on top; the middle tab a lime button raised half out of it with
+ * bottom, the ground at 90% with a blur and a hairline on top; the middle tab a lime button raised out of it with
  * the booth's glow; the tab you're on in lime, the others cream at 45%. One change: the row is GreedyGoo's 430px
  * column, not the booth's 480, so a sheet's scrim (which covers that column) covers every tab. The booth's colours are
  * written out, since its `ink` is GreedyGoo's ground (here `ink` is the words' colour). No z-index, as the pill.
