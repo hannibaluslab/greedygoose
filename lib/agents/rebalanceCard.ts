@@ -56,6 +56,11 @@ export type MixSlot = {
    * keeps it only where it says what holds the Rebalancer back (`rebalanceCard`); elsewhere it is null.
    */
   out: BandBreak;
+  /**
+   * Past its band with stock that backs credit, where the card says what to send (Adrian, 2026-10-22): it isn't sold,
+   * so it wears the backs-credit mark instead of a sell tint. Absent elsewhere.
+   */
+  backs?: boolean;
 };
 
 const clamp = (x: number) => Math.min(OFFSET_MAX, Math.max(-OFFSET_MAX, x)) + 0; // + 0: never −0
@@ -389,7 +394,14 @@ export function rebalanceCard(i: RebalanceCardInput): RebalanceCardModel | null 
   if (blocked) {
     const send = o.blocked === "credit" || o.blocked === "too-small-backing" ? sendToFix(i) : null;
     const say = send ? sendWords(send, !!i.topUps) : blocked;
-    return card("On", "on", words(...say), { say: say.join(" "), marks: true });
+    const marked = card("On", "on", words(...say), { say: say.join(" "), marks: true });
+    if (!send) return marked;
+    // What's sent buys the stocks under their share (still green); the ones over it back credit and aren't sold.
+    const backing = (id: number) => (i.holdings.find((h) => h.reserveId === id)?.backingRaw ?? 0n) > 0n;
+    return {
+      ...marked,
+      slots: marked.slots.map((x) => (x.out === "over" && backing(x.reserveId) ? { ...x, out: null, backs: true } : x)),
+    };
   }
   // 9. All good: the whole portfolio is in its band.
   return card("On", "on", { kind: "on-target", next: capital(when) }, { say: `On target. Next check ${when}.` });

@@ -1,7 +1,7 @@
 "use client";
 
 import { AgentMark } from "../activity/Activity";
-import { ChevronRight } from "../kit/icons";
+import { BacksIcon, ChevronRight } from "../kit/icons";
 import { StockAvatar } from "../kit/StockAvatar";
 import { useRebalanceCard } from "@/hooks/useRebalanceCard";
 import {
@@ -98,7 +98,7 @@ const pctText = (bps: number) => `${Number((bps / 100).toFixed(2))}%`;
  */
 export function MixPicture({ slots, faded }: { slots: readonly MixSlot[]; faded: boolean }) {
   const k = mixScale(slots.length);
-  const labelled = slots.some((s) => s.side !== null);
+  const labelled = slots.some((s) => s.side !== null || s.backs);
   const pctLine = k > 1 ? 18 : 16;
   const slotW = 34 * k;
   const slotH = 72 * k;
@@ -175,6 +175,19 @@ export function MixPicture({ slots, faded }: { slots: readonly MixSlot[]; faded:
               style={{ ...at(i, 24), top: top + slotH + 5, fontSize: k > 1 ? 11 : 10 }}
             >
               {s.side === "buy" ? "BUY" : "SELL"}
+            </span>
+          ),
+      )}
+      {/* Stock that backs credit, past its band: the app's backs-credit mark under its slot, as on the stock cards. */}
+      {slots.map(
+        (s, i) =>
+          s.backs && (
+            <span
+              key={s.reserveId}
+              className="absolute flex items-center justify-center rounded-full bg-chip text-ink-mid"
+              style={{ ...at(i, 10 * k), top: top + slotH + 3, width: 20 * k, height: 14 * k }}
+            >
+              <BacksIcon size={Math.round(9 * k)} />
             </span>
           ),
       )}

@@ -216,14 +216,15 @@ describe("rebalanceCard: off target with nothing to trade", () => {
       text: "Send $203,408 to fix your mix. Turn on top-ups so it goes in.",
       renew: false,
     });
-    // Apple 29% of the mix's stock against 3%, Amazon 35% against 25%, Alphabet 21% against 14%: over. Microsoft 15%
-    // against 58%: under. Nothing trades, so no side and no BUY or SELL.
+    // Apple 29% of the mix's stock against 3%, Amazon 35% against 25%, Alphabet 21% against 14%: over, and they back
+    // credit, so they wear the backs-credit mark, not a sell tint. Microsoft 15% against 58%: under, what's sent buys.
     expect(outs(m)).toEqual([
-      [0, "over"],
-      [1, "over"],
-      [2, "over"],
+      [0, null],
+      [1, null],
+      [2, null],
       [4, "under"],
     ]);
+    expect(m.slots.filter((s) => s.backs).map((s) => s.reserveId)).toEqual([0, 1, 2]);
     expect(m.slots.every((s) => s.side === null)).toBe(true);
   });
 
@@ -252,7 +253,8 @@ describe("rebalanceCard: off target with nothing to trade", () => {
       line2: "Turn on top-ups so it goes in.",
     });
     expect(TOO_SMALL).toBe("Off target, but too small to trade.");
-    expect(outs(m).map(([, out]) => out)).toEqual(["over", "over", "over", "under"]);
+    expect(outs(m).map(([, out]) => out)).toEqual([null, null, null, "under"]);
+    expect(m.slots.filter((s) => s.backs)).toHaveLength(3);
     expect(sheetLine(m).text).toBe("Send $204 to fix your mix. Turn on top-ups so it goes in.");
   });
 
