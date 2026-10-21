@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { rebalanceCheckAt, whenText } from "@/lib/agents/next";
+import { atText, rebalanceCheckAt, whenText } from "@/lib/agents/next";
 import { clockText, dayIn, gmtOffsetMinutes, gmtText } from "@/lib/clock";
 
 /*
@@ -72,5 +72,17 @@ describe("whenText: today, tomorrow or the weekday, the time, and the offset", (
 
   it("the viewer's own zone when none is pinned", () => {
     expect(plain(whenText(check, WED_9AM_NY))).toMatch(/^(today|tomorrow|[A-Z][a-z]{2}) \d{1,2}:\d{2} [AP]M GMT/);
+  });
+});
+
+describe("atText: the same in a sentence, with the day said", () => {
+  // Friday 2025-10-17, 14:30 New York; prices pause at 20:00 New York, Saturday 00:00 GMT.
+  const fri = Date.UTC(2025, 9, 17, 18, 30) / 1000;
+  const freeze = Date.UTC(2025, 9, 18, 0) / 1000;
+
+  it("the weekend freeze is already Saturday east of New York, so the day comes with the time", () => {
+    expect(plain(atText(freeze, fri, "Europe/Istanbul"))).toBe("tomorrow at 3:00 AM GMT+3");
+    expect(plain(atText(freeze, fri, "UTC"))).toBe("tomorrow at 12:00 AM GMT");
+    expect(plain(atText(freeze, fri, "America/New_York"))).toBe("today at 8:00 PM GMT-4");
   });
 });

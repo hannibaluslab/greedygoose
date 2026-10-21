@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { maxUint256 } from "viem";
 import type { AgentEvent } from "@/lib/agents/events";
 import { describeAgentEvent, type MoveContext, type Words } from "@/lib/agents/feed";
-import { clockText } from "@/lib/clock";
+import { clockText, dayIn } from "@/lib/clock";
 import { STATUS_LABEL } from "@/lib/risk/status";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 
@@ -206,6 +206,13 @@ describe("describeAgentEvent: the Agents board's rows", () => {
     // On the viewer's clock with its GMT offset ("12:33 PM GMT+3").
     expect(failed.details["Tries again"]).toBe(clockText(at + 1200));
     expect(failed.details["Tries again"]).toMatch(/^\d{1,2}:\d{2}\s[AP]M GMT([+-]\d{1,2}(:\d{2})?)?$/);
+    // Seven in a row wait 10 minutes doubled six times, about 10.7 hours: past midnight, the date comes first.
+    const late = describeAgentEvent({ kind: "run-failed", reason: "0x122158cf", fails: 7 }, at)!;
+    const retry = at + 600 * 64;
+    const tries = text(late.details.find((d) => d.label === "Tries again")!.value);
+    expect(tries.endsWith(clockText(retry))).toBe(true);
+    if (dayIn(retry) === dayIn(at)) expect(tries).toBe(clockText(retry));
+    else expect(tries).toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2}\s[AP]M GMT/);
     expect(row({ kind: "run-failed", reason: "0x5a154675", fails: 8 }).details).toEqual({
       "In a row": "8",
       Code: "0x5a154675",

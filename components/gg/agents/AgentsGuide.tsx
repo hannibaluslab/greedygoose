@@ -8,7 +8,8 @@ import { SheetShell, SheetSteps } from "../kit/SheetShell";
 import { LevelBar } from "./ProtectCard";
 import { MixPicture } from "./RebalanceCard";
 import { CASH_AGENT } from "@/config/risk";
-import { AGENTS_GUIDE as G } from "@/lib/agents/guide";
+import { useNowSec } from "@/hooks/useNowSec";
+import { AGENTS_GUIDE as G, rebalanceSteps } from "@/lib/agents/guide";
 import type { MixSlot } from "@/lib/agents/rebalanceCard";
 
 /*
@@ -49,6 +50,7 @@ const MIX: MixSlot[] = [
 ];
 
 export function AgentsGuideSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const nowSec = useNowSec();
   return (
     <SheetShell
       open={open}
@@ -61,7 +63,7 @@ export function AgentsGuideSheet({ open, onClose }: { open: boolean; onClose: ()
         <Agent agent="Protector" tag={G.protect.tag} steps={G.protect.steps} note={G.protect.note}>
           <LevelBar bar={PROTECT_BAR} />
         </Agent>
-        <Agent agent="Rebalancer" tag={G.rebalance.tag} steps={G.rebalance.steps} note={G.rebalance.note}>
+        <Agent agent="Rebalancer" tag={G.rebalance.tag} steps={rebalanceSteps(nowSec)} note={G.rebalance.note}>
           <MixPicture slots={MIX} faded={false} />
         </Agent>
         <p className="m-0 rounded-[22px] bg-card-bone px-[18px] py-4 text-sm leading-5 text-ink">{G.both}</p>

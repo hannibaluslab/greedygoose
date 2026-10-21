@@ -81,7 +81,10 @@ describe("Protector's card on the Agents overview: one pill, the credit health, 
     const c = card({ fails: 3, cooldownUntil: NOW + 20 * 60 });
     expect(c.pill).toEqual({ text: "Retrying", tone: "watch" });
     expect(c.line1).toBe("Your agents’ last 3 runs didn’t go through.");
-    expect(c.line2).toMatch(/^Nothing moved\. They try again at \d{1,2}:\d{2}\s?[AP]M GMT([+-]\d{1,2}(:\d{2})?)?\.$/);
+    // The day, then the viewer's clock with its GMT offset: "today at 4:10 PM GMT+3".
+    expect(c.line2).toMatch(
+      /^Nothing moved\. They try again (today|tomorrow) at \d{1,2}:\d{2}\s?[AP]M GMT([+-]\d{1,2}(:\d{2})?)?\.$/,
+    );
     expect(card({ fails: 3, cooldownUntil: NOW - 1 }).line2).toBe("Nothing moved. They try again on the next run.");
   });
 

@@ -3,6 +3,7 @@ import { rebalanceOptions, type MixHolding } from "@/lib/agents/mix";
 import {
   agentNexts,
   BACKING_RULE,
+  blockedWords,
   defaultNumbers,
   rebalanceCheckAt,
   rebalanceOutlook,
@@ -15,6 +16,7 @@ import { rebalanceCard, type RebalanceCardInput, type RebalanceCardModel } from 
 import { sheetLine } from "@/lib/agents/rebalanceSettings";
 import { bandBreaks, rebalanceTrades } from "@/lib/agents/rules/rebalance";
 import { JOBS, type AgentJob } from "@/lib/agents/permissions";
+import { USDC } from "@/lib/tokens/registry";
 
 /*
  * The honest card (Adrian, 2026-10-21, "the Rebalancer is not working, the 5 PM never came"): "On target" only while
@@ -33,8 +35,9 @@ const options = rebalanceOptions();
 const PRICES = [250, 220, 180, 700, 500, 180, 400];
 const raw = (usd: number, price: number) => BigInt(Math.round((usd * 1e8) / price));
 
-/** Each stock's dollars in all, and the free part of them (the rest backs credit), by reserve id. */
+/** Each stock's dollars in all, and the free part of them (the rest backs credit, never below 0), by reserve id. */
 function account(wholeUsd: readonly number[], freeUsd: readonly number[]): MixHolding[] {
+  if (freeUsd.some((x, i) => x > wholeUsd[i])) throw new Error("More free than held");
   return PRICES.map((p, reserveId) => ({
     reserveId,
     priceRaw: BigInt(p * 1e8),
@@ -143,29 +146,55 @@ describe("bandBreaks: the rule's own band, past its top or its bottom", () => {
   });
 });
 
-describe("rebalanceOutlook: the whole portfolio, and whether credit is what holds it", () => {
+describe("rebalanceOutlook: the whole portfolio, and what holds the Rebalancer back", () => {
   it("Adrian's account: nothing free in the mix, the whole portfolio far off, every trade under $20 even if freed", () => {
     const o = rebalanceOutlook(outlookIn(adrian()));
-    expect(o).toMatchObject({ noMix: false, trades: [], offTarget: true, heldByCredit: false });
+    expect(o).toMatchObject({ noMix: false, trades: [], offTarget: true, blocked: "too-small-backing" });
   });
 
   it("the same account at 1,000 times the size: freeing the stock would let it trade, so credit holds it", () => {
     const o = rebalanceOutlook(outlookIn(adrian(1_000), { debtUsd: 3_000, totalBackingUsd: 7_420 }));
-    expect(o).toMatchObject({ trades: [], offTarget: true, heldByCredit: true });
+    expect(o).toMatchObject({ trades: [], offTarget: true, blocked: "credit" });
   });
 
-  it("trades on free stock come first: not held, whatever backs credit", () => {
+  it("trades on free stock come first: nothing blocks it, whatever backs credit", () => {
     // $1,000 of Apple free: 100% of the free mix against 3%, so it sells Apple and buys the rest.
-    const o = rebalanceOutlook(outlookIn(adrian(1_000, [1_000, 0, 0, 320, 0, 0, 0])));
+    const o = rebalanceOutlook(outlookIn(adrian(1_000, [1, 0, 0, 0.32, 0, 0, 0])));
     expect(o.trades.length).toBeGreaterThan(0);
-    expect(o).toMatchObject({ offTarget: true, heldByCredit: false });
+    expect(o).toMatchObject({ offTarget: true, blocked: null });
   });
 
   it("on target when the whole portfolio is in its band, even if the little free stock isn't", () => {
     // The mix's own shares in all, backing credit, with $15 of Microsoft free: too small to trade, and the whole is in.
     const whole = [3, 25, 14, 0, 58, 0, 0].map((pct) => pct * 100);
     const o = rebalanceOutlook(outlookIn(account(whole, [0, 0, 0, 0, 15, 0, 0])));
-    expect(o).toMatchObject({ trades: [], offTarget: false, heldByCredit: false });
+    expect(o).toMatchObject({ trades: [], offTarget: false, blocked: null });
+  });
+
+  it("too small with free stock in the mix: off target, every trade under $20, some of the mix free", () => {
+    // $34.20 of free stock, all of it in the mix and none backing credit: Apple 35% against 3%, Microsoft 21% against
+    // 58%. Selling $11 of Apple for Microsoft would bring it back, under the $20 trade.
+    const free = [12, 10, 5, 0, 7.2, 0, 0];
+    const o = rebalanceOutlook(outlookIn(account(free, free)));
+    expect(o).toMatchObject({ trades: [], offTarget: true, blocked: "too-small" });
+  });
+
+  it("nothing it can trade at any size: the grant leaves no USDC this period", () => {
+    const o = rebalanceOutlook(
+      outlookIn(adrian(1_000, [1, 0, 0, 0.32, 0, 0, 0]), {
+        left: { rebalance: [{ token: USDC.address, leftRaw: 0n }] },
+      }),
+    );
+    expect(o).toMatchObject({ trades: [], offTarget: true, blocked: "limits" });
+  });
+
+  it("none of the mix held, free or backing: never On target, nothing to keep", () => {
+    // Only Meta, out of his mix.
+    const o = rebalanceOutlook(outlookIn(account([0, 0, 0, 500, 0, 0, 0], [0, 0, 0, 500, 0, 0, 0])));
+    expect(o).toMatchObject({ trades: [], offTarget: false, blocked: "none-held" });
+    expect(rebalanceOutlook(outlookIn(account([0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0])))).toMatchObject({
+      blocked: "none-held",
+    });
   });
 });
 
@@ -174,10 +203,11 @@ describe("rebalanceCard: off target with nothing to trade", () => {
     const m = card(adrian(1_000), {}, { debtUsd: 3_000, totalBackingUsd: 7_420 });
     expect(m.pill).toEqual({ text: "On", tone: "on" });
     expect(m.faded).toBe(false);
-    expect(m.footer).toEqual({ kind: "words", line1: BACKING_RULE, line2: "Repay or free up some to let it trade." });
+    // Freeing up is what takes stock out of backing: a repay alone leaves it there.
+    expect(m.footer).toEqual({ kind: "words", line1: BACKING_RULE, line2: "Free up some to let it trade." });
     expect(BACKING_RULE).toBe("Stock that backs your credit isn’t rebalanced.");
-    expect(m.label).toBe(`Rebalancer, on. ${BACKING_RULE} Repay or free up some to let it trade.`);
-    expect(sheetLine(m)).toEqual({ text: `${BACKING_RULE} Repay or free up some to let it trade.`, renew: false });
+    expect(m.label).toBe(`Rebalancer, on. ${BACKING_RULE} Free up some to let it trade.`);
+    expect(sheetLine(m)).toEqual({ text: `${BACKING_RULE} Free up some to let it trade.`, renew: false });
     // Apple 29% of the mix's stock against 3%, Amazon 35% against 25%, Alphabet 21% against 14%: over. Microsoft 15%
     // against 58%: under. Nothing trades, so no side and no BUY or SELL.
     expect(outs(m)).toEqual([
@@ -189,12 +219,62 @@ describe("rebalanceCard: off target with nothing to trade", () => {
     expect(m.slots.every((s) => s.side === null)).toBe(true);
   });
 
-  it("Adrian's own account: too small to trade, said with the smallest trade", () => {
+  it("held by credit with nothing owed, or in Act: the same words, freeing up is what lets it trade", () => {
+    const owesNothing = card(adrian(1_000), {}, { debtUsd: 0, totalBackingUsd: 7_420 });
+    expect(owesNothing.footer).toEqual({ kind: "words", line1: BACKING_RULE, line2: "Free up some to let it trade." });
+    const inAct = card(adrian(1_000), {}, { debtUsd: 5_000, totalBackingUsd: 7_420 });
+    expect(inAct.pill).toEqual({ text: "On", tone: "on" });
+    expect(inAct.footer).toEqual({ kind: "words", line1: BACKING_RULE, line2: "Free up some to let it trade." });
+  });
+
+  it("Adrian's own account: too small to trade, and the rule, since all of his mix backs credit", () => {
     const m = card(adrian());
     expect(m.pill).toEqual({ text: "On", tone: "on" });
-    expect(m.footer).toEqual({ kind: "words", line1: TOO_SMALL, line2: "Trades start at $20." });
+    expect(m.footer).toEqual({ kind: "words", line1: TOO_SMALL, line2: BACKING_RULE });
     expect(TOO_SMALL).toBe("Off target, but too small to trade.");
     expect(outs(m).map(([, out]) => out)).toEqual(["over", "over", "over", "under"]);
+    // The sheet's line says the rule already, so the sheet doesn't say it twice.
+    expect(sheetLine(m).text).toBe(`${TOO_SMALL} ${BACKING_RULE}`);
+  });
+
+  it("too small with free stock in the mix: said with the smallest trade", () => {
+    const free = [12, 10, 5, 0, 7.2, 0, 0];
+    const m = card(account(free, free));
+    expect(m.footer).toEqual({ kind: "words", line1: TOO_SMALL, line2: "Trades start at $20." });
+    expect(m.slots.find((s) => s.reserveId === 4)!.out).toBe("under");
+  });
+
+  it("nothing it can trade at any size: says so and when it checks next, never 'too small'", () => {
+    const m = card(
+      adrian(1_000, [1, 0, 0, 0.32, 0, 0, 0]),
+      {},
+      { left: { rebalance: [{ token: USDC.address, leftRaw: 0n }] } },
+    );
+    expect(m.footer).toEqual({
+      kind: "words",
+      line1: "Off target, but nothing it can trade now.",
+      line2: `Next check ${next}.`,
+    });
+  });
+
+  it("none of the mix held: never On target, says what starts it", () => {
+    const meta = [0, 0, 0, 500, 0, 0, 0];
+    const m = card(account(meta, meta));
+    expect(m.pill).toEqual({ text: "On", tone: "on" });
+    expect(m.footer).toEqual({
+      kind: "words",
+      line1: "You hold none of your mix yet.",
+      line2: "Buy some and it keeps them on target.",
+    });
+    expect(m.slots.every((s) => s.out === null)).toBe(true);
+  });
+
+  it("every block has two lines, and none uses a word the app never shows", () => {
+    for (const b of ["credit", "too-small", "too-small-backing", "limits", "none-held"] as const) {
+      const words = blockedWords(b, options.minTradeRaw, next);
+      expect(words).toHaveLength(2);
+      expect(words.join(" ")).not.toMatch(/borrow|loan|\block|locked|collateral|\broom\b|—/i);
+    }
   });
 
   it("places each logo by the whole portfolio, not the free stock", () => {
@@ -214,10 +294,26 @@ describe("rebalanceCard: off target with nothing to trade", () => {
   });
 
   it("trades due on free stock: the trades show, sides from them, no over or under", () => {
-    const m = card(adrian(1_000, [1_000, 0, 0, 320, 0, 0, 0]), {}, { debtUsd: 3_000, totalBackingUsd: 7_420 });
+    const m = card(adrian(1_000, [1, 0, 0, 0.32, 0, 0, 0]), {}, { debtUsd: 3_000, totalBackingUsd: 7_420 });
     expect(m.footer.kind).toBe("trades");
     expect(m.slots.find((s) => s.reserveId === 0)!.side).toBe("sell");
     expect(m.slots.every((s) => s.out === null)).toBe(true);
+  });
+
+  it("trades due: the logos are the free stock the trades move, so a SELL never sits below its line", () => {
+    // A 50/50 Apple and Amazon mix. In all, Apple 48 and Amazon 52 (in band); free, Apple 80 and Amazon 20, so the
+    // check sells free Apple. Drawn on the whole portfolio, Apple would sit under its line with SELL on it.
+    const m = card(
+      account([4_800, 5_200, 0, 0, 0, 0, 0], [800, 200, 0, 0, 0, 0, 0]),
+      {},
+      { mixBps: [5_000, 5_000, 0, 0, 0, 0, 0] },
+    );
+    expect(m.footer.kind).toBe("trades");
+    const apple = m.slots.find((s) => s.reserveId === 0)!;
+    expect(apple.side).toBe("sell");
+    expect(apple.offset).toBeGreaterThan(0);
+    expect(m.slots.find((s) => s.reserveId === 1)!).toMatchObject({ side: "buy" });
+    expect(m.slots.find((s) => s.reserveId === 1)!.offset).toBeLessThan(0);
   });
 
   it("ends soon while held: Renew first, then the rule", () => {
@@ -227,10 +323,26 @@ describe("rebalanceCard: off target with nothing to trade", () => {
     expect(sheetLine(m).renew).toBe(true);
   });
 
-  it("keeps the other states: retrying, needs you and stopped come first, faded ones mark nothing", () => {
+  it("Paused draws the free stock its trades wait to move, and marks nothing past its band", () => {
+    // Free: Apple 80, Amazon 20 against 50/50, so trades wait while the credit is in Act. In all, Apple sits under its
+    // band and Amazon over it: drawing or tinting that would say the opposite of what the waiting trades do.
+    const m = card(
+      account([3_000, 7_000, 0, 0, 0, 0, 0], [800, 200, 0, 0, 0, 0, 0]),
+      {},
+      { mixBps: [5_000, 5_000, 0, 0, 0, 0, 0], debtUsd: 7_000, totalBackingUsd: 9_000 },
+    );
+    expect(m.pill.text).toBe("Paused");
+    expect(m.slots.every((s) => s.out === null && s.side === null)).toBe(true);
+    expect(m.slots.find((s) => s.reserveId === 0)!.offset).toBeGreaterThan(0);
+    expect(m.slots.find((s) => s.reserveId === 1)!.offset).toBeLessThan(0);
+  });
+
+  it("keeps the other states: retrying, needs you and stopped come first, and mark nothing past the band", () => {
     const big = adrian(1_000);
     const at = { debtUsd: 3_000, totalBackingUsd: 7_420 };
-    expect(card(big, { fails: 3 }, at).pill.text).toBe("Retrying");
+    const retrying = card(big, { fails: 3 }, at);
+    expect(retrying.pill.text).toBe("Retrying");
+    expect(retrying.slots.every((s) => s.out === null)).toBe(true);
     const needs = card(big, { status: "starting" }, at);
     expect(needs.pill.text).toBe("Needs you");
     expect(needs.slots.every((s) => s.out === null)).toBe(true);
@@ -262,10 +374,12 @@ describe("the Agents list's next line says the same", () => {
     plan: null,
   });
 
-  it("held by credit, or too small, never On target", () => {
+  it("held by credit, too small, or none of the mix held, never On target", () => {
     expect(agentNexts(nextIn(adrian(1_000), 3_000, 7_420)).rebalance).toEqual({
       idle: "Stock that backs your credit isn’t rebalanced",
     });
     expect(agentNexts(nextIn(adrian(), 3, 7.42)).rebalance).toEqual({ idle: "Off target, but too small to trade" });
+    const meta = [0, 0, 0, 500, 0, 0, 0];
+    expect(agentNexts(nextIn(account(meta, meta), 0, 0)).rebalance).toEqual({ idle: "You hold none of your mix yet" });
   });
 });

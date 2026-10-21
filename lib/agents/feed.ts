@@ -4,7 +4,7 @@ import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import type { AgentEvent } from "@/lib/agents/events";
 import { PROTECT_LINE, PROTECT_TARGET, type AgentName } from "@/lib/agents/list";
 import type { AgentJob } from "@/lib/agents/permissions";
-import { clockText } from "@/lib/clock";
+import { clockText, dayIn } from "@/lib/clock";
 import { statusFor, type Status } from "@/lib/risk/status";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
@@ -50,8 +50,13 @@ const FIRST_COOLDOWN_SEC = 600;
 const MAX_FAILS = 8;
 
 const DATE = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
-/** When the agents try again: the viewer's clock and its GMT offset ("4:10 PM GMT+3"). */
-const at = (sec: number) => clockText(sec);
+const MONTH_DAY = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
+/**
+ * When the agents try again after the run at `rowSec`: the viewer's clock and its GMT offset ("4:10 PM GMT+3"), with
+ * the date when it falls on a later day than the row's ("Oct 22, 2:10 AM GMT+3"); the wait grows to hours.
+ */
+const at = (sec: number, rowSec: number) =>
+  dayIn(sec) === dayIn(rowSec) ? clockText(sec) : `${MONTH_DAY.format(sec * 1000)}, ${clockText(sec)}`;
 
 const usd = (raw: bigint) => formatUsdTrim(Number(raw) / 10 ** USDC.decimals);
 /** What's owed rounds up to the cent: it's never shown as less than it is. */
@@ -304,7 +309,7 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
         line: ["A run didn’t go through. Nothing moved."],
         details: [
           ...(e.fails < MAX_FAILS
-            ? [{ label: "Tries again", value: [at(time + (FIRST_COOLDOWN_SEC << (e.fails - 1)))] }]
+            ? [{ label: "Tries again", value: [at(time + (FIRST_COOLDOWN_SEC << (e.fails - 1)), time)] }]
             : []),
           { label: "In a row", value: [String(e.fails)] },
           { label: "Code", value: [errorName(e.reason)] },

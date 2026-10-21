@@ -7,30 +7,23 @@ import { FeedCard, FeedDays } from "@/components/gg/activity/Activity";
 import { AgentSheet } from "@/components/gg/AgentSheet";
 import { AgentRow, AgentsFeed, AgentsView, MixBar } from "@/components/gg/Agents";
 import { ProtectCardView } from "@/components/gg/agents/ProtectCard";
-import { RebalanceCardView } from "@/components/gg/agents/RebalanceCard";
+import { RebalanceCardView, RebalancePill } from "@/components/gg/agents/RebalanceCard";
+import { SheetShell } from "@/components/gg/kit/SheetShell";
 import type { AgentRow as FeedAgentRow } from "@/hooks/useAgentFeed";
 import { useNowSec } from "@/hooks/useNowSec";
 import type { AgentEvent } from "@/lib/agents/events";
 import { describeAgentEvent, type MoveContext } from "@/lib/agents/feed";
-import {
-  AGENT_JOBS,
-  AGENT_NAME,
-  agentItems,
-  longDateText,
-  timeText,
-  type Agent,
-  type AgentItem,
-} from "@/lib/agents/list";
+import { AGENT_JOBS, AGENT_NAME, agentItems, longDateText, type Agent, type AgentItem } from "@/lib/agents/list";
 import { rebalanceOptions } from "@/lib/agents/mix";
-import { agentNexts, defaultNumbers, rebalanceOutlook, type NextInput } from "@/lib/agents/next";
+import { agentNexts, atText, defaultNumbers, rebalanceOutlook, type NextInput } from "@/lib/agents/next";
 import { JOBS, startCapRaw, type AgentJob } from "@/lib/agents/permissions";
 import { protectCard, type ProtectCardInput } from "@/lib/agents/protectCard";
 import { rebalanceCard } from "@/lib/agents/rebalanceCard";
 import type { AgentStatus } from "@/lib/agents/status";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 import { ProtectDemo } from "../ProtectDemos";
-import { RebalanceStateBody } from "../RebalanceDemo";
 import { MEASURED_MIX, measuredAccount } from "./measuredAccount";
+import { stateOf, STATES } from "./rebalance-sheet/RebalanceSheets";
 
 /*
  * Dev only: the Agents tab in each state it can be in, with fixtures run through the app's own rules and words
@@ -40,7 +33,7 @@ import { MEASURED_MIX, measuredAccount } from "./measuredAccount";
  *   ?view=held                    the Rebalancer held by credit (Adrian's measured account, at 1,000×)
  *   ?view=rows                    each state of the Rebalancer's row
  *   ?view=notlive                 today: no executor configured
- *   &sheet=protect|rebalance      a sheet open
+ *   &sheet=protect|rebalance      a sheet open (the Rebalancer's is its real sheet, from the rebalance-sheet gallery)
  * Every switch, Renew and Turn off goes straight to JAW's own sheet in the app; here it only says so.
  */
 
@@ -174,10 +167,7 @@ function protectStates(nowSec: number): [string, Partial<ProtectCardInput>][] {
     ],
     ["Under the line, held back", { hf: 1.02, next: { idle: "Act. No cash to repay with" } }],
     ["7 · Credit in Act", { hf: 1.07, act: { addUsd: 45, protectOn: true } }],
-    [
-      "8 · Weekend risk",
-      { hf: 1.16, weekend: { addUsd: 96, dropPct: 15, when: `at ${timeText(nowSec + 3 * 3_600)}` } },
-    ],
+    ["8 · Weekend risk", { hf: 1.16, weekend: { addUsd: 96, dropPct: 15, when: atText(nowSec + 3 * 3_600, nowSec) } }],
     ["9 · Ends within 7 days", { endsAt: nowSec + 4 * 86_400 }],
     ["10 · All good", {}],
     ["Nothing owed", { hf: null }],
@@ -297,7 +287,18 @@ export function AgentsGallery() {
           />
         }
       />
-      {sheet && (
+      {sheet === "rebalance" && (
+        // The real Rebalancer sheet, on the card's own holdings and mix (the rebalance-sheet gallery's fixtures).
+        <RebalanceGallerySheet
+          nowSec={nowSec}
+          state={view === "held" ? "held" : view === "notlive" ? "coming-soon" : "agents-page"}
+          onClose={() => {
+            setSheet(null);
+            router.replace(`/dev/ui/agents${view === "live" ? "" : `?view=${view}`}`);
+          }}
+        />
+      )}
+      {sheet === "protect" && (
         <GallerySheet
           agent={sheet}
           item={items.find((i) => i.agent === sheet)!}
@@ -311,6 +312,24 @@ export function AgentsGallery() {
         />
       )}
     </>
+  );
+}
+
+/**
+ * The Rebalancer's real sheet in one of the rebalance-sheet gallery's states, as the app opens it: the held one under
+ * ?view=held, one on this page's own mix otherwise, so it says what the card above it says.
+ */
+function RebalanceGallerySheet({ nowSec, state, onClose }: { nowSec: number; state: string; onClose: () => void }) {
+  const s = stateOf(nowSec, STATES[state]);
+  return (
+    <SheetShell
+      open
+      onOpenChange={(next) => !next && onClose()}
+      title="Rebalancer"
+      titleAccessory={<RebalancePill model={s.model} />}
+    >
+      {s.body}
+    </SheetShell>
   );
 }
 
@@ -360,14 +379,8 @@ function GallerySheet({
       busy={false}
       error={null}
       stops={item.on ? longDateText(nowSec + 200 * 86_400) : null}
-      settings={
-        // The real settings bodies, drawn from their fixtures (ProtectDemos, RebalanceDemo).
-        agent === "protect" ? (
-          <ProtectDemo state={!live ? "not-live" : item.status === "off" ? "off" : "on"} />
-        ) : (
-          <RebalanceStateBody state={!live ? "not-live" : item.status === "off" ? "switch-on" : "on-target"} />
-        )
-      }
+      // The real settings body, drawn from its fixtures (ProtectDemos).
+      settings={<ProtectDemo state={!live ? "not-live" : item.status === "off" ? "off" : "on"} />}
       activity={
         <FeedCard>
           {live && activity.length ? (

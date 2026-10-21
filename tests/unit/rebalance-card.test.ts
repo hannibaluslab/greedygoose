@@ -157,7 +157,7 @@ describe("rebalanceOutlook: the sheet's line and the card share it", () => {
       inAct: false,
       waitsInAct: false,
       offTarget: false,
-      heldByCredit: false,
+      blocked: null,
     });
     expect(rebalanceOutlook(outlookIn({ mixBps: null }))).toMatchObject({ noMix: true, trades: [] });
     const drifted = rebalanceOutlook(outlookIn({ holdings: holdings(DRIFTED) }));

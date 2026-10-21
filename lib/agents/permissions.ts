@@ -235,7 +235,7 @@ export function stockTerms(limitsRaw: StockLimits): bigint {
 function rebalanceCalls(limitsRaw: StockLimits, topUps: boolean) {
   return [
     ...(topUps ? [{ target: PROTOCOLS.AAVE_V3_POOL, selector: SEL.withdraw }] : []),
-    ...sellable(limitsRaw, "The Rebalancer").map(({ stock }) => ({ target: stock, selector: SEL.approve })),
+    ...sellable(limitsRaw, "Rebalancer").map(({ stock }) => ({ target: stock, selector: SEL.approve })),
     { target: USDC.address, selector: SEL.approve },
     { target: AERODROME.ROUTER, selector: SEL.aeroSwap },
   ];
@@ -250,7 +250,7 @@ function rebalanceSpends(capRaw: bigint, limitsRaw: StockLimits, topUps: boolean
   return [
     { token: USDC.address, allowance: capRaw },
     ...(topUps ? [{ token: PROTOCOLS.AUSDC, allowance: capRaw }] : []),
-    ...sellable(limitsRaw, "The Rebalancer").map(({ stock, limitRaw }) => ({ token: stock, allowance: limitRaw })),
+    ...sellable(limitsRaw, "Rebalancer").map(({ stock, limitRaw }) => ({ token: stock, allowance: limitRaw })),
   ];
 }
 

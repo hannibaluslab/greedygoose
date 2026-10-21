@@ -6,13 +6,14 @@ import { RebalanceCard, RebalanceCardView } from "@/components/gg/agents/Rebalan
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { useNowSec } from "@/hooks/useNowSec";
 import { rebalanceOptions, type MixHolding } from "@/lib/agents/mix";
-import { nyDay, rebalanceOutlook } from "@/lib/agents/next";
+import { nyDay, rebalanceOutlook, type SpendLeft } from "@/lib/agents/next";
 import {
   rebalanceCard,
   type CardTopUps,
   type RebalanceCardInput,
   type RebalanceCardModel,
 } from "@/lib/agents/rebalanceCard";
+import { USDC } from "@/lib/tokens/registry";
 import { MEASURED_MIX, measuredAccount } from "../measuredAccount";
 
 /*
@@ -37,6 +38,19 @@ const holdings = (pcts: readonly number[]): MixHolding[] =>
     priceRaw: BigInt(Math.round(p * 1e8)),
     freeRaw: BigInt(Math.round(((pcts[reserveId] / 100) * 10_000 * 1e8) / p)),
   }));
+
+/** Each stock's dollars in all, and the free part of them; the rest backs credit. By reserve id. */
+const split = (wholeUsd: readonly number[], freeUsd: readonly number[]): MixHolding[] =>
+  PRICES.map((p, reserveId) => ({
+    reserveId,
+    priceRaw: BigInt(Math.round(p * 1e8)),
+    freeRaw: BigInt(Math.round((freeUsd[reserveId] * 1e8) / p)),
+    backingRaw: BigInt(Math.round(((wholeUsd[reserveId] - freeUsd[reserveId]) * 1e8) / p)),
+  }));
+/** Apple and Amazon at 50/50. */
+const HALVES = [5_000, 5_000, 0, 0, 0, 0, 0];
+/** $34.20 of free stock in Adrian's mix, none of it backing credit: Apple 35% against 3%, Microsoft 21% against 58%. */
+const SMALL_FREE = [12, 10, 5, 0, 7.2, 0, 0];
 
 /** The boards' mix: Apple 20, Amazon 10, Alphabet 10, Meta 10, Microsoft 15, NVIDIA 25, Tesla 10. */
 const MIX = [2_000, 1_000, 1_000, 1_000, 1_500, 2_500, 1_000];
@@ -73,6 +87,8 @@ type Fixture = {
   /** What's owed against $2,000 of backing at a 70% factor: $600 is Safe, $1,300 is in Act. */
   debtUsd?: number;
   card?: Partial<RebalanceCardInput>;
+  /** What the grant still allows this period; a fresh period at CAP_MAX unless said. */
+  left?: readonly SpendLeft[];
 };
 
 function model(nowSec: number, f: Fixture = {}): RebalanceCardModel | null {
@@ -88,7 +104,7 @@ function model(nowSec: number, f: Fixture = {}): RebalanceCardModel | null {
     debtUsd: f.debtUsd ?? 600,
     totalBackingUsd: 2_000,
     avgCf: 0.7,
-    left: { rebalance: null },
+    left: { rebalance: f.left ?? null },
     capRaw: { rebalance: CAP_MAX },
     numbers: { rebalance: options },
   });
@@ -122,8 +138,24 @@ const STATES: [string, (now: number) => Fixture | "loading"][] = [
     () => ({ holdings: measuredAccount(PRICES, 1), mixBps: MEASURED_MIX }),
   ],
   [
+    "Too small to trade, with free stock in the mix: $34.20",
+    () => ({ holdings: split(SMALL_FREE, SMALL_FREE), mixBps: MEASURED_MIX }),
+  ],
+  [
+    "Nothing it can trade now: the grant leaves no USDC this period",
+    () => ({ pcts: DRIFTED, left: [{ token: USDC.address, leftRaw: 0n }] }),
+  ],
+  [
+    "None of the mix held: only Meta, against Apple and Amazon",
+    () => ({ holdings: split([0, 0, 0, 500, 0, 0, 0], [0, 0, 0, 500, 0, 0, 0]), mixBps: HALVES }),
+  ],
+  [
     "Ends soon, held by credit",
     (now) => ({ holdings: measuredAccount(PRICES, 1_000), mixBps: MEASURED_MIX, card: { endsAt: now + 4 * DAY } }),
+  ],
+  [
+    "Trades due on free stock, the whole portfolio in band: drawn on the free stock",
+    () => ({ holdings: split([4_800, 5_200, 0, 0, 0, 0, 0], [800, 200, 0, 0, 0, 0, 0]), mixBps: HALVES }),
   ],
   ["Trades due (Coin hop): NVIDIA past its band", () => ({ pcts: DRIFTED })],
   ["Trades due: a two-stock mix, both past their bands", () => ({ pcts: [0, 0, 0, 0, 0, 70, 30], mixBps: TWO })],
@@ -140,6 +172,14 @@ const STATES: [string, (now: number) => Fixture | "loading"][] = [
   ["Retrying: 3 runs didn’t go through, trades due", () => ({ pcts: DRIFTED, card: { fails: 3 } })],
   ["Retrying: backed off past the next window", (now) => ({ card: { fails: 5, cooldownUntil: now + 2 * DAY } })],
   ["Paused: the credit is in Act, trades due", () => ({ pcts: DRIFTED, debtUsd: 1_300 })],
+  [
+    "Paused, the whole portfolio leaning the other way: the free stock, nothing tinted",
+    () => ({
+      holdings: split([3_000, 7_000, 0, 0, 0, 0, 0], [800, 200, 0, 0, 0, 0, 0]),
+      mixBps: HALVES,
+      debtUsd: 1_300,
+    }),
+  ],
   ["Paused: the credit is in Act, a top-up waits", (now) => ({ debtUsd: 1_300, card: { topUps: counted(now, 300) } })],
   ["Needs you: the registration is still to go", () => ({ card: { status: "starting", waiting: true } })],
   ["Stopped on its own", (now) => ({ pcts: DRIFTED, card: { status: "off", stoppedAt: now - 2 * DAY } })],

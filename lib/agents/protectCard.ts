@@ -1,6 +1,6 @@
 import { NOT_LIVE, type ActCard, type Next, type WeekendCard } from "@/lib/agents/list";
+import { atText } from "@/lib/agents/next";
 import type { AgentStatus } from "@/lib/agents/status";
-import { clockText } from "@/lib/clock";
 import { formatUsdTrim } from "@/lib/formatting";
 import { fallTo } from "@/lib/risk/health";
 import { STATUS_LABEL, statusFor } from "@/lib/risk/status";
@@ -140,7 +140,7 @@ export function protectCard(i: ProtectCardInput): ProtectCardModel {
   if (i.fails >= RETRYING_AT) {
     const retry =
       i.cooldownUntil > i.nowSec
-        ? `Nothing moved. They try again at ${clockText(i.cooldownUntil)}.`
+        ? `Nothing moved. They try again ${atText(i.cooldownUntil, i.nowSec)}.`
         : "Nothing moved. They try again on the next run.";
     return card("Retrying", "watch", `Your agents’ last ${i.fails} runs didn’t go through.`, retry);
   }

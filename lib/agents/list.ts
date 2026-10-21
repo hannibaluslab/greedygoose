@@ -1,7 +1,6 @@
 import { CASH_AGENT } from "@/config/risk";
 import type { AgentJob } from "@/lib/agents/permissions";
 import type { AgentStatus } from "@/lib/agents/status";
-import { clockText } from "@/lib/clock";
 import { formatUsdTrim } from "@/lib/formatting";
 
 /*
@@ -131,8 +130,6 @@ export const NOT_LIVE = "Coming soon: the agents open once their automation is a
 const YEAR = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
 /** "Oct 15, 2027", for a grant's end a year out. */
 export const longDateText = (sec: number) => YEAR.format(sec * 1000);
-/** "11:00 PM GMT+3": a time ahead, on the viewer's clock with its GMT offset (Adrian, 2026-10-21). */
-export const timeText = (sec: number) => clockText(sec);
 
 /** A warning's button: the Top up or Repay sheet over the screen. */
 export type CardAction = { kind: "sheet"; label: string; sheet: "top-up" | "repay" };

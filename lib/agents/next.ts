@@ -1,16 +1,7 @@
 import { CASH_AGENT, RISK } from "@/config/risk";
 import { OFF_REASONS } from "@/lib/agents/events";
 import { OFF_WHY } from "@/lib/agents/feed";
-import {
-  agentOf,
-  AGENTS,
-  hfText,
-  timeText,
-  type ActCard,
-  type Agent,
-  type Next,
-  type WeekendCard,
-} from "@/lib/agents/list";
+import { agentOf, AGENTS, hfText, type ActCard, type Agent, type Next, type WeekendCard } from "@/lib/agents/list";
 import { isMix, previewTrades, type MixHolding } from "@/lib/agents/mix";
 import { JOBS, readStockLimits, type AgentJob } from "@/lib/agents/permissions";
 import { planProtect, weekendHeadsUp } from "@/lib/agents/rules/protect";
@@ -128,6 +119,10 @@ export function whenText(sec: number, nowSec: number, timeZone?: string): string
   const day = days <= 0 ? "today" : days === 1 ? "tomorrow" : weekdayText(sec, timeZone);
   return `${day} ${clockText(sec, timeZone)}`;
 }
+
+/** "tomorrow at 5:00 PM GMT+3", "Mon at 5:00 PM GMT+3": whenText with "at" after the day (always one word), in a sentence. */
+export const atText = (sec: number, nowSec: number, timeZone?: string): string =>
+  whenText(sec, nowSec, timeZone).replace(" ", " at ");
 
 /** What one of a grant's spend limits still allows in its current period, in the token's own units. */
 export type SpendLeft = { token: string; leftRaw: bigint };
@@ -251,7 +246,8 @@ export function weekendCard(
   return {
     addUsd: Math.ceil(h.addUsd),
     dropPct: Math.round(i.numbers.stressDrop * 100),
-    when: `at ${timeText(i.freezeAt)}`,
+    // The freeze is Friday 8 PM New York: Saturday already on a clock east of it, so the day is said too.
+    when: atText(i.freezeAt, i.nowSec),
   };
 }
 
@@ -286,7 +282,8 @@ export type OutlookInput = Pick<
  * What the Rebalancer does at its next window, for its sheet's line and its card: whether a mix is saved, the trades
  * its rule finds for it on today's free shares, when it looks next, and whether it waits because the credit is in Act.
  * And the whole portfolio's place against the mix (Adrian, 2026-10-21): "On target" only while all of it, the stock
- * backing credit too, sits inside its band; when it doesn't and nothing trades, whether credit is what holds it.
+ * backing credit too, sits inside its band and holds some of the mix; when it doesn't and nothing trades, what holds
+ * the Rebalancer back (`blocked`).
  */
 export type RebalanceOutlook = {
   noMix: boolean;
@@ -299,12 +296,21 @@ export type RebalanceOutlook = {
   /** The whole portfolio (free stock and stock backing credit) breaks the mix's band, by the rule's own measure. */
   offTarget: boolean;
   /**
-   * Nothing trades on the free stock, but the rule would trade if the stock backing credit were free: what holds the
-   * Rebalancer is the credit (it never trades stock that backs it). False when it trades, when the whole portfolio is
-   * on target, or when it would trade nothing even then (each trade under the smallest one).
+   * Why nothing trades though the mix isn't kept: the whole portfolio is off target, or holds none of the mix. Null
+   * when it trades, when the whole portfolio sits in its band, or when no mix is saved.
    */
-  heldByCredit: boolean;
+  blocked: RebalanceBlock | null;
 };
+
+/**
+ * What holds the Rebalancer back while nothing trades (Adrian, 2026-10-21):
+ * - "credit": the rule would trade if the stock backing credit were free (it never trades stock that backs it);
+ * - "too-small": even with all of it free, every trade it would make is under the smallest one;
+ * - "too-small-backing": the same, and none of the mix's stock is free (all of it backs credit);
+ * - "limits": it would trade at any size, but what its grant still allows this period leaves nothing;
+ * - "none-held": the whole portfolio holds none of the mix, so there is nothing to keep on target.
+ */
+type RebalanceBlock = "credit" | "too-small" | "too-small-backing" | "limits" | "none-held";
 
 /** Every stock as if none of it backed credit: free shares plus the shares backing credit. */
 export const wholePortfolio = (holdings: readonly MixHolding[]): MixHolding[] =>
@@ -317,16 +323,16 @@ export function rebalanceOutlook(i: OutlookInput): RebalanceOutlook {
   const hf = i.debtUsd > 0 ? (i.totalBackingUsd * i.avgCf) / i.debtUsd : Infinity;
   const inAct = hf < RISK.watchMin;
   if (!i.mixBps || !isMix(i.mixBps) || i.mixBps.every((w) => w === 0))
-    return { noMix: true, trades: [], checkAt, inAct, waitsInAct: false, offTarget: false, heldByCredit: false };
+    return { noMix: true, trades: [], checkAt, inAct, waitsInAct: false, offTarget: false, blocked: null };
   const mixBps = i.mixBps;
   const left = i.left.rebalance;
-  const tradesOn = (holdings: readonly MixHolding[]) =>
+  const tradesOn = (holdings: readonly MixHolding[], minTradeRaw = i.numbers.rebalance.minTradeRaw) =>
     previewTrades({
       holdings,
       rows: EQUITIES.map((e) => ({ reserveId: e.reserveId, bps: mixBps[e.reserveId] })),
       capRaw: i.capRaw.rebalance,
       capMaxRaw: i.capMaxRaw,
-      options: i.numbers.rebalance,
+      options: { ...i.numbers.rebalance, minTradeRaw },
       left: left
         ? {
             usdcRaw: left[0].leftRaw,
@@ -340,29 +346,63 @@ export function rebalanceOutlook(i: OutlookInput): RebalanceOutlook {
     });
   const trades = tradesOn(i.holdings);
   const whole = wholePortfolio(i.holdings);
-  const offTarget = bandBreaks(
+  const book = (holdings: readonly MixHolding[]) =>
     EQUITIES.map((e) => {
-      const h = whole.find((x) => x.reserveId === e.reserveId);
+      const h = holdings.find((x) => x.reserveId === e.reserveId);
       return { sharesRaw: h?.freeRaw ?? 0n, price: h?.priceRaw ?? 0n, weightBps: BigInt(mixBps[e.reserveId]) };
-    }),
-    i.numbers.rebalance,
-  ).some((b) => b !== null);
-  const heldByCredit = offTarget && trades.length === 0 && tradesOn(whole).length > 0;
-  return { noMix: false, trades, checkAt, inAct, waitsInAct: trades.length > 0 && inAct, offTarget, heldByCredit };
+    });
+  // The mix's stock at Aave's price, as the rule values it: only the stocks in the mix count.
+  const mixValue = (holdings: readonly MixHolding[]) =>
+    book(holdings).reduce((a, s) => a + (s.weightBps > 0n ? (s.sharesRaw * s.price) / 10n ** 10n : 0n), 0n);
+  const offTarget = bandBreaks(book(whole), i.numbers.rebalance).some((b) => b !== null);
+  const blocked: RebalanceBlock | null =
+    trades.length > 0
+      ? null
+      : mixValue(whole) === 0n
+        ? "none-held"
+        : !offTarget
+          ? null
+          : tradesOn(whole).length > 0
+            ? "credit"
+            : tradesOn(whole, 1n).length > 0
+              ? mixValue(i.holdings) === 0n
+                ? "too-small-backing"
+                : "too-small"
+              : "limits";
+  return { noMix: false, trades, checkAt, inAct, waitsInAct: trades.length > 0 && inAct, offTarget, blocked };
 }
 
 /** The Rebalancer's rule, said wherever credit is what holds it (its sheet always says it). */
 export const BACKING_RULE = "Stock that backs your credit isn’t rebalanced.";
-/** Off target with nothing to trade, credit or not: every trade it would make is under the smallest one. */
+/** Off target, and every trade it would make, even with all of it free, is under the smallest one. */
 export const TOO_SMALL = "Off target, but too small to trade.";
+
+/**
+ * The card's two lines for what holds the Rebalancer back (`RebalanceBlock`), its sheet's line after them; the first
+ * is the Agents list's line too. `when` is the next check (whenText), `minTradeRaw` the executor's smallest trade.
+ */
+export function blockedWords(b: RebalanceBlock, minTradeRaw: bigint, when: string): [string, string] {
+  switch (b) {
+    case "credit":
+      // Freeing up is what takes stock out of backing; the Repay sheet asks for a repay first when one is needed.
+      return [BACKING_RULE, "Free up some to let it trade."];
+    case "too-small-backing":
+      return [TOO_SMALL, BACKING_RULE];
+    case "too-small":
+      return [TOO_SMALL, `Trades start at ${usd(minTradeRaw)}.`];
+    case "limits":
+      return ["Off target, but nothing it can trade now.", `Next check ${when}.`];
+    case "none-held":
+      return ["You hold none of your mix yet.", "Buy some and it keeps them on target."];
+  }
+}
 
 /** Rebalance: the trades its rule finds for the saved mix on today's free shares, at the next window. */
 function rebalanceNext(i: NextInput): Next {
   const o = rebalanceOutlook(i);
   if (o.noMix) return { idle: "No mix yet" };
   const when = whenText(o.checkAt, i.nowSec);
-  if (o.trades.length === 0 && o.offTarget)
-    return { idle: (o.heldByCredit ? BACKING_RULE : TOO_SMALL).replace(/\.$/, "") };
+  if (o.blocked) return { idle: blockedWords(o.blocked, i.numbers.rebalance.minTradeRaw, when)[0].replace(/\.$/, "") };
   if (o.trades.length === 0) return { idle: `On target. Checks ${when}` };
   if (o.waitsInAct) return { idle: "Waits until your credit is out of Act" };
   const spend = usd(o.trades.filter((t) => t.buy).reduce((a, t) => a + t.amountIn, 0n));

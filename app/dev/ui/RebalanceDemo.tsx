@@ -83,8 +83,8 @@ const STATES = [
 
 type RebalanceState = (typeof STATES)[number]["key"];
 
-/** RebalanceSettings' body in one state, from fixtures: what the Agents gallery's Rebalance sheet holds. */
-export function RebalanceStateBody({ state }: { state: RebalanceState }) {
+/** RebalanceSettings' body in one state, from fixtures, for the kit's Rebalancer section. */
+function RebalanceStateBody({ state }: { state: RebalanceState }) {
   const s = STATES.find((x) => x.key === state)!;
   return (
     <RebalanceSettingsView

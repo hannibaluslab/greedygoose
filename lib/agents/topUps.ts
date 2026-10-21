@@ -1,5 +1,5 @@
 import { BaseError, ContractFunctionRevertedError, ContractFunctionZeroDataError } from "viem";
-import { nyDay, rebalanceCheckAt, whenText } from "@/lib/agents/next";
+import { atText, nyDay, rebalanceCheckAt } from "@/lib/agents/next";
 import { waitingRaw as waitingOf, type TopUpsState } from "@/lib/agents/rules/topUps";
 import { formatUsdTrim } from "@/lib/formatting";
 import { USDC } from "@/lib/tokens/registry";
@@ -69,9 +69,6 @@ export type TopUpsView = {
   helper: string | null;
   note: TopUpsNote | null;
 };
-
-/** "tomorrow at 5:00 PM GMT+3", "Mon at 5:00 PM GMT+3": whenText with "at" after the day (always one word). */
-const atText = (sec: number, nowSec: number) => whenText(sec, nowSec).replace(" ", " at ");
 
 /**
  * The card's words. One note at most: the warning first (owing, Keep $0 and Protect can't sell), then "Starts with your

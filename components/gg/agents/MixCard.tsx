@@ -17,7 +17,8 @@ import { EQUITIES } from "@/lib/tokens/registry";
 
 /**
  * My mix: a target for each stock, which never adds up past 100%, and the share of the free stock each holds now. Its
- * rows keep Home's order (boards 7e–7h), an added stock too.
+ * rows keep Home's order (boards 7e–7h), an added stock too. A stock with no free shares that backs credit says so,
+ * not "none now" (Adrian, 2026-10-21: the card above draws the whole portfolio).
  */
 export function MixCard({
   holdings,
@@ -32,6 +33,10 @@ export function MixCard({
   const sum = mixWeights(rows).reduce((a, b) => a + b, 0);
   const whole = rows.length > 0 && sum === MIX_WHOLE;
   const now = nowPercents(holdings, rows);
+  const backsOnly = rows.map((r) => {
+    const h = holdings.find((x) => x.reserveId === r.reserveId);
+    return !!h && h.freeRaw === 0n && (h.backingRaw ?? 0n) > 0n;
+  });
   const notInMix = EQUITIES.filter((e) => !rows.some((r) => r.reserveId === e.reserveId));
   const add = (reserveId: number) => {
     onRows(inHomeOrder([...rows, { reserveId, bps: 0 }]));
@@ -60,7 +65,9 @@ export function MixCard({
             <StockAvatar symbol={e.symbol} size={30} font={tickerOf(e.symbol).length > 4 ? 7 : 8.5} />
             <div className="flex w-[78px] shrink-0 flex-col">
               <span className="whitespace-nowrap text-sm font-semibold">{e.name}</span>
-              <span className="num text-[11px] text-ink-mid">{now[i] === null ? "none now" : `now ${now[i]}%`}</span>
+              <span className="num text-[11px] text-ink-mid">
+                {backsOnly[i] ? "backs credit" : now[i] === null ? "none now" : `now ${now[i]}%`}
+              </span>
             </div>
             {/* Never past 100% in all: a target stops where the other stocks' leave off (setMixRow). */}
             <MixSlider name={e.name} bps={r.bps} onChange={(bps) => onRows(setMixRow(rows, r.reserveId, bps))} />

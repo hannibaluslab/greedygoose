@@ -58,6 +58,8 @@ type Fixture = {
   pcts?: readonly number[];
   /** Adrian's measured account and mix, its dollars times this (measuredAccount), instead of `pcts` and the boards'. */
   measured?: number;
+  /** A mix of its own, BPS by reserve id, instead of the boards' (or Adrian's with `measured`). */
+  mix?: readonly number[];
   /** What's owed against $2,000 of backing at a 70% factor: $600 is Safe, $1,300 is in Act. */
   debtUsd?: number;
   live?: boolean;
@@ -75,7 +77,7 @@ type Fixture = {
   invest?: number;
 };
 
-const STATES: Record<string, Fixture> = {
+export const STATES: Record<string, Fixture> = {
   "top-ups-off": { title: "7e · Top-ups off, nothing changed", topUps: { saved: OFF } },
   "turn-on": {
     title: "7f · Turning top-ups on: a new grant, one Face ID",
@@ -181,6 +183,12 @@ const STATES: Record<string, Fixture> = {
   "trades-due": { title: "Trades due at the next check", pcts: DRIFTED, topUps: { saved: OFF } },
   held: { title: "Held by credit: the stock that would trade backs it", measured: 1_000, topUps: { saved: OFF } },
   "too-small": { title: "Too small to trade: Adrian’s $7.74 (2026-10-21)", measured: 1, topUps: { saved: OFF } },
+  "agents-page": {
+    title: "The Agents page gallery’s mix: NVIDIA 50, Apple 25, Tesla 25, on target",
+    pcts: [25, 0, 0, 0, 0, 50, 25],
+    mix: [2_500, 0, 0, 0, 0, 5_000, 2_500],
+    topUps: { saved: OFF },
+  },
   paused: {
     title: "Paused: trades due while the credit is in Act",
     pcts: DRIFTED,
@@ -233,9 +241,9 @@ const STATES: Record<string, Fixture> = {
 };
 
 /** Each state's sheet body and pill, from its fixture. */
-function stateOf(nowSec: number, f: Fixture) {
+export function stateOf(nowSec: number, f: Fixture) {
   const h = f.measured ? measuredAccount(PRICES, f.measured) : holdings(f.pcts ?? ON_TARGET);
-  const mix = f.measured ? MEASURED_MIX : MIX;
+  const mix = f.mix ?? (f.measured ? MEASURED_MIX : MIX);
   const debtUsd = f.debtUsd ?? 600;
   const options = rebalanceOptions();
   const live = f.live ?? true;
