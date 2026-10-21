@@ -5,7 +5,6 @@ import {
   useCallback,
   useContext,
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   type CSSProperties,
@@ -60,7 +59,7 @@ type SheetShellProps = {
    *  in its own buttons, and a tap outside or Escape closes it. 18px between
    *  parts with a lead, 16px without. */
   look?: "flow" | "info";
-  /** A change made from this sheet is confirming on Base: the whole body waits (SheetConfirming). A TxButton inside
+  /** A change made from this sheet is confirming on Base: the body gives way to SheetConfirming. A TxButton inside
    *  says so on its own (useSheetConfirming); this is for a sheet whose buttons are its own. */
   confirming?: boolean;
   children: ReactNode;
@@ -95,8 +94,8 @@ function useSheetWait(confirming: boolean, embedded: boolean) {
 }
 
 /**
- * While the body is inert, focus leaves the sheet, and a step that took its place as the wait ended couldn't take focus
- * (SheetSteps tried while it was still inert). So when the wait ends, the step on screen takes focus, and is announced.
+ * While the body is hidden, focus leaves it, and a step that took its place as the wait ended couldn't take focus
+ * (SheetSteps tried while it was still hidden). So when the wait ends, the step on screen takes focus, and is announced.
  */
 function useFocusAfterWait(waits: boolean, scroll: React.RefObject<HTMLDivElement | null>) {
   const was = useRef(waits);
@@ -308,11 +307,13 @@ export function SheetShell({
               )}
             </div>
           </div>
+          {/* While it confirms, the body steps aside (still mounted, so its write keeps going) and the sheet becomes one
+              solid page: the goose and the eggs (Adrian, 2026-10-21: "tall and solid… the goose in it… small eggs
+              raining"). */}
           <div
             ref={scroll}
             data-sheet-scroll
-            inert={waits}
-            aria-busy={waits}
+            hidden={waits}
             className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-5 ${flushBottom ? "" : "pb-[max(34px,env(safe-area-inset-bottom))]"}`}
             // flex none while locked: `flex-1` would let the drawer's layout
             // renegotiate the height the lock is meant to pin.
@@ -320,7 +321,7 @@ export function SheetShell({
           >
             <SheetConfirmingContext.Provider value={add}>{children}</SheetConfirmingContext.Provider>
           </div>
-          {waits && <SheetConfirming scroll={scroll} />}
+          {waits && <SheetConfirming />}
         </DrawerContent>
       </Drawer>
     </>
@@ -328,30 +329,63 @@ export function SheetShell({
 }
 
 /**
- * The sheet while its change confirms on Base: over the body (the header's Close still works), the content fades
- * behind a veil, the goose walks it off, and one line says what it waits for. Placed on the scroll area as it is now, and again if it resizes.
+ * Small lime eggs falling behind the goose: where each starts across the page (%), its size (px), how long it falls
+ * and when it starts (s), and its tilt. Fixed, so the server and the phone draw the same rain.
  */
-function SheetConfirming({ scroll }: { scroll: React.RefObject<HTMLDivElement | null> }) {
-  const [box, setBox] = useState<{ top: number; height: number } | null>(null);
-  useLayoutEffect(() => {
-    const el = scroll.current;
-    if (!el) return;
-    const place = () => setBox({ top: el.offsetTop, height: el.offsetHeight });
-    place();
-    const seen = new ResizeObserver(place);
-    seen.observe(el);
-    return () => seen.disconnect();
-  }, [scroll]);
-  if (!box) return null;
+const EGG_RAIN: { x: number; size: number; dur: number; delay: number; tilt: number }[] = [
+  { x: 6, size: 10, dur: 2.6, delay: 0, tilt: -14 },
+  { x: 15, size: 7, dur: 2.1, delay: 1.1, tilt: 10 },
+  { x: 24, size: 12, dur: 3.0, delay: 0.5, tilt: 18 },
+  { x: 33, size: 8, dur: 2.3, delay: 1.7, tilt: -8 },
+  { x: 41, size: 10, dur: 2.8, delay: 0.2, tilt: 6 },
+  { x: 50, size: 7, dur: 2.0, delay: 1.3, tilt: -16 },
+  { x: 58, size: 11, dur: 2.7, delay: 0.8, tilt: 12 },
+  { x: 66, size: 8, dur: 2.2, delay: 2.0, tilt: -6 },
+  { x: 74, size: 12, dur: 3.1, delay: 0.4, tilt: 16 },
+  { x: 82, size: 7, dur: 2.0, delay: 1.5, tilt: -12 },
+  { x: 90, size: 10, dur: 2.6, delay: 0.9, tilt: 8 },
+  { x: 96, size: 8, dur: 2.4, delay: 1.9, tilt: -10 },
+  { x: 11, size: 9, dur: 2.9, delay: 2.3, tilt: 14 },
+  { x: 46, size: 9, dur: 2.5, delay: 2.6, tilt: -4 },
+  { x: 70, size: 9, dur: 2.9, delay: 2.9, tilt: 4 },
+];
+
+/**
+ * The sheet while its change confirms on Base, once JAW's sheet hands back: a solid page about as tall as the done
+ * screens that follow it, with the goose walking it off, small eggs raining behind him, and one line saying what it
+ * waits for. The header's Close still works. It takes focus as it appears (the body it replaces held it), so the line
+ * is read out.
+ */
+function SheetConfirming() {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => ref.current?.focus({ preventScroll: true }), []);
   return (
     <div
+      ref={ref}
       role="status"
-      className="absolute inset-x-0 z-10 flex flex-col items-center justify-center gap-4 bg-sheet/85 backdrop-blur-[2px] animate-in fade-in-0 duration-200"
-      style={box}
+      tabIndex={-1}
+      className="relative flex h-[280px] shrink-0 flex-col items-center justify-center gap-5 overflow-hidden px-5 pb-[max(34px,env(safe-area-inset-bottom))] outline-none animate-in fade-in-0 duration-200"
     >
-      {/* The goose walks it off while Base confirms (Adrian, 2026-10-21: "something cool and fun"). */}
-      <GooseLoader mode="walk" className="h-[72px] w-[210px]" />
-      <span className="text-[15px] font-semibold text-ink">Confirming on Base…</span>
+      <span aria-hidden className="ggl-rain pointer-events-none absolute inset-0">
+        {EGG_RAIN.map((e, i) => (
+          <span
+            key={i}
+            className="ggl-drop"
+            style={
+              {
+                left: `${e.x}%`,
+                width: e.size * 0.78,
+                height: e.size,
+                animationDuration: `${e.dur}s`,
+                animationDelay: `${e.delay}s`,
+                "--tilt": `${e.tilt}deg`,
+              } as CSSProperties
+            }
+          />
+        ))}
+      </span>
+      <GooseLoader mode="walk" className="relative h-[88px] w-[250px]" />
+      <span className="relative text-[20px] font-semibold tracking-[-0.02em] text-ink">Confirming on Base…</span>
     </div>
   );
 }

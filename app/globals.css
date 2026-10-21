@@ -620,6 +620,37 @@ body.gg-welcome {
     animation-delay: 2s;
   }
 }
+/* The egg rain behind the goose while a sheet confirms: small lime eggs, each falling the page's height, tilting as
+   it goes. Reduced motion: no rain. */
+.ggl-drop {
+  position: absolute;
+  top: -16px;
+  border-radius: 50% 50% 50% 50% / 58% 58% 42% 42%;
+  background: var(--brand);
+  box-shadow: inset 0 0 0 1px rgba(14, 13, 11, 0.16);
+  opacity: 0;
+}
+@keyframes ggl-fall {
+  0% {
+    opacity: 0;
+    transform: translateY(0) rotate(var(--tilt));
+  }
+  12% {
+    opacity: 0.9;
+  }
+  85% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(310px) rotate(calc(var(--tilt) * -1));
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ggl-drop {
+    animation: ggl-fall 2.5s linear infinite;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .ggl-z {
     opacity: 0.6;
