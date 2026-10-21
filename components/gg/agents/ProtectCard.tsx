@@ -66,8 +66,10 @@ export function ProtectCardView({ model, onOpen }: { model: ProtectCardModel; on
 
 const pct = (x: number) => `${(x * 100).toFixed(2)}%`;
 const MONO = "font-mono text-[10px] font-medium leading-3 whitespace-nowrap";
-/** Where Safe ends and Watch begins along the bar. */
+/** Where Safe ends and Watch begins along the bar: Watch's caption starts there. */
 const SAFE_END = barPosition(RISK.safeMin);
+/** Where Watch ends and Act begins: Act's caption starts there, as Watch's starts at SAFE_END. */
+const WATCH_END = barPosition(RISK.watchMin);
 
 /** A mark across the bar: solid while Protect guards it, dashed while nothing does. */
 function Tick({ at, solid }: { at: number; solid: boolean }) {
@@ -166,7 +168,7 @@ export function LevelBar({ bar }: { bar: ProtectCardModel["bar"] }) {
       <span className="absolute top-[38px] flex flex-col" style={{ left: `calc(${pct(SAFE_END)} + 3px)` }}>
         <Caption name="Watch" range={`${fmt(RISK.watchMin)} – ${fmt(RISK.safeMin)}`} tone="text-watch-ink" />
       </span>
-      <span className="absolute right-0 top-[38px] flex flex-col items-end">
+      <span className="absolute top-[38px] flex flex-col" style={{ left: `calc(${pct(WATCH_END)} + 3px)` }}>
         <Caption name="Act" range={`under ${fmt(RISK.watchMin)}`} tone="text-neg" />
       </span>
     </div>
