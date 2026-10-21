@@ -796,3 +796,10 @@ body.gg-welcome {
     inset 0 1px 0 rgba(255, 255, 255, 0.14),
     0 -24px 60px rgba(0, 0, 0, 0.55);
 }
+
+/* While JAW's own sheet is up, ours steps aside (data-jaw-up, lib/tx/jawSheet.ts): one sheet at a time. `translate`, not
+   `transform`, which vaul drives for its own drag and open. It comes back as JAW answers. */
+[data-slot="drawer-content"][data-jaw-up] {
+  translate: 0 110%;
+  pointer-events: none;
+}

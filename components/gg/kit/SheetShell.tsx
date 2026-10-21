@@ -9,11 +9,13 @@ import {
   useState,
   type CSSProperties,
   type ReactNode,
+  useSyncExternalStore,
 } from "react";
 import { ArrowLeftIcon, CloseIcon } from "@/components/gg/kit/icons";
 import { GooseLoader } from "@/components/gg/kit/GooseLoader";
 import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from "@/components/ui/drawer";
 import { useBodyScrollLock, useKeyboardLift } from "@/hooks/useSheetViewport";
+import { jawSheet } from "@/lib/tx/jawSheet";
 
 type SheetShellProps = {
   open: boolean;
@@ -77,6 +79,12 @@ const SheetHostContext = createContext(false);
  * after, so a sheet with several buttons waits while any of them does.
  */
 const SheetConfirmingContext = createContext<(() => () => void) | null>(null);
+
+/** JAW's own sheet is up: an open sheet steps aside until JAW answers, so only one sheet shows (lib/tx/jawSheet.ts). */
+function useStepsAside(open: boolean): "" | undefined {
+  const up = useSyncExternalStore(jawSheet.subscribe, jawSheet.isUp, () => false);
+  return open && up ? "" : undefined;
+}
 
 /**
  * Whether a sheet waits on Base: `confirming` (the sheet's own say), or any change inside it that added itself (`add`,
@@ -215,6 +223,7 @@ export function SheetShell({
   useKeyboardLift(open && !embedded);
   const dragToClose = useDragToClose(() => onOpenChange(false));
   const { shows, add } = useSheetWait(confirming, embedded, open);
+  const stepsAside = useStepsAside(open);
   const scroll = useRef<HTMLDivElement>(null);
   useFocusAfterWait(shows, scroll);
 
@@ -257,6 +266,7 @@ export function SheetShell({
           // The cap is a class reading a variable, not an inline max-height: useKeyboardLift clears the drawer's
           // inline max-height whenever no keyboard is up, which left a sheet taller than the screen running off its top.
           className="max-h-(--sheet-max-h)"
+          data-jaw-up={stepsAside}
           style={
             {
               "--sheet-max-h": `${maxHeightVh}dvh`,

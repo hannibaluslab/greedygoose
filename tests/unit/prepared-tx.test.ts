@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { jawSheet } from "@/lib/tx/jawSheet";
 import type { Hex } from "viem";
 import { UserRejectedRequestError, encodeFunctionResult, maxUint256 } from "viem";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
@@ -569,5 +570,35 @@ describe("signPlan: the tap", () => {
     await signPlan(plan("A"), apart.d);
     expect(apart.send).not.toHaveBeenCalled();
     expect(apart.state).toEqual({ phase: "failed", error: NOT_ATOMIC });
+  });
+});
+
+describe("JAW's sheet is up exactly while JAW answers (our sheet steps aside meanwhile)", () => {
+  it("from the send until JAW sends, cancels or is blocked", async () => {
+    for (const answer of [
+      () => Promise.resolve({ id: "0xcalls" }),
+      () => Promise.reject(new Error("User rejected the request.")),
+      () => Promise.reject(popupError()),
+    ]) {
+      const store = preparedFor("A", ok(1));
+      let upAtSend = false;
+      const send = vi.fn(() => {
+        upAtSend = jawSheet.isUp();
+        return answer();
+      });
+      const done = signPlan(plan("A"), deps(store, { send }).d);
+      expect(upAtSend).toBe(true);
+      await done;
+      expect(jawSheet.isUp()).toBe(false);
+    }
+  });
+
+  it("isn't raised for a batch that never reaches JAW", async () => {
+    const store = new PreparedTx(now);
+    await signPlan(
+      plan("A"),
+      deps(store, { check: vi.fn(async () => ({ ok: false as const, error: "stop", blocks: true })) }).d,
+    );
+    expect(jawSheet.isUp()).toBe(false);
   });
 });

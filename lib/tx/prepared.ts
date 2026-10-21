@@ -1,4 +1,5 @@
 import { isAddressEqual, type Hex } from "viem";
+import { jawSheet } from "./jawSheet";
 import { healthFromAccountData } from "@/lib/aave/math";
 import { accountDataRead, type Call } from "@/lib/aave/tx";
 import type { ActivityItem } from "@/lib/activity/decode";
@@ -397,6 +398,8 @@ function submit(plan: TxPlan, b: PreparedBatch, d: SignDeps): Promise<void> {
     return Promise.resolve();
   }
   d.setPhase("signing");
+  // JAW's sheet is up until it answers: ours steps aside meanwhile (lib/tx/jawSheet.ts).
+  jawSheet.begin();
   let sent: Promise<{ id: string }>;
   try {
     sent = d.send(b.batch, atomic);
@@ -405,10 +408,12 @@ function submit(plan: TxPlan, b: PreparedBatch, d: SignDeps): Promise<void> {
   }
   return sent.then(
     ({ id }) => {
+      jawSheet.end();
       d.onSent(plan, id);
       d.setPhase("pending");
     },
     (e: unknown) => {
+      jawSheet.end();
       if (isPopupBlocked(e)) {
         d.prepared.keep(b);
         d.setPhase("idle");

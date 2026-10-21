@@ -992,3 +992,13 @@ following the phone, with "a switch in the burger menu that overrides the phone 
 **In this repo:** `lib/theme.ts`, `hooks/useTheme.ts` (`useTheme`, `ThemeSync`), `app/layout.tsx`, `app/providers.tsx`,
 `lib/jaw/config.ts` (`jawThemeFor`), `components/gg/MenuButton.tsx`, `app/globals.css`, and the colour fixes across
 `components/gg`. **Tests:** `theme` (the rule, and the first-paint script run against a stand-in page).
+
+## 2026-10-21 · One sheet at a time while JAW signs
+
+Adrian: "2 sheet open is ugly and confusing" (our sheet peeked out above JAW's Review sheet). While JAW's own sheet is
+up, from the moment a batch goes to JAW until JAW answers (sent, cancelled, popup blocked), our sheet steps aside: it
+slides below the screen (`translate`, so vaul's own `transform` is untouched) and the dimmed page stays, so JAW's sheet
+shows alone. When JAW answers, ours comes back: as the goose page while the change confirms, or with "You cancelled.
+Nothing was sent." The flag is set in the one write path (`lib/tx/prepared.ts` submit, `lib/tx/jawSheet.ts`), so every
+sheet that signs does it. **Tests:** `prepared-tx` (up from the send to JAW's answer, for sent, cancelled and blocked;
+never up for a batch that doesn't reach JAW).
