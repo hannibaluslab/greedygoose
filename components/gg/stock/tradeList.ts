@@ -113,6 +113,8 @@ export function useTradeList({
     setSettledId(id);
     toList();
   };
+  /** A row swiped away in the list. */
+  const drop = (id: number) => setRows((prev) => prev.filter((r) => r.id !== id));
   const remove = () => {
     if (editing !== null) setRows((prev) => prev.filter((_, i) => i !== editing));
     toList();
@@ -151,6 +153,7 @@ export function useTradeList({
     openRow,
     commit,
     remove,
+    drop,
     /** Back from a row in the editor: its draft is dropped. */
     back: editingRow ? toList : undefined,
   };

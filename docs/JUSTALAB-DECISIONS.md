@@ -1021,3 +1021,13 @@ QUOTE_MOVED if its fresh sale no longer covers its buy), the sales, then one sav
 to bring. That supply is checked from the decoded calls, as a single sale's is (`assertSalesCoverSave` in
 `lib/sell/covers.ts`), and Multi trade joins the builders allowed to declare `saveTo`. Done: "2 trades done", and the
 sheet closes. **Tests:** `multi-trade` (11), the `saveTo` guard in `start-earning`.
+
+## 2026-10-21 · Multi trade: Add in grey, swipe a trade away
+
+Adrian: "the 2 ctas same color not really ux friendly", and remove a trade "by sliding left the card of it". Add is now
+the grey soft button (as Remove in the row editor), so the one lime button is the one that signs. A row swiped left
+follows the finger over a red strip with Remove; past a third of the row, or a quick flick, it slides out and the list
+closes up; short of that it springs back. A move that starts up or down stays a scroll, and the tap a swipe ends with
+doesn't open the row. Remove in the row editor stays, for anyone who doesn't swipe. The gesture is
+`components/gg/kit/useSwipeAway.ts`; the strip only fills the gap the card leaves, so dark's see-through card shows no
+red under it.

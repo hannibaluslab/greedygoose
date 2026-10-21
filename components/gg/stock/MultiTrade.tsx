@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect } from "react";
-import { Layers } from "lucide-react";
+import { Layers, Trash2 } from "lucide-react";
 import { assetMark } from "../kit/AssetPicker";
 import { Button } from "../kit/Button";
 import { PlusIcon } from "../kit/icons";
+import { useSwipeAway } from "../kit/useSwipeAway";
 import { TxButton, TxError } from "../TxUi";
 import type { TxPhase } from "@/hooks/useTx";
 import type { PositionData } from "@/hooks/usePosition";
@@ -16,8 +17,8 @@ import { tradeSign, useTradeView } from "./tradeView";
 
 /*
  * Multi trade's list (NYM's MoveSheet multi mode, Adrian 2026-10-21): the total and how many trades, one row per trade
- * (tap to edit it in the Trade sheet's own editor), dashed places up to the two a list needs, then Add and the button
- * that signs every trade at once. Each row prices itself live, as the editor does (useTradeView), and says up what it
+ * (tap to edit it in the Trade sheet's own editor, swipe it left to remove it), dashed places up to the two a list
+ * needs, then Add (grey, so the one lime button is the one that signs) and the button that signs every trade at once. Each row prices itself live, as the editor does (useTradeView), and says up what it
  * would sign, so the list's one batch is always built from fresh quotes.
  */
 
@@ -32,6 +33,7 @@ export function MultiList({
   reports,
   onReport,
   onOpen,
+  onRemove,
   onAdd,
   settledId,
   user,
@@ -49,6 +51,8 @@ export function MultiList({
   reports: Record<number, RowReport>;
   onReport: (id: number, r: RowReport) => void;
   onOpen: (index: number) => void;
+  /** A row swiped away. */
+  onRemove: (id: number) => void;
   onAdd: () => void;
   settledId: number | null;
   user: `0x${string}`;
@@ -93,6 +97,7 @@ export function MultiList({
             disabled={busy}
             onReport={(rep) => onReport(r.id, rep)}
             onOpen={() => onOpen(i)}
+            onRemove={() => onRemove(r.id)}
           />
         ))}
         {Array.from({ length: Math.max(0, MULTI_MIN - rows.length) }, (_, i) => (
@@ -116,15 +121,15 @@ export function MultiList({
           {rows.length >= MULTI_MAX ? MULTI_COPY.full : MULTI_COPY.oneSignature}
         </p>
         <div className="flex gap-2">
-          <button
-            type="button"
+          <Button
+            variant="soft"
             onClick={onAdd}
             disabled={busy || rows.length >= MULTI_MAX}
-            className="flex h-[52px] shrink-0 items-center gap-1.5 rounded-[26px] bg-brand/45 px-5 text-[15px] font-semibold text-ink disabled:opacity-45"
+            className="shrink-0 !gap-1.5 !px-5"
           >
             <PlusIcon size={16} />
             {MULTI_COPY.add}
-          </button>
+          </Button>
           <div className="min-w-0 grow">
             <TxButton
               label={MULTI_COPY.button(rows.length)}
@@ -206,7 +211,10 @@ export function RowButtons({
   );
 }
 
-/** One trade in the list: both marks, "NVIDIA → Apple", what it gets (or why it can't), its dollars. Prices itself. */
+/**
+ * One trade in the list: both marks, "NVIDIA → Apple", what it gets (or why it can't), its dollars. Prices itself.
+ * Tap to edit it; swipe it left to remove it (useSwipeAway).
+ */
 function LiveRow({
   row,
   user,
@@ -216,6 +224,7 @@ function LiveRow({
   disabled,
   onReport,
   onOpen,
+  onRemove,
 }: {
   row: ListedRow;
   user: `0x${string}`;
@@ -225,7 +234,9 @@ function LiveRow({
   disabled: boolean;
   onReport: (r: RowReport) => void;
   onOpen: () => void;
+  onRemove: () => void;
 }) {
+  const swipe = useSwipeAway({ onRemove, onTap: onOpen, disabled });
   const view = useTradeView({ from: row.from, to: row.to, amount: row.amount, all: row.all, data }, true);
   const toPriceUsd = data.holdings.find((h) => h.symbol === row.to)?.priceUsd ?? 0;
   const sign = tradeSign(view, user, data.debtRaw, toPriceUsd);
@@ -246,12 +257,23 @@ function LiveRow({
         ? MULTI_COPY.waiting
         : `≈ ${formatUsd(view.youGet.usd)} ${TRADE_COPY.toCash.toLowerCase()}`);
   return (
-    <li>
+    <li {...swipe.row} className="relative">
+      <span
+        {...swipe.strip}
+        aria-hidden
+        className="absolute inset-y-0 right-0 w-0 overflow-hidden rounded-[18px] bg-act"
+      >
+        {/* Pinned to the right edge, so it shows from the right as the strip opens (no width of its own at rest). */}
+        <span className="absolute inset-y-0 right-0 flex items-center gap-1.5 whitespace-nowrap pr-5 text-[14px] font-semibold text-(--bg-sheet)">
+          <Trash2 size={16} strokeWidth={2.25} className="shrink-0" />
+          {MULTI_COPY.remove}
+        </span>
+      </span>
       <button
+        {...swipe.card}
         type="button"
-        onClick={onOpen}
         disabled={disabled}
-        className={`flex min-h-[62px] w-full items-center gap-3 rounded-[18px] bg-card px-3.5 py-2.5 text-left shadow-card-elev transition ${
+        className={`relative flex min-h-[62px] w-full touch-pan-y select-none items-center gap-3 rounded-[18px] bg-card px-3.5 py-2.5 text-left shadow-card-elev transition-shadow ${
           settled ? "ring-2 ring-brand" : ""
         }`}
       >

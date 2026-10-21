@@ -197,6 +197,7 @@ export function TradeSheet({
             reports={list.reports}
             onReport={list.report}
             onOpen={list.openRow}
+            onRemove={list.drop}
             onAdd={() => list.openRow(null)}
             settledId={list.settledId}
             user={user}
