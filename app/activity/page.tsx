@@ -21,7 +21,7 @@ function Activity({ address }: { address: `0x${string}` }) {
   const all = useAccountFeed(address, useAgentFeed(address));
   const nowSec = useNowSec();
   return (
-    <div className="relative flex min-h-dvh flex-col gap-4 px-5 pt-[calc(env(safe-area-inset-top)+8px)]">
+    <div className="relative flex min-h-dvh flex-col gap-4 px-5">
       <TabHeader title="Activity" back="/home" />
       <AgentsFeed
         title={null}

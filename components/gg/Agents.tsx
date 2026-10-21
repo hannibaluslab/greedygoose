@@ -38,7 +38,7 @@ export function AgentsView({
 }) {
   const [guide, setGuide] = useState(false);
   return (
-    <div className="relative flex min-h-dvh flex-col gap-3 px-5 pt-[calc(env(safe-area-inset-top)+8px)] leading-[normal]">
+    <div className="relative flex min-h-dvh flex-col gap-3 px-5 leading-[normal]">
       <TabHeader title="Agents" back="/home" action={<AgentsGuideButton onOpen={() => setGuide(true)} />} />
       <AgentsGuideSheet open={guide} onClose={() => setGuide(false)} />
       <section aria-label="My agents" className="flex flex-col gap-3">

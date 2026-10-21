@@ -45,7 +45,7 @@ function Portfolio({ address }: { address: `0x${string}` }) {
 
   return (
     <div className="relative min-h-dvh">
-      <div className="flex flex-col gap-4 px-5 pt-[calc(env(safe-area-inset-top)+12px)]">
+      <div className="flex flex-col gap-4 px-5">
         <TabHeader title="Investments" back="/home" status={data?.status} onStatus={() => money.repay()} />
 
         {isError && !data ? (

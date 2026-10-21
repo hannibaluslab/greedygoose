@@ -30,7 +30,10 @@ export function TabHeader({
   menu?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between leading-[normal]">
+    // Home's header band (Header.tsx, Adrian 2026-10-22: the same header on every page): stuck to the top across the
+    // screen's 20px gutters, the ground at 80% with a blur and a hairline under it, the row at the page's top and 9px
+    // of band under it. Screens using it start with no top padding of their own.
+    <div className="sticky top-0 z-20 -mx-5 flex items-center justify-between border-b border-[rgba(14,13,11,0.1)] bg-[rgba(244,242,236,0.8)] px-5 pb-[9px] pt-[env(safe-area-inset-top)] leading-[normal] backdrop-blur-xl dark:border-[rgba(255,255,255,0.1)] dark:bg-[rgba(14,13,11,0.8)]">
       <div className="flex items-center">
         {back && (
           <Link href={back} aria-label="Back" className="-ml-3 -mr-1 flex size-11 items-center justify-center text-ink">

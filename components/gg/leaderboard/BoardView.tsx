@@ -140,7 +140,7 @@ export function BoardView({
   const onWall = tabs?.tab === "wall";
 
   return (
-    <div className="relative flex min-h-dvh flex-col gap-3 px-5 pt-[calc(env(safe-area-inset-top)+8px)] leading-[normal]">
+    <div className="relative flex min-h-dvh flex-col gap-3 px-5 leading-[normal]">
       <TabHeader title="Leaderboard" back="/home" />
       {state.kind !== "soon" && <Controls tabs={tabs} filter={filter} onFilter={onFilter} addButton={addButton} />}
       {onWall ? <WallBody state={tabs.wall} onRetry={tabs.onWallRetry} /> : body}

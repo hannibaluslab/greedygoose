@@ -36,7 +36,7 @@ function Settings({ address }: { address: `0x${string}` }) {
     </a>
   );
   return (
-    <div className="flex min-h-dvh flex-col gap-3.5 px-5 pb-[34px] pt-[calc(env(safe-area-inset-top)+8px)]">
+    <div className="flex min-h-dvh flex-col gap-3.5 px-5 pb-[34px]">
       <TabHeader title="Settings" back="/home" />
       <WhiteCard className="px-4 py-0.5">
         <Line

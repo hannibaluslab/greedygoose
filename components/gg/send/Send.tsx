@@ -169,7 +169,7 @@ export function SendScreen({ user, data }: { user: Address; data: PositionData }
     a === "cash" ? SEND_COPY.cashName : (data.holdings.find((h) => h.symbol === a)?.name ?? a);
 
   return (
-    <div className="relative flex min-h-dvh flex-col gap-3 px-5 pt-[calc(env(safe-area-inset-top)+8px)] leading-[normal]">
+    <div className="relative flex min-h-dvh flex-col gap-3 px-5 leading-[normal]">
       <SendHeader />
 
       {phase === "done" && sentTitle ? (
