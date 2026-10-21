@@ -58,8 +58,6 @@ export const SEND_COPY = {
   button: "Send",
   enterAmount: "Enter an amount",
   addWho: "Add who to send to",
-  sendUsd: (usd: number) => `Send ${formatUsd(usd)}`,
-  sendStock: (name: string) => `Send ${name}`,
   feeUnsupported: "Your account can’t pay network fees from your cash right now, so this can’t be sent.",
   fallback: "This send would fail right now. Check the amount and try again in a moment.",
   stockFallback: "This stock can’t go to that address right now. Send to someone else, or try again later.",

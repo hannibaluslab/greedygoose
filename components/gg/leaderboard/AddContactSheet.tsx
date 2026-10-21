@@ -149,7 +149,7 @@ export function AddContactSheet({
         )}
         {offBase && <p className="m-0 px-1 text-[13px] leading-[1.4] text-ink-mid">{BOARD_COPY.notOnBase}</p>}
         <TxButton
-          label={count > 1 ? `Add ${count} to contacts` : "Add to contacts"}
+          label="Add to contacts"
           size="md"
           phase={phase}
           checking={checking}

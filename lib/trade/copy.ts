@@ -33,8 +33,9 @@ export const TRADE_COPY = {
   atLeast: "You get at least",
   toCash: "To your cash",
   about: (usd: number) => `about ${formatUsd(usd)}`,
-  buyButton: (name: string) => `Buy ${name}`,
-  sellButton: (name: string) => `Sell ${name}`,
+  // What you do, not to what (Adrian, 2026-10-21): the cards above say which stock.
+  buyButton: "Buy stock",
+  sellButton: "Sell stock",
   tradeButton: "Trade",
   closed: "Stock markets are closed. You can still trade, but the price can jump when they reopen.",
   warnBuy: (pct: string, name: string) => `You’d pay ${pct}% over the stock’s price. The market for ${name} is small.`,

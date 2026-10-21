@@ -31,7 +31,7 @@ export const MULTI_COPY = {
   full: `Up to ${MULTI_MAX} trades at once.`,
   done: "Done",
   remove: "Remove",
-  button: (n: number) => (n === 0 ? "Add trades" : n < MULTI_MIN ? "Add a second trade" : `Make ${n} trades`),
+  button: (n: number) => (n === 0 ? "Add trades" : n < MULTI_MIN ? "Add a second trade" : "Make trades"),
   oneSignature: "One signature for every trade, one network fee.",
   waiting: "Getting prices…",
   overCash: (usd: number) => `These buys need more than your cash (${formatUsd(usd)}). Lower one.`,

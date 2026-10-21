@@ -567,7 +567,7 @@ describe("planTrade: cash → stock", () => {
       route: "buy",
       fromLabel: "You pay",
       hint: "Cash available: $1,939.18",
-      button: "Buy NVIDIA",
+      button: "Buy stock",
       note: null,
       ready: false,
     });
@@ -658,14 +658,14 @@ describe("planTrade: cash → stock", () => {
 describe("planTrade: stock → cash", () => {
   const base = { from: "NVDAc", to: "cash", all: false, data: newcomer, now: OPEN } as const;
 
-  it("ready: the free shares at Aave's price, what the sale pays at least, Sell NVIDIA", () => {
+  it("ready: the free shares at Aave's price, what the sale pays at least, Sell stock", () => {
     const q = sellQuoteFor("NVDAc", 25_000_000n);
     const v = planTrade({ ...base, amount: "50", sell: ready(q) });
     expect(v).toMatchObject({
       route: "sell",
       fromLabel: "You sell",
       hint: { upToUsd: 50 },
-      button: "Sell NVIDIA",
+      button: "Sell stock",
       ready: true,
     });
     expect(v.sellPlan!.minOutRaw).toBe(sellMinOut(q, nvda, PRICE.NVDAc));
@@ -939,9 +939,10 @@ describe("words on the main screen", () => {
   });
 
   it("the buttons name the action only", () => {
-    expect([TRADE_COPY.buyButton("Apple"), TRADE_COPY.sellButton("NVIDIA"), TRADE_COPY.tradeButton]).toEqual([
-      "Buy Apple",
-      "Sell NVIDIA",
+    // What you do, not to what (Adrian, 2026-10-21).
+    expect([TRADE_COPY.buyButton, TRADE_COPY.sellButton, TRADE_COPY.tradeButton]).toEqual([
+      "Buy stock",
+      "Sell stock",
       "Trade",
     ]);
     for (const v of [

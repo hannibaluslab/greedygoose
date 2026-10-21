@@ -91,7 +91,6 @@ export function BuySheet({
     split && cfs
       ? planCredit({ position: data, options: backingOptions(data.holdings, cfs), creditRaw: split.creditRaw, cash })
       : null;
-  const creditUsd = split ? toUsd(split.creditRaw) : 0;
 
   let blocker: string | null = null;
   if (amount > 0 && amount < BUY_LIMITS.minUsd) blocker = `Minimum buy is ${formatUsd(BUY_LIMITS.minUsd)}.`;
@@ -226,7 +225,7 @@ export function BuySheet({
                 </Button>
                 {!blocker && (
                   <TxButton
-                    label={`Use credit for the other ${formatUsd(creditUsd)}`}
+                    label="Use credit"
                     size="md"
                     phase={phase}
                     checking={checking}

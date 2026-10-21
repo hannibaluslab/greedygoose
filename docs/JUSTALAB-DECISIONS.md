@@ -1067,3 +1067,13 @@ Adrian, later: the owed amount ("−$4.76") is red, the same red as a loss on Ho
 ## 2026-10-21 · Home: the labels stay on top
 
 Adrian, from the before/after shots: "it was better above their numbers". The labels-under change is reverted.
+
+## 2026-10-21 · Buttons: bigger words, and what you do, not to what
+
+Adrian: bigger text on every button, and labels by intent ("buy amazon without amazon… buy stock and sell stock when
+it's stock to cash"). The kit's md buttons go 15 → 16px and lg 16 → 17px (iOS's own size); `row` (three to a row)
+stays at its measured 15px. Labels lose their details: Trade says "Buy stock", "Sell stock" or "Trade"; Send says
+"Send" (not "Send $25.00" or "Send Tesla"); Buy's credit button "Use credit" (not "for the other $4.20"); Add contact
+"Add to contacts" (not "Add 3 to contacts"); Multi trade "Make trades". The cards above each button already say which
+stock and how much. Hints for a missing step stay ("Enter an amount", "Add a second trade"). **Tests:** the Trade and
+Send plan tables re-recorded after checking, with the button set aside, that nothing else in them changed.

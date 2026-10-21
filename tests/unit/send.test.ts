@@ -588,7 +588,7 @@ describe("Send's options and amount", () => {
     expect(plan({ ...toSam, address: user }, {}).ready).toBe(false);
     const v = plan(toSam, { base: { code: true, used: true, notAccount: false } });
     expect(v.ready).toBe(true);
-    expect(v.button).toBe("Send $25.00");
+    expect(v.button).toBe("Send");
     expect(v.rows).toEqual([
       { label: "To", value: "sam.justan.id" },
       { label: "They get", value: "$25.00" },
@@ -611,7 +611,7 @@ describe("Send's options and amount", () => {
       recipient: { address: sam, name: null, onBase: true },
       checks: { base: { code: true, used: true, notAccount: false } },
     });
-    expect(v.button).toBe("Send Tesla");
+    expect(v.button).toBe("Send");
     expect(v.sentTitle).toBe("Sent 0.025 Tesla to 0x6478…2952");
     expect(v.rows[0]).toEqual({ label: "To", value: "0x6478…2952" });
     expect(v.rows[1].value).toBe("0.025 TSLA · about $10.00");

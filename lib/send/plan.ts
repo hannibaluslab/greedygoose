@@ -79,11 +79,11 @@ function sendAmountBlock(p: SendInput, a: SendAmount): string | null {
 }
 
 /** Ruling 44: while it's off for want of an amount or a person, the button says which. */
-function sendButton(p: SendInput, a: SendAmount, amountBlock: string | null): string {
+function sendButton(p: SendInput, a: SendAmount): string {
   if (a.amountRaw === 0n) return SEND_COPY.enterAmount;
   if (!p.recipient) return SEND_COPY.addWho;
-  if (p.asset === "cash") return a.amountUsd > 0 && !amountBlock ? SEND_COPY.sendUsd(a.amountUsd) : SEND_COPY.button;
-  return a.holding ? SEND_COPY.sendStock(a.holding.name) : SEND_COPY.button;
+  // "Send", not "Send $5.00" or "Send Apple" (Adrian, 2026-10-21: what you do, not the details).
+  return SEND_COPY.button;
 }
 
 /** The amount card's hint: the cash there is, or a stock's shares for the dollars typed and the most it can be. */
@@ -151,7 +151,7 @@ export function planSend(p: SendInput) {
             to: p.recipient.address,
           })
         : null,
-    button: sendButton(p, a, amountBlock),
+    button: sendButton(p, a),
     ready,
     /** "$20.00" or "0.043 NVIDIA", and to whom, for the done state. */
     sentTitle: who ? SEND_COPY.sent(what, who) : null,

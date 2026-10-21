@@ -169,8 +169,8 @@ function tradeHint(a: TradeAmount, fromCash: boolean, data: TradeData): AmountHi
 
 /** The button names the buy or the sale; a stock → stock trade says Trade. */
 function tradeButton(a: TradeAmount): string {
-  if (a.route === "buy" && a.toStock) return TRADE_COPY.buyButton(a.toStock.name);
-  if (a.route === "sell" && a.fromStock) return TRADE_COPY.sellButton(a.fromStock.name);
+  if (a.route === "buy" && a.toStock) return TRADE_COPY.buyButton;
+  if (a.route === "sell" && a.fromStock) return TRADE_COPY.sellButton;
   return TRADE_COPY.tradeButton;
 }
 

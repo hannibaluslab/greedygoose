@@ -17,8 +17,9 @@ const VARIANT = {
 } as const;
 
 const SIZE = {
-  md: "h-[52px] gap-2 rounded-[26px] px-6 text-[15px]",
-  lg: "h-14 gap-2.5 rounded-[28px] px-6 text-base",
+  // 16 and 17px (Adrian, 2026-10-21: bigger words on every button; 17 is iOS's own). `row` stays measured at 15.
+  md: "h-[52px] gap-2 rounded-[26px] px-6 text-[16px]",
+  lg: "h-14 gap-2.5 rounded-[28px] px-6 text-[17px]",
   /**
    * md, three to a row (Invest's Market · Trade · Credit Buy): no side padding, so the label has the whole cell. It steps
    * to 14px under a 390px screen, and drops its icon under 360px, so it never wraps or overflows. Measured with Geist at
