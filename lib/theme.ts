@@ -18,7 +18,7 @@ export const readPref = (raw: string | null | undefined): ThemePref =>
 export const resolveTheme = (pref: ThemePref, phoneDark: boolean): Theme =>
   pref === "system" ? (phoneDark ? "dark" : "light") : pref;
 
-/** The browser bar's colour for each theme: the page's own ground. */
+/** The browser bar's colour for each theme: the page's own ground, which is also the dark page's top edge. */
 export const THEME_COLOR: Record<Theme, string> = { light: "#f4f2ec", dark: "#0e0d0b" };
 
 /**
