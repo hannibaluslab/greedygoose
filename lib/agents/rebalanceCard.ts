@@ -296,7 +296,7 @@ export function rebalanceCard(i: RebalanceCardInput): RebalanceCardModel | null 
     // A faded picture marks nothing past its band: Rebalance isn't running, so nothing is on its way back.
     slots: (over.slots ?? still).map((x) => (over.faded ? { ...x, out: null } : x)),
     footer,
-    label: `Rebalance, ${pill.toLowerCase()}. ${over.say ?? (footer.kind === "words" ? footer.line1 : "")}`.trim(),
+    label: `Rebalancer, ${pill.toLowerCase()}. ${over.say ?? (footer.kind === "words" ? footer.line1 : "")}`.trim(),
     endsSoon: i.endsAt !== null && i.endsAt - i.nowSec <= ENDS_SOON_SEC,
   });
   const words = (line1: string, line2: string | null = null): RebalanceFooter => ({ kind: "words", line1, line2 });

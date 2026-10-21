@@ -133,7 +133,7 @@ const STOCK_LIMIT_MAX = (2n ** 32n - 1n) * STOCK_LIMIT_UNIT;
 export type StockLimits = readonly bigint[];
 
 /** The stocks a grant may sell, each with its limit, in reserve order. `job` names the agent in the error. */
-function sellable(limitsRaw: StockLimits, job = "Protect") {
+function sellable(limitsRaw: StockLimits, job = "Protector") {
   if (limitsRaw.length !== EQUITIES.length) throw new Error("One limit per stock");
   if (limitsRaw.some((l) => l < 0n || l % STOCK_LIMIT_UNIT !== 0n || l / STOCK_LIMIT_UNIT >= 2n ** 32n)) {
     throw new Error("Stock limits are whole units of 1e-4 share");

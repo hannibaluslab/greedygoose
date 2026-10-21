@@ -22,8 +22,8 @@ const base: ProtectCardInput = {
 };
 const card = (over: Partial<ProtectCardInput>) => protectCard({ ...base, ...over });
 
-describe("Protect's card on the Agents overview: one pill, the credit health, the levels bar, two lines", () => {
-  it("all good: On, the health and its word, the room before Protect's line rounded down", () => {
+describe("Protector's card on the Agents overview: one pill, the credit health, the levels bar, two lines", () => {
+  it("all good: On, the health and its word, the room before Protector's line rounded down", () => {
     expect(card({})).toEqual({
       pill: { text: "On", tone: "on" },
       hf: 1.62,
@@ -85,7 +85,7 @@ describe("Protect's card on the Agents overview: one pill, the credit health, th
     expect(card({ fails: 3, cooldownUntil: NOW - 1 }).line2).toBe("Nothing moved. They try again on the next run.");
   });
 
-  it("in Act above Protect's line: still On, the gap back to Watch", () => {
+  it("in Act above Protector's line: still On, the gap back to Watch", () => {
     expect(card({ hf: 1.07, act: { addUsd: 45, protectOn: true } })).toMatchObject({
       pill: { text: "On", tone: "on" },
       word: "Act",
@@ -130,7 +130,7 @@ describe("Protect's card on the Agents overview: one pill, the credit health, th
     expect(card({ waiting: "protect" }).line1).toBe("One more Face ID turns it on.");
   });
 
-  it("under Protect's line before a rescue starts: about to step in, or held back, never 'steps in if it falls'", () => {
+  it("under Protector's line before a rescue starts: about to step in, or held back, never 'steps in if it falls'", () => {
     expect(card({ hf: 1.02, next: { will: "repays $40 from your cash", would: "x" } })).toMatchObject({
       pill: { text: "On", tone: "act" },
       word: "Act",
@@ -159,7 +159,7 @@ describe("Protect's card on the Agents overview: one pill, the credit health, th
   });
 
   it("reads as one line to a screen reader, and never names the machinery", () => {
-    expect(protectCardLabel(card({}))).toBe("Protect, on. Your credit health 1.62, Safe. Steps in only under 1.03.");
+    expect(protectCardLabel(card({}))).toBe("Protector, on. Your credit health 1.62, Safe. Steps in only under 1.03.");
     const words = [card({}), card({ status: "starting" }), card({ fails: 3 }), card({ rescuing: true })]
       .flatMap((c) => [c.pill.text, c.line1, c.line2 ?? ""])
       .join(" ");

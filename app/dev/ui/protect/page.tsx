@@ -11,7 +11,7 @@ export default function DevProtectPage() {
     <RequireAccount>
       {(account) => (
         <div className="flex min-h-dvh flex-col gap-3 bg-ground px-5 pb-[34px] pt-[calc(env(safe-area-inset-top)+8px)]">
-          <h1 className="m-0 text-[20px] font-semibold text-ink">Protect</h1>
+          <h1 className="m-0 text-[20px] font-semibold text-ink">Protector</h1>
           <ProtectSettings account={account} />
         </div>
       )}

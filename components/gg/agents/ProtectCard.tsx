@@ -33,8 +33,8 @@ export function ProtectCardView({ model, onOpen }: { model: ProtectCardModel; on
       className="flex w-full flex-col rounded-[22px] bg-card p-[18px] text-left text-ink shadow-[0_1px_2px_rgba(14,13,11,0.04),0_6px_20px_rgba(14,13,11,0.06)] transition-transform active:scale-[0.98]"
     >
       <span className="flex h-8 items-center gap-2.5">
-        <AgentMark agent="Protect" size={32} />
-        <span className="grow text-[17px] font-semibold">Protect</span>
+        <AgentMark agent="Protector" size={32} />
+        <span className="grow text-[17px] font-semibold">Protector</span>
         <span
           className={`flex h-6 shrink-0 items-center whitespace-nowrap rounded-xl px-2.5 text-xs font-bold ${PILL[model.pill.tone]}`}
         >
@@ -88,7 +88,7 @@ export function LevelBar({ bar }: { bar: ProtectCardModel["bar"] }) {
   const line = barPosition(bar.line);
   const target = barPosition(bar.target);
   const fmt = (x: number) => x.toFixed(2);
-  const label = `Your credit health on the scale: Safe from ${fmt(RISK.safeMin)}, Watch from ${fmt(RISK.watchMin)} to ${fmt(RISK.safeMin)}, Act under ${fmt(RISK.watchMin)}. Protect steps in under ${fmt(bar.line)}.`;
+  const label = `Your credit health on the scale: Safe from ${fmt(RISK.safeMin)}, Watch from ${fmt(RISK.watchMin)} to ${fmt(RISK.safeMin)}, Act under ${fmt(RISK.watchMin)}. Protector steps in under ${fmt(bar.line)}.`;
   return (
     <div role="img" aria-label={label} className="relative mt-4 h-[72px]">
       {bar.working ? (
@@ -110,7 +110,7 @@ export function LevelBar({ bar }: { bar: ProtectCardModel["bar"] }) {
         <span className={`absolute right-0 top-0 text-ink ${MONO}`}>If stocks fall {bar.dropPct}%</span>
       ) : (
         <span className={`absolute right-0 top-0 ${bar.guarded ? "text-ink" : "text-ink-mid"} ${MONO}`}>
-          Protect · {fmt(bar.line)}
+          Protector · {fmt(bar.line)}
         </span>
       )}
       <span aria-hidden className="absolute inset-x-0 top-[18px] flex h-2.5 gap-[3px]">
@@ -190,13 +190,13 @@ export function ProtectCardSkeleton({ onOpen }: { onOpen?: () => void }) {
     <button
       type="button"
       aria-busy
-      aria-label="Protect. Open"
+      aria-label="Protector. Open"
       onClick={onOpen}
       className="flex w-full flex-col gap-4 rounded-[22px] bg-card p-[18px] text-left shadow-[0_1px_2px_rgba(14,13,11,0.04),0_6px_20px_rgba(14,13,11,0.06)]"
     >
       <span className="flex h-8 items-center gap-2.5">
-        <AgentMark agent="Protect" size={32} />
-        <span className="grow text-[17px] font-semibold">Protect</span>
+        <AgentMark agent="Protector" size={32} />
+        <span className="grow text-[17px] font-semibold">Protector</span>
         <span className="h-6 w-14 animate-pulse rounded-xl bg-card-bone" />
       </span>
       <span className="h-9 w-24 animate-pulse rounded-lg bg-card-bone" />

@@ -115,7 +115,7 @@ const STATES: Record<string, Fixture> = {
     draftTopUps: { on: false, keepUsd: 500 },
   },
   warning: {
-    title: "7h · Keep $0, owing, Protect can’t sell: the warning",
+    title: "7h · Keep $0, owing, Protector can’t sell: the warning",
     topUps: { saved: ON, protectSells: false },
     draftTopUps: { on: true, keepUsd: 0 },
   },
@@ -213,7 +213,7 @@ const STATES: Record<string, Fixture> = {
     card: { endsAt: 4 * DAY },
   },
   "rebalance-off": {
-    title: "Rebalance off: Turn on",
+    title: "Rebalancer off: Turn on",
     card: { status: "off" },
     terms: null,
     topUps: { saved: OFF },
@@ -347,7 +347,7 @@ function Frame({ pill, children }: { pill: ReactNode; children: ReactNode }) {
       <div aria-hidden className="mx-auto mt-2.5 h-[5px] w-10 rounded-[3px] bg-line-strong" />
       <div className="flex items-start gap-1.5 px-5 pb-3 pt-4">
         <div className="flex min-h-8 min-w-0 flex-1 items-center gap-2">
-          <h2 className="m-0 text-[20px] font-semibold tracking-tight-2">Rebalance</h2>
+          <h2 className="m-0 text-[20px] font-semibold tracking-tight-2">Rebalancer</h2>
           {pill}
         </div>
         <span aria-hidden className="ml-1 grid size-8 place-items-center rounded-full bg-[rgba(15,14,11,0.06)]">
@@ -392,7 +392,7 @@ export function RebalanceSheets() {
         <SheetShell
           open
           onOpenChange={(next) => !next && close()}
-          title="Rebalance"
+          title="Rebalancer"
           titleAccessory={<RebalancePill model={open.model} />}
         >
           {open.body}
@@ -402,7 +402,7 @@ export function RebalanceSheets() {
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-[390px] flex-col gap-6 bg-ground px-4 pb-10 pt-[calc(env(safe-area-inset-top)+16px)]">
-      <h1 className="m-0 px-1 text-[28px] font-semibold tracking-[-0.03em]">Rebalance sheet</h1>
+      <h1 className="m-0 px-1 text-[28px] font-semibold tracking-[-0.03em]">Rebalancer sheet</h1>
       {Object.entries(STATES).map(([key, f]) => {
         const s = stateOf(nowSec, f);
         return (

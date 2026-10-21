@@ -319,8 +319,8 @@ function riskNote(backers: string[], protectOn: boolean, sellOn: boolean): strin
   if (protectOn) {
     const falls = `${one ? `If ${one} falls` : "If your stocks fall"}, you can repay. If your credit falls under ${PROTECT_LINE}`;
     return sellOn
-      ? `${falls}, Protect repays from your cash, then sells a little ${one ?? "of them"} to bring it back to Watch.`
-      : `${falls}, Protect repays from your cash. Protect won’t sell your ${one ? "stock" : "stocks"}.`;
+      ? `${falls}, Protector repays from your cash, then sells a little ${one ?? "of them"} to bring it back to Watch.`
+      : `${falls}, Protector repays from your cash. Protector won’t sell your ${one ? "stock" : "stocks"}.`;
   }
   return one
     ? `If ${one} falls, you can repay. If it falls too far, part of it can be sold to repay what you owe.`

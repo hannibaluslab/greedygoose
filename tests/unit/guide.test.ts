@@ -54,10 +54,10 @@ describe("guideContent", () => {
     expect(guideContent(open).places.every((p) => !p.tag)).toBe(true);
   });
 
-  it("names Protect in Act only once agents are live", () => {
+  it("names Protector in Act only once agents are live", () => {
     const act = (flags: GuideFlags) => task(flags, "status")?.statuses?.find((s) => s.status === "act")?.text;
-    expect(act(TODAY)).not.toMatch(/Protect/);
-    expect(act({ ...TODAY, agentsLive: true })).toMatch(/^Protect steps in/);
+    expect(act(TODAY)).not.toMatch(/Protector/);
+    expect(act({ ...TODAY, agentsLive: true })).toMatch(/^Protector steps in/);
   });
 
   it("says the leaderboard is proportional, and Greedy Fatalities opens soon", () => {

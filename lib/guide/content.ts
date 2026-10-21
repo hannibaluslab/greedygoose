@@ -192,7 +192,7 @@ export function guideContent(flags: GuideFlags = FLAGS): Guide {
         {
           status: "act",
           text: flags.agentsLive
-            ? "Protect steps in at 1.03 if it’s on. You can also repay some yourself."
+            ? "Protector steps in at 1.03 if it’s on. You can also repay some yourself."
             : "Repay some. If prices keep falling, part of your stocks can be sold.",
         },
       ],
@@ -234,9 +234,9 @@ export function guideContent(flags: GuideFlags = FLAGS): Guide {
       title: "Let agents watch for me",
       where: ["Agents"],
       steps: [
-        "Protect steps in if your credit falls under 1.03. It repays from your cash first, then sells if needed.",
-        "Rebalance keeps your mix on target, once a market day.",
-        "You approve each agent. You set Rebalance’s mix.",
+        "Protector steps in if your credit falls under 1.03. It repays from your cash first, then sells if needed.",
+        "Rebalancer keeps your mix on target, once a market day.",
+        "You approve each agent. You set Rebalancer’s mix.",
       ],
       note: "You can turn any agent off at any time.",
       tag: agentsTag,

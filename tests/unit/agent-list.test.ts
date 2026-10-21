@@ -31,17 +31,17 @@ const nexts = { protect: repays, rebalance: idle("No mix yet") };
 const ON_SCREEN = /borrow|lock|permission|executor|upkeep|registry|spender|saving/i;
 
 describe("the two agents", () => {
-  it("are Protect and Rebalance, each saying what it does in under six words and what it never does", () => {
+  it("are Protector and Rebalancer, each saying what it does in under six words and what it never does", () => {
     const items = agentItems({ status: jobs("off"), next: nexts });
     expect(items.map((i) => [i.name, i.does])).toEqual([
-      ["Protect", "Steps in under 1.03"],
-      ["Rebalance", "Keeps your mix on target"],
+      ["Protector", "Steps in under 1.03"],
+      ["Rebalancer", "Keeps your mix on target"],
     ]);
     // Protect's line (Adrian, 2026-10-19): Protect steps in only under 1.03 and brings the credit back to 1.12.
     expect(PROTECT_RULE).toBe("Steps in only if your credit falls under 1.03, and brings it back to 1.12.");
     expect(AGENT_COPY.protect.lead.startsWith(PROTECT_RULE)).toBe(true);
     expect(AGENT_COPY.protect.never).toBe(
-      "Protect does nothing until your credit falls under 1.03. It never sells a stock that doesn’t back your credit, and never sells on a weekend.",
+      "Protector does nothing until your credit falls under 1.03. It never sells a stock that doesn’t back your credit, and never sells on a weekend.",
     );
     expect(Object.values(AGENT_COPY.protect).join(" ")).not.toMatch(/keeps your credit safe/i);
     for (const a of AGENTS) {
@@ -59,7 +59,7 @@ describe("the two agents", () => {
     expect(TAB_JOBS).toEqual(["protect", "sell", "rebalance"]);
   });
 
-  it("reads Protect from both its jobs: on when either runs", () => {
+  it("reads Protector from both its jobs: on when either runs", () => {
     expect(agentStatus("protect", { ...jobs("off"), sell: "on" })).toBe("on");
     expect(agentStatus("protect", { ...jobs("off"), protect: "starting" })).toBe("starting");
     expect(agentStatus("protect", { ...jobs("on"), sell: "loading" })).toBe("loading");
@@ -82,12 +82,12 @@ describe("the two agents", () => {
   });
 });
 
-describe("protectWarnings: the credit's warnings, with Top up and Repay, in Protect's sheet", () => {
+describe("protectWarnings: the credit's warnings, with Top up and Repay, in Protector's sheet", () => {
   it("says nothing when all is fine", () => {
     expect(protectWarnings({ act: null, weekend: null })).toEqual([]);
   });
 
-  it("warns in Act, saying whether Protect is on to step in at 1.03, then the weekend", () => {
+  it("warns in Act, saying whether Protector is on to step in at 1.03, then the weekend", () => {
     const [act, weekend] = protectWarnings({
       act: { addUsd: 120, protectOn: true },
       weekend: { addUsd: 129, dropPct: 15, when: "at 8:00 PM" },
@@ -96,7 +96,7 @@ describe("protectWarnings: the credit's warnings, with Top up and Repay, in Prot
       key: "act",
       tone: "act",
       text: "Your credit is in Act.",
-      sub: "Protect steps in at 1.03. Repaying $120 now brings it back to Watch.",
+      sub: "Protector steps in at 1.03. Repaying $120 now brings it back to Watch.",
     });
     expect(weekend).toMatchObject({
       key: "weekend",
@@ -110,7 +110,7 @@ describe("protectWarnings: the credit's warnings, with Top up and Repay, in Prot
         { kind: "sheet", label: "Repay", sheet: "repay" },
       ]);
     expect(protectWarnings({ act: { addUsd: 5, protectOn: false }, weekend: null })[0].sub).toBe(
-      "Protect is off. Repaying $5 now brings it back to Watch.",
+      "Protector is off. Repaying $5 now brings it back to Watch.",
     );
   });
 });
@@ -118,7 +118,7 @@ describe("protectWarnings: the credit's warnings, with Top up and Repay, in Prot
 describe("agentParam (/agents?agent=…)", () => {
   it("names one of the two agents, and nothing else: Save's and Receive's old links open the tab", () => {
     expect(AGENTS.map(agentParam)).toEqual([...AGENTS]);
-    expect([null, "", "Protect", "sell", "entry", "manage", "save", "receive"].map(agentParam)).toEqual([
+    expect([null, "", "Protector", "sell", "entry", "manage", "save", "receive"].map(agentParam)).toEqual([
       null,
       null,
       null,

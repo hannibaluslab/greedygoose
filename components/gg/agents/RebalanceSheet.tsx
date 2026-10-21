@@ -53,7 +53,7 @@ export function RebalanceSheet({
     <SheetShell
       open={open}
       onOpenChange={(next) => !next && onClose()}
-      title="Rebalance"
+      title="Rebalancer"
       titleAccessory={<RebalancePill model={model} />}
       confirming={confirming}
     >
@@ -134,7 +134,7 @@ export function RebalanceSheetBody({
             onClick={() => onAction("off")}
             className="flex h-11 items-center justify-center px-4 text-sm font-medium text-ink-mid disabled:opacity-45"
           >
-            Turn off Rebalance
+            Turn off Rebalancer
           </button>
         </div>
       )}

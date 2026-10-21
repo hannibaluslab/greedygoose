@@ -179,7 +179,7 @@ describe("rebalanceCard: the first state that applies, in board 7's order, with 
     expect(m.pill).toEqual({ text: "On", tone: "on" });
     expect(m.faded).toBe(false);
     expect(m.footer).toEqual({ kind: "on-target", next: next.charAt(0).toUpperCase() + next.slice(1) });
-    expect(m.label).toBe(`Rebalance, on. On target. Next check ${next}.`);
+    expect(m.label).toBe(`Rebalancer, on. On target. Next check ${next}.`);
   });
 
   it("trades due: the count and when, the traded slots tinted", () => {
@@ -191,7 +191,7 @@ describe("rebalanceCard: the first state that applies, in board 7's order, with 
       [3, "buy"],
       [5, "sell"],
     ]);
-    expect(m.label).toBe(`Rebalance, on. 3 trades ${next}. Sells NVIDIA. Buys Apple and Meta.`);
+    expect(m.label).toBe(`Rebalancer, on. 3 trades ${next}. Sells NVIDIA. Buys Apple and Meta.`);
   });
 
   it("ends soon: within a week of its grant's end, on target", () => {
@@ -314,7 +314,7 @@ describe("rebalanceCard: the first state that applies, in board 7's order, with 
     expect(rebalanceCard(input({ status: "loading" }))).toBeNull();
   });
 
-  it("is faded exactly when Rebalance isn't running", () => {
+  it("is faded exactly when Rebalancer isn't running", () => {
     const faded = (over: Partial<RebalanceCardInput>, at?: Partial<OutlookInput>) => card(over, at).faded;
     expect(faded({})).toBe(false);
     expect(faded({ fails: 3 })).toBe(false);
@@ -378,7 +378,7 @@ describe("top-ups going in: the card and the sheet's line show what the next che
       [5, "buy"],
       [6, "buy"],
     ]);
-    expect(m.label).toBe(`Rebalance, on. $300 going in ${next}. Buys NVIDIA and Tesla.`);
+    expect(m.label).toBe(`Rebalancer, on. $300 going in ${next}. Buys NVIDIA and Tesla.`);
     expect(sheetLine(m)).toEqual({ text: `$300 going in ${next}. Buys NVIDIA and Tesla.`, renew: false });
   });
 

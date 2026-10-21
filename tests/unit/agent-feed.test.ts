@@ -36,7 +36,7 @@ describe("describeAgentEvent: the Agents board's rows", () => {
         pricesRaw: prices,
       }),
     ).toEqual({
-      by: "Protect",
+      by: "Protector",
       line: "Sold $180 of Tesla to repay. Back to Watch.",
       details: {
         Why: "Your credit fell under 1.03.",
@@ -57,7 +57,7 @@ describe("describeAgentEvent: the Agents board's rows", () => {
     };
     const r = row(sale, { cashRaw: [usdc(10), usdc(11.8)], pricesRaw: prices });
     expect(r.line).toBe("Sold $180 of NVIDIA to repay. Back to Watch.");
-    expect(r.details.Why).toBe("Protect went on until 1.12.");
+    expect(r.details.Why).toBe("Protector went on until 1.12.");
     // A sale cut short (a run's six slices, a limit, the pool's window) says it's still in Act.
     expect(row({ ...sale, hfAfter: hf(1.07) }, { pricesRaw: prices }).line).toBe(
       "Sold $180 of NVIDIA to repay. Still in Act.",
@@ -81,7 +81,7 @@ describe("describeAgentEvent: the Agents board's rows", () => {
       { kind: "repaid", amountRaw: usdc(120), hfBefore: hf(1.02), hfAfter: hf(1.12) },
       { owedRaw: [780_000_001n, 660_000_001n] },
     );
-    expect(r).toMatchObject({ by: "Protect", line: "Repaid $120 from your cash. Back to Watch." });
+    expect(r).toMatchObject({ by: "Protector", line: "Repaid $120 from your cash. Back to Watch." });
     expect(r.details).toEqual({
       Why: "Your credit fell under 1.03.",
       "You owe": "$780.01 → $660.01",
@@ -90,19 +90,19 @@ describe("describeAgentEvent: the Agents board's rows", () => {
     });
     // A rescue going on above the line, and one that paid off everything.
     expect(row({ kind: "repaid", amountRaw: usdc(30), hfBefore: hf(1.06), hfAfter: hf(1.12) }).details.Why).toBe(
-      "Protect went on until 1.12.",
+      "Protector went on until 1.12.",
     );
     const all = row({ kind: "repaid", amountRaw: usdc(16.58), hfBefore: hf(1.02), hfAfter: maxUint256 });
     expect(all.line).toBe("Repaid $16.58 from your cash. Nothing owed now.");
     expect(all.details.Status).toBe("Act → Nothing owed");
   });
 
-  it("draws a Rebalance row: what traded, why and the cash, with no limit", () => {
+  it("draws a Rebalancer row: what traded, why and the cash, with no limit", () => {
     const r = row(
       { kind: "rebalanced", soldRaw: sevenWith(0, 20_000_000n), boughtRaw: sevenWith(5, 27_777_778n) },
       { cashRaw: [usdc(5), usdc(5.002)], pricesRaw: prices },
     );
-    expect(r).toMatchObject({ by: "Rebalance", line: "Sold $50 of Apple, bought $50 of NVIDIA." });
+    expect(r).toMatchObject({ by: "Rebalancer", line: "Sold $50 of Apple, bought $50 of NVIDIA." });
     expect(r.details).toEqual({
       Why: "Your mix drifted too far from its target.",
       "My cash": "Not touched",
@@ -116,7 +116,7 @@ describe("describeAgentEvent: the Agents board's rows", () => {
       boughtRaw: sevenWith(5, 166_666_666n),
     });
     expect(r).toEqual({
-      by: "Rebalance",
+      by: "Rebalancer",
       line: "Put $300 of top-ups into your mix.",
       details: {
         Why: "Top-ups above what you keep as cash go into your mix.",
@@ -131,7 +131,7 @@ describe("describeAgentEvent: the Agents board's rows", () => {
 
   it("says top-ups switched on with Keep, on with Keep $0, or off; a top-up counted makes no row", () => {
     expect(row({ kind: "top-ups-set", on: true, keepRaw: usdc(500) })).toEqual({
-      by: "Rebalance",
+      by: "Rebalancer",
       line: "Top-ups above $500 go into your mix.",
       details: {},
     });
@@ -179,18 +179,18 @@ describe("describeAgentEvent: the Agents board's rows", () => {
   it("names switches, the mix and failed runs in plain words, with the executor's own error name", () => {
     // No agent has an amount limit: the switches name none, whatever cap the grant holds (the executor's CAP_MAX).
     expect(row({ kind: "job-on", job: "protect", capRaw: usdc(5), end: 1_791_984_607 }).line).toBe(
-      "Protect is on. If your credit falls under 1.03, it repays from your cash.",
+      "Protector is on. If your credit falls under 1.03, it repays from your cash.",
     );
     expect(row({ kind: "job-on", job: "sell", capRaw: usdc(5), end: 1_791_984_607 }).line).toBe(
-      "Protect can sell backing stock.",
+      "Protector can sell backing stock.",
     );
     expect(row({ kind: "job-on", job: "rebalance", capRaw: usdc(500), end: 1_791_984_607 }).line).toBe(
-      "Rebalance is on.",
+      "Rebalancer is on.",
     );
     expect(row({ kind: "job-off", job: "protect", reason: "stuck" }).line).toBe(
-      "Protect is off: its last runs didn’t go through.",
+      "Protector is off: its last runs didn’t go through.",
     );
-    expect(row({ kind: "job-off", job: "rebalance", reason: "revoked" }).line).toBe("Rebalance is off.");
+    expect(row({ kind: "job-off", job: "rebalance", reason: "revoked" }).line).toBe("Rebalancer is off.");
     // Earning and converting are switched on once, where they matter: their switches make no row (D20).
     for (const job of ["save", "entry"] as const) {
       expect(describeAgentEvent({ kind: "job-on", job, capRaw: usdc(1_000), end: 1_791_984_607 }, at)).toBeNull();

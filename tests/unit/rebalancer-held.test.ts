@@ -176,7 +176,7 @@ describe("rebalanceCard: off target with nothing to trade", () => {
     expect(m.faded).toBe(false);
     expect(m.footer).toEqual({ kind: "words", line1: BACKING_RULE, line2: "Repay or free up some to let it trade." });
     expect(BACKING_RULE).toBe("Stock that backs your credit isn’t rebalanced.");
-    expect(m.label).toBe(`Rebalance, on. ${BACKING_RULE} Repay or free up some to let it trade.`);
+    expect(m.label).toBe(`Rebalancer, on. ${BACKING_RULE} Repay or free up some to let it trade.`);
     expect(sheetLine(m)).toEqual({ text: `${BACKING_RULE} Repay or free up some to let it trade.`, renew: false });
     // Apple 29% of the mix's stock against 3%, Amazon 35% against 25%, Alphabet 21% against 14%: over. Microsoft 15%
     // against 58%: under. Nothing trades, so no side and no BUY or SELL.

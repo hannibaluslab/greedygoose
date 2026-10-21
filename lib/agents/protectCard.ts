@@ -175,5 +175,5 @@ export function protectCard(i: ProtectCardInput): ProtectCardModel {
 /** The card's one-line description for screen readers: name, pill, number, first line. */
 export function protectCardLabel(m: ProtectCardModel): string {
   const health = m.hf === null ? "Nothing owed" : `Your credit health ${two(m.hf)}, ${m.word}`;
-  return `Protect, ${m.pill.text.toLowerCase()}. ${health}. ${m.line1}`;
+  return `Protector, ${m.pill.text.toLowerCase()}. ${health}. ${m.line1}`;
 }

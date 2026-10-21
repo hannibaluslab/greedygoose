@@ -362,23 +362,23 @@ export function Gallery() {
         </div>
       </Section>
 
-      <Section title="Protect settings · not live yet" kit="protect-not-live">
+      <Section title="Protector settings · not live yet" kit="protect-not-live">
         <ProtectDemo state="not-live" />
       </Section>
 
-      <Section title="Protect settings · off, saving switches it on" kit="protect-off">
+      <Section title="Protector settings · off, saving switches it on" kit="protect-off">
         <ProtectDemo state="off" />
       </Section>
 
-      <Section title="Protect settings · on, Tesla never sold" kit="protect-on">
+      <Section title="Protector settings · on, Tesla never sold" kit="protect-on">
         <ProtectDemo state="on" />
       </Section>
 
-      <Section title="Protect settings · selling off" kit="protect-sell-off">
+      <Section title="Protector settings · selling off" kit="protect-sell-off">
         <ProtectDemo state="sell-off" />
       </Section>
 
-      <Section title="Agent sheet · Rebalance settings" kit="rebalance-settings">
+      <Section title="Agent sheet · Rebalancer settings" kit="rebalance-settings">
         <RebalanceDemo />
       </Section>
 

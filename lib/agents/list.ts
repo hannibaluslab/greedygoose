@@ -35,10 +35,10 @@ export const agentOf = (job: AgentJob): Agent | null => AGENTS.find((a) => AGENT
 export const agentParam = (value: string | null): Agent | null => AGENTS.find((a) => a === value) ?? null;
 
 /** Who made a move in the activity: an agent, or "Agents" for a run that didn't go through. */
-export type AgentName = "Protect" | "Rebalance" | "Agents";
+export type AgentName = "Protector" | "Rebalancer" | "Agents";
 export const AGENT_NAME: Record<Agent, Exclude<AgentName, "Agents">> = {
-  protect: "Protect",
-  rebalance: "Rebalance",
+  protect: "Protector",
+  rebalance: "Rebalancer",
 };
 
 /** Health factors as the app writes them: "1.03", "1.12". */
@@ -60,12 +60,12 @@ export const AGENT_COPY: Record<Agent, { does: string; lead: string; never: stri
   protect: {
     does: `Steps in under ${LINE}`,
     lead: `${PROTECT_RULE} It repays from your cash, and can sell backing stock if cash isn’t enough.`,
-    never: `Protect does nothing until your credit falls under ${LINE}. It never sells a stock that doesn’t back your credit, and never sells on a weekend.`,
+    never: `Protector does nothing until your credit falls under ${LINE}. It never sells a stock that doesn’t back your credit, and never sells on a weekend.`,
   },
   rebalance: {
     does: "Keeps your mix on target",
     lead: "Once a market day, it sells what grew too big to buy what fell short.",
-    never: "Rebalance never touches your cash or the stocks backing your credit.",
+    never: "Rebalancer never touches your cash or the stocks backing your credit.",
   },
 };
 
@@ -174,16 +174,16 @@ export function protectWarnings(i: { act: ActCard | null; weekend: WeekendCard |
     cards.push({
       key: "act",
       tone: "act",
-      agent: "Protect",
+      agent: "Protector",
       text: "Your credit is in Act.",
-      sub: `${i.act.protectOn ? `Protect steps in at ${LINE}.` : "Protect is off."} Repaying ${formatUsdTrim(i.act.addUsd)} now brings it back to Watch.`,
+      sub: `${i.act.protectOn ? `Protector steps in at ${LINE}.` : "Protector is off."} Repaying ${formatUsdTrim(i.act.addUsd)} now brings it back to Watch.`,
       actions: money,
     });
   if (i.weekend)
     cards.push({
       key: "weekend",
       tone: "watch",
-      agent: "Protect",
+      agent: "Protector",
       text: `Prices pause ${i.weekend.when}. If stocks reopen ${i.weekend.dropPct}% lower, Aave can sell part of them.`,
       sub: `Repaying ${formatUsdTrim(i.weekend.addUsd)} now keeps your credit over Aave’s line.`,
       actions: money,

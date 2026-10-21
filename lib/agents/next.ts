@@ -194,7 +194,8 @@ function protectNext(i: NextInput): Next {
   const label = STATUS_LABEL[status];
   if (d.reason === "healthy") {
     return {
-      idle: status === "safe" ? "Safe. Nothing to do." : `${label}. Protect steps in at ${hfText(i.numbers.triggerHf)}`,
+      idle:
+        status === "safe" ? "Safe. Nothing to do." : `${label}. Protector steps in at ${hfText(i.numbers.triggerHf)}`,
     };
   }
   if (d.reason === "too-small") return { idle: `${label}. Nothing worth repaying yet` };

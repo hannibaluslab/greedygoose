@@ -18,7 +18,7 @@ export const ORDER = [
   { keepMix: true, label: "Keep my mix", sub: "Sells the same share of each stock that backs your credit." },
 ] as const;
 
-const NEVER_SELL_WARNING = "Protect won’t sell it, but Aave still can if your credit goes past its limit.";
+const NEVER_SELL_WARNING = "Protector won’t sell it, but Aave still can if your credit goes past its limit.";
 
 /**
  * Whether Save can go, and the line under it when it can't: not live yet, no network fee, or why the plan is blocked.

@@ -78,7 +78,7 @@ export function protectSteps(
   const start = savedChoice(saved);
   const steps: ProtectStep[] = [];
   if (choice.sellOn && choice.never.length >= EQUITIES.length) {
-    return { steps, blocked: "Leave at least one stock Protect may sell." };
+    return { steps, blocked: "Leave at least one stock Protector may sell." };
   }
   if (choice.sellOn && saved.keepMix !== null && choice.keepMix !== saved.keepMix)
     steps.push({ kind: "keepMix", on: choice.keepMix });
@@ -126,10 +126,10 @@ export function protectAllows(steps: readonly ProtectStep[], line: string, never
   const repays = grants.some((g) => g.job === "protect");
   const sells = grants.some((g) => g.job === "sell");
   const not = never ? `, never ${never}` : "";
-  const repay = `Protect can repay from your cash if your credit falls under ${line}, for a year.`;
+  const repay = `Protector can repay from your cash if your credit falls under ${line}, for a year.`;
   if (!sells) return `${repay} You can turn it off here.`;
   // Selling's grant alone: repaying keeps the grant it has, with its own end.
   if (!repays)
-    return `If cash isn’t enough, Protect can also sell stock that backs your credit${not}, for a year. You can turn it off here.`;
+    return `If cash isn’t enough, Protector can also sell stock that backs your credit${not}, for a year. You can turn it off here.`;
   return `${repay} If cash isn’t enough, it can also sell stock that backs your credit${not}. You can turn it off here.`;
 }

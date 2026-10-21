@@ -205,7 +205,7 @@ describe("executorCashRow: the executor's moves in the cash", () => {
     expect(words(r)[0]).toBe("Why: Dollars other than USDC become cash, at 99.5% of face value or better.");
   });
 
-  it("Protect's repay from the cash", () => {
+  it("Protector's repay from the cash", () => {
     const r = executorCashRow(
       exec({
         kind: "repaid",
@@ -215,20 +215,20 @@ describe("executorCashRow: the executor's moves in the cash", () => {
       }),
     )!;
     expect([r.title, r.line, r.mark]).toEqual([
-      "Protect repaid credit",
+      "Protector repaid credit",
       "−$40.00",
-      { kind: "agent", agent: "Protect" },
+      { kind: "agent", agent: "Protector" },
     ]);
   });
 
-  it("top-ups Rebalance put into the mix, out of the cash", () => {
+  it("top-ups Rebalancer put into the mix, out of the cash", () => {
     const r = executorCashRow(
       exec({ kind: "top-up-invested", amountRaw: usdc(300), boughtRaw: [0n, 0n, 0n, 0n, 0n, 1n, 0n] }),
     )!;
     expect([r.title, r.line, r.mark]).toEqual([
       "Top-ups went into your mix",
       "−$300.00",
-      { kind: "agent", agent: "Rebalance" },
+      { kind: "agent", agent: "Rebalancer" },
     ]);
   });
 
@@ -241,7 +241,7 @@ describe("executorCashRow: the executor's moves in the cash", () => {
       hfAfter: 2n,
     };
     expect(executorCashRow(exec(sold, { cashRaw: [usdc(400), usdc(401.8)] }))).toMatchObject({
-      title: "Protect sold backing stock",
+      title: "Protector sold backing stock",
       line: "+$1.80",
     });
     expect(executorCashRow(exec(sold, { cashRaw: [usdc(400), usdc(400.005)] }))).toBeNull();
@@ -252,9 +252,9 @@ describe("executorCashRow: the executor's moves in the cash", () => {
       boughtRaw: [0n, 0n, 0n, 0n, 0n, 1n, 0n],
     };
     expect(executorCashRow(exec(traded, { cashRaw: [usdc(400), usdc(401.12)] }))).toMatchObject({
-      title: "Rebalance traded",
+      title: "Rebalancer traded",
       line: "+$1.12",
-      mark: { kind: "agent", agent: "Rebalance" },
+      mark: { kind: "agent", agent: "Rebalancer" },
     });
   });
 
@@ -436,7 +436,7 @@ describe("cashRows: the sheet's list", () => {
       ],
       since: T - 7 * day,
     });
-    expect(rows.map((r) => r.title)).toEqual(["Received", "Received", "Sent", "Protect repaid credit"]);
+    expect(rows.map((r) => r.title)).toEqual(["Received", "Received", "Sent", "Protector repaid credit"]);
     expect(rows.filter((r) => r.hash === tx(1))).toHaveLength(1);
 
     const many = Array.from({ length: 9 }, (_, i) =>

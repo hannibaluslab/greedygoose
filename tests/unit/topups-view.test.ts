@@ -34,8 +34,8 @@ function input(over: Partial<TopUpsFacts & TopUpsChoice> = {}): TopUpsFacts & To
 
 const WARNING = {
   kind: "warning",
-  title: "Protect may have nothing to use",
-  line: "You owe $600 and Protect can’t sell. Keep some cash, or let Protect sell.",
+  title: "Protector may have nothing to use",
+  line: "You owe $600 and Protector can’t sell. Keep some cash, or let Protector sell.",
 };
 
 describe("topUpsView: the switch", () => {
@@ -108,7 +108,7 @@ describe("topUpsView: the one note", () => {
     expect(topUpsView(input({ waiting: { usd: 0.004, atSec: WED_NOON + DAY } })).note).toBeNull();
   });
 
-  it("warns only when something is owed, Keep is $0 and Protect can't sell (board 7h)", () => {
+  it("warns only when something is owed, Keep is $0 and Protector can't sell (board 7h)", () => {
     expect(topUpsView(input({ keepUsd: 0, protectSells: false })).note).toEqual(WARNING);
     // Each condition alone off: no warning.
     expect(topUpsView(input({ keepUsd: 0, protectSells: true })).note).toBeNull();
@@ -120,7 +120,7 @@ describe("topUpsView: the one note", () => {
 
   it("says what's owed as Home does, rounded up to the dollar", () => {
     expect(topUpsView(input({ keepUsd: 0, protectSells: false, debtUsd: 1_234.01 })).note?.line).toBe(
-      "You owe $1,235 and Protect can’t sell. Keep some cash, or let Protect sell.",
+      "You owe $1,235 and Protector can’t sell. Keep some cash, or let Protector sell.",
     );
   });
 

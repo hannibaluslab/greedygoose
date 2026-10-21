@@ -48,7 +48,7 @@ export function ProtectSettings({ account, onDone }: { account: `0x${string}`; o
   const live = AGENTS_LIVE;
   const [round, setRound] = useState(0);
   const saving = useProtectSave(account, agents, () => {
-    toast.success("Protect is saved");
+    toast.success("Protector is saved");
     setRound((r) => r + 1); // the screen starts again from what the chain now says
     onDone?.();
   });

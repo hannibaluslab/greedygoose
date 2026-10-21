@@ -52,17 +52,17 @@ function input(over: Partial<NextInput> = {}): NextInput {
 }
 
 describe("agentNexts: each agent's rule on live data", () => {
-  it("is Protect's and Rebalance's only: earning and converting other dollars have no line (D20)", () => {
+  it("is Protector's and Rebalancer's only: earning and converting other dollars have no line (D20)", () => {
     expect(Object.keys(agentNexts(input()))).toEqual(["protect", "rebalance"]);
   });
 
-  it("Protect repays from savings only under 1.03, back to 1.12, and says why it doesn't otherwise", () => {
+  it("Protector repays from savings only under 1.03, back to 1.12, and says why it doesn't otherwise", () => {
     expect(agentNexts(input()).protect).toEqual({ idle: "Safe. Nothing to do." });
     expect(agentNexts(input({ debtUsd: 0 })).protect).toEqual({ idle: "Nothing owed, nothing to do." });
     // $1,400 of power against $1,000 owed is 1.4: Watch is fine.
-    expect(agentNexts(input({ debtUsd: 1_000 })).protect).toEqual({ idle: "Watch. Protect steps in at 1.03" });
+    expect(agentNexts(input({ debtUsd: 1_000 })).protect).toEqual({ idle: "Watch. Protector steps in at 1.03" });
     // Against $1,300 it's 1.077: Act is a warning only (Adrian, 2026-10-19), Protect waits for its line.
-    expect(agentNexts(input({ debtUsd: 1_300 })).protect).toEqual({ idle: "Act. Protect steps in at 1.03" });
+    expect(agentNexts(input({ debtUsd: 1_300 })).protect).toEqual({ idle: "Act. Protector steps in at 1.03" });
     // Against $1,380 it's 1.014, under the line: back to 1.12 needs $130, rounded up to the cent.
     const under = input({ debtUsd: 1_380 });
     expect(agentNexts(under).protect).toEqual({
@@ -75,7 +75,7 @@ describe("agentNexts: each agent's rule on live data", () => {
       would: "Would repay $50.01 from your cash",
     });
     expect(agentNexts(input({ debtUsd: 1_250, rescuing: true })).protect).toEqual({
-      idle: "Watch. Protect steps in at 1.03",
+      idle: "Watch. Protector steps in at 1.03",
     });
     // No cash: a sale follows when selling is on, never while prices are held.
     expect(agentNexts({ ...under, savingsRaw: 0n }).protect).toEqual({ idle: "Act. No cash to repay with" });
@@ -99,7 +99,7 @@ describe("agentNexts: each agent's rule on live data", () => {
       expect(JSON.stringify(n.protect)).not.toMatch(/limit/i);
   });
 
-  it("warns in Act from a plain health check: down to Protect's line while it's on, all the way while it's off", () => {
+  it("warns in Act from a plain health check: down to Protector's line while it's on, all the way while it's off", () => {
     const numbers = defaultNumbers(rebalanceOptions());
     const at = (healthFactor: number | null, debtUsd: number, protectOn = true) =>
       actWarning({ healthFactor, totalBackingUsd: 2_000, avgCf: 0.7, debtUsd, numbers, protectOn });
@@ -132,13 +132,13 @@ describe("agentNexts: each agent's rule on live data", () => {
     });
     // No move with it: Protect waits for its line.
     expect(agentNexts(input({ nowSec: fri, debtUsd: 1_250 })).protect).toEqual({
-      idle: "Watch. Protect steps in at 1.03",
+      idle: "Watch. Protector steps in at 1.03",
     });
     expect(weekendCard(at(fri - 3 * 3600, 1_250))).toBeNull(); // 11:30: not yet
     expect(weekendCard(at(WED_NOON, 1_250))).toBeNull(); // a Wednesday
     expect(weekendCard(at(fri, 1_120))).toBeNull(); // 1.25: −15% leaves 1.0625, over Aave's line
     expect(weekendCard(at(fri, 1_300))).toMatchObject({ addUsd: 209 }); // 1.077, in Act: the card still shows
-    expect(weekendCard(at(fri, 1_380))).toBeNull(); // under Protect's line, Protect acts itself
+    expect(weekendCard(at(fri, 1_380))).toBeNull(); // under Protector's line, Protector acts itself
     expect(weekendCard({ ...at(fri, 1_250), freezeAt: null })).toBeNull(); // the executor's calendar not read yet
   });
 
@@ -164,7 +164,7 @@ describe("agentNexts: each agent's rule on live data", () => {
     expect(beforeFreeze(100 - 3601, 100, 3600)).toBe(false);
   });
 
-  it("Rebalance checks its mix at the next window, trades when a stock breaks its band, and waits while the credit is in Act", () => {
+  it("Rebalancer checks its mix at the next window, trades when a stock breaks its band, and waits while the credit is in Act", () => {
     // Thursday 10:00 New York, in the viewer's own words.
     expect(agentNexts(input()).rebalance).toEqual({
       idle: `On target. Checks ${whenText(Date.UTC(2025, 9, 16, 14) / 1000, WED_NOON)}`,

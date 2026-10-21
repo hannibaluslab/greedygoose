@@ -25,7 +25,7 @@ const off: ProtectSaved = { repayOn: false, sell: null, keepMix: false };
 const sellAll = { limitsRaw: sellLimitsFor(CAP_MAX, PRICES, []) };
 const fullOn: ProtectSaved = { repayOn: true, sell: sellAll, keepMix: false };
 
-describe("Protect's never-sell grant", () => {
+describe("Protector's never-sell grant", () => {
   it("leaves the never-sell stocks out of the sell grant: no approve, no limit", () => {
     const limitsRaw = sellLimitsFor(CAP_MAX, PRICES, [TESLA]);
     expect(limitsRaw[TESLA]).toBe(0n);
@@ -89,7 +89,7 @@ describe("protectSteps", () => {
     ]);
   });
 
-  it("has no limit to change: with Protect on and nothing else changed, there's nothing to save", () => {
+  it("has no limit to change: with Protector on and nothing else changed, there's nothing to save", () => {
     const saved: ProtectSaved = { ...fullOn, sell: null };
     expect(protectSteps(saved, savedChoice(saved), ctx).steps).toEqual([]);
     expect(Object.keys(savedChoice(fullOn))).not.toContain("limitUsd");
@@ -136,7 +136,7 @@ describe("protectSteps", () => {
     const all = EQUITIES.map((e) => e.reserveId);
     expect(protectSteps(fullOn, { ...savedChoice(fullOn), never: all }, ctx)).toEqual({
       steps: [],
-      blocked: "Leave at least one stock Protect may sell.",
+      blocked: "Leave at least one stock Protector may sell.",
     });
   });
 
@@ -186,16 +186,16 @@ describe('protectBatch: a save in one batch, one Face ID (Adrian, 2026-10-20: "i
     expect(protectBatch([])).toBeNull();
   });
 
-  it("says what the Face ID lets Protect do when it grants, never the machinery, and nothing when it doesn't", () => {
+  it("says what the Face ID lets Protector do when it grants, never the machinery, and nothing when it doesn't", () => {
     expect(protectAllows([grantP], "1.03", null)).toBe(
-      "Protect can repay from your cash if your credit falls under 1.03, for a year. You can turn it off here.",
+      "Protector can repay from your cash if your credit falls under 1.03, for a year. You can turn it off here.",
     );
     expect(protectAllows([grantP, grantS], "1.03", "Tesla")).toBe(
-      "Protect can repay from your cash if your credit falls under 1.03, for a year. If cash isn’t enough, it can also sell stock that backs your credit, never Tesla. You can turn it off here.",
+      "Protector can repay from your cash if your credit falls under 1.03, for a year. If cash isn’t enough, it can also sell stock that backs your credit, never Tesla. You can turn it off here.",
     );
     // Selling's grant alone: repaying keeps its own grant and end, so the line says only what this Face ID allows.
     expect(protectAllows([grantS], "1.03", null)).toBe(
-      "If cash isn’t enough, Protect can also sell stock that backs your credit, for a year. You can turn it off here.",
+      "If cash isn’t enough, Protector can also sell stock that backs your credit, for a year. You can turn it off here.",
     );
     expect(protectAllows([{ kind: "revoke", job: "sell" }], "1.03", null)).toBeNull();
     expect(protectAllows([grantP, grantS], "1.03", null)).not.toMatch(/borrow|lock|permission|grant|executor/i);

@@ -109,7 +109,7 @@ function owedRow(ctx: MoveContext) {
 const protectWhy = (hfBefore: bigint): Words =>
   Number(hfBefore) / 1e18 < CASH_AGENT.triggerHf
     ? [`Your credit fell under ${PROTECT_LINE}.`]
-    : [`Protect went on until ${PROTECT_TARGET}.`];
+    : [`Protector went on until ${PROTECT_TARGET}.`];
 
 /**
  * An agent job's name in a sentence, and the agent its rows sit under. Save and Entry are switched on once, where they
@@ -117,16 +117,16 @@ const protectWhy = (hfBefore: bigint): Words =>
  */
 const JOB: Partial<Record<AgentJob, { agent: AgentName; on: string; off: string }>> = {
   protect: {
-    agent: "Protect",
-    on: `Protect is on. If your credit falls under ${PROTECT_LINE}, it repays from your cash.`,
-    off: "Protect is off",
+    agent: "Protector",
+    on: `Protector is on. If your credit falls under ${PROTECT_LINE}, it repays from your cash.`,
+    off: "Protector is off",
   },
   sell: {
-    agent: "Protect",
-    on: "Protect can sell backing stock.",
-    off: "Protect won’t sell",
+    agent: "Protector",
+    on: "Protector can sell backing stock.",
+    off: "Protector won’t sell",
   },
-  rebalance: { agent: "Rebalance", on: "Rebalance is on.", off: "Rebalance is off" },
+  rebalance: { agent: "Rebalancer", on: "Rebalancer is on.", off: "Rebalancer is off" },
 };
 
 /** Why a job was switched off, after its name ("Save is off: …"). */
@@ -154,7 +154,7 @@ const coinAmount = (raw: bigint, decimals: number) => formatCoin(Number(raw) / 1
 /** Protect repaid from the cash: how much, the status it brought, and why. */
 function repaidMove(e: Extract<AgentEvent, { kind: "repaid" }>, ctx: MoveContext): AgentMove {
   return {
-    by: "Protect",
+    by: "Protector",
     line: [`Repaid ${usd(e.amountRaw)} from your cash. `, ...after(e.hfAfter)],
     details: [
       { label: "Why", value: protectWhy(e.hfBefore) },
@@ -169,7 +169,7 @@ function repaidMove(e: Extract<AgentEvent, { kind: "repaid" }>, ctx: MoveContext
 /** Protect sold backing stock to repay: what and how much, the status it brought, and why. */
 function soldMove(e: Extract<AgentEvent, { kind: "sold" }>, ctx: MoveContext): AgentMove {
   return {
-    by: "Protect",
+    by: "Protector",
     line: [`Sold ${worth(e.sharesRaw, ctx.pricesRaw)} of ${names(held(e.sharesRaw))} to repay. `, ...after(e.hfAfter)],
     details: [
       { label: "Why", value: protectWhy(e.hfBefore) },
@@ -223,14 +223,14 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
       return soldMove(e, ctx);
     case "keep-mix":
       return {
-        by: "Protect",
+        by: "Protector",
         line: [e.on ? "Will sell the same share of each stock." : "Will sell for the most safety per dollar."],
         details: [],
       };
     case "mix": {
       const set = e.weightsBps.flatMap((w, r) => (w > 0 ? [[r, w] as const] : [])).sort((a, b) => b[1] - a[1]);
       return {
-        by: "Rebalance",
+        by: "Rebalancer",
         line: [
           set.length
             ? `Your mix: ${set.map(([r, w]) => `${EQUITIES[r].name} ${w / 100}%`).join(", ")}.`
@@ -241,7 +241,7 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
     }
     case "rebalanced":
       return {
-        by: "Rebalance",
+        by: "Rebalancer",
         line: [
           `Sold ${worth(e.soldRaw, ctx.pricesRaw)} of ${names(held(e.soldRaw))}, bought ${worth(e.boughtRaw, ctx.pricesRaw)} of ${names(held(e.boughtRaw))}.`,
         ],
@@ -252,7 +252,7 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
       };
     case "sale-skipped":
       return {
-        by: "Protect",
+        by: "Protector",
         line: ["Couldn’t sell this time: the price was too far from Aave’s."],
         details: [
           { label: "Why", value: ["Each sale must get within 3% of Aave’s price. It tries again on its next run."] },
@@ -260,7 +260,7 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
       };
     case "rebalance-skipped":
       return {
-        by: "Rebalance",
+        by: "Rebalancer",
         line: ["Prices were off today, so it didn’t trade."],
         details: [
           { label: "Why", value: ["Each trade must get close to Aave’s price. It tries again next market day."] },
@@ -283,7 +283,7 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
     case "top-up-invested":
       // Top-ups go into my mix: the savings it took are the cash's own (D15), so the row says what went in and where.
       return {
-        by: "Rebalance",
+        by: "Rebalancer",
         line: [`Put ${usd(e.amountRaw)} of top-ups into your mix.`],
         details: [
           { label: "Why", value: ["Top-ups above what you keep as cash go into your mix."] },
@@ -292,7 +292,7 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
         ],
       };
     case "top-ups-set":
-      return { by: "Rebalance", line: [topUpsSetLine(e)], details: [] };
+      return { by: "Rebalancer", line: [topUpsSetLine(e)], details: [] };
     case "entry-waiting":
     case "run-deferred":
     // Save counting a top-up is under the hood: the money's arrival is its row ("saved"), and it waits to go in.

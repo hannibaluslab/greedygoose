@@ -23,7 +23,7 @@ import { MEASURED_MIX, measuredAccount } from "../measuredAccount";
  * A tap on a card would open Rebalance's sheet; here it only says so.
  */
 
-const OPEN = () => toast("Dev gallery: Rebalance’s sheet opens here");
+const OPEN = () => toast("Dev gallery: Rebalancer’s sheet opens here");
 
 /** Aave's prices, by reserve id: Apple, Amazon, Alphabet, Meta, Microsoft, NVIDIA, Tesla. */
 const PRICES = [250, 220, 180, 700, 500, 180, 400];
@@ -158,7 +158,7 @@ export function RebalanceCards() {
   const real = params.has("as");
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-[390px] flex-col gap-3 bg-ground px-4 pb-10 pt-[calc(env(safe-area-inset-top)+16px)]">
-      <h1 className="m-0 px-1 text-[28px] font-semibold tracking-[-0.03em]">Rebalance card</h1>
+      <h1 className="m-0 px-1 text-[28px] font-semibold tracking-[-0.03em]">Rebalancer card</h1>
       {real && (
         <section className="flex flex-col gap-2">
           <span className="label px-1">This account, live</span>

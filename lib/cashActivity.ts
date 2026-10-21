@@ -58,7 +58,7 @@ const MIN_USD = 0.01;
 export type CashMark =
   | { kind: "cash" }
   | { kind: "stock"; symbol: string }
-  | { kind: "agent"; agent: "Protect" | "Rebalance" };
+  | { kind: "agent"; agent: "Protector" | "Rebalancer" };
 
 type CashDetail = { label: string; value: Words };
 
@@ -287,13 +287,13 @@ export function executorCashRow(m: ExecutorMove): CashRow | null {
     }
     case "repaid":
       return done({
-        mark: { kind: "agent", agent: "Protect" },
-        title: "Protect repaid credit",
+        mark: { kind: "agent", agent: "Protector" },
+        title: "Protector repaid credit",
         usd: -toUsd(e.amountRaw),
       });
     case "top-up-invested":
       return done({
-        mark: { kind: "agent", agent: "Rebalance" },
+        mark: { kind: "agent", agent: "Rebalancer" },
         title: "Top-ups went into your mix",
         usd: -toUsd(e.amountRaw),
       });
@@ -302,8 +302,8 @@ export function executorCashRow(m: ExecutorMove): CashRow | null {
       const up = m.ctx.cashRaw ? m.ctx.cashRaw[1] - m.ctx.cashRaw[0] : 0n;
       if (toUsd(up) < MIN_USD) return null;
       return e.kind === "sold"
-        ? done({ mark: { kind: "agent", agent: "Protect" }, title: "Protect sold backing stock", usd: toUsd(up) })
-        : done({ mark: { kind: "agent", agent: "Rebalance" }, title: "Rebalance traded", usd: toUsd(up) });
+        ? done({ mark: { kind: "agent", agent: "Protector" }, title: "Protector sold backing stock", usd: toUsd(up) })
+        : done({ mark: { kind: "agent", agent: "Rebalancer" }, title: "Rebalancer traded", usd: toUsd(up) });
     }
     default:
       return null;

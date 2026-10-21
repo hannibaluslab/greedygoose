@@ -152,7 +152,7 @@ export function rebalanceSave(p: SaveInput): SavePlan {
  */
 export function savedText(plan: Pick<SavePlan, "mixChanged" | "topUpsChanged" | "needsGrant">, running: boolean) {
   if (plan.mixChanged) return "Your mix is saved";
-  if (plan.needsGrant && !running) return "Rebalance is on";
+  if (plan.needsGrant && !running) return "Rebalancer is on";
   return plan.topUpsChanged ? "Top-ups saved" : "Saved";
 }
 
@@ -179,9 +179,9 @@ const EARNING_ALLOWS = "New cash that arrives moves into savings on its own.";
 export function rebalanceAllows(topUps?: { keepUsd: number }, earning = false): string {
   const into = topUps && (topUps.keepUsd > 0 ? `your top-ups above ${keepText(topUps.keepUsd)}` : "every top-up");
   const can = into
-    ? `Rebalance can trade your stocks toward your mix, and put ${into} into it, for a year.`
-    : "Rebalance can trade your stocks toward your mix, for a year. It never spends your cash.";
-  return earning ? `${can} ${EARNING_ALLOWS} You can turn Rebalance off here.` : `${can} You can turn it off here.`;
+    ? `Rebalancer can trade your stocks toward your mix, and put ${into} into it, for a year.`
+    : "Rebalancer can trade your stocks toward your mix, for a year. It never spends your cash.";
+  return earning ? `${can} ${EARNING_ALLOWS} You can turn Rebalancer off here.` : `${can} You can turn it off here.`;
 }
 
 /** A grant in a change's batch, as useAgents `changePlan` takes it (its GrantStep). */

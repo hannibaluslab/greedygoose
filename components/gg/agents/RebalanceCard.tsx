@@ -55,13 +55,13 @@ export function RebalanceCardView({ model, onOpen }: { model: RebalanceCardModel
     <button
       type="button"
       onClick={onOpen}
-      aria-label={model?.label ?? "Rebalance. Open"}
+      aria-label={model?.label ?? "Rebalancer. Open"}
       aria-busy={!model || undefined}
       className={`${CARD} transition-transform active:scale-[0.98]`}
     >
       <span className="flex h-8 items-center gap-2.5">
-        <AgentMark agent="Rebalance" size={32} />
-        <span className="min-w-0 grow truncate text-[17px] font-semibold">Rebalance</span>
+        <AgentMark agent="Rebalancer" size={32} />
+        <span className="min-w-0 grow truncate text-[17px] font-semibold">Rebalancer</span>
         <RebalancePill model={model} />
         <ChevronRight size={14} className="shrink-0 text-ink-mid" />
       </span>

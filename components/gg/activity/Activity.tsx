@@ -31,8 +31,8 @@ export function ActivityAvatar({ symbol, size }: { symbol: string; size: number 
 
 /** Each agent's round mark: Protect's lime shield (the board's), the others' bone badges. */
 const MARK: Record<Exclude<MoveBy, "Cash">, { Icon: typeof ShieldIcon; bg: string }> = {
-  Protect: { Icon: ShieldIcon, bg: "bg-brand" },
-  Rebalance: { Icon: RebalanceIcon, bg: "bg-card-bone" },
+  Protector: { Icon: ShieldIcon, bg: "bg-brand" },
+  Rebalancer: { Icon: RebalanceIcon, bg: "bg-card-bone" },
   Agents: { Icon: AgentsIcon, bg: "bg-card-bone" },
 };
 

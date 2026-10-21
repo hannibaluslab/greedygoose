@@ -45,10 +45,10 @@ export function earnRiskLine(p: { names: readonly string[]; protect: AgentStatus
   const falls = one ? `If ${one} falls` : "If your stocks fall";
   if (p.protect === "on") {
     return p.sell === "on"
-      ? `${falls}, you can repay from your cash. If your credit falls under ${PROTECT_LINE}, Protect repays from it, then sells a little ${one ?? "of them"} to bring it back to Watch.`
-      : `${falls}, you can repay from your cash. If your credit falls under ${PROTECT_LINE}, Protect repays from it. Protect won’t sell your ${one ? "stock" : "stocks"}.`;
+      ? `${falls}, you can repay from your cash. If your credit falls under ${PROTECT_LINE}, Protector repays from it, then sells a little ${one ?? "of them"} to bring it back to Watch.`
+      : `${falls}, you can repay from your cash. If your credit falls under ${PROTECT_LINE}, Protector repays from it. Protector won’t sell your ${one ? "stock" : "stocks"}.`;
   }
-  const off = p.protect === "off" || p.protect === "unconfigured" ? " Protect is off." : "";
+  const off = p.protect === "off" || p.protect === "unconfigured" ? " Protector is off." : "";
   return `${falls}, repay from your cash. If ${one ? "it falls" : "they fall"} too far, part of ${one ? "it" : "them"} can be sold to repay what you owe.${off}`;
 }
 

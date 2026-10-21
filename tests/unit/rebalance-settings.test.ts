@@ -87,7 +87,7 @@ describe("rebalanceSave", () => {
     });
   });
 
-  it("says what the Face ID lets Rebalance do above Save only while Save grants", () => {
+  it("says what the Face ID lets Rebalancer do above Save only while Save grants", () => {
     const capped = { ...base, terms: { capRaw: usdc(100), limitsRaw: limits } };
     expect(rebalanceSave(capped).allows).toBe(rebalanceAllows());
     expect(rebalanceSave({ ...base, terms: null, running: false }).allows).toBe(rebalanceAllows());
@@ -132,20 +132,20 @@ describe('rebalanceSteps: Save is one batch, one Face ID (Adrian, 2026-10-20: "i
     expect(rebalanceSteps({ ...only, topUpsChanged: false })).toEqual([]);
   });
 
-  it("says what the Face ID lets Rebalance do, and that it never spends cash until top-ups are on", () => {
+  it("says what the Face ID lets Rebalancer do, and that it never spends cash until top-ups are on", () => {
     expect(rebalanceAllows()).toBe(
-      "Rebalance can trade your stocks toward your mix, for a year. It never spends your cash. You can turn it off here.",
+      "Rebalancer can trade your stocks toward your mix, for a year. It never spends your cash. You can turn it off here.",
     );
     expect(rebalanceAllows({ keepUsd: 500 })).toMatch(/put your top-ups above \$500 into it/);
     expect(rebalanceAllows({ keepUsd: 500 })).not.toMatch(/never spends/);
     expect(rebalanceAllows({ keepUsd: 0 })).toMatch(/put every top-up into it/);
   });
 
-  it("ends on the turn-off, naming Rebalance only when earning's words come before it", () => {
+  it("ends on the turn-off, naming Rebalancer only when earning's words come before it", () => {
     expect(rebalanceAllows({ keepUsd: 500 })).toMatch(/for a year\. You can turn it off here\.$/);
     expect(rebalanceAllows({ keepUsd: 0 }, true)).toBe(
-      "Rebalance can trade your stocks toward your mix, and put every top-up into it, for a year. " +
-        "New cash that arrives moves into savings on its own. You can turn Rebalance off here.",
+      "Rebalancer can trade your stocks toward your mix, and put every top-up into it, for a year. " +
+        "New cash that arrives moves into savings on its own. You can turn Rebalancer off here.",
     );
   });
 });
@@ -193,8 +193,8 @@ describe("rebalanceSave: Top-ups go into my mix", () => {
     expect(plan).toMatchObject({ needsGrant: true, steps: 1, canSave: true });
     // Earning's words before the turn-off, which ends the line and names Rebalance; no amount limit (P2).
     expect(plan.allows).toBe(
-      "Rebalance can trade your stocks toward your mix, and put your top-ups above $500 into it, for a year. " +
-        "New cash that arrives moves into savings on its own. You can turn Rebalance off here.",
+      "Rebalancer can trade your stocks toward your mix, and put your top-ups above $500 into it, for a year. " +
+        "New cash that arrives moves into savings on its own. You can turn Rebalancer off here.",
     );
     expect(plan.allows).toBe(rebalanceAllows({ keepUsd: 500 }, true));
     // A new grant with top-ups already on (a stock added to the mix) grants earning too while it's off.
@@ -322,7 +322,7 @@ describe("rebalanceSave: Top-ups go into my mix", () => {
     expect(rebalanceSave({ ...withWithdraw, ...waiting, topUps: { saved: on, chosen: on } }).keeps).toBeNull();
   });
 
-  it("switches top-ups off alone while Rebalance isn't running: the setting only, no grant", () => {
+  it("switches top-ups off alone while Rebalancer isn't running: the setting only, no grant", () => {
     const stopped = { ...base, terms: null, running: false };
     expect(rebalanceSave({ ...stopped, topUps: { saved: on, chosen: off } })).toMatchObject({
       topUpsChanged: true,
@@ -360,17 +360,17 @@ describe("savedText: the toast once a Save lands", () => {
   it("says top-ups are saved for Keep alone or the switch alone", () => {
     expect(savedText({ ...plan, topUpsChanged: true }, true)).toBe("Top-ups saved"); // Keep, no grant
     expect(savedText({ ...plan, topUpsChanged: true, needsGrant: true }, true)).toBe("Top-ups saved"); // the switch
-    expect(savedText({ ...plan, topUpsChanged: true }, false)).toBe("Top-ups saved"); // off alone, Rebalance stopped
+    expect(savedText({ ...plan, topUpsChanged: true }, false)).toBe("Top-ups saved"); // off alone, Rebalancer stopped
   });
 
-  it("says Rebalance is on when the Save turned it on, and Saved for a grant alone", () => {
-    expect(savedText({ ...plan, needsGrant: true }, false)).toBe("Rebalance is on");
-    expect(savedText({ ...plan, topUpsChanged: true, needsGrant: true }, false)).toBe("Rebalance is on");
+  it("says Rebalancer is on when the Save turned it on, and Saved for a grant alone", () => {
+    expect(savedText({ ...plan, needsGrant: true }, false)).toBe("Rebalancer is on");
+    expect(savedText({ ...plan, topUpsChanged: true, needsGrant: true }, false)).toBe("Rebalancer is on");
     expect(savedText({ ...plan, needsGrant: true }, true)).toBe("Saved");
   });
 });
 
-describe("sheetLine: the line under the sheet's title, from Rebalance's card", () => {
+describe("sheetLine: the line under the sheet's title, from Rebalancer's card", () => {
   /** Wednesday 2025-10-15 12:00 New York (16:00 UTC). */
   const WED_NOON = Date.UTC(2025, 9, 15, 16) / 1000;
   const DAY = 86_400;

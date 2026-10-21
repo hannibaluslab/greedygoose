@@ -92,8 +92,8 @@ export function topUpsView(i: TopUpsFacts & TopUpsChoice): TopUpsView {
     i.keepUsd === 0 && i.debtUsd >= 0.01 && !i.protectSells
       ? {
           kind: "warning",
-          title: "Protect may have nothing to use",
-          line: `You owe ${formatUsdTrim(Math.ceil(i.debtUsd))} and Protect can’t sell. Keep some cash, or let Protect sell.`,
+          title: "Protector may have nothing to use",
+          line: `You owe ${formatUsdTrim(Math.ceil(i.debtUsd))} and Protector can’t sell. Keep some cash, or let Protector sell.`,
         }
       : turningOn
         ? { kind: "starts", title: "Starts with your next top-up", line: "The cash you have now stays as it is." }

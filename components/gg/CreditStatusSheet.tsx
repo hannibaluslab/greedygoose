@@ -31,13 +31,13 @@ const SCALE: { key: string; status: Exclude<Status, "none">; range: string; line
     key: "act",
     status: "act",
     range: `Under ${RISK.watchMin}`,
-    line: `A warning. Protect steps in at ${PROTECT_LINE}.`,
+    line: `A warning. Protector steps in at ${PROTECT_LINE}.`,
   },
   {
     key: "protect",
     status: "act",
     range: `Under ${PROTECT_LINE}`,
-    line: "Protect repays from your cash, then sells if needed.",
+    line: "Protector repays from your cash, then sells if needed.",
   },
 ];
 

@@ -58,10 +58,10 @@ export function AgentsGuideSheet({ open, onClose }: { open: boolean; onClose: ()
       description={G.lead}
     >
       <SheetSteps stepKey="agents-guide" className="flex flex-col gap-3 leading-[normal]">
-        <Agent agent="Protect" tag={G.protect.tag} steps={G.protect.steps} note={G.protect.note}>
+        <Agent agent="Protector" tag={G.protect.tag} steps={G.protect.steps} note={G.protect.note}>
           <LevelBar bar={PROTECT_BAR} />
         </Agent>
-        <Agent agent="Rebalance" tag={G.rebalance.tag} steps={G.rebalance.steps} note={G.rebalance.note}>
+        <Agent agent="Rebalancer" tag={G.rebalance.tag} steps={G.rebalance.steps} note={G.rebalance.note}>
           <MixPicture slots={MIX} faded={false} />
         </Agent>
         <p className="m-0 rounded-[22px] bg-card-bone px-[18px] py-4 text-sm leading-5 text-ink">{G.both}</p>
@@ -80,7 +80,7 @@ function Agent({
   note,
   children,
 }: {
-  agent: "Protect" | "Rebalance";
+  agent: "Protector" | "Rebalancer";
   tag: string;
   steps: readonly string[];
   note: string;
