@@ -24,6 +24,7 @@
     "format:check": "prettier --check .",
     "knip": "knip",
     "board:e2e": "tsx scripts/board-e2e.ts",
+    "wall:e2e": "tsx scripts/wall-e2e.ts",
     "check": "npm run lint && npm run typecheck && npm run format:check && npm run knip && npm test"
   },
   "dependencies": {

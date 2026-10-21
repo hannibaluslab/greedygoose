@@ -17,9 +17,11 @@ import {
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { PROTOCOLS } from "@/lib/protocols/config";
+import { gooseBoardAbi } from "./abi";
 import { BOARD_LOG_CHUNK } from "./config";
 import type { BoardRecord } from "./flows";
 import { BOARD_TOKENS } from "./tokens";
+import type { WallJoin, WallSale } from "./wall";
 
 /**
  * The logs the board scores members from, read per 10,000-block chunk for every member at once (no indexer, D12):
@@ -62,6 +64,8 @@ const SAVINGS_REPAY = toEventSelector(savingsEventsAbi[3]);
 const SAVINGS_LIQUIDATION = toEventSelector(savingsEventsAbi[4]);
 const SAVINGS_EVENTS = [SAVINGS_SUPPLY, SAVINGS_WITHDRAW, SAVINGS_BORROW, SAVINGS_REPAY, SAVINGS_LIQUIDATION];
 const SPONSORED = toEventSelector(paymasterEventsAbi[0]);
+const JOINED = toEventSelector(getAbiItem({ abi: gooseBoardAbi, name: "Joined" }));
+const LIQUIDATION = toEventSelector(getAbiItem({ abi: spokeAbi, name: "LiquidationCall" }));
 const TOKEN_ADDRESSES = BOARD_TOKENS.map((t) => t.address);
 
 /** Accounts per topic list: public RPCs take a few dozen OR'd topics comfortably. */
@@ -254,16 +258,14 @@ async function readChunkLogs(client: Client, accounts: readonly Address[], c: Ch
 /* ── the chunk cache ───────────────────────────────────────────────── */
 
 type Stored = { v: 2; records: unknown[] };
-const memory = new Map<string, BoardRecord[]>();
+const memory = new Map<string, unknown[]>();
 // v2: chunks hold Aave V3 credit events too, so v1's are read again.
 const STORAGE_PREFIX = "gg.board.v2:";
 
 // Records hold bigints; storage holds JSON.
-const toJson = (r: BoardRecord) => JSON.parse(JSON.stringify(r, (_k, v) => (typeof v === "bigint" ? `${v}n` : v)));
-const fromJson = (r: unknown) =>
-  JSON.parse(JSON.stringify(r), (_k, v) =>
-    typeof v === "string" && /^-?\d+n$/.test(v) ? BigInt(v.slice(0, -1)) : v,
-  ) as BoardRecord;
+const toJson = (r: unknown) => JSON.parse(JSON.stringify(r, (_k, v) => (typeof v === "bigint" ? `${v}n` : v)));
+const fromJson = (r: unknown): unknown =>
+  JSON.parse(JSON.stringify(r), (_k, v) => (typeof v === "string" && /^-?\d+n$/.test(v) ? BigInt(v.slice(0, -1)) : v));
 
 function hash(s: string): string {
   let h = 2166136261;
@@ -280,9 +282,9 @@ function cacheKey(board: Address, accounts: readonly Address[], c: Chunk) {
   )}`;
 }
 
-function cached(key: string): BoardRecord[] | undefined {
+function cached<T = BoardRecord>(key: string): T[] | undefined {
   const hit = memory.get(key);
-  if (hit) return hit;
+  if (hit) return hit as T[];
   try {
     const raw = globalThis.localStorage?.getItem(STORAGE_PREFIX + key);
     if (!raw) return undefined;
@@ -290,13 +292,13 @@ function cached(key: string): BoardRecord[] | undefined {
     if (stored.v !== 2) return undefined;
     const records = stored.records.map(fromJson);
     memory.set(key, records);
-    return records;
+    return records as T[];
   } catch {
     return undefined;
   }
 }
 
-function keep(key: string, records: BoardRecord[]) {
+function keep<T = BoardRecord>(key: string, records: T[]) {
   memory.set(key, records);
   try {
     globalThis.localStorage?.setItem(
@@ -353,4 +355,58 @@ export async function readBoardRecords(
     }
   }
   return (await pool(jobs)).flat();
+}
+
+/* ── the Wall: who joined and whose stock was sold (lib/board/wall.ts) ── */
+
+/**
+ * GooseBoard's Joined events and Aave V4's LiquidationCall, from logs; anything else is dropped. A sale names the stock
+ * sold (`collateralReserveId`); whether it counts is lib/board/wall.ts's call.
+ */
+export function decodeWallLogs(logs: readonly Log[], board: Address): { joins: WallJoin[]; sales: WallSale[] } {
+  const joins: WallJoin[] = [];
+  const sales: WallSale[] = [];
+  for (const l of logs) {
+    if (isAddressEqual(l.address, board) && l.topics[0] === JOINED) {
+      const [e] = parseEventLogs({ abi: gooseBoardAbi, logs: [l], eventName: "Joined", strict: true });
+      if (e) joins.push({ account: e.args.account, block: l.blockNumber! });
+    } else if (isAddressEqual(l.address, AAVE.SPOKE) && l.topics[0] === LIQUIDATION) {
+      const [e] = parseEventLogs({ abi: spokeAbi, logs: [l], eventName: "LiquidationCall", strict: true });
+      if (e)
+        sales.push({
+          account: e.args.user,
+          block: l.blockNumber!,
+          tx: l.transactionHash!,
+          logIndex: l.logIndex!,
+          stockReserveId: Number(e.args.collateralReserveId),
+        });
+    }
+  }
+  return { joins, sales };
+}
+
+/**
+ * Every join of `board` and every sale on Aave V4's spoke after block `from` up to `head`, one request per 10,000-block
+ * chunk. Sales are rare, so they are read for the whole spoke and matched to members after (lib/board/wall.ts), which
+ * also finds members who left. A settled chunk is read once and kept. Throws if any request fails.
+ */
+export async function readWallRecords(
+  client: Client,
+  board: Address,
+  from: bigint,
+  head: bigint,
+): Promise<{ joins: WallJoin[]; sales: WallSale[] }> {
+  if (from >= head) return { joins: [], sales: [] };
+  type Rec = { joins: WallJoin[]; sales: WallSale[] };
+  const jobs = boardChunks(from + 1n, head).map((c) => async (): Promise<Rec> => {
+    const settled = c.to + SETTLED <= head;
+    const key = `${board.toLowerCase()}:wall:${c.from}-${c.to}`;
+    const hit = settled ? cached<Rec>(key) : undefined;
+    if (hit) return hit[0];
+    const rec = decodeWallLogs(await getLogs(client, [board, AAVE.SPOKE], [[JOINED, LIQUIDATION]], c), board);
+    if (settled) keep(key, [rec]);
+    return rec;
+  });
+  const parts = await pool(jobs);
+  return { joins: parts.flatMap((p) => p.joins), sales: parts.flatMap((p) => p.sales) };
 }

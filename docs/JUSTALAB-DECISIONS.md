@@ -850,3 +850,40 @@ each finding checked by a second reader) found nothing that moves money wrong, a
 `RATE_UNREAD`), `components/gg/stock/useCreditBuyCash.ts` (`sign`, `costText`), `CreditBuyCashStep.tsx`,
 `CreditBuySheet.tsx`, `lib/aave/errors.ts`. **Tests:** `credit-buy-cash` (the gap's sweep, the Cost cell, the failed read,
 the full cap).
+
+## 2026-10-21 · Greedy Fatalities: how the Wall reads
+
+Adrian asked to split the Leaderboard into Heroes (today's board) and the Wall of shame (SPEC's Greedy Fatalities), then
+asked Claude to decide how the Wall reads. This settles SPEC's "ranked by its multiple at the end"; the screens wait for
+their boards.
+
+- **The multiple is Home's leverage at the sale** (`lib/leverage.ts`, what they held ÷ what was theirs). Amounts are
+  read at the end of the block before the sale, valued at Aave's prices in the sale's own block: a liquidator usually
+  lands the sale in the same block as the price update that set it off, and the block before still has the old price
+  (on the fork, 1.73x at the sale's price where the old price read 1.69x). Cash counts as held, so credit kept as cash
+  stays low (the fork's $6,069 of credit kept as cash: 1.73x) and only credit turned into stock nears Aave's ceiling,
+  about 1 ÷ (1 − the stock's collateral factor): 2.9x for Tesla and Meta to 4.8x for Microsoft, a little more after a
+  price jump. The film's 14.2x can't happen; the galleries use real numbers. Nothing of their own left at the sale ranks
+  above every multiple. One row per account, at its highest; ties go to the earlier sale, then by address.
+- **Only Aave V4 sales of a stock count** (`LiquidationCall`'s `collateralReserveId` is one of the seven). Aave V3 sales
+  of savings backing credit drawn in another app never put anyone on the Wall. Heroes still counts their cost.
+- **Leaving doesn't take anyone off.** The Wall reads GooseBoard's whole list, not `listed`: an account on it when the
+  Wall opened counts from the opening, one that joined later from its first `Joined` event, so `leave()` and `join()`
+  again change nothing. Only sales after `NEXT_PUBLIC_WALL_FROM_BLOCK` count, so nobody is named under a rule that wasn't
+  shown yet; unset, there is no Wall. No contract change (GooseBoard has no owner).
+- **Reads:** one `eth_getLogs` per 10,000 blocks for GooseBoard's `Joined` and the spoke's `LiquidationCall` (sales are
+  rare, so the whole spoke's), GooseBoard's list at the opening block, and per sale the member's holdings and the prices
+  (past state). Settled reads are kept in the browser, as the board's are. Any read failing fails the Wall, never a
+  partial one.
+
+**Credit floor, decided the same day, to build next.** Users may take credit down toward Aave's line: 1.05 with Protector
+on (0.02 over its 1.03 line, as 1.12 sits over 1.10 today, so it doesn't sell straight back) and 1.01 with it off. A
+move ending under 1.1 shows the Wall's rule and one tick, which is where the rule is "stated once before the first
+credit". It ships with the Wall, since that line promises it. This will replace "1.12 is the line" and "Nothing the user
+does may end here" (SPEC › Credit health); Protect's target stays 1.12.
+
+**In this repo:** `lib/board/wall.ts` (`wallSince`, `countedSales`, `saleMultiple`, `rankWall`), `lib/board/logs.ts`
+(`decodeWallLogs`, `readWallRecords`), `lib/board/read.ts` (`readWall`; the holdings read is shared with Heroes),
+`lib/board/config.ts` (`WALL_FROM_BLOCK`). **Tests:** `board-wall` (the multiple, who counts and from when, the order,
+the decoder); `scripts/wall-e2e.ts` on a Base fork (a real sale in the price update's block, read by `readWall`; leave
+and join again).
