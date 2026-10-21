@@ -82,7 +82,7 @@ export function AmountField({
             type="button"
             onClick={onMax}
             disabled={rest.disabled}
-            className="h-7 shrink-0 rounded-[14px] bg-[rgba(15,14,11,0.06)] px-2.5 text-xs font-semibold text-ink-mid disabled:opacity-45"
+            className="h-7 shrink-0 rounded-[14px] bg-ink/6 px-2.5 text-xs font-semibold text-ink-mid disabled:opacity-45"
           >
             MAX
           </button>

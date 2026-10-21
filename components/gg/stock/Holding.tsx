@@ -42,7 +42,7 @@ function BacksChip({ backs, compact = false }: { backs: number; compact?: boolea
     ) : (
       <span
         title={words}
-        className="inline-flex h-4 w-5 items-center justify-center rounded-[8px] border border-dashed border-[rgba(14,13,11,0.22)] text-subtle"
+        className="inline-flex h-4 w-5 items-center justify-center rounded-[8px] border border-dashed border-ink/22 text-subtle"
       >
         <FreeIcon />
         <span className="sr-only">{words}</span>
@@ -135,7 +135,7 @@ export function AddStockCard({ href }: { href: string }) {
   return (
     <Tap
       href={href}
-      className="flex w-[111px] shrink-0 flex-col items-center justify-center gap-2 rounded-[22px] border-[1.5px] border-dashed border-[rgba(14,13,11,0.2)] text-xs font-semibold leading-[normal] text-ink-mid"
+      className="flex w-[111px] shrink-0 flex-col items-center justify-center gap-2 rounded-[22px] border-[1.5px] border-dashed border-ink/20 text-xs font-semibold leading-[normal] text-ink-mid"
     >
       <span aria-hidden className="flex size-[30px] items-center justify-center rounded-[15px] bg-pill">
         <PlusIcon size={14} strokeWidth={2.2} />

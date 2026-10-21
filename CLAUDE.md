@@ -154,6 +154,9 @@ be shown for information, labelled as such, and never used for limits.
   board.
 - Tokens live in `app/globals.css` (ink `#0e0d0b`, ground `#f4f2ec`, lime `#d4ff3c`, the Safe, Watch and Act colours).
   Fonts are Geist and Geist Mono (`app/layout.tsx`).
+- Light and dark (`lib/theme.ts`): the dark tokens are the booth app's look, under `[data-theme="dark"]`. Use tokens,
+  never a colour literal: an ink tint is `ink/8`, not `rgba(14,13,11,0.08)`, so it flips. JAW's sheet follows the theme
+  (`jawThemeFor`, `ThemeSync`).
 - Build from the kit (`components/gg/kit/`): Button, AmountField, AssetPicker, SheetShell, Switch. Every picker is the
   AssetPicker. One stock order everywhere (`byStockOrder`).
 - The status always shows its label (Safe, Watch, Act), so colour is never the only signal. Real `<button>`s, never

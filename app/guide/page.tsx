@@ -9,7 +9,7 @@ import { guideContent } from "@/lib/guide/content";
 export default function GuidePage() {
   return (
     <div className="flex min-h-dvh flex-col gap-3.5 px-5 pb-[34px]">
-      <div className="sticky top-0 z-20 -mx-5 bg-[rgba(244,242,236,0.92)] px-5 pb-2 pt-[calc(env(safe-area-inset-top)+8px)] backdrop-blur-md">
+      <div className="sticky top-0 z-20 -mx-5 bg-ground/92 px-5 pb-2 pt-[calc(env(safe-area-inset-top)+8px)] backdrop-blur-md">
         <TabHeader title="Guide" back="/home" />
       </div>
       <GuideView guide={guideContent()} />

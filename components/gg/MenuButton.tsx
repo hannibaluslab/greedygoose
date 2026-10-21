@@ -4,12 +4,22 @@ import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
 import { ActivityIcon, ChevronRight, GearIcon, GuideIcon, MenuIcon } from "./kit/icons";
+import { SegmentedControl } from "./kit/SegmentedControl";
+import { useTheme } from "@/hooks/useTheme";
+import type { ThemePref } from "@/lib/theme";
 
 const ITEMS = [
   { href: "/activity", label: "Activity", Icon: ActivityIcon },
   { href: "/guide", label: "Guide", Icon: GuideIcon },
   { href: "/settings", label: "Settings", Icon: GearIcon },
 ] as const;
+
+/** Light or dark (Adrian, 2026-10-21): follow the phone, or override it on this device. */
+const LOOKS: { value: ThemePref; label: string }[] = [
+  { value: "system", label: "Phone" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+];
 
 /** What a screen puts in its menu besides the links: a card above them, and a dot on the button while it waits. */
 export type MenuExtra = {
@@ -23,7 +33,8 @@ export type MenuExtra = {
 };
 
 /**
- * The header menu (D16): Activity, the Guide and Settings live here, out of the tab bar, and on Home what waits for the
+ * The header menu (D16): Activity, the Guide and Settings live here, out of the tab bar, then Appearance (Phone · Light ·
+ * Dark, lib/theme.ts), and on Home what waits for the
  * user (`extra`: other dollars to turn into cash), with how many over the button while any does (Adrian, 2026-10-20:
  * "a notification point or number over the burger menu icon when something is needed from the user").
  */
@@ -32,6 +43,7 @@ export function MenuButton({ extra }: { extra?: MenuExtra }) {
   const open = extra?.open ?? own;
   const setOpen = extra?.onOpenChange ?? setOwn;
   const waiting = extra?.waiting ?? 0;
+  const { pref, setPref } = useTheme();
   return (
     <>
       <button
@@ -69,6 +81,16 @@ export function MenuButton({ extra }: { extra?: MenuExtra }) {
               </Link>
             ))}
           </nav>
+          <div className="flex items-center justify-between gap-3 rounded-[22px] bg-card py-2.5 pl-4 pr-2.5 shadow-[0_1px_3px_rgba(14,13,11,0.06)]">
+            <span className="text-[15px] font-semibold">Appearance</span>
+            <SegmentedControl
+              label="Appearance"
+              options={LOOKS}
+              value={pref}
+              onChange={setPref}
+              className="w-[196px]"
+            />
+          </div>
         </SheetSteps>
       </SheetShell>
     </>

@@ -88,7 +88,7 @@ export function ToCard({
               aria-label={SEND_COPY.change}
               onClick={onChange}
               disabled={disabled}
-              className="relative grid size-8 shrink-0 place-items-center rounded-full bg-[rgba(15,14,11,0.06)] text-ink-mid transition after:absolute after:-inset-1.5 after:content-[''] active:scale-95 disabled:opacity-45"
+              className="relative grid size-8 shrink-0 place-items-center rounded-full bg-ink/6 text-ink-mid transition after:absolute after:-inset-1.5 after:content-[''] active:scale-95 disabled:opacity-45"
             >
               <CloseIcon size={14} />
             </button>

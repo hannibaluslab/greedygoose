@@ -208,7 +208,7 @@ export function BuySheet({
                   type="checkbox"
                   checked={ack}
                   onChange={(e) => setAck(e.target.checked)}
-                  className="mt-px size-[18px] shrink-0 accent-[#8e2a1d]"
+                  className="mt-px size-[18px] shrink-0 accent-neg"
                 />
                 {creditTick(plan)}
               </label>

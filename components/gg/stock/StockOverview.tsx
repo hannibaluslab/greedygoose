@@ -91,7 +91,7 @@ export function StockPosition({ holding }: { holding: Holding }) {
       <div
         role="img"
         aria-label={`${backsPct}% backs credit, ${freePct}% free`}
-        className="h-1.5 overflow-hidden rounded-[3px] bg-[rgba(14,13,11,0.08)]"
+        className="h-1.5 overflow-hidden rounded-[3px] bg-ink/8"
       >
         <div className="h-1.5 rounded-[3px] bg-ink" style={{ width: `${backsPct}%` }} />
       </div>

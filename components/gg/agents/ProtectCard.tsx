@@ -16,7 +16,7 @@ const PILL: Record<PillTone, string> = {
   on: "bg-pos-soft text-pos",
   neutral: "bg-card-bone text-ink-mid",
   act: "bg-neg-soft text-neg",
-  needs: "bg-[#f8d9bf] text-[#7a360a]",
+  needs: "bg-needs-soft text-needs-ink",
   watch: "bg-watch-soft text-watch-ink",
   working: "bg-brand text-ink",
 };

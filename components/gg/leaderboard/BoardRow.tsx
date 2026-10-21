@@ -53,7 +53,7 @@ export function BoardRowItem({
         aria-current={person.you ? "true" : undefined}
         aria-label={`${person.rank ? `Rank ${person.rank}, ` : ""}${label}${person.contact && !person.you ? ", contact" : ""}: ${value}`}
         className={`flex min-h-[56px] w-full items-center gap-3 px-3.5 py-2 text-left transition ${
-          person.you ? "rounded-[16px] bg-[rgba(212,255,60,0.42)]" : ""
+          person.you ? "rounded-[16px] bg-you-row" : ""
         }`}
       >
         <span className="num w-[22px] shrink-0 text-right font-mono text-[12px] text-ink-mid">

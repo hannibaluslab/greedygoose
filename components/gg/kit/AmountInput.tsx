@@ -32,7 +32,7 @@ export function AmountInput({
       placeholder="0"
       value={value}
       onChange={(e) => onValue(cleanAmount(e.target.value, decimals))}
-      className={`num w-full min-w-0 bg-transparent outline-none focus-visible:outline-none placeholder:text-[rgba(14,13,11,0.2)] ${className}`}
+      className={`num w-full min-w-0 bg-transparent outline-none focus-visible:outline-none placeholder:text-ink/20 ${className}`}
       {...rest}
     />
   );

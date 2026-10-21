@@ -3,15 +3,18 @@ import { jaw } from "@jaw.id/wagmi";
 import type { JawTheme } from "@jaw.id/core";
 import { CHAIN } from "@/lib/chain";
 import type { Rehearsal } from "@/lib/rehearsal";
+import type { Theme } from "@/lib/theme";
 
 const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? "GreedyGoo";
 const ENS_PARENT = process.env.NEXT_PUBLIC_ENS_PARENT ?? "justan.id";
 
 /**
  * JAW's own frames (sign in, sign up, every Review + Face ID sheet) wear the app's ink and lime, so the app and
- * JAW read as one product (Adrian, 2026-10-15). Colours from the goose and the canvas tokens.
+ * JAW read as one product (Adrian, 2026-10-15). Colours from the goose and the canvas tokens. Since 2026-10-21 they
+ * follow the app's theme (lib/theme.ts): this dark one, or JAW_LIGHT, pushed to the connector when it flips
+ * (hooks/useTheme.ts ThemeSync).
  */
-const JAW_THEME = {
+const JAW_DARK = {
   mode: "dark",
   accentColor: "#d4ff3c",
   accentColorForeground: "#0e0d0b",
@@ -40,6 +43,48 @@ const JAW_THEME = {
     identiconTile: "#24221d",
   },
 } as const satisfies JawTheme;
+
+/**
+ * The light app's sheet: its ground, white cards, ink words and the lime Confirm. What arrives reads green, as the
+ * app's gains do: lime words don't read on the ground.
+ */
+const JAW_LIGHT = {
+  mode: "light",
+  accentColor: "#d4ff3c",
+  accentColorForeground: "#0e0d0b",
+  borderRadius: "lg",
+  colors: {
+    background: "#f4f2ec",
+    foreground: "#0e0d0b",
+    card: "#ffffff",
+    cardForeground: "#0e0d0b",
+    popover: "#ffffff",
+    popoverForeground: "#0e0d0b",
+    primary: "#d4ff3c",
+    primaryForeground: "#0e0d0b",
+    secondary: "#ebe6db",
+    secondaryForeground: "#0e0d0b",
+    muted: "#ebe6db",
+    mutedForeground: "#5a564e",
+    accent: "#ebe6db",
+    accentForeground: "#0e0d0b",
+    border: "#e3ddcf",
+    input: "#ffffff",
+    ring: "#0e0d0b",
+    positive: "#1f6a4a",
+    negative: "#8e2a1d",
+    halo: "#d4ff3c",
+    scrim: "#0e0d0b",
+    identiconTile: "#ebe6db",
+  },
+} as const satisfies JawTheme;
+
+/** JAW's sheet for the app's theme. */
+export const jawThemeFor = (theme: Theme): JawTheme => (theme === "dark" ? JAW_DARK : JAW_LIGHT);
+
+/** The theme the page was painted in (lib/theme.ts THEME_BOOT sets it before any script); light on the server. */
+const paintedTheme = (): Theme =>
+  typeof document !== "undefined" && document.documentElement.dataset.theme === "dark" ? "dark" : "light";
 
 /**
  * Development only: the dress rehearsal (scripts/rehearsal/README.md), a local anvil fork of Base with fake money and a
@@ -74,7 +119,7 @@ export const wagmiConfig = createConfig({
           appLogoUrl: process.env.NEXT_PUBLIC_APP_LOGO_URL || null,
           defaultChainId: CHAIN.id,
           ens: ENS_PARENT,
-          theme: JAW_THEME,
+          theme: jawThemeFor(paintedTheme()),
         }),
       ],
   // A fork reads Base's state the first time it is touched, which can take longer than viem's 10 s.

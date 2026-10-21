@@ -24,7 +24,7 @@ export function MixSlider({ name, bps, onChange }: { name: string; bps: number; 
   const pct = bps / 100;
   return (
     <div className="group relative flex h-[22px] grow items-center">
-      <div className="h-1 w-full rounded-[2px] bg-[rgba(15,14,11,0.08)]">
+      <div className="h-1 w-full rounded-[2px] bg-ink/8">
         <div className="h-1 rounded-[2px] bg-ink" style={{ width: `${pct}%` }} />
       </div>
       <span

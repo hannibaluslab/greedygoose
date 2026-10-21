@@ -22,7 +22,7 @@ export function Switch({
       aria-label={label}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative flex h-[31px] w-[51px] shrink-0 items-center rounded-[16px] p-0.5 transition-colors before:absolute before:inset-x-0 before:-inset-y-[7px] disabled:opacity-45 ${checked ? "justify-end bg-ink" : "justify-start bg-[rgba(15,14,11,0.12)]"}`}
+      className={`relative flex h-[31px] w-[51px] shrink-0 items-center rounded-[16px] p-0.5 transition-colors before:absolute before:inset-x-0 before:-inset-y-[7px] disabled:opacity-45 ${checked ? "justify-end bg-ink" : "justify-start bg-ink/12"}`}
     >
       <span
         aria-hidden

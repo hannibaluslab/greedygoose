@@ -59,6 +59,14 @@
   --line-strong: rgba(14, 13, 11, 0.18);
   --line-field: #e3ddcf;
   --line-dark: rgba(255, 255, 255, 0.1);
+  /* A control's outline (the stock picker, Credit Buy's backing rows). */
+  --line-control: #d9d2c3;
+  /* Your own row on the leaderboard. */
+  --you-row: rgba(212, 255, 60, 0.42);
+  /* The toast's pill (its border carries the lime light, .gg-toast-beam). */
+  --toast-bg: #0e0d0b;
+  /* What dims the page under a sheet. */
+  --scrim: rgba(14, 13, 11, 0.45);
 
   /* shadcn semantic names, so radix/vaul primitives inherit the palette unedited. */
   --background: var(--bg-app);
@@ -124,6 +132,8 @@
   --color-line-strong: var(--line-strong);
   --color-line-field: var(--line-field);
   --color-line-dark: var(--line-dark);
+  --color-line-control: var(--line-control);
+  --color-you-row: var(--you-row);
 
   /* Leo's names, same values */
   --color-subtle: var(--ink-mute);
@@ -331,7 +341,7 @@ select {
 .gg-toast-beam {
   border: 2px solid transparent;
   background:
-    linear-gradient(var(--ink), var(--ink)) padding-box,
+    linear-gradient(var(--toast-bg), var(--toast-bg)) padding-box,
     conic-gradient(
         from var(--gg-beam),
         transparent 0turn 0.6turn,
@@ -686,4 +696,103 @@ body.gg-welcome {
   .ggl-z {
     opacity: 0.6;
   }
+}
+
+/*
+ * Dark (Adrian, 2026-10-21): the booth app's look (hannibaluslab/jaw-booth-revamp) — ink ground with lime dots and a
+ * lime glow at the top, glass cards (white 5%) with a white hairline, glass for what was ink, and lime that glows.
+ * `<html data-theme="dark">` is set by lib/theme.ts (the phone's setting, or the menu's Phone · Light · Dark). Tokens
+ * flip here; the few rules after them do what a token can't (a hairline on every card, ink turned to glass).
+ */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-app: #0e0d0b;
+  --bg-app-sub: #16150f;
+  --bg-card: rgba(255, 255, 255, 0.05);
+  --bg-card-elev: rgba(255, 255, 255, 0.07);
+  --bg-card-dark: rgba(255, 255, 255, 0.08);
+  --bg-card-bone: rgba(255, 255, 255, 0.06);
+  --bg-pill: rgba(255, 255, 255, 0.06);
+  --bg-pill-strong: rgba(255, 255, 255, 0.1);
+  --bg-pill-dark: rgba(255, 255, 255, 0.08);
+  --ink: #f5f0e2;
+  --ink-2: #e4dfd1;
+  --ink-mid: #a8a294;
+  --ink-mute: #8a8479;
+  --ink-faint: #55524a;
+  --pos: #7ad49a;
+  --pos-soft: rgba(122, 212, 154, 0.14);
+  --watch: #e2ae4a;
+  --watch-ink: #f0c46c;
+  --watch-soft: rgba(226, 174, 74, 0.15);
+  --neg: #ff7a66;
+  --act-edge: #b8442f;
+  --neg-soft: rgba(255, 122, 102, 0.14);
+  --sell-soft: rgba(255, 122, 102, 0.14);
+  --due-soft: rgba(226, 174, 74, 0.15);
+  --due-ink: #f0c46c;
+  --needs-soft: rgba(255, 160, 100, 0.15);
+  --needs-ink: #ffb07a;
+  --line: rgba(255, 255, 255, 0.1);
+  --line-mid: rgba(255, 255, 255, 0.12);
+  --line-strong: rgba(255, 255, 255, 0.18);
+  --line-field: rgba(255, 255, 255, 0.14);
+  --line-control: rgba(255, 255, 255, 0.16);
+  --you-row: rgba(212, 255, 60, 0.1);
+  --toast-bg: #1c1b17;
+  --bg-sheet: #171612;
+  --scrim: rgba(0, 0, 0, 0.6);
+  --shadow-card-elev: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  --shadow-card-hover: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+[data-theme="dark"] body {
+  background-image:
+    radial-gradient(
+      ellipse 90% 38% at 50% 0%,
+      rgba(212, 255, 60, 0.13) 0%,
+      rgba(212, 255, 60, 0.05) 45%,
+      transparent 75%
+    ),
+    radial-gradient(rgba(212, 255, 60, 0.07) 1px, transparent 1.4px);
+  background-size:
+    100% 100vh,
+    18px 18px;
+  background-repeat: no-repeat, repeat;
+}
+/* Every card is glass with a hairline, whatever shadow it wears in light. */
+[data-theme="dark"] .bg-card,
+[data-theme="dark"] .bg-card-elev,
+[data-theme="dark"] .bg-card-bone {
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+/* What was ink (dark buttons, dark cards) turns to glass; its words stay light (--ink-on-dark doesn't flip). */
+[data-theme="dark"] .bg-ink:not(.gg-toast-beam) {
+  background-color: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+/* Lime glows, and whatever sits on it stays ink. */
+[data-theme="dark"] .bg-brand {
+  box-shadow: 0 0 24px rgba(212, 255, 60, 0.3);
+  --ink: #0e0d0b;
+  --ink-2: #2c2a25;
+  --ink-mid: #2c2a25;
+}
+/* The chosen option of a segmented control stands out of its glass track. */
+[data-theme="dark"] [role="radio"][aria-checked="true"].bg-card {
+  background-color: rgba(255, 255, 255, 0.14);
+}
+[data-theme="dark"] .bg-you-row {
+  box-shadow: inset 0 0 0 1px rgba(212, 255, 60, 0.4);
+}
+/* A sheet rises off the page as the booth's do: the page dims and blurs behind it, and its top edge catches a hairline. */
+[data-theme="dark"] [data-scrim] {
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+[data-theme="dark"] [data-slot="drawer-content"] {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 -24px 60px rgba(0, 0, 0, 0.55);
 }

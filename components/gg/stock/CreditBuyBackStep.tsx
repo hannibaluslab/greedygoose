@@ -153,7 +153,7 @@ export function CreditBuyBackStep({
       // below instead, with why it can't back this yet.
       <div className="flex flex-col gap-3 pt-1">
         <h3 className="label m-0 px-1">Back it with</h3>
-        <div className="flex flex-col items-center gap-1.5 rounded-[16px] border-[1.5px] border-dashed border-[rgba(14,13,11,0.2)] px-5 py-5 text-center">
+        <div className="flex flex-col items-center gap-1.5 rounded-[16px] border-[1.5px] border-dashed border-ink/20 px-5 py-5 text-center">
           <p className="m-0 text-[15px] font-semibold">{NO_CREDIT["no-stocks"]}</p>
           <p className="m-0 text-pretty text-[13px] leading-[1.4] text-ink-mid">{available.line}</p>
           {!canBuyWithCash(data.cash) && (

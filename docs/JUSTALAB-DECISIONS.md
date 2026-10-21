@@ -969,3 +969,26 @@ offsets, where sonner made it overflow to the right). A lime light runs around i
 (`.gg-toast-beam` in `app/globals.css`: a conic gradient on the border box, so sonner keeps its pseudo-elements for
 swiping); with reduced motion it doesn't move. No JAW source for the original animation was found in this machine's
 repos; this is the same effect, built for the pill.
+
+## 2026-10-21 · Dark mode, in the booth's style
+
+Adrian saw a plain dark version ("really ugly"), then asked for the booth app's look (hannibaluslab/jaw-booth-revamp),
+following the phone, with "a switch in the burger menu that overrides the phone and lets JAW know".
+
+- **Phone · Light · Dark** in the menu (`MenuButton`, under the links), Phone by default. The choice lives on this
+  device (`gg.theme`); lost storage means following the phone again. `lib/theme.ts` resolves it; a script in the page
+  sets `<html data-theme>` and the browser bar's colour before the first paint, so a dark page never flashes light.
+- **The booth's look** (`app/globals.css`, `[data-theme="dark"]`): ink ground with lime dots and a lime glow at the
+  top, glass cards (white 5%) with a white hairline, ink turned to glass, lime that glows with ink words on it, Act's
+  red as the booth's #ff7a66, gains a lighter green. Sheets rise off the page: it dims (black 60%) and blurs behind
+  them, they sit a shade lighter with a hairline on their top edge. The goose loader is cream on dark.
+- **JAW's sheet follows:** a light theme (the app's ground, white cards, ink words, the lime Confirm, gains in green)
+  and the dark one it had; `ThemeSync` pushes the theme to JAW's connector (`setTheme`, @jaw.id/wagmi 1.1.13: it
+  re-themes a sheet that's open and the next one) whenever the theme flips, the phone's included.
+- **Hard-coded colours** that a theme couldn't reach now follow it: ink tints as `ink/8`-style opacity, the tab bar's
+  fade, the chart lines, checkbox accents, three new tokens (`--line-control`, `--you-row`, `--toast-bg`, `--scrim`).
+  Light is unchanged.
+
+**In this repo:** `lib/theme.ts`, `hooks/useTheme.ts` (`useTheme`, `ThemeSync`), `app/layout.tsx`, `app/providers.tsx`,
+`lib/jaw/config.ts` (`jawThemeFor`), `components/gg/MenuButton.tsx`, `app/globals.css`, and the colour fixes across
+`components/gg`. **Tests:** `theme` (the rule, and the first-paint script run against a stand-in page).

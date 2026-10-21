@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Check } from "lucide-react";
 import { Toaster } from "sonner";
 import { REHEARSAL, wagmiConfig } from "@/lib/jaw/config";
+import { ThemeSync } from "@/hooks/useTheme";
 
 /** The canvas toast: a dark pill under the status bar, success marked by a lime tick. */
 const TOAST_OFFSET = { top: "calc(env(safe-area-inset-top) + 6px)", left: 20, right: 20 };
@@ -16,6 +17,7 @@ export function Providers({ children }: { children: ReactNode }) {
     <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         {children}
+        <ThemeSync />
         {REHEARSAL && <REHEARSAL.Badge />}
         <Toaster
           position="top-center"

@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { THEME_BOOT } from "@/lib/theme";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "./providers";
 import "./globals.css";
@@ -44,8 +45,15 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    // suppressHydrationWarning: THEME_BOOT sets data-theme on <html> before React hydrates it.
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
+    >
       <body className="min-h-full">
+        {/* Light or dark before the first paint (lib/theme.ts), so a dark page never flashes light. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} />
         {/* Runs during parse, before the browser restores scroll (an effect would be too late).
             Safari restores the previous scroll offset on reload, and with that offset an open sheet
             (useBodyScrollLock pins body at top: -offset) keeps a hit-test region that is stale by

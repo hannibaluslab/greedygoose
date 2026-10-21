@@ -10,15 +10,17 @@ const EYE = "M104.09 35.03 C108.48 26.74 117.75 22.83 128 24.78 C124.58 34.06 11
 /** The same eye, shut: its lower lid as one stroke. */
 const EYE_SHUT = "M104.5 33.5 C111 37.5 120 36.5 127 27";
 
-const INK = "#0e0d0b";
+// Theme colours (lib/theme.ts), set through `style` where every browser reads var(): ink on the light sheet, cream on
+// the dark one, the eye in the sheet's own colour.
+const INK = "var(--ink)";
 const LIME = "#d4ff3c";
-const CREAM = "#f5f0e2";
+const CREAM = "var(--bg-sheet)";
 /** A hairline on the lime parts, so the egg and beak hold their shape on the light sheet. */
 const EDGE = "rgba(14,13,11,0.22)";
 
 /**
  * The GreedyGoo goose, alive, for a wait (Adrian, 2026-10-21: "walk around and jump… or sleeping, something cool and
- * fun"). The mark, in ink on the light sheet, with his lime egg:
+ * fun"). The mark, in ink on the light sheet (cream on the dark one), with his lime egg:
  * - `walk`: he waddles across, legs stepping, then jumps and turns in the air, and walks back. Never lets go of the egg.
  * - `sleep`: as in the film's night: eye shut, slow breathing over his egg, z's drifting up.
  * Pure CSS (globals.css, `ggl-`); with reduced motion he just stands. Decorative: the line beside it says what's waiting.
@@ -43,22 +45,22 @@ export function GooseLoader({ mode = "walk", className = "" }: { mode?: "walk" |
       </defs>
       <g className={walk ? "ggl-waddle" : "ggl-breathe"}>
         <g className={walk ? "ggl-leg-l" : undefined}>
-          <use href={`#${id}-b`} fill={INK} clipPath={`url(#${id}-l)`} />
+          <use href={`#${id}-b`} style={{ fill: INK }} clipPath={`url(#${id}-l)`} />
         </g>
         <g className={walk ? "ggl-leg-r" : undefined}>
-          <use href={`#${id}-b`} fill={INK} clipPath={`url(#${id}-r)`} />
+          <use href={`#${id}-b`} style={{ fill: INK }} clipPath={`url(#${id}-r)`} />
         </g>
-        <use href={`#${id}-b`} fill={INK} clipPath={`url(#${id}-top)`} />
+        <use href={`#${id}-b`} style={{ fill: INK }} clipPath={`url(#${id}-top)`} />
         <path d={BEAK} fill={LIME} stroke={EDGE} strokeWidth="2" strokeLinejoin="round" />
         {walk ? (
-          <path d={EYE} fill={CREAM} />
+          <path d={EYE} style={{ fill: CREAM }} />
         ) : (
-          <path d={EYE_SHUT} fill="none" stroke={CREAM} strokeWidth="4.5" strokeLinecap="round" />
+          <path d={EYE_SHUT} fill="none" style={{ stroke: CREAM }} strokeWidth="4.5" strokeLinecap="round" />
         )}
         <path className="ggl-egg" d={EGG} fill={LIME} stroke={EDGE} strokeWidth="2" />
       </g>
       {!walk && (
-        <g fill={INK} fontFamily="inherit" fontWeight="700">
+        <g style={{ fill: INK }} fontFamily="inherit" fontWeight="700">
           <text className="ggl-z" x="150" y="8" fontSize="64">
             z
           </text>

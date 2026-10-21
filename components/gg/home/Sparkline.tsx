@@ -18,7 +18,8 @@ const LOOK = {
 } as const;
 
 /** `neutral`: a line that isn't the user's money (the market's week before the first stock), so it never reads as a loss. */
-const TONE = { pos: "#1f6a4a", neg: "#8e2a1d", neutral: "#5a564e" } as const;
+// CSS colours, so a theme flips them: set through `style`, where every browser reads var().
+const TONE = { pos: "var(--pos)", neg: "var(--neg)", neutral: "var(--ink-mid)" } as const;
 
 /**
  * The caption's line: Geist Mono 10px in capitals, 0.08em apart, so each character takes 6.8px; 12px tall. The
@@ -125,14 +126,14 @@ export function Sparkline({
         {variant === "hero" && (
           <defs>
             <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor={color} stopOpacity={area} />
-              <stop offset="1" stopColor={color} stopOpacity={0} />
+              <stop offset="0" style={{ stopColor: color }} stopOpacity={area} />
+              <stop offset="1" style={{ stopColor: color }} stopOpacity={0} />
             </linearGradient>
           </defs>
         )}
         <path
           d={`${line} L${last.x.toFixed(2)} ${height} L${xy[0].x.toFixed(2)} ${height} Z`}
-          fill={variant === "hero" ? `url(#${gradientId})` : color}
+          style={{ fill: variant === "hero" ? `url(#${gradientId})` : color }}
           fillOpacity={variant === "hero" ? undefined : area}
         />
         {zero && range > 0 && (
@@ -141,7 +142,7 @@ export function Sparkline({
             x2={w}
             y1={pad.t + (1 - (0 - min) / range) * (height - pad.t - pad.b)}
             y2={pad.t + (1 - (0 - min) / range) * (height - pad.t - pad.b)}
-            stroke="#5a564e"
+            style={{ stroke: "var(--ink-mid)" }}
             strokeOpacity={0.45}
             strokeWidth={1}
             strokeDasharray="3 3"
@@ -151,7 +152,7 @@ export function Sparkline({
         <path
           d={line}
           fill="none"
-          stroke={color}
+          style={{ stroke: color }}
           strokeWidth={stroke}
           strokeLinejoin="round"
           strokeLinecap="round"

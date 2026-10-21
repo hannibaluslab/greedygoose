@@ -29,7 +29,7 @@ export function TabBar() {
       <div
         aria-hidden
         className="pointer-events-none fixed inset-x-0 bottom-0 h-[calc(env(safe-area-inset-bottom)+104px)]"
-        style={{ background: "linear-gradient(to bottom, rgba(244,242,236,0), #f4f2ec 70%)" }}
+        style={{ background: "linear-gradient(to bottom, transparent, var(--bg-app) 70%)" }}
       />
       <nav
         aria-label="Main"

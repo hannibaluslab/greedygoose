@@ -22,7 +22,7 @@ export function RiskTick({
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="mt-px size-[18px] shrink-0 accent-[#0e0d0b]"
+        className="mt-px size-[18px] shrink-0 accent-ink"
       />
       {label}
     </label>

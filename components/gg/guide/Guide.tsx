@@ -141,7 +141,7 @@ function Intro({ guide }: { guide: Guide }) {
           </div>
         ))}
       </dl>
-      <p className="m-0 flex items-center gap-2 border-t border-[rgba(14,13,11,0.1)] pt-3 text-[13px] leading-snug text-ink-2">
+      <p className="m-0 flex items-center gap-2 border-t border-ink/10 pt-3 text-[13px] leading-snug text-ink-2">
         <span aria-hidden className="size-2 shrink-0 rounded-full bg-brand ring-1 ring-ink/25" />
         {guide.approve}
       </p>

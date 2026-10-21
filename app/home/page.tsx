@@ -438,7 +438,7 @@ function Skeleton() {
  */
 function EmptyPortfolio() {
   return (
-    <div className="mb-4 flex grow flex-col items-center justify-center gap-3 rounded-[22px] border-[1.5px] border-dashed border-[rgba(14,13,11,0.2)] px-5 py-5 text-center">
+    <div className="mb-4 flex grow flex-col items-center justify-center gap-3 rounded-[22px] border-[1.5px] border-dashed border-ink/20 px-5 py-5 text-center">
       {/* Compact so it fits above the tab bar (Adrian); the logos name the stocks, so no list under them. */}
       <div aria-hidden className="flex gap-1">
         {EQUITIES.map((e) => (

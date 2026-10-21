@@ -233,7 +233,8 @@ export function SheetShell({
         <div
           aria-hidden
           onClick={() => onOpenChange(false)}
-          className="pointer-events-auto fixed inset-0 z-40 mx-auto max-w-[430px] bg-[rgba(14,13,11,0.45)] animate-in fade-in-0 duration-300"
+          className="pointer-events-auto fixed inset-0 z-40 mx-auto max-w-[430px] bg-(--scrim) animate-in fade-in-0 duration-300"
+          data-scrim=""
         />
       )}
       <Drawer
@@ -312,7 +313,7 @@ export function SheetShell({
                   type="button"
                   aria-label="Close"
                   onClick={() => onOpenChange(false)}
-                  className="ml-1 grid size-8 shrink-0 place-items-center rounded-full bg-[rgba(15,14,11,0.06)] text-ink transition hover:bg-pill-strong touch:active:scale-95"
+                  className="ml-1 grid size-8 shrink-0 place-items-center rounded-full bg-ink/6 text-ink transition hover:bg-pill-strong touch:active:scale-95"
                 >
                   <CloseIcon />
                 </button>

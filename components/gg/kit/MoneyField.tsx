@@ -30,7 +30,7 @@ export function MoneyField({
       value={value}
       disabled={disabled}
       onChange={(e) => onValue(e.target.value)}
-      className="num h-11 w-[120px] shrink-0 rounded-[14px] border-[1.5px] border-[rgba(14,13,11,0.14)] bg-card px-3.5 text-right text-[17px] font-semibold text-ink outline-none placeholder:text-ink-faint focus:border-ink disabled:opacity-45"
+      className="num h-11 w-[120px] shrink-0 rounded-[14px] border-[1.5px] border-ink/14 bg-card px-3.5 text-right text-[17px] font-semibold text-ink outline-none placeholder:text-ink-faint focus:border-ink disabled:opacity-45"
     />
   );
 }

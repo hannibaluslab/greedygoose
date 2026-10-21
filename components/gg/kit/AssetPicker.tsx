@@ -294,7 +294,10 @@ export function AssetPicker({
                       <span className="size-2 rounded-full bg-ink" />
                     </span>
                   ) : (
-                    <span aria-hidden className="size-[22px] shrink-0 rounded-full border-[1.5px] border-[#d9d2c3]" />
+                    <span
+                      aria-hidden
+                      className="size-[22px] shrink-0 rounded-full border-[1.5px] border-line-control"
+                    />
                   )}
                 </button>
               );

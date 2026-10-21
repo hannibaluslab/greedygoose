@@ -12,7 +12,7 @@ import { type Status } from "@/lib/risk/status";
 import { StatusPill } from "./Status";
 import { HealthScore } from "./CreditStatusSheet";
 
-const CASH_DOT = "#1f6a4a";
+const CASH_DOT = "var(--pos)";
 const STOCKS_DOT = "#76b900";
 
 /** Design board "2b · Total balance info" (HomeInfo.dc.html): what the total adds up, and what's left after credit. */
