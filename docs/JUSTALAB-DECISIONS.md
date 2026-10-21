@@ -1066,7 +1066,8 @@ Adrian, later: the owed amount ("−$4.76") is red, the same red as a loss on Ho
 
 ## 2026-10-21 · Home: the labels stay on top
 
-Adrian, from the before/after shots: "it was better above their numbers". The labels-under change is reverted.
+Labels under the figures were tried on Home (before/after shots); Adrian: "it was better above their numbers". They
+stay on top, as the canvas has them.
 
 ## 2026-10-21 · Buttons: bigger words, and what you do, not to what
 

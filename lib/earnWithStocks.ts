@@ -282,7 +282,7 @@ const savingsCall = (c: Call | undefined) => {
   }
 };
 
-/** The credit no more than the plan's limit allows (the 1.12 line), and each stock no more than its free shares. */
+/** The credit no more than the plan's limit allows (the position's line), and each stock no more than its free shares. */
 function assertWithinLimit(review: { creditRaw: bigint; backing: readonly Backing[]; limit: CreditLimit }) {
   if (review.creditRaw > review.limit.maxCreditRaw) throw new Error("Blocked: more credit than the backing allows");
   for (const b of review.backing) {
@@ -297,7 +297,7 @@ function assertWithinLimit(review: { creditRaw: bigint; backing: readonly Backin
  * use, an exact approve to the spoke, the supply and "use as backing", all for the user; then the credit, once, as USDC
  * to the user; then an approve of exactly that credit to Aave V3's pool and its supply into savings for the user,
  * referral code 0, last. Nothing else: no swap, no transfer, no other savings call. The credit is held to the plan's
- * limit (`limit.maxCreditRaw`, the 1.12 line, as assertCreditBuy holds Credit Buy) and each stock to its free shares,
+ * limit (`limit.maxCreditRaw`, the position's line, as assertCreditBuy holds Credit Buy) and each stock to its free shares,
  * so the batch itself never takes more than the screen allowed.
  */
 export function assertEarn(
@@ -372,7 +372,7 @@ export function buildEarnCalls(p: {
   user: Address;
   backing: readonly Backing[];
   creditRaw: bigint;
-  /** The plan's limit: the free shares it read and the most credit that backing allows (the 1.12 line). */
+  /** The plan's limit: the free shares it read and the most credit that backing allows (the position's line). */
   limit: CreditLimit;
   cash: Cash;
 }): Call[] {

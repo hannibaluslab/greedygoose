@@ -44,7 +44,7 @@ const tickLabel = (plan: { intoAct: boolean } | null | undefined) => (plan?.into
 /**
  * The credit sheet (canvas boards 1–8, v2): "You owe" with where it lands; "Pay with | Repay"; then, optionally, "Also
  * free up stocks", the stocks that back credit, ticked and taken out in the same signature as the repay, all under one
- * limit at the 1.12 line. Repay all brings every stock back. A free-up that ends in Watch asks for one tick. The money
+ * limit at the position's line (1.12 until Greedy Fatalities opens). Repay all brings every stock back. A free-up that ends in Watch asks for one tick. The money
  * maths is lib/repay/ (the repay) and lib/freeUpPlan.ts (the free-up); the batch is useRepayWith with its take-outs.
  */
 /**

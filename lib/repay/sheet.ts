@@ -6,7 +6,7 @@ import type { RepayData, RepayHolding, RepaySource } from "./sources";
 
 /*
  * The Repay sheet's free-up part (canvas boards 1–8): the stocks that back credit, ticked under "Also free up stocks"
- * and taken out in the same signature as the repay, all under one limit at the 1.12 line (lib/freeUpPlan.ts). Pure, so
+ * and taken out in the same signature as the repay, all under one limit at the position's line (lib/freeUpPlan.ts). Pure, so
  * the sheet holds no money maths.
  */
 

@@ -215,7 +215,6 @@ async function main() {
   const atSale = saleMultiple(before, await readPrices(client, s.blockNumber));
   const atOldPrice = saleMultiple(before, await readPrices(client, s.blockNumber - 1n));
   const wall = await readWall({ state: client, logs: client, board, from });
-  console.log(wall.rows);
   ok(wall.rows.length === 1, "one row on the Wall");
   ok(wall.rows[0].account.toLowerCase() === SAM.address.toLowerCase(), "it's Sam; Kit had nothing sold");
   ok(wall.rows[0].block === s.blockNumber && wall.rows[0].rank === 1, "at the sale's block, ranked 1");
