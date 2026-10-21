@@ -959,3 +959,13 @@ and a darker red edge 6% (1.03 to Aave's line, 1.0, token `--act-edge`). It was 
 Act on one straight line. Each 0.01 of health in Act now moves the dot about three times as far, and 1.03 sits where
 the edge starts, so the last stretch reads as the brink. One scale everywhere it's drawn: "My credit status", the
 Repay card, Credit Buy's amount step and Protector's card (whose 1.03 mark now meets the edge). **Tests:** `status`.
+
+## 2026-10-21 · Toasts fit their words, with a light around them
+
+Adrian: a short toast sat in a mostly empty pill ("toasts should be dynamic depending on the phrase"), then "use the
+border animation we have in jaw frames like the light that goes around, use the yellow fluo". A toast is now as wide
+as its words, centred, up to the full width (`app/providers.tsx`; on a phone the toaster is held between its two
+offsets, where sonner made it overflow to the right). A lime light runs around its border, one lap in 2.4 s
+(`.gg-toast-beam` in `app/globals.css`: a conic gradient on the border box, so sonner keeps its pseudo-elements for
+swiping); with reduced motion it doesn't move. No JAW source for the original animation was found in this machine's
+repos; this is the same effect, built for the pill.

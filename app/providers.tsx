@@ -40,7 +40,7 @@ export function Providers({ children }: { children: ReactNode }) {
               // font-sans: sonner puts a system font on its toaster; the boards' toast is in Geist. As wide as its words
               // (Adrian, 2026-10-21: a short one sat in a mostly empty pill), centred, up to the full width.
               toast:
-                "inset-x-0 mx-auto flex !w-fit max-w-full min-h-[42px] items-center gap-2.5 rounded-[21px] bg-ink px-4 py-2 font-sans text-[14px] font-semibold text-on-ink shadow-toast has-[[data-icon]]:pl-2.5",
+                "gg-toast-beam inset-x-0 mx-auto flex !w-fit max-w-full min-h-[42px] items-center gap-2.5 rounded-[21px] bg-ink px-4 py-2 font-sans text-[14px] font-semibold text-on-ink shadow-toast has-[[data-icon]]:pl-2.5",
               icon: "shrink-0",
               description: "text-[12.5px] font-normal text-ink-on-dark-dim",
             },

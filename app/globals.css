@@ -315,6 +315,34 @@ select {
 }
 
 /* Motion — short, calm, and off for reduced-motion users (rule above). */
+/* The toast's light (Adrian, 2026-10-21): a lime light runs around the dark pill's border, as on JAW's frames. Drawn
+   in the border itself (a conic gradient on the border box, the pill's ink on the padding box), since sonner uses the
+   toast's ::before and ::after for swiping. Off with reduced motion: the light then rests at the start. */
+@property --gg-beam {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes gg-beam {
+  to {
+    --gg-beam: 1turn;
+  }
+}
+.gg-toast-beam {
+  border: 2px solid transparent;
+  background:
+    linear-gradient(var(--ink), var(--ink)) padding-box,
+    conic-gradient(
+        from var(--gg-beam),
+        transparent 0turn 0.6turn,
+        color-mix(in srgb, var(--brand) 25%, transparent) 0.72turn,
+        color-mix(in srgb, var(--brand) 80%, transparent) 0.85turn,
+        var(--brand) 0.92turn,
+        transparent 0.97turn
+      )
+      border-box;
+  animation: gg-beam 2.4s linear infinite;
+}
 @keyframes gg-fade-in {
   from {
     opacity: 0;
