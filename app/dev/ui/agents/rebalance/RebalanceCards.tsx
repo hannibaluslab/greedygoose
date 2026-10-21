@@ -13,6 +13,7 @@ import {
   type RebalanceCardInput,
   type RebalanceCardModel,
 } from "@/lib/agents/rebalanceCard";
+import { MEASURED_MIX, measuredAccount } from "../measuredAccount";
 
 /*
  * Dev only: Rebalance's overview card in every state, the first that applies, with fixtures run through the app's own
@@ -66,6 +67,8 @@ const counted = (now: number, usd: number): CardTopUps => ({
 
 type Fixture = {
   pcts?: readonly number[];
+  /** Holdings in full, backing credit included; `pcts` otherwise. */
+  holdings?: MixHolding[];
   mixBps?: readonly number[] | null;
   /** What's owed against $2,000 of backing at a 70% factor: $600 is Safe, $1,300 is in Act. */
   debtUsd?: number;
@@ -73,7 +76,7 @@ type Fixture = {
 };
 
 function model(nowSec: number, f: Fixture = {}): RebalanceCardModel | null {
-  const h = holdings(f.pcts ?? ON_TARGET);
+  const h = f.holdings ?? holdings(f.pcts ?? ON_TARGET);
   const mixBps = f.mixBps === undefined ? MIX : f.mixBps;
   const options = rebalanceOptions();
   const outlook = rebalanceOutlook({
@@ -110,6 +113,18 @@ function model(nowSec: number, f: Fixture = {}): RebalanceCardModel | null {
 const DAY = 86_400;
 const STATES: [string, (now: number) => Fixture | "loading"][] = [
   ["On target (board 7a)", () => ({})],
+  [
+    "Held by credit: off target, and the stock that would trade backs credit",
+    () => ({ holdings: measuredAccount(PRICES, 1_000), mixBps: MEASURED_MIX }),
+  ],
+  [
+    "Too small to trade: Adrian’s account, $7.74 of stock (2026-10-21)",
+    () => ({ holdings: measuredAccount(PRICES, 1), mixBps: MEASURED_MIX }),
+  ],
+  [
+    "Ends soon, held by credit",
+    (now) => ({ holdings: measuredAccount(PRICES, 1_000), mixBps: MEASURED_MIX, card: { endsAt: now + 4 * DAY } }),
+  ],
   ["Trades due (Coin hop): NVIDIA past its band", () => ({ pcts: DRIFTED })],
   ["Trades due: a two-stock mix, both past their bands", () => ({ pcts: [0, 0, 0, 0, 0, 70, 30], mixBps: TWO })],
   [

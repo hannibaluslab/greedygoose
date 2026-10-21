@@ -19,7 +19,8 @@ export const inHomeOrder = (rows: readonly MixRow[]): MixRow[] => [...rows].sort
 
 /**
  * A stock as the mix sees it: free shares only (shares backing credit stay put) at Aave's price. `backingRaw`, the
- * shares backing credit, only draws the whole portfolio on Rebalance's card while it's off (`portfolioSlots`).
+ * shares backing credit, never trades: it draws the whole portfolio on Rebalance's card and tells whether credit is
+ * what holds Rebalance back (`wholePortfolio`, `rebalanceOutlook`).
  */
 export type MixHolding = { reserveId: number; freeRaw: bigint; priceRaw: bigint; backingRaw?: bigint };
 

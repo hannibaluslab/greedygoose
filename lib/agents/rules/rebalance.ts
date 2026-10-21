@@ -55,6 +55,28 @@ const sum = (v: readonly bigint[]) => v.reduce((a, b) => a + b, 0n);
 export const bandOf = (weightBps: bigint, o: Pick<RebalanceOptions, "bandBps" | "bandMaxBps">) =>
   min((weightBps * o.bandBps) / BPS, o.bandMaxBps);
 
+/** Where a stock sits against its band: past its top, past its bottom, or inside it (null). */
+export type BandBreak = "over" | "under" | null;
+
+/**
+ * Which stocks break their band, by reserve id, measured exactly as `rebalanceTrades` (and RebalanceRules._primary)
+ * measures it: each mix stock's value against its target share of the mix's stocks, past the smaller of `bandBps` of
+ * the target and `bandMaxBps` points. A stock out of the mix, or a mix that holds nothing, never breaks it.
+ */
+export function bandBreaks(
+  stocks: readonly Pick<RebalanceHolding, "sharesRaw" | "price" | "weightBps">[],
+  o: Pick<RebalanceOptions, "bandBps" | "bandMaxBps">,
+): BandBreak[] {
+  const values = stocks.map((h) => (h.weightBps > 0n ? (h.sharesRaw * h.price) / 10n ** 10n : 0n));
+  const total = sum(values);
+  return stocks.map((h, i) => {
+    if (total === 0n || h.weightBps === 0n) return null;
+    const target = (total * h.weightBps) / BPS;
+    const band = (total * bandOf(h.weightBps, o)) / BPS;
+    return values[i] > target + band ? "over" : values[i] + band < target ? "under" : null;
+  });
+}
+
 /**
  * Match the sides, within the USDC limit: the larger one shrinks, and a trade that falls under the minimum goes, until
  * nothing more drops. Shrinks `sell` and `buy` in place; false when nothing is left to trade.

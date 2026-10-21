@@ -16,6 +16,7 @@ import { nyDay, rebalanceOutlook } from "@/lib/agents/next";
 import { rebalanceCard, type RebalanceCardInput } from "@/lib/agents/rebalanceCard";
 import type { RebalanceTerms } from "@/lib/agents/rebalanceSettings";
 import type { TopUpsChoice, TopUpsFacts, TopUpsSetting } from "@/lib/agents/topUps";
+import { MEASURED_MIX, measuredAccount } from "../measuredAccount";
 
 /*
  * Dev only: Rebalance's sheet in every state, with fixtures run through the app's own rules and words
@@ -55,6 +56,8 @@ type Fixture = {
   title: string;
   /** Free stock by reserve id, % of $10,000. */
   pcts?: readonly number[];
+  /** Adrian's measured account and mix, its dollars times this (measuredAccount), instead of `pcts` and the boards'. */
+  measured?: number;
   /** What's owed against $2,000 of backing at a 70% factor: $600 is Safe, $1,300 is in Act. */
   debtUsd?: number;
   live?: boolean;
@@ -176,6 +179,8 @@ const STATES: Record<string, Fixture> = {
     ],
   },
   "trades-due": { title: "Trades due at the next check", pcts: DRIFTED, topUps: { saved: OFF } },
+  held: { title: "Held by credit: the stock that would trade backs it", measured: 1_000, topUps: { saved: OFF } },
+  "too-small": { title: "Too small to trade: Adrian’s $7.74 (2026-10-21)", measured: 1, topUps: { saved: OFF } },
   paused: {
     title: "Paused: trades due while the credit is in Act",
     pcts: DRIFTED,
@@ -229,8 +234,8 @@ const STATES: Record<string, Fixture> = {
 
 /** Each state's sheet body and pill, from its fixture. */
 function stateOf(nowSec: number, f: Fixture) {
-  const pcts = f.pcts ?? ON_TARGET;
-  const h = holdings(pcts);
+  const h = f.measured ? measuredAccount(PRICES, f.measured) : holdings(f.pcts ?? ON_TARGET);
+  const mix = f.measured ? MEASURED_MIX : MIX;
   const debtUsd = f.debtUsd ?? 600;
   const options = rebalanceOptions();
   const live = f.live ?? true;
@@ -243,7 +248,7 @@ function stateOf(nowSec: number, f: Fixture) {
   const outlook = rebalanceOutlook({
     nowSec,
     holdings: h,
-    mixBps: MIX,
+    mixBps: mix,
     capMaxRaw: CAP_MAX,
     rebalanceDay: 0,
     debtUsd,
@@ -262,7 +267,7 @@ function stateOf(nowSec: number, f: Fixture) {
     cooldownUntil: 0,
     rebalanceDay: 0,
     holdings: h,
-    mixBps: MIX,
+    mixBps: mix,
     options,
     outlook,
     topUps: f.invest
@@ -286,7 +291,7 @@ function stateOf(nowSec: number, f: Fixture) {
   const running = status === "on" || status === "starting";
   const saved = f.topUps?.saved ?? null;
   const terms: RebalanceTerms =
-    f.terms === undefined ? { capRaw: CAP_MAX, limitsRaw: MIX.map(() => 1n), topUps: !!saved?.on } : f.terms;
+    f.terms === undefined ? { capRaw: CAP_MAX, limitsRaw: mix.map(() => 1n), topUps: !!saved?.on } : f.terms;
   const topUps: TopUpsFacts = {
     available: true,
     earningFirst: false,
@@ -312,7 +317,7 @@ function stateOf(nowSec: number, f: Fixture) {
       settings={
         <RebalanceSettingsView
           holdings={h}
-          saved={f.saved ?? MIX}
+          saved={f.saved ?? mix}
           terms={terms}
           capMaxRaw={live ? CAP_MAX : null}
           configured={live}

@@ -14,7 +14,7 @@ import {
 import { isMix, previewTrades, type MixHolding } from "@/lib/agents/mix";
 import { JOBS, readStockLimits, type AgentJob } from "@/lib/agents/permissions";
 import { planProtect, weekendHeadsUp } from "@/lib/agents/rules/protect";
-import type { RebalanceOptions, RebalanceTrade } from "@/lib/agents/rules/rebalance";
+import { bandBreaks, type RebalanceOptions, type RebalanceTrade } from "@/lib/agents/rules/rebalance";
 import { formatUsdTrim } from "@/lib/formatting";
 import { marketState } from "@/lib/market-hours";
 import { STATUS_LABEL, statusFor } from "@/lib/risk/status";
@@ -293,6 +293,8 @@ export type OutlookInput = Pick<
 /**
  * What the Rebalancer does at its next window, for its sheet's line and its card: whether a mix is saved, the trades
  * its rule finds for it on today's free shares, when it looks next, and whether it waits because the credit is in Act.
+ * And the whole portfolio's place against the mix (Adrian, 2026-10-21): "On target" only while all of it, the stock
+ * backing credit too, sits inside its band; when it doesn't and nothing trades, whether credit is what holds it.
  */
 export type RebalanceOutlook = {
   noMix: boolean;
@@ -302,7 +304,19 @@ export type RebalanceOutlook = {
   inAct: boolean;
   /** Trades are due, and the credit is in Act: GooseExecutor's RebalanceJob waits. */
   waitsInAct: boolean;
+  /** The whole portfolio (free stock and stock backing credit) breaks the mix's band, by the rule's own measure. */
+  offTarget: boolean;
+  /**
+   * Nothing trades on the free stock, but the rule would trade if the stock backing credit were free: what holds the
+   * Rebalancer is the credit (it never trades stock that backs it). False when it trades, when the whole portfolio is
+   * on target, or when it would trade nothing even then (each trade under the smallest one).
+   */
+  heldByCredit: boolean;
 };
+
+/** Every stock as if none of it backed credit: free shares plus the shares backing credit. */
+export const wholePortfolio = (holdings: readonly MixHolding[]): MixHolding[] =>
+  holdings.map((h) => ({ ...h, freeRaw: h.freeRaw + (h.backingRaw ?? 0n) }));
 
 export function rebalanceOutlook(i: OutlookInput): RebalanceOutlook {
   const checkAt = rebalanceCheckAt(i.nowSec, i.rebalanceDay);
@@ -311,33 +325,52 @@ export function rebalanceOutlook(i: OutlookInput): RebalanceOutlook {
   const hf = i.debtUsd > 0 ? (i.totalBackingUsd * i.avgCf) / i.debtUsd : Infinity;
   const inAct = hf < RISK.watchMin;
   if (!i.mixBps || !isMix(i.mixBps) || i.mixBps.every((w) => w === 0))
-    return { noMix: true, trades: [], checkAt, inAct, waitsInAct: false };
+    return { noMix: true, trades: [], checkAt, inAct, waitsInAct: false, offTarget: false, heldByCredit: false };
+  const mixBps = i.mixBps;
   const left = i.left.rebalance;
-  const trades = previewTrades({
-    holdings: i.holdings,
-    rows: EQUITIES.map((e) => ({ reserveId: e.reserveId, bps: i.mixBps![e.reserveId] })),
-    capRaw: i.capRaw.rebalance,
-    capMaxRaw: i.capMaxRaw,
-    options: i.numbers.rebalance,
-    left: left
-      ? {
-          usdcRaw: left[0].leftRaw,
-          stocksRaw:
-            readStockLimits(
-              "rebalance",
-              left.map((s) => ({ token: s.token, allowance: s.leftRaw })),
-            ) ?? EQUITIES.map(() => 0n),
-        }
-      : undefined,
-  });
-  return { noMix: false, trades, checkAt, inAct, waitsInAct: trades.length > 0 && inAct };
+  const tradesOn = (holdings: readonly MixHolding[]) =>
+    previewTrades({
+      holdings,
+      rows: EQUITIES.map((e) => ({ reserveId: e.reserveId, bps: mixBps[e.reserveId] })),
+      capRaw: i.capRaw.rebalance,
+      capMaxRaw: i.capMaxRaw,
+      options: i.numbers.rebalance,
+      left: left
+        ? {
+            usdcRaw: left[0].leftRaw,
+            stocksRaw:
+              readStockLimits(
+                "rebalance",
+                left.map((s) => ({ token: s.token, allowance: s.leftRaw })),
+              ) ?? EQUITIES.map(() => 0n),
+          }
+        : undefined,
+    });
+  const trades = tradesOn(i.holdings);
+  const whole = wholePortfolio(i.holdings);
+  const offTarget = bandBreaks(
+    EQUITIES.map((e) => {
+      const h = whole.find((x) => x.reserveId === e.reserveId);
+      return { sharesRaw: h?.freeRaw ?? 0n, price: h?.priceRaw ?? 0n, weightBps: BigInt(mixBps[e.reserveId]) };
+    }),
+    i.numbers.rebalance,
+  ).some((b) => b !== null);
+  const heldByCredit = offTarget && trades.length === 0 && tradesOn(whole).length > 0;
+  return { noMix: false, trades, checkAt, inAct, waitsInAct: trades.length > 0 && inAct, offTarget, heldByCredit };
 }
+
+/** The Rebalancer's rule, said wherever credit is what holds it (its sheet always says it). */
+export const BACKING_RULE = "Stock that backs your credit isn’t rebalanced.";
+/** Off target with nothing to trade, credit or not: every trade it would make is under the smallest one. */
+export const TOO_SMALL = "Off target, but too small to trade.";
 
 /** Rebalance: the trades its rule finds for the saved mix on today's free shares, at the next window. */
 function rebalanceNext(i: NextInput): Next {
   const o = rebalanceOutlook(i);
   if (o.noMix) return { idle: "No mix yet" };
   const when = whenText(o.checkAt, i.nowSec);
+  if (o.trades.length === 0 && o.offTarget)
+    return { idle: (o.heldByCredit ? BACKING_RULE : TOO_SMALL).replace(/\.$/, "") };
   if (o.trades.length === 0) return { idle: `On target. Checks ${when}` };
   if (o.waitsInAct) return { idle: "Waits until your credit is out of Act" };
   const spend = usd(o.trades.filter((t) => t.buy).reduce((a, t) => a + t.amountIn, 0n));

@@ -1,6 +1,20 @@
 import { mixBpsNow, startingMix, type MixHolding } from "@/lib/agents/mix";
-import { nyDay, rebalanceCheckAt, whenText, type RebalanceOutlook } from "@/lib/agents/next";
-import { bandOf, type RebalanceOptions, type RebalanceTrade } from "@/lib/agents/rules/rebalance";
+import {
+  BACKING_RULE,
+  nyDay,
+  rebalanceCheckAt,
+  TOO_SMALL,
+  whenText,
+  wholePortfolio,
+  type RebalanceOutlook,
+} from "@/lib/agents/next";
+import {
+  bandBreaks,
+  bandOf,
+  type BandBreak,
+  type RebalanceOptions,
+  type RebalanceTrade,
+} from "@/lib/agents/rules/rebalance";
 import { investTrades, topUpsReady, type TopUpsState } from "@/lib/agents/rules/topUps";
 import type { AgentStatus } from "@/lib/agents/status";
 import { formatUsdTrim } from "@/lib/formatting";
@@ -8,10 +22,12 @@ import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
 /*
  * Rebalance's card on the Agents overview: one slot per stock in the mix, in Home's order, each with its target on top
- * and its logo placed by how far it sits from its target, measured in its own band, so every stock reads on the same
- * scale whatever its size. The slots of the stocks the next check trades are tinted (sell red, buy green) with a ghost
- * where the logo goes back to. Under it, "On target" and the next check, the top-ups going in or the trades due and
- * when, or the state's words. One pill says what Rebalance itself is doing; the first state that applies wins, in the order of board 7.
+ * and its logo placed by how far the whole portfolio's share of it (free and backing credit, Adrian 2026-10-21) sits
+ * from its target, measured in its own band, so every stock reads on the same scale whatever its size. The slots of
+ * the stocks the next check trades are tinted (sell red, buy green) with a ghost where the logo goes back to; when
+ * nothing trades, a stock past its band is tinted the same way (over red, under green), with no ghost and no label.
+ * Under it, "On target" and the next check, the top-ups going in or the trades due and when, or the state's words.
+ * One pill says what Rebalance itself is doing; the first state that applies wins, in the order of board 7.
  * Nothing on the card can be tapped on its own: the whole card opens Rebalance's sheet. Pure, so the gallery and the
  * tests draw every state with the app's own words.
  */
@@ -32,15 +48,18 @@ export type MixSlot = {
   /** (now − target) ÷ its band: 0 on target, ±1 at its band's edge (+ above), clamped to ±OFFSET_MAX. */
   offset: number;
   side: Side | null;
+  /** Past its band while nothing trades (no `side` anywhere): "over" or "under", by the rule's own measure. */
+  out: BandBreak;
 };
 
 const clamp = (x: number) => Math.min(OFFSET_MAX, Math.max(-OFFSET_MAX, x)) + 0; // + 0: never −0
 
 /**
- * The picture's slots. With a saved mix: its stocks, each placed by its share of the mix's free stock now against its
- * target, in its band (`bandOf`, as the rule measures it); its side comes from `trades`, since the other leg of a trade
- * can buy or sell a stock still inside its band. Before a mix is saved: the stocks held now, at their share now (as
- * the sheet opens on them), all on target. Nothing saved and nothing held: the seven stocks, with no target.
+ * The picture's slots. With a saved mix: its stocks, each placed by its share of the mix's stock in `holdings` now
+ * against its target, in its band (`bandOf`, as the rule measures it); its side comes from `trades`, since the other
+ * leg of a trade can buy or sell a stock still inside its band. With no trades, a stock past its band says which way
+ * (`out`, `bandBreaks`). Before a mix is saved: the stocks held now, at their share now (as the sheet opens on them),
+ * all on target. Nothing saved and nothing held: the seven stocks, with no target.
  */
 export function mixSlots(p: {
   holdings: readonly MixHolding[];
@@ -52,11 +71,21 @@ export function mixSlots(p: {
   if (!mix) {
     const held = startingMix(p.holdings, null);
     if (held.length === 0)
-      return EQUITIES.map((e) => ({ reserveId: e.reserveId, targetBps: null, offset: 0, side: null }));
-    return held.map((r) => ({ reserveId: r.reserveId, targetBps: r.bps, offset: 0, side: null }));
+      return EQUITIES.map((e) => ({ reserveId: e.reserveId, targetBps: null, offset: 0, side: null, out: null }));
+    return held.map((r) => ({ reserveId: r.reserveId, targetBps: r.bps, offset: 0, side: null, out: null }));
   }
   const now = mixBpsNow(p.holdings, mix);
   const sides = new Map(p.trades.map((t) => [t.reserveId, t.buy ? ("buy" as const) : ("sell" as const)]));
+  const outs =
+    p.trades.length === 0
+      ? bandBreaks(
+          EQUITIES.map((e) => {
+            const h = p.holdings.find((x) => x.reserveId === e.reserveId);
+            return { sharesRaw: h?.freeRaw ?? 0n, price: h?.priceRaw ?? 0n, weightBps: BigInt(mix[e.reserveId]) };
+          }),
+          p.options,
+        )
+      : null;
   return EQUITIES.filter((e) => mix[e.reserveId] > 0).map((e) => {
     const target = mix[e.reserveId];
     const band = Number(bandOf(BigInt(target), p.options));
@@ -66,6 +95,7 @@ export function mixSlots(p: {
       targetBps: target,
       offset: clamp(band > 0 ? drift / band : Math.sign(drift) * OFFSET_MAX),
       side: sides.get(e.reserveId) ?? null,
+      out: outs?.[e.reserveId] ?? null,
     };
   });
 }
@@ -76,8 +106,12 @@ export function mixSlots(p: {
  * it's off the card shows what the user owns. Nothing held: the seven stocks, with no target.
  */
 function portfolioSlots(holdings: readonly MixHolding[]): MixSlot[] {
-  const whole = holdings.map((h) => ({ ...h, freeRaw: h.freeRaw + (h.backingRaw ?? 0n) }));
-  return mixSlots({ holdings: whole, mixBps: null, options: { bandBps: 0n, bandMaxBps: 0n }, trades: [] });
+  return mixSlots({
+    holdings: wholePortfolio(holdings),
+    mixBps: null,
+    options: { bandBps: 0n, bandMaxBps: 0n },
+    trades: [],
+  });
 }
 
 /** Up to this many stocks, the card draws its slots bigger (Adrian, 2026-10-20, board 7l). */
@@ -245,8 +279,11 @@ const OFF_WORDS = ["When on, it keeps your mix on target.", "Checks once a marke
 /** The card, or null while the Rebalancer's state loads (the view draws its frame). */
 export function rebalanceCard(i: RebalanceCardInput): RebalanceCardModel | null {
   if (i.live && i.status === "loading") return null;
+  // The whole portfolio against the mix, free stock and stock backing credit (Adrian, 2026-10-21): what the user owns,
+  // even where Rebalance can't trade it.
+  const whole = wholePortfolio(i.holdings);
   const slots = (trades: readonly RebalanceTrade[]) =>
-    mixSlots({ holdings: i.holdings, mixBps: i.mixBps, options: i.options, trades });
+    mixSlots({ holdings: whole, mixBps: i.mixBps, options: i.options, trades });
   const still = slots([]);
   const card = (
     pill: string,
@@ -256,7 +293,8 @@ export function rebalanceCard(i: RebalanceCardInput): RebalanceCardModel | null 
   ): RebalanceCardModel => ({
     pill: { text: pill, tone },
     faded: over.faded ?? false,
-    slots: over.slots ?? still,
+    // A faded picture marks nothing past its band: Rebalance isn't running, so nothing is on its way back.
+    slots: (over.slots ?? still).map((x) => (over.faded ? { ...x, out: null } : x)),
     footer,
     label: `Rebalance, ${pill.toLowerCase()}. ${over.say ?? (footer.kind === "words" ? footer.line1 : "")}`.trim(),
     endsSoon: i.endsAt !== null && i.endsAt - i.nowSec <= ENDS_SOON_SEC,
@@ -301,12 +339,28 @@ export function rebalanceCard(i: RebalanceCardInput): RebalanceCardModel | null 
   // 6. Top-ups going into the mix at the next check, else the trades due then.
   const due = dueFooter(invest, o.trades, when);
   if (due) return card("On", "on", due.footer, { slots: moving, say: due.say });
-  const onTarget = o.noMix ? "No mix yet." : `On target. Checks ${when}.`;
+  // Nothing trades. "On target" only while the whole portfolio sits in its band; past it, what holds Rebalance back:
+  // the credit (it never trades stock that backs it), or every trade it would make is under the smallest one.
+  const held = !o.noMix && o.offTarget;
+  const standing = o.noMix
+    ? "No mix yet."
+    : !held
+      ? `On target. Checks ${when}.`
+      : o.heldByCredit
+        ? BACKING_RULE
+        : TOO_SMALL;
   // 7. Its grant ends within a week.
   if (i.endsAt !== null && i.endsAt - i.nowSec <= ENDS_SOON_SEC)
-    return card("Ends soon", "due", words(`Ends on ${date(i.endsAt)}. Then nothing trades.`, onTarget));
+    return card("Ends soon", "due", words(`Ends on ${date(i.endsAt)}. Then nothing trades.`, standing));
   // On, with no mix saved: nothing to keep on target yet.
-  if (o.noMix) return card("On", "on", words(onTarget));
-  // 8. All good.
+  if (o.noMix) return card("On", "on", words(standing));
+  // 8. Off target, and nothing trades: credit holds it, or the trades would be too small (Adrian, 2026-10-21).
+  if (held) {
+    const [line1, line2] = o.heldByCredit
+      ? [BACKING_RULE, "Repay or free up some to let it trade."]
+      : [TOO_SMALL, `Trades start at ${formatUsdTrim(Number(i.options.minTradeRaw) / 10 ** USDC.decimals)}.`];
+    return card("On", "on", words(line1, line2), { say: `${line1} ${line2}` });
+  }
+  // 9. All good: the whole portfolio is in its band.
   return card("On", "on", { kind: "on-target", next: capital(when) }, { say: `On target. Next check ${when}.` });
 }

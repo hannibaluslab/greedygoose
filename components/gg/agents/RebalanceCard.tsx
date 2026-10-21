@@ -86,12 +86,14 @@ const STEP_PCT = (43.67 / 322) * 100;
 const BAND_PX = 22;
 
 const FILL: Record<Side | "none", string> = { sell: "bg-sell-soft", buy: "bg-pos-soft", none: "bg-ground" };
+/** A slot's tint: the side the next check trades it, else past its band while nothing trades (over red, under green). */
+const fillOf = (s: MixSlot) => FILL[s.side ?? (s.out === "over" ? "sell" : s.out === "under" ? "buy" : "none")];
 const pctText = (bps: number) => `${Number((bps / 100).toFixed(2))}%`;
 
 /**
- * The mix: each stock's target on top, its slot (tinted when the next check sells or buys it), the dashed target line
- * through the slots' middles, a ghost where a traded stock goes back to, its logo placed by its drift in bands, and
- * BUY or SELL under a traded slot. All from the model, so it reads the same at every phone width. With 1–4 stocks
+ * The mix: each stock's target on top, its slot (tinted when the next check sells or buys it, or, when nothing trades,
+ * when it sits past its band), the dashed target line through the slots' middles, a ghost where a traded stock goes
+ * back to, its logo placed by its drift in bands, and BUY or SELL under a traded slot. All from the model, so it reads the same at every phone width. With 1–4 stocks
  * everything is drawn ×1.5 (`mixScale`, board 7l); 5–7 keep the boards' size.
  */
 export function MixPicture({ slots, faded }: { slots: readonly MixSlot[]; faded: boolean }) {
@@ -127,7 +129,7 @@ export function MixPicture({ slots, faded }: { slots: readonly MixSlot[]; faded:
       {slots.map((s, i) => (
         <span
           key={s.reserveId}
-          className={`absolute ${FILL[s.side ?? "none"]}`}
+          className={`absolute ${fillOf(s)}`}
           style={{ ...at(i, slotW / 2), top, width: slotW, height: slotH, borderRadius: slotW / 2 }}
         />
       ))}

@@ -10,6 +10,7 @@ import { useAgents } from "@/hooks/useAgents";
 import { useRebalanceCard } from "@/hooks/useRebalanceCard";
 import { AGENTS_LIVE } from "@/lib/agents/config";
 import type { SheetAction } from "@/lib/agents/list";
+import { BACKING_RULE } from "@/lib/agents/next";
 import type { RebalanceCardModel } from "@/lib/agents/rebalanceCard";
 import { sheetLine } from "@/lib/agents/rebalanceSettings";
 
@@ -19,7 +20,8 @@ import { sheetLine } from "@/lib/agents/rebalanceSettings";
  * into my mix with their Save (RebalanceSettings); and a quiet Turn off Rebalance. What it did lives on the overview.
  * Turn off and Renew go through the Agents page's runner (`onAction`), as Protect's sheet does, each one batch, one
  * Face ID (useAgents `changePlan`); Finish too (`finish`), which stands where the line is while JAW granted it and the
- * executor doesn't run it yet.
+ * executor doesn't run it yet. Under the line, always, its rule: stock that backs credit isn't rebalanced (Adrian,
+ * 2026-10-21), unless the line already says it.
  */
 
 export function RebalanceSheet({
@@ -115,6 +117,9 @@ export function RebalanceSheetBody({
         </p>
       ) : (
         <span aria-hidden className="h-[19px] w-3/4 animate-pulse rounded-md bg-chip" />
+      )}
+      {!line?.text.includes(BACKING_RULE) && (
+        <p className="m-0 -mt-1.5 px-0.5 text-[13px] leading-[18px] text-ink-mid">{BACKING_RULE}</p>
       )}
 
       {settings}

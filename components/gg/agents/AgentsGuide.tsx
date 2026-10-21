@@ -43,9 +43,9 @@ const PROTECT_BAR = {
 
 /** Apple short of its 30%, NVIDIA past its 50%, Tesla on its 20%. */
 const MIX: MixSlot[] = [
-  { reserveId: 0, targetBps: 3_000, offset: -1, side: "buy" },
-  { reserveId: 5, targetBps: 5_000, offset: 1, side: "sell" },
-  { reserveId: 6, targetBps: 2_000, offset: 0, side: null },
+  { reserveId: 0, targetBps: 3_000, offset: -1, side: "buy", out: null },
+  { reserveId: 5, targetBps: 5_000, offset: 1, side: "sell", out: null },
+  { reserveId: 6, targetBps: 2_000, offset: 0, side: null, out: null },
 ];
 
 export function AgentsGuideSheet({ open, onClose }: { open: boolean; onClose: () => void }) {

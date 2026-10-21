@@ -127,8 +127,8 @@ describe("mixSlots: each mix stock placed by its drift, in its own band", () => 
   it("before a mix is saved, draws the stocks held now at their share now, on target; with nothing held, the seven", () => {
     const held = mixSlots({ holdings: holdings([0, 0, 0, 0, 0, 75, 25]), mixBps: null, options, trades: [] });
     expect(held).toEqual([
-      { reserveId: 5, targetBps: 7_500, offset: 0, side: null },
-      { reserveId: 6, targetBps: 2_500, offset: 0, side: null },
+      { reserveId: 5, targetBps: 7_500, offset: 0, side: null, out: null },
+      { reserveId: 6, targetBps: 2_500, offset: 0, side: null, out: null },
     ]);
     const none = mixSlots({
       holdings: holdings([0, 0, 0, 0, 0, 0, 0]),
@@ -156,6 +156,8 @@ describe("rebalanceOutlook: the sheet's line and the card share it", () => {
       checkAt: rebalanceCheckAt(WED_NOON, 0),
       inAct: false,
       waitsInAct: false,
+      offTarget: false,
+      heldByCredit: false,
     });
     expect(rebalanceOutlook(outlookIn({ mixBps: null }))).toMatchObject({ noMix: true, trades: [] });
     const drifted = rebalanceOutlook(outlookIn({ holdings: holdings(DRIFTED) }));
@@ -256,14 +258,14 @@ describe("rebalanceCard: the first state that applies, in board 7's order, with 
           : 0n,
     }));
     const owned = [
-      { reserveId: 0, targetBps: 2_500, offset: 0, side: null },
-      { reserveId: 2, targetBps: 2_500, offset: 0, side: null },
-      { reserveId: 5, targetBps: 2_500, offset: 0, side: null },
-      { reserveId: 6, targetBps: 2_500, offset: 0, side: null },
+      { reserveId: 0, targetBps: 2_500, offset: 0, side: null, out: null },
+      { reserveId: 2, targetBps: 2_500, offset: 0, side: null, out: null },
+      { reserveId: 5, targetBps: 2_500, offset: 0, side: null, out: null },
+      { reserveId: 6, targetBps: 2_500, offset: 0, side: null, out: null },
     ];
     expect(card({ status: "off", holdings: held }).slots).toEqual(owned);
     expect(card({ live: false, holdings: held }).slots).toEqual(owned);
-    // On, it still draws the mix it keeps: free shares against their targets.
+    // On, it draws the mix it keeps: the whole portfolio, backing shares too, against the targets.
     expect(card({ holdings: held }).slots.map((x) => x.reserveId)).toEqual([0, 1, 2, 3, 4, 5, 6]);
   });
 
