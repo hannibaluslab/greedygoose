@@ -20,6 +20,8 @@ type CashStepTx = {
   error: string | null;
   checking: boolean;
   blocked: boolean;
+  /** JAW's sheet open or the batch confirming: the amount waits, as a send's or a trade's does. */
+  busy?: boolean;
   onSign: () => void;
 };
 
@@ -41,6 +43,7 @@ export function CreditBuyCashStep({
   amount,
   plan,
   quote,
+  costText,
   blocker,
   ready,
   protect,
@@ -62,6 +65,8 @@ export function CreditBuyCashStep({
   amount: number;
   plan: CreditPlan;
   quote: ToCashQuote;
+  /** The Cost cell's rate (costCellText); the gallery leaves it to the quote. */
+  costText?: string;
   blocker: string | null;
   ready: boolean;
   protect: AgentStatus;
@@ -73,7 +78,7 @@ export function CreditBuyCashStep({
   signable: boolean;
   tx: CashStepTx;
 }) {
-  const cost = quote.cost === null ? "…" : pctText(quote.cost);
+  const cost = costText ?? (quote.cost === null ? "…" : pctText(quote.cost));
   const lead = chosen?.stock.symbol;
   const names = backers(data.holdings, pick.raw > 0n && lead ? [lead] : [], lead).map((h) => h.name);
 
@@ -109,6 +114,7 @@ export function CreditBuyCashStep({
           </span>
         }
         autoFocus
+        disabled={tx.busy}
       />
       <AmountArrow />
       <YouGetCash usd={amount} line={toCashLine(quote.earn)} />

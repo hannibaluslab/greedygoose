@@ -44,7 +44,7 @@ export * from "./earnWithStocks/copy";
  * exact. The epsilon keeps a rate that is exactly on a tenth (4.1%) from rounding the wrong way in floating point.
  */
 export const earnTenths = (apy: number) => Math.floor(apy * 1000 + 1e-6);
-const costTenths = (apy: number) => Math.ceil(apy * 1000 - 1e-6);
+export const costTenths = (apy: number) => Math.ceil(apy * 1000 - 1e-6);
 /** Tenths of a point as on screen: 41 → "4.1%". */
 export const pctText = (tenths: number) => `${(tenths / 10).toFixed(1)}%`;
 

@@ -1,4 +1,4 @@
-import { decodeAbiParameters, decodeErrorResult, isAddressEqual, toFunctionSelector, type Hex } from "viem";
+import { decodeAbiParameters, decodeErrorResult, isAddressEqual, parseAbi, toFunctionSelector, type Hex } from "viem";
 import { spokeAbi } from "./abis/ISpoke";
 import { hubAbi } from "./abis/IHub";
 import { swapOf } from "@/lib/allowlist";
@@ -18,7 +18,14 @@ const PLAIN: Record<string, string> = {
   InsufficientLiquidity: "Aave doesn’t have enough USDC right now. Try a smaller amount.",
   MustNotLeaveDust: "That would leave a tiny amount behind. Repay all, or a little less.",
   MaximumUserReservesExceeded: "You’ve reached Aave’s limit on how many markets one account can use.",
+  SupplyCapExceeded: "Aave can’t take more cash into savings right now. Try again later.",
 };
+
+/**
+ * Aave V3 savings' own revert when its USDC supply cap is full (Pool.supply, measured on Base 2026-10-21: 0xf58f733a).
+ * The V4 spoke and hub ABIs don't carry it, so without it a full cap read as the caller's fallback.
+ */
+const savingsErrorsAbi = parseAbi(["error SupplyCapExceeded()"]);
 
 /**
  * GooseExecutor's reasons for refusing a registration, as a turn-on says them (lib/agents/register.ts): the batch that
@@ -113,7 +120,7 @@ export function explainRevert(raw: Hex | undefined, fallback: string, call?: { t
       return fallback;
     }
   }
-  for (const abi of [spokeAbi, hubAbi]) {
+  for (const abi of [spokeAbi, hubAbi, savingsErrorsAbi]) {
     try {
       const { errorName } = decodeErrorResult({ abi, data });
       return PLAIN[errorName] ?? fallback;

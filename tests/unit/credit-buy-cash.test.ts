@@ -15,7 +15,16 @@ import {
   type BackingPick,
   type CreditPosition,
 } from "@/lib/creditBuy";
-import { cashRowLine, gapLine, toCashLine, toCashQuote, toCashStop } from "@/lib/creditBuy/toCash";
+import {
+  RATE_UNREAD,
+  cashRowLine,
+  costCellText,
+  gapLine,
+  toCashLine,
+  toCashQuote,
+  toCashStop,
+} from "@/lib/creditBuy/toCash";
+import { explainRevert } from "@/lib/aave/errors";
 import { assertEarn } from "@/lib/earnWithStocks";
 import { aaveV3PoolAbi } from "@/lib/protocols/abis";
 import { PROTOCOLS } from "@/lib/protocols/config";
@@ -95,6 +104,50 @@ describe("Credit Buy's Cash row: the rates and the gap", () => {
     expect(gapLine(3, 1_250)).toBe("Earns 0.3% a year more than it costs, about $3 a year. Both rates are variable.");
     expect(gapLine(-2, 0)).toBe("Costs 0.2% a year more than it earns. Both rates are variable.");
     expect(gapLine(0, 500)).toBe("Costs about what it earns. Both rates are variable.");
+  });
+
+  it("the gap line's dollars are exact on whole amounts (review 2026-10-21: 1.7% of $3,000 read $52)", () => {
+    expect(gapLine(-17, 3_000)).toBe(
+      "Costs 1.7% a year more than it earns, about $51 a year. Both rates are variable.",
+    );
+    expect(gapLine(9, 3_000)).toBe("Earns 0.9% a year more than it costs, about $27 a year. Both rates are variable.");
+    expect(gapLine(18, 1_500)).toBe("Earns 1.8% a year more than it costs, about $27 a year. Both rates are variable.");
+    expect(gapLine(-18, 3_500)).toBe(
+      "Costs 1.8% a year more than it earns, about $63 a year. Both rates are variable.",
+    );
+    // Over the sweep the review ran, a cost is always rounded up and a gain down from the exact figure.
+    for (let gap = 1; gap <= 60; gap++)
+      for (let usd = 100; usd <= 20_000; usd += 100) {
+        const exact = (gap * usd) / 1000;
+        expect(gapLine(-gap, usd)).toContain(
+          exact < 1 ? "under $1" : `about $${Math.ceil(exact - 1e-6).toLocaleString("en-US")} a year`,
+        );
+        expect(gapLine(gap, usd)).toContain(
+          exact < 1 ? "under $1" : `about $${Math.floor(exact + 1e-6).toLocaleString("en-US")} a year`,
+        );
+      }
+  });
+
+  it("the Cost cell: the cost once read, today's rate while blocked, a dash when the read failed, … while it's read", () => {
+    const read = quote(100, LIVE.creditApy + 0.002);
+    const reading = quote(100, null);
+    expect(costCellText(read, { failed: false, blocked: false, apyNow: LIVE.creditApy })).toBe("4.8%");
+    expect(costCellText(reading, { failed: false, blocked: false, apyNow: LIVE.creditApy })).toBe("…");
+    expect(costCellText(reading, { failed: false, blocked: true, apyNow: 0.0396 })).toBe("4.0%");
+    expect(costCellText(reading, { failed: true, blocked: true, apyNow: 0.0396 })).toBe("—");
+    expect(RATE_UNREAD).not.toMatch(/borrow|loan|lock|collateral|room|—/i);
+  });
+
+  it("a failed rate read is no cost: the Cash row can't be signed on today's rate (review 2026-10-21)", () => {
+    const q = quote(100, null);
+    expect(q.cost).toBeNull();
+    expect(toCashStop(q, false)).toBe("One moment…");
+  });
+
+  it("Aave V3 savings' full supply cap says so, not the caller's fallback (0xf58f733a, measured on Base)", () => {
+    expect(explainRevert("0xf58f733a", "fallback")).toBe(
+      "Aave can’t take more cash into savings right now. Try again later.",
+    );
   });
 
   it("the words: the row's line, where it goes, no banned words, no em dash", () => {

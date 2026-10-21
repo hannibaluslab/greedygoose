@@ -829,3 +829,24 @@ real sheet now.
 **Tests:** `rebalancer-held` (each block, the free-stock picture, Paused untinted, nothing owed and Act), `clock`
 (`atText` for the weekend freeze), `agents-guide` (the check on four clocks and a clock-change week), `agent-feed` (the
 date on a retry past midnight).
+
+## 2026-10-21 · Credit Buy's Cash row after review
+
+Before it went to production (Adrian: "Deploy"), a review of the Cash row (money path, screens, the fit with main, tests,
+each finding checked by a second reader) found nothing that moves money wrong, and five things on screen:
+
+- **A failed rate read blocks.** When the simulation that reads what this credit costs fails, `useEarnRates` falls back to
+  today's rate; Earn with stocks keeps that (it's closed while credit costs more), but the Cash row shows the cost before
+  the tap, and today's rate understates it (the credit raises the rate it's taken at). It now reads `failed`, shows no
+  cost ("—" in the Cost cell) and says "Couldn’t read what this credit costs. Try again in a moment."
+- **The toast says the amount signed**, kept at the tap, not what the field says when it lands; and the field and MAX wait
+  while JAW's sheet is open or the batch confirms, as a send's and a trade's do.
+- **A blocked amount shows today's rate** in the Cost cell, as the stock route does, instead of "…" that never resolves.
+- **The gap's dollars are exact:** tenths × dollars ÷ 1,000 with earnTenths' epsilon (1.7% of $3,000 read "$52").
+- **A full savings cap says so:** Aave V3's `SupplyCapExceeded()` (0xf58f733a, measured on Base) reads "Aave can’t take
+  more cash into savings right now. Try again later." for every savings supply, where it fell back to the caller's words.
+
+**In this repo:** `hooks/useEarnWithStocks.ts` (`failed`), `lib/creditBuy/toCash.ts` (`gapLine`, `costCellText`,
+`RATE_UNREAD`), `components/gg/stock/useCreditBuyCash.ts` (`sign`, `costText`), `CreditBuyCashStep.tsx`,
+`CreditBuySheet.tsx`, `lib/aave/errors.ts`. **Tests:** `credit-buy-cash` (the gap's sweep, the Cost cell, the failed read,
+the full cap).

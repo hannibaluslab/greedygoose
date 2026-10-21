@@ -43,7 +43,7 @@ export function useEarnOffer(account: `0x${string}`, data: PositionData, open: b
  * What credit costs once this batch lands, as an APY: the batch simulated from the user (eth_simulateV1) with the
  * account's risk premium and the Hub's drawn rate read after it, 400 ms after the amount or the backing stops changing.
  * `apyAfter` is null while it's read; if the read fails it's today's rate (the batch is simulated again before JAW's
- * sheet).
+ * sheet), and `failed` says so: the Cash row of Credit Buy shows the cost before the tap, so it blocks instead.
  */
 export function useEarnRates(p: {
   user: `0x${string}`;
@@ -84,8 +84,11 @@ export function useEarnRates(p: {
       return aprToApy(creditApr(drawn, premium));
     },
   });
-  if (p.creditRaw <= 0n) return { apyAfter: p.apyNow };
-  return { apyAfter: q.isError ? p.apyNow : settled === key && q.data !== undefined ? q.data : null };
+  if (p.creditRaw <= 0n) return { apyAfter: p.apyNow, failed: false };
+  return {
+    apyAfter: q.isError ? p.apyNow : settled === key && q.data !== undefined ? q.data : null,
+    failed: q.isError,
+  };
 }
 
 const EARN_FAILED = "Earn with stocks didn’t go through on Base. Nothing moved except any network fee.";

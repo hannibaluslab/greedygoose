@@ -12,7 +12,7 @@ import { useSigningCash } from "@/hooks/useSigningCash";
 import { useTx } from "@/hooks/useTx";
 import { aprToApy } from "@/lib/aave/math";
 import { CREDIT_BLOCKED, type BackingOption, type CreditPlan } from "@/lib/creditBuy";
-import { toCashQuote } from "@/lib/creditBuy/toCash";
+import { costCellText, RATE_UNREAD, toCashQuote } from "@/lib/creditBuy/toCash";
 import { earnDone } from "@/lib/earnWithStocks";
 import { toCashPlan } from "@/lib/tx/plans";
 
@@ -66,7 +66,8 @@ export function useCreditBuyCash({
     debtUsd: data.debtUsd,
     cashApy: aprToApy(data.savingsApr),
     creditApyNow: apyNow,
-    creditApyAfter: rates.apyAfter,
+    // A failed read is no cost: today's rate would understate it (the credit raises the rate it's taken at).
+    creditApyAfter: rates.failed ? null : rates.apyAfter,
   });
 
   const blocker = pickGone
@@ -75,7 +76,10 @@ export function useCreditBuyCash({
       ? overReach(chosen, reachUsd)
       : amount > 0 && plan.block
         ? CREDIT_BLOCKED[plan.block]
-        : null;
+        : amount > 0 && rates.failed
+          ? RATE_UNREAD
+          : null;
+  const costText = costCellText(quote, { failed: rates.failed, blocked: !!blocker, apyNow });
   const ready = amount > 0 && !blocker && quote.cost !== null;
   const feeBlocked = isConnected && fee.state === "unsupported";
   const signable =
@@ -83,6 +87,14 @@ export function useCreditBuyCash({
       ? { user, quote, confirmedRisk: ack }
       : null;
   const tx = useTx(TO_CASH_FAILED, signable ? toCashPlan(signable, cashToSign) : null);
+
+  // The amount JAW's sheet signs, kept at the tap: the toast says that, not what the field says when it lands.
+  const sentUsd = useRef(0);
+  const sign = () => {
+    sentUsd.current = quote.amountUsd;
+    if (tx.phase !== "idle") tx.reset();
+    void tx.sign();
+  };
 
   // Once it lands, Home on the re-read cash, and the toast says it's earning. Once per batch.
   const router = useRouter();
@@ -92,17 +104,19 @@ export function useCreditBuyCash({
     landed.current = true;
     onClose();
     router.push("/home");
-    toast.success(earnDone(quote.amountUsd));
-  }, [tx.phase, onCashStep, onClose, router, quote.amountUsd]);
+    toast.success(earnDone(sentUsd.current));
+  }, [tx.phase, onCashStep, onClose, router]);
 
   return {
     quote,
+    costText,
     blocker,
     ready,
     feeBlocked,
     feeLoading: fee.loading,
     isConnected,
     signable: !!signable,
+    sign,
     tx,
   };
 }

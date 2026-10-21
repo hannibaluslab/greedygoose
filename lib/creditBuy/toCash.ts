@@ -1,6 +1,6 @@
 import { CREDIT_BLOCKED, creditBuyStop, type CreditPlan } from "@/lib/creditBuy";
 import { toUsd } from "@/lib/cash";
-import { earnRates, earnTenths, marginalApy, pctText } from "@/lib/earnWithStocks";
+import { costTenths, earnRates, earnTenths, marginalApy, pctText } from "@/lib/earnWithStocks";
 import { formatUsdTrim } from "@/lib/formatting";
 
 /*
@@ -50,12 +50,27 @@ export function toCashQuote(p: {
  */
 export function gapLine(gap: number, amountUsd: number): string {
   const pct = pctText(Math.abs(gap));
-  const usd = (Math.abs(gap) / 1000) * amountUsd;
-  const whole = gap < 0 ? Math.ceil(usd) : Math.floor(usd);
+  // Tenths × dollars first, then ÷ 1000, with the same epsilon as earnTenths: 1.7% of $3,000 is $51, not $52.
+  const usd = (Math.abs(gap) * amountUsd) / 1000;
+  const whole = gap < 0 ? Math.ceil(usd - 1e-6) : Math.floor(usd + 1e-6);
   const year = amountUsd > 0 && gap !== 0 ? `, ${usd < 1 ? "under $1" : `about ${formatUsdTrim(whole)}`} a year` : "";
   if (gap < 0) return `Costs ${pct} a year more than it earns${year}. Both rates are variable.`;
   if (gap === 0) return "Costs about what it earns. Both rates are variable.";
   return `Earns ${pct} a year more than it costs${year}. Both rates are variable.`;
+}
+
+/** The Cash row's rate when its cost can't be read: Credit Buy's own words for it. */
+export const RATE_UNREAD = "Couldn’t read what this credit costs. Try again in a moment.";
+
+/**
+ * The Cost cell's rate: what this credit costs once read; today's rate while the amount is blocked (its read is off, as
+ * the stock route shows its rate then); a dash when the read failed (the blocker says why); "…" only while it's read.
+ */
+export function costCellText(q: ToCashQuote, p: { failed: boolean; blocked: boolean; apyNow: number }): string {
+  if (q.cost !== null) return pctText(q.cost);
+  if (p.failed) return "—";
+  if (p.blocked) return pctText(costTenths(p.apyNow));
+  return "…";
 }
 
 /** Why the Cash row's amount can't be signed: none typed, a block, the rate after it still read, or the risk tick (D2). */

@@ -257,6 +257,7 @@ export function CreditBuySheet({
           ) : step === "amount" && toCash ? (
             <CreditBuyCashStep
               quote={cash.quote}
+              costText={cash.costText}
               blocker={cash.blocker}
               ready={cash.ready}
               feeBlocked={cash.feeBlocked}
@@ -280,10 +281,8 @@ export function CreditBuySheet({
                 error: cash.tx.error,
                 checking: cash.tx.checking,
                 blocked: cash.tx.blocked,
-                onSign: () => {
-                  if (cash.tx.phase !== "idle") cash.tx.reset();
-                  void cash.tx.sign();
-                },
+                busy: cash.tx.busy,
+                onSign: cash.sign,
               }}
             />
           ) : step === "amount" && stock ? (
