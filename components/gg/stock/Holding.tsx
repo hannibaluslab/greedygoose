@@ -86,7 +86,7 @@ export function HoldingCard({
     <Tap
       href={href}
       onClick={onClick}
-      className="flex w-[111px] shrink-0 flex-col rounded-[22px] bg-card p-3 text-left leading-[normal] text-ink shadow-[0_1px_3px_rgba(14,13,11,0.06),0_12px_22px_-16px_rgba(14,13,11,0.28)]"
+      className="flex w-[111px] shrink-0 flex-col rounded-[22px] bg-card px-3 py-[11px] text-left leading-[normal] text-ink shadow-[0_1px_3px_rgba(14,13,11,0.06),0_12px_22px_-16px_rgba(14,13,11,0.28)]"
     >
       <span className="flex items-center justify-between">
         <StockAvatar symbol={symbol} />

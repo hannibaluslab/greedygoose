@@ -1083,3 +1083,8 @@ Send plan tables re-recorded after checking, with the button set aside, that not
 Adrian: "lower even more the bottom navigation". It reaches into the bottom inset: `max(6px, inset − 14px)`, so 20px
 from the edge on an iPhone with a home bar (it was inset + 8, about 42px), and 6px where there is no inset (it was 8).
 The space kept under the pages shrinks to match.
+
+## 2026-10-21 · Home's stock cards are 2px shorter
+
+Adrian: "save 2px in the height of stocks under portfolio … in a balanced way". 1px off the top and 1px off the bottom
+(padding 12 → 11, sides stay 12): 171 → 169px, nothing inside moves.
