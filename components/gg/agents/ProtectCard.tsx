@@ -67,7 +67,7 @@ export function ProtectCardView({ model, onOpen }: { model: ProtectCardModel; on
 const pct = (x: number) => `${(x * 100).toFixed(2)}%`;
 const MONO = "font-mono text-[10px] font-medium leading-3 whitespace-nowrap";
 /** Where Safe ends and Watch begins along the bar. */
-const SAFE_END = BAR.safe / (BAR.safe + BAR.watch + BAR.act);
+const SAFE_END = barPosition(RISK.safeMin);
 
 /** A mark across the bar: solid while Protect guards it, dashed while nothing does. */
 function Tick({ at, solid }: { at: number; solid: boolean }) {
@@ -117,6 +117,7 @@ export function LevelBar({ bar }: { bar: ProtectCardModel["bar"] }) {
         <span className="rounded-[5px] bg-pos" style={{ flex: BAR.safe }} />
         <span className="rounded-[5px] bg-watch" style={{ flex: BAR.watch }} />
         <span className="rounded-[5px] bg-neg" style={{ flex: BAR.act }} />
+        <span className="rounded-[5px] bg-act-edge" style={{ flex: BAR.edge }} />
       </span>
       <Tick at={line} solid={bar.guarded} />
       {bar.working && at !== null && (

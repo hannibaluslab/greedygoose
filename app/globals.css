@@ -40,6 +40,8 @@
   --watch-ink: #8a6a1f;
   --watch-soft: #f3e6c9;
   --neg: #8e2a1d;
+  /* The health bar's last stretch, under Protector's line to Aave's (components/gg/Status.tsx BAR.edge). */
+  --act-edge: #5e170d;
   --neg-soft: #f3e0da;
   --gold: #b69050;
 
@@ -131,6 +133,7 @@
   --color-safe-bg: var(--pos-soft);
   --color-watch-text: var(--watch-ink);
   --color-act: var(--neg);
+  --color-act-edge: var(--act-edge);
   --color-act-bg: var(--neg-soft);
   --color-hairline: var(--line);
   --color-chip: var(--bg-pill);

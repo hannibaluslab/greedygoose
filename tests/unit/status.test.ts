@@ -41,8 +41,10 @@ describe("homeStatus", () => {
 });
 
 describe("barPosition", () => {
-  const safeEnd = 5 / 8.4;
-  const watchEnd = 7 / 8.4;
+  // Safe 25%, Watch 35%, Act 34%, the edge 6% (Adrian, 2026-10-21).
+  const safeEnd = 0.25;
+  const watchEnd = 0.6;
+  const edgeStart = 0.94;
   it("puts each band on its own segment", () => {
     expect(barPosition(3)).toBe(0);
     expect(barPosition(2)).toBeLessThan(safeEnd);
@@ -52,5 +54,14 @@ describe("barPosition", () => {
     expect(barPosition(1.12)).toBeLessThan(watchEnd);
     expect(barPosition(1.05)).toBeGreaterThan(watchEnd);
     expect(barPosition(0.9)).toBe(1);
+  });
+
+  it("gives Act most of the red and keeps the last stretch, under Protector's line, a thin edge", () => {
+    expect(barPosition(1.1)).toBeCloseTo(watchEnd);
+    expect(barPosition(1.03)).toBeCloseTo(edgeStart);
+    expect(barPosition(1.05)).toBeGreaterThan(watchEnd);
+    expect(barPosition(1.05)).toBeLessThan(edgeStart);
+    expect(barPosition(1.01)).toBeGreaterThan(edgeStart);
+    expect(barPosition(1)).toBe(1);
   });
 });

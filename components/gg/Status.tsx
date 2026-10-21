@@ -1,4 +1,4 @@
-import { RISK } from "@/config/risk";
+import { AAVE_LINE_HF, CASH_AGENT, RISK } from "@/config/risk";
 import { STATUS_LABEL, type Status } from "@/lib/risk/status";
 
 const PILL: Record<Status, string> = {
@@ -45,21 +45,27 @@ export function StatusChange({ from, to }: { from: Status; to: Status }) {
   );
 }
 
-/** The bar's segments, in flex units: Safe, Watch, Act. */
-export const BAR = { safe: 5, watch: 2, act: 1.4 } as const;
+/**
+ * The bar's segments, in flex units: Safe, Watch, Act down to Protector's line, and the edge under it, down to Aave's
+ * line, in a darker red (Adrian, 2026-10-21: Watch and Act were too close to tell apart and Safe matters less; then
+ * "the green a bit bigger"). Safe 25%, Watch 35%, Act 34%, the edge 6%, so 1.03 sits at the edge's start.
+ */
+export const BAR = { safe: 2.5, watch: 3.5, act: 3.4, edge: 0.6 } as const;
 
 /**
- * Where a health factor sits along the bar, 0 (left) to 1 (right). Each band's range fills its own segment, so the
- * marker is always on the colour its pill names: Safe from 2.5 down to 1.5, Watch down to 1.1, Act down to 1.0. One
- * straight line from 2.5 to 1.0 put every Watch below about 1.25 (the credit cap is 1.12) on the red.
+ * Where a health factor sits along the bar, 0 (left) to 1 (right). Each range fills its own segment, so the marker is
+ * always on the colour its pill names: Safe from 2.5 down to 1.5, Watch down to 1.1, Act down to Protector's line
+ * (1.03), the edge down to Aave's (1.0). One straight line from 2.5 to 1.0 put every Watch below about 1.25 on the red.
  */
 export function barPosition(healthFactor: number): number {
-  const total = BAR.safe + BAR.watch + BAR.act;
+  const total = BAR.safe + BAR.watch + BAR.act + BAR.edge;
   const along = (top: number, bottom: number, start: number, width: number) =>
     (start + width * Math.min(1, Math.max(0, (top - healthFactor) / (top - bottom)))) / total;
   if (healthFactor >= RISK.safeMin) return along(2.5, RISK.safeMin, 0, BAR.safe);
   if (healthFactor >= RISK.watchMin) return along(RISK.safeMin, RISK.watchMin, BAR.safe, BAR.watch);
-  return along(RISK.watchMin, 1, BAR.safe + BAR.watch, BAR.act);
+  if (healthFactor >= CASH_AGENT.triggerHf)
+    return along(RISK.watchMin, CASH_AGENT.triggerHf, BAR.safe + BAR.watch, BAR.act);
+  return along(CASH_AGENT.triggerHf, AAVE_LINE_HF, BAR.safe + BAR.watch + BAR.act, BAR.edge);
 }
 
 /**
@@ -73,6 +79,7 @@ export function StatusBar({ healthFactor, label }: { healthFactor: number | null
       <span className="rounded bg-safe" style={{ flex: BAR.safe }} />
       <span className="rounded bg-watch" style={{ flex: BAR.watch }} />
       <span className="rounded bg-act" style={{ flex: BAR.act }} />
+      <span className="rounded bg-act-edge" style={{ flex: BAR.edge }} />
       {at !== null && (
         <span
           aria-hidden
@@ -108,6 +115,7 @@ export function StatusMoveBar({
       <span className="rounded bg-safe" style={{ flex: BAR.safe }} />
       <span className="rounded bg-watch" style={{ flex: BAR.watch }} />
       <span className="rounded bg-act" style={{ flex: BAR.act }} />
+      <span className="rounded bg-act-edge" style={{ flex: BAR.edge }} />
       {moves && (
         <>
           {/* The way it moves, from now to after. */}

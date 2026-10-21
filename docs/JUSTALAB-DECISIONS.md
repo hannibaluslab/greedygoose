@@ -949,3 +949,13 @@ replaces, in "The Leaderboard", Add several (ticking rows on the board, with a b
 **In this repo:** `components/gg/leaderboard/AddContactSheet.tsx` (was `AddByNameSheet.tsx`), `BoardView.tsx`,
 `BoardRow.tsx` (no pick mode), `LeaderboardScreen.tsx`, `lib/board/view.ts` (`addCandidates`, `boardChanges`),
 `lib/board/copy.ts`. Gallery: `/dev/ui/board?sheet=add|add-found|add-eth|add-none`. **Tests:** `board-screen`.
+
+## 2026-10-21 · The health bar gives Watch and Act room
+
+Adrian: Watch and Act "are too close to each other, user dont see how watch he is or how bad in act zone he is, safe
+matter less"; then "make the green a bit bigger and orange and redish smaller". The bar (`components/gg/Status.tsx`
+`BAR`, `barPosition`) is now Safe 25% (2.5 to 1.5), Watch 35% (1.5 to 1.1), Act 34% (1.1 to Protector's line, 1.03)
+and a darker red edge 6% (1.03 to Aave's line, 1.0, token `--act-edge`). It was Safe 60%, Watch 24%, Act 17%, all of
+Act on one straight line. Each 0.01 of health in Act now moves the dot about three times as far, and 1.03 sits where
+the edge starts, so the last stretch reads as the brink. One scale everywhere it's drawn: "My credit status", the
+Repay card, Credit Buy's amount step and Protector's card (whose 1.03 mark now meets the edge). **Tests:** `status`.
