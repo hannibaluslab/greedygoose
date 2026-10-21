@@ -779,3 +779,49 @@ Next check today 5:00 PM" with no marks, so it looked broken. This supersedes, f
 **Tests:** `rebalancer-held` (the band check against the trades, the outlook, the states on Adrian's account and at
 1,000×, the whole-portfolio slots, the list's line), `clock` (offsets, today, tomorrow, the weekday, a viewer's own
 calendar, a clock change), and the suites that name the agents.
+
+## 2026-10-21 · The Rebalancer's card after review
+
+Three reviews of the entry above (logic, copy, the screens at 402px) found states that still misled. This supersedes,
+where they differ, its first bullet, its "Adrian's own account" bullet and the How it works line under "Times with GMT".
+
+- **What holds it back, five ways** (`RebalanceOutlook.blocked`, `blockedWords` in `lib/agents/next.ts`), the first
+  line also the Agents list's line, never "On target":
+  - held by credit: "Stock that backs your credit isn’t rebalanced." / "Free up some to let it trade." Repaying alone
+    leaves the stock backing credit (`backingRaw` is what's supplied; the guide says "Free up: Take shares out of
+    backing, often after a repay"), and the Repay sheet asks for a repay when a free-up needs one. Adrian's "Repay or
+    free up some to let it." is changed for that reason; his OK is still to come.
+  - too small with all of the mix's stock backing credit, Adrian's own account: "Off target, but too small to trade." /
+    "Stock that backs your credit isn’t rebalanced." So his card names the credit, as he asked, without promising that
+    freeing it up would make it trade (at $7.74 nothing would).
+  - too small with some of the mix free: "Off target, but too small to trade." / "Trades start at $20."
+  - the grant leaves nothing this period (a stock's sell limit or the USDC limit used up): "Off target, but nothing it
+    can trade now." / "Next check …". Before, this read "too small" though the trade was $1,500.
+  - none of the mix held, free or backing: "You hold none of your mix yet." / "Buy some and it keeps them on target."
+    Before, this read "On target" every day, the trap of "the 5 PM never came".
+- **The picture.** While trades or top-ups are due (marked, or waiting in Act), the card draws the free stock they
+  move, as before this change: on the whole portfolio, a SELL could sit on a logo below its line when free and backing
+  stock lean different ways (common after a Credit Buy). Otherwise it draws the whole portfolio. Over and under tints
+  show only in the five states above (and Ends soon when one of them is its second line); Paused and Retrying are
+  untinted again, as on main.
+- **How it works** says the check on the viewer's clock ("Once a market day, at 5:00 PM GMT+3, it checks your
+  stocks.", the next check's own offset), and "band" for "room", a word SPEC keeps off the screen. The same length.
+- **Days with every time ahead:** the weekend card ("Prices pause tomorrow at 3:00 AM GMT+3."), the Protector's "They
+  try again today at …", and the feed's "Tries again" with the date when it falls on a later day than its row.
+- **My mix** reads "backs credit" for a stock with no free shares that backs credit, where it said "none now".
+- **Small ones:** the Protector's save toast is "Protector saved" ("Protector is saved" read as a rescue); the
+  permission error names "Rebalancer", as everywhere else.
+- **Not changed, for Adrian:** at 402px the On target and top-ups footers wrap their time onto a second line whenever
+  it says "Tomorrow" (every evening after the check in Beirut): "Tomorrow 5:00 PM GMT+3" needs about 342px of the
+  footer's 322. That wrap is the footer's built-in fallback for narrow phones; the fix would stack "Next check" over the
+  time, a change to board 7a he decides.
+
+**In this repo:** `lib/agents/next.ts` (`blocked`, `blockedWords`, `atText`), `lib/agents/rebalanceCard.ts` (`marks`,
+the free-stock picture while trades are due), `lib/agents/guide.ts` `rebalanceSteps`, `components/gg/agents/MixCard.tsx`,
+`lib/agents/feed.ts`, `lib/agents/protectCard.ts`. Galleries: the card's too small with free stock, nothing to trade,
+none held, trades due drawn on the free stock, Paused leaning the other way; the Agents page's `&sheet=rebalance` is the
+real sheet now.
+
+**Tests:** `rebalancer-held` (each block, the free-stock picture, Paused untinted, nothing owed and Act), `clock`
+(`atText` for the weekend freeze), `agents-guide` (the check on four clocks and a clock-change week), `agent-feed` (the
+date on a retry past midnight).

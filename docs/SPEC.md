@@ -196,12 +196,15 @@ the free shares' value. A stock whose shares all back credit is listed but can't
 - The Agents feed shows the agents' moves only. Each agent turns off from its own sheet.
 - Every time an agent will act at shows on the viewer's own clock with its GMT offset: "Today 5:00 PM GMT+3",
   "Tomorrow 5:00 PM GMT+3", "Mon 5:00 PM GMT+3" ("GMT" alone at no offset, "GMT+5:30" for half hours).
-- The Rebalancer's card draws the whole portfolio (free and backing credit) against the mix. "On target" only while all
-  of it sits inside its band, by the rule's own band. Past it with nothing to trade, the card stays On and says why:
-  "Stock that backs your credit isn’t rebalanced. Repay or free up some to let it trade." when the rule would trade
-  that stock if it were free, else "Off target, but too small to trade. Trades start at $20." (the executor's smallest
-  trade). A stock past its band is tinted over or under when nothing trades. Its sheet always says "Stock that backs
-  your credit isn’t rebalanced."
+- The Rebalancer's card draws the whole portfolio (free and backing credit) against the mix; while trades or top-ups are
+  due (BUY, SELL, or waiting in Act), it draws the free stock they move. "On target" only while all of it sits inside
+  its band, by the rule's own band, and holds some of the mix. Otherwise, with nothing to trade, the card stays On and
+  says why: "Stock that backs your credit isn’t rebalanced. Free up some to let it trade." when the rule would trade
+  that stock if it were free; "Off target, but too small to trade. Trades start at $20." (the executor's smallest
+  trade), with the rule as its second line when none of the mix's stock is free; "Off target, but nothing it can trade
+  now. Next check …" when its grant leaves nothing this period; "You hold none of your mix yet. Buy some and it keeps
+  them on target." A stock past its band is tinted over or under only in those states. Its sheet always says "Stock that
+  backs your credit isn’t rebalanced.", and a My mix row with no free shares that backs credit reads "backs credit".
 - Rebalance only moves stocks that don't back credit, and never spends cash beyond the network fee. Its mix never adds
   up to more than 100%: a target stops where the other stocks' leave off.
 - **Top-ups go into my mix**, a Rebalance setting, off by default, with **Keep $X as cash** ($500 by default,
