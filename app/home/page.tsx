@@ -23,7 +23,6 @@ import { CashSheet } from "@/components/gg/cash/CashSheet";
 import { useMoneySheets } from "@/components/gg/cash/MoneySheets";
 import { StockSheets, useStockSheets } from "@/components/gg/stock/StockSheets";
 import { HeroLine } from "@/components/gg/home/HeroLine";
-import { StatusSheet } from "@/components/gg/CreditStatusSheet";
 import { LeverageSheet, TotalBalanceSheet, YieldSheet } from "@/components/gg/InfoSheets";
 import { StockAvatar } from "@/components/gg/kit/StockAvatar";
 import { ChevronRight, CreditIcon, PlusIcon, RepayIcon, TradeIcon } from "@/components/gg/kit/icons";
@@ -49,12 +48,12 @@ export default function HomePage() {
   return <RequireAccount>{(address) => <Home address={address} />}</RequireAccount>;
 }
 
-type Sheet = "total" | "yield" | "cash" | "leverage" | "status";
+type Sheet = "total" | "yield" | "cash" | "leverage";
 
 /**
  * Design board "2 · Home · portfolio: Rail" (HomeUpliftRail.dc.html), with its sheets: Total balance (HomeInfo) and
- * Average yield (HomeYieldInfo). The ⓘ beside Credit opens the Repay sheet, the one credit sheet (Adrian, 2026-10-15;
- * the board's Credit sheet, HomeCreditSlide, is gone). Today's change, the line and each holding's day come
+ * Average yield (HomeYieldInfo). Tapping Total balance opens its sheet, and the owed amount opens the Repay sheet, the
+ * one credit sheet (Adrian, 2026-10-15; the board's Credit sheet, HomeCreditSlide, is gone). No ⓘ on Home (2026-10-21). Today's change, the line and each holding's day come
  * from market prices (plan item 8). The board's all-time return is left out: it needs what Sam paid, which only the
  * PnL engine will read from the chain (plan item 7). A holding card opens its stock's sheet.
  *
@@ -186,12 +185,6 @@ function Home({ address }: { address: `0x${string}` }) {
             stocksUsd={data.stocksUsd}
             debtUsd={data.debtUsd}
           />
-          <StatusSheet
-            open={sheet === "status"}
-            onClose={close}
-            status={data.debtRaw > 0n ? homeStatus(data.status) : "none"}
-            data={data}
-          />
           <LeverageSheet
             open={sheet === "leverage"}
             onClose={close}
@@ -207,7 +200,6 @@ function Home({ address }: { address: `0x${string}` }) {
             savingsUsd={data.savingsUsd}
             apy={apy}
             apr={data.savingsApr}
-            earning={data.cash.saveOn}
             earned={earned.data}
           />
           <CashSheet
@@ -271,7 +263,8 @@ function Loaded({
       <section className="flex flex-col gap-2.5 px-5 pt-3">
         <BalanceHero
           label="Total balance"
-          info={{ label: "What’s in your total balance", onClick: () => open("total") }}
+          // The whole Total balance column opens what's in it (Adrian, 2026-10-21: no ⓘ on Home).
+          onOpen={{ label: "What’s in your total balance", run: () => open("total") }}
           value={data.stocksUsd + data.cashUsd}
           // All time once P&L can be added up (Adrian, 2026-10-19); until then, or if it can't be read, today's change.
           // Board 2f: today's change is always there; with no stocks nothing moves, so it reads $0.00 · 0.00% today.
@@ -291,9 +284,8 @@ function Loaded({
           // Board 2f: what you have on the left, what you owe on the right. Owed is rounded up, never shown as less.
           side={{
             label: "Credit",
-            // Credit's ⓘ explains the status (ruling 32, Adrian 2026-10-18); the owed amount opens the Credit sheet,
-            // which is Repay's (with nothing owed it says only that).
-            info: { label: "What your credit status means", onClick: () => open("status") },
+            // The owed amount opens the Credit sheet, which is Repay's (with nothing owed it says only that). What the
+            // status means sits behind the ⓘ beside "My credit" in it (Adrian, 2026-10-21; it was an ⓘ here).
             onClick: { label: "Open your credit", run: () => money.repay() },
             // The "$" and the cents drawn as the total balance draws them (Adrian): smaller, in the mid ink. Rounded up
             // to the cent, never shown as less than is owed.

@@ -1,42 +1,43 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { InfoIcon } from "../kit/icons";
 import { Money } from "../kit/Money";
 import { formatSignedPct, formatSignedUsd } from "@/lib/formatting";
 
-type Info = { label: string; onClick: () => void };
-type Column = { label: string; info?: Info; sub?: ReactNode };
+type Column = { label: string; sub?: ReactNode };
+type Opens = { label: string; run: () => void };
 
 /**
  * The balance block at the top of Home and Invest (HomeUpliftRail, PortfolioPage): the big
- * "$5,000.00" on the left, a second figure on the right of a hairline, a line under each.
+ * "$5,000.00" on the left, a second figure on the right of a hairline, a line under each. `onOpen`: the whole left
+ * column (its label, figure and line) is one tap that opens what's in it (Home: Total balance, Adrian 2026-10-21, in
+ * place of the ⓘ beside it).
  */
 export function BalanceHero({
   label,
-  info,
+  onOpen,
   value,
   sub,
   side,
   even = false,
 }: Column & {
+  onOpen?: Opens;
   value: number;
   /** `onClick`: the figure and its unit open something (Home: the owed amount opens the Credit sheet). */
-  side: Column & { value: ReactNode; unit?: string; onClick?: { label: string; run: () => void } };
+  side: Column & { value: ReactNode; unit?: string; onClick?: Opens };
   /** Two equal columns, not the figure's own width (Invest). */ even?: boolean;
 }) {
+  const rows = sub || side.sub ? 3 : 2;
   return (
     <div
-      className={`num grid ${even ? "grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" : "grid-cols-[157px_1fr]"} items-baseline px-[16.75px] leading-[normal]`}
+      className={`num relative grid ${even ? "grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" : "grid-cols-[157px_1fr]"} ${rows === 3 ? "grid-rows-[auto_auto_auto]" : "grid-rows-[auto_auto]"} items-baseline px-[16.75px] leading-[normal]`}
     >
       {/* The left column never grows (Adrian, 2026-10-18): a total that doesn't fit gets smaller instead. */}
       <div className="flex items-center gap-1.5 whitespace-nowrap pb-1">
         <span className="label">{label}</span>
-        {info && <InfoButton {...info} />}
       </div>
       <Divided className="flex items-center justify-center gap-1.5 whitespace-nowrap pb-1">
         <span className="label">{side.label}</span>
-        {side.info && <InfoButton {...side.info} />}
       </Divided>
 
       {even ? <ScaledMoney value={value} k={fit(value)} /> : <FitMoney value={value} />}
@@ -72,6 +73,17 @@ export function BalanceHero({
             {side.sub && <FitLine align="center">{side.sub}</FitLine>}
           </Divided>
         </>
+      )}
+      {/* Over the left column's cells, out of the grid's flow (absolute), so nothing moves. */}
+      {onOpen && (
+        <button
+          type="button"
+          aria-label={onOpen.label}
+          onClick={onOpen.run}
+          // Both lines set: an absolute item's open end would run to the grid's edge, over Credit.
+          style={{ gridColumn: "1 / 2", gridRow: `1 / ${rows + 1}` }}
+          className="absolute -inset-x-2 -inset-y-1 rounded-[14px] transition-colors active:bg-ink/5"
+        />
       )}
     </div>
   );
@@ -209,17 +221,4 @@ export function TodayPending() {
 
 function Divided({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <div className={`ml-[18px] border-l border-line-mid pl-[18px] text-center ${className}`}>{children}</div>;
-}
-
-function InfoButton({ label, onClick }: Info) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      onClick={onClick}
-      className="-m-1 flex size-6 items-center justify-center text-subtle"
-    >
-      <InfoIcon />
-    </button>
-  );
 }

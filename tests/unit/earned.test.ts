@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { encodeAbiParameters, encodeEventTopics, parseAbi, type Hex } from "viem";
-import { earnedPeriod, moveIn, sinceLastMoveRaw } from "@/lib/earned";
+import { averageYield, earnedPeriod, moveIn, sinceLastMoveRaw } from "@/lib/earned";
 import { PROTOCOLS } from "@/lib/protocols/config";
 import { USDC } from "@/lib/tokens/registry";
 
@@ -102,5 +102,22 @@ describe("total earned in savings", () => {
   it("a year on a younger account starts at its first move in; nothing saved, nothing to show", () => {
     expect(earnedPeriod(moves, 0.5, 20 * DAY, 20 * DAY - 365 * DAY).days).toBe(20);
     expect(earnedPeriod([], 0, 20 * DAY, null)).toEqual({ earnedUsd: 0, heldUsd: 0, days: 0, fromSec: null });
+  });
+});
+
+describe("the yearly rate a period really earned", () => {
+  const p = (earnedUsd: number, heldUsd: number, days: number) => ({ earnedUsd, heldUsd, days, fromSec: 0 });
+
+  it("is what was earned over what was held, compounded over a year", () => {
+    // $100 held for a year earning $4 is 4%; the same rate over 30 days reads the same.
+    expect(averageYield(p(4, 100, 365))).toBeCloseTo(0.04, 10);
+    const daily = 1.04 ** (1 / 365) - 1;
+    expect(averageYield(p(100 * ((1 + daily) ** 30 - 1), 100, 30))).toBeCloseTo(0.04, 10);
+  });
+
+  it("says nothing under a day, with nothing held, or before any money went in", () => {
+    expect(averageYield(p(0.001, 1, 0.5))).toBeNull();
+    expect(averageYield(p(0, 0, 3))).toBeNull();
+    expect(averageYield({ earnedUsd: 0, heldUsd: 0, days: 0, fromSec: null })).toBeNull();
   });
 });

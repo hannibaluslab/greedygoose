@@ -65,12 +65,11 @@ export function Gallery() {
         <div className="flex flex-col gap-2.5">
           <BalanceHero
             label="Total balance"
-            info={{ label: "What’s in your total balance", onClick: noop }}
+            onOpen={{ label: "What’s in your total balance", run: noop }}
             value={5000}
             sub={<TodayChange usd={38.2} pct={0.0076} />}
             side={{
               label: "Average yield",
-              info: { label: "How your average yield is worked out", onClick: noop },
               value: `${(CASH_APY * 100).toFixed(1)}%`,
               unit: "APY",
               sub: (

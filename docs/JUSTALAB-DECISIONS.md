@@ -1044,3 +1044,16 @@ every warning keep theirs.
 
 Adrian: "Cash should be the last option." Credit Buy's second step now lists Available stocks, then My holdings, then
 the Cash row ("Earns 3.8% in savings"). Nothing else about the Cash row changes.
+
+## 2026-10-21 · Home without ⓘ; My credit's status; Average yield since earning began
+
+Adrian: "Remove the 2 info dot in the homepage", the Total balance area opens what its ⓘ opened, and the credit's ⓘ
+goes "inside the sheet my credit next to the title". Home's hero has no ⓘ now: its whole Total balance column (label,
+figure, the line under it) is one tap that opens Total balance; the owed amount still opens My credit. In My credit an
+ⓘ beside the title opens "My credit status" as a step of the same sheet (Back returns), so two sheets never stack.
+
+Average yield sheet: "Earns in a year" is gone (the card and its note). Average yield is now what the cash really
+earned since it started earning, as a yearly rate compounded as Aave's APY is (`averageYield` in lib/earned.ts), with
+"over 1 day · since Oct 20" under it (Adrian: "the average since he started earning"). Under a day it shows today's rate
+and says so. The Cash row keeps today's rate. The lead loses "so your average yield is your cash rate", which is no
+longer exactly true. **Tests:** `earned` (the yearly rate, and nothing under a day).

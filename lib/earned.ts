@@ -110,3 +110,13 @@ export function earnedPeriod(
   stretch(at, nowSec, balance, openInc);
   return { earnedUsd: earned, heldUsd: span > 0 ? heldTime / span : balance, days: span / 86_400, fromSec: from };
 }
+
+/**
+ * The yearly rate a period really earned (the Yield sheet's Average yield, Adrian 2026-10-21): what it earned over what
+ * it held on average, compounded over a year as Aave's APY is, so it reads beside the cash rate. Null under a day (too
+ * short to say), or with nothing held.
+ */
+export function averageYield(p: EarnedPeriod): number | null {
+  if (p.fromSec === null || p.days < 1 || p.heldUsd <= 0) return null;
+  return (1 + p.earnedUsd / p.heldUsd) ** (365 / p.days) - 1;
+}

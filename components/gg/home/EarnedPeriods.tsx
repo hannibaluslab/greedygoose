@@ -19,10 +19,11 @@ const PERIODS: { value: Period; label: string; days: number | null }[] = [
 const DAY = 86_400;
 
 /** "21 days", "1 day", "Under a day". */
-const daysText = (days: number) =>
+export const daysText = (days: number) =>
   days < 1 ? "Under a day" : `${Math.floor(days)} ${Math.floor(days) === 1 ? "day" : "days"}`;
 
-const dateText = (sec: number) => new Date(sec * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+export const dateText = (sec: number) =>
+  new Date(sec * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
 /**
  * The Yield sheet's earnings by period (Adrian, 2026-10-18): Week, Month, Year or All, what the savings earned in it

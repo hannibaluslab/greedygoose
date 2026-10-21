@@ -1,14 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState, type ComponentProps } from "react";
+import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { useAccount } from "wagmi";
 import { toast } from "sonner";
 import { Button } from "@/components/gg/kit/Button";
 import { TxButton, TxError } from "@/components/gg/TxUi";
 import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
+import { InfoButton } from "@/components/gg/kit/InfoButton";
+import { StatusBody, statusLead } from "@/components/gg/CreditStatusSheet";
+import { StatusPill } from "@/components/gg/Status";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { useMenuGuard } from "@/hooks/useMenuGuard";
-import { useBackingFactorsRead, usePosition } from "@/hooks/usePosition";
+import { useBackingFactorsRead, usePosition, type PositionData } from "@/hooks/usePosition";
 import { repaySign, useRepayWith } from "@/hooks/useRepay";
 import { useSellQuote } from "@/hooks/useSell";
 import {
@@ -29,6 +32,7 @@ import {
 import { FreeUpList, type FreeUpItem } from "./FreeUpList";
 import { freeUpFloor } from "@/lib/freeUpPlan";
 import { BOARD_COPY } from "@/lib/board/copy";
+import { homeStatus, type Status } from "@/lib/risk/status";
 import { OweCard } from "./OweCard";
 import { PayBox } from "./PayBox";
 import { RiskTick } from "./RiskTick";
@@ -43,6 +47,49 @@ const tickLabel = (plan: { intoAct: boolean } | null | undefined) => (plan?.into
  * limit at the 1.12 line. Repay all brings every stock back. A free-up that ends in Watch asks for one tick. The money
  * maths is lib/repay/ (the repay) and lib/freeUpPlan.ts (the free-up); the batch is useRepayWith with its take-outs.
  */
+/**
+ * The header: "My credit" with an ⓘ beside it, or, behind the ⓘ, "My credit status" with its pill and a Back (Adrian,
+ * 2026-10-21: the status's ⓘ moves here from Credit on Home; one sheet, the status a step of it).
+ */
+function creditHeader(data: PositionData | undefined, about: boolean, setAbout: (on: boolean) => void) {
+  const status: Status = data && data.debtRaw > 0n ? homeStatus(data.status) : "none";
+  return about
+    ? {
+        title: "My credit status",
+        titleAccessory: <StatusPill status={status} size="sm" />,
+        description: statusLead(status !== "none" && !!data && data.debtUsd > 0),
+        onBack: () => setAbout(false),
+        status,
+      }
+    : {
+        title: "My credit",
+        titleAccessory: <InfoButton label="What your credit status means" onClick={() => setAbout(true)} />,
+        status,
+      };
+}
+
+/** The sheet's steps: the repay (`children`), or the status behind the ⓘ. */
+function CreditSteps({
+  about,
+  data,
+  status,
+  onDone,
+  children,
+}: {
+  about: boolean;
+  data: PositionData | undefined;
+  status: Status;
+  onDone: () => void;
+  children: ReactNode;
+}) {
+  const showStatus = about && !!data;
+  return (
+    <SheetSteps stepKey={showStatus ? "status" : "repay"} className="flex flex-col gap-3">
+      {showStatus ? <StatusBody status={status} data={data} onDone={onDone} /> : children}
+    </SheetSteps>
+  );
+}
+
 /** The amount the sheet opens on: empty, or the cash Stop earning with stocks repays. */
 const openingForm = (amountUsd: number | undefined): RepayForm =>
   amountUsd !== undefined && amountUsd > 0 ? { ...REPAY_FORM, amount: amountUsd.toFixed(2) } : REPAY_FORM;
@@ -78,6 +125,8 @@ export function RepaySheet({
   // Ticked from the stock sheet: all of it, held to what the limit allows (no "prices moved" for that first cut).
   const [picks, setPicks] = useState<FreeUpTick[]>(() => openingTicks(freeUp));
   const [ack, setAck] = useState(false);
+  const [about, setAbout] = useState(false);
+  const { status, ...header } = creditHeader(data, about, setAbout);
 
   const { sources, source, view } = useRepayView(data, cfRead.cfs, form);
 
@@ -117,8 +166,8 @@ export function RepaySheet({
   const canSign = (sign !== null || (repayUsd === 0 && takeOuts.length > 0)) && (!needsTick || ack);
 
   return (
-    <SheetShell open={open} onOpenChange={onOpenChange} title="My credit">
-      <SheetSteps stepKey="repay" className="flex flex-col gap-3">
+    <SheetShell open={open} onOpenChange={onOpenChange} {...header}>
+      <CreditSteps about={about} data={data} status={status} onDone={() => setAbout(false)}>
         {data?.debtRaw === 0n ? (
           <p className="m-0 px-1 pb-2 text-[17px] text-ink-mid">{REPAY_COPY.nothingOwed}</p>
         ) : !data || waitingForCfs ? (
@@ -193,7 +242,7 @@ export function RepaySheet({
             {smallPrint && <p className="m-0 px-0.5 text-[11.5px] leading-[1.45] text-subtle">{smallPrint}</p>}
           </>
         )}
-      </SheetSteps>
+      </CreditSteps>
     </SheetShell>
   );
 }

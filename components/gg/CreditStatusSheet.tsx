@@ -1,7 +1,6 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
 import { Button } from "./kit/Button";
 import { StatusBar, StatusPill } from "./Status";
 import { AAVE_LINE_HF, RISK, type CreditLine } from "@/config/risk";
@@ -55,106 +54,90 @@ function marginLine(health: number): string {
   return `Your stocks can fall ${pct(m.toAave)} before Aave’s line, ${pct(m.toAct)} before Act.`;
 }
 
+/** The lead under "My credit status". */
+export const statusLead = (owes: boolean) =>
+  owes
+    ? "How far your credit is from stocks being sold, on Aave’s rules."
+    : "Nothing is owed, so there’s no status yet. It starts with your first credit.";
+
 /**
- * "My credit status", from Credit's ⓘ on Home: the credit's health and how far the stocks can fall before Aave's line;
+ * "My credit status", a step of "My credit" behind the ⓘ beside its title (Adrian, 2026-10-21; it was Credit's ⓘ on
+ * Home): the credit's health and how far the stocks can fall before Aave's line;
  * how the health is worked out on Aave's rules (each stock's value × the share Aave counts, ÷ what's owed); and the
  * scale, Safe, Watch, Act and Protect's line at 1.03, down to Aave's line at 1.0. With nothing owed, the scale only.
  */
-export function StatusSheet({
-  open,
-  onClose,
-  status,
-  data,
-}: {
-  open: boolean;
-  onClose: () => void;
-  status: Status;
-  data: PositionData;
-}) {
+export function StatusBody({ status, data, onDone }: { status: Status; data: PositionData; onDone: () => void }) {
   const owes = status !== "none" && data.debtUsd > 0;
-  const { cfs } = useBackingFactorsRead(open && owes ? data.holdings : undefined);
+  const { cfs } = useBackingFactorsRead(owes ? data.holdings : undefined);
   const parts = owes ? healthParts(data.holdings, cfs, data.debtUsd) : null;
   const health = owes ? data.healthFactor : null;
   return (
-    <SheetShell
-      open={open}
-      onOpenChange={(next) => !next && onClose()}
-      look="info"
-      title="My credit status"
-      titleAccessory={<StatusPill status={status} size="sm" />}
-      description={
-        owes
-          ? "How far your credit is from stocks being sold, on Aave’s rules."
-          : "Nothing is owed, so there’s no status yet. It starts with your first credit."
-      }
-    >
-      <SheetSteps stepKey="status" className="num flex flex-col gap-3 leading-[normal]">
-        {health !== null && (
-          <Card>
-            <HealthScore health={health} status={status} />
-            <p className="m-0 text-[14px] font-medium leading-snug text-ink">{marginLine(health)}</p>
-          </Card>
-        )}
-        {owes && (
-          <Card>
-            <span className="label">How it’s worked out</span>
-            {parts ? (
-              <>
-                <dl className="m-0 flex flex-col gap-2">
-                  {parts.parts.map((p) => (
-                    <Line
-                      key={p.symbol}
-                      label={p.name}
-                      middle={`${formatUsd(p.valueUsd)} × ${Math.round(p.cf * 100)}%`}
-                      value={formatUsd(p.backsUsd)}
-                    />
-                  ))}
-                </dl>
-                <dl className="m-0 flex flex-col gap-2 border-t border-line-field pt-2.5">
-                  <Line label="Backs your credit" value={formatUsd(parts.backsUsd)} />
-                  <Line label="÷ You owe" value={formatUsd(data.debtUsd)} />
-                  <Line label="= Health" value={health === null ? "–" : hf(health)} strong />
-                </dl>
-                <p className="m-0 text-[12px] leading-snug text-subtle">
-                  Aave counts a share of each stock’s value, the % beside it.
-                </p>
-              </>
-            ) : (
-              <div aria-busy className="h-[92px] animate-pulse rounded-[14px] bg-chip" />
-            )}
-          </Card>
-        )}
+    <div className="num flex flex-col gap-3 leading-[normal]">
+      {health !== null && (
         <Card>
-          <ul className="m-0 flex list-none flex-col gap-3 p-0">
-            {scaleFor(data.line).map((r) => (
-              <li key={r.key} className="flex items-start gap-2.5">
-                <span className="w-[58px] shrink-0">
-                  <StatusPill status={r.status} size="sm" />
-                </span>
-                <span className="flex flex-col gap-0.5 text-[13px] leading-snug">
-                  <span className="font-semibold text-ink">{r.range}</span>
-                  <span className="text-ink-2">{r.line}</span>
-                </span>
-              </li>
-            ))}
-            <li className="flex items-start gap-2.5 border-t border-line-field pt-3">
+          <HealthScore health={health} status={status} />
+          <p className="m-0 text-[14px] font-medium leading-snug text-ink">{marginLine(health)}</p>
+        </Card>
+      )}
+      {owes && (
+        <Card>
+          <span className="label">How it’s worked out</span>
+          {parts ? (
+            <>
+              <dl className="m-0 flex flex-col gap-2">
+                {parts.parts.map((p) => (
+                  <Line
+                    key={p.symbol}
+                    label={p.name}
+                    middle={`${formatUsd(p.valueUsd)} × ${Math.round(p.cf * 100)}%`}
+                    value={formatUsd(p.backsUsd)}
+                  />
+                ))}
+              </dl>
+              <dl className="m-0 flex flex-col gap-2 border-t border-line-field pt-2.5">
+                <Line label="Backs your credit" value={formatUsd(parts.backsUsd)} />
+                <Line label="÷ You owe" value={formatUsd(data.debtUsd)} />
+                <Line label="= Health" value={health === null ? "–" : hf(health)} strong />
+              </dl>
+              <p className="m-0 text-[12px] leading-snug text-subtle">
+                Aave counts a share of each stock’s value, the % beside it.
+              </p>
+            </>
+          ) : (
+            <div aria-busy className="h-[92px] animate-pulse rounded-[14px] bg-chip" />
+          )}
+        </Card>
+      )}
+      <Card>
+        <ul className="m-0 flex list-none flex-col gap-3 p-0">
+          {scaleFor(data.line).map((r) => (
+            <li key={r.key} className="flex items-start gap-2.5">
               <span className="w-[58px] shrink-0">
-                <span className="inline-flex h-[22px] items-center rounded-[11px] bg-ink px-2 text-[11px] font-semibold text-on-ink">
-                  {AAVE_LINE_HF.toFixed(1)}
-                </span>
+                <StatusPill status={r.status} size="sm" />
               </span>
               <span className="flex flex-col gap-0.5 text-[13px] leading-snug">
-                <span className="font-semibold text-ink">Aave’s line</span>
-                <span className="text-ink-2">Under it, Aave can sell part of your stocks to repay what you owe.</span>
+                <span className="font-semibold text-ink">{r.range}</span>
+                <span className="text-ink-2">{r.line}</span>
               </span>
             </li>
-          </ul>
-        </Card>
-        <Button variant="dark" onClick={onClose} className="mt-1 w-full">
-          Got it
-        </Button>
-      </SheetSteps>
-    </SheetShell>
+          ))}
+          <li className="flex items-start gap-2.5 border-t border-line-field pt-3">
+            <span className="w-[58px] shrink-0">
+              <span className="inline-flex h-[22px] items-center rounded-[11px] bg-ink px-2 text-[11px] font-semibold text-on-ink">
+                {AAVE_LINE_HF.toFixed(1)}
+              </span>
+            </span>
+            <span className="flex flex-col gap-0.5 text-[13px] leading-snug">
+              <span className="font-semibold text-ink">Aave’s line</span>
+              <span className="text-ink-2">Under it, Aave can sell part of your stocks to repay what you owe.</span>
+            </span>
+          </li>
+        </ul>
+      </Card>
+      <Button variant="dark" onClick={onDone} className="mt-1 w-full">
+        Got it
+      </Button>
+    </div>
   );
 }
 

@@ -3,9 +3,9 @@
 import type { ReactNode } from "react";
 import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
 import { Button } from "./kit/Button";
-import { EarnedPeriods } from "./home/EarnedPeriods";
+import { EarnedPeriods, dateText, daysText } from "./home/EarnedPeriods";
 import type { TotalEarned } from "@/hooks/useTotalEarned";
-import { CASH } from "@/config/risk";
+import { averageYield, earnedPeriod } from "@/lib/earned";
 import { formatUsd, formatUsdTrim } from "@/lib/formatting";
 import { leverageOf, leverageText } from "@/lib/leverage";
 import { type Status } from "@/lib/risk/status";
@@ -63,9 +63,8 @@ export function TotalBalanceSheet({
 
 /**
  * Design board "2e · Average yield info" (HomeYieldInfo.dc.html), with D19: stocks earn no yield, so the average
- * yield is the cash rate and cash is the only row. Cash is one pot on screen (D20): what it earns in a year counts
- * the part that earns now (savings), and the rest is said in cash terms. While earning runs (`earning`, the Save job),
- * money that just arrived starts earning soon; before it's set up, it isn't earning yet.
+ * yield is the cash rate and cash is the only row. No "Earns in a year" (Adrian, 2026-10-21): what was earned, by
+ * period, is the card at the top.
  */
 export function YieldSheet({
   open,
@@ -74,7 +73,6 @@ export function YieldSheet({
   savingsUsd,
   apy,
   apr,
-  earning,
   earned,
 }: {
   open: boolean;
@@ -84,14 +82,19 @@ export function YieldSheet({
   apy: number;
   /** The savings APR, which the live counts run at. */
   apr: number;
-  earning: boolean;
   /** What the savings earned (useTotalEarned), for the periods; undefined while it's read. */
   earned: TotalEarned | undefined;
 }) {
   const rate = `${(apy * 100).toFixed(1)}%`;
+  // Average yield: what the cash really earned since it started earning, as a yearly rate (Adrian, 2026-10-21). Until
+  // it has a day to go on, today's rate, and the row says so.
+  const all = earned ? earnedPeriod(earned.moves, earned.openUsd, earned.readAt / 1000, null) : null;
+  const avg = all ? averageYield(all) : null;
+  const avgLine =
+    avg !== null && all?.fromSec != null
+      ? `over ${daysText(all.days).toLowerCase()} · since ${dateText(all.fromSec)}`
+      : "today’s rate";
   const value = formatUsdTrim(Math.round(cashUsd));
-  const earns = Math.round(savingsUsd * apy);
-  const wallet = cashUsd - savingsUsd;
   return (
     <SheetShell
       open={open}
@@ -103,7 +106,7 @@ export function YieldSheet({
           VARIABLE
         </span>
       }
-      description="What your cash earns. Stocks don’t earn a yield, so your average yield is your cash rate."
+      description="What your cash earns. Stocks don’t earn a yield."
     >
       <SheetSteps stepKey="yield" className="num flex flex-col gap-[18px] leading-[normal]">
         {earned ? (
@@ -123,26 +126,13 @@ export function YieldSheet({
             <span className="text-right font-semibold">{rate}</span>
           </div>
           <div className="grid grid-cols-[1fr_auto_52px] items-center gap-3 py-[13px] text-[16px]">
-            <span className="font-semibold">Average yield</span>
+            <span className="flex flex-col">
+              <span className="font-semibold">Average yield</span>
+              <span className="text-[12.5px] text-ink-mid">{avgLine}</span>
+            </span>
             <span className="text-[15px] text-ink-mid">{value}</span>
-            <span className="text-right font-bold">{rate}</span>
+            <span className="text-right font-bold">{avg === null ? rate : `${(avg * 100).toFixed(1)}%`}</span>
           </div>
-        </div>
-        <div className="flex flex-col gap-3">
-          <div className="rounded-[22px] bg-ink px-4 py-1 text-on-ink">
-            <Total
-              label="Earns in a year"
-              value={<span className="text-brand">{earns > 0 ? `about ${formatUsdTrim(earns)}` : "Nothing yet"}</span>}
-            />
-          </div>
-          <p className="m-0 px-0.5 text-[12.5px] leading-[1.45] text-subtle">
-            At today’s rate, which moves with the market.
-            {wallet > CASH.keepBackUsd &&
-              (earning
-                ? ` ${formatUsd(wallet)} arrived recently and starts earning soon.`
-                : ` ${formatUsd(wallet)} of your cash isn’t earning yet.`)}{" "}
-            What credit costs isn’t taken off. It shows under Credit on Home.
-          </p>
         </div>
         <Button variant="dark" size="lg" onClick={onClose}>
           Got it
