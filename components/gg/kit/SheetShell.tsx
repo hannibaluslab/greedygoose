@@ -81,27 +81,39 @@ const SheetConfirmingContext = createContext<(() => () => void) | null>(null);
 /**
  * Whether a sheet waits on Base: `confirming` (the sheet's own say), or any change inside it that added itself (`add`,
  * through SheetConfirmingContext) and hasn't taken itself off yet. A step (`embedded`) draws no wait of its own: its
- * `confirming` goes to the host, which does.
+ * `confirming` goes to the host, which does. `shows`: whether the goose page is on screen.
  */
-function useSheetWait(confirming: boolean, embedded: boolean) {
+function useSheetWait(confirming: boolean, embedded: boolean, open: boolean) {
   const [count, setCount] = useState(0);
   const add = useCallback(() => {
     setCount((n) => n + 1);
     return () => setCount((n) => n - 1);
   }, []);
   useSheetConfirming(confirming && embedded);
-  return { waits: !embedded && (confirming || count > 0), add };
+  const waits = !embedded && (confirming || count > 0);
+  // A sheet that closes as its change lands (Buy, Repay) slides away as the goose page it was, not the form behind it:
+  // while it's closed, it keeps showing what it showed last while open.
+  const [held, setHeld] = useState(false);
+  if (open && held !== waits) setHeld(waits);
+  return { shows: open ? waits : held, add };
 }
 
 /**
- * While the body is hidden, focus leaves it, and a step that took its place as the wait ended couldn't take focus
- * (SheetSteps tried while it was still hidden). So when the wait ends, the step on screen takes focus, and is announced.
+ * While the body is hidden, focus leaves it, and a step that took its place as the wait ended couldn't take focus or
+ * reset its scroll (SheetSteps tried while it was still hidden, and a scroller shown again gets its old offset back).
+ * So when the wait ends, the step on screen takes focus and is announced, and a new step (the done one, or Cash after
+ * Earn) starts at the top. The same step after a failure keeps its place, so the error by its button stays in view.
  */
 function useFocusAfterWait(waits: boolean, scroll: React.RefObject<HTMLDivElement | null>) {
   const was = useRef(waits);
+  const stepAtStart = useRef<HTMLElement | null>(null);
   useEffect(() => {
-    if (was.current && !waits)
-      scroll.current?.querySelector<HTMLElement>('[tabindex="-1"]')?.focus({ preventScroll: true });
+    const step = scroll.current?.querySelector<HTMLElement>('[tabindex="-1"]') ?? null;
+    if (!was.current && waits) stepAtStart.current = step;
+    if (was.current && !waits) {
+      if (step !== stepAtStart.current) scroll.current?.scrollTo({ top: 0 });
+      step?.focus({ preventScroll: true });
+    }
     was.current = waits;
   }, [waits, scroll]);
 }
@@ -202,9 +214,9 @@ export function SheetShell({
   useBodyScrollLock(open && !embedded);
   useKeyboardLift(open && !embedded);
   const dragToClose = useDragToClose(() => onOpenChange(false));
-  const { waits, add } = useSheetWait(confirming, embedded);
+  const { shows, add } = useSheetWait(confirming, embedded, open);
   const scroll = useRef<HTMLDivElement>(null);
-  useFocusAfterWait(waits, scroll);
+  useFocusAfterWait(shows, scroll);
 
   // As a step: contribute the body only. The host owns the drawer, the
   // header (title / back / close) and the scroll area, so the chrome props
@@ -313,7 +325,7 @@ export function SheetShell({
           <div
             ref={scroll}
             data-sheet-scroll
-            hidden={waits}
+            hidden={shows}
             className={`min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-5 ${flushBottom ? "" : "pb-[max(34px,env(safe-area-inset-bottom))]"}`}
             // flex none while locked: `flex-1` would let the drawer's layout
             // renegotiate the height the lock is meant to pin.
@@ -321,7 +333,7 @@ export function SheetShell({
           >
             <SheetConfirmingContext.Provider value={add}>{children}</SheetConfirmingContext.Provider>
           </div>
-          {waits && <SheetConfirming />}
+          {shows && <SheetConfirming />}
         </DrawerContent>
       </Drawer>
     </>
