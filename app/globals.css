@@ -4,6 +4,9 @@
 /* Touch-only variant: `touch:active:scale-95` gives press feedback on phones and leaves desktop
    hover alone (Tailwind 4 already gates `hover:` behind `@media (hover: hover)`). */
 @custom-variant touch (@media (hover: none));
+/* `dark:` follows <html data-theme="dark"> (lib/theme.ts: the phone, or the menu's Phone · Light · Dark), not the
+   phone's media query alone. */
+@custom-variant dark (&:where([data-theme="dark"] *));
 
 /* Design tokens: NYM's token set (styles/tokens.css) with the GreedyGoo canvas values.
    Leo's names (ground, subtle, safe, act…) are mapped onto the same values below. */
@@ -752,24 +755,35 @@ body.gg-welcome {
   --shadow-card-elev: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
   --shadow-card-hover: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
 }
-/* No strip under the status bar (Adrian, 2026-10-21): iOS paints that bar in one flat colour, the page's ground
-   (#0e0d0b, THEME_COLOR.dark), while the glow was brightest right at the page's top edge. The top edge now starts at
-   that same ground and the glow rises out of it over 64px, so the bar runs on into the page with no line. */
+/* The booth's background, exactly (Adrian, 2026-10-21: "same background as jaw-booth-mainnet"; hannibaluslab/
+   jaw-booth-revamp src/app/globals.css .dots/.aura, drawn by its <Screen>): the ink ground, then two full-screen
+   layers fixed to the screen, so they stay put while the page scrolls — the lime dots, and over them the lime aura
+   centred at 35% of the screen's height. Its top edge is all but the ground: in a Safari tab on iOS 26 the status
+   bar is painted flat in the body's background colour (#0e0d0b; theme-color is ignored), so it runs on into the
+   page with no strip. Below the page's content (z-index -1), above its ground. */
 [data-theme="dark"] body {
-  background-image:
-    linear-gradient(#0e0d0b, rgba(14, 13, 11, 0) 64px),
-    radial-gradient(
-      ellipse 90% 38% at 50% 0%,
-      rgba(212, 255, 60, 0.13) 0%,
-      rgba(212, 255, 60, 0.05) 45%,
-      transparent 75%
-    ),
-    radial-gradient(rgba(212, 255, 60, 0.07) 1px, transparent 1.4px);
-  background-size:
-    100% 64px,
-    100% 100vh,
-    18px 18px;
-  background-repeat: no-repeat, no-repeat, repeat;
+  background-image: none;
+}
+[data-theme="dark"] body::before,
+[data-theme="dark"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+[data-theme="dark"] body::before {
+  background-image: radial-gradient(rgba(212, 255, 60, 0.07) 1px, transparent 1.4px);
+  background-size: 18px 18px;
+}
+[data-theme="dark"] body::after {
+  background: radial-gradient(
+    ellipse 90% 60% at 50% 35%,
+    rgba(212, 255, 60, 0.22) 0%,
+    rgba(212, 255, 60, 0.1) 28%,
+    rgba(212, 255, 60, 0.04) 55%,
+    transparent 85%
+  );
 }
 /* Every card is glass with a hairline, whatever shadow it wears in light. */
 [data-theme="dark"] .bg-card,
