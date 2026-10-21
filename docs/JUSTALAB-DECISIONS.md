@@ -1031,3 +1031,16 @@ closes up; short of that it springs back. A move that starts up or down stays a 
 doesn't open the row. Remove in the row editor stays, for anyone who doesn't swipe. The gesture is
 `components/gg/kit/useSwipeAway.ts`; the strip only fills the gap the card leaves, so dark's see-through card shows no
 red under it.
+
+## 2026-10-21 · Multi trade: Add in the list, a bright red to remove
+
+Adrian: the grey Add button "looks off", and the swipe's red in light "is ugly, make it more vibrant". Add is now the
+list's own next place: a dashed row with a + under the trades (where the empty places were), up to five, so the foot has
+one button, the lime one that signs. The swipe strip has its own colour, `--remove`: `#ff3b30` with white words in
+light (the red phones use to delete), the coral `#ff7a66` in dark. Act's brick red is untouched, so the health bar and
+every warning keep theirs.
+
+## 2026-10-21 · Credit Buy: Cash is the last option
+
+Adrian: "Cash should be the last option." Credit Buy's second step now lists Available stocks, then My holdings, then
+the Cash row ("Earns 3.8% in savings"). Nothing else about the Cash row changes.

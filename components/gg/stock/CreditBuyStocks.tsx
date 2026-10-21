@@ -15,8 +15,8 @@ const valueOf = (h: Holding) => h.freeUsd + h.backingUsd;
 
 /**
  * Step 3's lists (F2-3): the holdings, then the other stocks. `othersFirst` (the stock to buy): the available stocks on
- * top, since a Credit Buy usually buys something new, then `cash` (the credit straight into savings), and the holdings
- * under them. `withCash`: the $0 state, where a tap buys with cash.
+ * top, since a Credit Buy usually buys something new, then the holdings, and `cash` (the credit straight into savings)
+ * last (Adrian, 2026-10-21). `withCash`: the $0 state, where a tap buys with cash.
  */
 export function StockLists({
   held,
@@ -86,8 +86,8 @@ export function StockLists({
   return othersFirst ? (
     <>
       {othersList}
-      {cashList}
       {heldList}
+      {cashList}
     </>
   ) : (
     <>

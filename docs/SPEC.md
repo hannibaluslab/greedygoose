@@ -134,7 +134,7 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
 
 ## Credit Buy (canvas boards 30–34)
 
-- The stock to buy lists Available stocks first, then **Cash**, then My holdings. MAX fills the most to the cent,
+- The stock to buy lists Available stocks first, then My holdings, then **Cash** last. MAX fills the most to the cent,
   rounded down.
 - Step 1: **Credit ready** first (the credit left on what already backs credit; nothing new goes in), then **Back new
   credit with** each stock and what it backs on its own ("Up to $417"). Then the stock to buy, then the amount. The
