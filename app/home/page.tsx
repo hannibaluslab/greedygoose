@@ -260,7 +260,8 @@ function Loaded({
 
   return (
     <>
-      {/* Spacing (Adrian, 2026-10-21): the hero 2px lower, the gaps under it 0.5 + 0.5 + 1px tighter, so Portfolio stays put. */}
+      {/* Spacing (Adrian, 2026-10-21): the hero 2px lower, the gaps under it 0.5 + 0.5 + 1px tighter, so Portfolio stayed
+          put; then the graph-to-buttons gap 1px tighter on its own (everything under it 1px higher). */}
       <section className="flex flex-col gap-2.5 px-5 pt-[14px]">
         <BalanceHero
           label="Total balance"
@@ -316,7 +317,7 @@ function Loaded({
         />
       </section>
 
-      <section className="grid grid-cols-4 gap-2 px-5 pt-[21.5px]">
+      <section className="grid grid-cols-4 gap-2 px-5 pt-[20.5px]">
         <QuickAction onClick={money.topUp} label="Top up" icon={<PlusIcon />} />
         <QuickAction onClick={openTrade} label="Trade" icon={<TradeIcon />} />
         <QuickAction onClick={openCreditBuy} label="Credit Buy" icon={<CreditIcon />} />
