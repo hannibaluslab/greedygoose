@@ -25,13 +25,13 @@ describe("the Agents tab's How it works sheet (board 7m)", () => {
   it("says the Rebalancer's check on the viewer's clock with its GMT offset (Adrian, 2026-10-21)", () => {
     // Intl may put a narrow space before AM or PM: read any space as one.
     const at = (zone: string) => rebalanceSteps(WED_NOON, zone)[1].replace(/\s/g, " ");
-    expect(at("Asia/Beirut")).toBe("Once a market day, at 5:00 PM GMT+3, it checks your stocks.");
-    expect(at("UTC")).toBe("Once a market day, at 2:00 PM GMT, it checks your stocks.");
+    expect(at("Asia/Beirut")).toBe("Once a market day, at 5 PM GMT+3, it checks your stocks.");
+    expect(at("UTC")).toBe("Once a market day, at 2 PM GMT, it checks your stocks.");
     expect(at("Asia/Kolkata")).toBe("Once a market day, at 7:30 PM GMT+5:30, it checks your stocks.");
-    expect(at("America/New_York")).toBe("Once a market day, at 10:00 AM GMT-4, it checks your stocks.");
-    // A week New York has changed its clocks and London hasn't yet (2026-03-09): 10:00 New York is 2:00 PM in London.
+    expect(at("America/New_York")).toBe("Once a market day, at 10 AM GMT-4, it checks your stocks.");
+    // A week New York has changed its clocks and London hasn't yet (2026-03-09): 10:00 New York is 2 PM in London.
     expect(rebalanceSteps(Date.UTC(2026, 2, 9, 12) / 1000, "Europe/London")[1].replace(/\s/g, " ")).toBe(
-      "Once a market day, at 2:00 PM GMT, it checks your stocks.",
+      "Once a market day, at 2 PM GMT, it checks your stocks.",
     );
     // Before the clock is read, New York's own time.
     expect(rebalanceSteps(0)[1]).toBe("Once a market day, at 10:00 AM New York, it checks your stocks.");

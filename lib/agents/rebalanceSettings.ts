@@ -234,7 +234,7 @@ export function rebalanceChange(
   return grants.length > 0 || settings.length > 0 ? { grants, settings } : null;
 }
 
-/** "tomorrow 5:00 PM GMT+3" back from the card's capitalised "Tomorrow 5:00 PM GMT+3" (a weekday keeps its capital). */
+/** "tomorrow 5 PM GMT+3" back from the card's capitalised "Tomorrow 5 PM GMT+3" (a weekday keeps its capital). */
 const lower = (when: string) => (/^(Today|Tomorrow) /.test(when) ? when[0].toLowerCase() + when.slice(1) : when);
 
 /** The stocks the next check trades on `side`, as one list ("Apple and Meta"); null when none. */

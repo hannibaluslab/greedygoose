@@ -111,7 +111,7 @@ export function rebalanceCheckAt(nowSec: number, ranDay: number, notBefore = 0):
 }
 
 /**
- * "today 5:00 PM GMT+3", "tomorrow 5:00 PM GMT+3", "Mon 5:00 PM GMT+3": the viewer's own clock and its GMT offset
+ * "today 5 PM GMT+3", "tomorrow 5 PM GMT+3", "Mon 5 PM GMT+3": the viewer's own clock and its GMT offset
  * (Adrian, 2026-10-21), "GMT" alone for a viewer on GMT. `timeZone` pins a zone for the tests.
  */
 export function whenText(sec: number, nowSec: number, timeZone?: string): string {
@@ -120,7 +120,7 @@ export function whenText(sec: number, nowSec: number, timeZone?: string): string
   return `${day} ${clockText(sec, timeZone)}`;
 }
 
-/** "tomorrow at 5:00 PM GMT+3", "Mon at 5:00 PM GMT+3": whenText with "at" after the day (always one word), in a sentence. */
+/** "tomorrow at 5 PM GMT+3", "Mon at 5 PM GMT+3": whenText with "at" after the day (always one word), in a sentence. */
 export const atText = (sec: number, nowSec: number, timeZone?: string): string =>
   whenText(sec, nowSec, timeZone).replace(" ", " at ");
 

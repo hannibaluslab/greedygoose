@@ -61,9 +61,13 @@ export function gmtText(offsetMinutes: number): string {
   return `GMT${offsetMinutes > 0 ? "+" : "-"}${Math.floor(abs / 60)}${minutes ? `:${String(minutes).padStart(2, "0")}` : ""}`;
 }
 
-/** "5:00 PM GMT+3": the time on the viewer's clock, and its offset then (a check past a clock change shows the new one). */
+/**
+ * "5 PM GMT+3", "5:30 PM GMT+5:30": the time on the viewer's clock, and its offset then (a check past a clock change
+ * shows the new one). A whole hour drops its ":00" so "Tomorrow 5 PM GMT+3" stays on the card footer's one line at 402px.
+ */
 export function clockText(sec: number, timeZone?: string): string {
-  const time = format("time", { hour: "numeric", minute: "2-digit" }, timeZone).format(sec * 1000);
+  const full = format("time", { hour: "numeric", minute: "2-digit" }, timeZone).format(sec * 1000);
+  const time = full.replace(/:00(?=\s)/, "");
   return `${time} ${gmtText(gmtOffsetMinutes(sec, timeZone))}`;
 }
 
