@@ -49,7 +49,7 @@ export function TotalBalanceSheet({
           <div className="rounded-[22px] bg-card px-4 py-1 shadow-card-elev">
             <div className="flex items-center justify-between border-b border-hairline py-3 text-[15px]">
               <span className="text-ink-mid">You owe on credit</span>
-              <span className="font-medium">−{formatUsd(debtUsd)}</span>
+              <span className="font-medium text-neg">−{formatUsd(debtUsd)}</span>
             </div>
             <Total label="After credit" value={formatUsd(total - debtUsd)} />
           </div>

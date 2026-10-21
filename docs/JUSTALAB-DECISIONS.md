@@ -1062,3 +1062,4 @@ longer exactly true. **Tests:** `earned` (the yearly rate, and nothing under a d
 
 Adrian: "dark is reserved for ctas", and not the bone colour either. "You owe on credit / After credit" in the Total
 balance sheet is a white card like the one above it; After credit is plain ink, not lime.
+Adrian, later: the owed amount ("−$4.76") is red, the same red as a loss on Home.
