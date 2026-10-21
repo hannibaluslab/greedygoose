@@ -19,9 +19,9 @@ export function Header({ address, aside, menu }: { address: `0x${string}`; aside
   return (
     // Dark: the booth's header (Adrian, 2026-10-22: "with that thin border, like that by default"; hannibaluslab/
     // jaw-booth-revamp src/app/home/page.tsx, its scrolled look, here always on). Stuck to the top, the ground at 80% with
-    // a blur and a hairline under it. The logo 6px from the top as in light (Adrian, 2026-10-22: 6px up), 10px of band
-    // under the row, then the hairline. Under the sheets' scrim (z-40).
-    <header className="flex items-center justify-between px-5 pt-[calc(env(safe-area-inset-top)+4px)] dark:sticky dark:top-0 dark:z-20 dark:border-b dark:border-[rgba(255,255,255,0.1)] dark:bg-[rgba(14,13,11,0.8)] dark:pb-2.5 dark:backdrop-blur-xl">
+    // a blur and a hairline under it. The row starts at the page's top, so the logo is 2px under it (Adrian, 2026-10-22:
+    // as high as it goes), 10px of band under the row, then the hairline. Under the sheets' scrim (z-40).
+    <header className="flex items-center justify-between px-5 pt-[calc(env(safe-area-inset-top)+4px)] dark:sticky dark:top-0 dark:z-20 dark:border-b dark:border-[rgba(255,255,255,0.1)] dark:bg-[rgba(14,13,11,0.8)] dark:pb-2.5 dark:pt-[env(safe-area-inset-top)] dark:backdrop-blur-xl">
       <div className="flex items-center gap-2.5">
         <span aria-hidden className="flex size-9 items-center justify-center rounded-[18px] bg-ink">
           <GooseMark className="h-[28px] w-auto" />

@@ -777,8 +777,9 @@ body.gg-welcome {
   background-size: 18px 18px;
 }
 [data-theme="dark"] body::after {
+  /* Centred a fifth lower than the booth's 35% (Adrian, 2026-10-22: 55% was too low). */
   background: radial-gradient(
-    ellipse 90% 60% at 50% 35%,
+    ellipse 90% 60% at 50% 42%,
     rgba(212, 255, 60, 0.22) 0%,
     rgba(212, 255, 60, 0.1) 28%,
     rgba(212, 255, 60, 0.04) 55%,
