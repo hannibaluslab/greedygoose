@@ -7,6 +7,9 @@ import type { Status } from "@/lib/risk/status";
 import { formatUsdTrim, monthlyCostText } from "@/lib/formatting";
 
 const CARD = "flex flex-col gap-2 rounded-[22px] px-4 py-3.5 leading-[normal]";
+// The cards' titles are Home's section titles (Adrian, 2026-10-22: 14px was small for what they are): 18px as
+// "Portfolio", on the 22px line of the chip beside them, so the cards are no taller.
+const TITLE = "text-lg font-semibold leading-[22px] tracking-[-0.015em]";
 
 /**
  * The dark Cash card on Home (board 2f): cash is savings plus wallet USDC (D15), with a USDC chip and one line under
@@ -35,7 +38,7 @@ export function CashCard({
       className={`${CARD} bg-ink text-left text-on-ink ${dim ? "opacity-60" : "shadow-[0_16px_32px_-18px_rgba(0,0,0,0.5)]"}`}
     >
       <span className="flex items-center justify-between">
-        <span className="text-[14px] font-semibold">Cash</span>
+        <span className={TITLE}>Cash</span>
         <span className="flex h-[22px] items-center rounded-[6px] bg-[rgba(212,255,60,0.14)] px-[7px] font-mono text-[10px] font-medium tracking-[0.04em] text-brand">
           USDC
         </span>
@@ -77,7 +80,7 @@ export function YieldCard({
       className={`${CARD} bg-card text-left text-ink shadow-card-elev ${dim ? "opacity-60" : ""}`}
     >
       <span className="flex items-center justify-between">
-        <span className="text-[14px] font-semibold">Yield</span>
+        <span className={TITLE}>Yield</span>
         {/* Ruling 4: the ⓘ says the card opens what the rate is and why it moves (VARIABLE is in the sheet). */}
         <span className="num flex h-[22px] items-center gap-1 rounded-[6px] bg-pill px-[7px] font-mono text-[10px] font-medium tracking-[0.04em] text-ink-mid">
           {apy == null ? "–" : `${(apy * 100).toFixed(1)}%`} APY
@@ -113,7 +116,7 @@ export function CreditCard({
   return (
     <Tap href={href} onClick={onClick} className={`${CARD} bg-card text-left text-ink shadow-card-elev`}>
       <span className="flex w-full items-center justify-between">
-        <span className="text-[14px] font-semibold">Credit</span>
+        <span className={TITLE}>Credit</span>
         <StatusPill status={status} size="sm" />
       </span>
       {/* Rounded up: what's owed is never shown as less than it is. */}
