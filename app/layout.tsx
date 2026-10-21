@@ -8,11 +8,13 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 // The link preview (WhatsApp, iMessage, X…): app/opengraph-image.jpg and twitter-image.jpg, 1200x630, made absolute by
-// metadataBase. A preview deploy's own address comes from Vercel; production is greedygoose.vercel.app.
+// metadataBase. A preview deploy's own address comes from Vercel; production is app.greedygoo.com (Adrian, 2026-10-21:
+// with greedygoose.vercel.app here, a link to app.greedygoo.com pointed its card and image at another domain, and chat
+// apps showed no thumbnail).
 const SITE =
   process.env.VERCEL_ENV === "preview" && process.env.VERCEL_URL
     ? `https://${process.env.VERCEL_URL}`
-    : "https://greedygoose.vercel.app";
+    : "https://app.greedygoo.com";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE),

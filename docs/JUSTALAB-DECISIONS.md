@@ -1102,3 +1102,9 @@ With Protector on, nothing changes (1.05). **Tests:** `credit-line`.
 Adrian: the section from Total balance to the Cash card 2px lower, the top bar unmoved; 0.5px less over the buttons,
 0.5px less over the Cash card, 1px less over Portfolio. Measured at 402px: labels 54 → 56, buttons 220.7 → 222.2, Cash
 325.2 → 326.2, Portfolio 432.7 unchanged, header 0 unchanged.
+
+## 2026-10-21 · Link previews point at app.greedygoo.com
+
+Adrian: links to app.greedygoo.com showed no thumbnail. The page's card named greedygoose.vercel.app as its address and
+image, another domain, which chat apps (iMessage first) drop. Production's metadataBase is app.greedygoo.com now;
+previews keep their own address.
