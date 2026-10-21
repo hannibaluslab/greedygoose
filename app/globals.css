@@ -43,6 +43,9 @@
   /* The health bar's last stretch, under Protector's line to Aave's (components/gg/Status.tsx BAR.edge). */
   --act-edge: #5e170d;
   --neg-soft: #f3e0da;
+  /* Swipe-to-remove's strip (Multi trade's rows, kit/useSwipeAway): a bright red, not Act's brick (Adrian 2026-10-21). */
+  --remove: #ff3b30;
+  --on-remove: #ffffff;
   --gold: #b69050;
 
   /* The agent cards (Agents boards 7): a stock Rebalance will sell, something due (trades, Retrying, Ends soon), and
@@ -145,6 +148,8 @@
   --color-act: var(--neg);
   --color-act-edge: var(--act-edge);
   --color-act-bg: var(--neg-soft);
+  --color-remove: var(--remove);
+  --color-on-remove: var(--on-remove);
   --color-hairline: var(--line);
   --color-chip: var(--bg-pill);
 
@@ -728,6 +733,8 @@ body.gg-welcome {
   --neg: #ff7a66;
   --act-edge: #b8442f;
   --neg-soft: rgba(255, 122, 102, 0.14);
+  --remove: #ff7a66;
+  --on-remove: #171612;
   --sell-soft: rgba(255, 122, 102, 0.14);
   --due-soft: rgba(226, 174, 74, 0.15);
   --due-ink: #f0c46c;

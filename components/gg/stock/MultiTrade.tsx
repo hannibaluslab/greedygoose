@@ -18,7 +18,7 @@ import { tradeSign, useTradeView } from "./tradeView";
 /*
  * Multi trade's list (NYM's MoveSheet multi mode, Adrian 2026-10-21): the total and how many trades, one row per trade
  * (tap to edit it in the Trade sheet's own editor, swipe it left to remove it), dashed places up to the two a list
- * needs, then Add (grey, so the one lime button is the one that signs) and the button that signs every trade at once. Each row prices itself live, as the editor does (useTradeView), and says up what it
+ * needs with Add as the next one (so the one button below is the one that signs every trade at once). Each row prices itself live, as the editor does (useTradeView), and says up what it
  * would sign, so the list's one batch is always built from fresh quotes.
  */
 
@@ -100,13 +100,29 @@ export function MultiList({
             onRemove={() => onRemove(r.id)}
           />
         ))}
-        {Array.from({ length: Math.max(0, MULTI_MIN - rows.length) }, (_, i) => (
+        {/* Add is the list's own next place (Adrian: two buttons side by side read badly), up to five. */}
+        {rows.length < MULTI_MAX && (
+          <li>
+            <button
+              type="button"
+              onClick={onAdd}
+              disabled={busy}
+              className="flex h-[62px] w-full items-center gap-3 rounded-[18px] border border-dashed border-ink/30 px-3.5 text-[15px] font-semibold text-ink transition active:scale-[0.99] disabled:opacity-45"
+            >
+              <span aria-hidden className="grid size-[30px] shrink-0 place-items-center rounded-full bg-ink/8">
+                <PlusIcon size={15} />
+              </span>
+              {MULTI_COPY.add}
+            </button>
+          </li>
+        )}
+        {Array.from({ length: Math.max(0, MULTI_MIN - rows.length - 1) }, (_, i) => (
           <li
             key={`ghost-${i}`}
             aria-hidden
             className="flex h-[62px] items-center rounded-[18px] border border-dashed border-line-strong px-4 text-[14px] text-ink-faint"
           >
-            {MULTI_COPY.ghost(rows.length + i + 1)}
+            {MULTI_COPY.ghost(rows.length + i + 2)}
           </li>
         ))}
       </ul>
@@ -120,28 +136,15 @@ export function MultiList({
         <p className="m-0 px-0.5 text-[12px] text-subtle">
           {rows.length >= MULTI_MAX ? MULTI_COPY.full : MULTI_COPY.oneSignature}
         </p>
-        <div className="flex gap-2">
-          <Button
-            variant="soft"
-            onClick={onAdd}
-            disabled={busy || rows.length >= MULTI_MAX}
-            className="shrink-0 !gap-1.5 !px-5"
-          >
-            <PlusIcon size={16} />
-            {MULTI_COPY.add}
-          </Button>
-          <div className="min-w-0 grow">
-            <TxButton
-              label={MULTI_COPY.button(rows.length)}
-              size="md"
-              phase={phase}
-              checking={checking}
-              preview={preview}
-              disabled={!canSign || phase === "done"}
-              onClick={onSign}
-            />
-          </div>
-        </div>
+        <TxButton
+          label={MULTI_COPY.button(rows.length)}
+          size="md"
+          phase={phase}
+          checking={checking}
+          preview={preview}
+          disabled={!canSign || phase === "done"}
+          onClick={onSign}
+        />
       </div>
     </div>
   );
@@ -261,10 +264,10 @@ function LiveRow({
       <span
         {...swipe.strip}
         aria-hidden
-        className="absolute inset-y-0 right-0 w-0 overflow-hidden rounded-[18px] bg-act"
+        className="absolute inset-y-0 right-0 w-0 overflow-hidden rounded-[18px] bg-remove"
       >
         {/* Pinned to the right edge, so it shows from the right as the strip opens (no width of its own at rest). */}
-        <span className="absolute inset-y-0 right-0 flex items-center gap-1.5 whitespace-nowrap pr-5 text-[14px] font-semibold text-(--bg-sheet)">
+        <span className="absolute inset-y-0 right-0 flex items-center gap-1.5 whitespace-nowrap pr-5 text-[14px] font-semibold text-on-remove">
           <Trash2 size={16} strokeWidth={2.25} className="shrink-0" />
           {MULTI_COPY.remove}
         </span>
