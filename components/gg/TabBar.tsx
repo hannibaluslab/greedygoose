@@ -92,6 +92,8 @@ export function TabBar() {
  * the booth's glow; the tab you're on in lime, the others cream at 45%. One change: the row is GreedyGoo's 430px
  * column, not the booth's 480, so a sheet's scrim (which covers that column) covers every tab. The booth's colours are
  * written out, since its `ink` is GreedyGoo's ground (here `ink` is the words' colour). No z-index, as the pill.
+ * Shorter than the booth's 64px (Adrian, 2026-10-22: no empty band under the labels above Safari's bar): 52px, the
+ * tabs sit 4px off its bottom, and the lime button stays centred on the icons, 10px out of the bar.
  */
 function BoothTabBar({ path }: { path: string }) {
   return (
@@ -100,17 +102,17 @@ function BoothTabBar({ path }: { path: string }) {
       className="fixed inset-x-0 bottom-0 hidden border-t pb-[env(safe-area-inset-bottom)] backdrop-blur-xl dark:block"
       style={{ background: "rgba(14,13,11,0.9)", borderTopColor: "rgba(255,255,255,0.1)" }}
     >
-      <ul className="mx-auto flex h-[64px] w-full max-w-[430px] items-stretch justify-around px-2">
+      <ul className="mx-auto flex h-[52px] w-full max-w-[430px] items-stretch justify-around px-2">
         {TABS.map(({ href, label, Icon, match }) => {
           const active = match.some((m) => path.startsWith(m));
           if (href === "/agents") {
             return (
-              <li key={href} className="flex flex-1 items-center justify-center">
+              <li key={href} className="flex flex-1 items-start justify-center">
                 <Link
                   href={href}
                   aria-label={label}
                   aria-current={active ? "page" : undefined}
-                  className="-mt-6 grid h-14 w-14 place-items-center rounded-full bg-brand text-ink transition active:scale-95"
+                  className="-mt-[10px] grid h-14 w-14 place-items-center rounded-full bg-brand text-ink transition active:scale-95"
                   // Inline, so the dark .bg-brand glow (0.3) doesn't replace the booth's own (0.4).
                   style={{ boxShadow: "0 0 24px rgba(212,255,60,0.4)" }}
                 >
@@ -124,7 +126,7 @@ function BoothTabBar({ path }: { path: string }) {
               <Link
                 href={href}
                 aria-current={active ? "page" : undefined}
-                className={`flex h-full flex-col items-center justify-center gap-1 transition ${active ? "text-brand" : "text-[rgba(245,240,226,0.45)] hover:text-[rgba(245,240,226,0.8)]"}`}
+                className={`flex h-full flex-col items-center justify-end gap-1 pb-1 transition ${active ? "text-brand" : "text-[rgba(245,240,226,0.45)] hover:text-[rgba(245,240,226,0.8)]"}`}
               >
                 <Icon size={22} />
                 <span className="text-[10px] font-medium tracking-tight">{label}</span>
