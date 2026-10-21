@@ -12,11 +12,12 @@ import { personLabel, wallDate, wallMultiple, type WallPerson, type WallState } 
  */
 
 /** A lime egg, cracked, on the pale red of Act: the film's mark for a Greedy Fatality. */
-function CrackedEgg({ size = 34 }: { size?: number }) {
+function CrackedEgg({ size = 34, onTint = false }: { size?: number; onTint?: boolean }) {
   return (
     <span
       aria-hidden
-      className="grid shrink-0 place-items-center rounded-full bg-neg-soft"
+      // On your own row, lit pale red already, the circle goes white so it still reads.
+      className={`grid shrink-0 place-items-center rounded-full ${onTint ? "bg-card" : "bg-neg-soft"}`}
       style={{ width: size, height: size }}
     >
       <svg width={size * 0.5} height={size * 0.6} viewBox="0 0 20 24">
@@ -43,7 +44,7 @@ function WallRow({ person }: { person: WallPerson }) {
       className={`flex min-h-[56px] items-center gap-3 px-3.5 py-2 ${person.you ? "rounded-[16px] bg-neg-soft" : ""}`}
     >
       <span className="num w-[22px] shrink-0 text-right font-mono text-[12px] text-ink-mid">{person.rank}</span>
-      <CrackedEgg />
+      <CrackedEgg onTint={person.you} />
       <span className="flex min-w-0 grow flex-col">
         <span className="truncate text-[15px] font-semibold leading-[1.25] text-neg line-through decoration-[1.5px]">
           {label}

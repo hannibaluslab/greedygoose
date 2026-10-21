@@ -171,7 +171,7 @@ export function RepaySheet({
             />
             <RepayNotes
               note={view.note}
-              tick={needsTick ? { checked: ack, onChange: setAck, label: tickLabel(plan) } : null}
+              tick={needsTick ? { checked: ack, onChange: setAck, label: tickLabel(plan), act: !!plan?.intoAct } : null}
               moved={moved}
               feeBlocked={feeBlocked}
             />
@@ -257,7 +257,7 @@ function RepayNotes({
   feeBlocked,
 }: {
   note: { text: string; tone: "act" | "watch" } | null;
-  tick: { checked: boolean; onChange: (on: boolean) => void; label: string } | null;
+  tick: { checked: boolean; onChange: (on: boolean) => void; label: string; act: boolean } | null;
   moved: boolean;
   feeBlocked: boolean;
 }) {
@@ -271,7 +271,7 @@ function RepayNotes({
           {note.text}
         </p>
       )}
-      {tick && <RiskTick checked={tick.checked} onChange={tick.onChange} label={tick.label} />}
+      {tick && <RiskTick checked={tick.checked} onChange={tick.onChange} label={tick.label} act={tick.act} />}
       {moved && (
         <p
           role="status"
