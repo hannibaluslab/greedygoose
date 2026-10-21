@@ -1057,3 +1057,8 @@ earned since it started earning, as a yearly rate compounded as Aave's APY is (`
 "over 1 day · since Oct 20" under it (Adrian: "the average since he started earning"). Under a day it shows today's rate
 and says so. The Cash row keeps today's rate. The lead loses "so your average yield is your cash rate", which is no
 longer exactly true. **Tests:** `earned` (the yearly rate, and nothing under a day).
+
+## 2026-10-21 · Total balance: the credit card is white
+
+Adrian: "dark is reserved for ctas", and not the bone colour either. "You owe on credit / After credit" in the Total
+balance sheet is a white card like the one above it; After credit is plain ink, not lime.

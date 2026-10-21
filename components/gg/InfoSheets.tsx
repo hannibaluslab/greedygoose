@@ -45,12 +45,13 @@ export function TotalBalanceSheet({
           <Total label="Total balance" value={formatUsd(total)} />
         </div>
         {debtUsd > 0 && (
-          <div className="rounded-[22px] bg-ink px-4 py-1 text-on-ink">
-            <div className="flex items-center justify-between border-b border-[rgba(245,240,226,0.12)] py-3 text-[15px]">
-              <span className="text-ink-on-dark-mute">You owe on credit</span>
+          // White, as the card above (Adrian, 2026-10-21): black is only for buttons.
+          <div className="rounded-[22px] bg-card px-4 py-1 shadow-card-elev">
+            <div className="flex items-center justify-between border-b border-hairline py-3 text-[15px]">
+              <span className="text-ink-mid">You owe on credit</span>
               <span className="font-medium">−{formatUsd(debtUsd)}</span>
             </div>
-            <Total label="After credit" value={<span className="text-brand">{formatUsd(total - debtUsd)}</span>} />
+            <Total label="After credit" value={formatUsd(total - debtUsd)} />
           </div>
         )}
         <Button variant="dark" size="lg" onClick={onClose}>
