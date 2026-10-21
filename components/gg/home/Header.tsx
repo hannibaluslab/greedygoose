@@ -17,11 +17,12 @@ import { shortAddress } from "@/lib/formatting";
 export function Header({ address, aside, menu }: { address: `0x${string}`; aside?: ReactNode; menu?: MenuExtra }) {
   const { data: name, isPending } = useAccountName(address);
   return (
-    // Dark: the booth's header (Adrian, 2026-10-22: "with that thin border, like that by default"; hannibaluslab/
+    // The booth's header in both themes (light: cream at 80% and an ink hairline, the logo 8px above it, so the hero
+    // stays where it was). Dark: (Adrian, 2026-10-22: "with that thin border, like that by default"; hannibaluslab/
     // jaw-booth-revamp src/app/home/page.tsx, its scrolled look, here always on). Stuck to the top, the ground at 80% with
     // a blur and a hairline under it. The row starts at the page's top, so the logo is 2px under it (Adrian, 2026-10-22:
     // as high as it goes), 9px of band under the row, so 12px from the logo to the hairline. Under the sheets' scrim (z-40).
-    <header className="flex items-center justify-between px-5 pt-[calc(env(safe-area-inset-top)+4px)] dark:sticky dark:top-0 dark:z-20 dark:border-b dark:border-[rgba(255,255,255,0.1)] dark:bg-[rgba(14,13,11,0.8)] dark:pb-[9px] dark:pt-[env(safe-area-inset-top)] dark:backdrop-blur-xl">
+    <header className="sticky top-0 z-20 flex items-center justify-between border-b border-[rgba(14,13,11,0.1)] bg-[rgba(244,242,236,0.8)] px-5 pb-[5px] pt-[env(safe-area-inset-top)] backdrop-blur-xl dark:border-[rgba(255,255,255,0.1)] dark:bg-[rgba(14,13,11,0.8)] dark:pb-[9px]">
       <div className="flex items-center gap-2.5">
         <span aria-hidden className="flex size-9 items-center justify-center rounded-[18px] bg-ink">
           <GooseMark className="h-[28px] w-auto" />

@@ -268,7 +268,7 @@ function Loaded({
           (50px with its hairline, the logo 2px from the top, 12px above the line) and the hero starts 22px under it;
           the week's line to the buttons is 12, not 16 (Adrian: the 4px went above Total balance).
           The lime button clears the cards by 12. */}
-      <section className="flex flex-col gap-2 px-5 pt-3 dark:pt-[22px]">
+      <section className="flex flex-col gap-2 px-5 pt-[10px] dark:pt-[22px]">
         <BalanceHero
           label="Total balance"
           // The whole Total balance column opens what's in it (Adrian, 2026-10-21: no ⓘ on Home).
