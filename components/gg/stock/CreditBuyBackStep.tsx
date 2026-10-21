@@ -231,7 +231,7 @@ export function CreditBuyBackStep({
       ) : (
         <>
           {options.length > 0 && (
-            <p className="m-0 px-1 text-[12.5px] leading-[1.4] text-ink-mid">Only what your buy needs goes in.</p>
+            <p className="m-0 px-1 text-[12.5px] leading-[1.4] text-ink-mid">We use only the shares you need.</p>
           )}
           <Button variant="dark" disabled={!pickedKey} onClick={onContinue} className="mt-1">
             Continue
