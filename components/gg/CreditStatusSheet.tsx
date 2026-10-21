@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
 import { Button } from "./kit/Button";
 import { StatusBar, StatusPill } from "./Status";
-import { AAVE_LINE_HF, CREDIT_CAP, RISK } from "@/config/risk";
+import { AAVE_LINE_HF, RISK, type CreditLine } from "@/config/risk";
 import { useBackingFactorsRead, type PositionData } from "@/hooks/usePosition";
 import { PROTECT_LINE } from "@/lib/agents/list";
 import { formatUsd } from "@/lib/formatting";
@@ -17,21 +17,26 @@ const pct = (f: number) => `${Math.floor(f * 100 + 1e-9)}%`;
 
 /**
  * The scale, from the top: where each band starts and what happens in it. Act is a warning only; Protect's line, under
- * it, is where Protect steps in (Adrian, 2026-10-19), still in Act, so its row wears Act's pill.
+ * it, is where Protect steps in (Adrian, 2026-10-19), still in Act, so its row wears Act's pill. New credit and free up
+ * stop at the position's line: in Watch at 1.12 (ACT_LINE), in Act once Greedy Fatalities is open.
  */
-const SCALE: { key: string; status: Exclude<Status, "none">; range: string; line: string }[] = [
+const scaleFor = (
+  line: CreditLine,
+): { key: string; status: Exclude<Status, "none">; range: string; line: string }[] => [
   { key: "safe", status: "safe", range: `${RISK.safeMin} and up`, line: "Nothing to do." },
   {
     key: "watch",
     status: "watch",
     range: `${RISK.watchMin} to ${RISK.safeMin}`,
-    line: `Nothing is sold. New credit and free up stop at ${CREDIT_CAP.minHf}.`,
+    line: line.intoAct ? "Nothing is sold." : `Nothing is sold. New credit and free up stop at ${line.capHf}.`,
   },
   {
     key: "act",
     status: "act",
     range: `Under ${RISK.watchMin}`,
-    line: `A warning. Protector steps in at ${PROTECT_LINE}.`,
+    line: line.intoAct
+      ? `A warning. New credit and free up stop at ${line.capHf}. Protector steps in at ${PROTECT_LINE}.`
+      : `A warning. Protector steps in at ${PROTECT_LINE}.`,
   },
   {
     key: "protect",
@@ -121,7 +126,7 @@ export function StatusSheet({
         )}
         <Card>
           <ul className="m-0 flex list-none flex-col gap-3 p-0">
-            {SCALE.map((r) => (
+            {scaleFor(data.line).map((r) => (
               <li key={r.key} className="flex items-start gap-2.5">
                 <span className="w-[58px] shrink-0">
                   <StatusPill status={r.status} size="sm" />

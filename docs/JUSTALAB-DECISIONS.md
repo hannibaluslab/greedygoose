@@ -888,8 +888,7 @@ is set. Protect's target stays 1.12.
   (`lineOf`), so a flow that doesn't pass one stays at 1.12. Credit Buy, its Cash row, Earn with stocks, Free up and Sell
   from backing all take it; each plan carries its own floor (`creditFloor`, `freeUpFloor`, `earnFloor`).
 - **Ending in Act asks for the tick** every flow already asks for Watch (`extraConfirm`; Free up's `risky`), and each
-  plan says `intoAct` so the screen can word it as the Wall's rule. **Sell from backing has no tick yet**: its screen
-  gets one with the Wall's boards, before the setting is set.
+  plan says `intoAct` so the screen can word it as the Wall's rule. No screen sells from backing (Sell and Trade sell free shares; Repay sells to pay, which ends healthier or is blocked), so no other tick is needed.
 - **New words:** "Your credit is past its limit. Repay some to use more." (under the line's stop, "past-limit"), "Prices
   moved, so that’s past your limit now. Try a smaller amount." (the simulation's stop), "That would take your credit
   past its limit. Sell more, or repay from cash." (a sale to repay that ends under the stop).
@@ -904,3 +903,31 @@ and join again). The credit line: `config/risk.ts` (`CreditLine`, `ACT_LINE`, `c
 `lib/cash.ts` (`protectRuns`), `hooks/usePosition.ts` (`line`), `lib/creditBuy.ts` (`lineOf`, `creditFloor`, `intoAct`),
 `lib/freeUpPlan.ts`, `lib/sell.ts`, `lib/earnWithStocks.ts`, `lib/tx/plans/{earn,freeUp}.ts`, `hooks/useRepay.ts`.
 **Tests:** `credit-line` (the three lines, Credit Buy's cap and blocks, Free up, Sell from backing, Earn's offer).
+
+## 2026-10-21 · Heroes | Wall of shame, the screens
+
+Adrian chose the tabs "Heroes" and "Wall of shame", the Wall titled "Greedy Fatalities" (as in the film and the guide),
+no leverage tag on Heroes rows for now, and, for the two choices on one screen, "a clean UX solution": the mock he
+approved.
+
+- **One pill for the board, a quiet toggle for who.** Heroes | Wall of shame is the NYM pill. Under it, on Heroes only,
+  Everyone · Contacts is two words, the chosen one in ink and underlined, with Add several at the end of that row. The
+  Wall has no filter: it is a short list and everyone on it is named. "Return since joining" stays in the foot.
+- **Until the Wall opens** (no `NEXT_PUBLIC_WALL_FROM_BLOCK`) the tab is exactly as before: All | Contacts as the pill,
+  "Return since joining" beside Add several. No tabs while the board opens soon (ruling 47).
+- **A Wall row:** rank, a lime egg cracked on Act's pale red, the name struck through in Act's red (`#8e2a1d`), the
+  multiple in bold red (Home's tag, "4.7x", rounded down, or "Wiped out") and the date. Your own row is lit pale red.
+  Nothing to tap. Over the list, "Greedy Fatalities" and "Part of their stock was sold to pay what they owe. Boldest
+  first."; under it, how it ranks. States: loading (the board's skeleton), Base not answering (Retry), nobody yet.
+- **The tick into Act states the Wall's rule** on every flow that has one (Credit Buy, a buy split with credit, its
+  Cash row, Earn with stocks, Free up): "I understand this puts my credit in Act. If my stocks fall too far and part of
+  them is sold to pay what I owe, my name goes on Greedy Fatalities." Watch keeps its own words.
+- **"My credit status"** says where new credit and free up stop: in Watch at 1.12 as before, in Act at the line once the
+  Wall is open.
+- **The guide's "Stay off Greedy Fatalities"** loses "Opens soon" with the Wall (`wallOpen`).
+
+**In this repo:** `components/gg/leaderboard/WallView.tsx`, `BoardView.tsx` (`Controls`, `WhoToggle`),
+`LeaderboardScreen.tsx`, `hooks/useWall.ts`, `lib/board/view.ts` (`BoardTab`, `WallPerson`, `wallMultiple`,
+`wallDate`), `lib/board/copy.ts`, `lib/creditBuy/copy.ts` (`creditTick`), `lib/earnWithStocks/copy.ts` (`earnTick`),
+`components/gg/CreditStatusSheet.tsx`, `lib/guide/content.ts`. Gallery: `/dev/ui/board?tab=wall&wall=few|many|empty|
+loading|error`, `&wall=off` for the board as before.

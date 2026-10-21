@@ -28,11 +28,14 @@ import {
 } from "@/lib/repay";
 import { FreeUpList, type FreeUpItem } from "./FreeUpList";
 import { freeUpFloor } from "@/lib/freeUpPlan";
+import { BOARD_COPY } from "@/lib/board/copy";
 import { OweCard } from "./OweCard";
 import { PayBox } from "./PayBox";
 import { RiskTick } from "./RiskTick";
 
 const RISK_TICK = "I understand: if prices fall, part of my stocks can be sold.";
+/** Free up's tick: the Watch words, or the Wall's rule when it ends in Act where the line allows it. */
+const tickLabel = (plan: { intoAct: boolean } | null | undefined) => (plan?.intoAct ? BOARD_COPY.wallTick : RISK_TICK);
 
 /**
  * The credit sheet (canvas boards 1–8, v2): "You owe" with where it lands; "Pay with | Repay"; then, optionally, "Also
@@ -168,7 +171,7 @@ export function RepaySheet({
             />
             <RepayNotes
               note={view.note}
-              tick={needsTick ? { checked: ack, onChange: setAck } : null}
+              tick={needsTick ? { checked: ack, onChange: setAck, label: tickLabel(plan) } : null}
               moved={moved}
               feeBlocked={feeBlocked}
             />
@@ -254,7 +257,7 @@ function RepayNotes({
   feeBlocked,
 }: {
   note: { text: string; tone: "act" | "watch" } | null;
-  tick: { checked: boolean; onChange: (on: boolean) => void } | null;
+  tick: { checked: boolean; onChange: (on: boolean) => void; label: string } | null;
   moved: boolean;
   feeBlocked: boolean;
 }) {
@@ -268,7 +271,7 @@ function RepayNotes({
           {note.text}
         </p>
       )}
-      {tick && <RiskTick checked={tick.checked} onChange={tick.onChange} label={RISK_TICK} />}
+      {tick && <RiskTick checked={tick.checked} onChange={tick.onChange} label={tick.label} />}
       {moved && (
         <p
           role="status"

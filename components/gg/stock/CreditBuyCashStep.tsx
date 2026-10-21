@@ -158,7 +158,7 @@ export function CreditBuyCashStep({
             onChange={(e) => setAck(e.target.checked)}
             className="mt-px size-[18px] shrink-0 accent-[#8e2a1d]"
           />
-          {earnTick(plan.after)}
+          {earnTick(plan)}
         </label>
       )}
       {feeBlocked && (

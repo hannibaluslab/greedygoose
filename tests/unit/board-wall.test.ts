@@ -12,6 +12,8 @@ import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { gooseBoardAbi } from "@/lib/board/abi";
 import { decodeWallLogs } from "@/lib/board/logs";
+import { BOARD_COPY } from "@/lib/board/copy";
+import { wallDate, wallMultiple } from "@/lib/board/view";
 import { countedSales, rankWall, saleMultiple, wallSince, type WallSale } from "@/lib/board/wall";
 import type { Holdings } from "@/lib/board/worth";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
@@ -214,5 +216,23 @@ describe("decoding the Wall's logs", () => {
     expect(sales).toEqual([
       { account: KIT, block: 1_300n, tx: `0x${"ab".repeat(32)}`, logIndex: 7, stockReserveId: NVDA.reserveId },
     ]);
+  });
+});
+
+describe("the Wall's words", () => {
+  it("shows Home's leverage tag, rounded down, or Wiped out", () => {
+    expect(wallMultiple(4.79)).toBe("4.7x");
+    expect(wallMultiple(1.7300792676184855)).toBe("1.7x");
+    expect(wallMultiple("wiped")).toBe("Wiped out");
+  });
+
+  it("dates a sale as month and day", () => {
+    expect(wallDate(Date.UTC(2026, 9, 24, 12) / 1000)).toBe("Oct 24");
+  });
+
+  it("never says liquidated, nor any word kept off screen", () => {
+    const words = Object.values(BOARD_COPY).join(" ").toLowerCase();
+    for (const banned of ["liquidat", "borrow", "loan", "lock", "collateral", "room"])
+      expect(words).not.toContain(banned);
   });
 });

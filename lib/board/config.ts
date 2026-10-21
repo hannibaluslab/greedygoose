@@ -14,7 +14,7 @@ export const GOOSE_BOARD = board && isAddress(board) ? board : undefined;
  * nobody is named under a rule that wasn't shown yet. Unset (or no board): the Leaderboard has no Wall, and credit stays
  * capped at 1.12. Set at the deploy that ships it, to a block after GooseBoard's deploy.
  */
-const WALL_FROM_BLOCK = GOOSE_BOARD && wallFrom && /^\d+$/.test(wallFrom) ? BigInt(wallFrom) : undefined;
+export const WALL_FROM_BLOCK = GOOSE_BOARD && wallFrom && /^\d+$/.test(wallFrom) ? BigInt(wallFrom) : undefined;
 
 /** Greedy Fatalities is open: credit may go down toward Aave's line (config/risk.ts creditLineFor). */
 export const WALL_OPEN = WALL_FROM_BLOCK !== undefined;

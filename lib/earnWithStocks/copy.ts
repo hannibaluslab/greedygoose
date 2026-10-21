@@ -5,6 +5,7 @@ import type { CreditPlan } from "@/lib/creditBuy";
 import { formatShares, formatUsdTrim, inWords } from "@/lib/formatting";
 import { STATUS_LABEL } from "@/lib/risk/status";
 import { tickerOf } from "@/lib/tokens/registry";
+import { BOARD_COPY } from "@/lib/board/copy";
 
 /** Earn with stocks' words: why the card offers nothing, the plan's blocks in the Cash sheet's words, and the small print. */
 
@@ -76,8 +77,10 @@ export function earnSmallPrint(p: {
   );
 }
 
-/** The risk tick (D2), when it ends in Watch (ending in Act is blocked). */
-export const earnTick = (after: CreditPlan["after"]) =>
-  `I understand this puts my credit in ${STATUS_LABEL[after]}. If my stocks fall, part of them can be sold to repay what I owe.`;
+/** The risk tick (D2), when it ends in Watch; ending in Act, where the line allows it, states the Wall's rule. */
+export const earnTick = (plan: Pick<CreditPlan, "after" | "intoAct">) =>
+  plan.intoAct
+    ? BOARD_COPY.wallTick
+    : `I understand this puts my credit in ${STATUS_LABEL[plan.after]}. If my stocks fall, part of them can be sold to repay what I owe.`;
 
 export const earnDone = (amountUsd: number) => `${formatUsdTrim(amountUsd)} is in your cash, earning.`;

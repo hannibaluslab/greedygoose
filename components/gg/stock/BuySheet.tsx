@@ -1,5 +1,6 @@
 "use client";
 
+import { creditTick } from "@/lib/creditBuy/copy";
 import { useState } from "react";
 import { parseUnits } from "viem";
 import { useAccount } from "wagmi";
@@ -22,7 +23,6 @@ import { maxSpendRaw, toUsd } from "@/lib/cash";
 import { CREDIT_BLOCKED, backingOptions, planCredit, splitCash, type CreditPlan } from "@/lib/creditBuy";
 import { formatShares, formatUsd, inWords, monthlyCostText } from "@/lib/formatting";
 import { marketState } from "@/lib/market-hours";
-import { STATUS_LABEL } from "@/lib/risk/status";
 import { BUY_LIMITS, minOut, quoteEconomics } from "@/lib/swap/buy";
 import { VENUE_LABEL } from "@/lib/swap/venues";
 import { rawToShares } from "@/lib/tokens/b20";
@@ -210,8 +210,7 @@ export function BuySheet({
                   onChange={(e) => setAck(e.target.checked)}
                   className="mt-px size-[18px] shrink-0 accent-[#8e2a1d]"
                 />
-                I understand this puts my credit in {STATUS_LABEL[plan.after]}. If my stocks fall too far, part of them
-                can be sold to repay what I owe.
+                {creditTick(plan)}
               </label>
             )}
             {feeBlocked && (

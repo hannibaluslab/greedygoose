@@ -67,6 +67,8 @@ describe("guideContent", () => {
       /\$100 account can beat a \$100,000 one, and joining early gives no head start/,
     );
     expect(task({ ...TODAY, boardOpen: true }, "fatalities")?.tag).toBe("Opens soon");
+    // Once its tab ships (WALL_OPEN), the card opens with the board.
+    expect(task({ ...TODAY, boardOpen: true, wallOpen: true }, "fatalities")?.tag).toBeUndefined();
     expect(task(TODAY, "fatalities")?.steps.join(" ")).toMatch(/can’t opt out/);
   });
 

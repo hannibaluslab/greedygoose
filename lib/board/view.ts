@@ -1,5 +1,7 @@
 import { isAddressEqual, type Address } from "viem";
 import { shortAddress } from "@/lib/formatting";
+import { leverageText } from "@/lib/leverage";
+import { BOARD_COPY } from "./copy";
 import type { ContactsChange } from "@/lib/tx/plans";
 
 /** Ranked rows shown on All before the list stops; your own row is pinned under them when it is further down. */
@@ -85,6 +87,31 @@ export function boardPct(pct: number): string {
   // "−" (U+2212), as formatSignedPct and the boards write it.
   return `${pct < 0 ? "−" : "+"}${shown}%`;
 }
+
+/** The Leaderboard's two boards, once Greedy Fatalities is open (Adrian, 2026-10-21). */
+export type BoardTab = "heroes" | "wall";
+
+/** One row of the Wall, as the screen draws it. */
+export type WallPerson = {
+  account: Address;
+  name: string | null;
+  rank: number;
+  /** Leverage at the sale, or "wiped" when nothing of their own was left. */
+  multiple: number | "wiped";
+  /** When the sale happened, unix seconds. */
+  time: number;
+  you: boolean;
+};
+
+/** What the Wall shows: loading, couldn't read, or its rows (none yet is an empty list). */
+export type WallState = { kind: "loading" } | { kind: "error" } | { kind: "ready"; people: WallPerson[] };
+
+/** The Wall's number: Home's leverage tag ("4.7x", rounded down), or "Wiped out". */
+export const wallMultiple = (m: WallPerson["multiple"]) => (m === "wiped" ? BOARD_COPY.wipedOut : leverageText(m));
+
+const WALL_DATE = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
+/** When it happened: "Oct 24". */
+export const wallDate = (time: number) => WALL_DATE.format(new Date(time * 1000));
 
 /** What the tab shows: opening soon, loading, couldn't read (the board, or on Contacts the contacts), or the board. */
 export type BoardState =

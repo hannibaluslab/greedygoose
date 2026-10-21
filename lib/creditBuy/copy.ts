@@ -1,6 +1,8 @@
 import { CASH } from "@/config/risk";
 import { cashRaw, feeBufferRaw, type Cash } from "@/lib/cash";
 import { formatUsd } from "@/lib/formatting";
+import { BOARD_COPY } from "@/lib/board/copy";
+import { STATUS_LABEL, type Status } from "@/lib/risk/status";
 
 /** Credit Buy's words: why a plan or Credit Buy can't go ahead, and the lines under "You can use up to". */
 
@@ -41,6 +43,15 @@ export const CREDIT_BLOCKED: Record<CreditBlock, string> = {
  * between reading the position and the tap (lib/tx/prepared.ts HealthFloor).
  */
 export const LINE_MOVED = "Prices moved, so that’s past your limit now. Try a smaller amount.";
+
+/**
+ * The risk tick on Credit Buy and a buy split with credit (D2): the status it ends in and what can happen, or, ending in
+ * Act where the line allows it, the Wall's rule.
+ */
+export const creditTick = (plan: { after: Status; intoAct: boolean }) =>
+  plan.intoAct
+    ? BOARD_COPY.wallTick
+    : `I understand this puts my credit in ${STATUS_LABEL[plan.after]}. If my stocks fall too far, part of them can be sold to repay what I owe.`;
 
 /** Why a Credit Buy can use nothing right now (F2-3's zero state, shown at step 1). */
 export type NoCredit =

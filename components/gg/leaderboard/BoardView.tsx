@@ -15,11 +15,14 @@ import {
   type BoardFilter,
   type BoardPerson,
   type BoardState,
+  type BoardTab,
   type OffBoard,
+  type WallState,
 } from "@/lib/board/view";
 import { RetryButton } from "../kit/RetryButton";
 import { BOARD_COPY } from "@/lib/board/copy";
 import { BoardRowItem, Gap, List, Note, Section, Skeleton } from "./BoardRow";
+import { WallBody } from "./WallView";
 
 /*
  * The Leaderboard tab (Adrian, 2026-10-15): one board, All | Contacts. Everyone is on it from their first move, ranked
@@ -32,6 +35,44 @@ const FILTERS: { value: BoardFilter; label: string }[] = [
   { value: "all", label: "All" },
   { value: "contacts", label: "Contacts" },
 ];
+
+/** Once Greedy Fatalities is open: the boards, as one pill, and who Heroes shows, as a quiet toggle under it. */
+const TABS: { value: BoardTab; label: string }[] = [
+  { value: "heroes", label: BOARD_COPY.heroes },
+  { value: "wall", label: BOARD_COPY.wall },
+];
+const WHO: { value: BoardFilter; label: string }[] = [
+  { value: "all", label: BOARD_COPY.everyone },
+  { value: "contacts", label: BOARD_COPY.contacts },
+];
+
+/** Who Heroes shows: Everyone or Contacts, as two words, the chosen one in ink and underlined. */
+function WhoToggle({ value, onChange }: { value: BoardFilter; onChange: (f: BoardFilter) => void }) {
+  return (
+    <div role="radiogroup" aria-label="Show" className="-ml-1 flex gap-1">
+      {WHO.map((o) => {
+        const on = o.value === value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            onClick={() => onChange(o.value)}
+            className={`flex h-11 items-center px-1 text-[14px] ${on ? "font-semibold text-ink" : "text-ink-mute"}`}
+          >
+            <span className={on ? "border-b-[1.5px] border-ink pb-px" : "border-b-[1.5px] border-transparent pb-px"}>
+              {o.label}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** The two boards (Heroes | Wall of shame), once the Wall is open; undefined keeps the one board as before. */
+type Tabs = { tab: BoardTab; onTab: (t: BoardTab) => void; wall: WallState; onWallRetry: () => void };
 
 /**
  * The tab: header, the All | Contacts filter (not while the board opens soon, ruling 47), then the board in its state.
@@ -50,7 +91,9 @@ export function BoardView({
   onOpen,
   onAddByName,
   pickBar,
+  tabs,
 }: {
+  tabs?: Tabs;
   filter: BoardFilter;
   onFilter: (f: BoardFilter) => void;
   state: BoardState;
@@ -111,27 +154,32 @@ export function BoardView({
     );
   }
 
+  const pickToggle = (
+    <button
+      type="button"
+      onClick={picking ? onPickStop : onPickStart}
+      className="-mr-2 flex h-11 items-center px-2 text-[13px] font-semibold text-ink underline-offset-2 hover:underline"
+    >
+      {picking ? "Cancel" : "Add several"}
+    </button>
+  );
+  const canPick = !!ready && filter === "all" && addable > 0;
+  const onWall = tabs?.tab === "wall";
+
   return (
     <div className="relative flex min-h-dvh flex-col gap-3 px-5 pt-[calc(env(safe-area-inset-top)+8px)] leading-[normal]">
       <TabHeader title="Leaderboard" back="/home" />
-      {/* Ruling 47: no All | Contacts while the board opens soon. */}
-      {state.kind !== "soon" && <SegmentedControl label="Show" options={FILTERS} value={filter} onChange={onFilter} />}
-      {ready && filter === "all" && addable > 0 && (
-        <div className="-mb-1 flex items-center justify-between px-1">
-          <span className="text-[13px] text-ink-mid">
-            {picking ? "Tick the people to add" : "Return since joining"}
-          </span>
-          <button
-            type="button"
-            onClick={picking ? onPickStop : onPickStart}
-            className="-mr-2 flex h-11 items-center px-2 text-[13px] font-semibold text-ink underline-offset-2 hover:underline"
-          >
-            {picking ? "Cancel" : "Add several"}
-          </button>
-        </div>
+      {state.kind !== "soon" && (
+        <Controls
+          tabs={tabs}
+          filter={filter}
+          onFilter={onFilter}
+          picking={picking}
+          pickToggle={canPick ? pickToggle : null}
+        />
       )}
-      {body}
-      {pickBar && (
+      {onWall ? <WallBody state={tabs.wall} onRetry={tabs.onWallRetry} /> : body}
+      {pickBar && !onWall && (
         <>
           {/* Space under the last row for the bar. */}
           <div aria-hidden className="h-[72px] shrink-0" />
@@ -140,6 +188,55 @@ export function BoardView({
       )}
       <TabBar />
     </div>
+  );
+}
+
+/**
+ * Above the board, not while it opens soon (ruling 47). Before the Wall opens: All | Contacts as a pill, and Add
+ * several beside "Return since joining". Once it's open: Heroes | Wall of shame as the pill, and under it, on Heroes
+ * only, who it shows (Everyone · Contacts) with Add several at its end.
+ */
+function Controls({
+  tabs,
+  filter,
+  onFilter,
+  picking,
+  pickToggle,
+}: {
+  tabs?: Tabs;
+  filter: BoardFilter;
+  onFilter: (f: BoardFilter) => void;
+  picking: boolean;
+  pickToggle: ReactNode;
+}) {
+  if (!tabs)
+    return (
+      <>
+        <SegmentedControl label="Show" options={FILTERS} value={filter} onChange={onFilter} />
+        {pickToggle && (
+          <div className="-mb-1 flex items-center justify-between px-1">
+            <span className="text-[13px] text-ink-mid">
+              {picking ? "Tick the people to add" : "Return since joining"}
+            </span>
+            {pickToggle}
+          </div>
+        )}
+      </>
+    );
+  return (
+    <>
+      <SegmentedControl label="Board" options={TABS} value={tabs.tab} onChange={tabs.onTab} />
+      {tabs.tab === "heroes" && (
+        <div className="-my-1 flex items-center justify-between px-1">
+          {picking ? (
+            <span className="text-[13px] text-ink-mid">Tick the people to add</span>
+          ) : (
+            <WhoToggle value={filter} onChange={onFilter} />
+          )}
+          {pickToggle}
+        </div>
+      )}
+    </>
   );
 }
 

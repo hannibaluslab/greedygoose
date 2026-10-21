@@ -1,5 +1,6 @@
 "use client";
 
+import { creditTick } from "@/lib/creditBuy/copy";
 import { AmountArrow, AmountBadge, AmountField, AmountSource, YouGet } from "../kit/AmountField";
 import { StockAvatar, tickerOf } from "../kit/StockAvatar";
 import { TxButton, TxError } from "../TxUi";
@@ -181,8 +182,7 @@ export function CreditBuyAmountStep({
             onChange={(e) => setAck(e.target.checked)}
             className="mt-px size-[18px] shrink-0 accent-[#8e2a1d]"
           />
-          I understand this puts my credit in {STATUS_LABEL[plan.after]}. If my stocks fall too far, part of them can be
-          sold to repay what I owe.
+          {creditTick(plan)}
         </label>
       )}
       {feeBlocked && (

@@ -1,6 +1,6 @@
 import { CASH } from "@/config/risk";
 import { AGENTS_LIVE } from "@/lib/agents/config";
-import { GOOSE_BOARD } from "@/lib/board/config";
+import { GOOSE_BOARD, WALL_OPEN } from "@/lib/board/config";
 import { LEADERBOARD_ENABLED } from "@/lib/features";
 import { formatUsd, inWords } from "@/lib/formatting";
 import type { Status } from "@/lib/risk/status";
@@ -64,6 +64,8 @@ export type GuideFlags = {
   boardShown: boolean;
   /** Its members contract is set, so it ranks people rather than saying it opens soon (GOOSE_BOARD). */
   boardOpen: boolean;
+  /** Greedy Fatalities is open (WALL_OPEN): its card loses "Opens soon". */
+  wallOpen?: boolean;
   /** The cash kept back for network fees. */
   fuelTankUsd: number;
   /** Dollar coins Turn into cash takes, besides USDC. */
@@ -74,6 +76,7 @@ const FLAGS: GuideFlags = {
   agentsLive: AGENTS_LIVE,
   boardShown: LEADERBOARD_ENABLED,
   boardOpen: !!GOOSE_BOARD,
+  wallOpen: WALL_OPEN,
   fuelTankUsd: CASH.feeBufferUsd,
   coins: CASH_COINS.map((c) => c.symbol),
 };
@@ -278,8 +281,8 @@ export function guideContent(flags: GuideFlags = FLAGS): Guide {
               "Everyone who gets there is named. You can’t opt out.",
             ],
             note: "Repay some while your credit is in Act to stay off it.",
-            // Its tab isn't built yet (SPEC, Leaderboard): the tag goes when it ships.
-            tag: "Opens soon" as const,
+            // Its tab opens with NEXT_PUBLIC_WALL_FROM_BLOCK (lib/board/config.ts WALL_OPEN); until then, "Opens soon".
+            tag: flags.wallOpen ? boardTag : ("Opens soon" as const),
             link: { label: "Open Leaderboard", href: "/leaderboard" },
             icon: "fatalities" as const,
           },

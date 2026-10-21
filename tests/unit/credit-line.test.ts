@@ -11,7 +11,8 @@ import {
   type CreditPosition,
 } from "@/lib/creditBuy";
 import { LINE_MOVED } from "@/lib/creditBuy/copy";
-import { earnOffer } from "@/lib/earnWithStocks";
+import { BOARD_COPY } from "@/lib/board/copy";
+import { earnOffer, earnTick } from "@/lib/earnWithStocks";
 import { FREE_UP_FLOOR, freeUpFloor, planFreeUp, type FreeUpStock } from "@/lib/freeUpPlan";
 import { planSell } from "@/lib/sell";
 import type { SellQuote } from "@/lib/swap/sell";
@@ -119,6 +120,12 @@ describe("taking credit (planCredit)", () => {
     expect(plan(100, at(1_000)).floor).toEqual(CREDIT_FLOOR);
     expect(plan(100, at(1_000, ON)).floor).toEqual({ minHf: 1.03, stop: LINE_MOVED });
     expect(creditFloor(OFF)).toEqual({ minHf: 1, stop: LINE_MOVED });
+  });
+
+  it("the tick into Act states the Wall's rule; the Watch tick keeps its words", () => {
+    expect(earnTick(plan(300, at(1_000, ON)))).toBe(BOARD_COPY.wallTick);
+    expect(earnTick(plan(100, at(1_000, ON)))).toMatch(/^I understand this puts my credit in Watch/);
+    expect(BOARD_COPY.wallTick).toMatch(/Greedy Fatalities\.$/);
   });
 
   it("Earn with stocks is closed under the stop with the same words", () => {

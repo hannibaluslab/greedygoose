@@ -9,11 +9,12 @@ import { AddByNameSheet, type NameLookup } from "./AddByNameSheet";
 import { BoardView, PickBar } from "./BoardView";
 import { PersonSheet } from "./PersonSheet";
 import { useBoard } from "@/hooks/useBoard";
+import { useWall } from "@/hooks/useWall";
 import { useContactsTx, useFollowing, useNames } from "@/hooks/useContacts";
 import type { ContactsChange } from "@/lib/tx/plans";
 import { TAP_AGAIN } from "@/hooks/useTx";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
-import { GOOSE_BOARD } from "@/lib/board/config";
+import { GOOSE_BOARD, WALL_OPEN } from "@/lib/board/config";
 import {
   BOARD_PAGE,
   boardChanges,
@@ -22,7 +23,9 @@ import {
   sheetPersonOf,
   type BoardFilter,
   type BoardPerson,
+  type BoardTab,
   type OffBoard,
+  type WallState,
 } from "@/lib/board/view";
 import { addressOfName } from "@/lib/jaw/name";
 
@@ -40,11 +43,12 @@ export function LeaderboardScreen({ address }: { address: Address }) {
   const preview = !signer || !isAddressEqual(signer, address);
   const fee = useFeeSupport();
   const board = useBoard();
+  const wall = useWall();
   const following = useFollowing(address);
 
-  const [filter, setFilter] = useState<BoardFilter>(
-    useSearchParams().get("filter") === "contacts" ? "contacts" : "all",
-  );
+  const params = useSearchParams();
+  const [filter, setFilter] = useState<BoardFilter>(params.get("filter") === "contacts" ? "contacts" : "all");
+  const [tab, setTab] = useState<BoardTab>(params.get("tab") === "wall" ? "wall" : "heroes");
   const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   // The open sheet keeps its person while it slides away.
@@ -61,11 +65,13 @@ export function LeaderboardScreen({ address }: { address: Address }) {
   const contactSet = useMemo(() => new Set(contacts.map(lower)), [contacts]);
   const memberSet = useMemo(() => new Set(rows.map((r) => lower(r.account))), [rows]);
 
-  // Names for what can be on screen: the first page, you and your contacts (others not ranked yet are only a count).
+  const wallRows = useMemo(() => wall.data?.rows ?? [], [wall.data]);
+  // Names for what can be on screen: the first page, you, your contacts (others not ranked yet are only a count) and
+  // everyone on the Wall.
   const named = useMemo(() => {
     const ranked = rows.filter((r) => r.rank !== null && r.rank <= BOARD_PAGE).map((r) => r.account);
-    return [...new Set([address, ...ranked, ...contacts].map(lower))] as Address[];
-  }, [rows, contacts, address]);
+    return [...new Set([address, ...ranked, ...contacts, ...wallRows.map((r) => r.account)].map(lower))] as Address[];
+  }, [rows, contacts, address, wallRows]);
   const names = useNames(named);
   const nameOf = (a: string) => names.get(lower(a)) ?? null;
 
@@ -161,9 +167,41 @@ export function LeaderboardScreen({ address }: { address: Address }) {
     }
   };
 
+  const wallState: WallState =
+    wall.isPending && !wall.data
+      ? { kind: "loading" }
+      : !wall.data
+        ? { kind: "error" }
+        : {
+            kind: "ready",
+            people: wallRows.map((r) => ({
+              account: r.account,
+              name: nameOf(r.account),
+              rank: r.rank,
+              multiple: r.multiple,
+              time: r.time,
+              you: isAddressEqual(r.account, address),
+            })),
+          };
+
   return (
     <>
       <BoardView
+        tabs={
+          WALL_OPEN
+            ? {
+                tab,
+                onTab: (t) => {
+                  settle();
+                  setTab(t);
+                  setPicking(false);
+                  setPicked(new Set());
+                },
+                wall: wallState,
+                onWallRetry: () => void wall.refetch(),
+              }
+            : undefined
+        }
         filter={filter}
         onFilter={(f) => {
           settle();
