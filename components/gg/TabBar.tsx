@@ -19,13 +19,14 @@ const TABS = [
   { href: "/send", label: "Send", Icon: SendIcon, match: ["/send"] },
 ];
 
-/** Floating dark pill tab bar with the fade behind it, as in the design. The board's 24px under it sat over the home
- * indicator; in a Safari tab the page already ends above Safari's bar, so it floats 8px over the bottom inset. */
+/** Floating dark pill tab bar with the fade behind it, as in the design. Lower (Adrian, 2026-10-21): it reaches into
+ * the bottom inset, ending 20px from the edge on an iPhone with a home bar (the bar's line stays clear under it), and
+ * 6px where there's no inset (a Safari tab, whose page already ends above Safari's bar). */
 export function TabBar() {
   const path = usePathname();
   return (
     <>
-      <div aria-hidden className="h-[calc(env(safe-area-inset-bottom)+88px)]" />
+      <div aria-hidden className="h-[calc(max(6px,env(safe-area-inset-bottom)-14px)+80px)]" />
       <div
         aria-hidden
         className="pointer-events-none fixed inset-x-0 bottom-0 h-[calc(env(safe-area-inset-bottom)+104px)]"
@@ -33,7 +34,7 @@ export function TabBar() {
       />
       <nav
         aria-label="Main"
-        className="fixed bottom-[calc(env(safe-area-inset-bottom)+8px)] left-1/2 grid h-14 w-[calc(min(100vw,430px)-28px)] -translate-x-1/2 rounded-[28px] px-1.5"
+        className="fixed bottom-[max(6px,calc(env(safe-area-inset-bottom)-14px))] left-1/2 grid h-14 w-[calc(min(100vw,430px)-28px)] -translate-x-1/2 rounded-[28px] px-1.5"
         style={{
           gridTemplateColumns: `repeat(${TABS.length}, minmax(0,1fr))`,
           background: "rgba(20,19,15,0.94)",

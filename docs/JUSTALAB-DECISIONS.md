@@ -1077,3 +1077,9 @@ stays at its measured 15px. Labels lose their details: Trade says "Buy stock", "
 "Add to contacts" (not "Add 3 to contacts"); Multi trade "Make trades". The cards above each button already say which
 stock and how much. Hints for a missing step stay ("Enter an amount", "Add a second trade"). **Tests:** the Trade and
 Send plan tables re-recorded after checking, with the button set aside, that nothing else in them changed.
+
+## 2026-10-21 · The tab bar sits lower
+
+Adrian: "lower even more the bottom navigation". It reaches into the bottom inset: `max(6px, inset − 14px)`, so 20px
+from the edge on an iPhone with a home bar (it was inset + 8, about 42px), and 6px where there is no inset (it was 8).
+The space kept under the pages shrinks to match.
