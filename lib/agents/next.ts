@@ -15,6 +15,7 @@ import { isMix, previewTrades, type MixHolding } from "@/lib/agents/mix";
 import { JOBS, readStockLimits, type AgentJob } from "@/lib/agents/permissions";
 import { planProtect, weekendHeadsUp } from "@/lib/agents/rules/protect";
 import { bandBreaks, type RebalanceOptions, type RebalanceTrade } from "@/lib/agents/rules/rebalance";
+import { clockText, dayIn, weekdayText } from "@/lib/clock";
 import { formatUsdTrim } from "@/lib/formatting";
 import { marketState } from "@/lib/market-hours";
 import { STATUS_LABEL, statusFor } from "@/lib/risk/status";
@@ -88,16 +89,7 @@ export function planNext(p: Plan): { agent: Agent; next: Next } | null {
 }
 
 /** New York's calendar day of `sec`, counted from 1970-01-01, as GooseExecutor's NyCalendar.day counts it. */
-export function nyDay(sec: number): number {
-  const f = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    year: "numeric",
-    month: "numeric",
-    day: "numeric",
-  });
-  const p = Object.fromEntries(f.formatToParts(sec * 1000).map((x) => [x.type, x.value]));
-  return Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day)) / 86_400_000;
-}
+export const nyDay = (sec: number): number => dayIn(sec, "America/New_York");
 
 /** The second `hour`:00 New York time falls on, on New York day `day`. */
 function nyHour(day: number, hour: number): number {
@@ -127,15 +119,14 @@ export function rebalanceCheckAt(nowSec: number, ranDay: number, notBefore = 0):
   }
 }
 
-const TIME = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" });
-const WEEKDAY = new Intl.DateTimeFormat("en-US", { weekday: "short" });
-const midnight = (ms: number) => new Date(ms).setHours(0, 0, 0, 0);
-
-/** "today 10:00 AM", "tomorrow 10:00 AM", "Mon 10:00 AM", in the viewer's own time. */
-export function whenText(sec: number, nowSec: number): string {
-  const days = Math.round((midnight(sec * 1000) - midnight(nowSec * 1000)) / 86_400_000);
-  const day = days <= 0 ? "today" : days === 1 ? "tomorrow" : WEEKDAY.format(sec * 1000);
-  return `${day} ${TIME.format(sec * 1000)}`;
+/**
+ * "today 5:00 PM GMT+3", "tomorrow 5:00 PM GMT+3", "Mon 5:00 PM GMT+3": the viewer's own clock and its GMT offset
+ * (Adrian, 2026-10-21), "GMT" alone for a viewer on GMT. `timeZone` pins a zone for the tests.
+ */
+export function whenText(sec: number, nowSec: number, timeZone?: string): string {
+  const days = dayIn(sec, timeZone) - dayIn(nowSec, timeZone);
+  const day = days <= 0 ? "today" : days === 1 ? "tomorrow" : weekdayText(sec, timeZone);
+  return `${day} ${clockText(sec, timeZone)}`;
 }
 
 /** What one of a grant's spend limits still allows in its current period, in the token's own units. */

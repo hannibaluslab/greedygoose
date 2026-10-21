@@ -100,7 +100,9 @@ describe("topUpsView: the one note", () => {
   it("names a top-up waiting for the next check, and that it earns until then (board 7g)", () => {
     const waiting = topUpsView(input({ waiting: { usd: 300, atSec: WED_NOON + DAY } })).note;
     expect(waiting).toMatchObject({ kind: "waiting", title: "$300 waiting" });
-    expect(waiting?.line).toMatch(/^Goes into your mix tomorrow at \d{1,2}:\d{2} [AP]M\. It earns until then\.$/);
+    expect(waiting?.line).toMatch(
+      /^Goes into your mix tomorrow at \d{1,2}:\d{2}\s[AP]M GMT([+-]\d{1,2}(:\d{2})?)?\. It earns until then\.$/,
+    );
     expect(topUpsView(input({ waiting: { usd: 300.5, atSec: WED_NOON + DAY } })).note?.title).toBe("$300.50 waiting");
     // Dust is no top-up to name.
     expect(topUpsView(input({ waiting: { usd: 0.004, atSec: WED_NOON + DAY } })).note).toBeNull();

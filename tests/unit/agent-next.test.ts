@@ -13,6 +13,7 @@ import {
 } from "@/lib/agents/next";
 import { rebalanceOptions } from "@/lib/agents/mix";
 import { JOBS, type AgentJob } from "@/lib/agents/permissions";
+import { clockText } from "@/lib/clock";
 import { USDC } from "@/lib/tokens/registry";
 
 const usdc = (x: number) => BigInt(Math.round(x * 1e6));
@@ -127,7 +128,7 @@ describe("agentNexts: each agent's rule on live data", () => {
     expect(card).toEqual({
       addUsd: 159,
       dropPct: 15,
-      when: `at ${new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(freezeAt * 1000)}`,
+      when: `at ${clockText(freezeAt)}`, // the viewer's clock and its GMT offset
     });
     // No move with it: Protect waits for its line.
     expect(agentNexts(input({ nowSec: fri, debtUsd: 1_250 })).protect).toEqual({

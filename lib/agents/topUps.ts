@@ -70,7 +70,7 @@ export type TopUpsView = {
   note: TopUpsNote | null;
 };
 
-/** "tomorrow at 10:00 AM", "Mon at 10:00 AM": whenText with "at" after the day (its day is always one word). */
+/** "tomorrow at 5:00 PM GMT+3", "Mon at 5:00 PM GMT+3": whenText with "at" after the day (always one word). */
 const atText = (sec: number, nowSec: number) => whenText(sec, nowSec).replace(" ", " at ");
 
 /**

@@ -1,5 +1,6 @@
 import { NOT_LIVE, type ActCard, type Next, type WeekendCard } from "@/lib/agents/list";
 import type { AgentStatus } from "@/lib/agents/status";
+import { clockText } from "@/lib/clock";
 import { formatUsdTrim } from "@/lib/formatting";
 import { fallTo } from "@/lib/risk/health";
 import { STATUS_LABEL, statusFor } from "@/lib/risk/status";
@@ -68,7 +69,6 @@ const ENDS_SOON_SEC = 7 * 86_400;
 const RETRYING_AT = 3;
 
 const DATE = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
-const TIME = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" });
 const date = (sec: number) => DATE.format(sec * 1000);
 const two = (hf: number) => hf.toFixed(2);
 
@@ -140,7 +140,7 @@ export function protectCard(i: ProtectCardInput): ProtectCardModel {
   if (i.fails >= RETRYING_AT) {
     const retry =
       i.cooldownUntil > i.nowSec
-        ? `Nothing moved. They try again at ${TIME.format(i.cooldownUntil * 1000)}.`
+        ? `Nothing moved. They try again at ${clockText(i.cooldownUntil)}.`
         : "Nothing moved. They try again on the next run.";
     return card("Retrying", "watch", `Your agents’ last ${i.fails} runs didn’t go through.`, retry);
   }

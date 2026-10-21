@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { maxUint256 } from "viem";
 import type { AgentEvent } from "@/lib/agents/events";
 import { describeAgentEvent, type MoveContext, type Words } from "@/lib/agents/feed";
+import { clockText } from "@/lib/clock";
 import { STATUS_LABEL } from "@/lib/risk/status";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
 
@@ -202,9 +203,9 @@ describe("describeAgentEvent: the Agents board's rows", () => {
     const failed = row({ kind: "run-failed", reason: "0x122158cf", fails: 2 });
     expect(failed).toMatchObject({ by: "Agents", line: "A run didn’t go through. Nothing moved." });
     expect(failed.details).toMatchObject({ "In a row": "2", Code: "DebtNotLower" });
-    expect(failed.details["Tries again"]).toBe(
-      new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format((at + 1200) * 1000),
-    );
+    // On the viewer's clock with its GMT offset ("12:33 PM GMT+3").
+    expect(failed.details["Tries again"]).toBe(clockText(at + 1200));
+    expect(failed.details["Tries again"]).toMatch(/^\d{1,2}:\d{2}\s[AP]M GMT([+-]\d{1,2}(:\d{2})?)?$/);
     expect(row({ kind: "run-failed", reason: "0x5a154675", fails: 8 }).details).toEqual({
       "In a row": "8",
       Code: "0x5a154675",

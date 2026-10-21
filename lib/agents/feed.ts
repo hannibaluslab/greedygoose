@@ -4,6 +4,7 @@ import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
 import type { AgentEvent } from "@/lib/agents/events";
 import { PROTECT_LINE, PROTECT_TARGET, type AgentName } from "@/lib/agents/list";
 import type { AgentJob } from "@/lib/agents/permissions";
+import { clockText } from "@/lib/clock";
 import { statusFor, type Status } from "@/lib/risk/status";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
@@ -48,9 +49,9 @@ export const movesMoney = (e: AgentEvent) => e.kind === "repaid" || e.kind === "
 const FIRST_COOLDOWN_SEC = 600;
 const MAX_FAILS = 8;
 
-const TIME = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" });
 const DATE = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
-const at = (sec: number) => TIME.format(sec * 1000);
+/** When the agents try again: the viewer's clock and its GMT offset ("4:10 PM GMT+3"). */
+const at = (sec: number) => clockText(sec);
 
 const usd = (raw: bigint) => formatUsdTrim(Number(raw) / 10 ** USDC.decimals);
 /** What's owed rounds up to the cent: it's never shown as less than it is. */
