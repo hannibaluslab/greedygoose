@@ -42,7 +42,17 @@ export function ProtectCardView({ model, onOpen }: { model: ProtectCardModel; on
         </span>
         <ChevronRight size={14} className="shrink-0 text-ink-mid" />
       </span>
-      <span className="mt-4 text-[13px] font-medium leading-[18px] text-ink-mid">Your credit health</span>
+      <span className="mt-4 flex items-baseline gap-2 text-[13px] font-medium leading-[18px] text-ink-mid">
+        Your credit health
+        {/* Its change over the past 24 hours, beside the title (Adrian, 2026-10-22): up in green, down in red. */}
+        {model.hf !== null && model.dayChange && (
+          <span
+            className={`num font-semibold ${model.dayChange.startsWith("+") ? "text-pos" : model.dayChange.startsWith("−") ? "text-neg" : "text-ink-mid"}`}
+          >
+            {model.dayChange} <span className="font-medium text-ink-mid">in 24h</span>
+          </span>
+        )}
+      </span>
       {model.hf === null ? (
         <span className="mt-0.5 text-[28px] font-semibold leading-[44px] tracking-[-0.02em] text-ink-mid">
           No credit
@@ -55,14 +65,6 @@ export function ProtectCardView({ model, onOpen }: { model: ProtectCardModel; on
             {model.hf.toFixed(2)}
           </span>
           {model.word && <span className={`text-[17px] font-semibold ${WORD[model.word]}`}>{model.word}</span>}
-          {/* The change over the past 24 hours (Adrian, 2026-10-22): up in green, down in red. */}
-          {model.dayChange && (
-            <span
-              className={`num ml-auto text-[13px] font-semibold ${model.dayChange.startsWith("+") ? "text-pos" : model.dayChange.startsWith("−") ? "text-neg" : "text-ink-mid"}`}
-            >
-              {model.dayChange} <span className="font-medium text-ink-mid">in 24h</span>
-            </span>
-          )}
         </span>
       )}
       <LevelBar bar={model.bar} />
