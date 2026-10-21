@@ -1,5 +1,6 @@
 "use client";
 
+import { ACT_LINE } from "@/config/risk";
 import { toast } from "sonner";
 import { CashFeed } from "@/components/gg/cash/CashActivity";
 import { CashStep, cashLead } from "@/components/gg/cash/CashSheet";
@@ -103,6 +104,7 @@ function position(p: { owed: number; saveOn: boolean; creditApr?: number }): Pos
     stocksUsd: holdings.reduce((a, h) => a + h.freeUsd + h.backingUsd, 0),
     totalBackingUsd,
     debtUsd: p.owed,
+    line: ACT_LINE,
     // As usePosition: the credit left at the one cap (Act is the line), not Aave's own limit.
     availableUsd: creditWith({
       totalBackingUsd,

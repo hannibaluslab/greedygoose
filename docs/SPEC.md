@@ -69,6 +69,10 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
 
 - **1.12 is the line.** Taking credit and freeing stock never end below 1.12 (Act line + 0.02). There is no other cap
   on leverage.
+- **Once Greedy Fatalities is open** (`NEXT_PUBLIC_WALL_FROM_BLOCK` set; Adrian, 2026-10-21) the line goes down toward
+  Aave's: 1.05 with Protector on (0.02 over its 1.03 line, so it doesn't sell straight back) and 1.01 with it off. A
+  move may then end in Act: it asks for one tick, which states the Wall's rule (its words wait for the Wall's boards).
+  The simulation's stop follows: under 1.03 with Protector on, under 1.0 with it off. Protect's target stays 1.12.
 - **Aave's own check runs before JAW's sheet.** Every batch that takes credit or frees stock is simulated on Base with
   the health read after it; a result under 1.10 stops it.
 - **Protect** acts only under 1.03, Protect's line (Adrian, 2026-10-19). Act is a warning only: a card on the Agents

@@ -876,14 +876,31 @@ their boards.
   (past state). Settled reads are kept in the browser, as the board's are. Any read failing fails the Wall, never a
   partial one.
 
-**Credit floor, decided the same day, to build next.** Users may take credit down toward Aave's line: 1.05 with Protector
-on (0.02 over its 1.03 line, as 1.12 sits over 1.10 today, so it doesn't sell straight back) and 1.01 with it off. A
-move ending under 1.1 shows the Wall's rule and one tick, which is where the rule is "stated once before the first
-credit". It ships with the Wall, since that line promises it. This will replace "1.12 is the line" and "Nothing the user
-does may end here" (SPEC › Credit health); Protect's target stays 1.12.
+**Credit floor, decided the same day.** Users may take credit down toward Aave's line: 1.05 with Protector on (0.02
+over its 1.03 line, as 1.12 sits over 1.10 today, so it doesn't sell straight back) and 1.01 with it off. A move ending
+under 1.1 shows the Wall's rule and one tick, which is where the rule is "stated once before the first credit". It ships
+with the Wall, since that line promises it: the line is `ACT_LINE` (1.12, unchanged) until `NEXT_PUBLIC_WALL_FROM_BLOCK`
+is set. Protect's target stays 1.12.
+
+- **One line per position** (`config/risk.ts` `CreditLine`: the cap plans stop at, the stop the simulation holds the
+  batch to, and whether a plan may end in Act). `usePosition` reads it from Protector's job bit on GooseExecutor
+  (`protectRuns`, the same read as Save's) and the Wall's setting, and every planner reads it from the position
+  (`lineOf`), so a flow that doesn't pass one stays at 1.12. Credit Buy, its Cash row, Earn with stocks, Free up and Sell
+  from backing all take it; each plan carries its own floor (`creditFloor`, `freeUpFloor`, `earnFloor`).
+- **Ending in Act asks for the tick** every flow already asks for Watch (`extraConfirm`; Free up's `risky`), and each
+  plan says `intoAct` so the screen can word it as the Wall's rule. **Sell from backing has no tick yet**: its screen
+  gets one with the Wall's boards, before the setting is set.
+- **New words:** "Your credit is past its limit. Repay some to use more." (under the line's stop, "past-limit"), "Prices
+  moved, so that’s past your limit now. Try a smaller amount." (the simulation's stop), "That would take your credit
+  past its limit. Sell more, or repay from cash." (a sale to repay that ends under the stop).
+- Under `ACT_LINE` nothing changes: the plan tables (over 7,000 Repay and Trade cases) hash exactly as before once the
+  two new fields are left out.
 
 **In this repo:** `lib/board/wall.ts` (`wallSince`, `countedSales`, `saleMultiple`, `rankWall`), `lib/board/logs.ts`
 (`decodeWallLogs`, `readWallRecords`), `lib/board/read.ts` (`readWall`; the holdings read is shared with Heroes),
 `lib/board/config.ts` (`WALL_FROM_BLOCK`). **Tests:** `board-wall` (the multiple, who counts and from when, the order,
 the decoder); `scripts/wall-e2e.ts` on a Base fork (a real sale in the price update's block, read by `readWall`; leave
-and join again).
+and join again). The credit line: `config/risk.ts` (`CreditLine`, `ACT_LINE`, `creditLineFor`, `pastStop`),
+`lib/cash.ts` (`protectRuns`), `hooks/usePosition.ts` (`line`), `lib/creditBuy.ts` (`lineOf`, `creditFloor`, `intoAct`),
+`lib/freeUpPlan.ts`, `lib/sell.ts`, `lib/earnWithStocks.ts`, `lib/tx/plans/{earn,freeUp}.ts`, `hooks/useRepay.ts`.
+**Tests:** `credit-line` (the three lines, Credit Buy's cap and blocks, Free up, Sell from backing, Earn's offer).

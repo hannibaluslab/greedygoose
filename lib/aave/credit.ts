@@ -14,6 +14,8 @@ export function combinedCredit(p: {
   lines: BackingLine[];
   creditUsd: number;
   liquidityUsd: number;
+  /** The app's cap (config/risk.ts CreditLine), CREDIT_CAP.minHf unless the position says otherwise. */
+  capHf?: number;
 }) {
   const power = p.totalBackingUsd * p.avgCf + p.lines.reduce((a, l) => a + l.usd * l.cf, 0);
   const debtAfter = p.debtUsd + p.creditUsd;
@@ -27,10 +29,11 @@ export function combinedCredit(p: {
     /** Most you can borrow before the loan reaches Act (the Watch line). */
     maxWatch: upTo(RISK.watchMin),
     /**
-     * The most credit the app takes with these locks (Act is the line, Adrian 2026-10-15): health stays at or above
-     * CREDIT_CAP.minHf, the Act line plus its margin. Every way of taking credit is capped here (lib/creditBuy.ts creditCap).
+     * The most credit the app takes with these locks: health stays at or above the line's cap, CREDIT_CAP.minHf (Act is
+     * the line, Adrian 2026-10-15) or, once Greedy Fatalities is open, nearer Aave's line (config/risk.ts
+     * creditLineFor). Every way of taking credit is capped here (lib/creditBuy.ts creditCap).
      */
-    maxCredit: upTo(CREDIT_CAP.minHf),
+    maxCredit: upTo(p.capHf ?? CREDIT_CAP.minHf),
     /** Aave's own limit with these locks (HF = 1). Never borrow right up to it. */
     maxAave: upTo(1),
   };

@@ -126,8 +126,11 @@ export function planRepaySheet<H extends RepayHolding & { backingShares: number 
     smallPrint,
     moved: !!plan && pricesMoved(plan, p.ticks, repayUsd),
     /** A free-up that ends in Watch asks for one tick. */
-    needsTick: !!plan?.risky && takeOuts.length > 0,
+    needsTick: asksTick(plan) && takeOuts.length > 0,
     label: repayLabel(repaysAll, takeOuts.length > 0, repayUsd),
     doneLine: doneLineOf({ repaysAll, repayUsd, view, freedNames, allOut: freed.every((r) => r.all) }),
   };
 }
+
+/** The free-up asks for the tick: it ends in Watch, or in Act where the line allows it. */
+const asksTick = (plan: Plan | null) => !!plan && (plan.risky || plan.intoAct);

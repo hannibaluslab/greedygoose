@@ -27,6 +27,7 @@ import {
   type RepayView,
 } from "@/lib/repay";
 import { FreeUpList, type FreeUpItem } from "./FreeUpList";
+import { freeUpFloor } from "@/lib/freeUpPlan";
 import { OweCard } from "./OweCard";
 import { PayBox } from "./PayBox";
 import { RiskTick } from "./RiskTick";
@@ -94,7 +95,7 @@ export function RepaySheet({
 
   const feeBlocked = isConnected && fee.state === "unsupported";
   const sign = signOf(view, data, address);
-  const tx = useRepayWith(sign, takeOuts, address, open && !feeBlocked && (!needsTick || ack));
+  const tx = useRepayWith(sign, takeOuts, address, open && !feeBlocked && (!needsTick || ack), freeUpFloor(data?.line));
 
   const doneRef = useDoneToast(tx.phase, onClose);
 

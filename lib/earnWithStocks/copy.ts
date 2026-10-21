@@ -15,6 +15,7 @@ export const EARN_CLOSED = {
   paused: "New credit is paused right now. Try again later.",
   credit: "Your stocks can’t back more credit right now.",
   "in-act": CREDIT_BLOCKED["in-act"],
+  "past-limit": CREDIT_BLOCKED["past-limit"],
   fee: CREDIT_BLOCKED.fee,
   unread: "We couldn’t check this right now. Try again in a moment.",
 } as const;
@@ -26,6 +27,7 @@ export const EARN_BLOCKED: Record<CreditBlock, string> = {
   "no-liquidity": "There isn’t enough credit available right now. Try a smaller amount.",
   "over-free": CREDIT_BLOCKED["over-free"],
   "in-act": CREDIT_BLOCKED["in-act"],
+  "past-limit": CREDIT_BLOCKED["past-limit"],
   act: CREDIT_BLOCKED.act,
   "too-much": "That’s more credit than your stocks can back right now. Try a smaller amount.",
   fee: CREDIT_BLOCKED.fee,

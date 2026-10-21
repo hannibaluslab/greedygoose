@@ -74,8 +74,9 @@ receipt → re-read state
   GooseExecutor and GooseBoard are the exceptions: each comes from its `NEXT_PUBLIC_*` setting, checked as an address
   (`lib/agents/config.ts`, `lib/board/config.ts`).
 - Approvals are exact, never unlimited, and a repay sets the allowance back to 0 (SPEC.md › Money rules).
-- Taking credit and freeing stock never end below 1.12 (`CREDIT_CAP.minHf`). For those batches, a simulated health
-  under 1.10 stops them.
+- Taking credit and freeing stock never end below the position's line (`config/risk.ts` `CreditLine`, `lineOf`):
+  1.12 (`ACT_LINE`), a simulated health under 1.10 stopping the batch; once Greedy Fatalities is open, 1.05 with
+  Protector on (stop 1.03) or 1.01 with it off (stop 1.0), ending in Act only with the tick.
 - Every spend from cash leaves the $0.50 fuel tank in the wallet (`CASH.feeBufferUsd`).
 - No optimistic financial state. "Done" comes only after the batch lands and the state is read again.
 

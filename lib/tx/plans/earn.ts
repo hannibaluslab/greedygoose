@@ -1,12 +1,4 @@
-import {
-  EARN_FLOOR,
-  buildEarnCalls,
-  earnActivity,
-  earnStop,
-  type EarnOpen,
-  type EarnQuote,
-} from "@/lib/earnWithStocks";
-import { CREDIT_FLOOR } from "@/lib/creditBuy";
+import { buildEarnCalls, earnFloor, earnActivity, earnStop, type EarnOpen, type EarnQuote } from "@/lib/earnWithStocks";
 import { toCashStop, type ToCashQuote } from "@/lib/creditBuy/toCash";
 import { TxStop, txKey, type TxPlan } from "../prepared";
 import type { CashToSign } from "./types";
@@ -44,7 +36,7 @@ export const earnPlan = (p: EarnInput, cashToSign: CashToSign): TxPlan => ({
   },
   fallback: EARN_REVERT,
   // The health on Aave after it, read in its simulation: in Act, it stops (Act is the line).
-  healthFloor: EARN_FLOOR,
+  healthFloor: earnFloor(p.quote.plan),
   activity: earnActivity(p.quote.plan),
 });
 
@@ -77,6 +69,6 @@ export const toCashPlan = (p: ToCashInput, cashToSign: CashToSign): TxPlan => ({
     return buildEarnCalls({ user: p.user, backing, creditRaw, limit, cash });
   },
   fallback: EARN_REVERT,
-  healthFloor: CREDIT_FLOOR,
+  healthFloor: p.quote.plan.floor,
   activity: earnActivity(p.quote.plan),
 });

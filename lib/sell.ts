@@ -1,4 +1,4 @@
-import { CREDIT_CAP } from "@/config/risk";
+import { ACT_LINE, type CreditLine } from "@/config/risk";
 import { healthAfterWithdraw, maxWithdrawUsd } from "@/lib/aave/math";
 import { buildRepayCalls, buildWithdrawCalls, fullRepayAmount, type Call } from "@/lib/aave/tx";
 import type { ActivityItem } from "@/lib/activity/decode";
@@ -7,7 +7,9 @@ import { feeBufferRaw, toUsd } from "@/lib/cash";
 import { buildAddSavingsCalls } from "@/lib/savings";
 import { formatUsdTrim } from "@/lib/formatting";
 import { marketState } from "@/lib/market-hours";
-import { endsInAct, statusFor, type Status } from "@/lib/risk/status";
+import { freeUpFloor } from "@/lib/freeUpPlan";
+import { statusFor, type Status } from "@/lib/risk/status";
+import type { HealthFloor } from "@/lib/tx/prepared";
 import { SELL_LIMITS, aaveFloorRaw, buildSellCalls, sellEconomics, sellMinOut, type SellQuote } from "@/lib/swap/sell";
 import { USDC, type ReserveAsset } from "@/lib/tokens/registry";
 import { assertSaleCoversRepay, assertSaleCoversSave } from "./sell/covers";
@@ -42,6 +44,8 @@ export type SellPosition = {
   debtUsd: number;
   debtRaw: bigint;
   healthFactor: number | null;
+  /** How low freeing shares may take the health (lib/creditBuy.ts lineOf): ACT_LINE without. */
+  line?: CreditLine;
 };
 
 export type SellBlock =
@@ -53,6 +57,7 @@ export type SellBlock =
   | "near-limit"
   | "too-small"
   | "act"
+  | "under-line"
   | "price";
 
 export const SELL_BLOCKED: Record<SellBlock, string> = {
@@ -65,6 +70,7 @@ export const SELL_BLOCKED: Record<SellBlock, string> = {
     "Your credit is too close to Aave’s limit to free these shares before the repay lands. Sell fewer, or repay from cash.",
   "too-small": `Minimum sale is ${formatUsdTrim(SELL_LIMITS.minUsd)}.`,
   act: "That would put your credit in Act. Sell more, or repay from cash.",
+  "under-line": "That would take your credit past its limit. Sell more, or repay from cash.",
   price: `Too big for the market right now. You’d get more than ${SELL_LIMITS.floorBps / 100}% under Aave’s price. Try a smaller amount.`,
 };
 
@@ -86,12 +92,16 @@ export type SellPlan = {
   /** How far under Aave's price the pool pays; `warn` past SELL_LIMITS.warnDiscount. */
   discount: number;
   warn: boolean;
-  /** Most shares this sale can take: the free shares; the backing the 1.12 line lets out; the backing that can come out before the repay. */
+  /** Most shares this sale can take: the free shares; the backing the line's cap lets out (1.12 under ACT_LINE); the backing that can come out before the repay. */
   maxRaw: bigint;
   /** The shares that come out of backing in the same batch (0 when the free shares cover the sale). */
   takeOutRaw: bigint;
   /** Repay by selling: what the sale repays, at least (0 otherwise). */
   repayRaw: bigint;
+  /** Shares from backing that end in Act, which the line allows once Greedy Fatalities is open: the Wall's tick. */
+  intoAct: boolean;
+  /** What a batch that takes shares out of backing is held to on Aave's health (freeUpFloor of the line). */
+  floor: HealthFloor;
   before: Status;
   after: Status;
   hfAfter: number | null;
@@ -149,15 +159,16 @@ function sellBlock(
   if (from === "backing" && sharesRaw > maxRaw) return "past-line";
   if (from === "repay" && sharesRaw > maxRaw) return "near-limit";
   if (s.usd < SELL_LIMITS.minUsd || (from === "repay" && repayRaw === 0n)) return "too-small";
-  if (from === "repay" && hfAfter !== null && endsInAct(statusFor(hfAfter)) && hfAfter < (pos.healthFactor ?? Infinity))
-    return "act";
+  const line = pos.line ?? ACT_LINE;
+  if (from === "repay" && hfAfter !== null && hfAfter < line.stopHf && hfAfter < (pos.healthFactor ?? Infinity))
+    return line.intoAct ? "under-line" : "act";
   if (quote.amountOut < aaveFloorRaw(sharesRaw, stock, h.priceUsd)) return "price";
   return undefined;
 }
 
 /**
- * Plan a sale of `quote.amountIn` shares on Leo's maths. A backing holding comes out only as far as the 1.12 line
- * allows (maxWithdrawUsd at CREDIT_CAP.minHf, Act is the line). Selling to repay takes the shares out first, so the credit must
+ * Plan a sale of `quote.amountIn` shares on Leo's maths. A backing holding comes out only as far as the line's cap
+ * allows (maxWithdrawUsd at 1.12 under ACT_LINE, Act is the line; nearer Aave's once Greedy Fatalities is open). Selling to repay takes the shares out first, so the credit must
  * stay within Aave's limit until the repay lands; it usually ends healthier, and one that would end in Act, lower
  * than it started, is blocked ("act", LIMIT_MARGIN). Plan only: the batch is simulated before JAW's sheet.
  */
@@ -186,7 +197,8 @@ export function planSell(p: {
   const backingShare = (usd: number) => part(h.backingRaw, h.backingUsd > 0 ? usd / h.backingUsd : 0);
 
   const repayRaw = from === "repay" ? saleRepayRaw(minOutRaw, pos.debtRaw) : 0n;
-  const lineShare = () => backingShare(maxWithdrawUsd({ ...creditInput, targetHf: CREDIT_CAP.minHf }));
+  const line = pos.line ?? ACT_LINE;
+  const lineShare = () => backingShare(maxWithdrawUsd({ ...creditInput, targetHf: line.capHf }));
   let maxRaw = h.freeRaw;
   let takeOutRaw = 0n;
   let hfAfter = pos.healthFactor;
@@ -216,6 +228,8 @@ export function planSell(p: {
     before: statusFor(pos.healthFactor),
     after: statusFor(hfAfter),
     hfAfter,
+    intoAct: line.intoAct && from === "backing" && statusFor(hfAfter) === "act",
+    floor: freeUpFloor(line),
     priceMayMove: !marketState(p.now).open,
     block,
   };

@@ -3,7 +3,7 @@
 import { TxStop, txKey, useTx, type TxPlan } from "./useTx";
 import { useSigningQuote } from "./useBuyQuote";
 import { useSigningCash } from "./useSigningCash";
-import { CREDIT_FLOOR, buildCreditBuyCalls, creditBuyActivity, creditBuyStop, type CreditPlan } from "@/lib/creditBuy";
+import { buildCreditBuyCalls, creditBuyActivity, creditBuyStop, type CreditPlan } from "@/lib/creditBuy";
 import { quoteKey, type BuyQuote } from "@/lib/swap/buy";
 import type { ReserveAsset } from "@/lib/tokens/registry";
 
@@ -61,7 +61,7 @@ const creditPlanKey = (plan: CreditPlan, confirmedRisk: boolean) => [
 
 /**
  * What a Credit Buy signs (useTx), and decision 1's buy with credit: keyed by the account, the stock, the quote and the
- * credit plan on screen. Its simulation reads the health on Aave after it, and one in Act stops it (CREDIT_FLOOR).
+ * credit plan on screen. Its simulation reads the health on Aave after it, and one under the line's stop stops it (the plan's floor, creditFloor).
  */
 export const creditBuyPlan = (p: CreditBuyInput, batch: ReturnType<typeof useCreditBuyBatch>): TxPlan => ({
   key: txKey(
@@ -75,7 +75,7 @@ export const creditBuyPlan = (p: CreditBuyInput, batch: ReturnType<typeof useCre
   user: p.user,
   calls: () => batch(p),
   fallback: CREDIT_BUY_FALLBACK,
-  ...(p.plan.creditRaw > 0n ? { healthFloor: CREDIT_FLOOR } : {}),
+  ...(p.plan.creditRaw > 0n ? { healthFloor: p.plan.floor } : {}),
   activity: creditBuyActivity(p),
 });
 

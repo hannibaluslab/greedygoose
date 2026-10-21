@@ -13,7 +13,9 @@ import { statusFor } from "@/lib/risk/status";
 import { PROTOCOLS } from "@/lib/protocols/config";
 import { GOOSE_EXECUTOR } from "@/lib/agents/config";
 import { executorAccountsAbi } from "@/lib/agents/abis/accounts";
-import { cashRaw, saveRuns, toUsd, type Cash } from "@/lib/cash";
+import { cashRaw, protectRuns, saveRuns, toUsd, type Cash } from "@/lib/cash";
+import { creditLineFor } from "@/config/risk";
+import { WALL_OPEN } from "@/lib/board/config";
 import { creditWith } from "@/lib/creditBuy";
 
 /** Aave V3 getReserveData — only `currentLiquidityRate` (index 2, RAY) is used. */
@@ -169,12 +171,14 @@ export function usePosition(user: `0x${string}` | undefined) {
     const cash: Cash = { walletRaw: usdcBal, savingsRaw, saveOn: saveRuns(agents?.[0] ?? 0) };
     const usdcLiquidity = Number(liquidity) / 10 ** USDC.decimals;
     const creditPaused = usdcCfg.paused || usdcCfg.frozen || !usdcCfg.borrowable;
+    // How low credit may go: 1.12 until Greedy Fatalities is open, then Protector's line or Aave's (config/risk.ts).
+    const line = creditLineFor({ wallOpen: WALL_OPEN, protectOn: protectRuns(agents?.[0] ?? 0) });
     return {
       holdings,
       stocksUsd: holdings.reduce((a, h) => a + h.freeUsd + h.backingUsd, 0),
       totalBackingUsd: s.totalBackingUsd,
       debtUsd,
-      // The credit left on what already backs it, at the one cap (Act is the line): never more than any flow lets you take.
+      // The credit left on what already backs it, at the one cap (the line's): never more than any flow lets you take.
       availableUsd: creditWith({
         totalBackingUsd: s.totalBackingUsd,
         avgCf: s.avgCf,
@@ -182,7 +186,9 @@ export function usePosition(user: `0x${string}` | undefined) {
         healthFactor: s.healthFactor,
         usdcLiquidity,
         creditPaused,
+        line,
       }),
+      line,
       healthFactor: s.healthFactor,
       avgCf: s.avgCf,
       status: statusFor(s.healthFactor),

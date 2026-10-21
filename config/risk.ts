@@ -36,6 +36,40 @@ export const CREDIT_CAP = {
 } as const;
 
 /**
+ * How low taking credit and freeing stock may take the health: the plans' cap (the MAX, "Up to", what a stock can
+ * back) and the floor the batch's simulation is held to (lib/tx/prepared.ts HealthFloor).
+ */
+export type CreditLine = {
+  capHf: number;
+  stopHf: number;
+  /** A plan may end in Act: the screen then shows the Wall's rule and asks for one tick. */
+  intoAct: boolean;
+};
+
+/** Act is the line (2026-10-15): 1.12, the batch stopped in Act. The line until Greedy Fatalities opens. */
+export const ACT_LINE: CreditLine = { capHf: CREDIT_CAP.minHf, stopHf: RISK.watchMin, intoAct: false };
+
+/** Over Aave's line with Protector off: a hundredth, so a plan at the cap isn't sold the block it lands. */
+const AAVE_MARGIN_HF = 0.01;
+
+/**
+ * Down toward Aave's line (Adrian, 2026-10-21), once Greedy Fatalities is open (its rule is what a move into Act
+ * confirms): with Protector on, 1.05, its line plus the same margin as 1.12 over Act, so Protector doesn't sell straight
+ * back what was just taken; with it off, 1.01. Until the Wall opens, ACT_LINE.
+ */
+export function creditLineFor(p: { wallOpen: boolean; protectOn: boolean }): CreditLine {
+  if (!p.wallOpen) return ACT_LINE;
+  const round = (hf: number) => Math.round(hf * 100) / 100;
+  return p.protectOn
+    ? { capHf: round(CASH_AGENT.triggerHf + CAP_MARGIN_HF), stopHf: CASH_AGENT.triggerHf, intoAct: true }
+    : { capHf: round(AAVE_LINE_HF + AAVE_MARGIN_HF), stopHf: AAVE_LINE_HF, intoAct: true };
+}
+
+/** Under the line's stop: no more credit or free up until it's back over it. */
+export const pastStop = (healthFactor: number | null, line: CreditLine) =>
+  healthFactor !== null && Number.isFinite(healthFactor) && healthFactor < line.stopHf;
+
+/**
  * Protect's numbers (D18). GooseExecutor holds the live values on-chain, each within hard bounds, and a change waits a
  * public 7-day delay. These mirror its deploy defaults (contracts/script/DeployExecutor.s.sol, checked by
  * contracts/test/DeployExecutor.t.sol); read the live ones with the executor's `thresholds()` and `amounts()`.

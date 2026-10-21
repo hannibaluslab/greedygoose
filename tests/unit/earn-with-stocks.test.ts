@@ -104,6 +104,7 @@ describe("earnOffer: whether the Cash sheet offers it", () => {
       "paused",
       "credit",
       "in-act",
+      "past-limit",
       "fee",
       "unread",
     ]);

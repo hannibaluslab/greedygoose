@@ -1,4 +1,5 @@
-import { CREDIT_CAP, RISK } from "@/config/risk";
+import { ACT_LINE, type CreditLine } from "@/config/risk";
+import { LINE_MOVED } from "@/lib/creditBuy/copy";
 import { statusFor, type Status } from "@/lib/risk/status";
 import type { HealthFloor } from "@/lib/tx/prepared";
 import { formatShares, formatUsd } from "@/lib/formatting";
@@ -6,7 +7,8 @@ import { formatShares, formatUsd } from "@/lib/formatting";
 /*
  * Repay + free up (canvas boards 1–8): the stocks ticked under "Also free up stocks", and how much of each comes out
  * of backing in the same signature as the repay. All of them share one limit: after the repay, the health stays at or
- * above CREDIT_CAP.minHf (1.12, "Act is the line"), so stock taken out is power the others can't use. Amounts are a
+ * above the line's cap (1.12 under ACT_LINE, "Act is the line"; nearer Aave's line once Greedy Fatalities is open), so
+ * stock taken out is power the others can't use. Amounts are a
  * share of the shares held (25%, 50%, Max, All). Pure, so it's unit-tested (tests/unit/free-up-plan.test.ts); the batch
  * is checked again on Aave's own health before JAW's sheet (FREE_UP_FLOOR).
  */
@@ -16,8 +18,17 @@ export const FREE_UP_BLOCKED = {
   act: "That would put your credit in Act. Free up less, or repay some first.",
 } as const;
 
-/** A batch that takes stock out of backing is stopped if the health on Aave after it, read in its simulation, is in Act. */
-export const FREE_UP_FLOOR: HealthFloor = { minHf: RISK.watchMin, stop: FREE_UP_BLOCKED.act };
+/**
+ * A batch that takes stock out of backing is stopped if the health on Aave after it, read in its simulation, is under
+ * the line's stop: in Act under ACT_LINE.
+ */
+export const freeUpFloor = (line: CreditLine = ACT_LINE): HealthFloor => ({
+  minHf: line.stopHf,
+  stop: line.intoAct ? LINE_MOVED : FREE_UP_BLOCKED.act,
+});
+
+/** Under ACT_LINE: stopped in Act. */
+export const FREE_UP_FLOOR = freeUpFloor();
 
 /** Under the limit by a hair when a stock comes out at its most, so a price tick before signing doesn't stop it. */
 const AT_MOST_MARGIN = 0.995;
@@ -65,6 +76,8 @@ type FreeUpPlan = {
   after: Status;
   /** It ends in Watch: the "I understand" tick. */
   risky: boolean;
+  /** It ends in Act, which the line allows once Greedy Fatalities is open: the Wall's rule and its tick. */
+  intoAct: boolean;
   /** Credit available once the repay and the take-outs land, floored to the dollar. */
   creditAfterUsd: number;
   /** What to sign: the ticked stocks with something to take out. */
@@ -79,7 +92,7 @@ const dollarsUp = (usd: number) => Math.ceil(usd - 1e-6);
  * leaves nothing owed, so every stock can come out.
  */
 export function planFreeUp(p: {
-  position: { totalBackingUsd: number; avgCf: number; debtUsd: number };
+  position: { totalBackingUsd: number; avgCf: number; debtUsd: number; line?: CreditLine };
   /** The repay in the same signature, in dollars, and whether it pays everything owed. */
   repayUsd: number;
   repaysAll: boolean;
@@ -88,7 +101,8 @@ export function planFreeUp(p: {
   stocks: readonly FreeUpStock[];
   picks: readonly FreeUpPick[];
 }): FreeUpPlan {
-  const m = CREDIT_CAP.minHf;
+  const line = p.position.line ?? ACT_LINE;
+  const m = line.capHf;
   const power = Math.max(0, p.position.totalBackingUsd * p.position.avgCf - (p.repayPowerOutUsd ?? 0));
   const owedAfterUsd = p.repaysAll ? 0 : Math.max(0, p.position.debtUsd - p.repayUsd);
   const limit = owedAfterUsd <= 0 ? Infinity : Math.max(0, power - owedAfterUsd * m);
@@ -152,6 +166,7 @@ export function planFreeUp(p: {
     hfAfter,
     after,
     risky: after === "watch",
+    intoAct: line.intoAct && after === "act",
     creditAfterUsd: Math.max(0, Math.floor(out / m - owedAfterUsd + 1e-6)),
     frees: rows.filter((r) => r.picked && r.raw > 0n).map((r) => ({ symbol: r.symbol, raw: r.raw, all: r.all })),
   };

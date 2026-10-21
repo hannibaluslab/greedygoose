@@ -25,6 +25,9 @@ export const toUsd = (raw: bigint) => Number(raw) / 10 ** USDC.decimals;
 /** Whether Save runs for the account, from the job bits of GooseExecutor's `accounts(account)`. */
 export const saveRuns = (jobs: number) => (jobs & (1 << JOBS.indexOf("save"))) !== 0;
 
+/** Whether Protector's repay from cash runs for the account (the same job bits): it acts under 1.03. */
+export const protectRuns = (jobs: number) => (jobs & (1 << JOBS.indexOf("protect"))) !== 0;
+
 /** The most one buy or repay can spend: the fee buffer stays behind for the network fee. */
 export function maxSpendRaw(c: Cash): bigint {
   const max = cashRaw(c) - feeBufferRaw;

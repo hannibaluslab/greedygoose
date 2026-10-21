@@ -1,6 +1,5 @@
 "use client";
 
-import { FREE_UP_FLOOR } from "@/lib/freeUpPlan";
 import { usePublicClient } from "wagmi";
 import { useQuery } from "@tanstack/react-query";
 import { TxStop, txKey, useTx, type TxPlan } from "./useTx";
@@ -84,8 +83,8 @@ export const salePlan = (p: SellInput, batch: ReturnType<typeof useSaleBatch>): 
     user: p.user,
     calls: () => batch(p),
     fallback: SELL_FALLBACK[p.plan.from],
-    // Shares taken out of backing for the sale: held to the Act line on Aave's own health, as Free up is.
-    ...(p.plan.takeOutRaw > 0n && p.plan.from !== "repay" ? { healthFloor: FREE_UP_FLOOR } : {}),
+    // Shares taken out of backing for the sale: held to the line on Aave's own health, as Free up is.
+    ...(p.plan.takeOutRaw > 0n && p.plan.from !== "repay" ? { healthFloor: p.plan.floor } : {}),
     activity: saleActivity(p.stock, p.plan),
   };
 };

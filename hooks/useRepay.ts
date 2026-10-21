@@ -14,7 +14,9 @@ import { CHAIN_ID } from "@/lib/chain";
 import { cantRepay, cashShort, maxSpendRaw, payFromCash } from "@/lib/cash";
 import { readCash } from "@/lib/cash/read";
 import type { RepayView } from "@/lib/repay";
+import { freeUpFloor } from "@/lib/freeUpPlan";
 import { buildFreeRepayCalls } from "@/lib/sell";
+import type { HealthFloor } from "@/lib/tx/prepared";
 import { USDC } from "@/lib/tokens/registry";
 import {
   FREE_REPAY_FALLBACK,
@@ -118,13 +120,15 @@ export function repaySign(view: RepayView, user: `0x${string}`, debtRaw: bigint)
  * from what it would sign now (`sign`, null while it can't), so the tap opens JAW's sheet straight away. Cash is
  * useRepayBatch (unchanged), a free stock useFreeRepayBatch, a backing stock the existing repay by selling (useSaleBatch).
  * The stocks ticked to free up are taken out after the repay in the same batch (withTakeOuts); with nothing repaid,
- * the take-outs alone (takeOutPlan). `ready` false keeps nothing prepared (the Watch tick not given yet).
+ * the take-outs alone (takeOutPlan), held to `floor` (freeUpFloor of the position's line). `ready` false keeps nothing
+ * prepared (the tick not given yet).
  */
 export function useRepayWith(
   sign: RepaySign | null,
   takeOuts: readonly TakeOut[] = [],
   user: `0x${string}` | null = null,
   ready = true,
+  floor: HealthFloor = freeUpFloor(),
 ) {
   const cash = useRepayBatch();
   const free = useFreeRepayBatch();
@@ -139,9 +143,9 @@ export function useRepayWith(
   const plan = !ready
     ? null
     : repay
-      ? withTakeOuts(repay, takeOuts)
+      ? withTakeOuts(repay, takeOuts, floor)
       : user && takeOuts.length > 0
-        ? takeOutPlan(user, takeOuts)
+        ? takeOutPlan(user, takeOuts, floor)
         : null;
   return useTx(undefined, plan);
 }

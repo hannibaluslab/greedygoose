@@ -1,11 +1,12 @@
 import { decodeFunctionData, erc20Abi, isAddressEqual } from "viem";
-import { RISK } from "@/config/risk";
+import { ACT_LINE, pastStop } from "@/config/risk";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { buildBackAndCreditCalls, type Call } from "@/lib/aave/tx";
 import type { ActivityItem } from "@/lib/activity/decode";
 import { cashRaw, feeBufferRaw, payFromCash, toUsd, type Cash } from "@/lib/cash";
 import {
+  lineOf,
   planCredit,
   type Backing,
   type BackingOption,
@@ -17,9 +18,10 @@ import { formatUsdTrim } from "@/lib/formatting";
 import { PROTOCOLS } from "@/lib/protocols/config";
 import { aaveV3PoolAbi } from "@/lib/protocols/abis";
 import { buildAddSavingsCalls } from "@/lib/savings";
-import { STATUS_LABEL, statusFor } from "@/lib/risk/status";
+import { STATUS_LABEL } from "@/lib/risk/status";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import type { HealthFloor } from "@/lib/tx/prepared";
+import { CREDIT_BLOCKED } from "@/lib/creditBuy/copy";
 import { EARN_BLOCKED, EARN_CLOSED, EARN_COSTS_MORE, type EarnClosed } from "./earnWithStocks/copy";
 
 export * from "./earnWithStocks/copy";
@@ -138,7 +140,8 @@ export function earnOffer(i: EarnInput): EarnOffer {
   const rates = earnRates(i.cashApy, i.creditApy);
   if (rates.left <= 0) return closed("costs-more", rates);
   if (i.position.creditPaused) return closed("paused");
-  if (statusFor(i.position.healthFactor) === "act") return closed("in-act");
+  if (pastStop(i.position.healthFactor, lineOf(i.position)))
+    return closed(lineOf(i.position).intoAct ? "past-limit" : "in-act");
 
   const plan0 = planCredit({ position: i.position, options: i.options, creditRaw: 0n, cash: i.cash, now: i.now });
   const maxUsd = Math.floor(Math.min(plan0.maxUsd, i.position.usdcLiquidity));
@@ -219,8 +222,15 @@ export function earnQuote(p: {
   return { plan, amountUsd, cost, left, leftUsdYear: Math.max(0, Math.floor((left / 1000) * amountUsd)) };
 }
 
-/** Its batch is stopped if the health on Aave after it, read in its own simulation, is in Act (lib/creditBuy.ts CREDIT_FLOOR). */
-export const EARN_FLOOR: HealthFloor = { minHf: RISK.watchMin, stop: EARN_BLOCKED.act };
+/**
+ * Its batch is stopped if the health on Aave after it, read in its own simulation, is under the line's stop (lib/creditBuy.ts
+ * creditFloor), in the Cash sheet's words when that's Act.
+ */
+export const earnFloor = (plan: CreditPlan): HealthFloor =>
+  plan.floor.stop === CREDIT_BLOCKED.act ? { ...plan.floor, stop: EARN_BLOCKED.act } : plan.floor;
+
+/** Under ACT_LINE: stopped in Act, in the Cash sheet's words. */
+export const EARN_FLOOR: HealthFloor = { minHf: ACT_LINE.stopHf, stop: EARN_BLOCKED.act };
 
 /** Why this amount can't go ahead, in the red line under it; null when it can (the risk tick aside). */
 export function earnBlock(q: EarnQuote, o: EarnOpen): string | null {

@@ -82,6 +82,8 @@ describe("a Credit Buy's key", () => {
     maxSafeUsd: 100,
     maxUsd: 500,
     priceMayMove: false,
+    intoAct: false,
+    floor: CREDIT_FLOOR,
   } as CreditPlan;
   const key = (p: Partial<CreditPlan> = {}, confirmedRisk = true) =>
     creditBuyPlan(
@@ -107,7 +109,7 @@ describe("a Credit Buy's key", () => {
 
   it("is checked on Aave's own health after it: in Act, it stops (Act is the line)", () => {
     const p = creditBuyPlan({ user: SAM, stock: nvda, quote, oraclePriceUsd: 200, plan, confirmedRisk: true }, noBatch);
-    expect(p.healthFloor).toBe(CREDIT_FLOOR);
+    expect(p.healthFloor).toEqual(CREDIT_FLOOR);
     expect(CREDIT_FLOOR).toEqual({
       minHf: RISK.watchMin,
       stop: "That would put your credit in Act. Try a smaller amount.",
@@ -285,7 +287,7 @@ describe("Free up's key", () => {
   });
 
   it("shares freed up are checked on Aave's own health after them", () => {
-    expect(withdrawPlan({ user: SAM, stock: nvda, amountRaw: 5n, all: false }).healthFloor).toBe(FREE_UP_FLOOR);
+    expect(withdrawPlan({ user: SAM, stock: nvda, amountRaw: 5n, all: false }).healthFloor).toEqual(FREE_UP_FLOOR);
     expect(FREE_UP_FLOOR).toEqual({
       minHf: RISK.watchMin,
       stop: "That would put your credit in Act. Free up less, or repay some first.",
@@ -305,6 +307,8 @@ describe("Earn with stocks' key", () => {
     maxSafeUsd: 500,
     maxUsd: 900,
     priceMayMove: false,
+    intoAct: false,
+    floor: CREDIT_FLOOR,
   } as CreditPlan;
   const quote = { plan, amountUsd: 100, cost: 50, left: 10, leftUsdYear: 1 } as EarnInput["quote"];
   const offer = {
@@ -333,7 +337,7 @@ describe("Earn with stocks' key", () => {
   });
 
   it("is checked on Aave's own health after it: in Act, it stops", () => {
-    expect(earnPlan({ user: SAM, quote, offer, confirmedRisk: false }, vi.fn()).healthFloor).toBe(EARN_FLOOR);
+    expect(earnPlan({ user: SAM, quote, offer, confirmedRisk: false }, vi.fn()).healthFloor).toEqual(EARN_FLOOR);
     expect(EARN_FLOOR).toEqual({
       minHf: RISK.watchMin,
       stop: "That would put your credit in Act. Try a smaller amount.",

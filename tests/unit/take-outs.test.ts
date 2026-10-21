@@ -40,7 +40,7 @@ describe("withTakeOuts: repay and free up in one signature", () => {
 
   it("is held to the Act line on Aave's own health, and says what comes out", () => {
     const plan = withTakeOuts(repay, [{ stock: aapl, amountRaw: 600_000n, all: false }]);
-    expect(plan.healthFloor).toBe(FREE_UP_FLOOR);
+    expect(plan.healthFloor).toEqual(FREE_UP_FLOOR);
     expect(plan.activity).toEqual([
       { kind: "repay", symbol: "USDC", amount: 200 },
       { kind: "withdraw", symbol: "AAPLc", amount: 600_000 / 10 ** aapl.decimals },
@@ -71,7 +71,7 @@ describe("withTakeOuts: repay and free up in one signature", () => {
 describe("takeOutPlan: free up with nothing repaid", () => {
   it("takes the stocks out, held to the same line", async () => {
     const plan = takeOutPlan(SAM, [{ stock: aapl, amountRaw: 350_000n, all: false }]);
-    expect(plan.healthFloor).toBe(FREE_UP_FLOOR);
+    expect(plan.healthFloor).toEqual(FREE_UP_FLOOR);
     expect((await resolve(plan)).map((c) => spokeCall(c.data))).toMatchObject([
       { functionName: "withdraw", args: [BigInt(aapl.reserveId), 350_000n, SAM] },
     ]);

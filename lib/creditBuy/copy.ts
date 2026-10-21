@@ -11,22 +11,47 @@ export function shortNames(names: readonly string[]): string {
 
 /**
  * Why a plan can't go ahead. "in-act": the credit is in Act already, so no more is taken until it's out. "act": this
- * plan would end in Act (Act is the line, Adrian 2026-10-15): blocked, and no risk tick can let it through.
+ * plan would end in Act (Act is the line, Adrian 2026-10-15): blocked, and no risk tick can let it through. Once Greedy
+ * Fatalities is open a plan may end in Act (config/risk.ts creditLineFor), and "past-limit" replaces "in-act": the
+ * credit is under the line's stop already (Protector's line, or Aave's).
  */
-export type CreditBlock = "paused" | "no-liquidity" | "over-free" | "in-act" | "act" | "too-much" | "fee";
+export type CreditBlock =
+  | "paused"
+  | "no-liquidity"
+  | "over-free"
+  | "in-act"
+  | "past-limit"
+  | "act"
+  | "too-much"
+  | "fee";
 
 export const CREDIT_BLOCKED: Record<CreditBlock, string> = {
   paused: "Aave isn’t giving new USDC credit right now.",
   "no-liquidity": "Aave doesn’t have enough USDC for this right now. Try a smaller amount.",
   "over-free": "That’s more than you have free to put in use. Try a smaller amount.",
   "in-act": "Your credit is in Act. Repay some to use more.",
+  "past-limit": "Your credit is past its limit. Repay some to use more.",
   act: "That would put your credit in Act. Try a smaller amount.",
   "too-much": "That’s more credit than your stocks can back right now. Try a smaller amount.",
   fee: `The network fee is paid from your cash. Top up ${formatUsd(CASH.feeBufferUsd)} first.`,
 };
 
+/**
+ * A batch's simulation landed under the line's stop once a plan may end in Act: the plan was at the cap, so prices moved
+ * between reading the position and the tap (lib/tx/prepared.ts HealthFloor).
+ */
+export const LINE_MOVED = "Prices moved, so that’s past your limit now. Try a smaller amount.";
+
 /** Why a Credit Buy can use nothing right now (F2-3's zero state, shown at step 1). */
-export type NoCredit = "no-stocks" | "cant-back" | "too-small" | "all-in-use" | "in-act" | "paused" | "no-liquidity";
+export type NoCredit =
+  | "no-stocks"
+  | "cant-back"
+  | "too-small"
+  | "all-in-use"
+  | "in-act"
+  | "past-limit"
+  | "paused"
+  | "no-liquidity";
 
 /** F2-3's line under "$0", first half: why. */
 export const NO_CREDIT: Record<NoCredit, string> = {
@@ -35,6 +60,7 @@ export const NO_CREDIT: Record<NoCredit, string> = {
   "too-small": "Your free stock is too small to back credit yet.",
   "all-in-use": "Your stocks already back what you owe. Repay some to use more.",
   "in-act": CREDIT_BLOCKED["in-act"],
+  "past-limit": CREDIT_BLOCKED["past-limit"],
   paused: "New credit is paused right now.",
   "no-liquidity": "There’s no credit to give out right now.",
 };

@@ -1,12 +1,19 @@
 import { decodeFunctionData, erc20Abi, isAddressEqual, parseUnits } from "viem";
-import { CREDIT_CAP, RISK } from "@/config/risk";
+import { ACT_LINE, RISK, pastStop, type CreditLine } from "@/config/risk";
 import { swapOf } from "@/lib/allowlist";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { autoFill, combinedCredit, fillRaw, type BackingLine } from "@/lib/aave/credit";
 import { buildBackAndCreditCalls, type Call } from "@/lib/aave/tx";
 import { cashRaw, feeBufferRaw, maxSpendRaw, payFromCash, toUsd, type Cash } from "@/lib/cash";
-import { CREDIT_BLOCKED, creditLine, noCreditLine, type CreditBlock, type NoCredit } from "./creditBuy/copy";
+import {
+  CREDIT_BLOCKED,
+  LINE_MOVED,
+  creditLine,
+  noCreditLine,
+  type CreditBlock,
+  type NoCredit,
+} from "./creditBuy/copy";
 import { floorCents } from "@/lib/formatting";
 import { marketState } from "@/lib/market-hours";
 import type { ActivityItem } from "@/lib/activity/decode";
@@ -73,14 +80,26 @@ export type CreditPosition = {
   healthFactor: number | null;
   usdcLiquidity: number;
   creditPaused: boolean;
+  /** How low credit may take the health (usePosition reads it: Protector's switch, the Wall open). ACT_LINE without. */
+  line?: CreditLine;
 };
 
+/** The position's line: ACT_LINE (1.12, Act is the line) unless it says otherwise. */
+export const lineOf = (pos: { line?: CreditLine }): CreditLine => pos.line ?? ACT_LINE;
+
 /**
- * Every batch that takes credit (Credit Buy, decision 1, Earn with stocks) is stopped if the health on Aave
- * after it, read in its own simulation, is in Act: the screen's cap is planned on the position as last read, Aave lets
- * credit go down to 1.0, and a cut in a stock's collateral factor lands when the credit is taken (lib/tx/prepared.ts HealthFloor).
+ * Every batch that takes credit (Credit Buy, decision 1, Earn with stocks) is stopped if the health on Aave after it,
+ * read in its own simulation, is under the line's stop: in Act (ACT_LINE), or under Protector's line or Aave's once a
+ * plan may end in Act. The screen's cap is planned on the position as last read, Aave lets credit go down to 1.0, and a
+ * cut in a stock's collateral factor lands when the credit is taken (lib/tx/prepared.ts HealthFloor).
  */
-export const CREDIT_FLOOR: HealthFloor = { minHf: RISK.watchMin, stop: CREDIT_BLOCKED.act };
+export const creditFloor = (line: CreditLine): HealthFloor => ({
+  minHf: line.stopHf,
+  stop: line.intoAct ? LINE_MOVED : CREDIT_BLOCKED.act,
+});
+
+/** Under ACT_LINE: stopped in Act. */
+export const CREDIT_FLOOR = creditFloor(ACT_LINE);
 
 export type CreditPlan = {
   creditRaw: bigint;
@@ -91,11 +110,21 @@ export type CreditPlan = {
   before: Status;
   after: Status;
   hfAfter: number;
-  /** It ends in Watch, so the screen needs the risk tick (D2). Ending in Act is a block instead ("act"), never a tick. */
+  /**
+   * The screen needs the risk tick before anything is prepared: it ends in Watch (D2), or in Act where the line allows
+   * it (intoAct). Under ACT_LINE ending in Act is a block instead ("act"), never a tick.
+   */
   extraConfirm: boolean;
   /**
+   * It ends in Act, which the line allows once Greedy Fatalities is open: the screen shows the Wall's rule and asks for
+   * one tick before anything is prepared.
+   */
+  intoAct: boolean;
+  /** What the batch's simulation is held to (creditFloor of the position's line). */
+  floor: HealthFloor;
+  /**
    * Most credit with every option in use (or, with an explicit pick, with that pick in use): staying Safe, and the MAX
-   * (creditCap: health at or above CREDIT_CAP.minHf, so it can end in Watch but never in Act).
+   * (creditCap: health at or above the line's cap, so it ends in Watch at most under ACT_LINE).
    */
   maxSafeUsd: number;
   maxUsd: number;
@@ -110,22 +139,24 @@ const creditInputOf = (pos: CreditPosition) => ({
   avgCf: pos.avgCf,
   debtUsd: pos.debtUsd,
   liquidityUsd: pos.usdcLiquidity,
+  capHf: lineOf(pos).capHf,
 });
-const lineOf = (o: BackingOption, usd: number) => ({ key: o.stock.symbol, usd, cf: o.cf, freeUsd: o.freeUsd });
+const backingLine = (o: BackingOption, usd: number) => ({ key: o.stock.symbol, usd, cf: o.cf, freeUsd: o.freeUsd });
 
 /**
  * The one cap on taking credit (Act is the line, Adrian 2026-10-15), for every way of taking it: Credit Buy, decision
  * 1's "Use credit for the other $Y", Earn with stocks, and every figure that says how much (usePosition's
  * `availableUsd`, Invest's buying power, "You can use up to", MAX and "Up to"). With `lines` put in use and
- * no credit taken yet: the most credit that keeps the health factor at or above CREDIT_CAP.minHf (combinedCredit's
- * maxCredit: net of what's owed, within what can be lent), so a plan may end in Watch but never in Act, and the most
- * that stays Safe. In cents, rounded down. Nothing while the credit is in Act: more is blocked until it's out.
+ * no credit taken yet: the most credit that keeps the health factor at or above the line's cap (combinedCredit's
+ * maxCredit: net of what's owed, within what can be lent), so under ACT_LINE a plan may end in Watch but never in Act,
+ * and the most that stays Safe. In cents, rounded down. Nothing while the credit is under the line's stop (in Act,
+ * under ACT_LINE): more is blocked until it's back over it.
  */
 export function creditCap(
   pos: CreditPosition,
   lines: readonly BackingLine[] = [],
 ): { maxUsd: number; maxSafeUsd: number } {
-  if (statusFor(pos.healthFactor) === "act") return { maxUsd: 0, maxSafeUsd: 0 };
+  if (pastStop(pos.healthFactor, lineOf(pos))) return { maxUsd: 0, maxSafeUsd: 0 };
   const all = combinedCredit({ ...creditInputOf(pos), creditUsd: 0, lines: [...lines] });
   return { maxUsd: floorCents(all.maxCredit), maxSafeUsd: floorCents(all.maxSafe) };
 }
@@ -134,7 +165,7 @@ export function creditCap(
 function creditReach(pos: CreditPosition, options: readonly BackingOption[]): { maxUsd: number; maxSafeUsd: number } {
   return reachWith(
     pos,
-    options.map((o) => lineOf(o, o.freeUsd)),
+    options.map((o) => backingLine(o, o.freeUsd)),
   );
 }
 
@@ -171,12 +202,14 @@ export function backingRawFor(option: BackingOption, usd: number): bigint {
 
 /**
  * What a stock can back on its own, all of its free shares at the line (boards 30–34, "Back new credit with"): its free
- * value × its backing factor ÷ 1.12, in dollars rounded down to the cent. Credit ready (what already backs credit) is
+ * value × its backing factor ÷ the line's cap (1.12 under ACT_LINE), in dollars rounded down to the cent. Credit ready (what already backs credit) is
  * its own choice, so this never counts it; and never more than the whole position allows with it in (creditWith: what
  * Aave has to lend, and what's owed past the line already).
  */
 export const ownCreditUsd = (position: CreditPosition, option: BackingOption) =>
-  floorCents(Math.max(0, Math.min((option.freeUsd * option.cf) / CREDIT_CAP.minHf, creditWith(position, option))));
+  floorCents(
+    Math.max(0, Math.min((option.freeUsd * option.cf) / lineOf(position).capHf, creditWith(position, option))),
+  );
 
 /**
  * The backing a Credit Buy of `creditUsd` puts in with `option` (boards 31–33): just enough of the stock for the buy to
@@ -214,6 +247,37 @@ export function bestBacking(
 }
 
 /**
+ * The line's own blocks on taking credit. Under ACT_LINE, Act is the line: credit taken while in Act, or credit that
+ * would end in Act, is blocked outright (no risk tick). Once a plan may end in Act, only credit taken under the line's
+ * stop is ("past-limit"); past the cap is "too-much".
+ */
+function lineBlock(healthFactor: number | null, after: Status, line: CreditLine): CreditBlock | undefined {
+  if (pastStop(healthFactor, line)) return line.intoAct ? "past-limit" : "in-act";
+  if (!line.intoAct && endsInAct(after)) return "act";
+  return undefined;
+}
+
+/** Why a plan can't go ahead, first match: Aave's state, the free shares, the line, the cap, the network fee. */
+function creditBlockOf(q: {
+  pos: CreditPosition;
+  creditUsd: number;
+  overFree: boolean;
+  after: Status;
+  line: CreditLine;
+  maxUsd: number;
+  cash: Cash;
+}): CreditBlock | undefined {
+  if (q.pos.creditPaused) return "paused";
+  if (q.creditUsd > q.pos.usdcLiquidity) return "no-liquidity";
+  if (q.overFree) return "over-free";
+  const byLine = q.creditUsd > 0 ? lineBlock(q.pos.healthFactor, q.after, q.line) : undefined;
+  if (byLine) return byLine;
+  if (q.creditUsd > q.maxUsd) return "too-much";
+  if (cashRaw(q.cash) < feeBufferRaw) return "fee";
+  return undefined;
+}
+
+/**
  * What backs `creditRaw` of credit and the status it ends in, on Leo's credit maths.
  *
  * With `backing` (Credit Buy, backing first): exactly that pick goes in use, and the credit it can take is what it and what already
@@ -246,18 +310,18 @@ export function planCredit(
     chosen = option && raw > 0n ? [{ option, raw, usd: usdOf(option, raw) }] : [];
     reach = reachWith(
       pos,
-      chosen.map((c) => lineOf(c.option, c.usd)),
+      chosen.map((c) => backingLine(c.option, c.usd)),
     );
   } else {
     const options = p.options;
-    const fill = autoFill({ ...creditInput, creditUsd: creditUsd, lines: options.map((o) => lineOf(o, 0)) });
+    const fill = autoFill({ ...creditInput, creditUsd: creditUsd, lines: options.map((o) => backingLine(o, 0)) });
     chosen = options.flatMap((o) => {
       const raw = fillRaw(o.freeRaw, o.freeUsd, fill[o.stock.symbol]);
       return raw > 0n ? [{ option: o, raw, usd: usdOf(o, raw) }] : [];
     });
     reach = creditReach(pos, options);
   }
-  const lines = chosen.map((c) => lineOf(c.option, c.usd));
+  const lines = chosen.map((c) => backingLine(c.option, c.usd));
   const calc = combinedCredit({ ...creditInput, creditUsd: creditUsd, lines: lines });
   const { maxUsd, maxSafeUsd } = reach;
   const after = statusFor(pos.debtUsd + creditUsd > 0 ? calc.hfAfter : null);
@@ -267,16 +331,9 @@ export function planCredit(
     freeRaw: Object.fromEntries(chosen.map((c) => [c.option.stock.symbol, c.option.freeRaw])),
   };
 
-  // Act is the line: credit taken while in Act, or credit that would end in Act, is blocked outright (no risk tick).
+  const line = lineOf(pos);
   const before = statusFor(pos.healthFactor);
-  let block: CreditBlock | undefined;
-  if (pos.creditPaused) block = "paused";
-  else if (creditUsd > pos.usdcLiquidity) block = "no-liquidity";
-  else if (overFree) block = "over-free";
-  else if (creditUsd > 0 && before === "act") block = "in-act";
-  else if (creditUsd > 0 && endsInAct(after)) block = "act";
-  else if (creditUsd > maxUsd) block = "too-much";
-  else if (cashRaw(p.cash) < feeBufferRaw) block = "fee";
+  const block = creditBlockOf({ pos, creditUsd, overFree, after, line, maxUsd, cash: p.cash });
 
   return {
     creditRaw: p.creditRaw,
@@ -285,8 +342,11 @@ export function planCredit(
     before,
     after,
     hfAfter: calc.hfAfter,
-    // D2's tick is for ending in Watch; ending in Act is the "act" block above.
-    extraConfirm: creditUsd > 0 && needsExtraConfirm(after),
+    // D2's tick is for ending in Watch. Ending in Act is the "act" block above under ACT_LINE; once the line allows it,
+    // the same tick, which the screen words as the Wall's rule (intoAct).
+    extraConfirm: creditUsd > 0 && (needsExtraConfirm(after) || (line.intoAct && endsInAct(after))),
+    intoAct: creditUsd > 0 && line.intoAct && endsInAct(after),
+    floor: creditFloor(line),
     maxSafeUsd,
     maxUsd,
     priceMayMove: !marketState(p.now).open,
@@ -326,7 +386,8 @@ export function creditAvailable(p: {
   const why = ((): NoCredit | undefined => {
     if (!p.holdsStock) return "no-stocks";
     if (p.position.creditPaused) return "paused";
-    if (statusFor(p.position.healthFactor) === "act") return "in-act";
+    if (pastStop(p.position.healthFactor, lineOf(p.position)))
+      return lineOf(p.position).intoAct ? "past-limit" : "in-act";
     if (usd >= BUY_LIMITS.minUsd) return undefined;
     if (p.position.usdcLiquidity < BUY_LIMITS.minUsd) return "no-liquidity";
     // Nothing backs credit yet: free stock too small to give the $1 minimum buy isn't "all in use".

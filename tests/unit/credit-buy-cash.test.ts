@@ -238,7 +238,7 @@ describe("Credit Buy's Cash row: the batch (Earn with stocks', backed the Credit
     await expect(callsOf(none)).rejects.toBeInstanceOf(TxStop);
     expect(cashToSign).not.toHaveBeenCalled();
     const p = toCashPlan({ user, quote: quote(100), confirmedRisk: false }, cashToSign);
-    expect(p.healthFloor).toBe(CREDIT_FLOOR);
+    expect(p.healthFloor).toEqual(CREDIT_FLOOR);
     expect(p.activity).toEqual([{ kind: "earn", symbol: "USDC", amount: 100 }]);
     const key = (amount: number, ack = false) =>
       toCashPlan({ user, quote: quote(amount), confirmedRisk: ack }, cashToSign).key;
