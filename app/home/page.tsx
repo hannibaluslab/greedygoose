@@ -264,8 +264,9 @@ function Loaded({
           16 from section to section, 8 inside a block (title or figures to what they head) and between cards. With the
           week's line 40px (was 44) and the stock cards' padding 10px (was 11), Home is 20px shorter; the header then sits
           2px lower, so 18px net. At 402x709 (an iPhone 17 Safari tab) the last cards clear the tab bar and its lime
-          button. Replaces the 0.5–2px tweaks of 2026-10-21. */}
-      <section className="flex flex-col gap-2 px-5 pt-3">
+          button. Replaces the 0.5–2px tweaks of 2026-10-21. Dark only (Adrian, 2026-10-22): the header 6px lower and 6px
+          more under it (18), so the logo sits 12px from the top and the lime button clears the cards by 12. */}
+      <section className="flex flex-col gap-2 px-5 pt-3 dark:pt-[18px]">
         <BalanceHero
           label="Total balance"
           // The whole Total balance column opens what's in it (Adrian, 2026-10-21: no ⓘ on Home).
