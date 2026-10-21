@@ -10,7 +10,7 @@ import { BOARD_COPY } from "@/lib/board/copy";
 export const tone = (pct: number) =>
   Number(Math.abs(pct * 100).toFixed(1)) === 0 ? "text-ink-mid" : pct < 0 ? "text-neg" : "text-pos";
 
-function Tick({ on }: { on: boolean }) {
+export function Tick({ on }: { on: boolean }) {
   return (
     <span
       aria-hidden
@@ -32,43 +32,32 @@ function Tick({ on }: { on: boolean }) {
   );
 }
 
-/**
- * One person: rank, mark, name and their percent. Your own row is lit. While picking, the rank becomes a tick for
- * anyone who can be added; you and your contacts can't be ticked.
- */
+/** One person: rank, mark, name and their percent. Your own row is lit. Adding people is Add contact's sheet. */
 export function BoardRowItem({
   person,
-  picking = false,
-  picked = false,
   onOpen,
-  onPick,
   showContact = true,
 }: {
   person: BoardPerson;
-  picking?: boolean;
-  picked?: boolean;
   onOpen: () => void;
-  onPick?: () => void;
   /** Say "Contact" under a contact's name (All); Contacts shows only contacts, so it doesn't. */
   showContact?: boolean;
 }) {
-  const pickable = picking && !person.you && !person.contact;
   const label = personLabel(person, person.you);
   const value = person.pct === null ? BOARD_COPY.notRanked : boardPct(person.pct);
   return (
     <li>
       <button
         type="button"
-        onClick={pickable ? onPick : onOpen}
+        onClick={onOpen}
         aria-current={person.you ? "true" : undefined}
-        aria-pressed={pickable ? picked : undefined}
         aria-label={`${person.rank ? `Rank ${person.rank}, ` : ""}${label}${person.contact && !person.you ? ", contact" : ""}: ${value}`}
         className={`flex min-h-[56px] w-full items-center gap-3 px-3.5 py-2 text-left transition ${
           person.you ? "rounded-[16px] bg-[rgba(212,255,60,0.42)]" : ""
-        } ${picking && !pickable ? "opacity-45" : ""}`}
+        }`}
       >
         <span className="num w-[22px] shrink-0 text-right font-mono text-[12px] text-ink-mid">
-          {pickable ? <Tick on={picked} /> : (person.rank ?? "–")}
+          {person.rank ?? "–"}
         </span>
         <Initial person={person} />
         <span className="flex min-w-0 grow flex-col">

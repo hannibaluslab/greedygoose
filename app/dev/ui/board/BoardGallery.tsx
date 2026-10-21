@@ -4,8 +4,8 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { numberToHex, type Address } from "viem";
-import { AddByNameSheet, type NameLookup } from "@/components/gg/leaderboard/AddByNameSheet";
-import { BoardView, PickBar } from "@/components/gg/leaderboard/BoardView";
+import { AddContactSheet, type NameLookup } from "@/components/gg/leaderboard/AddContactSheet";
+import { BoardView } from "@/components/gg/leaderboard/BoardView";
 import { PersonSheet } from "@/components/gg/leaderboard/PersonSheet";
 import { rankRows, returnSinceJoining } from "@/lib/board/score";
 import { rankWall } from "@/lib/board/wall";
@@ -19,8 +19,9 @@ import type { BoardFilter, BoardPerson, BoardState, BoardTab, OffBoard, WallStat
  *   ?view=crowd                   the board plus 300 accounts that joined and did nothing: one line, not 300 rows
  *   ?view=soon|loading|error|contacts-error|empty
  *   &filter=contacts              the same board filtered to your contacts
- *   &pick=1                       "Add several", two ticked
- *   &sheet=person|contact|you|unranked|offboard|name|name-eth (a name that only gives an Ethereum address)
+ *   &sheet=person|contact|you|unranked|offboard
+ *   &sheet=add                    Add contact, two ticked; add-found (Find found rae.justan.id, ticked), add-eth (a name
+ *                                 that only gives an Ethereum address), add-none (Find found nobody)
  *   &tab=wall                     Greedy Fatalities: &wall=few (default, you on it), many, empty, loading, error
  *   &wall=off                     the one board as it is before the Wall opens (All | Contacts as a pill)
  * Adding and removing go straight to JAW's own sheet in the app; here they only say so.
@@ -132,14 +133,22 @@ export function BoardGallery() {
   const router = useRouter();
   const view = q.get("view");
   const [filter, setFilter] = useState<BoardFilter>(q.get("filter") === "contacts" ? "contacts" : "all");
-  const [picking, setPicking] = useState(q.get("pick") === "1");
   const [tab, setTab] = useState<BoardTab>(q.get("tab") === "wall" ? "wall" : "heroes");
   const wallOn = q.get("wall") !== "off";
   const crowd = Array.from({ length: 300 }, () => [null, 0, 0, 0, 0, 0] as (typeof FIXTURE)[number]);
   const list =
     view === "far" ? far() : view === "empty" ? [] : people(view === "crowd" ? [...FIXTURE, ...crowd] : FIXTURE);
+  const adding = (q.get("sheet") ?? "").startsWith("add");
   const [picked, setPicked] = useState<Set<string>>(
-    new Set(q.get("pick") === "1" ? [addr(1), addr(2)].map((a) => a.toLowerCase()) : []),
+    new Set(
+      adding
+        ? [
+            addr(1),
+            addr(2),
+            ...(q.get("sheet") === "add-found" ? [addr(40)] : q.get("sheet") === "add-eth" ? [addr(42)] : []),
+          ].map((a) => a.toLowerCase())
+        : [],
+    ),
   );
   const sheet = q.get("sheet");
   const state: BoardState =
@@ -171,18 +180,23 @@ export function BoardGallery() {
     next.delete("sheet");
     router.replace(`/dev/ui/board?${next}`);
   };
+  const sheetName = q.get("sheet");
   const lookup: NameLookup =
-    sheet === "name-eth"
+    sheetName === "add-eth"
       ? { kind: "found", name: "rae.eth", account: addr(42), you: false, contact: false, onBoard: false, onBase: false }
-      : {
-          kind: "found",
-          name: "rae.justan.id",
-          account: addr(40),
-          you: false,
-          contact: false,
-          onBoard: false,
-          onBase: true,
-        };
+      : sheetName === "add-found"
+        ? {
+            kind: "found",
+            name: "rae.justan.id",
+            account: addr(40),
+            you: false,
+            contact: false,
+            onBoard: false,
+            onBase: true,
+          }
+        : sheetName === "add-none"
+          ? { kind: "none", name: "zed" }
+          : { kind: "idle" };
 
   return (
     <>
@@ -191,37 +205,16 @@ export function BoardGallery() {
           wallOn
             ? {
                 tab,
-                onTab: (t) => {
-                  setTab(t);
-                  setPicking(false);
-                },
+                onTab: (t) => setTab(t),
                 wall: wallState(q.get("wall")),
                 onWallRetry: NOTHING_SIGNED,
               }
             : undefined
         }
         filter={filter}
-        onFilter={(f) => {
-          setFilter(f);
-          setPicking(false);
-        }}
+        onFilter={(f) => setFilter(f)}
         state={state}
         onRetry={NOTHING_SIGNED}
-        picking={picking}
-        picked={picked}
-        onPickToggle={(a) =>
-          setPicked((prev) => {
-            const next = new Set(prev);
-            if (next.has(a.toLowerCase())) next.delete(a.toLowerCase());
-            else next.add(a.toLowerCase());
-            return next;
-          })
-        }
-        onPickStart={() => setPicking(true)}
-        onPickStop={() => {
-          setPicking(false);
-          setPicked(new Set());
-        }}
         onOpen={(p) => {
           const i = list.findIndex((x) => x.account === p.account);
           const s =
@@ -234,10 +227,9 @@ export function BoardGallery() {
                   : "person";
           router.replace(`/dev/ui/board?${new URLSearchParams({ ...Object.fromEntries(q), sheet: s })}`);
         }}
-        onAddByName={() =>
-          router.replace(`/dev/ui/board?${new URLSearchParams({ ...Object.fromEntries(q), sheet: "name" })}`)
+        onAddContact={() =>
+          router.replace(`/dev/ui/board?${new URLSearchParams({ ...Object.fromEntries(q), sheet: "add" })}`)
         }
-        pickBar={picking ? <PickBar count={picked.size} phase="idle" onAdd={NOTHING_SIGNED} /> : undefined}
       />
       <PersonSheet
         open={!!sheetPerson}
@@ -250,11 +242,21 @@ export function BoardGallery() {
         onAdd={NOTHING_SIGNED}
         onRemove={NOTHING_SIGNED}
       />
-      <AddByNameSheet
-        open={sheet === "name" || sheet === "name-eth"}
+      <AddContactSheet
+        open={adding}
         onClose={close}
-        lookup={sheet === "name" || sheet === "name-eth" ? lookup : { kind: "idle" }}
+        people={list}
+        lookup={lookup}
         onLookup={NOTHING_SIGNED}
+        picked={picked}
+        onToggle={(a) =>
+          setPicked((prev) => {
+            const next = new Set(prev);
+            if (next.has(a.toLowerCase())) next.delete(a.toLowerCase());
+            else next.add(a.toLowerCase());
+            return next;
+          })
+        }
         phase="idle"
         error={null}
         note={null}

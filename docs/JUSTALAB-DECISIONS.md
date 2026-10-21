@@ -931,3 +931,21 @@ approved.
 `wallDate`), `lib/board/copy.ts`, `lib/creditBuy/copy.ts` (`creditTick`), `lib/earnWithStocks/copy.ts` (`earnTick`),
 `components/gg/CreditStatusSheet.tsx`, `lib/guide/content.ts`. Gallery: `/dev/ui/board?tab=wall&wall=few|many|empty|
 loading|error`, `&wall=off` for the board as before.
+
+## 2026-10-21 · Add contact, one sheet
+
+Adrian: "add contact not add several, when click you can select multiple from the list of search and select". This
+replaces, in "The Leaderboard", Add several (ticking rows on the board, with a bar over the tab bar) and Add by name.
+
+- **One button, "Add contact"**, at the end of the row under the tabs (beside "Return since joining" before the Wall
+  opens), on Everyone and on Contacts; Contacts' empty state offers it too.
+- **One sheet, "Add contacts":** a field that narrows the board's list as you type (any part of a name's own label, the
+  whole name once a dot is typed, or an address; the parent every name shares doesn't match a plain word), and Find,
+  which looks a name up for someone not on the list and puts them on top, ticked. Everyone on the board but you and
+  your contacts is listed with a tick, their mark and their percent; whoever is ticked stays listed whatever is typed,
+  so "Add 3 to contacts" never counts a hidden row. One JAW sheet adds them all (`addChange`).
+- Names for the whole board are read while the sheet is open, so it can search them.
+
+**In this repo:** `components/gg/leaderboard/AddContactSheet.tsx` (was `AddByNameSheet.tsx`), `BoardView.tsx`,
+`BoardRow.tsx` (no pick mode), `LeaderboardScreen.tsx`, `lib/board/view.ts` (`addCandidates`, `boardChanges`),
+`lib/board/copy.ts`. Gallery: `/dev/ui/board?sheet=add|add-found|add-eth|add-none`. **Tests:** `board-screen`.

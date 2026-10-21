@@ -27,7 +27,7 @@ import {
   type TxReceipt,
 } from "@/lib/tx/prepared";
 
-export { TAP_AGAIN, TxStop, txKey } from "@/lib/tx/prepared";
+export { TxStop, txKey } from "@/lib/tx/prepared";
 export type { TxPhase, TxPlan } from "@/lib/tx/prepared";
 
 type Client = NonNullable<ReturnType<typeof usePublicClient>>;

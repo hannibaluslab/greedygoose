@@ -180,26 +180,62 @@ export function sheetPersonOf(
 }
 
 /**
- * The change each place would sign now: the person's sheet (add or remove them), the name sheet (add who was found),
- * and the Add several bar (add everyone ticked).
+ * The change each place would sign now: the person's sheet (add or remove them) and the Add contact sheet (add everyone
+ * ticked there, one JAW sheet for all).
  */
 export function boardChanges(p: {
   user: Address;
   person: { account: Address; you: boolean; contact: boolean } | null;
   personShown: boolean;
-  found: { account: Address; you: boolean; contact: boolean } | null;
-  byName: boolean;
-  picking: boolean;
+  /** The Add contact sheet is open. */
+  adding: boolean;
   picked: ReadonlySet<string>;
-}): { personChange: ContactsChange | null; nameChange: ContactsChange | null; pickChange: ContactsChange | null } {
-  const { user, person, found } = p;
+}): { personChange: ContactsChange | null; addChange: ContactsChange | null } {
+  const { user, person } = p;
   return {
     personChange:
       p.personShown && person && !person.you
         ? { verb: person.contact ? "remove" : "add", user, targets: [person.account] }
         : null,
-    nameChange:
-      p.byName && found && !found.you && !found.contact ? { verb: "add", user, targets: [found.account] } : null,
-    pickChange: p.picking && p.picked.size > 0 ? { verb: "add", user, targets: [...p.picked] as Address[] } : null,
+    addChange: p.adding && p.picked.size > 0 ? { verb: "add", user, targets: [...p.picked] as Address[] } : null,
   };
+}
+
+/** Someone Add contact can tick: on the board, or found by name. */
+export type AddCandidate = {
+  account: Address;
+  name: string | null;
+  pct: number | null;
+  onBoard: boolean;
+  /** Found by name and it gave only an Ethereum address (BOARD_COPY.notOnBase). */
+  onBase?: boolean;
+};
+
+/**
+ * Who Add contact lists (Adrian, 2026-10-21: "select multiple from the list, or search and select"): everyone on the
+ * board who isn't you or a contact yet, in board order, narrowed by what's typed (any part of a name's own label, the
+ * whole name once a dot is typed, or of an address), and on top whoever a name lookup found who isn't listed already.
+ */
+export function addCandidates(
+  people: readonly BoardPerson[],
+  query: string,
+  found: AddCandidate | null = null,
+  /** Ticked, by lowercase address: they stay listed whatever is typed, so the count never names hidden rows. */
+  picked: ReadonlySet<string> = new Set(),
+): AddCandidate[] {
+  const q = query.trim().toLowerCase();
+  // Every JAW name ends in its parent ("justan.id"), so a plain word matches the name's own part ("sam"); a dot typed
+  // matches the whole name ("sam.jus").
+  const nameMatch = (name: string | null) => {
+    const n = (name ?? "").toLowerCase();
+    return (q.includes(".") ? n : n.split(".")[0]).includes(q);
+  };
+  const listed = people
+    .filter((p) => !p.you && !p.contact)
+    .filter(
+      (p) => !q || picked.has(p.account.toLowerCase()) || nameMatch(p.name) || p.account.toLowerCase().includes(q),
+    )
+    .map((p) => ({ account: p.account, name: p.name, pct: p.pct, onBoard: true }));
+  if (!found || people.some((p) => isAddressEqual(p.account, found.account) && (p.you || p.contact))) return listed;
+  return [found, ...listed.filter((c) => !isAddressEqual(c.account, found.account))];
 }

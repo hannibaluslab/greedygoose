@@ -5,14 +5,13 @@ import { useSearchParams } from "next/navigation";
 import { isAddressEqual, type Address } from "viem";
 import { useAccount } from "wagmi";
 import { toast } from "sonner";
-import { AddByNameSheet, type NameLookup } from "./AddByNameSheet";
-import { BoardView, PickBar } from "./BoardView";
+import { AddContactSheet, type NameLookup } from "./AddContactSheet";
+import { BoardView } from "./BoardView";
 import { PersonSheet } from "./PersonSheet";
 import { useBoard } from "@/hooks/useBoard";
 import { useWall } from "@/hooks/useWall";
 import { useContactsTx, useFollowing, useNames } from "@/hooks/useContacts";
 import type { ContactsChange } from "@/lib/tx/plans";
-import { TAP_AGAIN } from "@/hooks/useTx";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { GOOSE_BOARD, WALL_OPEN } from "@/lib/board/config";
 import {
@@ -49,15 +48,15 @@ export function LeaderboardScreen({ address }: { address: Address }) {
   const params = useSearchParams();
   const [filter, setFilter] = useState<BoardFilter>(params.get("filter") === "contacts" ? "contacts" : "all");
   const [tab, setTab] = useState<BoardTab>(params.get("tab") === "wall" ? "wall" : "heroes");
-  const [picking, setPicking] = useState(false);
+  // Add contact: the sheet, and who's ticked in it.
+  const [adding, setAdding] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   // The open sheet keeps its person while it slides away.
   const [person, setPerson] = useState<Address | null>(null);
   const [personShown, setPersonShown] = useState(false);
-  const [byName, setByName] = useState(false);
   const [lookup, setLookup] = useState<NameLookup>({ kind: "idle" });
   /** Where the change in JAW's sheet came from, so its result shows there. */
-  const [from, setFrom] = useState<"person" | "pick" | "name" | null>(null);
+  const [from, setFrom] = useState<"person" | "add" | null>(null);
   const [verb, setVerb] = useState<"add" | "remove">("add");
 
   const rows = useMemo(() => board.data?.rows ?? [], [board.data]);
@@ -66,12 +65,12 @@ export function LeaderboardScreen({ address }: { address: Address }) {
   const memberSet = useMemo(() => new Set(rows.map((r) => lower(r.account))), [rows]);
 
   const wallRows = useMemo(() => wall.data?.rows ?? [], [wall.data]);
-  // Names for what can be on screen: the first page, you, your contacts (others not ranked yet are only a count) and
-  // everyone on the Wall.
+  // Names for what can be on screen: the first page, you, your contacts (others not ranked yet are only a count),
+  // everyone on the Wall, and, while Add contact is open, everyone it lists (it searches them by name).
   const named = useMemo(() => {
-    const ranked = rows.filter((r) => r.rank !== null && r.rank <= BOARD_PAGE).map((r) => r.account);
+    const ranked = rows.filter((r) => adding || (r.rank !== null && r.rank <= BOARD_PAGE)).map((r) => r.account);
     return [...new Set([address, ...ranked, ...contacts, ...wallRows.map((r) => r.account)].map(lower))] as Address[];
-  }, [rows, contacts, address, wallRows]);
+  }, [rows, contacts, address, wallRows, adding]);
   const names = useNames(named);
   const nameOf = (a: string) => names.get(lower(a)) ?? null;
 
@@ -87,54 +86,44 @@ export function LeaderboardScreen({ address }: { address: Address }) {
   });
   const sheetPerson = sheetPersonOf(person, people, (a) => contactSet.has(lower(a)), nameOf);
 
-  // The change each place would sign now. The one in front (a person's sheet, then the name sheet, then the bar) is
-  // prepared while the screen is idle, so its tap opens JAW's sheet at once.
-  const { personChange, nameChange, pickChange } = boardChanges({
+  // The change each place would sign now. The one in front (a person's sheet, then Add contact) is prepared while the
+  // screen is idle, so its tap opens JAW's sheet at once.
+  const { personChange, addChange } = boardChanges({
     user: address,
     person: sheetPerson,
     personShown,
-    found: lookup.kind === "found" ? lookup : null,
-    byName,
-    picking,
+    adding,
     picked,
   });
-  const front = note ? null : (personChange ?? nameChange ?? pickChange);
+  const front = note ? null : (personChange ?? addChange);
   const tx = useContactsTx(front);
   const checkingFor = (c: ContactsChange | null) => tx.checking && !!c && c === front;
   /** A sheet's own share of the one write: its phase and error once it signed, or while its change is in front. */
-  const placeOf = (where: "person" | "name", c: ContactsChange | null) => ({
+  const placeOf = (where: "person" | "add", c: ContactsChange | null) => ({
     phase: from === where ? tx.phase : ("idle" as const),
     checking: checkingFor(c),
     blocked: c !== null && c === front && tx.blocked,
     error: from === where || (c !== null && c === front) ? tx.error : null,
   });
 
-  // A change that landed closes what asked for it, the sheet or the bar. Derived from the phase rather than set from
-  // an effect; `settle` puts it away for good before anything new starts.
+  // A change that landed closes the sheet that asked for it. Derived from the phase rather than set from an effect;
+  // `settle` puts it away for good before anything new starts.
   const landed = tx.phase === "done" ? from : null;
-  const pickOpen = picking && landed !== "pick";
   useEffect(() => {
     if (tx.phase === "done") toast.success(verb === "add" ? "Added to your contacts" : "Removed from your contacts");
   }, [tx.phase, verb]);
-  // The bar has no room for an error: it comes as a toast.
-  useEffect(() => {
-    if (from !== "pick" || !tx.error) return;
-    if (tx.error === TAP_AGAIN) toast(TAP_AGAIN);
-    else if (tx.phase === "failed") toast.error(tx.error);
-  }, [from, tx.phase, tx.error]);
 
   const settle = () => {
-    if (landed === "pick") {
-      setPicking(false);
+    if (landed === "add") {
+      setAdding(false);
       setPicked(new Set());
     }
     if (landed === "person") setPersonShown(false);
-    if (landed === "name") setByName(false);
     if (landed) setFrom(null);
     tx.reset();
   };
 
-  const start = (where: "person" | "pick" | "name", v: "add" | "remove") => {
+  const start = (where: "person" | "add", v: "add" | "remove") => {
     settle();
     setFrom(where);
     setVerb(v);
@@ -153,15 +142,19 @@ export function LeaderboardScreen({ address }: { address: Address }) {
     try {
       const found = await addressOfName(text);
       if (!found) return setLookup({ kind: "none", name: text.trim() });
+      const you = isAddressEqual(found.address, address);
+      const contact = contactSet.has(lower(found.address));
       setLookup({
         kind: "found",
         name: found.name ?? nameOf(found.address),
         account: found.address,
         onBase: found.onBase,
-        you: isAddressEqual(found.address, address),
-        contact: contactSet.has(lower(found.address)),
+        you,
+        contact,
         onBoard: memberSet.has(lower(found.address)),
       });
+      // Found someone to add: ticked already, so one tap adds them.
+      if (!you && !contact) setPicked((prev) => new Set(prev).add(lower(found.address)));
     } catch {
       setLookup({ kind: "none", name: text.trim() });
     }
@@ -194,8 +187,6 @@ export function LeaderboardScreen({ address }: { address: Address }) {
                 onTab: (t) => {
                   settle();
                   setTab(t);
-                  setPicking(false);
-                  setPicked(new Set());
                 },
                 wall: wallState,
                 onWallRetry: () => void wall.refetch(),
@@ -206,58 +197,20 @@ export function LeaderboardScreen({ address }: { address: Address }) {
         onFilter={(f) => {
           settle();
           setFilter(f);
-          setPicking(false);
-          setPicked(new Set());
         }}
         state={state}
         onRetry={() => {
           void board.refetch();
           void following.refetch();
         }}
-        picking={pickOpen}
-        picked={picked}
-        onPickToggle={(a) =>
-          setPicked((prev) => {
-            const next = new Set(prev);
-            if (next.has(lower(a))) next.delete(lower(a));
-            else next.add(lower(a));
-            return next;
-          })
-        }
-        onPickStart={() => {
-          settle();
-          setPicked(new Set());
-          setPicking(true);
-        }}
-        onPickStop={() => {
-          setPicking(false);
-          setPicked(new Set());
-        }}
         onOpen={open}
-        onAddByName={() => {
+        onAddContact={() => {
+          if (tx.busy) return;
           settle();
           setLookup({ kind: "idle" });
-          setByName(true);
+          setPicked(new Set());
+          setAdding(true);
         }}
-        pickBar={
-          pickOpen ? (
-            <PickBar
-              count={picked.size}
-              phase={from === "pick" ? tx.phase : "idle"}
-              checking={checkingFor(pickChange)}
-              // In the dev preview the tap says why nothing can be signed.
-              disabled={
-                !!note || (tx.busy && from !== "pick") || (pickChange !== null && pickChange === front && tx.blocked)
-              }
-              onAdd={() => {
-                if (preview) return void toast("Preview mode. Sign in to do this.");
-                if (!pickChange) return;
-                start("pick", "add");
-                void tx.sign(tx.planOf(pickChange));
-              }}
-            />
-          ) : undefined
-        }
       />
       <PersonSheet
         open={personShown && landed !== "person"}
@@ -277,18 +230,28 @@ export function LeaderboardScreen({ address }: { address: Address }) {
           void tx.sign(tx.planOf(personChange));
         }}
       />
-      <AddByNameSheet
-        open={byName && landed !== "name"}
-        onClose={() => setByName(false)}
+      <AddContactSheet
+        open={adding && landed !== "add"}
+        onClose={() => setAdding(false)}
+        people={people}
         lookup={lookup}
         onLookup={(t) => void onLookup(t)}
-        {...placeOf("name", nameChange)}
+        picked={picked}
+        onToggle={(a) =>
+          setPicked((prev) => {
+            const next = new Set(prev);
+            if (next.has(lower(a))) next.delete(lower(a));
+            else next.add(lower(a));
+            return next;
+          })
+        }
+        {...placeOf("add", addChange)}
         note={note}
         preview={preview}
         onAdd={() => {
-          if (!nameChange) return;
-          start("name", "add");
-          void tx.sign(tx.planOf(nameChange));
+          if (!addChange) return;
+          start("add", "add");
+          void tx.sign(tx.planOf(addChange));
         }}
       />
     </>

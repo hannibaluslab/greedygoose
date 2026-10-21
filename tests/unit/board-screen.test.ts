@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Address } from "viem";
-import { boardChanges, boardPeople, boardState, sheetPersonOf } from "@/lib/board/view";
+import { addCandidates, boardChanges, boardPeople, boardState, sheetPersonOf } from "@/lib/board/view";
 
 const ME = "0x00000000000000000000000000000000000000aa" as Address;
 const ANN = "0x00000000000000000000000000000000000000bb" as Address;
@@ -52,13 +52,54 @@ describe("the Leaderboard tab's derivations", () => {
       user: ME,
       person: { account: ANN, you: false, contact: true },
       personShown: true,
-      found: { account: BOB, you: false, contact: false },
-      byName: true,
-      picking: true,
+      adding: true,
       picked: new Set([BOB]),
     });
     expect(c.personChange).toEqual({ verb: "remove", user: ME, targets: [ANN] });
-    expect(c.nameChange).toEqual({ verb: "add", user: ME, targets: [BOB] });
-    expect(c.pickChange).toEqual({ verb: "add", user: ME, targets: [BOB] });
+    expect(c.addChange).toEqual({ verb: "add", user: ME, targets: [BOB] });
+    // Nothing ticked, or the sheet closed: nothing to add.
+    expect(
+      boardChanges({ user: ME, person: null, personShown: false, adding: true, picked: new Set() }).addChange,
+    ).toBeNull();
+    expect(
+      boardChanges({ user: ME, person: null, personShown: false, adding: false, picked: new Set([BOB]) }).addChange,
+    ).toBeNull();
+  });
+});
+
+describe("Add contact's list", () => {
+  const people = [
+    { account: ME, name: "me.justan.id", pct: 0.1, rank: 1, you: true, contact: false },
+    { account: ANN, name: "ann.justan.id", pct: 0.05, rank: 2, you: false, contact: true },
+    { account: BOB, name: "bob.justan.id", pct: -0.02, rank: 3, you: false, contact: false },
+  ];
+
+  it("lists everyone on the board but you and your contacts, in board order", () => {
+    expect(addCandidates(people, "").map((c) => c.account)).toEqual([BOB]);
+  });
+
+  it("narrows by any part of a name or an address as you type", () => {
+    expect(addCandidates(people, "BO").map((c) => c.account)).toEqual([BOB]);
+    expect(addCandidates(people, "00cc").map((c) => c.account)).toEqual([BOB]);
+    expect(addCandidates(people, "zed")).toEqual([]);
+    // The parent every name shares doesn't match a plain word; typed with a dot, it does.
+    expect(addCandidates(people, "justan")).toEqual([]);
+    expect(addCandidates(people, "bob.jus").map((c) => c.account)).toEqual([BOB]);
+    // Ticked stays listed whatever is typed.
+    expect(addCandidates(people, "zed", null, new Set([BOB.toLowerCase()])).map((c) => c.account)).toEqual([BOB]);
+  });
+
+  it("puts who Find found on top, once, and never you or a contact", () => {
+    const rae = {
+      account: "0x00000000000000000000000000000000000000dd" as Address,
+      name: "rae.eth",
+      pct: null,
+      onBoard: false,
+    };
+    expect(addCandidates(people, "", rae).map((c) => c.account)).toEqual([rae.account, BOB]);
+    expect(addCandidates(people, "", { ...rae, account: BOB, onBoard: true }).map((c) => c.account)).toEqual([BOB]);
+    expect(addCandidates(people, "", { ...rae, account: ANN })).toEqual([
+      { account: BOB, name: "bob.justan.id", pct: -0.02, onBoard: true },
+    ]);
   });
 });

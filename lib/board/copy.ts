@@ -24,6 +24,12 @@ export const BOARD_COPY = {
   wall: "Wall of shame",
   everyone: "Everyone",
   contacts: "Contacts",
+  // Add contact (Adrian, 2026-10-21): one sheet to tick people from the board or find them by name.
+  addContact: "Add contact",
+  addContactTitle: "Add contacts",
+  addContactLine: "Tick people on the board, or find them by name.",
+  addNoMatch: "Nobody on the board matches. Tap Find to look the name up.",
+  addNobody: "Everyone on the board is in your contacts. Find someone by name.",
   // Greedy Fatalities: never "liquidated" on screen.
   wallTitle: "Greedy Fatalities",
   wallLine: "Part of their stock was sold to pay what they owe. Boldest first.",
