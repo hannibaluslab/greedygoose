@@ -234,7 +234,7 @@ export function AssetPicker({
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
           style={{ maxHeight: maxH, ...(align === "start" && startInset ? { left: -startInset } : {}) }}
-          className={`absolute ${align === "start" ? "left-0" : "right-0"} z-30 flex ${wide ? "w-[min(350px,calc(100vw-40px))]" : "w-[min(320px,calc(100vw-40px))]"} flex-col rounded-[16px] border border-line-field bg-card p-2 shadow-[0_12px_32px_-12px_rgba(14,13,11,0.28)] animate-in fade-in-0 zoom-in-95 duration-150 ${
+          className={`absolute ${align === "start" ? "left-0" : "right-0"} z-30 flex ${wide ? "w-[min(350px,calc(100vw-40px))]" : "w-[min(320px,calc(100vw-40px))]"} flex-col rounded-[16px] border border-line-field bg-card p-2 dark:bg-[#1f1e1a] shadow-[0_12px_32px_-12px_rgba(14,13,11,0.28)] animate-in fade-in-0 zoom-in-95 duration-150 ${
             up ? "bottom-full mb-2 origin-bottom-right" : "top-full mt-2 origin-top-right"
           }`}
         >
