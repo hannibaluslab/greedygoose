@@ -121,6 +121,13 @@ export function useTradeList({
   };
 
   const editingRow = on && step === "edit";
+  // The other rows' trades while one is in the editor: what they spend and sell is held back from it (leftAfter).
+  const others = editingRow
+    ? rows.flatMap((r, i) => {
+        const s = i === editing ? null : (reports[r.id]?.sign ?? null);
+        return s ? [s] : [];
+      })
+    : [];
   const title = !on
     ? TRADE_COPY.title
     : !editingRow
@@ -154,6 +161,7 @@ export function useTradeList({
     commit,
     remove,
     drop,
+    others,
     /** Back from a row in the editor: its draft is dropped. */
     back: editingRow ? toList : undefined,
   };

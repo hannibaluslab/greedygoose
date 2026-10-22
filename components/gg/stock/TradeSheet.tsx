@@ -2,6 +2,7 @@
 
 import { EQUITIES } from "@/lib/tokens/registry";
 import { useState, type ComponentProps } from "react";
+import { leftAfter, leftKey, type TradeSign } from "@/lib/tx/plans";
 import { useAccount } from "wagmi";
 import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
 import { AmountArrow, AmountBadge, AmountField, AmountHintLine, YouGetCash, YouGetShares } from "../kit/AmountField";
@@ -101,9 +102,12 @@ export function TradeSheet({
   const { amount, all } = form;
   const { menu, setMenu, closeMenu, onOpenChange } = useMenuGuard<"from" | "to" | null>(onClose, null);
   const [signed, setSigned] = useState<Signed | null>(null);
+  // In a multi trade's editor, what the other trades already spend and sell is held back (leftAfter).
+  const [others, setOthers] = useState<TradeSign[]>([]);
+  const left = leftAfter(data, others);
 
   const { from, to } = legs ?? NO_LEGS;
-  const view = useTradeView({ from, to, amount, all, data }, !!legs);
+  const view = useTradeView({ from, to, amount, all, data: left }, !!legs);
   const feeBlocked = isConnected && fee.state === "unsupported";
   // What the button would sign now, per route, prepared while the sheet is idle so the tap opens JAW's sheet at once.
   const toPriceUsd = data.holdings.find((h) => h.symbol === to)?.priceUsd ?? 0;
@@ -119,6 +123,8 @@ export function TradeSheet({
     setForm,
     onClose,
   });
+  // Derived during render (React's pattern for state that follows other state), keyed so it settles at once.
+  if (leftKey(list.others) !== leftKey(others)) setOthers(list.others);
   const signable = list.single;
   const { sign: signTrade, phase, error, reset, busy, txHash, checking, blocked } = useTrade(signable);
 
@@ -131,7 +137,7 @@ export function TradeSheet({
   /** The legs and the amount move only through `tradeForm` (lib/trade/form.ts): flip, pick, typed dollars, MAX. */
   const dispatch = (action: TradeAction) => {
     fresh();
-    setForm((f) => tradeForm({ ...f, legs: f.legs ?? legs }, action, data));
+    setForm((f) => tradeForm({ ...f, legs: f.legs ?? legs }, action, left));
   };
   const flip = () => dispatch({ type: "flip" });
   const pick = (which: "from" | "to", asset: TradeAsset) => {
@@ -152,8 +158,8 @@ export function TradeSheet({
 
   const nameOf = (asset: TradeAsset) =>
     asset === "cash" ? TRADE_COPY.cashName : (data.holdings.find((h) => h.symbol === asset)?.name ?? asset);
-  const fromHolding = data.holdings.find((h) => h.symbol === from);
-  const toHolding = data.holdings.find((h) => h.symbol === to);
+  const fromHolding = left.holdings.find((h) => h.symbol === from);
+  const toHolding = left.holdings.find((h) => h.symbol === to);
   const picker = (which: "from" | "to") => {
     const asset = which === "from" ? from : to;
     return (
@@ -162,7 +168,7 @@ export function TradeSheet({
         title={which === "from" ? TRADE_COPY.fromMenu : TRADE_COPY.toMenu}
         name={nameOf(asset)}
         mark={assetMark(asset, 18)}
-        rows={pickerRows(which === "from" ? fromOptions(data) : toOptions(data))}
+        rows={pickerRows(which === "from" ? fromOptions(left) : toOptions(left))}
         selected={asset}
         open={menu === which}
         onToggle={() => toggle(which)}
@@ -260,7 +266,7 @@ export function TradeSheet({
                 {view.note.text}
               </p>
             )}
-            <TradeSmallPrint view={view} data={data} fromHolding={fromHolding} toHolding={toHolding} />
+            <TradeSmallPrint view={view} data={left} fromHolding={fromHolding} toHolding={toHolding} />
             {feeBlocked && (
               <p role="alert" className="m-0 text-[13px] text-act">
                 {TRADE_COPY.feeUnsupported}

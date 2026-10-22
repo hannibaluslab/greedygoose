@@ -152,3 +152,49 @@ export const multiTradePlan = (user: `0x${string}`, signs: readonly TradeSign[],
   fallback: MULTI_COPY.fallback,
   activity: multiActivity(signs),
 });
+
+/**
+ * What the editor can still use while the list holds other trades (Adrian, 2026-10-22: "cash available should
+ * decrease if I used it in another trade"): the cash less what the other rows' buys spend (out of the wallet first,
+ * as the batch pays), and each stock's free shares less what the other rows sell of it. Their sales' cash isn't
+ * counted in: multiBlock doesn't count it either, so what the editor offers is what the list can sign.
+ */
+export function leftAfter<
+  D extends {
+    cash: Cash;
+    cashUsd: number;
+    holdings: readonly { symbol: string; freeRaw: bigint; freeShares: number; freeUsd: number }[];
+  },
+>(data: D, others: readonly TradeSign[]): D {
+  if (others.length === 0) return data;
+  const spend = others.reduce((sum, s) => sum + (s.route === "buy" ? s.quote.amountIn : 0n), 0n);
+  const fromWallet = spend < data.cash.walletRaw ? spend : data.cash.walletRaw;
+  const rest = spend - fromWallet;
+  const cash: Cash = {
+    ...data.cash,
+    walletRaw: data.cash.walletRaw - fromWallet,
+    savingsRaw: rest < data.cash.savingsRaw ? data.cash.savingsRaw - rest : 0n,
+  };
+  const sold = new Map<string, bigint>();
+  for (const s of others) {
+    const o = sharesOut(s);
+    if (o) sold.set(o.symbol, (sold.get(o.symbol) ?? 0n) + o.raw);
+  }
+  const holdings = data.holdings.map((h) => {
+    const out = sold.get(h.symbol);
+    if (!out || h.freeRaw === 0n) return h;
+    const freeRaw = out < h.freeRaw ? h.freeRaw - out : 0n;
+    const share = Number(freeRaw) / Number(h.freeRaw);
+    return { ...h, freeRaw, freeShares: h.freeShares * share, freeUsd: h.freeUsd * share };
+  });
+  return { ...data, cash, cashUsd: data.cashUsd - toUsd(cashRaw(data.cash) - cashRaw(cash)), holdings };
+}
+
+/** A key for what the other rows hold back (`leftAfter`), so the editor re-reads only when it changes. */
+export const leftKey = (others: readonly TradeSign[]) =>
+  others
+    .map((s) => {
+      const o = sharesOut(s);
+      return `${s.route === "buy" ? s.quote.amountIn : 0n}:${o ? `${o.symbol}${o.raw}` : ""}`;
+    })
+    .join("|");
