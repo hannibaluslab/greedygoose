@@ -1,8 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Dev only: lets the dev server be opened by the VM's public IP.
-  allowedDevOrigins: ["141.148.209.77"],
+  // Dev only: hosts other than localhost that may open the dev server (a phone on the LAN, a VM), comma-separated.
+  allowedDevOrigins: process.env.DEV_ALLOWED_ORIGINS?.split(",").filter(Boolean) ?? [],
   // The floating dev badge overlaps the tab bar while testing on a phone.
   devIndicators: false,
   cacheComponents: true,
