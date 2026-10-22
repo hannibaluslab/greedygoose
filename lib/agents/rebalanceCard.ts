@@ -284,6 +284,33 @@ function dueFooter(
   return { footer: { kind: "trades", text, when: capital(when) }, say: `${text} ${when}.${what.join("")}` };
 }
 
+/**
+ * State 8 (off target, nothing trades): what holds the Rebalancer back. Where it's the stock backing credit, how much to
+ * send so today's top-ups put the whole portfolio back in its bands (2026-10-22), and the over-weight stock that backs
+ * credit wears the backs-credit mark instead of a sell tint: it isn't sold, what's sent buys the ones under.
+ */
+function heldCard(
+  i: RebalanceCardInput,
+  why: RebalanceOutlook["blocked"],
+  blocked: [string, string],
+  card: (
+    pill: string,
+    tone: PillTone,
+    footer: RebalanceFooter,
+    over: { say?: string; marks?: boolean },
+  ) => RebalanceCardModel,
+): RebalanceCardModel {
+  const send = why === "credit" || why === "too-small-backing" ? sendToFix(i) : null;
+  const say = send ? sendWords(send, !!i.topUps) : blocked;
+  const marked = card("On", "on", { kind: "words", line1: say[0], line2: say[1] }, { say: say.join(" "), marks: true });
+  if (!send) return marked;
+  const backing = (id: number) => (i.holdings.find((h) => h.reserveId === id)?.backingRaw ?? 0n) > 0n;
+  return {
+    ...marked,
+    slots: marked.slots.map((x) => (x.out === "over" && backing(x.reserveId) ? { ...x, out: null, backs: true } : x)),
+  };
+}
+
 /** How much to send to fix the mix (`sendToFixRaw`), USDC units; null when nothing to send or no amount does it. */
 function sendToFix(i: RebalanceCardInput): bigint | null {
   if (!i.mixBps) return null;
@@ -391,18 +418,7 @@ export function rebalanceCard(i: RebalanceCardInput): RebalanceCardModel | null 
   if (o.noMix) return card("On", "on", words(standing));
   // 8. Off target (or none of the mix held), and nothing trades: what holds it back (Adrian, 2026-10-21). Where it's the
   // stock backing credit, how much to send so today's top-ups put the whole portfolio back in its bands (2026-10-22).
-  if (blocked) {
-    const send = o.blocked === "credit" || o.blocked === "too-small-backing" ? sendToFix(i) : null;
-    const say = send ? sendWords(send, !!i.topUps) : blocked;
-    const marked = card("On", "on", words(...say), { say: say.join(" "), marks: true });
-    if (!send) return marked;
-    // What's sent buys the stocks under their share (still green); the ones over it back credit and aren't sold.
-    const backing = (id: number) => (i.holdings.find((h) => h.reserveId === id)?.backingRaw ?? 0n) > 0n;
-    return {
-      ...marked,
-      slots: marked.slots.map((x) => (x.out === "over" && backing(x.reserveId) ? { ...x, out: null, backs: true } : x)),
-    };
-  }
+  if (blocked) return heldCard(i, o.blocked, blocked, card);
   // 9. All good: the whole portfolio is in its band.
   return card("On", "on", { kind: "on-target", next: capital(when) }, { say: `On target. Next check ${when}.` });
 }
