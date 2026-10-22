@@ -755,6 +755,52 @@ body.gg-welcome {
   --shadow-card-elev: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
   --shadow-card-hover: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
 }
+/* The welcome never changes with the theme (Adrian, 2026-10-22: "the only exception where dark and light are the
+   same"): it keeps the light theme's colours, the ink ground with the cream goose and words, in dark too. Every token
+   dark mode changes is set back here, on the welcome and on the page while it's up (body.gg-welcome). */
+:root[data-theme="dark"] body.gg-welcome,
+:root[data-theme="dark"] [data-welcome] {
+  color-scheme: dark;
+  --bg-app: #f4f2ec;
+  --bg-app-sub: #ebe6db;
+  --bg-card: #ffffff;
+  --bg-card-elev: #faf8f2;
+  --bg-card-dark: #0e0d0b;
+  --bg-card-bone: #e7e1d2;
+  --bg-pill: rgba(15, 14, 11, 0.05);
+  --bg-pill-strong: rgba(15, 14, 11, 0.08);
+  --bg-pill-dark: rgba(255, 255, 255, 0.08);
+  --ink: #0e0d0b;
+  --ink-2: #2c2a25;
+  --ink-mid: #5a564e;
+  --ink-mute: #8a8479;
+  --ink-faint: #b9b3a6;
+  --pos: #1f6a4a;
+  --pos-soft: #d6e7dc;
+  --watch: #d9a441;
+  --watch-ink: #8a6a1f;
+  --watch-soft: #f3e6c9;
+  --neg: #8e2a1d;
+  --act-edge: #5e170d;
+  --neg-soft: #f3e0da;
+  --remove: #ff3b30;
+  --on-remove: #ffffff;
+  --sell-soft: #f4d8d1;
+  --due-soft: #f1e4c2;
+  --due-ink: #6e5010;
+  --needs-soft: #f8d9bf;
+  --needs-ink: #7a360a;
+  --line: rgba(14, 13, 11, 0.09);
+  --line-mid: rgba(14, 13, 11, 0.12);
+  --line-strong: rgba(14, 13, 11, 0.18);
+  --line-field: #e3ddcf;
+  --line-control: #d9d2c3;
+  --you-row: rgba(212, 255, 60, 0.42);
+  --toast-bg: #0e0d0b;
+  --bg-sheet: #f4f2ec;
+  --scrim: rgba(14, 13, 11, 0.45);
+}
+
 /* The booth's background, exactly (Adrian, 2026-10-21: "same background as jaw-booth-mainnet"; hannibaluslab/
    jaw-booth-revamp src/app/globals.css .dots/.aura, drawn by its <Screen>): the ink ground, then two full-screen
    layers fixed to the screen, so they stay put while the page scrolls — the lime dots, and over them the lime aura
