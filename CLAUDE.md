@@ -116,7 +116,8 @@ be shown for information, labelled as such, and never used for limits.
 ### Contracts
 
 - GooseExecutor stays under 24,576 bytes (EIP-170). Check `forge build --sizes` after every change to it and record
-  the size in GooseExecutor-as-built.md.
+  the size in GooseExecutor-as-built.md. Read GooseExecutor's row: the command always exits 1, because the test-only
+  `ExecutorHarness` is over the limit.
 - Fork tests and on-chain suites run only through a keyless public RPC (`BASE_RPC_URL=https://mainnet.base.org`),
   never the app's Alchemy key.
 - A new executor is a new spender, so every account grants its agents again. The next one must allow JAW's account
@@ -129,7 +130,7 @@ be shown for information, labelled as such, and never used for limits.
 ### Git, checks and deploys
 
 - Never push or deploy without the owner's OK. Push only to `origin` (hannibaluslab/greedygoose), never the `leo`
-  remote.
+  remote. Production is released with `scripts/release.sh <commit on main>` (contracts/docs/DEPLOYMENTS.md, "Live now").
 - Run `npm run check` (lint, types, Prettier, knip, unit tests) before every commit. CI also runs `npm run build` and
   forge.
 - Node 22 (`.nvmrc`) and npm (`package-lock.json`).

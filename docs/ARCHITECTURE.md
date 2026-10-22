@@ -29,22 +29,21 @@ hooks that read and write, and a view that renders the plan. New screens follow 
 - **Tests:** unit tests for every planner and builder (`tests/unit`); Base simulations for every new batch
   (`tests/onchain`, needs an RPC); Foundry tests for the contracts, fork suites included when `BASE_RPC_URL` is set.
 - **Writes:** one path, `useTx`. No screen sends a transaction any other way, and there is no confirm screen of ours.
-- **Size:** files over 400 lines and functions with complexity over 25 warn. 2 warnings today; each goes when its
-  screen or engine is rebuilt, then the rule becomes an error.
+- **Size:** files over 400 lines and functions with complexity over 25 warn. 5 warnings today (3 complex functions,
+  `app/home/page.tsx` and `hooks/useAgents.ts` over 400 counted lines); each goes when its screen or engine is rebuilt,
+  then the rule becomes an error.
 
 ## Clean-up ahead (V1 and V2)
 
-Measured on 2026-10-19, on `v2` at `391053a` and the Credit Buy split after it; sizes and warnings re-measured on
-`jl/cleanup` after the moves (trade, send, repay and the feature folders are done).
+Measured on 2026-10-22 on `main` @ `6f15de2` (it was first measured on 2026-10-19, before `jl/cleanup`).
 
-| Issue                                     | Today                                                                                          | Target                                                                                     |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Two vocabularies                          | Screens say backing, credit, Protect; code says `locked`, `borrow`, `loan`, `guardian` (about 294 lines) | One domain language in code too. Aave's ABIs and the contracts keep their own names        |
-| Comments that cite people and dates       | 73 lines such as "(Adrian, 2026-10-15)"                                                        | Comments say why; who decided and when lives in the decisions log                          |
-| Oversized engines and pages               | Over 400 lines with blanks and comments: `lib/creditBuy.ts` 498, `lib/agents/permissions.ts` 493, `app/home/page.tsx` 432, `lib/rehearsal/signer.ts` 424, `lib/tx/prepared.ts` 420 (under the lint's count, which skips those) | Under 400 lines each, split by step or concern |
-| Complex functions                         | The 2 lint warnings: `BuySheet` (complexity 81) and `useTx` (28)                               | Under 25 each, then the rule becomes an error                                              |
-| Free up outside Repay                     | Done: Free up lives in the rebuilt Repay sheet (`components/gg/repay/`)                        | Done                                                                                       |
-| Non-null assertions                       | 108 in the app code                                                                            | Replaced as each module is touched                                                         |
+| Issue                                | Today                                                                                                                                                                        | Target                                                                              |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Two vocabularies                     | About 55 lines still say `borrow`, `locked`, `loan` or `guardian`, mostly Aave's own field names (`borrowable`), quotes in comments and the sheet's scroll lock (was 294)     | One domain language in code too. Aave's ABIs and the contracts keep their own names |
+| Comments that cite people and dates  | About 155 lines such as "(Adrian, 2026-10-15)" (was 73)                                                                                                                      | Comments say why; who decided and when lives in the decisions log                   |
+| Oversized engines and pages          | Over 400 lines with blanks and comments: `hooks/useAgents.ts` 668, `lib/agents/permissions.ts` 572, `lib/creditBuy.ts` 559, `lib/allowlist.ts` 502, `app/home/page.tsx` 488 | Under 400 lines each, split by step or concern                                      |
+| Complex functions                    | 3 lint warnings: `BuySheet` (complexity 80), `Agents` on the Agents page (38) and `useTx` (29)                                                                               | Under 25 each, then the rule becomes an error                                       |
+| Non-null assertions                  | About 100 in the app code                                                                                                                                                    | Replaced as each module is touched                                                  |
 
 Each row is done module by module as V1 (engines) and V2 (screens) reach it, never as one big sweep across working
 code.
