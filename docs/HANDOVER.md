@@ -43,8 +43,9 @@ For the developers taking over GreedyGoose (GreedyGoo on screen). Read this page
 
 The rules that bite:
 
-- **The repo is public.** No key, `.env.local`, `contracts/broadcast/` or account data in a commit. Every
-  `NEXT_PUBLIC_*` value ships in the page, so none can be a secret.
+- **Treat the repo as public** (it was public until the handover, so its whole history is out there). No key,
+  `.env.local`, `contracts/broadcast/` or account data in a commit. Every `NEXT_PUBLIC_*` value ships in the page, so
+  none can be a secret.
 - **One write path.** Every transaction goes through `useTx`: allowlist, simulation on Base, then JAW's sheet. A new
   call shape gets its own narrow allowlist rule and tests.
 - **Words.** Never on screen: borrow, loan, lock, locked, unlock, collateral, room. Use credit, backs credit, free up,
