@@ -2,7 +2,7 @@
 
 import { AmountArrow, AmountBadge, AmountField, AmountSource, YouGetCash } from "../kit/AmountField";
 import { StockAvatar } from "../kit/StockAvatar";
-import { BacksIcon } from "../kit/icons";
+import { CreditIcon } from "../kit/icons";
 import { TxButton, TxError } from "../TxUi";
 import { backingLineOf, CreditMove, maxText } from "./CreditBuyAmountStep";
 import { wholeUsd } from "./CreditBuyBacking";
@@ -92,7 +92,7 @@ export function CreditBuyCashStep({
               Back: {chosen.stock.name}
             </AmountSource>
           ) : (
-            <AmountSource mark={<BacksIcon size={12} />}>Credit ready</AmountSource>
+            <AmountSource mark={<CreditIcon size={14} />}>Credit ready</AmountSource>
           )
         }
         badge={<AmountBadge kind="credit" />}

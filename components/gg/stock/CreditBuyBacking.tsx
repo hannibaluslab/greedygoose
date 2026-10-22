@@ -2,7 +2,7 @@
 
 import { createContext, useContext, type ReactNode } from "react";
 import { StockAvatar, tickerOf } from "../kit/StockAvatar";
-import { BacksIcon } from "../kit/icons";
+import { BacksIcon, CreditIcon } from "../kit/icons";
 import type { Holding } from "@/hooks/usePosition";
 import { MIN_BACKING_USD, shortNames, type BackingOption } from "@/lib/creditBuy";
 import { floorCents, formatShares, formatUsd, formatUsdTrim } from "@/lib/formatting";
@@ -42,8 +42,9 @@ export function ReadyRow({
       onClick={onPick}
       className={`flex min-h-11 items-center gap-3 rounded-[16px] bg-card px-3.5 py-3 text-left leading-[normal] text-ink ${checked ? "border-[1.5px] border-ink" : "border border-line-field"}`}
     >
+      {/* The credit itself, as on the Credit Buy button; the link mark stays for stock that backs credit. */}
       <span aria-hidden className="flex size-9 shrink-0 items-center justify-center rounded-full bg-ink text-on-ink">
-        <BacksIcon size={12} />
+        <CreditIcon size={18} />
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-[15px] font-semibold">Credit ready</span>
