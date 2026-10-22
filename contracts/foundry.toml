@@ -8,9 +8,16 @@ evm_version = "cancun"
 optimizer = true
 optimizer_runs = 10000
 bytecode_hash = "none"
-# GooseExecutor only fits under the 24 KB code limit through the IR pipeline at a low run count.
+# GooseExecutor only fits under the 24 KB code limit through the IR pipeline at a low run count. GooseGuard uses the
+# same profile: the IR pipeline makes it about 1.9 KB smaller (measured at build step 1).
 additional_compiler_profiles = [{ name = "executor", via_ir = true, optimizer_runs = 200 }]
-compilation_restrictions = [{ paths = "src/GooseExecutor.sol", via_ir = true, max_optimizer_runs = 200 }]
+compilation_restrictions = [
+    { paths = "src/GooseExecutor.sol", via_ir = true, max_optimizer_runs = 200 },
+    { paths = "src/GooseGuard.sol", via_ir = true, max_optimizer_runs = 200 },
+]
+# 2^32 test gas: the Planner's 500-member read test makes 1,000 registrations, each asking the manager isApproved and
+# isRevoked, which passes Forge's default 2^30.
+gas_limit = 4294967296
 # Test vectors exported from the TypeScript reference (npm run contracts:vectors).
 fs_permissions = [{ access = "read", path = "./test/vectors" }]
 

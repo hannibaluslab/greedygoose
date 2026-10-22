@@ -56,6 +56,8 @@ interface ISpoke {
         view
         returns (DynamicReserveConfig memory);
     function repay(uint256 reserveId, uint256 amount, address onBehalfOf) external returns (uint256, uint256);
+    /// Moves the user to each reserve's latest collateral config; only the user or its position manager may.
+    function updateUserDynamicConfig(address onBehalfOf) external;
     /// Sends the stock to the caller, here the account itself, and checks its health is still at least 1.
     function withdraw(uint256 reserveId, uint256 amount, address onBehalfOf) external returns (uint256, uint256);
 }
@@ -126,6 +128,14 @@ interface IPsm3 {
         address receiver,
         uint256 referralCode
     ) external returns (uint256 amountOut);
+}
+
+/// Chainlink's price feeds (AggregatorV3Interface): EUR/USD prices EURC for Turn into cash.
+interface IChainlinkFeed {
+    function latestRoundData()
+        external
+        view
+        returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound);
 }
 
 /// JustanAccount, the contract behind every JAW account.

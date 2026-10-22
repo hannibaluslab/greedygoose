@@ -335,6 +335,8 @@ contract GooseExecutorForkTest is ExecutorForkBase {
     /// top-ups. And the registration the app sends for each kind's first input (lib/agents/register.ts) is abi.encode
     /// of that same template, what registerApproved decodes.
     function test_templates_hash_like_the_apps_builder() public {
+        // Retired: the app now builds GooseGuard's permissions (GooseGuardAppBytesFork), not GooseExecutor's.
+        vm.skip(true);
         vm.etch(Vectors.HASH_SPENDER, address(x).code);
         ExecutorHarness h = ExecutorHarness(Vectors.HASH_SPENDER);
         string memory json = vm.readFile("test/vectors/permissions.json");
