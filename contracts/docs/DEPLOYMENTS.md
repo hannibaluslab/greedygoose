@@ -1,5 +1,18 @@
 # Deployments
 
+## Live now (2026-10-22)
+
+What production runs today. The sections below are the record of how it got here, oldest decisions included.
+
+| What | Value |
+|---|---|
+| App | https://app.greedygoo.com (also greedygoose.vercel.app): Vercel deployment `dpl_7cNrpemF8SVhtXUdLPcT8c8Vvjbs`, built from `main` @ `6f15de2`. Vercel isn't connected to GitHub: a push never deploys, `scripts/release.sh` does |
+| Build values | `NEXT_PUBLIC_GOOSE_EXECUTOR` `0x686cd88F248DE3F9FC0835566DB798D93881F02D`, `NEXT_PUBLIC_GOOSE_EXECUTOR_BLOCK` 52851406, `NEXT_PUBLIC_AGENTS_LIVE` 1, `NEXT_PUBLIC_GOOSE_BOARD` `0x0E10c55D3f20D4Ea1DEf5aC6c60480b34c07FcA1`, `NEXT_PUBLIC_WALL_FROM_BLOCK` 52912478, plus `NEXT_PUBLIC_ALCHEMY_KEY` and `NEXT_PUBLIC_BASE_RPC_URL` (a PublicNode personal token) from the owner's `.env.local`. Only `NEXT_PUBLIC_JAW_API_KEY` is set in Vercel's own production env, so every other value goes in as `--build-env` (`scripts/release.sh` does it) |
+| GooseExecutor | `0x686c…F02D` (below): agents on for everyone, no amount cap (`CAP_MAX` = max uint160), **not audited**. Owner = the JustaLab test deployer `0xF3bB…31aD`. Not paused (read 2026-10-22) |
+| Runner | KeeperHub round workflow `q5vdv47dieyabhg4toiue`, every 10 minutes on `0x686c…F02D`, on since 2026-10-20 10:42 UTC. Chainlink CRE (`GooseReceiver`) still waits on Chainlink |
+| GooseBoard | `0x0E10…FcA1` (below), the Leaderboard's member list. The Wall of shame counts sales from block 52912478 |
+| Waiting | The 12 NYSE holidays can be applied after 2026-10-27 10:32 UTC (the owner signs, table below). The review's fixes for the next executor are parked on `jl/executor-fixes` (`FIX-PLAN-2026-10-20.md`); the external audit hasn't started |
+
 ## Base mainnet — team-only preview deploy (2026-10-20)
 
 The no-limit executor (`CAP_MAX` = max uint160), unaudited, for a team-only preview (Adrian, 2026-10-20). Production stays off until the audit or Adrian's go (D13): greedygoose.vercel.app doesn't point at it, only the preview build below does. It supersedes the D13 test deploy for the preview; that one stays un-bootstrapped.
@@ -182,7 +195,7 @@ The script prints the address and the block. Optionally verify the source (`forg
 | Built from | `main` @ `90519eb` |
 | Deploy cost | about 0.0000025 ETH |
 | Logs RPC | A PublicNode personal token (free, made on Allnodes' portfolio page) as `NEXT_PUBLIC_BASE_RPC_URL`. Checked 2026-10-20: 10,000-block `eth_getLogs` from about 4 months back, past state, `eth_simulateV1`, open CORS; `tests/onchain/board.test.ts` passes through it. Every keyless Base RPC tried refuses logs older than about 10,000 blocks, and Alchemy's free tier answers 10 blocks a request. |
-| Production | `dpl_8HFXMjwm6CQ2q8GrrHVApTCtAtHQ` (`main` @ `2f3035d`, 2026-10-21, also at app.greedygoo.com): the agents' three settings, `NEXT_PUBLIC_ALCHEMY_KEY`, `NEXT_PUBLIC_BASE_RPC_URL` and `NEXT_PUBLIC_GOOSE_BOARD`, all passed as `--build-env`. A deploy without the last two puts the Leaderboard back to "opens soon" and drops `join()`. Rollbacks: `dpl_76ALyxPYpRuLcoPiryTcLooYu9su` (`main` @ `8945f31`, the translucent confirming veil), `dpl_Fn3ZjofxFEWg2qhrGbXP2RTNrMKK` (`main` @ `b14ef51`, before the Home cents, cash-without-fuel and confirming-sheet changes); before the board, `dpl_B8yuNVKFMtFo5oseoNUecP8W9f7R`. |
+| Production | Every production build since 2026-10-20 carries `NEXT_PUBLIC_GOOSE_BOARD` and `NEXT_PUBLIC_BASE_RPC_URL` as `--build-env` ("Live now" above has today's deployment). A deploy without the two puts the Leaderboard back to "opens soon" and drops `join()`. Vercel keeps every earlier deployment for a rollback (promote it in the dashboard). |
 | Bytecode | about 1.9 KB (`forge inspect GooseBoard deployedBytecode`) |
 | Rehearsed | Base fork: `GooseBoardForkTest` (JAW account batch: EFP mint + follow + join), `scripts/board-e2e.ts` (anvil) |
 
@@ -201,11 +214,11 @@ KeeperHub (app.keeperhub.com) runs GooseExecutor without waiting for Chainlink: 
 
 A sponsored KeeperHub write is a type-4 (EIP-7702) transaction: relayer `0x6331eb4571DE9284f7E9eAD98ac7b0661a091E99` → Turnkey's gas station `0x5aF5194B4b0909eB978e3Cf1e25333852277f07D` → the wallet (delegated to `0x955d84139e7621bc571b117d8eb5d28a4a222c6f`) → the target. In tx `0x0ffbab34f60c1beacc6f84a9925ff462e6d324cfd8f1bc9a3e6af23c5324f7a6` (WETH `deposit()`, value 0), WETH's `Deposit` names the wallet, so **`msg.sender` at the target is the wallet** and `bootstrap` takes its address. The wrapper costs about 60k gas, and KeeperHub's gas limit is the outer transaction's, so writes carry a fixed 5,500,000 to leave `performUpkeep` its 5M.
 
-### Workflows (both off)
+### Workflows (the round is on since 2026-10-20)
 
 | Workflow | Id | What it does | State |
 |---|---|---|---|
-| GreedyGoose round (Base) | `q5vdv47dieyabhg4toiue` | Every 10 min (`*/10 * * * *`): `checkUpkeep(abi.encode(0, 1))` → if `upkeepNeeded`, `performUpkeep(performData)`, then the same check and run once more (a rescue left unfinished goes on in the same run). Gas 5,500,000 on each write, sponsored | Built, off. Its executor address is the old test deploy as a placeholder: point it at the new executor before switching it on |
+| GreedyGoose round (Base) | `q5vdv47dieyabhg4toiue` | Every 10 min (`*/10 * * * *`): `checkUpkeep(abi.encode(0, 1))` → if `upkeepNeeded`, `performUpkeep(performData)`, then the same check and run once more (a rescue left unfinished goes on in the same run). Gas 5,500,000 on each write, sponsored | **On** since 2026-10-20 10:42 UTC, all four Web3 steps on `0x686c…F02D` ("Runner and preview" above) |
 | GreedyGoose registration (Base) | `a0t6mjkoezs3k5fdm2k03` | On JAW's manager `PermissionApproved` (`0xf1b40E3D5701C04d86F7828f0EB367B9C90901D8`): `registrationOf(permission)` → if ok, `registerApproved(permission)` | Draft, off, **blocked**: KeeperHub's form can't fill the permission's `calls[]` and `spends[]` from the event (they take only fixed objects). Unblocked by an executor entry that takes the permission as one `bytes` value, fed by a KeeperHub "Run Code" step, or by CRE. *(Superseded by "Registration route" below: the app registers, and this draft stays off.)* |
 
 Budget: the round runs 4,464 times in a 31-day month. Each `PermissionApproved` on Base adds one run, from any JAW app (measured 0 in 6 hours on 2026-10-19). That leaves about 536 runs a month. If registrations grow, move the round to every 12 minutes (3,720 runs). *(With the registration workflow off, "Registration route" below, no `PermissionApproved` adds a run: the round is the whole budget.)* Gas: a Protect repay costs about 1 cent, a seven-stock sale about 7 cents, and a check that finds nothing costs nothing.
@@ -213,6 +226,8 @@ Budget: the round runs 4,464 times in a 31-day month. Each `PermissionApproved` 
 Protect timing with the round alone: Protect acts below 1.03 and Aave liquidates at 1.0, a further fall of about 2.9%, or about 6 feed steps of 0.5% (the largest step measured was −2.13%). A 10-minute round is usually in time, but it can be late on a very fast drop. The price-feed triggers come with CRE.
 
 ### Go-live checklist
+
+For the next executor (the review's fixes). The live one, `0x686c…F02D`, went through steps 6, 8, 12 and 13 on 2026-10-20, and its holidays (step 9) are queued.
 
 | # | Step | Who | State |
 |---|---|---|---|
@@ -228,7 +243,7 @@ Protect timing with the round alone: Protect acts below 1.03 and Aave liquidates
 | 10 | Cancel the two Automation requests above (0.0008 WETH back to the deployer) | Adrian signs | Open |
 | 11 | Optional gas backup: a little ETH (or USDC, which KeeperHub converts) in the runner wallet for when the $1 credit runs out | Adrian | Open |
 | 12 | Point the round workflow at the new executor, then switch it on. The registration draft stays off ("Registration route" below) | Claude, with Adrian's OK | Open |
-| 13 | Vercel: `NEXT_PUBLIC_GOOSE_EXECUTOR` (and `_BLOCK`) and `NEXT_PUBLIC_AGENTS_LIVE=1`; `NEXT_PUBLIC_ALCHEMY_KEY` added in the dashboard by Adrian (or `--build-env`); deploy per HANDOVER-2026-10-19.md (the owner's handover, kept outside this repo) | Adrian's OK | Open |
+| 13 | Vercel: `NEXT_PUBLIC_GOOSE_EXECUTOR` (and `_BLOCK`) and `NEXT_PUBLIC_AGENTS_LIVE=1`; `NEXT_PUBLIC_ALCHEMY_KEY` added in the dashboard by Adrian (or `--build-env`); then `scripts/release.sh` with the new executor's address and block in it | Adrian's OK | Open |
 | 14 | Check: read `planOf` and `checkUpkeep` for a test account, then a first real run while Adrian watches (KeeperHub's run log and Basescan) | Adrian, Claude | Open |
 
 ### Registration route (2026-10-20)
