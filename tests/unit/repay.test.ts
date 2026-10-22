@@ -341,7 +341,14 @@ describe("Amount: 0 to start, All in the field, quick picks, never more than owe
     expect(v.done).toBe(REPAY_COPY.doneAll);
     expect(repaySign(v, user, d.debtRaw)).toEqual({
       via: "cash",
-      input: { user, all: true, coversAll: true, amount: 64, amountRaw: usd(64) + usd(64) / 2000n + 1n },
+      input: {
+        user,
+        all: true,
+        coversAll: true,
+        amount: 64,
+        amountRaw: usd(64) + usd(64) / 2000n + 1n,
+        rescuing: false,
+      },
     });
   });
 });

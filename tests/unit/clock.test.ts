@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { atText, rebalanceCheckAt, whenText } from "@/lib/agents/next";
+import { atText, whenText } from "@/lib/agents/next";
 import { clockText, dayIn, gmtOffsetMinutes, gmtText } from "@/lib/clock";
 
 /*
- * Check times on the viewer's own clock with its GMT offset (Adrian, 2026-10-21): "Today 5 PM GMT+3". The
- * Rebalancer's window opens at 10:00 New York; each zone below is pinned, so the words don't depend on the machine.
+ * Check times on the viewer's own clock with its GMT offset (Adrian, 2026-10-21): "Today 5 PM GMT+3". The times below
+ * are 10:00 New York on a few days; each zone is pinned, so the words don't depend on the machine.
  */
 
 /** Intl may put a narrow space before AM or PM: the tests read any space as one. */
@@ -38,7 +38,7 @@ describe("gmtText: the offset as people write it", () => {
 });
 
 describe("whenText: today, tomorrow or the weekday, the time, and the offset", () => {
-  const check = rebalanceCheckAt(WED_9AM_NY, 0); // Wednesday 10:00 New York, 14:00 GMT
+  const check = Date.UTC(2025, 9, 15, 14) / 1000; // Wednesday 10:00 New York, 14:00 GMT
 
   it("today, for a viewer three hours ahead of GMT: Today 5 PM GMT+3 on the card", () => {
     expect(plain(whenText(check, WED_9AM_NY, "Europe/Istanbul"))).toBe("today 5 PM GMT+3");
@@ -50,22 +50,22 @@ describe("whenText: today, tomorrow or the weekday, the time, and the offset", (
     expect(plain(whenText(check, WED_9AM_NY, "America/New_York"))).toBe("today 10 AM GMT-4");
   });
 
-  it("tomorrow once today's window has passed, and the weekday further out", () => {
-    const thu = rebalanceCheckAt(WED_NOON_NY, 0);
+  it("tomorrow for the next day, and the weekday further out", () => {
+    const thu = Date.UTC(2025, 9, 16, 14) / 1000;
     expect(plain(whenText(thu, WED_NOON_NY, "Europe/Istanbul"))).toBe("tomorrow 5 PM GMT+3");
-    const mon = rebalanceCheckAt(FRI_NOON_NY, 0);
+    const mon = Date.UTC(2025, 9, 20, 14) / 1000;
     expect(plain(whenText(mon, FRI_NOON_NY, "Europe/Istanbul"))).toBe("Mon 5 PM GMT+3");
   });
 
   it("counts days on the viewer's own calendar: Thursday 1 AM in Tokyo, the check is tonight", () => {
-    const thu = rebalanceCheckAt(WED_NOON_NY, 0); // Thursday 14:00 GMT, 23:00 in Tokyo
+    const thu = Date.UTC(2025, 9, 16, 14) / 1000; // Thursday 14:00 GMT, 23:00 in Tokyo
     expect(plain(whenText(thu, WED_NOON_NY, "Asia/Tokyo"))).toBe("today 11 PM GMT+9");
     expect(dayIn(WED_NOON_NY, "Asia/Tokyo") - dayIn(WED_NOON_NY, "UTC")).toBe(1);
   });
 
   it("shows the offset the check falls in: past New York's clock change, GMT-5", () => {
     const sat = Date.UTC(2025, 10, 1, 16) / 1000; // Saturday 2025-11-01, still summer time
-    const mon = rebalanceCheckAt(sat, 0); // Monday 2025-11-03, 10:00 New York, winter time
+    const mon = Date.UTC(2025, 10, 3, 15) / 1000; // Monday 2025-11-03, 10:00 New York, winter time
     expect(plain(whenText(mon, sat, "America/New_York"))).toBe("Mon 10 AM GMT-5");
     expect(plain(clockText(sat, "America/New_York"))).toBe("12 PM GMT-4");
   });

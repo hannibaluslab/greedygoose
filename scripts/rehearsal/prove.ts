@@ -5,10 +5,11 @@
  *   1. Sign in as sam with the fork signer.
  *   2. Buy $5 of NVIDIA from cash: the buy sheet, Review, Confirm. On-chain: shares received, cash down $5, and the
  *      savings withdrawal the review announced (sam's wallet holds less than the buy).
- *   3. Switch Protect on in its sheet, selling backing stock included: one JAW grant each, on the manager.
- *   4. run-agents: registerApproved registers both grants with GooseExecutor, then a run.
+ *   3. Switch Protect on in its sheet, selling backing stock included: one JAW grant each, on the manager, each
+ *      registered with GooseGuard in the same batch.
+ *   4. run-agents: a round (it needs GoosePlanner on the fork).
  *   5. With --shock: NVIDIA down on Aave's oracle puts sam under Protect's line (health about 1.02, in Act);
- *      run-agents: Protect repays from savings, up to the test deploy's CAP_MAX. The price is put back after.
+ *      run-agents: Protect repays from the cash, with no amount limit. The price is put back after.
  *
  * Needs the fork, setup and the app running (npm run rehearsal:fork, rehearsal:setup, rehearsal:dev).
  *
@@ -23,7 +24,7 @@ import { chromium, type Page } from "@playwright/test";
 import { erc20Abi, getAbiItem, isAddressEqual, parseUnits, type Address } from "viem";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
-import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
+import { guardAbi } from "@/lib/agents/abis/GooseGuard";
 import { permissionManagerAbi } from "@/lib/protocols/abis";
 import { PROTOCOLS } from "@/lib/protocols/config";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
@@ -143,7 +144,7 @@ async function main() {
     await shot("activity");
 
     console.log("\n3. Switch Protect on, selling backing stock included");
-    const grantsBefore = await grantsFor(fork, sam, state.executor, state.fromBlock);
+    const grantsBefore = await grantsFor(fork, sam, state.guard, state.fromBlock);
     await page.goto(`${APP}/agents?agent=protect`, { waitUntil: "networkidle", timeout: 120_000 });
     const switchOn = page.getByRole("button", { name: "Switch on with Face ID" });
     await switchOn.waitFor({ timeout: 60_000 });
@@ -154,14 +155,14 @@ async function main() {
     await switchOn.click();
     await page.getByText("Protect is saved").waitFor({ timeout: 180_000 });
     await shot("protect-saved");
-    const grants = (await grantsFor(fork, sam, state.executor, state.fromBlock)) - grantsBefore;
-    ok(grants === 2, `two grants on JAW's manager for GooseExecutor: repay from cash and sell backing stock`);
+    const grants = (await grantsFor(fork, sam, state.guard, state.fromBlock)) - grantsBefore;
+    ok(grants === 2, `two grants on JAW's manager for GooseGuard: repay from cash and sell backing stock`);
+    const jobs = await jobsOf(fork, state.guard, sam);
+    ok((jobs & (1 << PROTECT)) !== 0, "GooseGuard has Protect on for sam");
+    ok((jobs & (1 << PROTECT_SELL)) !== 0, "GooseGuard has Protect · sell on for sam");
 
     console.log("\n4. run-agents");
     agents();
-    const jobs = await jobsOf(fork, state.executor, sam);
-    ok((jobs & (1 << PROTECT)) !== 0, "GooseExecutor has Protect on for sam");
-    ok((jobs & (1 << PROTECT_SELL)) !== 0, "GooseExecutor has Protect · sell on for sam");
     await page.goto(`${APP}/agents`, { waitUntil: "networkidle", timeout: 120_000 });
     await page.getByText("Protect", { exact: true }).first().waitFor({ timeout: 60_000 });
     await page.waitForTimeout(3_000);
@@ -170,7 +171,6 @@ async function main() {
     if (shock) {
       console.log("\n5. NVIDIA down on Aave's oracle to under Protect's line, then run-agents");
       const debtBefore = await debtOf(fork, sam);
-      const savingsBefore = (await balances(fork, sam)).savings;
       // NVIDIA is all that backs sam's credit, so the health moves with its price: the fall that leaves about 1.02.
       const hfBefore = await healthOf(fork, sam);
       const fall = (1.02 / (Number(hfBefore) / 1e18) - 1) * 100;
@@ -182,11 +182,14 @@ async function main() {
       await shot("home-act");
       agents();
       const repaid = debtBefore - (await debtOf(fork, sam));
-      const used = savingsBefore - (await balances(fork, sam)).savings;
-      // Within a cent of $5: the debt and the savings both accrue interest between the reads. One run, one move: the
-      // repay from savings, held to the test deploy's CAP_MAX; a sale would follow in the next runs.
-      ok(repaid >= 4_990_000n && repaid <= 5_010_000n, `Protect repaid ${usd(repaid)} (the test CAP_MAX is $5 a day)`);
-      ok(used >= 4_990_000n && used <= 5_010_000n, `from savings: ${usd(used)}`);
+      const hfAfter = await healthOf(fork, sam);
+      // No amount limit (decision 9): one round repays from the cash, the wallet first, then savings, back to Protect's
+      // target (1.12), never more than 0.01 past it.
+      ok(repaid > 0n, `Protect repaid ${usd(repaid)} from the cash`);
+      ok(
+        hfAfter >= 1_110_000_000_000_000_000n && hfAfter <= 1_130_000_000_000_000_000n,
+        `back to the target: health ${health(hfAfter)}`,
+      );
       await page.goto(`${APP}/agents`, { waitUntil: "networkidle", timeout: 120_000 });
       await page
         .getByText(/Repaid/)
@@ -250,18 +253,18 @@ function debtOf(fork: Fork, account: Address) {
   });
 }
 
-async function jobsOf(fork: Fork, executor: Address, account: Address) {
-  const [jobs] = await fork.pub.readContract({
-    address: executor,
-    abi: gooseExecutorAbi,
-    functionName: "accounts",
+async function jobsOf(fork: Fork, guard: Address, account: Address) {
+  const [a] = await fork.pub.readContract({
+    address: guard,
+    abi: guardAbi,
+    functionName: "accountOf",
     args: [account],
   });
-  return jobs;
+  return a.jobs;
 }
 
-/** Permissions the manager approved for `account` with GooseExecutor as the spender, since the fork point. */
-async function grantsFor(fork: Fork, account: Address, executor: Address, fromBlock: number) {
+/** Permissions the manager approved for `account` with GooseGuard as the spender, since the fork point. */
+async function grantsFor(fork: Fork, account: Address, guard: Address, fromBlock: number) {
   const logs = await fork.pub.getLogs({
     address: PROTOCOLS.PERMISSION_MANAGER as Address,
     event: APPROVED,
@@ -271,7 +274,7 @@ async function grantsFor(fork: Fork, account: Address, executor: Address, fromBl
     (l) =>
       l.args.permission &&
       isAddressEqual(l.args.permission.account, account) &&
-      isAddressEqual(l.args.permission.spender, executor),
+      isAddressEqual(l.args.permission.spender, guard),
   ).length;
 }
 

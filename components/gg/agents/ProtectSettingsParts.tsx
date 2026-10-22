@@ -8,7 +8,7 @@ import type { EQUITIES } from "@/lib/tokens/registry";
 
 /* Protect · settings' parts: the choices under selling, the notes, and what Save does. */
 
-/** "Sells first": GooseExecutor's `keepMix` for Protect · sell. */
+/** "Sells first": GooseGuard's `keepMix` for Protect · sell. */
 export const ORDER = [
   {
     keepMix: false,
@@ -22,7 +22,7 @@ const NEVER_SELL_WARNING = "Protector won’t sell it, but Aave still can if you
 
 /**
  * Whether Save can go, and the line under it when it can't: not live yet, no network fee, or why the plan is blocked.
- * `ready`: it's not the dev preview, nothing else is loading or signing, and the executor's CAP_MAX is read.
+ * `ready`: it's not the dev preview, and nothing else is loading or signing.
  */
 export function saveState(p: {
   live: boolean;

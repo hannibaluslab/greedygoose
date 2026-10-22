@@ -6,16 +6,13 @@ import { sellLimitsFor, type ProtectSaved } from "@/lib/agents/protect";
 
 // Sample figures for the gallery only: NVIDIA backs $2,000 and Tesla $1,400 of credit (HoldingCards' figures), at
 // Aave-like prices. Nothing here reads the chain.
-const usdc = (x: number) => BigInt(x) * 10n ** 6n;
-const PRICES = [250, 220, 180, 700, 500, 180, 383].map((p) => BigInt(p) * 10n ** 8n);
 const BACKS = [0, 0, 0, 0, 0, 2_000, 1_400];
-const CAP_MAX = usdc(10_000);
 const TESLA = 6;
 
-/** Protect's grants are at the executor's CAP_MAX (no amount limit). */
+/** Protect's grants have no amount limit (decision 9). */
 const SAVED: Record<"off" | "on" | "repay", ProtectSaved> = {
   off: { repayOn: false, sell: null, keepMix: null },
-  on: { repayOn: true, sell: { limitsRaw: sellLimitsFor(CAP_MAX, PRICES, [TESLA]) }, keepMix: false },
+  on: { repayOn: true, sell: { limitsRaw: sellLimitsFor([TESLA]) }, keepMix: false },
   repay: { repayOn: true, sell: null, keepMix: false },
 };
 
@@ -29,8 +26,6 @@ export function ProtectDemo({ state }: { state: "not-live" | "off" | "on" | "sel
     preview: false,
     saved: state === "not-live" || state === "off" ? SAVED.off : state === "on" ? SAVED.on : SAVED.repay,
     backsUsd: BACKS,
-    pricesRaw: PRICES,
-    capMaxRaw: state === "not-live" ? null : CAP_MAX,
     feeBlocked: false,
     phase: "idle",
     error: null,

@@ -183,7 +183,12 @@ describe("readCash", () => {
         throw new Error("no executor is configured in tests");
       },
     } as unknown as Parameters<typeof readCash>[0];
-    expect(await readCash(client, user)).toEqual({ walletRaw: usd(2), savingsRaw: usd(30), saveOn: false });
+    expect(await readCash(client, user)).toEqual({
+      walletRaw: usd(2),
+      savingsRaw: usd(30),
+      saveOn: false,
+      rescuing: false,
+    });
     expect(asked).toMatchObject([
       { address: USDC.address, functionName: "balanceOf", args: [user] },
       { address: PROTOCOLS.AUSDC, functionName: "balanceOf", args: [user] },

@@ -6,14 +6,13 @@ import { RebalanceCard, RebalanceCardView } from "@/components/gg/agents/Rebalan
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { useNowSec } from "@/hooks/useNowSec";
 import { rebalanceOptions, type MixHolding } from "@/lib/agents/mix";
-import { nyDay, rebalanceOutlook, type SpendLeft } from "@/lib/agents/next";
+import { rebalanceOutlook } from "@/lib/agents/next";
 import {
   rebalanceCard,
   type CardTopUps,
   type RebalanceCardInput,
   type RebalanceCardModel,
 } from "@/lib/agents/rebalanceCard";
-import { USDC } from "@/lib/tokens/registry";
 import { MEASURED_MIX, measuredAccount } from "../measuredAccount";
 
 /*
@@ -29,7 +28,6 @@ const OPEN = () => toast("Dev gallery: Rebalancer’s sheet opens here");
 /** Aave's prices, by reserve id: Apple, Amazon, Alphabet, Meta, Microsoft, NVIDIA, Tesla. */
 const PRICES = [250, 220, 180, 700, 500, 180, 400];
 const usdc = (x: number) => BigInt(Math.round(x * 1e6));
-const CAP_MAX = usdc(1_000_000);
 
 /** $10,000 of free stock, `pcts` of it in each stock by reserve id. */
 const holdings = (pcts: readonly number[]): MixHolding[] =>
@@ -62,22 +60,10 @@ const DRIFTED = [16, 10, 10, 8, 15, 32, 9];
 const TWO = [0, 0, 0, 0, 0, 6_000, 4_000];
 
 /**
- * Top-ups on: $`usd` counted yesterday, with Keep $500 and enough savings above it, so all of it goes in at the next
- * check (lib/agents/rebalanceCard.ts investDue, the contract's rule).
+ * Top-ups on: $`usd` in the wallet above $1 and above what Keep still needs, so all of it goes in at the next round
+ * (lib/agents/rebalanceCard.ts investDue, the Planner's `topUpsReady`).
  */
-const counted = (now: number, usd: number): CardTopUps => ({
-  state: {
-    day: nyDay(now) - 1,
-    keepRaw: usdc(500),
-    readyRaw: usdc(usd),
-    todayRaw: 0n,
-    markRaw: usdc(usd + 1_000),
-    ownRaw: 0n,
-  },
-  savingsRaw: usdc(usd + 1_000),
-  usdcLeftRaw: CAP_MAX,
-  savingsLeftRaw: CAP_MAX,
-});
+const counted = (usd: number): CardTopUps => ({ readyRaw: usdc(usd) });
 
 type Fixture = {
   pcts?: readonly number[];
@@ -87,8 +73,6 @@ type Fixture = {
   /** What's owed against $2,000 of backing at a 70% factor: $600 is Safe, $1,300 is in Act. */
   debtUsd?: number;
   card?: Partial<RebalanceCardInput>;
-  /** What the grant still allows this period; a fresh period at CAP_MAX unless said. */
-  left?: readonly SpendLeft[];
 };
 
 function model(nowSec: number, f: Fixture = {}): RebalanceCardModel | null {
@@ -99,13 +83,10 @@ function model(nowSec: number, f: Fixture = {}): RebalanceCardModel | null {
     nowSec,
     holdings: h,
     mixBps,
-    capMaxRaw: CAP_MAX,
-    rebalanceDay: 0,
+    pacing: { sessionAt: 0, mixSetAt: 0 },
     debtUsd: f.debtUsd ?? 600,
     totalBackingUsd: 2_000,
     avgCf: 0.7,
-    left: { rebalance: f.left ?? null },
-    capRaw: { rebalance: CAP_MAX },
     numbers: { rebalance: options },
   });
   return rebalanceCard({
@@ -115,9 +96,7 @@ function model(nowSec: number, f: Fixture = {}): RebalanceCardModel | null {
     waiting: false,
     stoppedAt: null,
     endsAt: nowSec + 200 * 86_400,
-    fails: 0,
-    cooldownUntil: 0,
-    rebalanceDay: 0,
+    refused: 0,
     holdings: h,
     mixBps,
     options,
@@ -134,16 +113,12 @@ const STATES: [string, (now: number) => Fixture | "loading"][] = [
     () => ({ holdings: measuredAccount(PRICES, 1_000), mixBps: MEASURED_MIX }),
   ],
   [
-    "Too small to trade: Adrian’s account, $7.74 of stock (2026-10-21)",
+    "No trade too small: Adrian’s account, $7.74 of stock (2026-10-21)",
     () => ({ holdings: measuredAccount(PRICES, 1), mixBps: MEASURED_MIX }),
   ],
   [
-    "Too small to trade, with free stock in the mix: $34.20",
+    "No trade too small, with free stock in the mix: $34.20",
     () => ({ holdings: split(SMALL_FREE, SMALL_FREE), mixBps: MEASURED_MIX }),
-  ],
-  [
-    "Nothing it can trade now: the grant leaves no USDC this period",
-    () => ({ pcts: DRIFTED, left: [{ token: USDC.address, leftRaw: 0n }] }),
   ],
   [
     "None of the mix held: only Meta, against Apple and Amazon",
@@ -161,16 +136,13 @@ const STATES: [string, (now: number) => Fixture | "loading"][] = [
   ["Trades due: a two-stock mix, both past their bands", () => ({ pcts: [0, 0, 0, 0, 0, 70, 30], mixBps: TWO })],
   [
     "Top-up going in: $300 into a two-stock mix on target",
-    (now) => ({ pcts: [0, 0, 0, 0, 0, 60, 40], mixBps: TWO, card: { topUps: counted(now, 300) } }),
+    () => ({ pcts: [0, 0, 0, 0, 0, 60, 40], mixBps: TWO, card: { topUps: counted(300) } }),
   ],
-  [
-    "Top-up and trades both due: the top-up goes in first, trades wait a day",
-    (now) => ({ pcts: DRIFTED, card: { topUps: counted(now, 300) } }),
-  ],
-  ["Top-up going in: $1,000 into the boards’ mix, all seven", (now) => ({ card: { topUps: counted(now, 1_000) } })],
+  ["Top-up and trades both due: the top-up goes in first", () => ({ pcts: DRIFTED, card: { topUps: counted(300) } })],
+  ["Top-up going in: $1,000 into the boards’ mix, all seven", () => ({ card: { topUps: counted(1_000) } })],
   ["Ends soon", (now) => ({ card: { endsAt: now + 4 * DAY } })],
-  ["Retrying: 3 runs didn’t go through, trades due", () => ({ pcts: DRIFTED, card: { fails: 3 } })],
-  ["Retrying: backed off past the next window", (now) => ({ card: { fails: 5, cooldownUntil: now + 2 * DAY } })],
+  ["Retrying: 3 moves refused in a row, trades due", () => ({ pcts: DRIFTED, card: { refused: 3 } })],
+  ["Retrying: 5 moves refused in a row, on target", () => ({ card: { refused: 5 } })],
   ["Paused: the credit is in Act, trades due", () => ({ pcts: DRIFTED, debtUsd: 1_300 })],
   [
     "Paused, the whole portfolio leaning the other way: the free stock, nothing tinted",
@@ -180,7 +152,7 @@ const STATES: [string, (now: number) => Fixture | "loading"][] = [
       debtUsd: 1_300,
     }),
   ],
-  ["Paused: the credit is in Act, a top-up waits", (now) => ({ debtUsd: 1_300, card: { topUps: counted(now, 300) } })],
+  ["Paused: the credit is in Act, a top-up waits", () => ({ debtUsd: 1_300, card: { topUps: counted(300) } })],
   ["Needs you: the registration is still to go", () => ({ card: { status: "starting", waiting: true } })],
   ["Stopped on its own", (now) => ({ pcts: DRIFTED, card: { status: "off", stoppedAt: now - 2 * DAY } })],
   ["Off, with a mix saved", () => ({ card: { status: "off" } })],

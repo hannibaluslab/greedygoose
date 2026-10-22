@@ -3,71 +3,95 @@
 import { useMemo } from "react";
 import { zeroAddress } from "viem";
 import { useReadContract, useReadContracts } from "wagmi";
+import { useNowSec } from "@/hooks/useNowSec";
 import { CHAIN_ID } from "@/lib/chain";
-import { GOOSE_EXECUTOR } from "@/lib/agents/config";
-import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
-import { executorAccountsAbi } from "@/lib/agents/abis/accounts";
+import { GOOSE_GUARD, GOOSE_PLANNER } from "@/lib/agents/config";
+import { guardAbi } from "@/lib/agents/abis/GooseGuard";
+import { plannerAbi } from "@/lib/agents/abis/GoosePlanner";
 import { rebalanceOptions, unpackMix } from "@/lib/agents/mix";
-import type { Plan, RuleNumbers } from "@/lib/agents/next";
+import { defaultNumbers, type Plan, type RuleNumbers } from "@/lib/agents/next";
 
 const WAD = 1e18;
+/** GooseGuard's RESCUE_MAX_AGE: an unfinished rescue ends after 7 days (decision 5's backstop). */
+const RESCUE_MAX_AGE_SEC = 7 * 86_400;
 
 /**
- * The agents' settings and numbers in GooseExecutor's registry, read from the chain so they survive cleared browser
- * storage: the Rebalancer's mix (`mixes`); the account's slot (`accounts`: Protect · sell's "Keep my mix", the rescue
- * under way, the Rebalancer's last day); the live numbers Protect's and the Rebalancer's rules run with (D18); and what
- * a run would do now (`planOf`). Null until the executor is configured and read.
+ * The agents' settings and numbers, read from the chain so they survive cleared browser storage. From GooseGuard
+ * (`accountOf`): the Rebalancer's mix, Protect · sell's "Keep my mix", the rescue under way, the Rebalancer's pacing and
+ * top-ups; and `linesOf`, the account's own Protect line and target (1.03 and 1.12 unless it set others). From the
+ * Planner: the numbers the Rebalancer's and the weekend card's rules run with (D18) and what a round would do now
+ * (`planOf`); the defaults (config/risk.ts) until it is read. Null until the Guard is configured and read.
  */
 export function useAgentSettings(account: `0x${string}`) {
-  const executor = GOOSE_EXECUTOR;
-  const at = executor ?? zeroAddress; // the reads stay off until the executor is configured
-  const read = { address: at, abi: gooseExecutorAbi, chainId: CHAIN_ID } as const;
-  const q = useReadContracts({
+  const guard = GOOSE_GUARD;
+  const planner = GOOSE_PLANNER;
+  const atGuard = guard ?? zeroAddress; // the reads stay off until each is configured
+  const atPlanner = planner ?? zeroAddress;
+  const own = useReadContracts({
     contracts: [
-      { ...read, functionName: "mixes", args: [account] },
-      // The fields every deployed executor has (the one live today has no protectIndex).
-      { address: at, abi: executorAccountsAbi, functionName: "accounts", args: [account], chainId: CHAIN_ID },
+      { address: atGuard, abi: guardAbi, functionName: "accountOf", args: [account], chainId: CHAIN_ID },
+      { address: atGuard, abi: guardAbi, functionName: "linesOf", args: [account], chainId: CHAIN_ID },
+    ],
+    allowFailure: false,
+    query: { enabled: !!guard, refetchInterval: 20_000 },
+  });
+  const read = { address: atPlanner, abi: plannerAbi, chainId: CHAIN_ID } as const;
+  const views = useReadContracts({
+    contracts: [
       { ...read, functionName: "rebalanceLimits" },
       { ...read, functionName: "amounts" },
       { ...read, functionName: "thresholds" },
     ],
     allowFailure: false,
-    query: { enabled: !!executor, refetchInterval: 20_000 },
+    query: { enabled: !!planner, refetchInterval: 60_000 },
   });
   // Apart from the rest: a view that plans every job could run out of gas or revert, and the others don't wait on it.
   const plan = useReadContract({
     ...read,
     functionName: "planOf",
     args: [account],
-    query: { enabled: !!executor, refetchInterval: 20_000 },
+    query: { enabled: !!planner, refetchInterval: 20_000 },
   });
+  // A rescue's age is checked to the minute: the second only moves the clock.
+  const minute = Math.floor(useNowSec() / 60);
 
   return useMemo(() => {
-    if (!q.data) return null;
-    const [mix, a, [bandBps, bandMaxBps, , floorBps, minTrade, maxSlice], [minRepay, , , weekendWindow], thresholds] =
-      q.data;
-    const [triggerHf, targetHf, stressDrop, stressFloorHf] = thresholds;
-    const options = rebalanceOptions({ bandBps, bandMaxBps, floorBps, minTrade, maxSlice });
-    const numbers: RuleNumbers = {
-      minRepayRaw: minRepay,
-      triggerHf: Number(triggerHf) / WAD,
-      targetHf: Number(targetHf) / WAD,
-      stressDrop: Number(stressDrop) / WAD,
-      stressFloorHf: Number(stressFloorHf) / WAD,
-      weekendWindowSec: weekendWindow,
-      rebalance: options,
-    };
+    if (!own.data) return null;
+    const [[a, s], [lineWad, targetWad]] = own.data;
+    const fallback = defaultNumbers(rebalanceOptions());
+    let numbers: RuleNumbers = fallback;
+    if (views.data) {
+      const [[bandBps, bandMaxBps, , floorBps, minTrade, maxSlice], [minRepay, , , weekendWindow], thresholds] =
+        views.data;
+      const [, , stressDrop, stressFloorHf] = thresholds;
+      numbers = {
+        minRepayRaw: minRepay,
+        triggerHf: fallback.triggerHf,
+        targetHf: fallback.targetHf,
+        stressDrop: Number(stressDrop) / WAD,
+        stressFloorHf: Number(stressFloorHf) / WAD,
+        weekendWindowSec: weekendWindow,
+        rebalance: rebalanceOptions({ bandBps, bandMaxBps, floorBps, minTrade, maxSlice }),
+      };
+    }
+    // Protect's line and target are the account's own (decision 3), whatever the Planner's defaults say.
+    numbers = { ...numbers, triggerHf: Number(lineWad) / WAD, targetHf: Number(targetWad) / WAD };
     return {
       /** BPS per stock by reserve id; all 0 before a mix is saved. */
-      mixBps: unpackMix(mix),
-      keepMix: a[7],
-      /** A rescue Protect started is under way (`rescueAt`, when it started, isn't 0): it goes on until the target. */
-      rescuing: a[6] !== 0,
-      /** The New York day the Rebalancer last traded. */
-      rebalanceDay: a[8],
-      options,
+      mixBps: unpackMix(s.mix),
+      keepMix: s.keepMix,
+      /**
+       * A rescue Protect started is under way (`rescueAt`, when it started, isn't 0, and it is under 7 days old): it goes
+       * on until the target, or until the user takes credit or repays by hand (`endRescue`).
+       */
+      rescuing: a.rescueAt !== 0 && minute * 60 <= a.rescueAt + RESCUE_MAX_AGE_SEC,
+      /** The Rebalancer's pacing: when its last session opened, and when the mix was last set. */
+      pacing: { sessionAt: a.sessionAt, mixSetAt: s.mixSetAt },
+      /** Top-ups go into my mix: the switch and Keep as cash (USDC units). */
+      topUps: { on: s.topUpsOn, keepRaw: BigInt(s.keep) },
+      options: numbers.rebalance,
       numbers,
       plan: (plan.data ?? null) as Plan | null,
     };
-  }, [q.data, plan.data]);
+  }, [own.data, views.data, plan.data, minute]);
 }

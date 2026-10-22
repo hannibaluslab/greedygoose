@@ -1,12 +1,13 @@
 /**
- * Moves the fork's clock forward (scripts/rehearsal/README.md, "Time warp"): evm_increaseTime, then a block. For a
- * daily limit's next period (the test deploy's CAP_MAX), the Rebalancer's window, or prices reopening after a weekend.
+ * Moves the fork's clock forward (scripts/rehearsal/README.md, "Time warp"): evm_increaseTime, then a block. For the
+ * Rebalancer's next session (20 hours after the last one opened), a rescue's 7-day end, or prices reopening after a
+ * weekend.
  *
  *   npm run rehearsal:warp -- 30m      # also 90s, 2h, 1d
  *
  * The fork keeps its new time; the browser's clock doesn't move, so the app's own countdowns read from now.
  */
-import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
+import { marketState } from "@/lib/market-hours";
 import { connectFork, nyTime, readState } from "./lib";
 
 const UNIT = { s: 1, m: 60, h: 3_600, d: 86_400 } as const;
@@ -24,14 +25,10 @@ async function main() {
   await fork.test.increaseTime({ seconds });
   await fork.test.mine({ blocks: 1 });
   const after = (await fork.pub.getBlock()).timestamp;
-  const frozen = await fork.pub.readContract({
-    address: state.executor,
-    abi: gooseExecutorAbi,
-    functionName: "frozen",
-    args: [after],
-  });
+  // GooseGuard has no calendar (decision 7): the agents act whenever Aave and the 1% price check allow.
+  const open = marketState(new Date(Number(after) * 1000)).open;
   console.log(`Fork time: ${nyTime(before)} → ${nyTime(after)} (+${Number(after - before).toLocaleString("en-US")} s)`);
-  console.log(`Stock prices are ${frozen ? "held (markets closed): Protect won't sell" : "live"}`);
+  console.log(`Aave's stock prices are ${open ? "live" : "held (markets closed)"}`);
 }
 
 main().catch((e) => {

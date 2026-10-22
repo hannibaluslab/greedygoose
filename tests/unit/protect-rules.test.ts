@@ -102,9 +102,14 @@ describe("planProtect", () => {
     });
     expect(planProtect({ ...base, debtUsd: act, capLeftUsd: 0 })).toMatchObject({ action: "none", reason: "no-cap" });
   });
-  it("skips dust repays (gas would cost more than it helps)", () => {
-    // Under the line, but only 1 cent of savings left → too small to be worth a transaction.
+  it("repays any amount by default (the Planner's minRepay is 0), and skips one under a minimum when given", () => {
+    // Under the line, only 1 cent of savings left: GooseGuard has no smallest repay, so it repays it.
     expect(planProtect({ ...base, debtUsd: owedAt(1.02), savingsUsd: 0.01 })).toMatchObject({
+      action: "repay",
+      amountUsd: 0.01,
+    });
+    // GooseExecutor's $0.05 minimum, as its CashRules port still takes it.
+    expect(planProtect({ ...base, debtUsd: owedAt(1.02), savingsUsd: 0.01, minRepayUsd: 0.05 })).toMatchObject({
       action: "none",
       reason: "too-small",
     });
@@ -134,7 +139,8 @@ describe("weekendHeadsUp: Weekend Shield is a card now, never a repay", () => {
 
 describe("planSave", () => {
   const usd = (n: number) => BigInt(Math.round(n * 1e6));
-  const base = { capLeftRaw: usd(100), savesToday: 0 }; // keep-back $1, minimum $1, 6 a day
+  // Keep-back $1, 6 a day; GooseExecutor's $1 minimum (the defaults have none: the Planner's minSave is 0).
+  const base = { capLeftRaw: usd(100), savesToday: 0, minSaveRaw: usd(1) };
 
   it("saves wallet USDC above the keep-back, never below it", () => {
     expect(planSave({ ...base, walletRaw: usd(41) })).toEqual({ action: "save", amountRaw: usd(40) });

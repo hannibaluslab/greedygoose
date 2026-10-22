@@ -16,23 +16,23 @@ import { describeAgentEvent, type MoveContext } from "@/lib/agents/feed";
 import { AGENT_JOBS, AGENT_NAME, agentItems, longDateText, type Agent, type AgentItem } from "@/lib/agents/list";
 import { rebalanceOptions } from "@/lib/agents/mix";
 import { agentNexts, atText, defaultNumbers, rebalanceOutlook, type NextInput } from "@/lib/agents/next";
-import { JOBS, startCapRaw, type AgentJob } from "@/lib/agents/permissions";
+import { JOBS, type AgentJob } from "@/lib/agents/permissions";
 import { protectCard, type ProtectCardInput } from "@/lib/agents/protectCard";
 import { rebalanceCard } from "@/lib/agents/rebalanceCard";
 import type { AgentStatus } from "@/lib/agents/status";
-import { ENTRY_COINS } from "@/lib/tokens/stables";
+import { CASH_COINS } from "@/lib/tokens/stables";
 import { ProtectDemo } from "../ProtectDemos";
 import { MEASURED_MIX, measuredAccount } from "./measuredAccount";
 import { stateOf, STATES } from "./rebalance-sheet/RebalanceSheets";
 
 /*
  * Dev only: the Agents tab in each state it can be in, with fixtures run through the app's own rules and words
- * (agentNexts, agentItems, protectCard, describeAgentEvent). Nothing here reads the chain or the executor.
+ * (agentNexts, agentItems, protectCard, describeAgentEvent). Nothing here reads the chain or the Guard.
  *   /dev/ui/agents                live, all fine
  *   ?view=protect                 every state of Protect's card, the first that applies
  *   ?view=held                    the Rebalancer held by credit (Adrian's measured account, at 1,000×)
  *   ?view=rows                    each state of the Rebalancer's row
- *   ?view=notlive                 today: no executor configured
+ *   ?view=notlive                 today: no Guard configured
  *   &sheet=protect|rebalance      a sheet open (the Rebalancer's is its real sheet, from the rebalance-sheet gallery)
  * Every switch, Renew and Turn off goes straight to JAW's own sheet in the app; here it only says so.
  */
@@ -58,9 +58,6 @@ const HOLDINGS = PRICES.map((p, reserveId) => ({
 }));
 const MIX = [2_500, 0, 0, 0, 0, 5_000, 2_500];
 
-/** The executor's CAP_MAX here: Protect's and the Rebalancer's grants are at it (no amount limit). */
-const CAP_MAX = usdc(10_000);
-
 /** $400 of cash earning, $600 owed against $2,000 of backing: Safe. */
 function nextInput(nowSec: number, over: Partial<NextInput> = {}): NextInput {
   return {
@@ -71,21 +68,16 @@ function nextInput(nowSec: number, over: Partial<NextInput> = {}): NextInput {
     debtUsd: 600,
     holdings: HOLDINGS,
     mixBps: MIX,
-    left: byJob(() => null),
-    capRaw: caps,
-    capMaxRaw: CAP_MAX,
     numbers: defaultNumbers(rebalanceOptions()),
-    rebalanceDay: 0,
+    pacing: { sessionAt: 0, mixSetAt: 0 },
     rescuing: false,
     sellOn: true,
-    pricesHeld: false,
     plan: null,
     ...over,
   };
 }
 
 const all = (s: AgentStatus) => byJob(() => s);
-const caps = byJob((job) => startCapRaw(job, CAP_MAX));
 
 /**
  * What the agents did, and the cash events: today $40 arriving, a repay from cash and a sale that went on until 1.12
@@ -125,12 +117,12 @@ function feedRows(nowMs: number): FeedAgentRow[] {
     [
       "convert",
       at(2, 8, 30),
-      { kind: "converted", coin: ENTRY_COINS[0].address, amountInRaw: usdc(120), usdcOutRaw: usdc(119.83) },
+      { kind: "converted", coin: CASH_COINS[0].address, amountInRaw: usdc(120), usdcOutRaw: usdc(119.83) },
       {},
     ],
   ];
   return moves.map(([key, time, e, ctx]) => ({
-    ...describeAgentEvent(e, time, ctx)!,
+    ...describeAgentEvent(e, ctx)!,
     key,
     time: time * 1000,
     hash: ZERO_TX,
@@ -160,7 +152,7 @@ function protectStates(nowSec: number): [string, Partial<ProtectCardInput>][] {
         next: { will: "repays $98.22 from your cash", would: "Would repay $98.22 from your cash" },
       },
     ],
-    ["6 · Runs failing", { fails: 3, cooldownUntil: nowSec + 20 * 60, hf: 1.01 }],
+    ["6 · Moves refused", { refused: 3, hf: 1.01 }],
     [
       "Under the line, about to step in",
       { hf: 1.02, next: { will: "repays $40 from your cash", would: "Would repay $40 from your cash" } },
@@ -206,8 +198,7 @@ export function AgentsGallery() {
       waiting: null,
       hf: 1.62,
       rescuing: false,
-      fails: 0,
-      cooldownUntil: 0,
+      refused: 0,
       stoppedAt: null,
       endsAt: nowSec + 200 * 86_400,
       act: null,
@@ -229,9 +220,7 @@ export function AgentsGallery() {
       waiting: false,
       stoppedAt: null,
       endsAt: nowSec + 200 * 86_400,
-      fails: 0,
-      cooldownUntil: 0,
-      rebalanceDay: 0,
+      refused: 0,
       holdings,
       mixBps,
       options: input.numbers.rebalance,

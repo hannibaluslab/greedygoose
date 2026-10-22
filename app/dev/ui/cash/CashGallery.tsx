@@ -301,7 +301,7 @@ function ActivityFixture({ nowSec }: { nowSec: number }) {
   ];
   const rows: FeedRow[] = [
     ...executor.map(([key, time, e, ctx]) => ({
-      ...describeAgentEvent(e, time, ctx)!,
+      ...describeAgentEvent(e, ctx)!,
       key,
       time: time * 1000,
       hash: ZERO_TX,

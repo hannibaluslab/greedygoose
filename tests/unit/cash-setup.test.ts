@@ -85,13 +85,13 @@ describe("other dollars in the account", () => {
     );
   });
 
-  it("are asked about while the Entry agent's grant runs when it doesn't convert them (DAI, EURC)", () => {
+  it("arrive on their own while the Entry agent's grant runs: it converts every coin of Turn into cash, DAI and EURC too", () => {
     const usdt = arrivedCoins([raw(USDT, 120), 0n, 0n, 0n, 0n]);
     const dai = arrivedCoins([0n, 0n, 0n, raw(DAI, 50), 0n]);
     const both = arrivedCoins([raw(USDT, 120), 0n, 0n, raw(DAI, 50), raw(EURC, 30)]);
     expect(arrivedView(usdt, "on")).toMatchObject({ kind: "arriving", text: "120 USDT" });
-    expect(arrivedView(dai, "on")).toMatchObject({ kind: "ask", text: "50 DAI" });
-    expect(arrivedView(both, "starting")).toMatchObject({ kind: "ask", text: "50 DAI and 30 EURC" });
+    expect(arrivedView(dai, "on")).toMatchObject({ kind: "arriving", text: "50 DAI" });
+    expect(arrivedView(both, "starting")).toMatchObject({ kind: "arriving", text: "120 USDT, 50 DAI and 30 EURC" });
     expect(arrivedView(both, "off")).toMatchObject({ kind: "ask", text: "120 USDT, 50 DAI and 30 EURC" });
   });
 

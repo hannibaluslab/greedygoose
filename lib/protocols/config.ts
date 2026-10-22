@@ -21,4 +21,5 @@ export const SEL = {
   aeroSwap: "0xa026383e", // Aerodrome Slipstream router exactInputSingle((address,address,int24,address,uint256,uint256,uint256,uint160))
   uniSwap: "0x04e45aaf", // Uniswap SwapRouter02 exactInputSingle((address,address,uint24,address,uint256,uint256,uint160))
   psmSwap: "0x1a019e37", // Spark PSM3 swapExactIn(address,address,uint256,uint256,address,uint256)
+  spokeRefresh: "0x826002e2", // Spoke.updateUserDynamicConfig(address)
 } as const;

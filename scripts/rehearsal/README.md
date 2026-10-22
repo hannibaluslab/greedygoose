@@ -1,6 +1,6 @@
 # Rehearsal: the real app on a local fork of Base
 
-A dress rehearsal for GreedyGoose. The real app (`next dev`) runs against a local anvil fork of Base mainnet, with fake money. Every flow signs and lands on the fork, and the agents run in GooseExecutor, triggered the way the runner triggers them (the runner lives outside this repo; Chainlink Automation is gone since 2026-10-19).
+A dress rehearsal for GreedyGoose. The real app (`next dev`) runs against a local anvil fork of Base mainnet, with fake money. Every flow signs and lands on the fork, and the agents run in GooseGuard, planned by GoosePlanner and triggered the way KeeperHub triggers them (KeeperHub lives outside this repo). GoosePlanner isn't built yet, so `run-agents` waits for it.
 
 Nothing here writes to Base. Anvil reads Base's state the first time something touches it and keeps every write on this machine. The fork signer and the scripts refuse any RPC that isn't a local anvil on chain 8453. The production build can't contain the signer ([The fence](#the-fence)).
 
@@ -10,7 +10,7 @@ Foundry 1.8 or later (`anvil`, `forge`, `cast`), Node 22 (`nvm use 22`), and `np
 
 ```sh
 npm run rehearsal:fork       # terminal 1: the fork, on http://127.0.0.1:18545
-npm run rehearsal:setup      # stand-in stocks, two JAW accounts with fake money, GooseExecutor (about 1.5 min)
+npm run rehearsal:setup      # stand-in stocks, two JAW accounts with fake money, GooseGuard (about 1.5 min)
 npm run rehearsal:dev        # terminal 2: the app on http://localhost:3100, signing in as sam
 ```
 
@@ -51,7 +51,7 @@ A restarted fork is a fresh fork: run `setup` again, then restart `dev` (setup w
    - **sam:** $3 in the wallet and $650 in Aave V3 savings: $250 of the cash, plus the $400 of credit drawn against 5 NVIDIA supplied as backing (health about 1.94, Safe). The wallet holds less than a $5 buy, so a buy takes the rest from savings in the same batch.
    - **ana:** $100 of USDC and $10 of USDT, for Receive's convert. No stocks and no credit.
    - Amounts are environment variables (dollars; shares for NVDA): `REHEARSAL_SAM_WALLET`, `REHEARSAL_SAM_SAVINGS`, `REHEARSAL_SAM_NVDA`, `REHEARSAL_SAM_CREDIT`, `REHEARSAL_ANA_WALLET`, `REHEARSAL_ANA_USDT`.
-4. **GooseExecutor and its job libraries** with the D13 deploy script (`contracts/script/DeployExecutor.s.sol`, daily limits capped at $5), sent by forge with `--unlocked` from anvil dev account #0, its owner. Forge links each library through CREATE2, so a library Base already has from the D13 deploy (same code, same address) is reused. The owner then bootstraps dev account #1 as the one forwarder. The deploy record goes to `.rehearsal/broadcast`, never `contracts/broadcast`.
+4. **GooseGuard** (`contracts/src/GooseGuard.sol`), sent by `forge create` with `--unlocked` from anvil dev account #0, its owner, with dev account #1 as its one runner (KeeperHub's place), JAW's account clone (sam's code) as the code it accepts, and the floors at the spec's defaults (sale 3%, swap 0.5%, band 1%, $1 kept back, $1 of dust). No amount limit anywhere (decision 9). GoosePlanner is deployed here once it is built; set `planner` in `.rehearsal/state.json`.
 5. **A warm-up:** the app's own `quotePool` on every open stock pool, both ways (about 20 s), so the screens don't wait on Base the first time.
 6. **The files:** `.rehearsal/state.json` for the scripts, and `.env.rehearsal.local` for the app. Both are gitignored.
 
@@ -59,8 +59,8 @@ The anvil dev accounts' roles:
 
 | # | Role |
 | --- | --- |
-| 0 | GooseExecutor's owner and deployer; sends the factory calls |
-| 1 | The forwarder (the runner's place) |
+| 0 | GooseGuard's owner and deployer; sends the factory calls |
+| 1 | The runner (KeeperHub's place) |
 | 2 | sam's signer (the passkey's place) |
 | 3 | ana's signer |
 
@@ -75,7 +75,8 @@ Anvil signs for its own unlocked dev accounts (`eth_sendTransaction`), so no pri
 | `NEXT_PUBLIC_REHEARSAL_RPC` | The fork. It switches the rehearsal on (development only, local only). |
 | `NEXT_PUBLIC_REHEARSAL_ACCOUNT` / `_SIGNER` | The account to sign in as, and its owner on anvil. |
 | `NEXT_PUBLIC_REHEARSAL_FROM_BLOCK` | The first block after the fork point. Logs before it would be asked of Base, which refuses `eth_getLogs`. |
-| `NEXT_PUBLIC_GOOSE_EXECUTOR` / `_BLOCK` | The fork's executor and its deploy block. A D13 deploy on Base, if `.env.local` names one, is overridden. |
+| `NEXT_PUBLIC_GOOSE_GUARD` / `_BLOCK` | The fork's GooseGuard and its deploy block, overriding any in `.env.local`. |
+| `NEXT_PUBLIC_GOOSE_PLANNER` | The fork's GoosePlanner, once `planner` is in `.rehearsal/state.json`. |
 
 With the rehearsal on, `lib/jaw/config.ts` points every wagmi read at the fork (60 s timeout, for first reads) and puts the fork signer's connector in place of JAW's. JAW's connector isn't loaded, so nothing can reach JAW's real bundler. Welcome's sign-in uses whichever is configured (`SIGN_IN_CONNECTOR_TYPE`).
 
@@ -99,25 +100,20 @@ Before the first write it checks that the node is anvil, the chain is 8453, the 
 
 ## Agents
 
-`npm run rehearsal:agents` (`run-agents.ts`) does what the runner does on Base, with the forwarder:
+`npm run rehearsal:agents` (`run-agents.ts`) does what KeeperHub does on Base, with the runner: a round (`checkData = abi.encode(0, 1)`), GoosePlanner's `checkUpkeep`, then GooseGuard's `performUpkeep` with the moves it planned, at 5.4M gas. Never at an estimate: the Guard refuses a move it has no gas for, so an estimate finds exactly that. `-- --until-idle` repeats until nothing is planned, at most 5 times. There is no registration step: the account registers its own grants in the app's batch.
 
-1. **Registration**: every `PermissionApproved` the manager emitted since the last run is read with GooseExecutor's `registrationOf`, and each one it accepts is registered with `registerApproved`, at 1M gas.
-2. **A run** (the safety-net round, `checkData = abi.encode(0, 1)`): `checkUpkeep`, then `performUpkeep` with the accounts it lists, at 5M gas. Never at an estimate: a run with too little gas succeeds by deferring every account, so an estimate finds exactly that. `-- --until-idle` repeats until nothing is listed, at most 5 times.
-
-It prints what each step did, from the executor's events:
+It prints what each round did, from the Guard's events, refusals included:
 
 ```
-Run 1: checkUpkeep(shard 0 of 1)
-  listed: sam
-  sam plans Repay (Protect)
-  sam: Protect repaid $5.00 from savings (Act), health 1.020 → 1.033 (Act)
+Round 1: checkUpkeep(shard 0 of 1)
+  sam: Protect repaid $3.00 from the wallet and $95.00 from savings, health 1.020 → 1.121 (Watch)
 ```
 
 ## Price shock
 
 `npm run rehearsal:shock -- <stock> <change>` (`price-shock.ts`), where change is `-28%`, `+10%`, a price in dollars (`135`) or `reset`.
 
-The spoke's oracle prices a stock with `latestAnswer()` on its source (`getReserveSource`, a Chainlink proxy). The script puts `RehearsalFeed` (`contracts/script/rehearsal`) at that source and writes the new price; `reset` puts the proxy's own code back. Aave, the app and GooseExecutor read the same oracle, so all of them see the shock. It prints each account's health before and after.
+The spoke's oracle prices a stock with `latestAnswer()` on its source (`getReserveSource`, a Chainlink proxy). The script puts `RehearsalFeed` (`contracts/script/rehearsal`) at that source and writes the new price; `reset` puts the proxy's own code back. Aave, the app and GooseGuard read the same oracle, so all of them see the shock. It prints each account's health before and after.
 
 The stock's pools don't move. A buy of a shocked stock is blocked by the app's 10% guard. Protect sells into a pool above Aave's price, which its pool check allows. The app's market prices (JAW, CoinGecko) stay Base's, so they fail the 2% check against Aave's and are hidden, as designed.
 
@@ -150,9 +146,9 @@ On the test deploy (CAP_MAX $5 a day) a rescue moves $5 a day for each grant; wi
 
 1. Sign in as sam with the fork signer.
 2. Buy $5 of NVIDIA from cash (buy sheet, Review, Confirm). Checks: NVIDIA received, at least the review's minimum; cash down $5; savings down by the withdrawal the review announced; the wallet's USDC exact to the unit.
-3. Switch Protect on in its sheet, selling included. Checks: two grants on JAW's manager with GooseExecutor as the spender.
-4. `run-agents`. Checks: GooseExecutor has Protect and Protect · sell on for sam.
-5. With `-- --shock`: NVIDIA down to about health 1.02, under Protect's line, sam in Act on Home, `run-agents`. Checks: Protect repaid $5 from savings (the test CAP_MAX). The price is put back after.
+3. Switch Protect on in its sheet, selling included. Checks: two grants on JAW's manager with GooseGuard as the spender, and GooseGuard has Protect and Protect · sell on for sam (registered in the same batch).
+4. `run-agents` (it needs GoosePlanner).
+5. With `-- --shock`: NVIDIA down to about health 1.02, under Protect's line, sam in Act on Home, `run-agents`. Checks: Protect repaid from the cash, with no amount limit. The price is put back after.
 
 Screenshots go to `.rehearsal/shots` (`REHEARSAL_SHOTS`). Chrome is the system's (`REHEARSAL_CHROME` takes a path). It needs a fresh setup: on a second run Protect is already on.
 
@@ -164,7 +160,7 @@ The fork signer exists only in development, and only against a local fork.
 - `lib/jaw/config.ts` writes the same condition inline around a `require`, so the bundler sees it is false in a production build and leaves `lib/rehearsal` out. `next build` always runs as production.
 - The signer throws if created in production, or with a non-local RPC. Before any write it checks for anvil, chain 8453 and an unlocked owner.
 - `npm run rehearsal:check-build` builds with every rehearsal variable set, the worst case, then searches the output for the signer's marker (which it uses at runtime, so tree-shaking can't remove it while the signer stays), the badge's words, and any source map listing a file in `lib/rehearsal/`. It exits 1 if it finds any.
-- `tests/unit/rehearsal.test.ts`: production keeps JAW's connector even with every rehearsal variable set; the signer and its loader refuse to run in production; a non-local RPC is refused; the signer refuses other chains, other senders and signing methods; and JAW's grant builder yields exactly GooseExecutor's template for all five jobs.
+- `tests/unit/rehearsal.test.ts`: production keeps JAW's connector even with every rehearsal variable set; the signer and its loader refuse to run in production; a non-local RPC is refused; the signer refuses other chains, other senders and signing methods; and JAW's grant builder yields exactly the app's template for all five jobs.
 - No keys: anvil signs for its own dev accounts. JAW's connector is untouched and is the only connector whenever the rehearsal is off.
 
 ## What differs from Base

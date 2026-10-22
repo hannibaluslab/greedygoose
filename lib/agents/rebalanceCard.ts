@@ -2,8 +2,7 @@ import { mixBpsNow, startingMix, type MixHolding } from "@/lib/agents/mix";
 import {
   BACKING_RULE,
   blockedWords,
-  nyDay,
-  rebalanceCheckAt,
+  nextRound,
   whenText,
   wholePortfolio,
   type RebalanceOutlook,
@@ -15,7 +14,7 @@ import {
   type RebalanceOptions,
   type RebalanceTrade,
 } from "@/lib/agents/rules/rebalance";
-import { investTrades, sendToFixRaw, topUpsReady, type TopUpsState } from "@/lib/agents/rules/topUps";
+import { investTrades, sendToFixRaw } from "@/lib/agents/rules/topUps";
 import type { AgentStatus } from "@/lib/agents/status";
 import { formatUsdTrim } from "@/lib/formatting";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
@@ -29,7 +28,8 @@ import { EQUITIES, USDC } from "@/lib/tokens/registry";
  * stock they act on, and a SELL never sits on a logo below its line. When nothing trades and something holds it back,
  * a stock past its band is tinted the same way (over red, under green), with no ghost and no label; every other state
  * marks nothing past its band.
- * Under it, "On target" and the next check, the top-ups going in or the trades due and when, or the state's words.
+ * Under it, "On target" and when it may next trade, the top-ups going in or the trades due and when, or the state's
+ * words.
  * One pill says what Rebalance itself is doing; the first state that applies wins, in the order of board 7.
  * Nothing on the card can be tapped on its own: the whole card opens Rebalance's sheet. Pure, so the gallery and the
  * tests draw every state with the app's own words.
@@ -137,7 +137,7 @@ export type PillTone = "on" | "neutral" | "needs" | "due";
 export type RebalanceFooter =
   | { kind: "on-target"; next: string }
   | { kind: "trades"; text: string; when: string }
-  /** Counted top-ups go into the mix at the next check ("$300 going in"). */
+  /** Top-ups in the wallet go into the mix at the next round ("$300 going in"). */
   | { kind: "invest"; text: string; when: string }
   | { kind: "words"; line1: string; line2: string | null };
 
@@ -159,59 +159,41 @@ export type RebalanceCardInput = {
   nowSec: number;
   /** The Rebalancer's state (agentStatus): "loading" draws no model, the card's frame waits for it. */
   status: AgentStatus;
-  /** JAW granted it and the executor doesn't run it yet: its registration is still to go (useAgents `toFinish`). */
+  /** JAW granted it and the Guard doesn't run it yet: its registration is still to go (useAgents `toFinish`). */
   waiting: boolean;
   /** When it stopped without the user turning it off; null when it didn't. */
   stoppedAt: number | null;
   /** Its grant's end while it has one. */
   endsAt: number | null;
-  /** Failed runs in a row (the account's), and when the executor tries again. */
-  fails: number;
-  cooldownUntil: number;
-  /** The New York day it last traded (the registry's `accounts`). */
-  rebalanceDay: number;
+  /** Its moves GooseGuard refused in a row (lib/agents/feed.ts `refusedInARow`); each is tried again next round. */
+  refused: number;
   holdings: readonly MixHolding[];
   mixBps: readonly number[] | null;
   options: RebalanceOptions;
-  /** Its next window (lib/agents/next.ts `rebalanceOutlook`), shared with its sheet's line. */
+  /** What it may do next (lib/agents/next.ts `rebalanceOutlook`, its pacing included), shared with its sheet's line. */
   outlook: RebalanceOutlook;
-  /** Top-ups, while they're on in both the account's switch and the grant it runs; null or absent otherwise. */
+  /** Top-ups, while the account's switch is on; null or absent otherwise. */
   topUps?: CardTopUps | null;
 };
 
-/** Top-ups as the card reads them, to work out what goes in at the next check (`investDue`). */
+/** Top-ups as the card reads them, to work out what goes in at the next round (`investDue`). */
 export type CardTopUps = {
-  /** The executor's counts for the account (`topUps(account)`). */
-  state: TopUpsState;
-  /** Savings now, USDC units. */
-  savingsRaw: bigint;
-  /** What the grant's USDC limit (the buys) and its aUSDC limit (the savings withdraw) still allow, USDC units. */
-  usdcLeftRaw: bigint;
-  savingsLeftRaw: bigint;
+  /** The wallet's cash that goes into the mix at the next round, USDC units (the Planner's `topUpsReady`). */
+  readyRaw: bigint;
 };
 
-/** Aave's rounding on a savings withdraw, which the manager charges on aUSDC (JobBase.SAVINGS_ROUNDING). */
-const SAVINGS_ROUNDING = 2n;
-const minOf = (...v: bigint[]) => v.reduce((a, b) => (b < a ? b : a));
-
 /**
- * The buys that put counted top-ups into the mix at the check on New York day `day`, as GooseExecutor's RebalanceJob
- * plans them: what was counted on an earlier day (`topUpsReady`: any fall since taken out, within savings above Keep),
- * within what the grant's limits leave, once it's at least the smallest trade (`investTrades`, the contract's
- * RebalanceRules.invest). Empty when nothing goes in: the band trades go then. A day it invests, they wait a day.
+ * The buys that put the waiting top-ups into the mix at the next round (`investTrades`, the Planner's invest rule):
+ * the stocks furthest below their target first. Empty when nothing waits: the band trades go then.
  */
 export function investDue(p: {
   holdings: readonly MixHolding[];
   mixBps: readonly number[];
   options: RebalanceOptions;
   topUps: CardTopUps;
-  day: number;
 }): RebalanceTrade[] {
-  const t = p.topUps;
-  const ready = topUpsReady(t.state, p.day, t.savingsRaw).readyRaw;
-  const savingsLeft = t.savingsLeftRaw > SAVINGS_ROUNDING ? t.savingsLeftRaw - SAVINGS_ROUNDING : 0n;
-  const amount = minOf(ready, savingsLeft, t.usdcLeftRaw);
-  if (amount < p.options.minTradeRaw) return [];
+  const amount = p.topUps.readyRaw;
+  if (amount <= 0n || amount < p.options.minTradeRaw) return [];
   const stocks = EQUITIES.map((e) => {
     const h = p.holdings.find((x) => x.reserveId === e.reserveId);
     return {
@@ -224,7 +206,7 @@ export function investDue(p: {
   return investTrades({ stocks }, amount, p.options);
 }
 
-/** Failed runs in a row before the card says so (the executor switches the account off at eight). */
+/** Refused moves in a row before the card says so (nothing switches itself off: each is tried again next round). */
 const RETRYING_AT = 3;
 /** A grant this close to its end says so. */
 const ENDS_SOON_SEC = 7 * 86_400;
@@ -237,27 +219,10 @@ const names = (ids: readonly number[]) => {
   return n.length > 1 ? `${n.slice(0, -1).join(", ")} and ${n.at(-1)}` : n[0];
 };
 
-/**
- * When it checks next. The executor backs a failing account off: its next check is the first window after that, and
- * never before the back-off ends (one that ends inside a window checks then, not at the window's open).
- */
-function nextCheck(i: RebalanceCardInput): number {
-  const o = i.outlook;
-  return i.cooldownUntil > o.checkAt
-    ? Math.max(i.cooldownUntil, rebalanceCheckAt(i.cooldownUntil, i.rebalanceDay))
-    : o.checkAt;
-}
-
-/** The top-ups going in at the check at `checkAt` (`investDue`): only while they're on and a mix is saved. */
-function investAt(i: RebalanceCardInput, checkAt: number): RebalanceTrade[] {
+/** The top-ups going in at the next round (`investDue`): only while they're on and a mix is saved. */
+function investAt(i: RebalanceCardInput): RebalanceTrade[] {
   if (!i.topUps || !i.mixBps || i.outlook.noMix) return [];
-  return investDue({
-    holdings: i.holdings,
-    mixBps: i.mixBps,
-    options: i.options,
-    topUps: i.topUps,
-    day: nyDay(checkAt),
-  });
+  return investDue({ holdings: i.holdings, mixBps: i.mixBps, options: i.options, topUps: i.topUps });
 }
 
 /**
@@ -300,7 +265,7 @@ function heldCard(
     over: { say?: string; marks?: boolean },
   ) => RebalanceCardModel,
 ): RebalanceCardModel {
-  const send = why === "credit" || why === "too-small-backing" ? sendToFix(i) : null;
+  const send = why === "credit" ? sendToFix(i) : null;
   const say = send ? sendWords(send, !!i.topUps) : blocked;
   const marked = card("On", "on", { kind: "words", line1: say[0], line2: say[1] }, { say: say.join(" "), marks: true });
   if (!send) return marked;
@@ -335,7 +300,7 @@ function sendWords(raw: bigint, topUpsOn: boolean): [string, string] {
 }
 
 /** What the card says while off and before the agents are live. */
-const OFF_WORDS = ["When on, it keeps your mix on target.", "Checks once a market day, after the US open."] as const;
+const OFF_WORDS = ["When on, it keeps your mix on target.", "Trades at most once a day, or on a new mix."] as const;
 
 /** The card, or null while the Rebalancer's state loads (the view draws its frame). */
 export function rebalanceCard(i: RebalanceCardInput): RebalanceCardModel | null {
@@ -367,11 +332,11 @@ export function rebalanceCard(i: RebalanceCardInput): RebalanceCardModel | null 
   const owned = { faded: true, slots: portfolioSlots(i.holdings) };
 
   if (!i.live) return card("Coming soon", "neutral", words(...OFF_WORDS), owned);
-  // 1. JAW granted it and the executor doesn't run it yet: its registration is still to go.
+  // 1. JAW granted it and the Guard doesn't run it yet: its registration is still to go.
   if (i.waiting || i.status === "starting")
     return card("Needs you", "needs", words("One more Face ID turns it on.", "Until then, nothing trades."), faded);
   if (i.status !== "on") {
-    // 2. Stopped on its own: its year ran out, its runs kept failing, or it can no longer act on the account.
+    // 2. Stopped on its own: its year ran out.
     if (i.stoppedAt !== null)
       return card("Stopped", "needs", words(`Stopped on ${date(i.stoppedAt)}. Nothing trades now.`), faded);
     // 3. Off.
@@ -379,21 +344,21 @@ export function rebalanceCard(i: RebalanceCardInput): RebalanceCardModel | null 
   }
 
   const o = i.outlook;
-  const checkAt = nextCheck(i);
-  const when = whenText(checkAt, i.nowSec);
-  // Counted top-ups that go in at that check: the executor puts them in first, and band trades wait a day.
-  const invest = investAt(i, checkAt);
+  // Top-ups waiting in the wallet go in at the next round, never held back (decision 4), before any band trade; band
+  // trades go when the pacing lets them (`rebalanceCheckAt`).
+  const invest = investAt(i);
   const next = invest.length > 0 ? invest : o.trades;
+  const when = whenText(invest.length > 0 ? nextRound(i.nowSec) : o.checkAt, i.nowSec);
   const waits = next.length > 0 && o.inAct;
   // Trades and top-ups act on free stock: while some are due, the card draws the free stock they move, so each BUY,
   // SELL and ghost reads the way the trade moves it (none while they wait in Act). Nothing due: the whole portfolio.
   const moving = next.length === 0 ? still : picture(i.holdings, waits ? [] : next);
-  // 4. Runs keep failing.
-  if (i.fails >= RETRYING_AT)
+  // 4. Its moves keep being refused: each is tried again at the next round.
+  if (i.refused >= RETRYING_AT)
     return card(
       "Retrying",
       "due",
-      words(`Your agents’ last ${i.fails} runs didn’t go through.`, `Nothing moved. Next check ${when}.`),
+      words(`Your agents’ last ${i.refused} runs didn’t go through.`, `Nothing moved. Next check ${when}.`),
       { slots: moving },
     );
   // 5. Trades or top-ups are due, and the credit is in Act: it waits.
@@ -401,13 +366,13 @@ export function rebalanceCard(i: RebalanceCardInput): RebalanceCardModel | null 
     return card("Paused", "neutral", words("Waits until your credit is out of Act.", "Nothing trades meanwhile."), {
       slots: moving,
     });
-  // 6. Top-ups going into the mix at the next check, else the trades due then.
+  // 6. Top-ups going into the mix at the next round, else the trades due when the pacing lets them.
   const due = dueFooter(invest, o.trades, when);
   if (due) return card("On", "on", due.footer, { slots: moving, say: due.say });
   // Nothing trades. "On target" only while the whole portfolio sits in its band; past it, or holding none of the mix,
-  // what holds Rebalance back (`blocked`): the credit (it never trades stock that backs it), every trade it would make
-  // under the smallest one, what its grant still allows, or nothing of the mix to keep.
-  const blocked = o.blocked && blockedWords(o.blocked, i.options.minTradeRaw, when);
+  // what holds Rebalance back (`blocked`): the credit (it never trades stock that backs it), no trade it can make, or
+  // nothing of the mix to keep.
+  const blocked = o.blocked && blockedWords(o.blocked, when);
   const standing = o.noMix ? "No mix yet." : blocked ? blocked[0] : `On target. Checks ${when}.`;
   // 7. Its grant ends within a week.
   if (i.endsAt !== null && i.endsAt - i.nowSec <= ENDS_SOON_SEC)

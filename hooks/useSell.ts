@@ -10,6 +10,7 @@ import { SELL_BLOCKED, buildSaleCalls, saleActivity, saleRepayRaw, type SellFrom
 import { quoteKey, quoteSwap } from "@/lib/swap/buy";
 import { sellMinOut, type SellQuote } from "@/lib/swap/sell";
 import type { ReserveAsset } from "@/lib/tokens/registry";
+import { withEndRescue } from "@/lib/tx/plans";
 
 /** Best quote for selling `sharesRaw` of `stock` for USDC, across Leo's venues. `null` = no pool can fill it. */
 export function useSellQuote(stock: ReserveAsset | undefined, sharesRaw: bigint) {
@@ -34,6 +35,8 @@ export type SellInput = {
   oraclePriceUsd: number;
   /** What the account owes, for a repay by selling (the position's debtRaw). */
   debtRaw: bigint;
+  /** A rescue is on: a repay by selling ends it (`withEndRescue`). */
+  rescuing?: boolean;
 };
 
 const SELL_FALLBACK: Record<SellFrom, string> = {
@@ -81,7 +84,8 @@ export const salePlan = (p: SellInput, batch: ReturnType<typeof useSaleBatch>): 
       p.plan.from === "repay" ? (saleRepayRaw(floor, p.debtRaw) > p.debtRaw ? "full" : "part") : null,
     ),
     user: p.user,
-    calls: () => batch(p),
+    // A repay by selling is a repay by hand: it ends a rescue Protect started (decision 5).
+    calls: () => (p.plan.from === "repay" ? withEndRescue(batch)(p) : batch(p)),
     fallback: SELL_FALLBACK[p.plan.from],
     // Shares taken out of backing for the sale: held to the line on Aave's own health, as Free up is.
     ...(p.plan.takeOutRaw > 0n && p.plan.from !== "repay" ? { healthFloor: p.plan.floor } : {}),

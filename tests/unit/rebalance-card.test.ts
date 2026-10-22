@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mixBpsNow, rebalanceOptions, type MixHolding } from "@/lib/agents/mix";
-import { nyDay, rebalanceCheckAt, rebalanceOutlook, whenText, type OutlookInput } from "@/lib/agents/next";
+import { nextRound, REBALANCE_GAP_SEC, rebalanceOutlook, whenText, type OutlookInput } from "@/lib/agents/next";
 import {
   investDue,
   mixScale,
@@ -12,10 +12,8 @@ import {
 } from "@/lib/agents/rebalanceCard";
 import { sheetLine } from "@/lib/agents/rebalanceSettings";
 import { bandOf } from "@/lib/agents/rules/rebalance";
-import type { TopUpsState } from "@/lib/agents/rules/topUps";
 
 const usdc = (x: number) => BigInt(Math.round(x * 1e6));
-const CAP_MAX = usdc(1_000_000);
 /** Wednesday 2025-10-15 12:00 New York (16:00 UTC, daylight time). */
 const WED_NOON = Date.UTC(2025, 9, 15, 16) / 1000;
 const DAY = 86_400;
@@ -43,13 +41,10 @@ function outlookIn(over: Partial<OutlookInput> = {}): OutlookInput {
     nowSec: WED_NOON,
     holdings: holdings(ON_TARGET),
     mixBps: MIX,
-    capMaxRaw: CAP_MAX,
-    rebalanceDay: 0,
+    pacing: { sessionAt: 0, mixSetAt: 0 },
     debtUsd: 600,
     totalBackingUsd: 2_000,
     avgCf: 0.7,
-    left: { rebalance: null },
-    capRaw: { rebalance: CAP_MAX },
     numbers: { rebalance: options },
     ...over,
   };
@@ -65,9 +60,7 @@ function input(over: Partial<RebalanceCardInput> = {}, at: Partial<OutlookInput>
     waiting: false,
     stoppedAt: null,
     endsAt: WED_NOON + 200 * DAY,
-    fails: 0,
-    cooldownUntil: 0,
-    rebalanceDay: 0,
+    refused: 0,
     holdings: o.holdings,
     mixBps: o.mixBps,
     options,
@@ -76,7 +69,7 @@ function input(over: Partial<RebalanceCardInput> = {}, at: Partial<OutlookInput>
   };
 }
 const card = (over?: Partial<RebalanceCardInput>, at?: Partial<OutlookInput>) => rebalanceCard(input(over, at))!;
-const next = whenText(rebalanceCheckAt(WED_NOON, 0), WED_NOON); // "tomorrow 10:00 AM" in the viewer's own time
+const next = whenText(nextRound(WED_NOON), WED_NOON); // the next round, "today 12:10 PM" in the viewer's own time
 
 describe("mixSlots: each mix stock placed by its drift, in its own band", () => {
   it("places NVIDIA 26% of 25% at +0.2 of its band and Tesla 9% of 10% at −0.5, as board 7a draws them", () => {
@@ -153,7 +146,7 @@ describe("rebalanceOutlook: the sheet's line and the card share it", () => {
     expect(rebalanceOutlook(outlookIn())).toEqual({
       noMix: false,
       trades: [],
-      checkAt: rebalanceCheckAt(WED_NOON, 0),
+      checkAt: nextRound(WED_NOON),
       inAct: false,
       waitsInAct: false,
       offTarget: false,
@@ -216,35 +209,38 @@ describe("rebalanceCard: the first state that applies, in board 7's order, with 
     expect(m.slots.every((s) => s.side === null)).toBe(true);
   });
 
-  it("retrying: 3 failed runs in a row, before Paused; a back-off moves the next check", () => {
-    const m = card({ fails: 3 }, { holdings: holdings(DRIFTED), debtUsd: 1_300 });
+  it("retrying: 3 refused moves in a row, before Paused; no back-off, the next check is the next round", () => {
+    const m = card({ refused: 3 }, { holdings: holdings(DRIFTED), debtUsd: 1_300 });
     expect(m.pill).toEqual({ text: "Retrying", tone: "due" });
     expect(m.footer).toEqual({
       kind: "words",
       line1: "Your agents’ last 3 runs didn’t go through.",
       line2: `Nothing moved. Next check ${next}.`,
     });
-    const later = WED_NOON + 2 * DAY;
-    const backedOff = card({ fails: 5, cooldownUntil: later });
-    expect(backedOff.footer).toMatchObject({
-      line2: `Nothing moved. Next check ${whenText(rebalanceCheckAt(later, 0), WED_NOON)}.`,
-    });
-    // A back-off that ends inside the window: the check waits for it, as the executor does, not the window's open.
-    const midWindow = rebalanceCheckAt(WED_NOON, 0) + 10 * 60;
-    expect(card({ fails: 3, cooldownUntil: midWindow }).footer).toMatchObject({
-      line2: `Nothing moved. Next check ${whenText(midWindow, WED_NOON)}.`,
-    });
-    expect(card({ fails: 2 }).pill.text).toBe("On");
+    expect(card({ refused: 2 }).pill.text).toBe("On");
   });
 
-  it("off: faded, with what it does and when it checks", () => {
+  it("paced: trades due after a session today wait for its 20 hours, unless the mix is new (decision 4)", () => {
+    const sessionAt = WED_NOON - 2 * 3_600;
+    const waits = card({}, { holdings: holdings(DRIFTED), pacing: { sessionAt, mixSetAt: 0 } });
+    const at = whenText(nextRound(sessionAt + REBALANCE_GAP_SEC - 1), WED_NOON);
+    expect(waits.footer).toMatchObject({
+      kind: "trades",
+      text: "3 trades",
+      when: at.charAt(0).toUpperCase() + at.slice(1),
+    });
+    const fresh = card({}, { holdings: holdings(DRIFTED), pacing: { sessionAt, mixSetAt: WED_NOON - 60 } });
+    expect(fresh.footer).toMatchObject({ kind: "trades", when: next.charAt(0).toUpperCase() + next.slice(1) });
+  });
+
+  it("off: faded, with what it does and how often it trades", () => {
     const m = card({ status: "off" });
     expect(m.pill).toEqual({ text: "Off", tone: "neutral" });
     expect(m.faded).toBe(true);
     expect(m.footer).toEqual({
       kind: "words",
       line1: "When on, it keeps your mix on target.",
-      line2: "Checks once a market day, after the US open.",
+      line2: "Trades at most once a day, or on a new mix.",
     });
   });
 
@@ -275,7 +271,7 @@ describe("rebalanceCard: the first state that applies, in board 7's order, with 
   });
 
   it("stopped on its own: before Off, faded", () => {
-    const m = card({ status: "off", stoppedAt: WED_NOON - 2 * DAY, fails: 8 });
+    const m = card({ status: "off", stoppedAt: WED_NOON - 2 * DAY, refused: 8 });
     expect(m.pill).toEqual({ text: "Stopped", tone: "needs" });
     expect(m.faded).toBe(true);
     expect(m.footer).toEqual({
@@ -299,7 +295,7 @@ describe("rebalanceCard: the first state that applies, in board 7's order, with 
   });
 
   it("coming soon while the agents aren't live, whatever else applies", () => {
-    const m = card({ live: false, status: "unconfigured", waiting: true, fails: 4 });
+    const m = card({ live: false, status: "unconfigured", waiting: true, refused: 4 });
     expect(m.pill).toEqual({ text: "Coming soon", tone: "neutral" });
     expect(m.faded).toBe(true);
   });
@@ -317,7 +313,7 @@ describe("rebalanceCard: the first state that applies, in board 7's order, with 
   it("is faded exactly when Rebalancer isn't running", () => {
     const faded = (over: Partial<RebalanceCardInput>, at?: Partial<OutlookInput>) => card(over, at).faded;
     expect(faded({})).toBe(false);
-    expect(faded({ fails: 3 })).toBe(false);
+    expect(faded({ refused: 3 })).toBe(false);
     expect(faded({ endsAt: WED_NOON + DAY })).toBe(false);
     expect(faded({}, { holdings: holdings(DRIFTED), debtUsd: 1_300 })).toBe(false);
     expect(faded({ status: "off" })).toBe(true);
@@ -326,38 +322,20 @@ describe("rebalanceCard: the first state that applies, in board 7's order, with 
   });
 });
 
-describe("top-ups going in: the card and the sheet's line show what the next check puts into the mix", () => {
+describe("top-ups going in: the card and the sheet's line show what the next round puts into the mix", () => {
   const TWO = [0, 0, 0, 0, 0, 6_000, 4_000];
-  const WED = nyDay(WED_NOON);
-  /** $300 counted on `day`, $1,300 in savings and Keep $500, the grant's limits at CAP_MAX. */
-  const topUps = (over: Partial<TopUpsState> = {}, at: Partial<CardTopUps> = {}): CardTopUps => ({
-    state: {
-      day: WED - 1,
-      keepRaw: usdc(500),
-      readyRaw: usdc(300),
-      todayRaw: 0n,
-      markRaw: usdc(1_300),
-      ownRaw: 0n,
-      ...over,
-    },
-    savingsRaw: usdc(1_300),
-    usdcLeftRaw: CAP_MAX,
-    savingsLeftRaw: CAP_MAX,
-    ...at,
-  });
+  /** $300 in the wallet above $1 and above what Keep still needs: the Planner's `topUpsReady`. */
+  const topUps = (usd = 300): CardTopUps => ({ readyRaw: usdc(usd) });
   const two = { holdings: holdings([0, 0, 0, 0, 0, 60, 40]), mixBps: TWO };
   const investCard = (t: CardTopUps | null, over: Partial<RebalanceCardInput> = {}, at: Partial<OutlookInput> = two) =>
     card({ topUps: t, ...over }, at);
   const buys = (m: ReturnType<typeof card>) => m.slots.filter((s) => s.side).map((s) => [s.reserveId, s.side]);
   const dollars = (raw: bigint) => Number(raw) / 1e6;
-  /** What goes in at Thursday's check, in dollars. */
-  const spent = (t: CardTopUps) =>
-    dollars(investDue({ ...two, options, topUps: t, day: WED + 1 }).reduce((a, x) => a + x.amountIn, 0n));
 
-  it("buys what's furthest below its target with what was counted on an earlier day (the contract's invest)", () => {
+  it("buys what's furthest below its target with the top-up (the Planner's invest rule)", () => {
     // 60/40 on target, $300 in: targets $6,180 and $4,120, so $180 of NVIDIA and $120 of Tesla (to a unit: the
     // fixture's shares are rounded).
-    const trades = investDue({ ...two, options, topUps: topUps(), day: WED + 1 });
+    const trades = investDue({ ...two, options, topUps: topUps() });
     expect(trades.map((t) => [t.reserveId, t.buy])).toEqual([
       [5, true],
       [6, true],
@@ -366,7 +344,7 @@ describe("top-ups going in: the card and the sheet's line show what the next che
     expect(dollars(trades[1].amountIn)).toBeCloseTo(120, 5);
   });
 
-  it("shows the top-up going in: the green pill, the time, BUY on the stocks it buys", () => {
+  it("shows the top-up going in at the next round: the green pill, the time, BUY on the stocks it buys", () => {
     const m = investCard(topUps());
     expect(m.pill).toEqual({ text: "On", tone: "on" });
     expect(m.footer).toEqual({
@@ -382,7 +360,12 @@ describe("top-ups going in: the card and the sheet's line show what the next che
     expect(sheetLine(m)).toEqual({ text: `$300 going in ${next}. Buys NVIDIA and Tesla.`, renew: false });
   });
 
-  it("shows the top-up, not the band trades, when both are due: the contract invests first, trades wait a day", () => {
+  it("is never held back by the pacing: a top-up goes in at the next round after a session today", () => {
+    const m = investCard(topUps(), {}, { ...two, pacing: { sessionAt: WED_NOON - 2 * 3_600, mixSetAt: 0 } });
+    expect(m.footer).toMatchObject({ kind: "invest", when: next.charAt(0).toUpperCase() + next.slice(1) });
+  });
+
+  it("shows the top-up, not the band trades, when both are due: it goes in first", () => {
     // "Coin hop": NVIDIA past its band. $300 in: Apple is furthest below its target ($2,060 against $1,600).
     const m = investCard(topUps(), {}, { holdings: holdings(DRIFTED) });
     expect(m.footer).toMatchObject({ kind: "invest", text: "$300 going in" });
@@ -390,39 +373,14 @@ describe("top-ups going in: the card and the sheet's line show what the next che
     expect(card({}, { holdings: holdings(DRIFTED) }).footer).toMatchObject({ kind: "trades", text: "3 trades" });
   });
 
-  it("puts in only what the trades take: a last piece under the smallest trade waits for the next check", () => {
-    // The boards' mix on target, $300 in: $130 Tesla, $60 Apple, $45 Microsoft, $30 Amazon, $30 Alphabet; Meta's $5 waits.
+  it("puts all of it in: no trade is too small (the Planner's minTrade is 0)", () => {
     const m = card({ topUps: topUps() });
-    expect(m.footer).toMatchObject({ kind: "invest", text: "$295 going in" });
-    expect(buys(m).map(([id]) => id)).toEqual([0, 1, 2, 4, 6]);
+    expect(m.footer).toMatchObject({ kind: "invest", text: "$300 going in" });
+    expect(investCard(topUps(15)).footer).toMatchObject({ kind: "invest", text: "$15 going in" });
   });
 
-  it("goes in the market day after it was counted: a count today waits past today's check", () => {
-    const morning = WED_NOON - 3 * 3_600; // Wednesday 9:00 AM New York: today's window is still ahead
-    const today = topUps({ day: WED, readyRaw: 0n, todayRaw: usdc(300) });
-    const early = rebalanceCard(input({ nowSec: morning, topUps: today }, { ...two, nowSec: morning }))!;
-    expect(early.footer.kind).toBe("on-target");
-    // After the window, the next check is Thursday's: Wednesday's count goes in then.
-    expect(investCard(today).footer).toMatchObject({ kind: "invest", text: "$300 going in" });
-  });
-
-  it("takes a fall in savings out of it, and never goes past savings above Keep or the grant's limits", () => {
-    expect(spent(topUps({}, { savingsRaw: usdc(1_100) }))).toBeCloseTo(100, 5); // $200 spent since the count
-    expect(spent(topUps({ markRaw: usdc(700) }, { savingsRaw: usdc(700) }))).toBeCloseTo(200, 5); // $700 saved, Keep $500
-    expect(spent(topUps({}, { usdcLeftRaw: usdc(100) }))).toBeCloseTo(100, 5);
-    // The aUSDC limit less Aave's rounding (2 units), exactly: all of it buys Apple, furthest below its target.
-    const apple = investDue({
-      holdings: holdings(DRIFTED),
-      mixBps: MIX,
-      options,
-      topUps: topUps({}, { savingsLeftRaw: usdc(100) }),
-      day: WED + 1,
-    });
-    expect(apple.map((t) => [t.reserveId, t.amountIn])).toEqual([[0, usdc(100) - 2n]]);
-  });
-
-  it("shows nothing going in under the smallest trade, with top-ups off, or with no mix", () => {
-    expect(investCard(topUps({ readyRaw: usdc(15) })).footer.kind).toBe("on-target");
+  it("shows nothing going in with nothing waiting, top-ups off, or no mix", () => {
+    expect(investCard(topUps(0)).footer.kind).toBe("on-target");
     expect(investCard(null).footer.kind).toBe("on-target");
     expect(card({ topUps: topUps(), mixBps: null }, { mixBps: null }).footer).toEqual({
       kind: "words",
@@ -436,7 +394,7 @@ describe("top-ups going in: the card and the sheet's line show what the next che
     const paused = investCard(topUps(), {}, { ...two, debtUsd: 1_300 });
     expect(paused.pill).toEqual({ text: "Paused", tone: "neutral" });
     expect(paused.slots.every((s) => s.side === null)).toBe(true);
-    const retrying = investCard(topUps(), { fails: 3 });
+    const retrying = investCard(topUps(), { refused: 3 });
     expect(retrying.pill.text).toBe("Retrying");
     expect(buys(retrying)).toEqual([
       [5, "buy"],

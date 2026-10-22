@@ -75,7 +75,7 @@ const net = vi.hoisted(() => {
     return new Response(JSON.stringify(out), { status: 200, headers: { "content-type": "application/json" } });
   }) as typeof fetch;
 
-  process.env.NEXT_PUBLIC_GOOSE_EXECUTOR = "0x00000000000000000000000000000000000e5ec0";
+  process.env.NEXT_PUBLIC_GOOSE_GUARD = "0x00000000000000000000000000000000000e5ec0";
   return state;
 });
 
@@ -103,7 +103,7 @@ import {
 import { grantPermissions } from "../../node_modules/@jaw.id/core/dist/rpc/permissions.js";
 import { prepareCallsForExecution } from "../../node_modules/@jaw.id/core/dist/account/smartAccount.js";
 import { abi as jawAccountAbi } from "../../node_modules/@jaw.id/core/dist/account/toJustanAccount.js";
-import { jobGrant } from "@/lib/agents/permissions";
+import { jobGrant, JOBS, stockLimitsRaw } from "@/lib/agents/permissions";
 import {
   addManagerOwnerCall,
   approveCall,
@@ -118,30 +118,27 @@ import {
   storePermissionInRelay,
 } from "@/lib/agents/oneTapGrant";
 import { encodePermission } from "@/lib/agents/register";
-import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
+import { guardAbi } from "@/lib/agents/abis/GooseGuard";
 import { permissionManagerAbi } from "@/lib/protocols/abis";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
-const EXECUTOR = "0x00000000000000000000000000000000000e5ec0" as const;
+const GUARD = "0x00000000000000000000000000000000000e5ec0" as const;
 const USER = getAddress("0x14087c532332dE6E971Eb2F60a252cbf511F59eA");
 const MANAGER = PERMISSIONS_MANAGER_ADDRESS as Address;
 const API_KEY = "test-key-not-real";
 const RPC = "https://bundler.invalid/rpc";
 const PICK = { start: 1_792_454_400, salt: 0x00c0ffee_1234_5678_9abc_def0_0fed_cba9_8765_4321_0000_1111_2222_3333n };
 const EXPIRY = PICK.start + 365 * 86_400;
-const CAP = 5_000_000n;
-const sellLimits = EQUITIES.map((e) =>
-  e.symbol === "NVDAc" ? 250_000_000n : e.symbol === "TSLAc" ? 100_000_000n : 0n,
-);
-const rebalanceLimits = EQUITIES.map((e) => (e.symbol === "AAPLc" ? 50_000_000n : 0n));
+const sellLimits = stockLimitsRaw(EQUITIES.map((e) => e.symbol === "NVDAc" || e.symbol === "TSLAc"));
+const rebalanceLimits = stockLimitsRaw(EQUITIES.map((e) => e.symbol === "AAPLc"));
 
 /** Every job's grant as the app asks for it, and one request that walks JAW's other branches. */
 const TEMPLATES: Record<string, PermissionsDetail> = {
-  save: jobGrant("save", 1_000_000_000n),
-  protect: jobGrant("protect", CAP),
-  sell: jobGrant("sell", CAP, sellLimits),
-  rebalance: jobGrant("rebalance", CAP, rebalanceLimits),
-  entry: jobGrant("entry", CAP),
+  save: jobGrant("save"),
+  protect: jobGrant("protect"),
+  sell: jobGrant("sell", sellLimits),
+  rebalance: jobGrant("rebalance", rebalanceLimits),
+  entry: jobGrant("entry"),
   "not ours: a signature, a year, the native token, × 3": {
     calls: [{ target: USDC.address, functionSignature: "transfer(address,uint256)" }],
     spends: [
@@ -278,7 +275,7 @@ async function jawGrant(detail: PermissionsDetail, pick: typeof PICK, logsFor: (
     throw new Error(`unexpected ${method}`);
   };
   const pending = withJawClock(pick, () =>
-    grantPermissions(fakeAccount(sent), EXPIRY, EXECUTOR, detail, { id: 8453, rpcUrl: RPC }, API_KEY),
+    grantPermissions(fakeAccount(sent), EXPIRY, GUARD, detail, { id: 8453, rpcUrl: RPC }, API_KEY),
   );
   const response = await pending;
   const relay = net.rest.filter((r) => r.method === "POST" && r.url === RELAY_PERMISSIONS_URL);
@@ -313,7 +310,7 @@ describe("JAW's own grant, run against a fake bundler and relay, next to the one
   for (const [name, detail] of Object.entries(TEMPLATES)) {
     it(`${name}: the same approve call, the same permission id and the same relay request`, async () => {
       const jaw = await jawGrant(detail, PICK, onlyOurs);
-      const ours = jawPermission(USER, EXECUTOR, EXPIRY, detail, PICK);
+      const ours = jawPermission(USER, GUARD, EXPIRY, detail, PICK);
 
       // The user operation JAW's grant sends is one call, manager.approve(permission): ours, byte for byte.
       expect(jaw.sent).toHaveLength(1);
@@ -337,7 +334,7 @@ describe("JAW's own grant, run against a fake bundler and relay, next to the one
   it("the relay request, written out: a POST of the record, keyed by the app's API key, nothing that proves ownership", async () => {
     const detail = TEMPLATES.save;
     const jaw = await jawGrant(detail, PICK, onlyOurs);
-    const ours = jawPermission(USER, EXECUTOR, EXPIRY, detail, PICK);
+    const ours = jawPermission(USER, GUARD, EXPIRY, detail, PICK);
     expect(jaw.relay[0].url).toBe("https://api.justaname.id/proxy/v1/permissions");
     expect(jaw.relay[0].method).toBe("POST");
     expect(jaw.relay[0].headers).toEqual({
@@ -348,7 +345,7 @@ describe("JAW's own grant, run against a fake bundler and relay, next to the one
     expect(JSON.parse(jaw.relay[0].body)).toEqual({
       permissionId: jaw.response.permissionId,
       account: USER,
-      spender: EXECUTOR,
+      spender: GUARD,
       start: PICK.start,
       end: EXPIRY,
       salt: `0x${PICK.salt.toString(16)}`,
@@ -369,14 +366,14 @@ describe("JAW's own grant, run against a fake bundler and relay, next to the one
   });
 
   it("without an API key: the same request, no x-api-key", async () => {
-    const ours = jawPermission(USER, EXECUTOR, EXPIRY, TEMPLATES.save, PICK);
+    const ours = jawPermission(USER, GUARD, EXPIRY, TEMPLATES.save, PICK);
     const { seen } = await ourRelayRequest(`0x${"11".repeat(32)}`, ours, undefined);
     expect(seen.headers).toEqual({ accept: "application/json, text/plain, */*", "content-type": "application/json" });
   });
 
   it("a crowded bundle: JAW takes the first PermissionApproved the manager logged; ours does the same, or finds its own", async () => {
     const someoneElse = getAddress("0x00000000000000000000000000000000000a11ce");
-    const theirs = contractPermission(jawPermission(someoneElse, EXECUTOR, EXPIRY, TEMPLATES.save, PICK));
+    const theirs = contractPermission(jawPermission(someoneElse, GUARD, EXPIRY, TEMPLATES.save, PICK));
     const theirLog = approvedLog(theirs);
     const transfer = {
       address: USDC.address,
@@ -395,7 +392,7 @@ describe("JAW's own grant, run against a fake bundler and relay, next to the one
     const spoof = approvedLog(theirs, USDC.address, `0x${"33".repeat(32)}`);
     const logsFor = (approved: OnChain) => [transfer, revoked, spoof, theirLog, approvedLog(approved)];
     const jaw = await jawGrant(TEMPLATES.save, PICK, logsFor);
-    const ours = jawPermission(USER, EXECUTOR, EXPIRY, TEMPLATES.save, PICK);
+    const ours = jawPermission(USER, GUARD, EXPIRY, TEMPLATES.save, PICK);
 
     expect(jaw.response.permissionId).toBe(theirLog.topics[1]);
     expect(permissionIdFromReceipt(jaw.logs)).toBe(jaw.response.permissionId);
@@ -406,7 +403,7 @@ describe("JAW's own grant, run against a fake bundler and relay, next to the one
   it("no PermissionApproved from the manager: JAW and ours fail with the same words", async () => {
     const someoneElse = getAddress("0x00000000000000000000000000000000000a11ce");
     const spoof = approvedLog(
-      contractPermission(jawPermission(someoneElse, EXECUTOR, EXPIRY, TEMPLATES.save, PICK)),
+      contractPermission(jawPermission(someoneElse, GUARD, EXPIRY, TEMPLATES.save, PICK)),
       USDC.address,
     );
     await expect(jawGrant(TEMPLATES.save, PICK, () => [spoof])).rejects.toThrow(
@@ -419,14 +416,14 @@ describe("JAW's own grant, run against a fake bundler and relay, next to the one
 describe("the approve call against the SDK's exported builder", () => {
   for (const [name, detail] of Object.entries(TEMPLATES)) {
     it(`${name}: buildGrantPermissionCall with the same start and salt is our approve call`, () => {
-      const jaw = withJawClock(PICK, () => buildGrantPermissionCall(USER, EXECUTOR, EXPIRY, detail));
-      expect(approveCall(jawPermission(USER, EXECUTOR, EXPIRY, detail, PICK))).toEqual({ ...jaw, value: 0n });
+      const jaw = withJawClock(PICK, () => buildGrantPermissionCall(USER, GUARD, EXPIRY, detail));
+      expect(approveCall(jawPermission(USER, GUARD, EXPIRY, detail, PICK))).toEqual({ ...jaw, value: 0n });
     });
   }
 
   it("JAW's revoke, rebuilt from our relay record, revokes exactly the struct our batch approved", () => {
     for (const detail of Object.values(TEMPLATES)) {
-      const p = jawPermission(USER, EXECUTOR, EXPIRY, detail, PICK);
+      const p = jawPermission(USER, GUARD, EXPIRY, detail, PICK);
       const revoke = buildRevokePermissionCall(relayRecord(`0x${"44".repeat(32)}`, p, 8453));
       expect(revoke.data).toBe(
         encodeFunctionData({ abi: permissionManagerAbi, functionName: "revoke", args: [contractPermission(p)] }),
@@ -437,10 +434,10 @@ describe("the approve call against the SDK's exported builder", () => {
 
   it("refuses a call with neither a selector nor a signature, as JAW's grant does", () => {
     const detail = { calls: [{ target: USDC.address }] } as PermissionsDetail;
-    expect(() => jawPermission(USER, EXECUTOR, EXPIRY, detail, PICK)).toThrow(
+    expect(() => jawPermission(USER, GUARD, EXPIRY, detail, PICK)).toThrow(
       "Either selector or functionSignature must be provided for call permission",
     );
-    expect(() => withJawClock(PICK, () => buildGrantPermissionCall(USER, EXECUTOR, EXPIRY, detail))).toThrow(
+    expect(() => withJawClock(PICK, () => buildGrantPermissionCall(USER, GUARD, EXPIRY, detail))).toThrow(
       "Either selector or functionSignature must be provided for call permission",
     );
   });
@@ -466,7 +463,7 @@ describe("addOwnerAddress(manager): JAW's call, and when the batch needs it", ()
       if (method === "eth_call") return encodeAbiParameters([{ type: "address" }], [impl]); // the factory's getImplementation
       throw new Error(`unexpected ${method}`);
     };
-    const approve = approveCall(jawPermission(USER, EXECUTOR, EXPIRY, TEMPLATES.save, PICK));
+    const approve = approveCall(jawPermission(USER, GUARD, EXPIRY, TEMPLATES.save, PICK));
     const { calls } = await prepareCallsForExecution(fakeAccount([]), [approve], { id: 8453, rpcUrl: RPC }, {
       address: USER,
     } as never);
@@ -497,23 +494,25 @@ describe("addOwnerAddress(manager): JAW's call, and when the batch needs it", ()
 });
 
 describe("oneTapGrantCalls: one batch, one Face ID", () => {
-  const grant = (detail: PermissionsDetail, account: Address = USER, spender: Address = EXECUTOR) =>
+  const grant = (detail: PermissionsDetail, account: Address = USER, spender: Address = GUARD) =>
     jawPermission(account, spender, EXPIRY, detail, PICK);
-  const registered = (data: Hex) => {
-    const { functionName, args } = decodeFunctionData({ abi: gooseExecutorAbi, data });
-    expect(functionName).toBe("registerApproved");
-    return (args as readonly Hex[])[0];
+  const registered = (data: Hex, job: string) => {
+    const { functionName, args } = decodeFunctionData({ abi: guardAbi, data });
+    expect(functionName).toBe("register");
+    const [id, permission] = args as readonly [number, Hex];
+    expect(JOBS[id]).toBe(job);
+    return permission;
   };
 
-  it("owner call, then each approve, then each registration carrying the permission exactly as the manager logs it", () => {
+  it("owner call, then each approve, then each registration, as its own job, with the permission as the manager logs it", () => {
     const save = grant(TEMPLATES.save);
     const sell = grant(TEMPLATES.sell);
     const calls = oneTapGrantCalls(USER, [save, sell], [addManagerOwnerCall(USER)]);
-    expect(calls.map((c) => c.to)).toEqual([USER, MANAGER, MANAGER, EXECUTOR, EXECUTOR]);
+    expect(calls.map((c) => c.to)).toEqual([USER, MANAGER, MANAGER, GUARD, GUARD]);
     expect(calls[1]).toEqual(approveCall(save));
     expect(calls[2]).toEqual(approveCall(sell));
-    expect(registered(calls[3].data)).toBe(approvedLog(contractPermission(save)).data);
-    expect(registered(calls[4].data)).toBe(approvedLog(contractPermission(sell)).data);
+    expect(registered(calls[3].data, "save")).toBe(approvedLog(contractPermission(save)).data);
+    expect(registered(calls[4].data, "sell")).toBe(approvedLog(contractPermission(sell)).data);
     expect(calls.every((c) => c.value === 0n)).toBe(true);
   });
 
@@ -536,7 +535,7 @@ describe("oneTapGrantCalls: one batch, one Face ID", () => {
       data: encodeFunctionData({ abi: jawAccountAbi, functionName: "addOwnerAddress", args: [USDC.address] }),
     };
     expect(() => oneTapGrantCalls(USER, [save], [other])).toThrow("Blocked: unexpected owner change");
-    expect(() => oneTapGrantCalls(USER, [save], [addManagerOwnerCall(EXECUTOR)])).toThrow(
+    expect(() => oneTapGrantCalls(USER, [save], [addManagerOwnerCall(GUARD)])).toThrow(
       "Blocked: unexpected owner change",
     );
     expect(() => oneTapGrantCalls(USER, [save], [addManagerOwnerCall(USER), addManagerOwnerCall(USER)])).toThrow(
@@ -546,7 +545,7 @@ describe("oneTapGrantCalls: one batch, one Face ID", () => {
 });
 
 describe("storePermissionInRelay: the relay's answers", () => {
-  const p = jawPermission(USER, EXECUTOR, EXPIRY, TEMPLATES.save, PICK);
+  const p = jawPermission(USER, GUARD, EXPIRY, TEMPLATES.save, PICK);
   const answer = (status: number, body: unknown) =>
     (async () => new Response(JSON.stringify(body), { status })) as typeof fetch;
 

@@ -5,20 +5,18 @@ import {
   atText,
   beforeFreeze,
   defaultNumbers,
-  nyDay,
+  nextRound,
   planNext,
+  REBALANCE_GAP_SEC,
+  REBALANCE_SESSION_SEC,
   rebalanceCheckAt,
   weekendCard,
   whenText,
   type NextInput,
 } from "@/lib/agents/next";
 import { rebalanceOptions } from "@/lib/agents/mix";
-import { JOBS, type AgentJob } from "@/lib/agents/permissions";
-import { USDC } from "@/lib/tokens/registry";
 
 const usdc = (x: number) => BigInt(Math.round(x * 1e6));
-const byJob = <T>(f: (job: AgentJob) => T) =>
-  Object.fromEntries(JOBS.map((job) => [job, f(job)])) as Record<AgentJob, T>;
 const price = (usd: number) => BigInt(Math.round(usd * 1e8));
 const free = (reserveId: number, usd: number, p: number) => ({
   reserveId,
@@ -38,14 +36,10 @@ function input(over: Partial<NextInput> = {}): NextInput {
     debtUsd: 600,
     holdings: [free(0, 5_000, 250), free(5, 5_000, 180)],
     mixBps: [5_000, 0, 0, 0, 0, 5_000, 0],
-    left: byJob(() => null),
-    capRaw: { save: usdc(1_000), protect: usdc(300), sell: usdc(300), rebalance: usdc(10_000), entry: usdc(1_000) },
-    capMaxRaw: usdc(10_000),
     numbers: defaultNumbers(rebalanceOptions()),
-    rebalanceDay: 0,
+    pacing: { sessionAt: 0, mixSetAt: 0 },
     rescuing: false,
     sellOn: false,
-    pricesHeld: false,
     plan: null,
     ...over,
   };
@@ -77,26 +71,18 @@ describe("agentNexts: each agent's rule on live data", () => {
     expect(agentNexts(input({ debtUsd: 1_250, rescuing: true })).protect).toEqual({
       idle: "Watch. Protector steps in at 1.03",
     });
-    // No cash: a sale follows when selling is on, never while prices are held.
+    // No cash: a sale follows when selling is on, weekends too (decision 7: no line says it waits for prices to reopen).
     expect(agentNexts({ ...under, savingsRaw: 0n }).protect).toEqual({ idle: "Act. No cash to repay with" });
     expect(agentNexts({ ...under, savingsRaw: 0n, sellOn: true }).protect).toEqual({
       will: "sells backing stock to repay",
       would: "Would sell backing stock to repay",
     });
-    expect(agentNexts({ ...under, savingsRaw: 0n, sellOn: true, pricesHeld: true }).protect).toEqual({
-      idle: "Act. Sells backing stock when prices reopen",
+    // No amount limit and no smallest repay (decision 9): a cent under the line is repaid too.
+    expect(agentNexts(input({ debtUsd: 1_400 / 1.0299 })).protect).toMatchObject({
+      will: expect.stringMatching(/^repays/),
     });
-    // No amount limit: a used-up limit is only a capped test deploy's, and Protect goes on at its next run.
-    const used = {
-      ...under.left,
-      protect: [
-        { token: USDC.address, leftRaw: 0n },
-        { token: USDC.address, leftRaw: 0n },
-      ],
-    };
-    expect(agentNexts({ ...under, left: used }).protect).toEqual({ idle: "Act. Repays on its next run" });
-    for (const n of [agentNexts(under), agentNexts({ ...under, left: used })])
-      expect(JSON.stringify(n.protect)).not.toMatch(/limit/i);
+    for (const n of [agentNexts(under), agentNexts({ ...under, savingsRaw: 0n, sellOn: true })])
+      expect(JSON.stringify(n.protect)).not.toMatch(/limit|next run|reopen|weekend/i);
   });
 
   it("warns in Act from a plain health check: down to Protector's line while it's on, all the way while it's off", () => {
@@ -164,18 +150,25 @@ describe("agentNexts: each agent's rule on live data", () => {
     expect(beforeFreeze(100 - 3601, 100, 3600)).toBe(false);
   });
 
-  it("Rebalancer checks its mix at the next window, trades when a stock breaks its band, and waits while the credit is in Act", () => {
-    // Thursday 10:00 New York, in the viewer's own words.
+  it("Rebalancer checks its mix at the next round, trades when a stock breaks its band, and waits while the credit is in Act", () => {
+    // The next round, 10 minutes on the clock's tens, in the viewer's own words.
     expect(agentNexts(input()).rebalance).toEqual({
-      idle: `On target. Checks ${whenText(Date.UTC(2025, 9, 16, 14) / 1000, WED_NOON)}`,
+      idle: `On target. Checks ${whenText(nextRound(WED_NOON), WED_NOON)}`,
     });
     expect(agentNexts(input({ mixBps: null })).rebalance).toEqual({ idle: "No mix yet" });
     // 60/40 against a 50/50 mix: Apple broke out by 10 points.
     const drifted = input({ holdings: [free(0, 6_000, 250), free(5, 4_000, 180)] });
     const n = agentNexts(drifted).rebalance;
     expect(n).toMatchObject({ would: expect.stringMatching(/^Would trade \$\d+(\.\d\d)?$/) });
-    expect("will" in n && n.will).toMatch(/^trades \$\d+(\.\d\d)? (today|tomorrow) /);
-    // Watch is fine for the Rebalancer too: GooseExecutor waits only in Act (RebalanceJob.ACT_HF, 1.1), not down to
+    expect("will" in n && n.will).toMatch(/^trades \$\d+(\.\d\d)? today /);
+    // Paced: a session that closed an hour ago waits for its 20 hours, unless the user set a new mix since.
+    const paced = { ...drifted, pacing: { sessionAt: WED_NOON - 2 * 3_600, mixSetAt: 0 } };
+    expect("will" in agentNexts(paced).rebalance && agentNexts(paced).rebalance).toMatchObject({
+      will: expect.stringMatching(/^trades \$\d+(\.\d\d)? tomorrow /),
+    });
+    const fresh = { ...paced, pacing: { ...paced.pacing, mixSetAt: WED_NOON - 60 } };
+    expect(agentNexts(fresh).rebalance).toEqual(agentNexts(drifted).rebalance);
+    // Watch is fine for the Rebalancer too: it waits only in Act (1.10, GooseGuard's invest health), not down to
     // Protect's line (1.03): at 1.077 it waits.
     expect(agentNexts({ ...drifted, debtUsd: 1_000 }).rebalance).toMatchObject({
       would: expect.stringMatching(/^Would trade/),
@@ -249,27 +242,33 @@ describe("agentNexts: each agent's rule on live data", () => {
   });
 });
 
-describe("the Rebalancer's next window", () => {
-  it("counts New York days as the executor's calendar does", () => {
-    expect(nyDay(WED_NOON)).toBe(Date.UTC(2025, 9, 15) / 86_400_000);
-    // 02:00 UTC Thursday is still Wednesday evening in New York.
-    expect(nyDay(Date.UTC(2025, 9, 16, 2) / 1000)).toBe(Date.UTC(2025, 9, 15) / 86_400_000);
+describe("the Rebalancer's pacing (GooseGuard, decision 4): at most once a day, unless the user sets a new mix", () => {
+  it("rounds are 10 minutes apart, on the clock's tens", () => {
+    expect(nextRound(WED_NOON)).toBe(WED_NOON + 600);
+    expect(nextRound(WED_NOON + 1)).toBe(WED_NOON + 600);
+    expect(nextRound(WED_NOON + 599)).toBe(WED_NOON + 600);
   });
 
-  it("is 10:00 New York on the next weekday whose window hasn't passed or run", () => {
-    const at = (y: number, m: number, d: number, utcHour: number) => Date.UTC(y, m, d, utcHour) / 1000;
-    // Wednesday noon: today's window has passed, so Thursday 10:00 (14:00 UTC, daylight time).
-    expect(rebalanceCheckAt(WED_NOON, 0)).toBe(at(2025, 9, 16, 14));
-    // Wednesday 9:00: today, unless it already traded today.
-    expect(rebalanceCheckAt(at(2025, 9, 15, 13), 0)).toBe(at(2025, 9, 15, 14));
-    expect(rebalanceCheckAt(at(2025, 9, 15, 13), nyDay(WED_NOON))).toBe(at(2025, 9, 16, 14));
-    // Friday afternoon: Monday.
-    expect(rebalanceCheckAt(at(2025, 9, 17, 20), 0)).toBe(at(2025, 9, 20, 14));
-    // Standard time in December: 15:00 UTC.
-    expect(rebalanceCheckAt(at(2025, 11, 3, 12), 0)).toBe(at(2025, 11, 3, 15));
-    // Not before a later day (a top-up counted today): Wednesday 9:00 waits for Thursday; Friday's for Monday.
-    expect(rebalanceCheckAt(at(2025, 9, 15, 13), 0, nyDay(WED_NOON) + 1)).toBe(at(2025, 9, 16, 14));
-    expect(rebalanceCheckAt(at(2025, 9, 17, 13), 0, nyDay(at(2025, 9, 17, 13)) + 1)).toBe(at(2025, 9, 20, 14));
+  it("trades at the next round with no session yet, inside its hour, or after 20 hours; else when the 20 hours end", () => {
+    const at = (sessionAt: number, mixSetAt = 0) => rebalanceCheckAt(WED_NOON, { sessionAt, mixSetAt });
+    expect(at(0)).toBe(nextRound(WED_NOON));
+    // The session opened 20 minutes ago: the next round is still in its hour.
+    expect(at(WED_NOON - 1_200)).toBe(nextRound(WED_NOON));
+    // Opened 55 minutes ago: the next round falls past its hour, so it waits for the 20 hours.
+    expect(at(WED_NOON - 3_300)).toBe(nextRound(WED_NOON - 3_300 + REBALANCE_GAP_SEC - 1));
+    expect(at(WED_NOON - 3_300) - (WED_NOON - 3_300 + REBALANCE_GAP_SEC)).toBe(300); // the first round after
+    // Opened 5 hours ago: the first round from 20 hours after it opened.
+    expect(at(WED_NOON - 5 * 3_600)).toBe(WED_NOON - 5 * 3_600 + REBALANCE_GAP_SEC);
+    // 20 hours on: a new session at the next round.
+    expect(at(WED_NOON - REBALANCE_GAP_SEC)).toBe(nextRound(WED_NOON));
+    // A new mix since the session opened: the next round, whatever the wait.
+    expect(at(WED_NOON - 5 * 3_600, WED_NOON - 60)).toBe(nextRound(WED_NOON));
+    expect(REBALANCE_SESSION_SEC).toBe(3_600);
+  });
+
+  it("has no calendar: a Saturday is like any day (decision 7)", () => {
+    const sat = Date.UTC(2025, 9, 18, 16) / 1000;
+    expect(rebalanceCheckAt(sat, { sessionAt: 0, mixSetAt: 0 })).toBe(nextRound(sat));
   });
 
   it("says when in the viewer's own day", () => {

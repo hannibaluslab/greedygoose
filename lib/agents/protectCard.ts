@@ -1,5 +1,4 @@
 import { NOT_LIVE, type ActCard, type Next, type WeekendCard } from "@/lib/agents/list";
-import { atText } from "@/lib/agents/next";
 import type { AgentStatus } from "@/lib/agents/status";
 import { formatUsdTrim } from "@/lib/formatting";
 import { fallTo } from "@/lib/risk/health";
@@ -39,8 +38,8 @@ export type ProtectCardInput = {
   /** Protect as one agent: its two jobs together (agentStatus), as its sheet shows it. */
   status: AgentStatus;
   /**
-   * Which of Protect's jobs JAW granted that the executor doesn't run yet (its registration is still to go): repaying
-   * from cash first, else selling; null when neither waits.
+   * Which of Protect's jobs JAW granted that the Guard doesn't run yet (its registration is still to go): repaying from
+   * cash first, else selling; null when neither waits.
    */
   waiting: "protect" | "sell" | null;
   /** The credit health; null when nothing is owed. */
@@ -49,9 +48,8 @@ export type ProtectCardInput = {
   hfDayAgo?: number | null;
   /** A rescue is under way: Protect acts below the target until it's back. */
   rescuing: boolean;
-  /** Failed runs in a row (the account's), and when the runner tries again. */
-  fails: number;
-  cooldownUntil: number;
+  /** Protect's moves GooseGuard refused in a row (lib/agents/feed.ts `refusedInARow`); each is tried again next round. */
+  refused: number;
   /** When Protect stopped without the user turning it off; null when it didn't. */
   stoppedAt: number | null;
   /** The soonest end of its grants while it has one. */
@@ -62,14 +60,14 @@ export type ProtectCardInput = {
   weekend: WeekendCard | null;
   /** Protect's next move from its rule (agentNexts). */
   next: Next;
-  /** Protect's line and target (the executor's numbers). */
+  /** Protect's line and target: the account's own (GooseGuard's `linesOf`), 1.03 and 1.12 unless it set others. */
   triggerHf: number;
   targetHf: number;
 };
 
 /** A grant this close to its end says so. */
 const ENDS_SOON_SEC = 7 * 86_400;
-/** Failed runs in a row before the card says so (the executor switches the account off at eight). */
+/** Refused moves in a row before the card says so (nothing switches itself off: each is tried again next round). */
 const RETRYING_AT = 3;
 
 const DATE = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
@@ -120,7 +118,7 @@ export function protectCard(i: ProtectCardInput): ProtectCardModel {
   const room = i.hf !== null ? `Your stocks can fall ${fallPct(i.hf, i.triggerHf)}% before that.` : null;
 
   if (!i.live) return card("Soon", "neutral", NOT_LIVE, null, { guarded: false });
-  // 1. JAW granted it and the executor doesn't run it yet: its registration is still to go.
+  // 1. JAW granted it and the Guard doesn't run it yet: its registration is still to go.
   if (i.waiting === "protect" || (i.waiting === null && i.status === "starting"))
     return card("Needs you", "needs", "One more Face ID turns it on.", "Until then, nothing steps in.", {
       guarded: false,
@@ -133,7 +131,7 @@ export function protectCard(i: ProtectCardInput): ProtectCardModel {
       "Until then, it repays from your cash only.",
     );
   if (i.status === "off") {
-    // 2. Stopped on its own: its year ran out, its runs kept failing, or it can no longer act on the account.
+    // 2. Stopped on its own: its year ran out.
     if (i.stoppedAt !== null)
       return card("Stopped", "needs", `Stopped on ${date(i.stoppedAt)}. Nothing steps in now.`, null, {
         guarded: false,
@@ -149,15 +147,15 @@ export function protectCard(i: ProtectCardInput): ProtectCardModel {
   // 5. A rescue is under way: back to the target.
   if (i.rescuing)
     return card("Working", "working", `Bringing your credit back to ${target}.`, nextLine(i.next), { working: true });
-  // 6. Runs keep failing.
-  if (i.fails >= RETRYING_AT) {
-    const retry =
-      i.cooldownUntil > i.nowSec
-        ? `Nothing moved. They try again ${atText(i.cooldownUntil, i.nowSec)}.`
-        : "Nothing moved. They try again on the next run.";
-    return card("Retrying", "watch", `Your agents’ last ${i.fails} runs didn’t go through.`, retry);
-  }
-  // Under Protect's line with no rescue started yet: about to step in, or held back (no cash, selling off, prices held).
+  // 6. Its moves keep being refused: each is tried again at the next round.
+  if (i.refused >= RETRYING_AT)
+    return card(
+      "Retrying",
+      "watch",
+      `Your agents’ last ${i.refused} runs didn’t go through.`,
+      "Nothing moved. They try again next round.",
+    );
+  // Under Protect's line with no rescue started yet: about to step in, or held back (no cash, selling off).
   if (i.hf !== null && i.hf < i.triggerHf)
     return "will" in i.next
       ? card("On", "act", `Your credit is under ${line}.`, nextLine(i.next))
@@ -165,7 +163,8 @@ export function protectCard(i: ProtectCardInput): ProtectCardModel {
   // 7. The credit is in Act, above Protect's line.
   if (status === "act")
     return card("On", "on", `Steps in if your credit falls under ${line}.`, actGap ?? nextLine(i.next));
-  // 8. Prices pause soon, and a drop then could reach Aave's line.
+  // 8. Aave's stock prices pause soon, and a drop at the reopen could reach Aave's line. The agents don't stop then
+  // (decision 7): the card only says the prices pause.
   if (i.weekend) {
     const w = i.weekend;
     return card(

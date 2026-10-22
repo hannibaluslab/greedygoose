@@ -5,9 +5,9 @@ import { keepPreviousData, useQueries, useQuery, useQueryClient } from "@tanstac
 import { useBlockNumber, usePublicClient } from "wagmi";
 import type { Address, Hex, Log } from "viem";
 import { CHAIN_ID } from "@/lib/chain";
-import { GOOSE_EXECUTOR, GOOSE_EXECUTOR_BLOCK } from "@/lib/agents/config";
+import { GOOSE_GUARD, GOOSE_GUARD_BLOCK } from "@/lib/agents/config";
 import { decodeAgentLogs, type AgentEvent, type AgentLog } from "@/lib/agents/events";
-import { describeAgentEvent, type AgentMove, type MoveContext } from "@/lib/agents/feed";
+import { collapseRefused, describeAgentEvent, type AgentMove, type MoveContext } from "@/lib/agents/feed";
 import type { AgentJob } from "@/lib/agents/permissions";
 import { LOG_CHUNK, WEEK_BLOCKS, logChunks, readAgentLogs, readMoveContext } from "@/lib/agents/history";
 
@@ -26,54 +26,54 @@ export type AgentRow = AgentMove & { key: string; time: number; hash: Hex; event
 type Switched = { on: boolean; byUser: boolean; at: number };
 
 /**
- * What GooseExecutor did for one account, read from the chain with no indexer (D12): its events indexed by the
- * account, with getLogs in chunks, newest first, then each move's block and the reads around it, a week at a time
- * back to the executor's deploy block. Nothing is read until an executor is configured.
+ * What GooseGuard did for one account, read from the chain with no indexer (D12): its events indexed by the account,
+ * with getLogs in chunks, newest first, then each move's block and the reads around it, a week at a time back to the
+ * Guard's deploy block. Nothing is read until a Guard is configured.
  */
 export function useAgentFeed(account: Address) {
-  const executor = GOOSE_EXECUTOR;
+  const guard = GOOSE_GUARD;
   const client = usePublicClient({ chainId: CHAIN_ID });
   const queryClient = useQueryClient();
   const [weeks, setWeeks] = useState(1);
-  const head = useBlockNumber({ chainId: CHAIN_ID, query: { enabled: !!executor, refetchInterval: 20_000 } });
+  const head = useBlockNumber({ chainId: CHAIN_ID, query: { enabled: !!guard, refetchInterval: 20_000 } });
 
   // On a chunk boundary, so the window's oldest chunk is the same request until the head crosses the next one.
   const from = useMemo(() => {
     if (head.data === undefined) return undefined;
     const back = head.data - BigInt(weeks) * WEEK_BLOCKS;
     const aligned = back > 0n ? (back / LOG_CHUNK) * LOG_CHUNK : 0n;
-    return aligned > GOOSE_EXECUTOR_BLOCK ? aligned : GOOSE_EXECUTOR_BLOCK;
+    return aligned > GOOSE_GUARD_BLOCK ? aligned : GOOSE_GUARD_BLOCK;
   }, [head.data, weeks]);
 
   const logs = useQuery({
-    queryKey: ["agentLogs", executor, account, String(from), String(head.data)],
-    enabled: !!executor && !!client && from !== undefined,
+    queryKey: ["agentLogs", guard, account, String(from), String(head.data)],
+    enabled: !!guard && !!client && from !== undefined,
     placeholderData: keepPreviousData,
     queryFn: async () => {
       const to = head.data!;
       const settled = to - SETTLED_BLOCKS;
       const read = (c: { from: bigint; to: bigint }) =>
         queryClient.fetchQuery({
-          queryKey: ["agentLogChunk", executor, account, String(c.from), String(c.to)],
+          queryKey: ["agentLogChunk", guard, account, String(c.from), String(c.to)],
           staleTime: c.to <= settled ? Infinity : 0,
           gcTime: c.to <= settled ? Infinity : undefined,
-          queryFn: () => readAgentLogs(client!, { executor: executor!, account, ...c }),
+          queryFn: () => readAgentLogs(client!, { guard: guard!, account, ...c }),
         });
       const chunks = logChunks(from!, to);
       const out: Log[] = [];
       for (let i = 0; i < chunks.length; i += PARALLEL)
         out.push(...(await Promise.all(chunks.slice(i, i + PARALLEL).map(read))).flat());
-      return decodeAgentLogs(out, executor!, account).sort((a, b) =>
+      return decodeAgentLogs(out, guard!, account).sort((a, b) =>
         a.blockNumber === b.blockNumber ? b.logIndex - a.logIndex : a.blockNumber > b.blockNumber ? -1 : 1,
       );
     },
   });
 
-  // A run deferred to the next block isn't a move: nothing to read for it.
-  const events = useMemo(() => (logs.data ?? []).filter((e) => e.kind !== "run-deferred"), [logs.data]);
+  // Each agent's refusals in a row are one row, the newest, with their count; the rest are read as they are.
+  const events = useMemo(() => collapseRefused(logs.data ?? []), [logs.data]);
   const moves = useQueries({
     queries: events.map((e: AgentLog) => ({
-      queryKey: ["agentMove", executor, e.key],
+      queryKey: ["agentMove", guard, e.key],
       enabled: !!client,
       staleTime: Infinity,
       queryFn: () => readMoveContext(client!, { account }, e),
@@ -81,7 +81,7 @@ export function useAgentFeed(account: Address) {
   });
 
   // When the window starts, so the feed shows no older moves of the user's own until it reads that far back.
-  const more = from !== undefined && from > GOOSE_EXECUTOR_BLOCK;
+  const more = from !== undefined && from > GOOSE_GUARD_BLOCK;
   const start = useQuery({
     queryKey: ["blockTime", String(from)],
     enabled: !!client && more,
@@ -93,14 +93,13 @@ export function useAgentFeed(account: Address) {
     () =>
       events.flatMap((e, i) => {
         const m = moves[i]?.data;
-        const move = m && describeAgentEvent(e, m.time, m.ctx);
+        const move = m && describeAgentEvent(e, m.ctx);
         return move ? [{ ...move, key: e.key, time: m.time * 1000, hash: e.txHash, event: e, ctx: m.ctx }] : [];
       }),
     [events, moves],
   );
 
-  // Each job's newest switch: on, or off by the user (revoked) or by the executor (its grant ran out, it can't act, or
-  // its runs kept failing).
+  // Each job's newest switch: on, or off by the user (only the account itself unregisters a job in the Guard).
   const switched = useMemo(() => {
     const out: Partial<Record<AgentJob, Switched>> = {};
     const seen = new Set<AgentJob>();
@@ -108,15 +107,15 @@ export function useAgentFeed(account: Address) {
       if ((e.kind !== "job-on" && e.kind !== "job-off") || seen.has(e.job)) return;
       seen.add(e.job);
       const time = moves[i]?.data?.time; // until its block is read, the job waits rather than show an older switch
-      if (time)
-        out[e.job] = { on: e.kind === "job-on", byUser: e.kind === "job-off" && e.reason === "revoked", at: time };
+      if (time) out[e.job] = { on: e.kind === "job-on", byUser: e.kind === "job-off", at: time };
     });
     return out;
   }, [events, moves]);
 
-  if (!executor) {
+  if (!guard) {
     return {
       rows: [],
+      events: [] as typeof events,
       switched: {} as Partial<Record<AgentJob, Switched>>,
       since: 0,
       more: false,
@@ -128,6 +127,8 @@ export function useAgentFeed(account: Address) {
   }
   return {
     rows,
+    /** The events read so far, newest first, each agent's refusals in a row as one (`collapseRefused`). */
+    events,
     /** Each job's newest switch in the weeks read so far. */
     switched,
     /** The user's own moves older than this (ms) wait for "Show earlier", so the two lists cover the same days. */

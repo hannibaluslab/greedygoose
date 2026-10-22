@@ -99,17 +99,32 @@ type RepaySign =
   | { via: "backing"; input: SellInput };
 
 /** What the Repay sheet would sign for the row and amount on screen, once it's ready (null while it isn't). */
-export function repaySign(view: RepayView, user: `0x${string}`, debtRaw: bigint): RepaySign | null {
+export function repaySign(view: RepayView, user: `0x${string}`, debtRaw: bigint, rescuing = false): RepaySign | null {
   if (!view.ready) return null;
   const { source, sellPlan, quote } = view;
   if (source.kind === "cash") {
     return {
       via: "cash",
-      input: { user, all: view.all, coversAll: view.coversAll, amount: view.repayUsd, amountRaw: view.repayRaw },
+      input: {
+        user,
+        all: view.all,
+        coversAll: view.coversAll,
+        amount: view.repayUsd,
+        amountRaw: view.repayRaw,
+        rescuing,
+      },
     };
   }
   if (!source.stock || !source.holding || !sellPlan || !quote) return null;
-  const sale = { user, stock: source.stock, quote, plan: sellPlan, oraclePriceUsd: source.holding.priceUsd, debtRaw };
+  const sale = {
+    user,
+    stock: source.stock,
+    quote,
+    plan: sellPlan,
+    oraclePriceUsd: source.holding.priceUsd,
+    debtRaw,
+    rescuing,
+  };
   return source.kind === "free"
     ? { via: "free", input: { ...sale, feeFromSale: source.feeFromSale } }
     : { via: "backing", input: sale };

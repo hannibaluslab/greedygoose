@@ -1,14 +1,12 @@
-import { BaseError, ContractFunctionRevertedError, ContractFunctionZeroDataError } from "viem";
-import { atText, nyDay, rebalanceCheckAt } from "@/lib/agents/next";
-import { waitingRaw as waitingOf, type TopUpsState } from "@/lib/agents/rules/topUps";
 import { formatUsdTrim } from "@/lib/formatting";
 import { USDC } from "@/lib/tokens/registry";
 
 /*
  * "Top-ups go into my mix", a Rebalance setting (SPEC, Agents), as its card in Rebalance's sheet shows it (boards
  * 7e–7h): the switch, Keep as cash, the line under it and at most one note. Pure, so the sheet, the dev gallery and the
- * tests draw every state with the same words. A top-up fills cash up to Keep first, and only the part above goes into
- * the mix, at the next market morning's check.
+ * tests draw every state with the same words. With it on, GooseGuard's wallet rule (decision 1): Save fills savings up
+ * to Keep, and the wallet's cash above $1 and above what Keep still needs goes into the mix at the next round. Savings
+ * never go into stock.
  */
 
 /** Keep as cash: $500 to start (board 7f), whole dollars, $0 allowed, at most $1,000,000. */
@@ -21,35 +19,34 @@ export const TOP_UPS_TITLE = "Top-ups go into my mix";
 export const TOP_UPS_SUB = "Each top-up buys what’s furthest below its target.";
 export const KEEP_LABEL = "Keep as cash";
 
-/** Why the switch can't be used: no executor that counts top-ups yet, or earning has to come first (P3's fallback). */
+/** Why the switch can't be used: no Guard yet, or earning has to come first (P3's fallback). */
 const NOT_AVAILABLE = "Not available yet.";
 const EARNING_FIRST = "Turn on earning first.";
 
-/** The setting as the executor keeps it. */
+/** The setting as GooseGuard keeps it. */
 export type TopUpsSetting = { on: boolean; keepUsd: number };
 
 /** The setting on screen: Keep is null while its field is empty. */
 export type TopUpsChoice = { on: boolean; keepUsd: number | null };
 
-/** What the card reads besides what's typed: the executor's side (M5) and the account's. */
+/** What the card reads besides what's typed: the Guard's side and the account's. */
 export type TopUpsFacts = {
-  /** The executor counts top-ups (its `topUps(account)` read doesn't revert). */
+  /** A Guard is configured, so top-ups can be switched on. */
   available: boolean;
   /** Earning is off and can't be turned on in the same signature: the switch waits for it. */
   earningFirst: boolean;
-  /** What the executor has; null before it's read or while it isn't available. */
+  /** What the Guard has; null before it's read or while it isn't available. */
   saved: TopUpsSetting | null;
-  /** A counted top-up waiting for the next check, and when that check is. */
-  waiting: { usd: number; atSec: number } | null;
+  /** Cash in the wallet waiting to go into the mix at the next round (the Planner's `topUpsReady`). */
+  waiting: { usd: number } | null;
   /** The cash rate now ("4.2%"); null before it's read. */
   rate: string | null;
   debtUsd: number;
   /** Protect · sell runs, so Protect has stock to sell when cash runs out. */
   protectSells: boolean;
-  nowSec: number;
 };
 
-/** Before the executor counts top-ups (until M5): the switch says so, and nothing else shows. */
+/** Before a Guard is configured: the switch says so, and nothing else shows. */
 export const TOP_UPS_NOT_YET: Pick<TopUpsFacts, "available" | "earningFirst" | "saved" | "waiting"> = {
   available: false,
   earningFirst: false,
@@ -98,7 +95,7 @@ export function topUpsView(i: TopUpsFacts & TopUpsChoice): TopUpsView {
           ? {
               kind: "waiting",
               title: `${formatUsdTrim(i.waiting.usd)} waiting`,
-              line: `Goes into your mix ${atText(i.waiting.atSec, i.nowSec)}. It earns until then.`,
+              line: "Goes into your mix at the next round.",
             }
           : null;
   return { disabled, blocked, open: true, helper, note };
@@ -110,16 +107,16 @@ export function parseKeepUsd(text: string): number | null {
   return digits === "" ? null : Math.min(KEEP_MAX_USD, Number(digits));
 }
 
-/** Keep when the switch turns on: what the executor has while it's on, else $500 (the boards' default). */
+/** Keep when the switch turns on: what the Guard has while it's on, else $500 (the boards' default). */
 export const keepToStart = (saved: TopUpsSetting | null) => (saved?.on ? saved.keepUsd : KEEP_DEFAULT_USD);
 
-/** The choice the sheet opens on: what the executor has, off until it's read. */
+/** The choice the sheet opens on: what the Guard has, off until it's read. */
 export const choiceFrom = (saved: TopUpsSetting | null): TopUpsChoice => ({
   on: saved?.on ?? false,
   keepUsd: keepToStart(saved),
 });
 
-/** The setting Save sends (an empty Keep never saves); null while the executor's isn't read. */
+/** The setting Save sends (an empty Keep never saves); null while the Guard's isn't read. */
 export const settingFrom = (saved: TopUpsSetting | null, chosen: TopUpsChoice): TopUpsSetting | null =>
   saved ? { on: chosen.on, keepUsd: chosen.keepUsd ?? 0 } : null;
 
@@ -127,85 +124,30 @@ export const settingFrom = (saved: TopUpsSetting | null, chosen: TopUpsChoice): 
 export const keepText = (usd: number | null) => (usd === null ? "" : `$${usd.toLocaleString("en-US")}`);
 
 /**
- * Whether the choice on screen differs from what the executor has. Keep counts only while the setting is on (its
- * field is hidden while off); nothing changes while the setting can't be read.
+ * Whether the choice on screen differs from what the Guard has. Keep counts only while the setting is on (its field
+ * is hidden while off); nothing changes while the setting can't be read.
  */
 export function topUpsChanged(saved: TopUpsSetting | null, chosen: TopUpsChoice): boolean {
   if (!saved) return false;
   return chosen.on !== saved.on || (chosen.on && chosen.keepUsd !== saved.keepUsd);
 }
 
-/** `topUps(account)` as GooseExecutor returns it: on, day, keep, ready, today, mark, own (CashRules.TopUps). */
-type TopUpsTuple = readonly [boolean, number, number, bigint, bigint, bigint, bigint];
-
-/** What `topUps(account)` answered: the struct, or a revert (an executor without top-ups has no such getter). */
-export type TopUpsAnswer = { status: "success"; result: TopUpsTuple } | { status: "failure" };
-
-/** The executor itself reverted (it has no `topUps` getter), as opposed to Base not answering (a 429, a dropped call). */
-export const topUpsReverted = (error: unknown): boolean =>
-  error instanceof BaseError &&
-  !!error.walk((e) => e instanceof ContractFunctionRevertedError || e instanceof ContractFunctionZeroDataError);
-
-/**
- * A `topUps(account)` read as an answer: the struct (the last one Base gave, kept through a refetch that failed), a
- * revert, or undefined while Base hasn't answered. Base not answering is never "not available": read that way, Turn
- * off Rebalance would leave top-ups on, and the switch would say "Not available yet." on an executor that has them.
- */
-export function topUpsAnswerOf(data: TopUpsTuple | undefined, error: unknown): TopUpsAnswer | undefined {
-  if (data) return { status: "success", result: data };
-  return topUpsReverted(error) ? { status: "failure" } : undefined;
-}
-
-/** Top-ups as the app reads them on Base. */
+/** Top-ups as the app reads them on Base: GooseGuard's switch and Keep, and what waits to go in. */
 export type TopUpsRead = {
-  /** The executor counts top-ups: its `topUps(account)` didn't revert (the executor live today has none). */
+  /** A Guard is configured. */
   available: boolean;
   /** The account's own switch (`setTopUps`). */
   on: boolean;
   /** Keep as cash, USDC units. */
   keepRaw: bigint;
-  /** Counted and not in the mix yet: what's ready and today's count, after any fall since and within savings past Keep. */
+  /** Wallet cash that goes into the mix at the next round (the Planner's `topUpsReady`); 0 while off or unread. */
   waitingRaw: bigint;
-  /** When the last of it goes in: the next check for what's ready, the next market day's after today for today's. */
-  readyAtSec: number;
 };
 
 /**
- * The executor's counts for the account (lib/agents/rules/topUps.ts `TopUpsState`) while its switch is on; null while
- * it's off (nothing counts) or the executor doesn't count top-ups (a revert).
- */
-export function topUpsStateOf(answer: TopUpsAnswer): TopUpsState | null {
-  if (answer.status !== "success" || !answer.result[0]) return null;
-  const [, day, keep, ready, today, mark, own] = answer.result;
-  return { day, keepRaw: BigInt(keep), readyRaw: ready, todayRaw: today, markRaw: mark, ownRaw: own };
-}
-
-/**
- * Reads `topUps(account)` the way GooseExecutor will act on it (lib/agents/rules/topUps.ts `waitingRaw`): at New York
- * day `nyDay(nowSec)` with `savingsRaw` in savings, and Rebalance's last day (`rebalanceDay`, one batch a day). A
- * revert means the executor doesn't count top-ups: not available, nothing waits.
- */
-export function readTopUps(
-  answer: TopUpsAnswer,
-  ctx: { nowSec: number; savingsRaw: bigint; rebalanceDay: number },
-): TopUpsRead {
-  if (answer.status !== "success") return { available: false, on: false, keepRaw: 0n, waitingRaw: 0n, readyAtSec: 0 };
-  const [on, , keep] = answer.result;
-  const keepRaw = BigInt(keep);
-  const state = topUpsStateOf(answer);
-  if (!state) return { available: true, on, keepRaw, waitingRaw: 0n, readyAtSec: 0 };
-  const now = nyDay(ctx.nowSec);
-  const w = waitingOf(state, now, ctx.savingsRaw);
-  const waitingRaw = w.readyRaw + w.todayRaw;
-  const readyAtSec =
-    waitingRaw === 0n ? 0 : rebalanceCheckAt(ctx.nowSec, ctx.rebalanceDay, w.todayRaw > 0n ? now + 1 : 0);
-  return { available: true, on, keepRaw, waitingRaw, readyAtSec };
-}
-
-/**
  * What the card reads from Base (`TopUpsFacts`' chain side): before the read is in, the switch waits with nothing to
- * say; a revert says "Not available yet." Earning never comes first: turning top-ups on while earning is off grants
- * earning in the same signature (P3, useManageSave).
+ * say; with no Guard it says "Not available yet." Earning never comes first: turning top-ups on while earning is off
+ * grants earning in the same signature (P3, useManageSave).
  */
 export function chainFacts(
   read: TopUpsRead | null,
@@ -217,7 +159,7 @@ export function chainFacts(
     available: true,
     earningFirst: false,
     saved: { on: read.on, keepUsd: Math.floor(usd(read.keepRaw)) },
-    waiting: read.waitingRaw > 0n ? { usd: usd(read.waitingRaw), atSec: read.readyAtSec } : null,
+    waiting: read.on && read.waitingRaw > 0n ? { usd: usd(read.waitingRaw) } : null,
   };
 }
 

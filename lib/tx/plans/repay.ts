@@ -1,3 +1,4 @@
+import { endRescueCalls } from "@/lib/agents/settings";
 import { freeRepayActivity, freeRepayRaw, type SellPlan } from "@/lib/sell";
 import { quoteKey } from "@/lib/swap/buy";
 import { sellMinOut, type SellQuote } from "@/lib/swap/sell";
@@ -16,19 +17,29 @@ export type RepayInput = {
   amount: number;
   /** A chip's exact amount, or All's from the position on screen (all the cash, when it doesn't cover what's owed). */
   amountRaw: bigint;
+  /** A rescue is on: the repay ends it (`withEndRescue`). */
+  rescuing?: boolean;
 };
+
+/**
+ * A repay by hand ends a rescue Protect started (decision 5): GooseGuard's `endRescue()` goes first in the batch, sent
+ * by the account itself. It does nothing when no rescue is on, so it never fails the repay. None with no Guard.
+ */
+export const withEndRescue =
+  <P extends { user: `0x${string}`; rescuing?: boolean }>(batch: Batch<P>): Batch<P> =>
+  async (p) => [...endRescueCalls(p.user, !!p.rescuing), ...(await batch(p))];
 
 /**
  * What Repay signs (useTx), keyed by what shapes its batch: a chip by its exact amount; All by whether it covers
  * what's owed, and, when it doesn't, by the dollars on screen to the cent (the cash it spends), so a batch for other
- * cash is never signed.
+ * cash is never signed. The rescue ends with it (`withEndRescue`).
  */
 export const repayPlan = (p: RepayInput, batch: Batch<RepayInput>): TxPlan => ({
   key: p.all
     ? txKey("repay", p.user, "all", p.coversAll ? "full" : Math.round(p.amount * 100))
     : txKey("repay", p.user, p.amountRaw),
   user: p.user,
-  calls: () => batch(p),
+  calls: () => withEndRescue(batch)(p),
   activity: [{ kind: "repay", symbol: "USDC", amount: p.amount }],
 });
 
@@ -46,6 +57,8 @@ export type FreeRepayInput = {
   debtRaw: bigint;
   /** The cash can't keep the network-fee buffer, so the sale pays the fee. */
   feeFromSale: boolean;
+  /** A rescue is on: the repay ends it (`withEndRescue`). */
+  rescuing?: boolean;
 };
 
 export const FREE_REPAY_FALLBACK =
@@ -54,7 +67,8 @@ export const FREE_REPAY_FALLBACK =
 /**
  * What a repay with free shares signs (useTx), keyed by what shapes its batch: the account, the stock, the quote and its
  * floor, who pays the fee, the stop, and whether the floor covers what's owed. Not what's owed itself, as a repay by
- * selling: it accrues every block, and the batch only changes when the floor stops (or starts) covering it.
+ * selling: it accrues every block, and the batch only changes when the floor stops (or starts) covering it. The rescue
+ * ends with it (`withEndRescue`).
  */
 export const freeRepayPlan = (p: FreeRepayInput, batch: Batch<FreeRepayInput>): TxPlan => {
   const floor = sellMinOut(p.quote, p.stock, p.oraclePriceUsd);
@@ -71,7 +85,7 @@ export const freeRepayPlan = (p: FreeRepayInput, batch: Batch<FreeRepayInput>): 
       repayRaw > p.debtRaw ? "full" : "part",
     ),
     user: p.user,
-    calls: () => batch(p),
+    calls: () => withEndRescue(batch)(p),
     fallback: FREE_REPAY_FALLBACK,
     activity: freeRepayActivity(p.stock, p.plan, repayRaw),
   };

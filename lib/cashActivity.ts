@@ -6,7 +6,7 @@ import type { AgentMove, MoveContext, Words } from "@/lib/agents/feed";
 import { maxSpendRaw, toUsd, type Cash } from "@/lib/cash";
 import { ceilCents, formatCoin, formatShares, formatUsd, inWords, shortAddress } from "@/lib/formatting";
 import { EQUITIES, USDC, tickerOf } from "@/lib/tokens/registry";
-import { ENTRY_COINS } from "@/lib/tokens/stables";
+import { CASH_COINS } from "@/lib/tokens/stables";
 
 /*
  * The Cash sheet's activity (Adrian, 2026-10-15: "what was moved or converted, received and sent/pay"): only what
@@ -258,8 +258,8 @@ export function ownCashRow(m: OwnMove): CashRow | null {
   });
 }
 
-/** A coin of the Entry agent's by address. */
-const coinOf = (address: `0x${string}`) => ENTRY_COINS.find((c) => isAddressEqual(c.address, address));
+/** A coin Turn into cash converts on its own (GooseGuard's CONVERT), by address. */
+const coinOf = (address: `0x${string}`) => CASH_COINS.find((c) => isAddressEqual(c.address, address));
 
 /**
  * One of the executor's moves as a cash row, with the feed's own details: other dollars that became cash, Protect's

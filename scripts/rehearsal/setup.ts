@@ -10,8 +10,9 @@
  *      (an anvil dev account stands in for the passkey) and the permission manager.
  *   3. Fake money, by setting balance storage (anvil_dealERC20): sam gets cash ($3 in the wallet, the rest in Aave V3
  *      savings) and credit backed by NVIDIA; ana gets $100 of USDC and $10 of USDT for Receive's convert.
- *   4. GooseExecutor and its job libraries, with the D13 deploy script (daily limits capped at $5), owned by an anvil
- *      dev account, and a second dev account bootstrapped as its one forwarder.
+ *   4. GooseGuard (contracts/src/GooseGuard.sol), owned by an anvil dev account, with a second dev account as its one
+ *      runner (KeeperHub's place) and JAW's account clone as the code it accepts; the floors at the spec's defaults. No
+ *      amount limit anywhere (decision 9). GoosePlanner isn't built yet: run-agents needs it.
  *   5. A warm-up: the app's own quote on every stock pool, both ways, so anvil has fetched those pools from Base
  *      before the app asks (a first read of anything on a fork is slow).
  *   6. .rehearsal/state.json for the other scripts, and .env.rehearsal.local for the app (both gitignored).
@@ -43,7 +44,7 @@ import { base } from "viem/chains";
 import { AAVE } from "@/lib/aave/addresses";
 import { aaveOracleAbi } from "@/lib/aave/abis/IAaveOracle";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
-import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
+import { guardAbi } from "@/lib/agents/abis/GooseGuard";
 import { aaveV3PoolAbi, justanAccountAbi } from "@/lib/protocols/abis";
 import { PROTOCOLS } from "@/lib/protocols/config";
 import { quotePool } from "@/lib/swap/buy";
@@ -53,7 +54,6 @@ import { ENTRY_COINS } from "@/lib/tokens/stables";
 import {
   ENV_FILE,
   ROOT,
-  STATE_DIR,
   connectFork,
   health,
   shares,
@@ -102,19 +102,30 @@ function artifact(contract: string): Hex {
   return (JSON.parse(readFileSync(path, "utf8")) as { deployedBytecode: { object: Hex } }).deployedBytecode.object;
 }
 
-function forge(args: string[], env: Record<string, string> = {}) {
-  const r = spawnSync("forge", args, {
-    cwd: join(ROOT, "contracts"),
-    env: { ...process.env, PATH: `${process.env.PATH}:${process.env.HOME}/.foundry/bin`, ...env },
-    stdio: "inherit",
-  });
+const FORGE_ENV = { ...process.env, PATH: `${process.env.PATH}:${process.env.HOME}/.foundry/bin` };
+
+function forge(args: string[]) {
+  const r = spawnSync("forge", args, { cwd: join(ROOT, "contracts"), env: FORGE_ENV, stdio: "inherit" });
   if (r.status !== 0) throw new Error(`forge ${args[0]} failed`);
 }
+
+/** A forge command's `--json` answer. */
+function forgeJson(args: string[]): unknown {
+  const r = spawnSync("forge", args, { cwd: join(ROOT, "contracts"), env: FORGE_ENV, encoding: "utf8" });
+  if (r.status !== 0) throw new Error(`forge ${args[0]} failed: ${r.stderr}`);
+  return JSON.parse(r.stdout.trim().split("\n").at(-1)!);
+}
+
+/**
+ * GooseGuard's floors, in its constructor's order (spec-final-v2.md §2, step0-facts.md): sale floor 3%, swap floor
+ * 0.5%, band 1%, $1 kept in the wallet, $1 of dust.
+ */
+const GUARD_FLOORS = { saleFloorBps: 300, swapFloorBps: 50, bandBps: 100, keepBack: 1_000_000, dust: 1_000_000 };
 
 async function main() {
   const fork = await connectFork();
   const { pub, test, dev } = fork;
-  const [owner, forwarder, samSigner, anaSigner] = dev;
+  const [owner, runner, samSigner, anaSigner] = dev;
   const info = (await pub.request({ method: "anvil_nodeInfo" } as never)) as {
     network?: string;
     forkConfig?: { forkUrl?: string; forkBlockNumber?: number };
@@ -268,70 +279,37 @@ async function main() {
   await deal(fork, USDT.address, ana, AMOUNTS.anaUsdt);
   for (const name of ["sam", "ana"] as Name[]) await printAccount(fork, name, accounts[name].address);
 
-  console.log("\n4. GooseExecutor (D13 deploy script) and its forwarder");
-  const broadcast = join(STATE_DIR, "broadcast");
-  forge(
-    [
-      "script",
-      "script/DeployExecutor.s.sol:DeployExecutor",
-      "--rpc-url",
-      fork.rpc,
-      "--broadcast",
-      "--unlocked",
-      "--sender",
-      owner,
-    ],
-    {
-      EXECUTOR_OWNER: owner,
-      // The fork's deploy record stays out of contracts/broadcast, where the real Base deploys are kept.
-      FOUNDRY_BROADCAST: broadcast,
-    },
-  );
-  const run = JSON.parse(readFileSync(join(broadcast, "DeployExecutor.s.sol", "8453", "run-latest.json"), "utf8")) as {
-    transactions: { contractName?: string; contractAddress?: Address; transactionType: string; hash: Hex }[];
-    receipts: { transactionHash: Hex; blockNumber: Hex }[];
-    libraries: string[]; // "src/jobs/SaveJob.sol:SaveJob:0x…"
-  };
-  const created = run.transactions.filter((t) => t.transactionType === "CREATE" && t.contractAddress);
-  const executorTx = created.find((t) => t.contractName === "GooseExecutor");
-  if (!executorTx?.contractAddress) throw new Error("The deploy record has no GooseExecutor");
-  const executor = getAddress(executorTx.contractAddress);
-  const executorBlock = Number(run.receipts.find((r) => r.transactionHash === executorTx.hash)!.blockNumber);
-  // forge links each job library through CREATE2, so a library Base already has (the D13 deploy's, same code) is
-  // reused from the fork rather than deployed again.
-  const libraries = Object.fromEntries(
-    run.libraries.map((l) => l.split(":")).map(([, name, a]) => [name, getAddress(a)]),
-  );
-  for (const [name, a] of Object.entries(libraries)) {
-    if (!(await pub.getCode({ address: a }))) throw new Error(`${name} has no code at ${a}`);
-  }
-  await fork.send(
+  console.log("\n4. GooseGuard and its runner");
+  // JAW's account clone, as the factory just deployed it for sam: the code the Guard lets register.
+  const cloneCodehash = keccak256((await pub.getCode({ address: accounts.sam.address }))!);
+  const created = forgeJson([
+    "create",
+    "src/GooseGuard.sol:GooseGuard",
+    "--rpc-url",
+    fork.rpc,
+    "--unlocked",
+    "--from",
     owner,
-    executor,
-    encodeFunctionData({ abi: gooseExecutorAbi, functionName: "bootstrap", args: [[forwarder]] }),
-    "bootstrap",
-  );
-  const [capMax, isForwarder, ...allowed] = await Promise.all([
-    pub.readContract({ address: executor, abi: gooseExecutorAbi, functionName: "CAP_MAX" }),
-    pub.readContract({ address: executor, abi: gooseExecutorAbi, functionName: "isForwarder", args: [forwarder] }),
-    ...[sam, ana].map(async (a) =>
-      pub.readContract({
-        address: executor,
-        abi: gooseExecutorAbi,
-        functionName: "allowedCodehash",
-        args: [keccak256((await pub.getCode({ address: a }))!)],
-      }),
-    ),
+    "--broadcast",
+    "--json",
+    "--constructor-args",
+    owner,
+    runner,
+    cloneCodehash,
+    ...Object.values(GUARD_FLOORS).map(String),
+  ]) as { deployedTo?: Address; transactionHash?: Hex };
+  if (!created.deployedTo || !created.transactionHash) throw new Error("forge create gave no GooseGuard");
+  const guard = getAddress(created.deployedTo);
+  const guardBlock = Number((await pub.getTransactionReceipt({ hash: created.transactionHash })).blockNumber);
+  const [isRunner, codeOk] = await Promise.all([
+    pub.readContract({ address: guard, abi: guardAbi, functionName: "isRunner", args: [runner] }),
+    pub.readContract({ address: guard, abi: guardAbi, functionName: "codehashOk", args: [cloneCodehash] }),
   ]);
-  if (!isForwarder) throw new Error("bootstrap didn't set the forwarder");
-  if (!allowed.every(Boolean)) throw new Error("the executor doesn't accept JAW's account code");
-  console.log(`   GooseExecutor ${executor} (block ${executorBlock}), daily limits capped at ${usd(capMax)}`);
-  console.log(
-    `   libraries: ${Object.entries(libraries)
-      .map(([n, a]) => `${n} ${a}`)
-      .join(", ")}`,
-  );
-  console.log(`   owner ${owner}, forwarder ${forwarder} (anvil dev accounts)`);
+  if (!isRunner) throw new Error("the constructor didn't set the runner");
+  if (!codeOk) throw new Error("the Guard doesn't accept JAW's account code");
+  console.log(`   GooseGuard ${guard} (block ${guardBlock}), no amount limit`);
+  console.log(`   owner ${owner}, runner ${runner} (anvil dev accounts)`);
+  console.log("   GoosePlanner: not built yet, so run-agents can't plan a round until it is deployed here");
 
   console.log("\n5. Warming the fork: the app's quote on every open stock pool, both ways");
   // anvil reads Base's state the first time it is touched, so the first quote on a pool is slow (seconds). The app
@@ -354,13 +332,11 @@ async function main() {
     forkBlock,
     fromBlock: forkBlock + 1,
     owner,
-    forwarder,
-    executor,
-    executorBlock,
-    libraries,
+    runner,
+    guard,
+    guardBlock,
     accounts,
     feeds: {},
-    registeredThrough: executorBlock,
   };
   writeState(state);
   writeEnv(state, "sam");
@@ -492,8 +468,9 @@ function writeEnv(state: State, as: Name) {
     `NEXT_PUBLIC_REHEARSAL_FROM_BLOCK=${state.fromBlock}`,
     `NEXT_PUBLIC_REHEARSAL_ACCOUNT=${state.accounts[as].address}`,
     `NEXT_PUBLIC_REHEARSAL_SIGNER=${state.accounts[as].signer}`,
-    `NEXT_PUBLIC_GOOSE_EXECUTOR=${state.executor}`,
-    `NEXT_PUBLIC_GOOSE_EXECUTOR_BLOCK=${state.executorBlock}`,
+    `NEXT_PUBLIC_GOOSE_GUARD=${state.guard}`,
+    `NEXT_PUBLIC_GOOSE_GUARD_BLOCK=${state.guardBlock}`,
+    ...(state.planner ? [`NEXT_PUBLIC_GOOSE_PLANNER=${state.planner}`] : []),
     "",
   ];
   writeFileSync(ENV_FILE, lines.join("\n"));

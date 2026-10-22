@@ -8,10 +8,11 @@ import { buildWithdrawSavingsCalls } from "@/lib/savings";
 import { USDC } from "@/lib/tokens/registry";
 
 /**
- * Cash is savings (D15): wallet USDC plus the Aave V3 savings balance, in USDC raw units. `saveOn` says whether the
- * Cash Agent's Save job runs for the account (GooseExecutor's registry).
+ * Cash is savings (D15): wallet USDC plus the Aave V3 savings balance, in USDC raw units. `saveOn` says whether an agent
+ * may move the wallet's cash above the keep-back for the account (`walletSwept`, read from GooseGuard).
  */
-export type Cash = { walletRaw: bigint; savingsRaw: bigint; saveOn: boolean };
+/** `rescuing`: a rescue Protect started is on (GooseGuard's `accountOf(account).rescueAt` isn't 0); absent = none. */
+export type Cash = { walletRaw: bigint; savingsRaw: bigint; saveOn: boolean; rescuing?: boolean };
 
 const usdcRaw = (usd: number) => parseUnits(usd.toFixed(USDC.decimals), USDC.decimals);
 const keepBackRaw = usdcRaw(CASH.keepBackUsd);
@@ -22,8 +23,15 @@ export const cashRaw = (c: Cash) => c.walletRaw + c.savingsRaw;
 export const feeFromSale = (cash: Cash) => cashRaw(cash) < feeBufferRaw;
 export const toUsd = (raw: bigint) => Number(raw) / 10 ** USDC.decimals;
 
-/** Whether Save runs for the account, from the job bits of GooseExecutor's `accounts(account)`. */
+/** Whether Save runs for the account, from the job bits of GooseGuard's `accountOf(account)`. */
 export const saveRuns = (jobs: number) => (jobs & (1 << JOBS.indexOf("save"))) !== 0;
+
+/**
+ * Whether an agent may move the wallet's cash above the keep-back between a batch's simulation and its signing: Save
+ * (into savings), or the Rebalancer with top-ups on (into the mix, GooseGuard's wallet rule).
+ */
+export const walletSwept = (jobs: number, topUpsOn: boolean) =>
+  saveRuns(jobs) || (topUpsOn && (jobs & (1 << JOBS.indexOf("rebalance"))) !== 0);
 
 /** Whether Protector's repay from cash runs for the account (the same job bits): it acts under 1.03. */
 export const protectRuns = (jobs: number) => (jobs & (1 << JOBS.indexOf("protect"))) !== 0;

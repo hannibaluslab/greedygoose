@@ -2,19 +2,19 @@ import { EQUITIES } from "@/lib/tokens/registry";
 import { stockLimitsRaw, type StockLimits } from "@/lib/agents/permissions";
 
 /*
- * Protect's settings (the agent sheet, JUSTALAB-DECISIONS.md "From the Agents redesign"): repay from cash (Job.Protect, always first), selling
- * backing stock as its own grant (Job.ProtectSell, decision 5), what it sells first (the registry's `keepMix`) and the
- * never-sell list (stocks left out of the sell grant). No amount limit (Adrian, 2026-10-19): both grants carry the
- * executor's CAP_MAX, and there is no limit to choose. Pure, so the steps a save takes are tested.
+ * Protect's settings (the agent sheet, JUSTALAB-DECISIONS.md "From the Agents redesign"): repay from cash (job 1, always
+ * first), selling backing stock as its own grant (job 2, decision 5), what it sells first (GooseGuard's `keepMix`) and
+ * the never-sell list (stocks left out of the sell grant). No amount limit (decision 9): there is no limit to choose.
+ * Pure, so the steps a save takes are tested.
  */
 
 /** What the chain says Protect runs with now. */
 export type ProtectSaved = {
   /** Repay from cash: on (or starting). */
   repayOn: boolean;
-  /** Selling: each stock's limit in its grant, while on (or starting); null while off. */
+  /** Selling: the stocks its grant may sell, while on (or starting); null while off. */
   sell: { limitsRaw: StockLimits } | null;
-  /** The registry's "Keep my mix"; null until read (or with no executor). */
+  /** GooseGuard's "Keep my mix"; null until read (or with no Guard). */
   keepMix: boolean | null;
 };
 
@@ -22,19 +22,19 @@ export type ProtectSaved = {
 export type ProtectChoice = { sellOn: boolean; keepMix: boolean; never: readonly number[] };
 
 /**
- * What a save changes: "Sells first" (the registry's `setKeepMix`), a new grant, or selling's revoke, all in one batch,
- * one Face ID (`protectBatch`).
+ * What a save changes: "Sells first" (GooseGuard's `setKeepMix`), a new grant, or selling's turn-off, all in one
+ * batch, one Face ID (`protectBatch`).
  */
 export type ProtectStep =
   | { kind: "keepMix"; on: boolean }
-  | { kind: "grant"; job: "protect"; capRaw: bigint }
-  | { kind: "grant"; job: "sell"; capRaw: bigint; limitsRaw: StockLimits }
+  | { kind: "grant"; job: "protect" }
+  | { kind: "grant"; job: "sell"; limitsRaw: StockLimits }
   | { kind: "revoke"; job: "sell" };
 
 /** Protect's two jobs: repaying from cash, and selling backing stock. */
 type ProtectJob = "protect" | "sell";
 
-/** The stocks a sell grant leaves out (limit 0), by reserve id. */
+/** The stocks a sell grant leaves out (no approve), by reserve id. */
 export function neverSellOf(limitsRaw: StockLimits | null | undefined): number[] {
   return limitsRaw ? EQUITIES.filter((e) => limitsRaw[e.reserveId] === 0n).map((e) => e.reserveId) : [];
 }
@@ -51,29 +51,22 @@ export function savedChoice(saved: ProtectSaved): ProtectChoice {
 const sameSet = (a: readonly number[], b: readonly number[]) => a.length === b.length && a.every((r) => b.includes(r));
 
 /**
- * The sell grant for a never-sell set: every stock but those, each at shares worth twice CAP_MAX at Aave's price, held
- * to what the grant's terms can hold (`stockLimitsRaw`), so a stock bought and used as backing later is covered
- * without a new grant.
+ * The sell grant for a never-sell set: every stock but those, with no limit (`stockLimitsRaw`), so a stock bought and
+ * used as backing later is covered without a new grant.
  */
-export function sellLimitsFor(capMaxRaw: bigint, pricesRaw: readonly bigint[], never: readonly number[]): StockLimits {
-  return stockLimitsRaw(
-    capMaxRaw,
-    capMaxRaw,
-    pricesRaw,
-    EQUITIES.map((e) => !never.includes(e.reserveId)),
-  );
+export function sellLimitsFor(never: readonly number[]): StockLimits {
+  return stockLimitsRaw(EQUITIES.map((e) => !never.includes(e.reserveId)));
 }
 
 /**
  * What saving `choice` takes, in order, from what is `saved`: "Sells first" (only while selling stays on), then the
  * repay grant while it's off (saving switches Protect on), then the sell grant (switched on, or its never-sell list
- * changed) or its revoke. Every grant is at the executor's CAP_MAX. `blocked` says why it can't save: every stock is
- * on the never-sell list.
+ * changed) or its turn-off. No grant has a limit. `blocked` says why it can't save: every stock is on the never-sell
+ * list.
  */
 export function protectSteps(
   saved: ProtectSaved,
   choice: ProtectChoice,
-  ctx: { capMaxRaw: bigint; pricesRaw: readonly bigint[] },
 ): { steps: ProtectStep[]; blocked: string | null } {
   const start = savedChoice(saved);
   const steps: ProtectStep[] = [];
@@ -83,33 +76,27 @@ export function protectSteps(
   if (choice.sellOn && saved.keepMix !== null && choice.keepMix !== saved.keepMix)
     steps.push({ kind: "keepMix", on: choice.keepMix });
   // Repaying from cash always comes first: while it's off, any save switches it on.
-  if (!saved.repayOn) steps.push({ kind: "grant", job: "protect", capRaw: ctx.capMaxRaw });
-  if (choice.sellOn && (!saved.sell || !sameSet(choice.never, start.never))) {
-    steps.push({
-      kind: "grant",
-      job: "sell",
-      capRaw: ctx.capMaxRaw,
-      limitsRaw: sellLimitsFor(ctx.capMaxRaw, ctx.pricesRaw, choice.never),
-    });
-  }
+  if (!saved.repayOn) steps.push({ kind: "grant", job: "protect" });
+  if (choice.sellOn && (!saved.sell || !sameSet(choice.never, start.never)))
+    steps.push({ kind: "grant", job: "sell", limitsRaw: sellLimitsFor(choice.never) });
   if (!choice.sellOn && saved.sell) steps.push({ kind: "revoke", job: "sell" });
   return { steps, blocked: null };
 }
 
 /**
  * A save's one batch (Adrian, 2026-10-20: "the permission, the cash move and the registration in one signature"): its
- * new grants, each approved and registered (and the grant each replaces revoked), selling's revoke when it's switched
- * off, and "Sells first" when it changed; null when there's nothing to save. useProtectSave signs it through useTx
- * (useAgents `changePlan`).
+ * new grants, each approved and registered (and the grant each replaces revoked), selling's turn-off (revoked and
+ * unregistered) when it's switched off, and "Sells first" when it changed; null when there's nothing to save.
+ * useProtectSave signs it through useTx (useAgents `changePlan`).
  */
 export function protectBatch(steps: readonly ProtectStep[]): {
-  grants: { job: ProtectJob; capRaw: bigint; limitsRaw?: StockLimits }[];
+  grants: { job: ProtectJob; limitsRaw?: StockLimits }[];
   off: ProtectJob[];
   keepMix?: boolean;
 } | null {
   if (steps.length === 0) return null;
   const grants = steps.flatMap((s) =>
-    s.kind === "grant" ? [{ job: s.job, capRaw: s.capRaw, ...(s.job === "sell" && { limitsRaw: s.limitsRaw }) }] : [],
+    s.kind === "grant" ? [{ job: s.job, ...(s.job === "sell" && { limitsRaw: s.limitsRaw }) }] : [],
   );
   const off = steps.flatMap((s) => (s.kind === "revoke" ? [s.job] : []));
   const keep = steps.find((s) => s.kind === "keepMix");

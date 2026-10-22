@@ -94,14 +94,15 @@ const EURC = coin({
 });
 
 /**
- * The coins the Entry agent turns into USDC, in GooseExecutor's order (contracts/src/jobs/EntryJob.sol): the index is
- * the coin's place in the Entry permission, so this list changes only with EntryJob, at an executor redeploy.
+ * The coins the old GooseExecutor's Entry agent turned into USDC (contracts/src/jobs/EntryJob.sol). Kept for its
+ * rules' test vectors and so a Send never pays USDbC's contract; GooseGuard converts CASH_COINS instead.
  */
 export const ENTRY_COINS: readonly EntryCoinAsset[] = [USDT, USDE, USDBC, USDS];
 
 /**
- * The coins the user's own Turn into cash takes: USDbC is left out (a $5.5M supply trading $0.2M a day), DAI and EURC
- * are in. The allowlist approves and converts these only.
+ * The coins the user's own Turn into cash takes, and the ones the Entry agent converts on its own, in GooseGuard's
+ * order (its CONVERT `k`, decision 10): USDbC is left out (a $5.5M supply trading $0.2M a day), DAI and EURC are in.
+ * The allowlist approves and converts these only, and the Entry grant lists one approve and one spend per coin.
  */
 export const CASH_COINS: readonly EntryCoinAsset[] = [USDT, USDE, USDS, DAI, EURC];
 

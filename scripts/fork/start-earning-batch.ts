@@ -2,13 +2,13 @@
  * The app's own bytes for Start earning on an account JAW hasn't deployed yet, for
  * contracts/test/OneTapNewAccountFork.t.sol: the fork runs exactly the batch this TypeScript builds, the way Home's card
  * builds it (useStartEarning: startEarningPlan, then startEarningPrefix in front of earning's grant), the grant as
- * useCashSetup `earningPlan` asks useAgents `changePlan` for it (jobGrant("save", CAP_MAX), jawPermission), put together
- * by agentChangePlan with the allowlist. getCode answers "0x", as Base does for a never-used account, so no owner call
- * is read or added and the registration is left out of the simulation. Nothing is signed or sent. Forge calls it
- * through vm.ffi with NEXT_PUBLIC_GOOSE_EXECUTOR set to the fork's executor; it prints
+ * useCashSetup `earningPlan` asks useAgents `changePlan` for it (jobGrant("save"), no limit, jawPermission), put
+ * together by agentChangePlan with the allowlist. getCode answers "0x", as Base does for a never-used account, so no
+ * owner call is read or added and the registration is left out of the simulation. Nothing is signed or sent. Forge
+ * calls it through vm.ffi with NEXT_PUBLIC_GOOSE_GUARD set to the fork's GooseGuard; it prints
  * abi.encode(calls, grants, simulated) on stdout, `simulated` being the part the app simulates before the tap.
  *
- *   account start salt capMax walletRaw
+ *   account start salt walletRaw
  *
  * `start` and `salt` stand in for lib/agents/picks.ts (the device's clock less five minutes, and 256 random bits).
  */
@@ -20,24 +20,17 @@ import { startEarningPlan, startEarningPrefix } from "@/lib/startEarning";
 import { agentChangePlan } from "@/lib/tx/plans";
 import type { Call } from "@/lib/aave/tx";
 
-const [account, startArg, saltArg, capMaxArg, walletArg] = process.argv.slice(2) as [
-  Address,
-  string,
-  string,
-  string,
-  string,
-];
-const executor = process.env.NEXT_PUBLIC_GOOSE_EXECUTOR as Address;
+const [account, startArg, saltArg, walletArg] = process.argv.slice(2) as [Address, string, string, string];
+const guard = process.env.NEXT_PUBLIC_GOOSE_GUARD as Address;
 const start = Number(startArg);
 const salt = BigInt(saltArg);
-const capMaxRaw = BigInt(capMaxArg);
 const walletRaw = BigInt(walletArg);
 
 async function batch() {
   // The wallet read again while it's prepared answers what the card showed.
   const supply = startEarningPlan(account, walletRaw, () => Promise.resolve(walletRaw));
   if (!supply) throw new Error("Under the smallest amount");
-  const grant = jawPermission(account, executor, start + GRANT_SECONDS, jobGrant("save", capMaxRaw), { start, salt });
+  const grant = jawPermission(account, guard, start + GRANT_SECONDS, jobGrant("save"), { start, salt });
   const plan = agentChangePlan(
     account,
     { grants: [grant], prefix: startEarningPrefix(supply) },

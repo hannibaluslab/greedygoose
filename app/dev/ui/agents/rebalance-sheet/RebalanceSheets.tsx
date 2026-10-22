@@ -12,7 +12,8 @@ import { SheetShell } from "@/components/gg/kit/SheetShell";
 import { RequireAccount } from "@/components/wallet/RequireAccount";
 import { useNowSec } from "@/hooks/useNowSec";
 import { rebalanceOptions, type MixRow } from "@/lib/agents/mix";
-import { nyDay, rebalanceOutlook } from "@/lib/agents/next";
+import { NO_LIMIT } from "@/lib/agents/permissions";
+import { rebalanceOutlook } from "@/lib/agents/next";
 import { rebalanceCard, type RebalanceCardInput } from "@/lib/agents/rebalanceCard";
 import type { RebalanceTerms } from "@/lib/agents/rebalanceSettings";
 import type { TopUpsChoice, TopUpsFacts, TopUpsSetting } from "@/lib/agents/topUps";
@@ -31,7 +32,6 @@ const NOTHING_SIGNED = () => toast("Dev gallery: nothing is signed");
 /** Aave's prices, by reserve id: Apple, Amazon, Alphabet, Meta, Microsoft, NVIDIA, Tesla. */
 const PRICES = [250, 220, 180, 700, 500, 180, 400];
 const usdc = (x: number) => BigInt(Math.round(x * 1e6));
-const CAP_MAX = usdc(1_000_000);
 /** The boards' mix: Apple 20, Amazon 10, Alphabet 10, Meta 10, Microsoft 15, NVIDIA 25, Tesla 10. */
 const MIX = [2_000, 1_000, 1_000, 1_000, 1_500, 2_500, 1_000];
 /** Board 7a: all inside their bands, NVIDIA a little high (26%), Tesla a little low (9%). */
@@ -73,14 +73,14 @@ type Fixture = {
   /** Earning (the Save job) is off: turning top-ups on grants it in the same Face ID. */
   earningOff?: boolean;
   finish?: boolean;
-  /** Dollars of top-ups counted yesterday, going in at the next check (Keep $500, enough savings above it). */
+  /** Dollars of top-ups waiting in the wallet, going in at the next round (above $1 and what Keep still needs). */
   invest?: number;
 };
 
 export const STATES: Record<string, Fixture> = {
   "top-ups-off": { title: "7e · Top-ups off, nothing changed", topUps: { saved: OFF } },
   "turn-on": {
-    title: "7f · Turning top-ups on: a new grant, one Face ID",
+    title: "7f · Turning top-ups on: the wallet's cash saved first, one Face ID",
     topUps: { saved: OFF },
     draftTopUps: { on: true, keepUsd: 500 },
   },
@@ -91,29 +91,28 @@ export const STATES: Record<string, Fixture> = {
     earningOff: true,
   },
   waiting: {
-    title: "7g · $300 waiting for the next check",
-    topUps: { saved: ON, waiting: { usd: 300, atSec: 0 } },
+    title: "7g · $300 waiting for the next round",
+    topUps: { saved: ON, waiting: { usd: 300 } },
   },
   "going-in": {
-    title: "$1,000 of top-ups going in at the next check: the line says it",
-    topUps: { saved: ON, waiting: { usd: 1_000, atSec: 0 } },
+    title: "$1,000 of top-ups going in at the next round: the line says it",
+    topUps: { saved: ON, waiting: { usd: 1_000 } },
     invest: 1_000,
   },
   "going-in-trades-due": {
-    title: "A top-up and trades both due: the top-up first, trades wait a day",
+    title: "A top-up and trades both due: the top-up first",
     pcts: DRIFTED,
-    topUps: { saved: ON, waiting: { usd: 300, atSec: 0 } },
+    topUps: { saved: ON, waiting: { usd: 300 } },
     invest: 300,
   },
-  "waiting-regrant": {
-    title: "$300 waiting and a Save that grants again: it stays as cash",
-    // A capped grant from before is granted again at CAP_MAX, which drops what was counted.
-    terms: { capRaw: usdc(100), limitsRaw: MIX.map(() => 1n), topUps: true },
-    topUps: { saved: ON, waiting: { usd: 300, atSec: 0 } },
+  "waiting-new-stock": {
+    title: "$300 waiting and a Save that grants again (a new stock in the mix): it still goes in",
+    terms: { limitsRaw: MIX.map((w, r) => (w > 0 && r !== 6 ? NO_LIMIT : 0n)) },
+    topUps: { saved: ON, waiting: { usd: 300 } },
   },
   "waiting-turn-off": {
     title: "$300 waiting and top-ups turned off: it stays as cash",
-    topUps: { saved: ON, waiting: { usd: 300, atSec: 0 } },
+    topUps: { saved: ON, waiting: { usd: 300 } },
     draftTopUps: { on: false, keepUsd: 500 },
   },
   warning: {
@@ -144,17 +143,17 @@ export const STATES: Record<string, Fixture> = {
     draftTopUps: { on: true, keepUsd: null },
   },
   unread: {
-    title: "A grant with top-ups, the switch not read yet: a new grant waits",
-    // A capped grant from before is granted again at CAP_MAX; the switch's read hasn't come back.
-    terms: { capRaw: usdc(100), limitsRaw: MIX.map(() => 1n), topUps: true },
+    title: "A Save that grants, the switch not read yet: it waits",
+    // A stock in the mix the grant may not sell yet; the switch's read hasn't come back.
+    terms: { limitsRaw: MIX.map((w, r) => (w > 0 && r !== 6 ? NO_LIMIT : 0n)) },
     topUps: { saved: null },
   },
   "turn-off": {
-    title: "Turning top-ups off: a new grant without the withdraw",
+    title: "Turning top-ups off: the setting alone, no new grant",
     topUps: { saved: ON },
     draftTopUps: { on: false, keepUsd: 500 },
   },
-  "not-available": { title: "Not available yet (until the executor counts top-ups)", topUps: { available: false } },
+  "not-available": { title: "Not available yet (no Guard configured)", topUps: { available: false } },
   "earning-first": {
     title: "Earning off and no one signature: turn on earning first",
     topUps: { saved: OFF, earningFirst: true },
@@ -182,7 +181,7 @@ export const STATES: Record<string, Fixture> = {
   },
   "trades-due": { title: "Trades due at the next check", pcts: DRIFTED, topUps: { saved: OFF } },
   held: { title: "Held by credit: the stock that would trade backs it", measured: 1_000, topUps: { saved: OFF } },
-  "too-small": { title: "Too small to trade: Adrian’s $7.74 (2026-10-21)", measured: 1, topUps: { saved: OFF } },
+  "too-small": { title: "No trade too small: Adrian’s $7.74 (2026-10-21)", measured: 1, topUps: { saved: OFF } },
   "agents-page": {
     title: "The Agents page gallery’s mix: NVIDIA 50, Apple 25, Tesla 25, on target",
     pcts: [25, 0, 0, 0, 0, 50, 25],
@@ -195,7 +194,7 @@ export const STATES: Record<string, Fixture> = {
     debtUsd: 1_300,
     topUps: { saved: OFF },
   },
-  retrying: { title: "Retrying: the last 3 runs didn’t go through", card: { fails: 3 }, topUps: { saved: OFF } },
+  retrying: { title: "Retrying: the last 3 moves were refused", card: { refused: 3 }, topUps: { saved: OFF } },
   stopped: {
     title: "Stopped on its own: Turn on",
     card: { status: "off", stoppedAt: -2 * DAY },
@@ -257,13 +256,10 @@ export function stateOf(nowSec: number, f: Fixture) {
     nowSec,
     holdings: h,
     mixBps: mix,
-    capMaxRaw: CAP_MAX,
-    rebalanceDay: 0,
+    pacing: { sessionAt: 0, mixSetAt: 0 },
     debtUsd,
     totalBackingUsd: 2_000,
     avgCf: 0.7,
-    left: { rebalance: null },
-    capRaw: { rebalance: CAP_MAX },
     numbers: { rebalance: options },
   });
   const model = rebalanceCard({
@@ -271,35 +267,19 @@ export function stateOf(nowSec: number, f: Fixture) {
     nowSec,
     status: "on",
     waiting: false,
-    fails: 0,
-    cooldownUntil: 0,
-    rebalanceDay: 0,
+    refused: 0,
     holdings: h,
     mixBps: mix,
     options,
     outlook,
-    topUps: f.invest
-      ? {
-          state: {
-            day: nyDay(nowSec) - 1,
-            keepRaw: usdc(500),
-            readyRaw: usdc(f.invest),
-            todayRaw: 0n,
-            markRaw: usdc(f.invest + 1_000),
-            ownRaw: 0n,
-          },
-          savingsRaw: usdc(f.invest + 1_000),
-          usdcLeftRaw: CAP_MAX,
-          savingsLeftRaw: CAP_MAX,
-        }
-      : null,
+    topUps: f.invest ? { readyRaw: usdc(f.invest) } : null,
     ...card,
   });
   const status = card.status ?? "on";
   const running = status === "on" || status === "starting";
   const saved = f.topUps?.saved ?? null;
   const terms: RebalanceTerms =
-    f.terms === undefined ? { capRaw: CAP_MAX, limitsRaw: mix.map(() => 1n), topUps: !!saved?.on } : f.terms;
+    f.terms === undefined ? { limitsRaw: mix.map((w) => (w > 0 ? NO_LIMIT : 0n)) } : f.terms;
   const topUps: TopUpsFacts = {
     available: true,
     earningFirst: false,
@@ -308,11 +288,8 @@ export function stateOf(nowSec: number, f: Fixture) {
     rate: "4.2%",
     debtUsd,
     protectSells: true,
-    nowSec,
     ...f.topUps,
   };
-  // The waiting top-up goes in at the next check the outlook names.
-  if (topUps.waiting) topUps.waiting = { ...topUps.waiting, atSec: outlook.checkAt };
   const body = (
     <RebalanceSheetBody
       model={model}
@@ -327,7 +304,6 @@ export function stateOf(nowSec: number, f: Fixture) {
           holdings={h}
           saved={f.saved ?? mix}
           terms={terms}
-          capMaxRaw={live ? CAP_MAX : null}
           configured={live}
           connected
           running={running}

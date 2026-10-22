@@ -17,7 +17,7 @@ import {
   type StorePermissionApiResponse,
 } from "@jaw.id/core";
 import type { Call } from "@/lib/aave/tx";
-import { GOOSE_EXECUTOR } from "@/lib/agents/config";
+import { GOOSE_GUARD } from "@/lib/agents/config";
 import { PERIOD, readAgentGrant, type JawPermission } from "@/lib/agents/permissions";
 import { buildRegisterCalls, encodePermission } from "@/lib/agents/register";
 import { justanAccountAbi, permissionManagerAbi } from "@/lib/protocols/abis";
@@ -25,7 +25,7 @@ import { PROTOCOLS } from "@/lib/protocols/config";
 
 /*
  * One Face ID for an agent grant: the app's own batch approves the permission in JAW's manager and registers it with
- * GooseExecutor, in place of JAW's permission screen followed by a registration batch (D14 dropped, see
+ * GooseGuard, in place of JAW's permission screen followed by a registration batch (D14 dropped, see
  * docs/JUSTALAB-DECISIONS.md). After the receipt the app records the grant in JAW's relay the way JAW's grant does, so
  * JAW still lists it (`usePermissions`) and can revoke it (`useRevokePermissions`).
  *
@@ -54,7 +54,8 @@ const UNIT: Record<Exclude<SpendPeriod, "year">, number> = {
 
 /**
  * A grant's start and salt, picked by the app as JAW's grant picks them (the browser's clock, 256 random bits), from a
- * secure source. A clock running ahead only delays the first run: the executor skips a grant before its start.
+ * secure source. lib/agents/picks.ts sets the start behind the device's clock and Base's: GooseGuard refuses a grant
+ * that starts after the block it lands in.
  */
 export function grantPick(nowMs = Date.now()): { start: number; salt: bigint } {
   return { start: Math.floor(nowMs / 1000), salt: BigInt(bytesToHex(crypto.getRandomValues(new Uint8Array(32)))) };
@@ -115,7 +116,7 @@ export const approveCall = (p: Permission): Call => ({
 /**
  * addOwnerAddress(manager) on the account itself, the call JAW's SDK puts first when the manager doesn't own the account
  * yet (core account/smartAccount.js `prepareEip7702Calls`). The manager runs agent batches through the account, so it
- * must own it, and GooseExecutor refuses a registration until it does (`ManagerNotOwner`).
+ * must own it, or every agent batch reverts (MANAGER-NOTES.md §6).
  */
 export const addManagerOwnerCall = (account: Address): Call => ({
   to: account,
@@ -149,10 +150,10 @@ export async function managerOwnerCalls(
 }
 
 /**
- * One batch, one Face ID: the owner call when `managerOwnerCalls` says so, each grant's approve, then the executor's
- * settings and one `registerApproved` per grant (lib/agents/register.ts). Atomic: each registration finds the approval
- * made earlier in the same batch. Every grant must be the user's own, to GooseExecutor, and exactly one job's template.
- * Start earning's savings supply goes in front, from its own builder.
+ * One batch, one Face ID: the owner call when `managerOwnerCalls` says so, each grant's approve, then the Guard's
+ * settings and one `register(job, permission)` per grant, its job read off its own template (lib/agents/register.ts).
+ * Atomic: each registration lands with the approval made earlier in the same batch. Every grant must be the user's
+ * own, to GooseGuard, and exactly one job's template. Start earning's savings supply goes in front, from its own builder.
  */
 export function oneTapGrantCalls(
   user: Address,
@@ -160,19 +161,19 @@ export function oneTapGrantCalls(
   owner: readonly Call[] = [],
   settings: readonly Call[] = [],
 ): Call[] {
-  if (!GOOSE_EXECUTOR) throw new Error("Agents aren't available yet");
-  const executor = GOOSE_EXECUTOR;
+  if (!GOOSE_GUARD) throw new Error("Agents aren't available yet");
+  const guard = GOOSE_GUARD;
   if (grants.length === 0) throw new Error("Nothing to grant");
-  for (const p of grants) {
-    const own = isAddressEqual(p.account, user) && isAddressEqual(p.spender, executor);
-    if (!own || !readAgentGrant(relayRecord("0x", p, PROTOCOLS.chainId), executor)) {
-      throw new Error("Blocked: a grant that isn't one of the user's agents");
-    }
-  }
+  const registers = grants.map((p) => {
+    const own = isAddressEqual(p.account, user) && isAddressEqual(p.spender, guard);
+    const job = own ? readAgentGrant(relayRecord("0x", p, PROTOCOLS.chainId), guard)?.job : undefined;
+    if (!job) throw new Error("Blocked: a grant that isn't one of the user's agents");
+    return { job, p: contractPermission(p) };
+  });
   const ownerCall = addManagerOwnerCall(user);
   const ownerOk = (c: Call) => isAddressEqual(c.to, ownerCall.to) && c.data === ownerCall.data && c.value === 0n;
   if (owner.length > 1 || !owner.every(ownerOk)) throw new Error("Blocked: unexpected owner change");
-  return [...owner, ...grants.map(approveCall), ...buildRegisterCalls(user, grants.map(contractPermission), settings)];
+  return [...owner, ...grants.map(approveCall), ...buildRegisterCalls(user, registers, settings)];
 }
 
 /** A log as wallet_getCallsStatus returns it in a receipt (EIP-5792), or as viem reads it. */

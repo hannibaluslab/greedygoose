@@ -8,6 +8,7 @@ import {
   type SettingsHolding,
 } from "@/components/gg/agents/RebalanceSettings";
 import type { MixRow } from "@/lib/agents/mix";
+import { NO_LIMIT } from "@/lib/agents/permissions";
 import { EQUITIES } from "@/lib/tokens/registry";
 
 // Sample figures for the gallery only: the old Manage board's NVIDIA, Apple and Tesla at 43/26/30 of their free shares,
@@ -32,11 +33,10 @@ const TARGET: MixRow[] = [
   { reserveId: 0, bps: 2_500 },
   { reserveId: 6, bps: 2_500 },
 ];
-/** The executor's CAP_MAX here: the Rebalancer's grant is at it (no amount limit). */
-const CAP_MAX = 10_000_000_000n;
-const TERMS = { capRaw: CAP_MAX, limitsRaw: EQUITIES.map((e) => (SAVED[e.reserveId] > 0 ? 1n : 0n)) };
-/** A grant from before the Rebalancer had no amount limit, $100 a week: the next Save grants it again. */
-const CAPPED = { ...TERMS, capRaw: 100_000_000n };
+/** The Rebalancer's grant: it may sell each stock in the saved mix, with no limit (decision 9). */
+const TERMS = { limitsRaw: EQUITIES.map((e) => (SAVED[e.reserveId] > 0 ? NO_LIMIT : 0n)) };
+/** A grant that may not sell Tesla, now in the mix: the next Save grants it again. */
+const NARROW = { limitsRaw: TERMS.limitsRaw.map((l, r) => (r === 6 ? 0n : l)) };
 const noop = () => {};
 const noopSubscribe = () => () => {};
 const previewAs = () => {
@@ -45,7 +45,7 @@ const previewAs = () => {
 };
 
 const STATES = [
-  { key: "not-live", title: "Not live yet (no executor)", configured: false, saved: null, terms: null, draft: TARGET },
+  { key: "not-live", title: "Not live yet (no Guard)", configured: false, saved: null, terms: null, draft: TARGET },
   { key: "new-mix", title: "New mix · Save", configured: true, saved: SAVED, terms: TERMS, draft: TARGET },
   {
     key: "not-whole",
@@ -65,10 +65,10 @@ const STATES = [
   },
   {
     key: "capped",
-    title: "A capped grant from before · a new grant, one Face ID",
+    title: "A stock the grant may not sell yet · a new grant, one Face ID",
     configured: true,
     saved: SAVED,
-    terms: CAPPED,
+    terms: NARROW,
     draft: undefined,
   },
   {
@@ -91,7 +91,6 @@ function RebalanceStateBody({ state }: { state: RebalanceState }) {
       holdings={HOLDINGS}
       saved={s.saved}
       terms={s.terms}
-      capMaxRaw={s.configured ? CAP_MAX : null}
       configured={s.configured}
       connected
       running={!!s.terms}

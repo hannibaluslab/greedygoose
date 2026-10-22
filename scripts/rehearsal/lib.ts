@@ -21,11 +21,13 @@ import {
   type TransactionReceipt,
 } from "viem";
 import { base } from "viem/chains";
-import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
+import { guardAbi } from "@/lib/agents/abis/GooseGuard";
+import { MOVES } from "@/lib/agents/events";
+import { unpackMix } from "@/lib/agents/mix";
 import { isLocalRpc } from "@/lib/rehearsal/flag";
 import { statusFor, STATUS_LABEL } from "@/lib/risk/status";
 import { EQUITIES } from "@/lib/tokens/registry";
-import { ENTRY_COINS } from "@/lib/tokens/stables";
+import { CASH_COINS } from "@/lib/tokens/stables";
 
 export const ROOT = resolve(__dirname, "../..");
 export const STATE_DIR = join(ROOT, ".rehearsal");
@@ -44,17 +46,16 @@ export type State = {
   forkBlock: number;
   /** The first block after the fork point: logs before it would be asked of Base, which refuses eth_getLogs. */
   fromBlock: number;
-  /** anvil dev accounts: the executor's owner (and deployer) and its one forwarder. */
+  /** anvil dev accounts: GooseGuard's owner (and deployer) and its one runner, in KeeperHub's place. */
   owner: Address;
-  forwarder: Address;
-  executor: Address;
-  executorBlock: number;
-  libraries: Record<string, Address>;
+  runner: Address;
+  guard: Address;
+  guardBlock: number;
+  /** GoosePlanner, once it is built and deployed on the fork: run-agents reads its plan. */
+  planner?: Address;
   accounts: Record<Name, { address: Address; signer: Address }>;
   /** price-shock: each oracle source it replaced, with the code to put back. */
   feeds: Record<string, { source: Address; code: Hex }>;
-  /** run-agents: the last block whose PermissionApproved logs were registered. */
-  registeredThrough?: number;
 };
 
 export function readState(): State {
@@ -167,29 +168,20 @@ export const nyTime = (sec: number | bigint) =>
     day: "numeric",
   }) + " New York";
 
-/** The agents' names on screen (JUSTALAB-DECISIONS, "Four agents, one name each"), by GooseExecutor's Job. */
+/** The agents' names on screen (JUSTALAB-DECISIONS, "Four agents, one name each"), by GooseGuard's job. */
 const JOB_NAMES = ["Save", "Protect", "Protect · sell", "Rebalance", "Receive"] as const;
-const OFF_REASONS = [
-  "revoked",
-  "expired",
-  "the manager no longer owns the account",
-  "stuck after failed runs",
-] as const;
-/** CashRules.sol `ProtectCase`; a repay is only ever Watch or WeekendShield. */
-/** CashRules' ProtectCase: only Act repays, below Protect's line or on through a rescue. */
-const PROTECT_CASES = ["NoDebt", "Healthy", "NoSavings", "NoCap", "TooSmall", "Act"] as const;
 
 const stockList = (amounts: readonly bigint[]) =>
   amounts.flatMap((a, r) => (a > 0n ? [`${shares(a)} ${EQUITIES[r].symbol}`] : [])).join(", ") || "nothing";
 
-/** Each GooseExecutor event in a receipt, in words. `who` names an account. */
-export function describeExecutorLogs(logs: readonly Log[], executor: Address, who: (a: Address) => string): string[] {
+/** Each GooseGuard event in a receipt, in words. `who` names an account. */
+export function describeGuardLogs(logs: readonly Log[], guard: Address, who: (a: Address) => string): string[] {
   const out: string[] = [];
   for (const log of logs) {
-    if (!isAddressEqual(log.address, executor)) continue;
+    if (!isAddressEqual(log.address, guard)) continue;
     let e;
     try {
-      e = decodeEventLog({ abi: gooseExecutorAbi, data: log.data, topics: log.topics });
+      e = decodeEventLog({ abi: guardAbi, data: log.data, topics: log.topics });
     } catch {
       continue;
     }
@@ -198,18 +190,18 @@ export function describeExecutorLogs(logs: readonly Log[], executor: Address, wh
     switch (e.eventName) {
       case "JobOn":
         out.push(
-          `${name}: ${JOB_NAMES[Number(a.job)]} is on, limit ${usd(a.cap as bigint)}, until ${new Date(Number(a.end) * 1000).toISOString().slice(0, 10)}`,
+          `${name}: ${JOB_NAMES[Number(a.job)]} is on, no limit, until ${new Date(Number(a.end) * 1000).toISOString().slice(0, 10)}`,
         );
         break;
       case "JobOff":
-        out.push(`${name}: ${JOB_NAMES[Number(a.job)]} is off (${OFF_REASONS[Number(a.reason)]})`);
+        out.push(`${name}: ${JOB_NAMES[Number(a.job)]} is off`);
         break;
       case "Saved":
         out.push(`${name}: Save put ${usd(a.amount as bigint)} into savings`);
         break;
       case "ProtectRepaid":
         out.push(
-          `${name}: Protect repaid ${usd(a.amount as bigint)} from savings (${PROTECT_CASES[Number(a.reason)]}), health ${hf(a.hfBefore as bigint)} → ${health(a.hfAfter as bigint)}`,
+          `${name}: Protect repaid ${usd(a.fromWallet as bigint)} from the wallet and ${usd(a.fromSavings as bigint)} from savings, health ${hf(a.hfBefore as bigint)} → ${health(a.hfAfter as bigint)}`,
         );
         break;
       case "ProtectSold":
@@ -217,49 +209,45 @@ export function describeExecutorLogs(logs: readonly Log[], executor: Address, wh
           `${name}: Protect sold ${stockList(a.shares as bigint[])} and repaid ${usd(a.repaid as bigint)}, health ${hf(a.hfBefore as bigint)} → ${health(a.hfAfter as bigint)}`,
         );
         break;
+      case "ConfigRefreshed":
+        out.push(
+          `${name}: Aave's latest settings applied, health ${hf(a.hfBefore as bigint)} → ${health(a.hfAfter as bigint)}`,
+        );
+        break;
+      case "RescueEnded":
+        out.push(`${name}: the rescue ended`);
+        break;
       case "Rebalanced":
         out.push(
           `${name}: Rebalance sold ${stockList(a.sold as bigint[])} and bought ${stockList(a.bought as bigint[])}`,
         );
         break;
-      case "RebalanceSkipped":
-        out.push(`${name}: Rebalance couldn't meet its floors today; nothing moved`);
-        break;
       case "TopUpsSet":
         out.push(`${name}: top-ups into the mix ${a.on ? "on" : "off"}, keep ${usd(BigInt(a.keep as number))} as cash`);
-        break;
-      case "TopUpCounted":
-        out.push(`${name}: Save counted ${usd(a.amount as bigint)} of top-ups, ${usd(a.waiting as bigint)} waiting`);
         break;
       case "TopUpInvested":
         out.push(
           `${name}: Rebalance put ${usd(a.amount as bigint)} of top-ups into the mix, bought ${stockList(a.bought as bigint[])}`,
         );
         break;
+      case "MixSet":
+        out.push(
+          `${name}: mix ${unpackMix(a.mix as bigint)
+            .map((w) => w / 100)
+            .join("/")}`,
+        );
+        break;
       case "EntryConverted": {
-        const coin = ENTRY_COINS.find((c) => isAddressEqual(c.address, a.coin as Address));
+        const coin = CASH_COINS.find((c) => isAddressEqual(c.address, a.coin as Address));
         out.push(
           `${name}: Receive converted ${usd(a.amountIn as bigint, coin?.decimals ?? 6)} of ${coin?.symbol ?? a.coin} into ${usd(a.usdcOut as bigint)} of USDC`,
         );
         break;
       }
-      case "EntryWaiting": {
-        const coin = ENTRY_COINS.find((c) => isAddressEqual(c.address, a.coin as Address));
+      case "Refused":
         out.push(
-          `${name}: Receive is waiting for a fair price on ${coin?.symbol ?? a.coin}, tries again at ${nyTime(a.retryAt as number)}`,
+          `${name}: a ${MOVES[Number(a.kind)] ?? a.kind} was refused (${errorName(a.reason as Hex)}); next round`,
         );
-        break;
-      }
-      case "RunFailed":
-        out.push(`${name}: the run failed (${errorName(a.reason as Hex)}), ${a.fails} in a row`);
-        break;
-      case "RunDeferred":
-        out.push(`${name}: didn't fit in this run's gas; the next run picks it up`);
-        break;
-      case "PageOpened":
-      case "ForwarderSet":
-      case "OwnerSet":
-      case "CodehashSet":
         break;
       default:
         out.push(`${e.eventName}`);
@@ -277,9 +265,9 @@ const managerErrors = parseAbi([
   "error JustaPermissionManager_UnauthorizedPermission()",
 ]);
 
-/** A revert selector, by name when GooseExecutor or JAW's manager declares it. */
+/** A revert selector, by name when GooseGuard or JAW's manager declares it. */
 export function errorName(selector: Hex): string {
-  for (const abi of [gooseExecutorAbi, managerErrors]) {
+  for (const abi of [guardAbi, managerErrors]) {
     for (const i of abi) {
       if (i.type !== "error") continue;
       const signature = `${i.name}(${i.inputs.map((p) => p.type).join(",")})`;

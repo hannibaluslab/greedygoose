@@ -21,9 +21,9 @@ import {
   agentPermission,
   CASH_JOBS,
   entryPermission,
+  NO_LIMIT,
   rebalancePermission,
   sellPermission,
-  STOCK_LIMIT_UNIT,
   type StockLimits,
 } from "@/lib/agents/permissions";
 import { ENTRY_COINS } from "@/lib/tokens/stables";
@@ -302,13 +302,13 @@ export function hashInput(i: number) {
   };
 }
 
-/** Protect · sell hash inputs: a hash input plus a daily limit per stock, a third of them never-sell, at least one
- *  for sale. Mirrors Vectors.sellHashInput. */
+/** Protect · sell hash inputs: a hash input plus the stocks it may sell (no limit), a third of them never-sell, at least
+ *  one for sale. */
 export function sellHashInput(i: number) {
   const r = (f: number) => rand("sell-hash", i, f);
   const first = Number(r(6) % 7n);
   const limitsRaw: StockLimits = Array.from({ length: 7 }, (_, k) =>
-    k !== first && r(7 + k) % 3n === 0n ? 0n : (1n + (r(14 + k) % 1_000_000n)) * STOCK_LIMIT_UNIT,
+    k !== first && r(7 + k) % 3n === 0n ? 0n : NO_LIMIT,
   );
   const start = 1_700_000_000n + (r(2) % 300_000_000n);
   return {
@@ -321,13 +321,12 @@ export function sellHashInput(i: number) {
   };
 }
 
-/** Rebalancer hash inputs: a weekly USDC limit and a weekly limit per stock, a third of them unsellable, at least one
- *  sellable. Mirrors Vectors.rebalanceHashInput. */
+/** Rebalancer hash inputs: the stocks it may sell (no limit), a third of them unsellable, at least one sellable. */
 export function rebalanceHashInput(i: number) {
   const r = (f: number) => rand("rebalance-hash", i, f);
   const first = Number(r(6) % 7n);
   const limitsRaw: StockLimits = Array.from({ length: 7 }, (_, k) =>
-    k !== first && r(7 + k) % 3n === 0n ? 0n : (1n + (r(14 + k) % 1_000_000n)) * STOCK_LIMIT_UNIT,
+    k !== first && r(7 + k) % 3n === 0n ? 0n : NO_LIMIT,
   );
   const start = 1_700_000_000n + (r(2) % 300_000_000n);
   return {
@@ -571,9 +570,9 @@ function managerHash(p: ReturnType<typeof agentPermission>) {
 }
 
 /**
- * The manager's hash of the permission JAW grants for each input, for every job, and the registration the app sends for
- * the first input of each kind (`registrations`: abi.encode(permission), lib/agents/register.ts), which the executor's
- * registerApproved decodes and must find equal to its own template.
+ * The manager's hash of the permission JAW grants for each input, for every job (every allowance NO_LIMIT, decision 9),
+ * and the bytes the app registers for the first input of each kind (`registrations`: abi.encode(permission),
+ * lib/agents/register.ts), which GooseGuard's `register(job, permission)` stores as they are.
  */
 function hashVectors() {
   const firsts: Parameters<typeof encodePermission>[0][] = [];
@@ -593,7 +592,6 @@ function hashVectors() {
           start: Number(v.start),
           end: Number(v.end),
           salt: v.salt,
-          capRaw: v.cap,
         }),
       ),
     );
@@ -610,7 +608,6 @@ function hashVectors() {
           start: Number(v.start),
           end: Number(v.end),
           salt: v.salt,
-          capRaw: v.cap,
           limitsRaw: v.limitsRaw,
         }),
       ),
@@ -628,7 +625,6 @@ function hashVectors() {
           start: Number(v.start),
           end: Number(v.end),
           salt: v.salt,
-          capRaw: v.cap,
           limitsRaw: v.limitsRaw,
         }),
       ),
@@ -646,27 +642,6 @@ function hashVectors() {
           start: Number(v.start),
           end: Number(v.end),
           salt: v.salt,
-          capRaw: v.cap,
-        }),
-      ),
-    );
-  }
-  // The Rebalancer with top-ups: the same inputs, with the savings withdraw and the aUSDC limit.
-  const rebalanceTopUpsHashes = [];
-  for (let i = 0; i < HASH_COUNT; i++) {
-    const v = rebalanceHashInput(i);
-    rebalanceTopUpsHashes.push(
-      hashed(
-        i,
-        rebalancePermission({
-          account: v.account,
-          spender: HASH_SPENDER,
-          start: Number(v.start),
-          end: Number(v.end),
-          salt: v.salt,
-          capRaw: v.cap,
-          limitsRaw: v.limitsRaw,
-          topUps: true,
         }),
       ),
     );
@@ -678,7 +653,6 @@ function hashVectors() {
     sellHashes,
     rebalanceHashes,
     entryHashes,
-    rebalanceTopUpsHashes,
     registrations,
   };
 }

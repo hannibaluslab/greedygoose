@@ -1,6 +1,4 @@
 import { CASH_AGENT, PROTECT_SELL, REBALANCER } from "@/config/risk";
-import { rebalanceCheckAt, WINDOW } from "@/lib/agents/next";
-import { clockText } from "@/lib/clock";
 
 /*
  * The Agents tab's "How it works" sheet (Adrian, 2026-10-20, board 7m, its words through the no-AI-slop pass): how
@@ -13,26 +11,11 @@ export const RUNNER_EVERY_MIN = 10;
 
 const hf = (x: number) => x.toFixed(2);
 const pct = (bps: number) => `${Number((bps / 100).toFixed(2))}%`;
-const clock = (h: number) => `${h % 12 === 0 ? 12 : h % 12}:00 ${h < 12 ? "AM" : "PM"}`;
 /** The band's share of a target, as the note says it. */
 const SHARE: Record<number, string> = { 0.2: "a fifth", 0.25: "a quarter", 0.1: "a tenth" };
 /** The note's example target, in % of the mix, and its band in points. */
 const EXAMPLE = 25;
 const BAND = Math.min(EXAMPLE * REBALANCER.bandOfTarget, REBALANCER.bandMaxPoints);
-
-/**
- * The Rebalancer's steps. Its check is on the viewer's clock with its GMT offset, as every time an agent acts at is
- * (Adrian, 2026-10-21): the next one from `nowSec`, so a week New York and the viewer change clocks on different dates
- * reads right. Before the clock is read (`nowSec` 0), New York's.
- */
-export function rebalanceSteps(nowSec: number, timeZone?: string): string[] {
-  const at = nowSec > 0 ? clockText(rebalanceCheckAt(nowSec, 0), timeZone) : `${clock(WINDOW.hour)} New York`;
-  return [
-    "You pick how much of each stock you want.",
-    `Once a market day, at ${at}, it checks your stocks.`,
-    "When one moves past its band, it sells some of what grew and buys what fell, so your mix is back on target.",
-  ];
-}
 
 export const AGENTS_GUIDE = {
   button: "How it works",
@@ -50,7 +33,12 @@ export const AGENTS_GUIDE = {
   },
   rebalance: {
     tag: "Keeps your mix on target",
-    // Its steps are `rebalanceSteps`: the check time is the viewer's.
+    // GooseGuard's pacing (decision 4): one session a day, unless the user sets a new mix. No fixed hour, no calendar.
+    steps: [
+      "You pick how much of each stock you want.",
+      "It trades at most once a day, or on a new mix.",
+      "When one moves past its band, it sells some of what grew and buys what fell, so your mix is back on target.",
+    ],
     note: `Each stock’s band is ${SHARE[REBALANCER.bandOfTarget] ?? `${REBALANCER.bandOfTarget * 100}%`} of its target, at most ${REBALANCER.bandMaxPoints} points, so a ${EXAMPLE}% target trades above ${EXAMPLE + BAND}% or below ${EXAMPLE - BAND}%. It trades at most ${pct(REBALANCER.floorBps)} under the market price, only with stock that isn’t backing your credit, and waits while your credit is in Act.`,
   },
   both: "Each agent turns on with one Face ID and off any time. Everything they do, and why, shows in Activity.",

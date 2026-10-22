@@ -46,11 +46,11 @@ function listedFromPermission(p: JawPermission, permissionId: string): ListedPer
 }
 
 /**
- * The job an on-chain permission is a grant of: `user`'s own, to `executor`, and exactly one job's template; null for
- * anything else. What the allowlist lets a batch approve and register.
+ * The job an on-chain permission is a grant of: `user`'s own, to `guard` (GooseGuard), and exactly one job's template;
+ * null for anything else. What the allowlist lets a batch approve, register (for that job only) and revoke.
  */
-export function agentJobOf(p: JawPermission, user: Address, executor: Address): AgentJob | null {
-  if (!isAddressEqual(p.account, user) || !isAddressEqual(p.spender, executor)) return null;
+export function agentJobOf(p: JawPermission, user: Address, guard: Address): AgentJob | null {
+  if (!isAddressEqual(p.account, user) || !isAddressEqual(p.spender, guard)) return null;
   const listed = listedFromPermission(p, "0x");
-  return listed ? (readAgentGrant(listed, executor)?.job ?? null) : null;
+  return listed ? (readAgentGrant(listed, guard)?.job ?? null) : null;
 }

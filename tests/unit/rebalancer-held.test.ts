@@ -5,9 +5,8 @@ import {
   BACKING_RULE,
   blockedWords,
   defaultNumbers,
-  rebalanceCheckAt,
+  nextRound,
   rebalanceOutlook,
-  TOO_SMALL,
   whenText,
   type NextInput,
   type OutlookInput,
@@ -15,8 +14,7 @@ import {
 import { rebalanceCard, type RebalanceCardInput, type RebalanceCardModel } from "@/lib/agents/rebalanceCard";
 import { sheetLine } from "@/lib/agents/rebalanceSettings";
 import { bandBreaks, rebalanceTrades } from "@/lib/agents/rules/rebalance";
-import { JOBS, type AgentJob } from "@/lib/agents/permissions";
-import { USDC } from "@/lib/tokens/registry";
+import { NO_LIMIT } from "@/lib/agents/permissions";
 
 /*
  * The honest card (Adrian, 2026-10-21, "the Rebalancer is not working, the 5 PM never came"): "On target" only while
@@ -24,9 +22,7 @@ import { USDC } from "@/lib/tokens/registry";
  * what holds it, and its slots show the whole portfolio against the mix, tinted over and under.
  */
 
-const usdc = (x: number) => BigInt(Math.round(x * 1e6));
-const CAP_MAX = usdc(1_000_000);
-/** Wednesday 2025-10-15 12:00 New York (16:00 UTC, daylight time): today's window has passed. */
+/** Wednesday 2025-10-15 12:00 New York (16:00 UTC, daylight time). */
 const WED_NOON = Date.UTC(2025, 9, 15, 16) / 1000;
 const DAY = 86_400;
 const options = rebalanceOptions();
@@ -65,13 +61,10 @@ function outlookIn(holdings: MixHolding[], over: Partial<OutlookInput> = {}): Ou
     nowSec: WED_NOON,
     holdings,
     mixBps: HIS_MIX,
-    capMaxRaw: CAP_MAX,
-    rebalanceDay: 0,
+    pacing: { sessionAt: 0, mixSetAt: 0 },
     debtUsd: 3,
     totalBackingUsd: 7.42,
     avgCf: 0.7,
-    left: { rebalance: null },
-    capRaw: { rebalance: CAP_MAX },
     numbers: { rebalance: options },
     ...over,
   };
@@ -90,9 +83,7 @@ function card(
     waiting: false,
     stoppedAt: null,
     endsAt: WED_NOON + 200 * DAY,
-    fails: 0,
-    cooldownUntil: 0,
-    rebalanceDay: 0,
+    refused: 0,
     holdings: o.holdings,
     mixBps: o.mixBps,
     options,
@@ -102,7 +93,7 @@ function card(
 }
 
 const outs = (m: RebalanceCardModel) => m.slots.map((s) => [s.reserveId, s.out]);
-const next = whenText(rebalanceCheckAt(WED_NOON, 0), WED_NOON);
+const next = whenText(nextRound(WED_NOON), WED_NOON);
 
 describe("bandBreaks: the rule's own band, past its top or its bottom", () => {
   const two = (a: number, b: number) =>
@@ -133,7 +124,7 @@ describe("bandBreaks: the rule's own band, past its top or its bottom", () => {
         sellLeftRaw: 10n ** 20n,
       }));
       const broken = bandBreaks(stocks, options).some((b) => b !== null);
-      expect(rebalanceTrades({ stocks, usdcLeftRaw: CAP_MAX }, options).length > 0).toBe(broken);
+      expect(rebalanceTrades({ stocks, usdcLeftRaw: NO_LIMIT }, options).length > 0).toBe(broken);
     }
   });
 
@@ -147,9 +138,10 @@ describe("bandBreaks: the rule's own band, past its top or its bottom", () => {
 });
 
 describe("rebalanceOutlook: the whole portfolio, and what holds the Rebalancer back", () => {
-  it("Adrian's account: nothing free in the mix, the whole portfolio far off, every trade under $20 even if freed", () => {
+  it("Adrian's account: nothing free in the mix, the whole portfolio far off: credit holds it, however small", () => {
+    // No trade is too small any more (the Planner's minTrade is 0): freeing the stock would let it trade.
     const o = rebalanceOutlook(outlookIn(adrian()));
-    expect(o).toMatchObject({ noMix: false, trades: [], offTarget: true, blocked: "too-small-backing" });
+    expect(o).toMatchObject({ noMix: false, trades: [], offTarget: true, blocked: "credit" });
   });
 
   it("the same account at 1,000 times the size: freeing the stock would let it trade, so credit holds it", () => {
@@ -164,28 +156,28 @@ describe("rebalanceOutlook: the whole portfolio, and what holds the Rebalancer b
     expect(o).toMatchObject({ offTarget: true, blocked: null });
   });
 
-  it("on target when the whole portfolio is in its band, even if the little free stock isn't", () => {
-    // The mix's own shares in all, backing credit, with $15 of Microsoft free: too small to trade, and the whole is in.
+  it("the whole portfolio in its band: nothing holds it, and the little free stock still trades (no smallest trade)", () => {
+    // The mix's own shares in all, backing credit, with $15 of Microsoft free: the whole is in its band, and the free
+    // stock alone is all Microsoft, so it trades toward the mix.
     const whole = [3, 25, 14, 0, 58, 0, 0].map((pct) => pct * 100);
     const o = rebalanceOutlook(outlookIn(account(whole, [0, 0, 0, 0, 15, 0, 0])));
-    expect(o).toMatchObject({ trades: [], offTarget: false, blocked: null });
+    expect(o).toMatchObject({ offTarget: false, blocked: null });
+    expect(o.trades.length).toBeGreaterThan(0);
+    // With nothing free, it is on target.
+    expect(rebalanceOutlook(outlookIn(account(whole, [0, 0, 0, 0, 0, 0, 0])))).toMatchObject({
+      trades: [],
+      offTarget: false,
+      blocked: null,
+    });
   });
 
-  it("too small with free stock in the mix: off target, every trade under $20, some of the mix free", () => {
+  it("a small mix of free stock trades: no trade is too small (once $20, Trades start at $20)", () => {
     // $34.20 of free stock, all of it in the mix and none backing credit: Apple 35% against 3%, Microsoft 21% against
-    // 58%. Selling $11 of Apple for Microsoft would bring it back, under the $20 trade.
+    // 58%. Selling $11 of Apple for Microsoft brings it back.
     const free = [12, 10, 5, 0, 7.2, 0, 0];
     const o = rebalanceOutlook(outlookIn(account(free, free)));
-    expect(o).toMatchObject({ trades: [], offTarget: true, blocked: "too-small" });
-  });
-
-  it("nothing it can trade at any size: the grant leaves no USDC this period", () => {
-    const o = rebalanceOutlook(
-      outlookIn(adrian(1_000, [1, 0, 0, 0.32, 0, 0, 0]), {
-        left: { rebalance: [{ token: USDC.address, leftRaw: 0n }] },
-      }),
-    );
-    expect(o).toMatchObject({ trades: [], offTarget: true, blocked: "limits" });
+    expect(o.trades.length).toBeGreaterThan(0);
+    expect(o).toMatchObject({ offTarget: true, blocked: null });
   });
 
   it("none of the mix held, free or backing: never On target, nothing to keep", () => {
@@ -252,30 +244,23 @@ describe("rebalanceCard: off target with nothing to trade", () => {
       line1: "Send $204 to fix your mix.",
       line2: "Turn on top-ups so it goes in.",
     });
-    expect(TOO_SMALL).toBe("Off target, but too small to trade.");
     expect(outs(m).map(([, out]) => out)).toEqual([null, null, null, "under"]);
     expect(m.slots.filter((s) => s.backs)).toHaveLength(3);
     expect(sheetLine(m).text).toBe("Send $204 to fix your mix. Turn on top-ups so it goes in.");
   });
 
-  it("too small with free stock in the mix: said with the smallest trade", () => {
+  it("a small mix of free stock: the trades are due, never 'too small' (no smallest trade)", () => {
     const free = [12, 10, 5, 0, 7.2, 0, 0];
     const m = card(account(free, free));
-    expect(m.footer).toEqual({ kind: "words", line1: TOO_SMALL, line2: "Trades start at $20." });
-    expect(m.slots.find((s) => s.reserveId === 4)!.out).toBe("under");
+    expect(m.footer.kind).toBe("trades");
+    expect(JSON.stringify(m)).not.toMatch(/too small|Trades start/);
   });
 
-  it("nothing it can trade at any size: says so and when it checks next, never 'too small'", () => {
-    const m = card(
-      adrian(1_000, [1, 0, 0, 0.32, 0, 0, 0]),
-      {},
-      { left: { rebalance: [{ token: USDC.address, leftRaw: 0n }] } },
-    );
-    expect(m.footer).toEqual({
-      kind: "words",
-      line1: "Off target, but nothing it can trade now.",
-      line2: `Next check ${next}.`,
-    });
+  it("nothing it can trade at all: says so and when it checks next", () => {
+    expect(blockedWords("no-trade", next)).toEqual([
+      "Off target, but nothing it can trade now.",
+      `Next check ${next}.`,
+    ]);
   });
 
   it("none of the mix held: never On target, says what starts it", () => {
@@ -291,8 +276,8 @@ describe("rebalanceCard: off target with nothing to trade", () => {
   });
 
   it("every block has two lines, and none uses a word the app never shows", () => {
-    for (const b of ["credit", "too-small", "too-small-backing", "limits", "none-held"] as const) {
-      const words = blockedWords(b, options.minTradeRaw, next);
+    for (const b of ["credit", "no-trade", "none-held"] as const) {
+      const words = blockedWords(b, next);
       expect(words).toHaveLength(2);
       expect(words.join(" ")).not.toMatch(/borrow|loan|\block|locked|collateral|\broom\b|—/i);
     }
@@ -309,7 +294,7 @@ describe("rebalanceCard: off target with nothing to trade", () => {
 
   it("on target only while the whole portfolio is in its band", () => {
     const whole = [3, 25, 14, 0, 58, 0, 0].map((pct) => pct * 100);
-    const m = card(account(whole, [0, 0, 0, 0, 15, 0, 0]));
+    const m = card(account(whole, [0, 0, 0, 0, 0, 0, 0]));
     expect(m.footer).toEqual({ kind: "on-target", next: next.charAt(0).toUpperCase() + next.slice(1) });
     expect(m.slots.every((s) => s.out === null)).toBe(true);
   });
@@ -361,7 +346,7 @@ describe("rebalanceCard: off target with nothing to trade", () => {
   it("keeps the other states: retrying, needs you and stopped come first, and mark nothing past the band", () => {
     const big = adrian(1_000);
     const at = { debtUsd: 3_000, totalBackingUsd: 7_420 };
-    const retrying = card(big, { fails: 3 }, at);
+    const retrying = card(big, { refused: 3 }, at);
     expect(retrying.pill.text).toBe("Retrying");
     expect(retrying.slots.every((s) => s.out === null)).toBe(true);
     const needs = card(big, { status: "starting" }, at);
@@ -375,7 +360,6 @@ describe("rebalanceCard: off target with nothing to trade", () => {
 });
 
 describe("the Agents list's next line says the same", () => {
-  const byJob = <T>(f: (job: AgentJob) => T) => Object.fromEntries(JOBS.map((j) => [j, f(j)])) as Record<AgentJob, T>;
   const nextIn = (holdings: MixHolding[], debtUsd: number, backingUsd: number): NextInput => ({
     nowSec: WED_NOON,
     savingsRaw: 0n,
@@ -384,22 +368,20 @@ describe("the Agents list's next line says the same", () => {
     debtUsd,
     holdings,
     mixBps: HIS_MIX,
-    left: byJob(() => null),
-    capRaw: byJob(() => CAP_MAX),
-    capMaxRaw: CAP_MAX,
     numbers: defaultNumbers(options),
-    rebalanceDay: 0,
+    pacing: { sessionAt: 0, mixSetAt: 0 },
     rescuing: false,
     sellOn: false,
-    pricesHeld: false,
     plan: null,
   });
 
-  it("held by credit, too small, or none of the mix held, never On target", () => {
+  it("held by credit, at any size, or none of the mix held, never On target", () => {
     expect(agentNexts(nextIn(adrian(1_000), 3_000, 7_420)).rebalance).toEqual({
       idle: "Stock that backs your credit isn’t rebalanced",
     });
-    expect(agentNexts(nextIn(adrian(), 3, 7.42)).rebalance).toEqual({ idle: "Off target, but too small to trade" });
+    expect(agentNexts(nextIn(adrian(), 3, 7.42)).rebalance).toEqual({
+      idle: "Stock that backs your credit isn’t rebalanced",
+    });
     const meta = [0, 0, 0, 500, 0, 0, 0];
     expect(agentNexts(nextIn(account(meta, meta), 0, 0)).rebalance).toEqual({ idle: "You hold none of your mix yet" });
   });

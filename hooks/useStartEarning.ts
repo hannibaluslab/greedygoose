@@ -95,7 +95,7 @@ export function useStartEarning(p: {
     void tx.sign(plan);
   }
 
-  // With a grant, it needs the executor's limit read too ("One moment…"); the batch alone, only the fee.
+  // With a grant, it needs the agents to be live too; the batch alone, only the fee.
   const note = grants ? setup.earningBlocked : setup.feeBlocked;
   const { title, line } = words ?? { title: "", line: "" };
   return {

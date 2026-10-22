@@ -41,7 +41,7 @@ describe("the two agents", () => {
     expect(PROTECT_RULE).toBe("Steps in only if your credit falls under 1.03, and brings it back to 1.12.");
     expect(AGENT_COPY.protect.lead.startsWith(PROTECT_RULE)).toBe(true);
     expect(AGENT_COPY.protect.never).toBe(
-      "Protector does nothing until your credit falls under 1.03. It never sells a stock that doesn’t back your credit, and never sells on a weekend.",
+      "Protector does nothing until your credit falls under 1.03. It never sells a stock that doesn’t back your credit.",
     );
     expect(Object.values(AGENT_COPY.protect).join(" ")).not.toMatch(/keeps your credit safe/i);
     for (const a of AGENTS) {

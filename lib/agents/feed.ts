@@ -1,13 +1,12 @@
-import { decodeErrorResult, isAddressEqual, maxUint256, type Hex } from "viem";
+import { decodeErrorResult, isAddressEqual, maxUint256, toFunctionSelector, type Hex } from "viem";
 import { CASH_AGENT } from "@/config/risk";
-import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
-import type { AgentEvent } from "@/lib/agents/events";
-import { PROTECT_LINE, PROTECT_TARGET, type AgentName } from "@/lib/agents/list";
+import { guardAbi } from "@/lib/agents/abis/GooseGuard";
+import type { AgentEvent, MoveKind } from "@/lib/agents/events";
+import { AGENT_JOBS, PROTECT_LINE, PROTECT_TARGET, type Agent, type AgentName } from "@/lib/agents/list";
 import type { AgentJob } from "@/lib/agents/permissions";
-import { clockText, dayIn } from "@/lib/clock";
 import { statusFor, type Status } from "@/lib/risk/status";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
-import { ENTRY_COINS } from "@/lib/tokens/stables";
+import { CASH_COINS } from "@/lib/tokens/stables";
 import { formatCoin, formatShares, formatUsdTrim } from "@/lib/formatting";
 
 /** A line of the feed: plain words, and Safe / Watch / Act in their colour. */
@@ -19,7 +18,7 @@ export type Words = readonly (string | { status: Exclude<Status, "none"> })[];
  */
 export type MoveBy = AgentName | "Cash";
 
-/** One executor move as the feed draws it: who, one line on what changed, and the details on tap. */
+/** One Guard move as the feed draws it: who, one line on what changed, and the details on tap. */
 export type AgentMove = {
   by: MoveBy;
   line: Words;
@@ -42,21 +41,7 @@ export type MoveContext = {
 /** Whether a move's row reads what was owed and the cash around it. */
 export const movesMoney = (e: AgentEvent) => e.kind === "repaid" || e.kind === "sold" || e.kind === "rebalanced";
 
-/**
- * GooseExecutor's BASE_COOLDOWN and MAX_FAILS (docs/archive/goose-executor-plan.md §6): 10 minutes after a failed run,
- * doubling, and off at eight.
- */
-const FIRST_COOLDOWN_SEC = 600;
-const MAX_FAILS = 8;
-
 const DATE = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
-const MONTH_DAY = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
-/**
- * When the agents try again after the run at `rowSec`: the viewer's clock and its GMT offset ("4:10 PM GMT+3"), with
- * the date when it falls on a later day than the row's ("Oct 22, 2:10 AM GMT+3"); the wait grows to hours.
- */
-const at = (sec: number, rowSec: number) =>
-  dayIn(sec) === dayIn(rowSec) ? clockText(sec) : `${MONTH_DAY.format(sec * 1000)}, ${clockText(sec)}`;
 
 const usd = (raw: bigint) => formatUsdTrim(Number(raw) / 10 ** USDC.decimals);
 /** What's owed rounds up to the cent: it's never shown as less than it is. */
@@ -134,7 +119,7 @@ const JOB: Partial<Record<AgentJob, { agent: AgentName; on: string; off: string 
   rebalance: { agent: "Rebalancer", on: "Rebalancer is on.", off: "Rebalancer is off" },
 };
 
-/** Why a job was switched off, after its name ("Save is off: …"). */
+/** Why a plan switches a job off, after its name ("Protector is off: …"). */
 export const OFF_WHY = {
   revoked: ".",
   expired: ": a year has passed since you switched it on.",
@@ -142,18 +127,90 @@ export const OFF_WHY = {
   stuck: ": its last runs didn’t go through.",
 } as const;
 
-/** A failed run's reason in GooseExecutor's own words (its error's name), or the raw code. */
+/** A refused move's reason in GooseGuard's own words (its error's name), or the raw code. */
 function errorName(reason: Hex): string {
   try {
-    return decodeErrorResult({ abi: gooseExecutorAbi, data: reason }).errorName;
+    return decodeErrorResult({ abi: guardAbi, data: reason }).errorName;
   } catch {
     return reason;
   }
 }
 
 function coin(address: `0x${string}`) {
-  return ENTRY_COINS.find((c) => isAddressEqual(c.address, address));
+  return CASH_COINS.find((c) => isAddressEqual(c.address, address));
 }
+
+/*
+ * Refused moves (GooseGuard's `Refused`): a move that broke a rule changes nothing and is tried again at the next round,
+ * with no back-off and no switch-off. Each agent's refusals in a row since its last move that went through make one row,
+ * the newest, with how many there were.
+ */
+
+/** The agent a refused move is for; null for the moves with no agent on screen (Save, Turn into cash, a rescue's end). */
+const MOVE_AGENT: Record<MoveKind, Agent | null> = {
+  save: null,
+  repay: "protect",
+  sell: "protect",
+  trade: "rebalance",
+  convert: null,
+  end: null,
+  refresh: "protect",
+};
+
+/** The agent an event that went through is for: it ends that agent's refusals in a row. */
+function doneBy(e: AgentEvent): Agent | null {
+  if (e.kind === "repaid" || e.kind === "sold" || e.kind === "refreshed") return "protect";
+  if (e.kind === "rebalanced" || e.kind === "top-up-invested") return "rebalance";
+  if (e.kind === "job-on")
+    return (Object.keys(AGENT_JOBS) as Agent[]).find((a) => AGENT_JOBS[a].includes(e.job)) ?? null;
+  return null;
+}
+
+/** A refused move with how many of its agent's moves were refused in a row up to it. */
+type Counted<E> = E & { inARow?: number };
+
+/**
+ * The events as the feed lists them (newest first): each agent's refusals in a row since its last move that went
+ * through become their newest one, carrying the count (`inARow`); refusals of moves with no agent on screen go.
+ */
+export function collapseRefused<E extends AgentEvent>(events: readonly E[]): Counted<E>[] {
+  const out: Counted<E>[] = [];
+  const open: Partial<Record<Agent, number>> = {};
+  for (const e of events) {
+    if (e.kind !== "refused") {
+      const done = doneBy(e);
+      if (done) delete open[done];
+      out.push(e);
+      continue;
+    }
+    const agent = MOVE_AGENT[e.move];
+    if (!agent) continue;
+    const at = open[agent];
+    if (at === undefined) {
+      open[agent] = out.length;
+      out.push({ ...e, inARow: 1 });
+    } else out[at].inARow = (out[at].inARow ?? 1) + 1;
+  }
+  return out;
+}
+
+/**
+ * Each agent's moves the Guard refused in a row, newest first, from the feed's events (`collapseRefused`): what the
+ * "Retrying" cards count. 0 once a move of the agent's went through.
+ */
+export function refusedInARow(events: readonly Counted<AgentEvent>[]): Record<Agent, number> {
+  const count = (agent: Agent) => {
+    for (const e of events) {
+      if (e.kind === "refused" && MOVE_AGENT[e.move] === agent) return e.inARow ?? 1;
+      if (doneBy(e) === agent) return 0;
+    }
+    return 0;
+  };
+  return { protect: count("protect"), rebalance: count("rebalance") };
+}
+
+/** GooseGuard's refusal when the pool sits more than the band (1%) from Aave's price, either way. */
+const OFF_BAND = toFunctionSelector("OffBand()");
 const coinAmount = (raw: bigint, decimals: number) => formatCoin(Number(raw) / 10 ** decimals);
 
 /** Protect repaid from the cash: how much, the status it brought, and why. */
@@ -194,12 +251,11 @@ const topUpsSetLine = (e: Extract<AgentEvent, { kind: "top-ups-set" }>) =>
       : "Every top-up goes into your mix.";
 
 /**
- * The Agents board's words for one executor event at `time` (seconds). Plain words and dollars, no health factor but
- * Protect's line and target (D17's words too); null for what isn't a move from the user's side: a run deferred to the
- * next block, Save's and Entry's switches, a coin waiting for a fair price (the Cash card says it's arriving), and
- * Save counting a top-up (its arrival is the cash's own row).
+ * The Agents board's words for one Guard event. Plain words and dollars, no health factor but Protect's line and target
+ * (D17's words too); null for what isn't a move from the user's side: Save's and Entry's switches, a config refresh or
+ * a rescue's end (no money moves), and refusals of moves with no agent on screen.
  */
-export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext = {}): AgentMove | null {
+export function describeAgentEvent(e: Counted<AgentEvent>, ctx: MoveContext = {}): AgentMove | null {
   switch (e.kind) {
     case "job-on": {
       const j = JOB[e.job];
@@ -212,8 +268,9 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
         : null;
     }
     case "job-off": {
+      // Only the account itself switches a job off in the Guard (`unregister`): the user's own turn-off.
       const j = JOB[e.job];
-      return j ? { by: j.agent, line: [j.off + OFF_WHY[e.reason]], details: [] } : null;
+      return j ? { by: j.agent, line: [j.off + OFF_WHY.revoked], details: [] } : null;
     }
     case "saved":
       // Cash is savings (D15), and earning is under the hood (D20): a Save reads as the money arriving.
@@ -255,22 +312,6 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
           { label: "My cash", value: cashAfterTrade(ctx) },
         ],
       };
-    case "sale-skipped":
-      return {
-        by: "Protector",
-        line: ["Couldn’t sell this time: the price was too far from Aave’s."],
-        details: [
-          { label: "Why", value: ["Each sale must get within 3% of Aave’s price. It tries again on its next run."] },
-        ],
-      };
-    case "rebalance-skipped":
-      return {
-        by: "Rebalancer",
-        line: ["Prices were off today, so it didn’t trade."],
-        details: [
-          { label: "Why", value: ["Each trade must get close to Aave’s price. It tries again next market day."] },
-        ],
-      };
     case "converted": {
       // Other dollars becoming cash is under the hood (D20): it reads as the money arriving.
       const c = coin(e.coin);
@@ -298,22 +339,41 @@ export function describeAgentEvent(e: AgentEvent, time: number, ctx: MoveContext
       };
     case "top-ups-set":
       return { by: "Rebalancer", line: [topUpsSetLine(e)], details: [] };
-    case "entry-waiting":
-    case "run-deferred":
-    // Save counting a top-up is under the hood: the money's arrival is its row ("saved"), and it waits to go in.
-    case "top-up-counted":
+    // No money moves: the credit's own rows say where it stands.
+    case "refreshed":
+    case "rescue-ended":
       return null;
-    case "run-failed":
-      return {
-        by: "Agents",
-        line: ["A run didn’t go through. Nothing moved."],
-        details: [
-          ...(e.fails < MAX_FAILS
-            ? [{ label: "Tries again", value: [at(time + (FIRST_COOLDOWN_SEC << (e.fails - 1)), time)] }]
-            : []),
-          { label: "In a row", value: [String(e.fails)] },
-          { label: "Code", value: [errorName(e.reason)] },
-        ],
-      };
+    case "refused":
+      return refusedMove(e);
   }
+}
+
+/**
+ * A refused move: nothing moved, and it tries again at the next round. A sale or a trade the price kept back says so in
+ * the words of the rows it replaces; anything else says the run didn't go through, how many in a row, and the code.
+ */
+function refusedMove(e: Counted<Extract<AgentEvent, { kind: "refused" }>>): AgentMove | null {
+  const agent = MOVE_AGENT[e.move];
+  if (!agent) return null;
+  if (e.reason.toLowerCase() === OFF_BAND && e.move === "sell")
+    return {
+      by: "Protector",
+      line: ["Couldn’t sell this time: the price was too far from Aave’s."],
+      details: [{ label: "Why", value: ["The price must be within 1% of Aave’s. It tries again at the next round."] }],
+    };
+  if (e.reason.toLowerCase() === OFF_BAND && e.move === "trade")
+    return {
+      by: "Rebalancer",
+      line: ["Prices were off, so it didn’t trade."],
+      details: [{ label: "Why", value: ["Trades must get close to Aave’s price. It tries again at the next round."] }],
+    };
+  return {
+    by: agent === "protect" ? "Protector" : "Rebalancer",
+    line: ["A run didn’t go through. Nothing moved."],
+    details: [
+      { label: "Tries again", value: ["Next round"] },
+      { label: "In a row", value: [String(e.inARow ?? 1)] },
+      { label: "Code", value: [errorName(e.reason)] },
+    ],
+  };
 }

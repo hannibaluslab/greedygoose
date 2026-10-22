@@ -4,6 +4,7 @@ import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { buildBackAndCreditCalls, type Call } from "@/lib/aave/tx";
 import type { ActivityItem } from "@/lib/activity/decode";
+import { endRescueCalls } from "@/lib/agents/settings";
 import { cashRaw, feeBufferRaw, payFromCash, toUsd, type Cash } from "@/lib/cash";
 import {
   lineOf,
@@ -380,7 +381,11 @@ export function buildEarnCalls(p: {
   const calls = payFromCash(p.user, 0n, p.cash, [...backAndCredit, ...buildAddSavingsCalls(p.user, p.creditRaw)], {
     saveTo: p.user,
   });
-  return assertEarn(p.user, calls, { creditRaw: p.creditRaw, backing: p.backing, limit: p.limit });
+  // Taking credit by hand ends a rescue Protect started (decision 5, GooseGuard's `endRescue`; nothing when none is on).
+  return [
+    ...endRescueCalls(p.user, !!p.cash.rescuing),
+    ...assertEarn(p.user, calls, { creditRaw: p.creditRaw, backing: p.backing, limit: p.limit }),
+  ];
 }
 
 /**

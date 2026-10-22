@@ -97,7 +97,7 @@ export function dayLabel(ms: number, nowMs: number) {
   return days === 0 ? "Today" : days === 1 ? "Yesterday" : days < 7 ? WEEKDAY.format(ms) : DATE.format(ms);
 }
 
-/** A row of the feed: the user's own move (JAW's history), or the executor's (GooseExecutor's events). */
+/** A row of the feed: the user's own move (JAW's history), or an agent's (GooseGuard's events). */
 export type FeedRow = ActivityRow | AgentRow;
 const isAgentRow = (r: FeedRow): r is AgentRow => "by" in r;
 

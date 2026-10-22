@@ -4,11 +4,13 @@ Next.js version notes: @AGENTS.md
 
 An invest-and-earn app on Base. Cash earns in Aave V3 savings, the seven Coinbase tokenized stocks can be bought, sold
 and traded, credit is USDC on Aave V4's Equities spoke backed by those stocks, and agents (Save, Entry, Protect,
-Rebalance) act on-chain in GooseExecutor under permissions the user grants. Accounts are JAW passkey smart accounts.
-The agents are on in production since 2026-10-20 (Adrian's go), on GooseExecutor `0x686c…F02D`: no amount cap, not
-audited yet (`contracts/docs/DEPLOYMENTS.md`). The Leaderboard is live too, on GooseBoard `0x0E10…FcA1`. Both come from
-build flags: a build without `NEXT_PUBLIC_GOOSE_EXECUTOR` and `NEXT_PUBLIC_AGENTS_LIVE=1` (`lib/agents/config.ts`) shows
-the agents as Coming soon, and one without `NEXT_PUBLIC_GOOSE_BOARD` shows the board as opens soon. Mobile-first web,
+Rebalance) act on-chain through GooseGuard, the one contract that moves money and the spender of every permission the
+user grants, planned by GoosePlanner's read-only views. Accounts are JAW passkey smart accounts. Neither is deployed
+yet: production still runs the agents on GooseExecutor `0x686c…F02D` (since 2026-10-20, Adrian's go; no amount cap, not
+audited yet, `contracts/docs/DEPLOYMENTS.md`) until the Guard's release. The Leaderboard is live too, on GooseBoard
+`0x0E10…FcA1`. Both come from build flags: a build without `NEXT_PUBLIC_GOOSE_GUARD`, `NEXT_PUBLIC_GOOSE_PLANNER` and
+`NEXT_PUBLIC_AGENTS_LIVE=1` (`lib/agents/config.ts`) shows the agents as Coming soon, and one without
+`NEXT_PUBLIC_GOOSE_BOARD` shows the board as opens soon. Mobile-first web,
 installable to the home screen, with iPhone Safari and passkeys as the primary target (D5, `app/manifest.ts`).
 
 ## Read first
@@ -32,14 +34,15 @@ the code, SPEC.md or the decisions log.
 ### Custody and keys
 
 - Non-custodial. The app never holds keys or money. No seed phrases, no private-key inputs.
-- No server and no database of ours (D12). Agents run on-chain in GooseExecutor and the app reads Base. The only server
-  code is the stateless price route (`app/api/prices`). The runners (KeeperHub's wallet, outside this repo, and later
-  Chainlink CRE through `GooseReceiver`) only wake the executor: they hold no money and sit in no permission
-  (DEPLOYMENTS.md).
+- No server and no database of ours (D12). Agents run on-chain in GooseGuard and the app reads Base. The only server
+  code is the stateless price route (`app/api/prices`). The runners (KeeperHub's wallet, outside this repo, the
+  account itself, or one runner it picks) only send the Guard moves to check: they hold no money and sit in no
+  permission (DEPLOYMENTS.md).
 - JAW is the only wallet (`lib/jaw/config.ts`). Don't add MetaMask, WalletConnect, Coinbase Wallet or any other. The
   rehearsal's fork signer is for development only and never ships (`npm run rehearsal:check-build`).
-- Agents act only under JAW permissions the user grants to GooseExecutor, approved and registered in the same batch as
-  the change. Turning an agent off revokes its grants in one batch (`manager.revoke`), never through JAW's revoke sheet.
+- Agents act only under JAW permissions the user grants to GooseGuard, approved and registered (`register(job,
+  permission)`, by the account itself) in the same batch as the change. Turning an agent off revokes its grants and
+  unregisters it in one batch (`manager.revoke`, `unregister`), never through JAW's revoke sheet.
 - Keys are never printed. `.env.local` and the deployer key stay private. Every `NEXT_PUBLIC_*` value ships in the
   page, so no secret goes in one.
 - Never log signatures, keys or personal data. The app's lint refuses `console.log`; only `console.warn` and
@@ -71,7 +74,7 @@ receipt → re-read state
   Trade, Send, Repay, Credit Buy and Earn with stocks name every move in their small print.
 - Targets come only from the typed registries (`lib/aave/addresses.ts`, `lib/tokens/registry.ts`,
   `lib/protocols/config.ts`, `lib/swap/venues.ts`). Never from a URL, a query string, user input or a quote's response.
-  GooseExecutor and GooseBoard are the exceptions: each comes from its `NEXT_PUBLIC_*` setting, checked as an address
+  GooseGuard, GoosePlanner and GooseBoard are the exceptions: each comes from its `NEXT_PUBLIC_*` setting, checked as an address
   (`lib/agents/config.ts`, `lib/board/config.ts`).
 - Approvals are exact, never unlimited, and a repay sets the allowance back to 0 (SPEC.md › Money rules).
 - Taking credit and freeing stock never end below the position's line (`config/risk.ts` `CreditLine`, `lineOf`):
@@ -95,7 +98,8 @@ receipt → re-read state
   accruing. The Invest page says so (`components/ui/MarketBanner.tsx`).
 - Buying, selling, trading and taking credit on a weekend are allowed, because the pools trade and Aave allows it. Each
   of those screens says the price can jump when markets reopen.
-- Protect never sells while prices are held.
+- The agents act at weekends too, whenever Aave and GooseGuard's 1% price check allow (decision 7, 2026-10-22). No
+  line may say they stop then; the weekend card only says Aave's stock prices pause.
 - A paused, frozen, capped or empty reserve disables the action and says why in plain words.
 
 ### Oracle
@@ -122,8 +126,9 @@ be shown for information, labelled as such, and never used for limits.
   never the app's Alchemy key.
 - A new executor is a new spender, so every account grants its agents again. The next one must allow JAW's account
   clone (DEPLOYMENTS.md).
-- Deploys are the owner's, each recorded in DEPLOYMENTS.md. A test deploy is capped at $5 (D13) and never goes in
-  production config.
+- Deploys are the owner's, each recorded in DEPLOYMENTS.md. There is no amount limit anywhere, the live test included
+  (decision 9, 2026-10-22, which replaces D13's $5 cap): every agent allowance is the largest a JAW spend holds
+  (`NO_LIMIT`), and how much anyone puts in is their own choice.
 - B20 stock code can't run in Foundry. Fork tests use the stand-ins in `contracts/test/ForkBase.sol` (MANAGER-NOTES.md
   § 8).
 
@@ -186,8 +191,9 @@ rules above:
 
 - **Thresholds** live in `config/risk.ts` only (D2): Safe 1.5 and above, Watch 1.1 to 1.5, Act under 1.1.
 - **Act is the line.** Act is a warning only. Ending in Watch asks for one tick (D2's extra confirmation).
-- **Protect** acts only under 1.03: it repays from cash, then sells backing stock at once, back to 1.12. Protect,
-  Rebalance and Save have no amount limit (their grants at the executor's `CAP_MAX`).
+- **Protect** acts only under 1.03: it repays from cash, then sells backing stock at once, back to 1.12 (the account's
+  own line and target once it sets them, decision 3). No agent has an amount limit (decision 9: every grant's
+  allowance is `NO_LIMIT`, `lib/agents/permissions.ts`).
 - **Network fees** are paid in USDC through JAW's `feeToken` (D4, `useFeeSupport`). When USDC can't pay the fee, the
   action is blocked with a plain message. Never silently require ETH, and never say "gasless" or "no fees".
 - **Names** take their parent from `NEXT_PUBLIC_ENS_PARENT`, `justan.id` by default (D6).

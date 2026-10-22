@@ -19,9 +19,11 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
 - **Stocks** are the 7 Coinbase tokenized stocks (Apple, Amazon, Alphabet, Meta, Microsoft, NVIDIA, Tesla). They earn
   no yield, so no stock shows an APY. "Not company shares" appears once, on the stock sheet.
 - **Credit** is USDC on the Aave V4 Equities spoke, backed by the user's stocks.
-- **Agents** run on-chain in `GooseExecutor`, woken by its runners (KeeperHub, and Chainlink CRE through
-  `GooseReceiver`). There is no server and no database: the app reads everything from Base, and the price route is
-  stateless.
+- **Agents** run on-chain through two contracts: `GooseGuard`, the only one that moves money (every agent's spender),
+  which checks every move against its rules, and `GoosePlanner`, which works out each move and holds nothing. KeeperHub
+  sends the moves every 10 minutes; the user's own account, or one helper it picks, may send its own under the same
+  rules (Adrian, 2026-10-22). There is no server and no database: the app reads everything from Base, and the price
+  route is stateless.
 
 ## Home
 
@@ -115,7 +117,7 @@ An invest-and-earn app on Base, signed in with a JAW passkey.
   2026-10-19). Each coin is approved and swapped only at its own venue and pool, into USDC for the user. A dollar coin's
   floor is 99.5% of face value; EURC's is 99.5% of its value at Chainlink's EUR / USD rate, read again at signing (a
   rate that rose raises the floor, one that fell never lowers it), and refused when the rate is over two hours old or
-  reads 0 or less. The Entry agent keeps its own list until the executor's pre-launch redeploy.
+  reads 0 or less. The Entry agent converts the same five coins (GooseGuard).
 - **One stock order** in every list: Home's (Apple, Amazon, Alphabet, Meta, Microsoft, NVIDIA, Tesla). Lists keep
   their groups (what can go before what can't); a default still opens on the cash or the biggest free stock.
 
@@ -190,13 +192,11 @@ the free shares' value. A stock whose shares all back credit is listed but can't
 - Invisible: earning on idle cash (Save) and turning other dollars into cash (Receive). Their permissions are asked
   when money first arrives.
 - Each change is one batch, one Face ID (D14 dropped, Adrian 2026-10-20): its permissions approved in JAW's manager and
-  registered with the executor, the ones they replace (or a turn-off's) revoked, with the settings and any cash move,
-  then recorded in JAW's list. The card says what its Face ID allows before the tap. The spender is `GooseExecutor`.
+  registered with GooseGuard, the ones they replace (or a turn-off's) revoked, with the settings and any cash move,
+  then recorded in JAW's list. The card says what its Face ID allows before the tap. The spender is `GooseGuard`.
   An account JAW hasn't deployed yet starts earning in one too.
-  Protect and Rebalance have no amount limit:
-  their grants (Protect's repay from cash and sell, Rebalance's trades) are at the executor's CAP_MAX, with no field to
-  type. Each is limited by its rules. A Rebalance grant capped below CAP_MAX, from before, is granted again at the
-  next Save.
+  No agent has an amount limit (Adrian, 2026-10-22): every grant is at the largest amount JAW allows, with no field to
+  type. Each is limited by its rules.
 - The Rebalancer waits while the credit is in Act (under 1.1), not down to Protect's line.
 - Until the agents go live (`NEXT_PUBLIC_AGENTS_LIVE=1`), "Coming soon" stands where the switches and
   Save are; the figures are real. The invisible grants wait too: Start earning is its batch alone (no Save grant), and
@@ -210,32 +210,26 @@ the free shares' value. A stock whose shares all back credit is listed but can't
   due (BUY, SELL, or waiting in Act), it draws the free stock they move. "On target" only while all of it sits inside
   its band, by the rule's own band, and holds some of the mix. Otherwise, with nothing to trade, the card stays On and
   says why: "Stock that backs your credit isn’t rebalanced. Free up some to let it trade." when the rule would trade
-  that stock if it were free; "Off target, but too small to trade. Trades start at $20." (the executor's smallest
-  trade), with the rule as its second line when none of the mix's stock is free; "Off target, but nothing it can trade
-  now. Next check …" when its grant leaves nothing this period; "You hold none of your mix yet. Buy some and it keeps
+  that stock if it were free; "Off target, but nothing it can trade now. Next check …" when its grant leaves nothing this period; "You hold none of your mix yet. Buy some and it keeps
   them on target." A stock past its band is tinted over or under only in those states. Its sheet always says "Stock that
   backs your credit isn’t rebalanced.", and a My mix row with no free shares that backs credit reads "backs credit".
 - Rebalance only moves stocks that don't back credit, and never spends cash beyond the network fee. Its mix never adds
   up to more than 100%: a target stops where the other stocks' leave off.
 - **Top-ups go into my mix**, a Rebalance setting, off by default, with **Keep $X as cash** ($500 by default,
   whole dollars, $0 allowed). A top-up is money that comes in from outside: USDC sent to the account, and other dollar
-  coins turned into cash. A sale's proceeds and credit taken as cash are never top-ups (they go into savings inside the
-  user's own batch), nor is the change the agents' sales leave; the change from the user's own sales (about 1%) counts
-  as one. A top-up fills cash up to Keep $X first, and only the part above goes into the mix (Keep $0: all of it). It
-  goes in at the next market morning's check, never the day it arrived, and earns until then. Rebalance takes it from
-  savings and buys the stocks furthest below their target first, then pro rata to the mix. It never sells for this, has
-  no amount cap, and waits while the credit is in Act. If the cash falls after a top-up is counted, the fall comes out
-  of the waiting top-up first. With the setting off, Rebalance spends no cash.
-- **How top-ups run.** Only Save counts top-ups, so turning the setting on also turns on earning, in the same
-  signature. Save counts what it puts in savings; Rebalance, at its daily check, invests the smaller of that count and
-  the cash above Keep $X. The Rebalance grant carries Aave V3's savings withdraw (to the account only) only while the
-  setting is on, so switching it on or off is a new grant; changing Keep alone is the setting only. Turning Rebalance
-  off switches top-ups off in the same signature; once Rebalance has stopped, switching them off is the setting alone.
-  Save has no amount limit either, its grant at the executor's CAP_MAX, from Rebalance's Save and from Start earning
-  alike. The sheet shows what's waiting and when it goes in, and warns when
-  Keep is $0, something is owed and Protect can't sell; the card and the sheet's line show a top-up going in at the
-  next check and the stocks it buys. A Save that drops a waiting top-up (a new grant, or the switch flipped) says so
-  first. Until the executor that counts top-ups is live, the setting says "Not available yet."
+  coins turned into cash. Credit taken as cash and a sale's proceeds are never top-ups: they go into savings inside the
+  user's own batch, and savings never go into stock (GooseGuard's wallet rule, Adrian 2026-10-22). Change the agents'
+  sales leave in the wallet is invested like a top-up. A top-up fills cash up to Keep $X first, and only the part above
+  goes into the mix (Keep $0: all of it). It goes in from the wallet at the next round and doesn't earn while it waits.
+  Rebalance buys the stocks furthest below their target first, then pro rata to the mix. It never sells for this, has
+  no amount cap, and waits during a rescue and while the credit is in Act (under 1.10, or the user's own line if
+  higher). With the setting off, Rebalance spends no cash.
+- **How top-ups run.** With the setting on, Save only fills savings up to Keep $X; the rest of the wallet above the $1
+  kept back waits there to go into the mix. Switching the setting on first saves the cash already in the wallet, so it
+  stays cash. The Rebalance grant has no savings withdraw, so switching top-ups on or off, or changing Keep, is the
+  setting alone. Turning Rebalance off switches top-ups off in the same signature. Save has no amount limit either. The
+  sheet shows what's waiting and when it goes in, and warns when Keep is $0, something is owed and Protect can't sell;
+  the card and the sheet's line show a top-up going in at the next round and the stocks it buys.
 
 ## Words
 

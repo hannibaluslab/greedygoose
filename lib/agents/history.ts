@@ -28,16 +28,16 @@ export function logChunks(from: bigint, to: bigint, size = LOG_CHUNK): { from: b
   return out;
 }
 
-/** GooseExecutor's logs about `account` in one range: every event about an account has it as its first indexed topic. */
+/** GooseGuard's logs about `account` in one range: every event about an account has it as its first indexed topic. */
 export async function readAgentLogs(
   client: Client,
-  q: { executor: Address; account: Address; from: bigint; to: bigint },
+  q: { guard: Address; account: Address; from: bigint; to: bigint },
 ): Promise<Log[]> {
   const logs = (await client.request({
     method: "eth_getLogs",
     params: [
       {
-        address: q.executor,
+        address: q.guard,
         topics: [null, pad(q.account.toLowerCase() as Address)],
         fromBlock: toHex(q.from),
         toBlock: toHex(q.to),

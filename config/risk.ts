@@ -69,16 +69,15 @@ export const pastStop = (healthFactor: number | null, line: CreditLine) =>
   healthFactor !== null && Number.isFinite(healthFactor) && healthFactor < line.stopHf;
 
 /**
- * Protect's numbers (D18). GooseExecutor holds the live values on-chain, each within hard bounds, and a change waits a
- * public 7-day delay. These mirror its deploy defaults (contracts/script/DeployExecutor.s.sol, checked by
- * contracts/test/DeployExecutor.t.sol); read the live ones with the executor's `thresholds()` and `amounts()`.
+ * Protect's numbers (D18). GooseGuard holds the line and target (each account's own, `linesOf`: 1.03 and 1.12 unless it
+ * set others, decision 3); GoosePlanner exposes the rest (`thresholds()`, `amounts()`). These mirror the defaults.
  *
  * Protect's line (Adrian, 2026-10-19): Protect acts only below 1.03, as late as is safe before Aave's line at 1.0 (a
  * 2.9% fall; the feeds move in steps of about 0.5%, the largest measured −2.13%). Act (1.1) is a warning only. Once it
  * acts, the rescue goes on until the credit is back at 1.12: savings first, then selling. 1.12 is the same line credit
  * is capped at (CREDIT_CAP.minHf), so Protect puts the account back where it was allowed to be. There is no amount
- * limit: like DeFi Saver, Protect is limited by what it does, and a move may not land above the target plus 0.01. The
- * executor's bounds pin the line (contracts/src/CashRules.sol TRIGGER_HF) and keep the target under the Safe line.
+ * limit (decision 9): like DeFi Saver, Protect is limited by what it does, and a move may not land above the target
+ * plus 0.01. GooseGuard never lets a line under 1.03 or a target over 1.40.
  */
 export const CASH_AGENT = {
   /** Protect acts below this health factor (Protect's line)… */
@@ -92,9 +91,9 @@ export const CASH_AGENT = {
   /** How long before a freeze the weekend card shows (Friday 14:00–20:00 New York with no holiday; the app reads the
    *  executor's own calendar, so a holiday's eve gets it too). */
   weekendWindowSec: 6 * 3600,
-  /** Smallest repay and smallest save worth a run. */
-  minRepayUsd: 0.05,
-  minSaveUsd: 1,
+  /** Smallest repay and smallest save worth a round: none (GoosePlanner's `amounts()`, spec-final-v2.md §10). */
+  minRepayUsd: 0,
+  minSaveUsd: 0,
   /** Most Saves per account per New York day. */
   maxSavesPerDay: 6,
 } as const;
@@ -102,11 +101,11 @@ export const CASH_AGENT = {
 /**
  * Protect · sell's numbers (D18): when savings can't bring the credit back to the target, Protect sells backing stock,
  * at once, on Protect's own lines (CASH_AGENT): below 1.03, and on through a rescue until 1.12 (Adrian, 2026-10-19).
- * Never while prices are held. Before 2026-10-19: a heads-up below 1.1 and a sale 30 minutes later, at once below 1.05,
+ * Weekends too, while the pool sits within 1% of Aave's price (decision 7). Before 2026-10-19: a heads-up below 1.1 and a sale 30 minutes later, at once below 1.05,
  * back to 1.2. Every sale is urgent now, so it takes the urgent floor, 3% under Aave's price. The pool numbers follow
  * the expert panel (eval/protect-panel.json): about 2% of a pool's USDC depth per 10 minutes, and each swap near 1% of
- * it (the Aerodrome pools hold $0.44M–1.57M, 2026-10-14). All wait on calibration (plan item 6 step 9). GooseExecutor
- * holds the live values within hard bounds (contracts/src/SellRules.sol); a change waits the public 7-day delay.
+ * it (the Aerodrome pools hold $0.44M–1.57M, 2026-10-14). All wait on calibration (plan item 6 step 9). GooseGuard
+ * fixes the floor (SALE_FLOOR_BPS) and the 1% band; the Planner sizes the slices.
  */
 export const PROTECT_SELL = {
   floorBps: 300,
@@ -117,11 +116,9 @@ export const PROTECT_SELL = {
 
 /**
  * The Rebalancer's numbers (D18), as locked for plan item 9: a stock breaks its band past the smaller of 20% of its
- * target and 5 points, and goes back to half the band; trades under $20 are skipped; a pool more than 0.5% off Aave's
- * price holds the rebalance; each swap is at most $25k. Each swap gets at least Aave's price less 0.5%, the same as the
- * pool gap. All wait on calibration (plan item 6 step 9, item 9 step 5). GooseExecutor holds the live values within
- * hard bounds (contracts/src/RebalanceRules.sol); a change waits the public 7-day delay, and can only make the floor and
- * the pool gap stricter.
+ * target and 5 points, and goes back to half the band; no trade is too small (GoosePlanner's `rebalanceLimits()`
+ * minTrade is 0); each swap is at most $25k. Each swap gets at least Aave's price less 0.5% (GooseGuard's swap floor),
+ * and the pool must sit within 1% of Aave's price. All wait on calibration (plan item 6 step 9, item 9 step 5).
  */
 export const REBALANCER = {
   /** The band: the smaller of this share of a stock's target… */
@@ -130,16 +127,15 @@ export const REBALANCER = {
   bandMaxPoints: 5,
   poolGapBps: 50,
   floorBps: 50,
-  minTradeUsd: 20,
+  minTradeUsd: 0,
   maxSliceUsd: 25_000,
 } as const;
 
 /**
  * The Entry agent's numbers (D18), plan item 2: every swap at 99.5% of face value or better. A swap is at most $10k,
  * under a fifth of the thinnest venue's USDC (Aerodrome's USDbC pool holds $58k and fills $10k at 99.99%, 2026-10-14);
- * a larger balance is split over the next runs. Both wait on calibration (plan item 6 step 9). GooseExecutor holds
- * the live values within hard bounds, the floor never under 99.5% (contracts/src/EntryRules.sol); a change waits the
- * public 7-day delay.
+ * a larger balance is split over the next rounds. Both wait on calibration (plan item 6 step 9). GooseGuard fixes the
+ * floor, never under 99.5% (SWAP_FLOOR_BPS); the Planner sizes each swap.
  */
 export const ENTRY = {
   floorBps: 50,

@@ -10,9 +10,12 @@
 set -euo pipefail
 
 # Production's public build values (contracts/docs/DEPLOYMENTS.md, "Live now"). A deploy without them silently turns the
-# agents, the Leaderboard and the Wall off.
-EXECUTOR=0x686cd88F248DE3F9FC0835566DB798D93881F02D
-EXECUTOR_BLOCK=52851406
+# agents, the Leaderboard and the Wall off. GooseGuard (the spender of every agent permission) and GoosePlanner (its
+# views) aren't deployed yet: fill in their addresses and the Guard's deploy block from DEPLOYMENTS.md once the owner
+# has deployed them. Until then this script refuses to release: this app no longer talks to GooseExecutor (0x686c).
+GUARD=
+GUARD_BLOCK=
+PLANNER=
 BOARD=0x0E10c55D3f20D4Ea1DEf5aC6c60480b34c07FcA1
 WALL_FROM_BLOCK=52912478 # the block the Wall went live at: a new one would restart its count
 SITE=https://app.greedygoo.com
@@ -21,6 +24,9 @@ ROOT=$(git rev-parse --show-toplevel)
 SHA=$(git -C "$ROOT" rev-parse --verify "${1:?usage: scripts/release.sh <commit on origin/main>}^{commit}")
 ENVF="$ROOT/.env.local"
 val() { grep "^$1=" "$ENVF" | head -1 | cut -d= -f2-; }
+for v in GUARD GUARD_BLOCK PLANNER; do
+  [ -n "${!v}" ] || { echo "$v is empty in scripts/release.sh: GooseGuard and GoosePlanner aren't deployed yet." >&2; exit 1; }
+done
 [ -f "$ROOT/.vercel/project.json" ] || { echo "Run 'vercel link' in the repo root first." >&2; exit 1; }
 for k in NEXT_PUBLIC_ALCHEMY_KEY NEXT_PUBLIC_BASE_RPC_URL; do
   [ -n "$(val "$k")" ] || { echo "$k is missing from .env.local." >&2; exit 1; }
@@ -40,8 +46,9 @@ cp -R "$ROOT/.vercel" "$SRC/.vercel"
 (cd "$SRC" && vercel deploy --prod --yes --force \
   --build-env NEXT_PUBLIC_ALCHEMY_KEY="$(val NEXT_PUBLIC_ALCHEMY_KEY)" \
   --build-env NEXT_PUBLIC_BASE_RPC_URL="$(val NEXT_PUBLIC_BASE_RPC_URL)" \
-  --build-env NEXT_PUBLIC_GOOSE_EXECUTOR="$EXECUTOR" \
-  --build-env NEXT_PUBLIC_GOOSE_EXECUTOR_BLOCK="$EXECUTOR_BLOCK" \
+  --build-env NEXT_PUBLIC_GOOSE_GUARD="$GUARD" \
+  --build-env NEXT_PUBLIC_GOOSE_GUARD_BLOCK="$GUARD_BLOCK" \
+  --build-env NEXT_PUBLIC_GOOSE_PLANNER="$PLANNER" \
   --build-env NEXT_PUBLIC_AGENTS_LIVE=1 \
   --build-env NEXT_PUBLIC_GOOSE_BOARD="$BOARD" \
   --build-env NEXT_PUBLIC_WALL_FROM_BLOCK="$WALL_FROM_BLOCK")
@@ -55,7 +62,7 @@ for p in / /home /portfolio /agents /activity /send /settings /leaderboard /guid
 done
 JS=$(for p in /home /agents /leaderboard; do curl -s "$SITE$p" | grep -o '/_next/static/[^"]*\.js'; done | sort -u)
 ALL=$(for f in $JS; do curl -s "$SITE$f"; done)
-for v in "$EXECUTOR" "$EXECUTOR_BLOCK" "$BOARD" "$WALL_FROM_BLOCK" alchemy.com; do
+for v in "$GUARD" "$GUARD_BLOCK" "$PLANNER" "$BOARD" "$WALL_FROM_BLOCK" alchemy.com; do
   if grep -q -i -F "$v" <<<"$ALL"; then echo "live: $v"; else echo "MISSING from the live scripts: $v" >&2; fail=1; fi
 done
 [ "$fail" = 0 ] && echo "Released $SHA to $SITE." || { echo "Released, but a check failed: look before telling anyone." >&2; exit 1; }

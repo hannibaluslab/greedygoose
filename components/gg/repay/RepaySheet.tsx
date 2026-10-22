@@ -355,7 +355,7 @@ function useRepayView(data: RepayData | undefined, cfs: Record<string, number> |
 
 /** What the sheet would sign for the row and amount on screen (null with no amount, or while it isn't ready). */
 const signOf = (view: RepayView | null, data: RepayData | undefined, address: `0x${string}`) =>
-  view && view.amountUsd > 0 && data ? repaySign(view, address, data.debtRaw) : null;
+  view && view.amountUsd > 0 && data ? repaySign(view, address, data.debtRaw, !!data.cash.rescuing) : null;
 
 /** The stocks that back credit are still being read: the sheet waits for them. */
 const waitsForCfs = (data: RepayData | undefined, cfRead: { cfs?: Record<string, number>; failed: boolean }) =>

@@ -5,6 +5,7 @@ import {
   agentPermission,
   entryPermission,
   jobGrant,
+  NO_LIMIT,
   rebalancePermission,
   sellPermission,
   type AgentJob,
@@ -108,21 +109,21 @@ describe("the production build has no fork signer", () => {
   });
 });
 
-describe("the fork signer's grant is JAW's (buildGrantPermissionCall) and GooseExecutor's template", () => {
-  const limits: StockLimits = [0n, 0n, 0n, 0n, 0n, 2_250_000n, 0n];
-  const cases: { job: AgentJob; cap: bigint; limits?: StockLimits }[] = [
-    { job: "save", cap: 5_000_000n },
-    { job: "protect", cap: 5_000_000n },
-    { job: "sell", cap: 5_000_000n, limits },
-    { job: "rebalance", cap: 5_000_000n, limits },
-    { job: "entry", cap: 5_000_000n },
+describe("the fork signer's grant is JAW's (buildGrantPermissionCall) and the app's template", () => {
+  const limits: StockLimits = [0n, 0n, 0n, 0n, 0n, NO_LIMIT, 0n];
+  const cases: { job: AgentJob; limits?: StockLimits }[] = [
+    { job: "save" },
+    { job: "protect" },
+    { job: "sell", limits },
+    { job: "rebalance", limits },
+    { job: "entry" },
   ];
 
   it.each(cases)(
-    "$job: the approve JAW's grant ends with carries the permission the executor rebuilds",
-    ({ job, cap, limits }) => {
+    "$job: the approve JAW's grant ends with carries the permission GooseGuard stores",
+    ({ job, limits }) => {
       const expiry = Math.floor(Date.now() / 1000) + 365 * 86_400;
-      const call = buildGrantPermissionCall(account, executor, expiry, jobGrant(job, cap, limits));
+      const call = buildGrantPermissionCall(account, executor, expiry, jobGrant(job, limits));
       expect(getAddress(call.to)).toBe(getAddress(PROTOCOLS.PERMISSION_MANAGER));
       const { functionName, args } = decodeFunctionData({ abi: permissionManagerAbi, data: call.data });
       expect(functionName).toBe("approve");
@@ -130,7 +131,7 @@ describe("the fork signer's grant is JAW's (buildGrantPermissionCall) and GooseE
       // JAW's SDK picks the start (this clock) and a random salt; everything else must be the template.
       expect(Math.abs(p.start - Date.now() / 1000)).toBeLessThan(5);
       expect(p.end).toBe(expiry);
-      const signed = { account, spender: executor, start: p.start, end: p.end, salt: p.salt, capRaw: cap };
+      const signed = { account, spender: executor, start: p.start, end: p.end, salt: p.salt };
       const template =
         job === "save" || job === "protect"
           ? agentPermission(job, signed)

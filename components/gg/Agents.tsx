@@ -156,8 +156,8 @@ export function ComingSoon() {
 
 /**
  * One agent: its mark, name and what it does, its switch (Coming soon until the agents are live), then what it does
- * next and its limit (the Rebalancer's; Protect has none). The row opens the agent's sheet; the switch opens JAW's own
- * sheet for the grant (at the limit shown, or Protect's at the executor's CAP_MAX), or for the revoke.
+ * next (no agent has an amount limit, decision 9). The row opens the agent's sheet; the switch opens the grant's batch,
+ * or the turn-off's.
  */
 export function AgentRow({
   item,

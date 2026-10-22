@@ -2,9 +2,9 @@ import { encodeFunctionData, isAddressEqual, toFunctionSelector, type Hex } from
 import type { Permission } from "@jaw.id/core";
 import type { ActivityItem } from "@/lib/activity/decode";
 import type { Call } from "@/lib/aave/tx";
-import { GOOSE_EXECUTOR } from "@/lib/agents/config";
+import { GOOSE_GUARD } from "@/lib/agents/config";
 import { oneTapGrantCalls } from "@/lib/agents/oneTapGrant";
-import type { JawPermission } from "@/lib/agents/permissions";
+import type { AgentJob, JawPermission } from "@/lib/agents/permissions";
 import { PROTOCOLS } from "@/lib/protocols/config";
 import { permissionManagerAbi } from "@/lib/protocols/abis";
 import { buildRegisterCalls, REGISTER_FALLBACK } from "@/lib/agents/register";
@@ -27,22 +27,22 @@ export const keepMixPlan = (account: `0x${string}`, on: boolean): TxPlan => ({
 });
 
 /**
- * A change's last batch: its registry settings, then the registrations of its new grants (`registerApproved`), as
- * useTx signs them: keyed by the account, the grants' salts and the settings' calldata.
+ * A change's last batch: its settings in GooseGuard, then the registrations of its new grants (`register(job,
+ * permission)`), as useTx signs them: keyed by the account, the grants' jobs and salts and the settings' calldata.
  */
 export const registerPlan = (
   account: `0x${string}`,
-  permissions: readonly JawPermission[],
+  grants: readonly { job: AgentJob; p: JawPermission }[],
   settings: readonly Call[] = [],
 ): TxPlan => ({
   key: txKey(
     "register",
     account,
-    permissions.map((p) => p.salt),
+    grants.map((g) => [g.job, g.p.salt]),
     settings.map((c) => c.data),
   ),
   user: account,
-  calls: () => Promise.resolve(buildRegisterCalls(account, permissions, settings)),
+  calls: () => Promise.resolve(buildRegisterCalls(account, grants, settings)),
   fallback: REGISTER_FALLBACK,
 });
 
@@ -75,9 +75,9 @@ type ChangeDeps = {
   landed?: (receipts: readonly TxReceipt[]) => Promise<void>;
 };
 
-const REGISTER_APPROVED = toFunctionSelector("registerApproved(bytes)");
+const REGISTER = toFunctionSelector("register(uint8,bytes)");
 const isRegistration = (c: Call) =>
-  !!GOOSE_EXECUTOR && isAddressEqual(c.to, GOOSE_EXECUTOR) && c.data.slice(0, 10).toLowerCase() === REGISTER_APPROVED;
+  !!GOOSE_GUARD && isAddressEqual(c.to, GOOSE_GUARD) && c.data.slice(0, 10).toLowerCase() === REGISTER;
 
 /** manager.revoke(permission): a grant of the user's own, taken back in the manager. */
 export const revokeCall = (p: JawPermission): Call => ({
@@ -90,17 +90,17 @@ export const revokeCall = (p: JawPermission): Call => ({
  * A change in one signature (D14 dropped, Adrian 2026-10-20: "the permission, the cash move and the registration in one
  * signature like Leo's Guardian"): `prefix` first (Start earning's supply), then each grant it takes back (`revokes`: a
  * job turned off, or the grant a new one replaces, so nothing old stays approved), then the owner call when the manager
- * doesn't own the account yet, each new grant's approve in JAW's manager, the registry `settings`, and each new grant's
- * registration (oneTapGrantCalls); the whole batch through the allowlist. Keyed by the account, every grant's salt
- * (new ones picked once, lib/agents/picks.ts), the settings' calldata and the prefix's key.
+ * doesn't own the account yet, each new grant's approve in JAW's manager, the Guard `settings` (a turn-off's
+ * `unregister` among them), and each new grant's registration (oneTapGrantCalls); the whole batch through the
+ * allowlist. Keyed by the account, every grant's salt (new ones picked once, lib/agents/picks.ts), the settings'
+ * calldata and the prefix's key.
  *
  * An account JAW hasn't deployed yet (money arrived, nothing ever sent) is simulated without its registrations (Adrian,
- * 2026-10-20: one Face ID there too): the executor checks the account's code and that the manager owns it, which JAW's
- * factory puts there first in the same user operation, so no simulation from the bare address can pass them. What
- * they check was read on Base instead: the executor allows the code of JAW's accounts (allowedCodehash of the factory's
- * clone, true on 0x778d), and JAW's v1 recipe makes the manager an owner (core accountRecord.js ACCOUNT_RECIPE_V1).
- * The supply and the approves are still simulated; if a registration ever failed, the whole batch would revert and
- * nothing would move.
+ * 2026-10-20: one Face ID there too): GooseGuard's `register` checks the account's code (`codehashOk`), which JAW's
+ * factory puts there first in the same user operation, so no simulation from the bare address can pass it. The Guard
+ * allows the code of JAW's account clone from its constructor (spec-final-v2.md §7), and JAW's v1 recipe makes the
+ * manager an owner (core accountRecord.js ACCOUNT_RECIPE_V1). The supply and the approves are still simulated; if a
+ * registration ever failed, the whole batch would revert and nothing would move.
  */
 export function agentChangePlan(
   account: `0x${string}`,

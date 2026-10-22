@@ -193,7 +193,7 @@ function activity(nowMs: number) {
     hash: tx(key.length + 10),
     event: e,
     ctx,
-    details: describeAgentEvent(e, time / 1000, ctx)!.details,
+    details: describeAgentEvent(e, ctx)!.details,
   });
   const moves: ExecutorMove[] = [
     executor(

@@ -1108,3 +1108,32 @@ Adrian: the section from Total balance to the Cash card 2px lower, the top bar u
 Adrian: links to app.greedygoo.com showed no thumbnail. The page's card named greedygoose.vercel.app as its address and
 image, another domain, which chat apps (iMessage first) drop. Production's metadataBase is app.greedygoo.com now;
 previews keep their own address.
+
+## 2026-10-22 · GooseGuard and GoosePlanner replace GooseExecutor
+
+Adrian: "safe and simple and not 24k", and "KeeperHub works, don't change it". The agents' contract becomes two:
+GooseGuard, the only one that moves money (every agent's spender, every rule checked on live reads), and GoosePlanner,
+read-only, which works out the moves and can be replaced without anyone granting again. KeeperHub's workflow keeps its
+steps; its read points at the Planner and its write at the Guard. The full rules are in the build's spec
+(guard-build/design/spec-final-v2.md, with the measured facts in step0-facts.md); the decisions, each Adrian's:
+
+- **Top-ups come from the wallet.** Savings never go into stock, so credit taken as cash (which goes into savings in
+  the user's own batch) can never be invested; there is no top-up count to get wrong.
+- **The user's own AI agent may run the account** under the same rules: KeeperHub, the account itself, or one helper it
+  picks. In the contract now, screens later. It also keeps Protect running if the owner key is ever stolen.
+- **Each user plans their own risk:** a Protect line never under 1.03, a target at least 0.05 above it and at most
+  1.40; 1.03 / 1.12 by default; the most risk is Protect off.
+- **Rebalance trades at most once a day** (one hour, then 20 hours' wait) unless the user sets a new mix. Top-ups are
+  never held back.
+- **A rescue ends** when the user takes more credit or repays by hand (the app adds `endRescue()` to that batch while a
+  rescue is on), and after 7 days as a backstop.
+- **Protect pays off the whole credit** only when what's left at the target would be under $1.
+- **No calendar in the contract.** Adrian: "we should let sell and buy whenever aave let you sell or buy, this is not up
+  to us". The 1% price check, both ways, guards a frozen weekend price; no holidays and no owner holiday power.
+- **One owner key**, the deployer's, for the live test and the release. Every owner change waits 48 hours, and the
+  owner's pause never stops Protect; the emergency brake for everything is turning off KeeperHub's workflow.
+- **No amount limit anywhere, the live test included.** Adrian: "i dont want a limit that will block our agents to
+  work", and on balances, "if someone wants to go full on he could".
+- **Turn into cash** takes USDT, USDe, USDS, DAI and EURC. Adrian: "if the price comes from chainlink then the 2h rule
+  doesnt hold": EURC's price counts as fresh for Chainlink's own schedule plus an hour, which measures at 2 hours.
+- **KeeperHub's second read** changes its input only if the live test shows it runs before the first write lands.

@@ -22,7 +22,7 @@ vi.mock("@/lib/allowlist", async (importOriginal) => {
 import { decodeActivity } from "@/lib/activity/decode";
 import { AAVE } from "@/lib/aave/addresses";
 import { assertAllowed } from "@/lib/allowlist";
-import { jobGrant, JOBS, sellGrant, rebalanceGrant, entryGrant } from "@/lib/agents/permissions";
+import { jobGrant, JOBS, sellGrant, rebalanceGrant, entryGrant, stockLimitsRaw } from "@/lib/agents/permissions";
 import { feeBufferRaw, type Cash } from "@/lib/cash";
 import { ownCashRow } from "@/lib/cashActivity";
 import { APP_CONTRACTS, isAppContract, recipientBlock } from "@/lib/contracts";
@@ -283,14 +283,14 @@ describe("assertAllowed: the transfer rule (Send only)", () => {
 describe("agents can't send out (Send is user-signed only)", () => {
   const TRANSFER = toFunctionSelector("transfer(address,uint256)");
   const TRANSFER_FROM = toFunctionSelector("transferFrom(address,address,uint256)");
-  const limits = EQUITIES.map(() => 10_000n);
+  const limits = stockLimitsRaw(EQUITIES.map(() => true));
 
   it("no agent grant lists transfer or transferFrom", () => {
     const grants = [
-      ...JOBS.map((job) => jobGrant(job, usd(100), limits)),
-      sellGrant(usd(100), limits),
-      rebalanceGrant(usd(100), limits),
-      entryGrant(usd(100)),
+      ...JOBS.map((job) => jobGrant(job, limits)),
+      sellGrant(limits),
+      rebalanceGrant(limits),
+      entryGrant(),
     ];
     for (const g of grants) {
       for (const c of g.calls ?? []) {

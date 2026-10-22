@@ -12,7 +12,6 @@ import { useAgentSettings } from "@/hooks/useAgentSettings";
 import { useFeeSupport } from "@/hooks/useFeeSupport";
 import { usePosition } from "@/hooks/usePosition";
 import { useProtectSave } from "@/hooks/useProtectSave";
-import { useSteadyPrices } from "@/hooks/useSteadyPrices";
 import { usePrepare, type TxPhase, type TxPlan, type TxPrep } from "@/hooks/useTx";
 import { AGENTS_LIVE } from "@/lib/agents/config";
 import { PROTECT_LINE } from "@/lib/agents/list";
@@ -34,10 +33,10 @@ const running = (s: AgentStatus) => s === "on" || s === "starting";
 
 /**
  * Protect's settings, for the agent sheet's settings slot: repay from cash (always first), selling backing stock as its
- * own switch (Job.ProtectSell), what it sells first (`setKeepMix`) and the never-sell list (stocks left out of a new
- * sell grant). No limit to type (Adrian, 2026-10-19): both grants are at the executor's CAP_MAX. Everything comes from
- * the chain through the agents' hooks; saving opens JAW's sheet once a change (`useProtectSave`). Without an executor
- * it renders the real figures and saves nothing ("Not live yet").
+ * own switch (job 2), what it sells first (`setKeepMix`) and the never-sell list (stocks left out of a new sell
+ * grant). No limit to type (decision 9). Everything comes from the chain through the agents' hooks; saving opens JAW's
+ * sheet once a change (`useProtectSave`). Without a Guard it renders the real figures and saves nothing ("Not live
+ * yet").
  */
 export function ProtectSettings({ account, onDone }: { account: `0x${string}`; onDone?: () => void }) {
   const { address } = useAccount();
@@ -53,14 +52,7 @@ export function ProtectSettings({ account, onDone }: { account: `0x${string}`; o
     onDone?.();
   });
 
-  if (
-    !data ||
-    (live &&
-      (agents.status.protect === "loading" ||
-        agents.status.sell === "loading" ||
-        !settings ||
-        agents.capMaxRaw === null))
-  ) {
+  if (!data || (live && (agents.status.protect === "loading" || agents.status.sell === "loading" || !settings))) {
     return <ProtectSettingsSkeleton />;
   }
   const { protect, sell } = agents.terms;
@@ -78,8 +70,6 @@ export function ProtectSettings({ account, onDone }: { account: `0x${string}`; o
       backsUsd={EQUITIES.map((e) =>
         data.holdings[e.reserveId].backingRaw > 0n ? data.holdings[e.reserveId].backingUsd : 0,
       )}
-      pricesRaw={EQUITIES.map((e) => data.holdings[e.reserveId].priceRaw)}
-      capMaxRaw={agents.capMaxRaw}
       feeBlocked={!!address && fee.state === "unsupported"}
       waiting={fee.loading}
       phase={saving.phase}
@@ -102,17 +92,13 @@ function ProtectSettingsSkeleton() {
 }
 
 export type ProtectSettingsViewProps = {
-  /** An executor is configured; without one nothing saves ("Not live yet"). */
+  /** The agents are live; until then nothing saves ("Not live yet"). */
   live: boolean;
   /** Not signed in as this account (the dev preview): nothing signs. */
   preview: boolean;
   saved: ProtectSaved;
   /** What each stock backs now, in dollars, by reserve id (0 = backs nothing). */
   backsUsd: readonly number[];
-  /** Aave's prices by reserve id (8 decimals), for a sell grant's stock limits. */
-  pricesRaw: readonly bigint[];
-  /** The executor's CAP_MAX: every grant of Protect's is at it (no amount limit). */
-  capMaxRaw: bigint | null;
   feeBlocked: boolean;
   /** Something still loading or signing elsewhere (fee support, an agent switch). */
   waiting?: boolean;
@@ -131,8 +117,6 @@ export function ProtectSettingsView({
   preview,
   saved,
   backsUsd,
-  pricesRaw,
-  capMaxRaw,
   feeBlocked,
   waiting = false,
   phase,
@@ -147,10 +131,7 @@ export function ProtectSettingsView({
   const choice: ProtectChoice = { ...start, ...chosen };
   const set = (c: Partial<ProtectChoice>) => setChosen((p) => ({ ...p, ...c }));
 
-  // Until CAP_MAX is read nothing can save (`ready` below), so the steps only say what's blocked. A sell grant's stock
-  // limits follow Aave's prices held steady (`useSteadyPrices`), so the batch prepared for it isn't rebuilt on every read.
-  const steady = useSteadyPrices(pricesRaw);
-  const plan = protectSteps(saved, choice, { capMaxRaw: capMaxRaw ?? 0n, pricesRaw: steady });
+  const plan = protectSteps(saved, choice);
   const steps = live ? plan.steps : [];
   // One batch, one Face ID, whatever the save holds.
   const count = protectBatch(steps) ? 1 : 0;
@@ -161,7 +142,7 @@ export function ProtectSettingsView({
   const off = !saved.repayOn;
   const { canSave, note } = saveState({
     live,
-    ready: !preview && !waiting && !busy && capMaxRaw !== null,
+    ready: !preview && !waiting && !busy,
     feeBlocked,
     blocked: plan.blocked,
     changes: steps.length,

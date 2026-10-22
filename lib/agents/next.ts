@@ -3,40 +3,38 @@ import { OFF_REASONS } from "@/lib/agents/events";
 import { OFF_WHY } from "@/lib/agents/feed";
 import { agentOf, AGENTS, hfText, type ActCard, type Agent, type Next, type WeekendCard } from "@/lib/agents/list";
 import { isMix, previewTrades, type MixHolding } from "@/lib/agents/mix";
-import { JOBS, readStockLimits, type AgentJob } from "@/lib/agents/permissions";
+import { JOBS, type AgentJob } from "@/lib/agents/permissions";
 import { planProtect, weekendHeadsUp } from "@/lib/agents/rules/protect";
 import { bandBreaks, type RebalanceOptions, type RebalanceTrade } from "@/lib/agents/rules/rebalance";
 import { clockText, dayIn, weekdayText } from "@/lib/clock";
 import { formatUsdTrim } from "@/lib/formatting";
-import { marketState } from "@/lib/market-hours";
 import { STATUS_LABEL, statusFor } from "@/lib/risk/status";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
 /*
- * What each agent does next. With an executor configured, its `planOf(account)` names the first job, in its order,
- * with a move; every other agent reads its TypeScript rule (lib/agents/rules/*.ts, which the contract matches through the
- * differential tests) on live data. With none configured, every agent reads its rule. Save and Entry have no agent on
- * screen (D20), so a plan for them gives no line.
+ * What each agent does next. With a Planner configured, its `planOf(account)` names the first job, in its order, with
+ * a move; every other agent reads its TypeScript rule (lib/agents/rules/*.ts) on live data. With none configured, every
+ * agent reads its rule. Save and Entry have no agent on screen (D20), so a plan for them gives no line.
  */
 
 const usd = (raw: bigint) => formatUsdTrim(Number(raw) / 10 ** USDC.decimals);
 const move = (will: string, would: string): Next => ({ will, would });
 
-/** The executor's numbers the rules take (its registry, D18); config/risk.ts mirrors its deploy defaults. */
+/** The numbers the rules take (GoosePlanner's views and the account's own Protect line, D18); config/risk.ts mirrors the defaults. */
 export type RuleNumbers = {
   minRepayRaw: bigint;
   triggerHf: number;
   targetHf: number;
   stressDrop: number;
   stressFloorHf: number;
-  /** How long before a price freeze the weekend card shows, in seconds (the executor's `amounts`). */
+  /** How long before a price freeze the weekend card shows, in seconds (the Planner's `amounts`). */
   weekendWindowSec: number;
   rebalance: RebalanceOptions;
 };
 
 const raw = (usdAmount: number) => BigInt(Math.round(usdAmount * 10 ** USDC.decimals));
 
-/** The deploy defaults, for when no executor is configured. */
+/** The defaults, for when no Planner is configured. */
 export function defaultNumbers(rebalance: RebalanceOptions): RuleNumbers {
   return {
     minRepayRaw: raw(CASH_AGENT.minRepayUsd),
@@ -49,22 +47,33 @@ export function defaultNumbers(rebalance: RebalanceOptions): RuleNumbers {
   };
 }
 
-/** GooseExecutor's `planOf(account)`: what a run would do for the account now. */
+/** GoosePlanner's `planOf(account)`: what a round would do for the account now (today's Plan layout). */
 export type Plan = { action: number; job: number; amount: bigint; reason: number; off: number };
 
-/** GooseExecutor's Action, in order. */
-const ACTIONS = ["none", "prune", "repay", "save", "sell", "end-rescue", "defer", "rebalance", "convert"] as const;
+/** The Planner's Action, in order (GooseExecutor's, kept for the app). */
+const ACTIONS = [
+  "none",
+  "prune",
+  "repay",
+  "save",
+  "sell",
+  "end-rescue",
+  "defer",
+  "rebalance",
+  "convert",
+  "refresh",
+] as const;
 
 /**
  * The plan's move in words, and the agent it's for; null when a run would do nothing, when it's a job with no agent on
- * screen (Save's and Entry's moves, D20), or when it only ends a rescue that reached its target (no money moves, so
- * the agent's own rule says where the credit stands).
+ * screen (Save's and Entry's moves, D20), or when it only ends a rescue or refreshes Aave's collateral settings (no
+ * money moves, so the agent's own rule says where the credit stands).
  */
 export function planNext(p: Plan): { agent: Agent; next: Next } | null {
   const job: AgentJob | undefined = JOBS[p.job];
   const agent = job ? agentOf(job) : null;
   const action = ACTIONS[p.action];
-  if (!agent || !action || ["none", "save", "convert", "end-rescue"].includes(action)) return null;
+  if (!agent || !action || ["none", "save", "convert", "end-rescue", "refresh"].includes(action)) return null;
   const a = usd(p.amount);
   const next: Next =
     action === "prune"
@@ -79,35 +88,33 @@ export function planNext(p: Plan): { agent: Agent; next: Next } | null {
   return { agent, next };
 }
 
-/** New York's calendar day of `sec`, counted from 1970-01-01, as GooseExecutor's NyCalendar.day counts it. */
-export const nyDay = (sec: number): number => dayIn(sec, "America/New_York");
+/** KeeperHub's round: every 10 minutes, on the clock's tens (workflow q5vdv47dieyabhg4toiue). */
+const ROUND_SEC = 600;
 
-/** The second `hour`:00 New York time falls on, on New York day `day`. */
-function nyHour(day: number, hour: number): number {
-  const est = day * 86_400 + (hour + 5) * 3_600;
-  const shown = Number(
-    new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", hourCycle: "h23" }).format(
-      est * 1000,
-    ),
-  );
-  return shown === hour ? est : est - 3_600; // daylight time: New York is 4 hours behind
-}
-
-/** The Rebalancer's window: 10:00 to 10:30 New York, once a market day (GooseExecutor's RebalanceJob). */
-export const WINDOW = { hour: 10, minutes: 30 } as const;
+/** The first round after `sec`: when the agents next look at the account. */
+export const nextRound = (sec: number): number => (Math.floor(sec / ROUND_SEC) + 1) * ROUND_SEC;
 
 /**
- * When the Rebalancer next looks at the mix: 10:00 New York on the next weekday whose window hasn't passed and on
- * which it hasn't traded yet (`ranDay`, the registry's rebalanceDay), never before New York day `notBefore` (a top-up
- * counted today goes in on a later day). Holidays are the executor's own calendar.
+ * GooseGuard's Rebalance pacing (decision 4): a rebalance that sells runs in one session of an hour, then waits 20 hours
+ * from when that session opened, unless the user sets a new mix. Top-ups going in are never held back.
  */
-export function rebalanceCheckAt(nowSec: number, ranDay: number, notBefore = 0): number {
-  for (let d = Math.max(nyDay(nowSec), notBefore); ; d++) {
-    const weekday = new Date(d * 86_400_000).getUTCDay();
-    const opens = nyHour(d, WINDOW.hour);
-    if (weekday === 0 || weekday === 6 || d === ranDay || nowSec >= opens + WINDOW.minutes * 60) continue;
-    return opens;
-  }
+export const REBALANCE_SESSION_SEC = 3_600;
+export const REBALANCE_GAP_SEC = 20 * 3_600;
+
+/** What the pacing reads from GooseGuard's `accountOf`: when the last session opened and when the mix was last set. */
+type Pacing = { sessionAt: number; mixSetAt: number };
+
+/**
+ * When the Rebalancer may next trade the mix: the next round while a session is open (and that round is still in it),
+ * once its 20-hour wait is over, or once the user set a new mix since the session opened; else the first round after
+ * the wait ends. No calendar: it trades weekends too (decision 7).
+ */
+export function rebalanceCheckAt(nowSec: number, pacing: Pacing): number {
+  const { sessionAt, mixSetAt } = pacing;
+  const round = nextRound(nowSec);
+  const fresh = mixSetAt > sessionAt || round >= sessionAt + REBALANCE_GAP_SEC;
+  if (fresh || round < sessionAt + REBALANCE_SESSION_SEC) return round;
+  return nextRound(sessionAt + REBALANCE_GAP_SEC - 1);
 }
 
 /**
@@ -124,9 +131,6 @@ export function whenText(sec: number, nowSec: number, timeZone?: string): string
 export const atText = (sec: number, nowSec: number, timeZone?: string): string =>
   whenText(sec, nowSec, timeZone).replace(" ", " at ");
 
-/** What one of a grant's spend limits still allows in its current period, in the token's own units. */
-export type SpendLeft = { token: string; leftRaw: bigint };
-
 /** What the rules read off the account and the chain. */
 export type NextInput = {
   nowSec: number;
@@ -137,44 +141,31 @@ export type NextInput = {
   debtUsd: number;
   /** Free shares and Aave's price, by reserve id. */
   holdings: readonly MixHolding[];
-  /** The registry's mix in BPS, by reserve id; null before one is saved (or read). */
+  /** The account's mix in BPS, by reserve id; null before one is saved (or read). */
   mixBps: readonly number[] | null;
-  /**
-   * What each job's limit still allows now, one figure per spend of its grant (GooseExecutor's `permissionOf`, the
-   * manager's `getCurrentPeriod`); null while it has none registered, so the rule runs on a fresh period at `capRaw`.
-   */
-  left: Readonly<Record<AgentJob, readonly SpendLeft[] | null>>;
-  /** The limit each rule assumes: the grant's, or the one the job starts on. USDC units. */
-  capRaw: Readonly<Record<AgentJob, bigint>>;
-  capMaxRaw: bigint | null;
   numbers: RuleNumbers;
-  /** The New York day the Rebalancer last traded (the registry's `accounts`). */
-  rebalanceDay: number;
-  /** A rescue Protect started is under way (the registry's `rescueAt` isn't 0): it goes on until the target. */
+  /** The Rebalancer's pacing (GooseGuard's `accountOf`). */
+  pacing: Pacing;
+  /** A rescue Protect started is under way (the Guard's `rescueAt` isn't 0): it goes on until the target. */
   rescuing: boolean;
   /** Protect may sell backing stock (its sell grant is on or starting). */
   sellOn: boolean;
-  /** Stock prices are held now (a weekend or a holiday): Protect never sells then. */
-  pricesHeld: boolean;
   plan: Plan | null;
 };
 
-const smaller = (a: bigint, b: bigint) => (a < b ? a : b);
-
 /**
- * Protect (planProtect; Protect's line, Adrian 2026-10-19): repays from savings below its line, and on through a rescue
- * until the target, back in Watch. Above its line it says where it steps in (Act is a warning only). With no cash left,
- * a sale follows when selling is on, never while prices are held. No amount limit: the grant is at CAP_MAX, so a
- * limit that is used up can only be a capped test deploy's, and Protect goes on at its next run.
+ * Protect (planProtect; Protect's line, Adrian 2026-10-19): repays from the cash below its line, and on through a
+ * rescue until the target. Above its line it says where it steps in (Act is a warning only). With no cash left, a sale
+ * follows when selling is on, weekends included (decision 7: whenever Aave and the 1% price check allow). No amount
+ * limit (decision 9).
  */
 function protectNext(i: NextInput): Next {
-  const left = i.left.protect;
   const d = planProtect({
     totalBackingUsd: i.totalBackingUsd,
     avgCf: i.avgCf,
     debtUsd: i.debtUsd,
     savingsUsd: Number(i.savingsRaw) / 10 ** USDC.decimals,
-    capLeftUsd: Number(left ? left.map((s) => s.leftRaw).reduce(smaller) : i.capRaw.protect) / 10 ** USDC.decimals,
+    capLeftUsd: Infinity,
     triggerHf: i.numbers.triggerHf,
     targetHf: i.numbers.targetHf,
     rescuing: i.rescuing,
@@ -193,10 +184,7 @@ function protectNext(i: NextInput): Next {
         status === "safe" ? "Safe. Nothing to do." : `${label}. Protector steps in at ${hfText(i.numbers.triggerHf)}`,
     };
   }
-  if (d.reason === "too-small") return { idle: `${label}. Nothing worth repaying yet` };
-  if (d.reason === "no-cap") return { idle: `${label}. Repays on its next run` };
   if (!i.sellOn) return { idle: `${label}. No cash to repay with` };
-  if (i.pricesHeld) return { idle: `${label}. Sells backing stock when prices reopen` };
   return move("sells backing stock to repay", "Would sell backing stock to repay");
 }
 
@@ -224,10 +212,11 @@ export function actWarning(i: {
 }
 
 /**
- * The weekend card (lib/agents/rules/protect.ts `weekendHeadsUp`, on the executor's live numbers): in the window
- * before the next price freeze, credit that the stress drop would take under Aave's line. No move: a card only.
- * `freezeAt` is the executor's `nextFreeze`, its own calendar with the holidays it holds, so the card shows before a
- * freeze that starts mid-week and not while prices are already held (Good Friday); null while it isn't read.
+ * The weekend card (lib/agents/rules/protect.ts `weekendHeadsUp`, on the live numbers): in the window before Aave's
+ * stock prices next pause, credit that the stress drop at the reopen would take under Aave's line. No move: a card
+ * only, and it never says the agents stop (decision 7: they act whenever Aave and the 1% price check allow).
+ * `freezeAt` is the Planner's `nextFreeze`, its New York calendar with the holidays it holds, so the card shows before
+ * a pause that starts mid-week and not while prices are already held (Good Friday); null while it isn't read.
  */
 export function weekendCard(
   i: Pick<NextInput, "nowSec" | "totalBackingUsd" | "avgCf" | "debtUsd" | "numbers"> & { freezeAt: number | null },
@@ -253,34 +242,24 @@ export function weekendCard(
 
 /**
  * Whether `nowSec` is in the window before a freeze: prices still live, and the next freeze starts within `windowSec`.
- * The executor's own test of it (ExecutorHarness.preFreeze) agrees with Leo's `inWeekendWindow` on a week with no
- * holiday (contracts/test/NyCalendar.t.sol).
+ * It agrees with Leo's `inWeekendWindow` on a week with no holiday (contracts/test/NyCalendar.t.sol).
  */
 export function beforeFreeze(nowSec: number, freezeAt: number | null, windowSec: number): boolean {
   return freezeAt !== null && freezeAt > nowSec && freezeAt - nowSec <= windowSec;
 }
 
-/**
- * Whether stock prices are held at `nowSec`: the executor's own calendar gives the time asked itself as the next freeze
- * while they are (`nextFreeze`, holidays included). Until it's read, the weekend's hours (`marketState`).
- */
-export function pricesHeldAt(nowSec: number, freezeAt: number | null): boolean {
-  return freezeAt !== null ? freezeAt <= nowSec : !marketState(new Date(nowSec * 1000)).open;
-}
-
-/** What the Rebalancer's outlook reads: NextInput's own fields, the Rebalancer's alone where they're kept by job. */
+/** What the Rebalancer's outlook reads: NextInput's own fields. */
 export type OutlookInput = Pick<
   NextInput,
-  "nowSec" | "holdings" | "mixBps" | "capMaxRaw" | "rebalanceDay" | "debtUsd" | "totalBackingUsd" | "avgCf"
+  "nowSec" | "holdings" | "mixBps" | "pacing" | "debtUsd" | "totalBackingUsd" | "avgCf"
 > & {
-  left: Pick<NextInput["left"], "rebalance">;
-  capRaw: Pick<NextInput["capRaw"], "rebalance">;
   numbers: Pick<RuleNumbers, "rebalance">;
 };
 
 /**
- * What the Rebalancer does at its next window, for its sheet's line and its card: whether a mix is saved, the trades
- * its rule finds for it on today's free shares, when it looks next, and whether it waits because the credit is in Act.
+ * What the Rebalancer does when it may next trade, for its sheet's line and its card: whether a mix is saved, the
+ * trades its rule finds for it on today's free shares, when it may next trade (its pacing, `rebalanceCheckAt`), and
+ * whether it waits because the credit is in Act.
  * And the whole portfolio's place against the mix (Adrian, 2026-10-21): "On target" only while all of it, the stock
  * backing credit too, sits inside its band and holds some of the mix; when it doesn't and nothing trades, what holds
  * the Rebalancer back (`blocked`).
@@ -289,9 +268,9 @@ export type RebalanceOutlook = {
   noMix: boolean;
   trades: RebalanceTrade[];
   checkAt: number;
-  /** The credit is in Act now: GooseExecutor's RebalanceJob trades nothing, top-ups included. */
+  /** The credit is in Act now: no top-up goes in (GooseGuard: health at least max(1.10, line)), and the trades wait. */
   inAct: boolean;
-  /** Trades are due, and the credit is in Act: GooseExecutor's RebalanceJob waits. */
+  /** Trades are due, and the credit is in Act: the Rebalancer waits. */
   waitsInAct: boolean;
   /** The whole portfolio (free stock and stock backing credit) breaks the mix's band, by the rule's own measure. */
   offTarget: boolean;
@@ -305,44 +284,30 @@ export type RebalanceOutlook = {
 /**
  * What holds the Rebalancer back while nothing trades (Adrian, 2026-10-21):
  * - "credit": the rule would trade if the stock backing credit were free (it never trades stock that backs it);
- * - "too-small": even with all of it free, every trade it would make is under the smallest one;
- * - "too-small-backing": the same, and none of the mix's stock is free (all of it backs credit);
- * - "limits": it would trade at any size, but what its grant still allows this period leaves nothing;
+ * - "no-trade": even with all of it free, the rule finds no trade it can make (a stock with no price, a trade so small
+ *   its floor rounds to nothing);
  * - "none-held": the whole portfolio holds none of the mix, so there is nothing to keep on target.
  */
-type RebalanceBlock = "credit" | "too-small" | "too-small-backing" | "limits" | "none-held";
+type RebalanceBlock = "credit" | "no-trade" | "none-held";
 
 /** Every stock as if none of it backed credit: free shares plus the shares backing credit. */
 export const wholePortfolio = (holdings: readonly MixHolding[]): MixHolding[] =>
   holdings.map((h) => ({ ...h, freeRaw: h.freeRaw + (h.backingRaw ?? 0n) }));
 
 export function rebalanceOutlook(i: OutlookInput): RebalanceOutlook {
-  const checkAt = rebalanceCheckAt(i.nowSec, i.rebalanceDay);
-  // GooseExecutor's RebalanceJob waits while the credit is in Act: the status line (RebalanceJob.ACT_HF), not
+  const checkAt = rebalanceCheckAt(i.nowSec, i.pacing);
+  // The Rebalancer waits while the credit is in Act: the status line (GooseGuard's invest health, 1.10), not
   // Protect's, which acts further down (Adrian, 2026-10-19).
   const hf = i.debtUsd > 0 ? (i.totalBackingUsd * i.avgCf) / i.debtUsd : Infinity;
   const inAct = hf < RISK.watchMin;
   if (!i.mixBps || !isMix(i.mixBps) || i.mixBps.every((w) => w === 0))
     return { noMix: true, trades: [], checkAt, inAct, waitsInAct: false, offTarget: false, blocked: null };
   const mixBps = i.mixBps;
-  const left = i.left.rebalance;
-  const tradesOn = (holdings: readonly MixHolding[], minTradeRaw = i.numbers.rebalance.minTradeRaw) =>
+  const tradesOn = (holdings: readonly MixHolding[]) =>
     previewTrades({
       holdings,
       rows: EQUITIES.map((e) => ({ reserveId: e.reserveId, bps: mixBps[e.reserveId] })),
-      capRaw: i.capRaw.rebalance,
-      capMaxRaw: i.capMaxRaw,
-      options: { ...i.numbers.rebalance, minTradeRaw },
-      left: left
-        ? {
-            usdcRaw: left[0].leftRaw,
-            stocksRaw:
-              readStockLimits(
-                "rebalance",
-                left.map((s) => ({ token: s.token, allowance: s.leftRaw })),
-              ) ?? EQUITIES.map(() => 0n),
-          }
-        : undefined,
+      options: i.numbers.rebalance,
     });
   const trades = tradesOn(i.holdings);
   const whole = wholePortfolio(i.holdings);
@@ -364,45 +329,35 @@ export function rebalanceOutlook(i: OutlookInput): RebalanceOutlook {
           ? null
           : tradesOn(whole).length > 0
             ? "credit"
-            : tradesOn(whole, 1n).length > 0
-              ? mixValue(i.holdings) === 0n
-                ? "too-small-backing"
-                : "too-small"
-              : "limits";
+            : "no-trade";
   return { noMix: false, trades, checkAt, inAct, waitsInAct: trades.length > 0 && inAct, offTarget, blocked };
 }
 
 /** The Rebalancer's rule, said wherever credit is what holds it (its sheet always says it). */
 export const BACKING_RULE = "Stock that backs your credit isn’t rebalanced.";
-/** Off target, and every trade it would make, even with all of it free, is under the smallest one. */
-export const TOO_SMALL = "Off target, but too small to trade.";
 
 /**
  * The card's two lines for what holds the Rebalancer back (`RebalanceBlock`), its sheet's line after them; the first
- * is the Agents list's line too. `when` is the next check (whenText), `minTradeRaw` the executor's smallest trade.
+ * is the Agents list's line too. `when` is the next check (whenText).
  */
-export function blockedWords(b: RebalanceBlock, minTradeRaw: bigint, when: string): [string, string] {
+export function blockedWords(b: RebalanceBlock, when: string): [string, string] {
   switch (b) {
     case "credit":
       // Freeing up is what takes stock out of backing; the Repay sheet asks for a repay first when one is needed.
       return [BACKING_RULE, "Free up some to let it trade."];
-    case "too-small-backing":
-      return [TOO_SMALL, BACKING_RULE];
-    case "too-small":
-      return [TOO_SMALL, `Trades start at ${usd(minTradeRaw)}.`];
-    case "limits":
+    case "no-trade":
       return ["Off target, but nothing it can trade now.", `Next check ${when}.`];
     case "none-held":
       return ["You hold none of your mix yet.", "Buy some and it keeps them on target."];
   }
 }
 
-/** Rebalance: the trades its rule finds for the saved mix on today's free shares, at the next window. */
+/** Rebalance: the trades its rule finds for the saved mix on today's free shares, when its pacing next lets it trade. */
 function rebalanceNext(i: NextInput): Next {
   const o = rebalanceOutlook(i);
   if (o.noMix) return { idle: "No mix yet" };
   const when = whenText(o.checkAt, i.nowSec);
-  if (o.blocked) return { idle: blockedWords(o.blocked, i.numbers.rebalance.minTradeRaw, when)[0].replace(/\.$/, "") };
+  if (o.blocked) return { idle: blockedWords(o.blocked, when)[0].replace(/\.$/, "") };
   if (o.trades.length === 0) return { idle: `On target. Checks ${when}` };
   if (o.waitsInAct) return { idle: "Waits until your credit is out of Act" };
   const spend = usd(o.trades.filter((t) => t.buy).reduce((a, t) => a + t.amountIn, 0n));
@@ -414,7 +369,7 @@ const RULES: Record<Agent, (i: NextInput) => Next> = {
   rebalance: rebalanceNext,
 };
 
-/** Every agent's next line: the executor's plan for the agent it names, each agent's own rule for the rest. */
+/** Every agent's next line: the Planner's plan for the agent it names, each agent's own rule for the rest. */
 export function agentNexts(i: NextInput): Record<Agent, Next> {
   const planned = i.plan && planNext(i.plan);
   return Object.fromEntries(AGENTS.map((a) => [a, planned?.agent === a ? planned.next : RULES[a](i)])) as Record<

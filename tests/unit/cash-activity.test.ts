@@ -44,7 +44,7 @@ const exec = (e: AgentEvent, ctx: MoveContext = {}, over: Partial<ExecutorMove> 
   hash: tx(2),
   event: e,
   ctx,
-  details: describeAgentEvent(e, T / 1000, ctx)?.details ?? [],
+  details: describeAgentEvent(e, ctx)?.details ?? [],
   ...over,
 });
 const words = (r: { details: { label: string; value: readonly unknown[] }[] }) =>

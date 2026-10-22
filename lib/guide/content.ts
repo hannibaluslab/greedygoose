@@ -238,7 +238,7 @@ export function guideContent(flags: GuideFlags = FLAGS): Guide {
       where: ["Agents"],
       steps: [
         "Protector steps in if your credit falls under 1.03. It repays from your cash first, then sells if needed.",
-        "Rebalancer keeps your mix on target, once a market day.",
+        "Rebalancer keeps your mix on target, up to once a day.",
         "You approve each agent. You set Rebalancer’s mix.",
       ],
       note: "You can turn any agent off at any time.",

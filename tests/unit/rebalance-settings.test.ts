@@ -1,29 +1,26 @@
 import { describe, expect, it } from "vitest";
 import { rebalanceOptions, type MixHolding } from "@/lib/agents/mix";
-import { rebalanceCheckAt, rebalanceOutlook, whenText, type OutlookInput } from "@/lib/agents/next";
-import type { StockLimits } from "@/lib/agents/permissions";
+import { nextRound, rebalanceOutlook, whenText, type OutlookInput } from "@/lib/agents/next";
+import { NO_LIMIT, type StockLimits } from "@/lib/agents/permissions";
 import { rebalanceCard, type RebalanceCardInput } from "@/lib/agents/rebalanceCard";
 import { rebalanceAllows, rebalanceSave, rebalanceSteps, savedText, sheetLine } from "@/lib/agents/rebalanceSettings";
 
-const usdc = (usd: number) => BigInt(usd) * 10n ** 6n;
-
 describe("rebalanceSave", () => {
   const mix = [2_500, 0, 0, 0, 0, 5_000, 2_500];
-  const limits: StockLimits = [1n, 0n, 0n, 0n, 0n, 1n, 1n];
+  const limits: StockLimits = [NO_LIMIT, 0n, 0n, 0n, 0n, NO_LIMIT, NO_LIMIT];
   const base = {
     configured: true,
     connected: true,
     saved: mix,
     weights: mix,
-    terms: { capRaw: usdc(10_000), limitsRaw: limits },
-    capMaxRaw: usdc(10_000),
+    terms: { limitsRaw: limits },
     running: true,
     feeBlocked: false,
     feeLoading: false,
     busy: false,
   };
 
-  it("says Not live yet and saves nothing without an executor", () => {
+  it("says Not live yet and saves nothing without a Guard", () => {
     expect(rebalanceSave({ ...base, configured: false, saved: null, terms: null })).toEqual({
       mixChanged: false,
       topUpsChanged: false,
@@ -36,7 +33,7 @@ describe("rebalanceSave", () => {
     });
   });
 
-  it("has nothing to save when the mix is what it runs with, on a grant at CAP_MAX", () => {
+  it("has nothing to save when the mix is what it runs with", () => {
     expect(rebalanceSave(base)).toMatchObject({ steps: 0, canSave: false, note: null });
   });
 
@@ -49,19 +46,6 @@ describe("rebalanceSave", () => {
       canSave: true,
       note: null,
     });
-  });
-
-  it("needs a new grant at CAP_MAX for a capped grant from before: one batch, approved and registered", () => {
-    const capped = { ...base, terms: { capRaw: usdc(100), limitsRaw: limits } };
-    expect(rebalanceSave(capped)).toMatchObject({
-      mixChanged: false,
-      needsGrant: true,
-      steps: 1,
-      canSave: true,
-      note: null,
-    });
-    // Until CAP_MAX is read nothing saves, and the grant isn't judged capped yet.
-    expect(rebalanceSave({ ...capped, capMaxRaw: null })).toMatchObject({ needsGrant: false, canSave: false });
   });
 
   it("takes one batch for a stock the grant can't sell yet: the new grant and the mix together", () => {
@@ -88,8 +72,8 @@ describe("rebalanceSave", () => {
   });
 
   it("says what the Face ID lets Rebalancer do above Save only while Save grants", () => {
-    const capped = { ...base, terms: { capRaw: usdc(100), limitsRaw: limits } };
-    expect(rebalanceSave(capped).allows).toBe(rebalanceAllows());
+    const narrow = { ...base, terms: { limitsRaw: limits.map((l, r) => (r === 6 ? 0n : l)) } };
+    expect(rebalanceSave(narrow).allows).toBe(rebalanceAllows());
     expect(rebalanceSave({ ...base, terms: null, running: false }).allows).toBe(rebalanceAllows());
     expect(rebalanceSave({ ...base, weights: [5_000, 0, 0, 0, 0, 2_500, 2_500] }).allows).toBeNull();
     expect(rebalanceSave(base).allows).toBeNull();
@@ -112,7 +96,6 @@ describe("rebalanceSave", () => {
     expect(rebalanceSave({ ...base, weights, busy: true }).canSave).toBe(false);
     expect(rebalanceSave({ ...base, weights, feeLoading: true }).canSave).toBe(false);
     expect(rebalanceSave({ ...base, weights, connected: false }).canSave).toBe(false);
-    expect(rebalanceSave({ ...base, weights, capMaxRaw: null }).canSave).toBe(false);
   });
 });
 
@@ -150,9 +133,9 @@ describe('rebalanceSteps: Save is one batch, one Face ID (Adrian, 2026-10-20: "i
   });
 });
 
-describe("rebalanceSave: Top-ups go into my mix", () => {
+describe("rebalanceSave: Top-ups go into my mix (a setting in GooseGuard: no new grant to switch them)", () => {
   const mix = [2_500, 0, 0, 0, 0, 5_000, 2_500];
-  const limits: StockLimits = [1n, 0n, 0n, 0n, 0n, 1n, 1n];
+  const limits: StockLimits = [NO_LIMIT, 0n, 0n, 0n, 0n, NO_LIMIT, NO_LIMIT];
   const off = { on: false, keepUsd: 500 };
   const on = { on: true, keepUsd: 500 };
   const base = {
@@ -160,69 +143,63 @@ describe("rebalanceSave: Top-ups go into my mix", () => {
     connected: true,
     saved: mix,
     weights: mix,
-    terms: { capRaw: usdc(10_000), limitsRaw: limits, topUps: false },
-    capMaxRaw: usdc(10_000),
+    terms: { limitsRaw: limits },
     running: true,
     feeBlocked: false,
     feeLoading: false,
     busy: false,
   };
-  const withWithdraw = { ...base, terms: { ...base.terms, topUps: true } };
 
-  it("has nothing to save while the setting is what the executor has", () => {
+  it("has nothing to save while the setting is what the Guard has", () => {
     expect(rebalanceSave({ ...base, topUps: { saved: off, chosen: off } })).toMatchObject({ steps: 0, canSave: false });
-    expect(rebalanceSave({ ...withWithdraw, topUps: { saved: on, chosen: on } })).toMatchObject({ steps: 0 });
+    expect(rebalanceSave({ ...base, topUps: { saved: on, chosen: on } })).toMatchObject({ steps: 0 });
   });
 
-  it("takes a new grant to turn them on, with the savings withdraw in it: Save, one batch (board 7f)", () => {
+  it("turns them on with the setting alone: Save, one batch, no new grant (board 7f)", () => {
     expect(rebalanceSave({ ...base, topUps: { saved: off, chosen: on } })).toMatchObject({
       topUpsChanged: true,
-      needsGrant: true,
+      needsGrant: false,
       steps: 1,
       canSave: true,
       note: null,
-      allows: rebalanceAllows({ keepUsd: 500 }),
+      allows: null,
     });
-    expect(rebalanceSave({ ...base, topUps: { saved: off, chosen: { on: true, keepUsd: 0 } } }).allows).toMatch(
-      /put every top-up into it/,
-    );
   });
 
-  it("says earning turns on too when top-ups turn on while it's off: the same Face ID grants it (P3)", () => {
-    const plan = rebalanceSave({ ...base, earningOff: true, topUps: { saved: off, chosen: on } });
-    expect(plan).toMatchObject({ needsGrant: true, steps: 1, canSave: true });
-    // Earning's words before the turn-off, which ends the line and names Rebalance; no amount limit (P2).
-    expect(plan.allows).toBe(
+  it("turns them off with the setting alone, running or not", () => {
+    expect(rebalanceSave({ ...base, topUps: { saved: on, chosen: off } })).toMatchObject({
+      topUpsChanged: true,
+      needsGrant: false,
+      steps: 1,
+      canSave: true,
+    });
+    const stopped = { ...base, terms: null, running: false };
+    expect(rebalanceSave({ ...stopped, topUps: { saved: on, chosen: off } })).toMatchObject({
+      needsGrant: false,
+      steps: 1,
+      allows: null,
+    });
+    // Turning Rebalance on stays a grant: nothing changed, the mix changed too, or top-ups left on.
+    expect(rebalanceSave({ ...stopped, topUps: { saved: on, chosen: on } })).toMatchObject({ needsGrant: true });
+    expect(
+      rebalanceSave({ ...stopped, weights: [5_000, 0, 0, 0, 0, 2_500, 2_500], topUps: { saved: on, chosen: off } }),
+    ).toMatchObject({ needsGrant: true });
+  });
+
+  it("says what a grant lets Rebalancer do, from the switch as chosen, and earning's words while it's off (P3)", () => {
+    const weights = [2_500, 0, 0, 0, 2_500, 2_500, 2_500]; // Microsoft it may not sell yet: a new grant
+    expect(rebalanceSave({ ...base, weights, topUps: { saved: on, chosen: on } }).allows).toBe(
+      rebalanceAllows({ keepUsd: 500 }),
+    );
+    expect(rebalanceSave({ ...base, weights, topUps: { saved: off, chosen: off } }).allows).toBe(rebalanceAllows());
+    expect(rebalanceSave({ ...base, weights, earningOff: true, topUps: { saved: off, chosen: on } }).allows).toBe(
       "Rebalancer can trade your stocks toward your mix, and put your top-ups above $500 into it, for a year. " +
         "New cash that arrives moves into savings on its own. You can turn Rebalancer off here.",
     );
-    expect(plan.allows).toBe(rebalanceAllows({ keepUsd: 500 }, true));
-    // A new grant with top-ups already on (a stock added to the mix) grants earning too while it's off.
-    const weights = [2_500, 0, 0, 0, 2_500, 2_500, 2_500];
-    expect(
-      rebalanceSave({ ...withWithdraw, weights, earningOff: true, topUps: { saved: on, chosen: on } }).allows,
-    ).toBe(plan.allows);
-    // Earning already on, or top-ups turning off: Rebalance's line alone.
-    expect(rebalanceSave({ ...base, topUps: { saved: off, chosen: on } }).allows).toBe(
-      rebalanceAllows({ keepUsd: 500 }),
-    );
-    expect(rebalanceSave({ ...withWithdraw, earningOff: true, topUps: { saved: on, chosen: off } }).allows).toBe(
-      rebalanceAllows(),
-    );
-  });
-
-  it("takes a new grant without the withdraw to turn them off: one batch, the old grant revoked in it", () => {
-    expect(rebalanceSave({ ...withWithdraw, topUps: { saved: on, chosen: off } })).toMatchObject({
-      topUpsChanged: true,
-      needsGrant: true,
-      steps: 1,
-      // The new grant has no withdraw, so the line says it never spends cash.
-      allows: rebalanceAllows(),
-    });
   });
 
   it("saves Keep alone as a settings-only change, no new grant (board 7h)", () => {
-    expect(rebalanceSave({ ...withWithdraw, topUps: { saved: on, chosen: { on: true, keepUsd: 0 } } })).toMatchObject({
+    expect(rebalanceSave({ ...base, topUps: { saved: on, chosen: { on: true, keepUsd: 0 } } })).toMatchObject({
       mixChanged: false,
       topUpsChanged: true,
       needsGrant: false,
@@ -232,28 +209,15 @@ describe("rebalanceSave: Top-ups go into my mix", () => {
     });
   });
 
-  it("waits for an amount while Keep is empty, and says nothing it allows until one is typed", () => {
-    expect(
-      rebalanceSave({ ...withWithdraw, topUps: { saved: on, chosen: { on: true, keepUsd: null } } }),
-    ).toMatchObject({ steps: 1, canSave: false, note: "Enter an amount" });
-    // Turning them on with Keep emptied: a new grant, but no "every top-up" for an amount nobody typed.
-    expect(rebalanceSave({ ...base, topUps: { saved: off, chosen: { on: true, keepUsd: null } } })).toMatchObject({
-      needsGrant: true,
+  it("waits for an amount while Keep is empty", () => {
+    expect(rebalanceSave({ ...base, topUps: { saved: on, chosen: { on: true, keepUsd: null } } })).toMatchObject({
+      steps: 1,
       canSave: false,
       note: "Enter an amount",
-      allows: null,
     });
   });
 
-  it("grants again when the grant lost the withdraw while top-ups are on", () => {
-    expect(rebalanceSave({ ...base, topUps: { saved: on, chosen: on } })).toMatchObject({
-      topUpsChanged: false,
-      needsGrant: true,
-      steps: 1,
-    });
-  });
-
-  it("counts nothing about top-ups until the executor's setting is read, or without an executor", () => {
+  it("counts nothing about top-ups until the Guard's setting is read, or without a Guard", () => {
     expect(rebalanceSave({ ...base, topUps: { saved: null, chosen: on } })).toMatchObject({
       topUpsChanged: false,
       needsGrant: false,
@@ -264,86 +228,47 @@ describe("rebalanceSave: Top-ups go into my mix", () => {
     ).toMatchObject({ topUpsChanged: false, steps: 0 });
   });
 
-  it("holds a Save that grants while the running grant carries top-ups and the switch isn't read", () => {
-    const weights = [2_500, 0, 0, 0, 2_500, 2_500, 2_500]; // Microsoft has no sell limit yet: a new grant
-    for (const saved of [undefined, null]) {
-      const plan = rebalanceSave({
-        ...withWithdraw,
-        weights,
-        topUps: saved === undefined ? undefined : { saved, chosen: on },
-      });
-      expect(plan).toMatchObject({ needsGrant: true, steps: 1, canSave: false, note: "One moment…", allows: null });
-    }
-    // Read, the same Save goes ahead with the line for the grant it makes.
-    expect(rebalanceSave({ ...withWithdraw, weights, topUps: { saved: on, chosen: on } })).toMatchObject({
+  it("holds a Save that grants until the switch is read: the grant's line says whether top-ups go in", () => {
+    const weights = [2_500, 0, 0, 0, 2_500, 2_500, 2_500];
+    const plan = rebalanceSave({ ...base, weights, topUps: { saved: null, chosen: on } });
+    expect(plan).toMatchObject({ needsGrant: true, steps: 1, canSave: false, note: "One moment…", allows: null });
+    expect(rebalanceSave({ ...base, weights, topUps: { saved: on, chosen: on } })).toMatchObject({
       canSave: true,
       note: null,
       allows: rebalanceAllows({ keepUsd: 500 }),
     });
-    // A grant without the withdraw: nothing to contradict, so it doesn't wait. Nor does a Save that grants nothing.
-    expect(rebalanceSave({ ...base, weights, topUps: { saved: null, chosen: off } })).toMatchObject({
-      canSave: true,
-      allows: rebalanceAllows(),
-    });
+    // A Save that grants nothing doesn't wait.
     const mixOnly = [5_000, 0, 0, 0, 0, 2_500, 2_500];
-    expect(rebalanceSave({ ...withWithdraw, weights: mixOnly, topUps: { saved: null, chosen: on } })).toMatchObject({
+    expect(rebalanceSave({ ...base, weights: mixOnly, topUps: { saved: null, chosen: on } })).toMatchObject({
       needsGrant: false,
       canSave: true,
       note: null,
     });
   });
 
-  it("says a waiting top-up stays as cash when the Save starts the counts again", () => {
+  it("says a waiting top-up stays as cash only when the Save switches top-ups off", () => {
     const waiting = { waitingUsd: 300 };
-    const newStock = [2_500, 0, 0, 0, 2_500, 2_500, 2_500]; // a new grant
-    const keeps = "The $300 waiting stays as cash.";
-    // A new Rebalancer grant: the executor drops what was counted before it.
-    expect(
-      rebalanceSave({ ...withWithdraw, ...waiting, weights: newStock, topUps: { saved: on, chosen: on } }).keeps,
-    ).toBe(keeps);
-    // Switching top-ups off starts them again from nothing too.
-    expect(rebalanceSave({ ...withWithdraw, ...waiting, topUps: { saved: on, chosen: off } }).keeps).toBe(keeps);
-    expect(rebalanceSave({ ...withWithdraw, waitingUsd: 300.5, topUps: { saved: on, chosen: off } }).keeps).toBe(
+    expect(rebalanceSave({ ...base, ...waiting, topUps: { saved: on, chosen: off } }).keeps).toBe(
+      "The $300 waiting stays as cash.",
+    );
+    expect(rebalanceSave({ ...base, waitingUsd: 300.5, topUps: { saved: on, chosen: off } }).keeps).toBe(
       "The $300.50 waiting stays as cash.",
     );
-    // Keep alone, or the mix alone, keeps the count: nothing to say. Nor with nothing waiting, or nothing to save.
+    // A new grant, Keep alone or the mix alone keeps it going in: nothing to say. Nor with nothing waiting.
+    const newStock = [2_500, 0, 0, 0, 2_500, 2_500, 2_500];
     expect(
-      rebalanceSave({ ...withWithdraw, ...waiting, topUps: { saved: on, chosen: { on: true, keepUsd: 900 } } }).keeps,
+      rebalanceSave({ ...base, ...waiting, weights: newStock, topUps: { saved: on, chosen: on } }).keeps,
     ).toBeNull();
     expect(
-      rebalanceSave({
-        ...withWithdraw,
-        ...waiting,
-        weights: [5_000, 0, 0, 0, 0, 2_500, 2_500],
-        topUps: { saved: on, chosen: on },
-      }).keeps,
+      rebalanceSave({ ...base, ...waiting, topUps: { saved: on, chosen: { on: true, keepUsd: 900 } } }).keeps,
     ).toBeNull();
-    expect(rebalanceSave({ ...withWithdraw, waitingUsd: null, topUps: { saved: on, chosen: off } }).keeps).toBeNull();
-    expect(rebalanceSave({ ...withWithdraw, ...waiting, topUps: { saved: on, chosen: on } }).keeps).toBeNull();
-  });
-
-  it("switches top-ups off alone while Rebalancer isn't running: the setting only, no grant", () => {
-    const stopped = { ...base, terms: null, running: false };
-    expect(rebalanceSave({ ...stopped, topUps: { saved: on, chosen: off } })).toMatchObject({
-      topUpsChanged: true,
-      needsGrant: false,
-      steps: 1,
-      canSave: true,
-      allows: null,
-    });
-    // Turning Rebalance on stays a grant: nothing changed, the mix changed too, or top-ups left on.
-    expect(rebalanceSave({ ...stopped, topUps: { saved: on, chosen: on } })).toMatchObject({ needsGrant: true });
-    expect(
-      rebalanceSave({ ...stopped, weights: [5_000, 0, 0, 0, 0, 2_500, 2_500], topUps: { saved: on, chosen: off } }),
-    ).toMatchObject({ needsGrant: true });
-    // Running, switching them off is still a new grant without the withdraw.
-    expect(rebalanceSave({ ...withWithdraw, topUps: { saved: on, chosen: off } })).toMatchObject({ needsGrant: true });
+    expect(rebalanceSave({ ...base, waitingUsd: null, topUps: { saved: on, chosen: off } }).keeps).toBeNull();
   });
 
   it("puts a mix change and a top-ups change in the same batch", () => {
     const weights = [5_000, 0, 0, 0, 0, 2_500, 2_500];
     expect(
-      rebalanceSave({ ...withWithdraw, weights, topUps: { saved: on, chosen: { on: true, keepUsd: 900 } } }),
+      rebalanceSave({ ...base, weights, topUps: { saved: on, chosen: { on: true, keepUsd: 900 } } }),
     ).toMatchObject({ mixChanged: true, topUpsChanged: true, needsGrant: false, steps: 1 });
   });
 });
@@ -388,13 +313,10 @@ describe("sheetLine: the line under the sheet's title, from Rebalancer's card", 
       nowSec: WED_NOON,
       holdings: holdings(pcts),
       mixBps: MIX,
-      capMaxRaw: usdc(1_000_000),
-      rebalanceDay: 0,
+      pacing: { sessionAt: 0, mixSetAt: 0 },
       debtUsd,
       totalBackingUsd: 2_000,
       avgCf: 0.7,
-      left: { rebalance: null },
-      capRaw: { rebalance: usdc(1_000_000) },
       numbers: { rebalance: options },
     };
     return rebalanceCard({
@@ -404,9 +326,7 @@ describe("sheetLine: the line under the sheet's title, from Rebalancer's card", 
       waiting: false,
       stoppedAt: null,
       endsAt: WED_NOON + 200 * DAY,
-      fails: 0,
-      cooldownUntil: 0,
-      rebalanceDay: 0,
+      refused: 0,
       holdings: o.holdings,
       mixBps: MIX,
       options,
@@ -414,8 +334,8 @@ describe("sheetLine: the line under the sheet's title, from Rebalancer's card", 
       ...over,
     })!;
   };
-  // "tomorrow 10:00 AM" in the viewer's own time; a weekday keeps its capital ("Mon 10:00 AM").
-  const next = whenText(rebalanceCheckAt(WED_NOON, 0), WED_NOON);
+  // The next round in the viewer's own time ("today 12:10 PM GMT-4").
+  const next = whenText(nextRound(WED_NOON), WED_NOON);
 
   it("says it's on target and when it checks, as boards 7e–7h do", () => {
     expect(sheetLine(card())).toEqual({ text: `On target. Checks ${next}.`, renew: false });
@@ -449,7 +369,7 @@ describe("sheetLine: the line under the sheet's title, from Rebalancer's card", 
 
   it("says the state's own words otherwise", () => {
     expect(sheetLine(card({ status: "off" }))).toEqual({
-      text: "When on, it keeps your mix on target. Checks once a market day, after the US open.",
+      text: "When on, it keeps your mix on target. Trades at most once a day, or on a new mix.",
       renew: false,
     });
     expect(sheetLine(card({ status: "starting", waiting: true }))).toEqual({

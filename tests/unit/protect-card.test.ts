@@ -10,8 +10,7 @@ const base: ProtectCardInput = {
   waiting: null,
   hf: 1.62,
   rescuing: false,
-  fails: 0,
-  cooldownUntil: 0,
+  refused: 0,
   stoppedAt: null,
   endsAt: NOW + 200 * DAY,
   act: null,
@@ -78,15 +77,12 @@ describe("Protector's card on the Agents overview: one pill, the credit health, 
     });
   });
 
-  it("retrying after 3 failed runs, with when they try again", () => {
-    const c = card({ fails: 3, cooldownUntil: NOW + 20 * 60 });
+  it("retrying after 3 refused moves in a row: no back-off, each tries again at the next round", () => {
+    const c = card({ refused: 3 });
     expect(c.pill).toEqual({ text: "Retrying", tone: "watch" });
     expect(c.line1).toBe("Your agents’ last 3 runs didn’t go through.");
-    // The day, then the viewer's clock with its GMT offset: "today at 4:10 PM GMT+3".
-    expect(c.line2).toMatch(
-      /^Nothing moved\. They try again (today|tomorrow) at \d{1,2}:\d{2}\s?[AP]M GMT([+-]\d{1,2}(:\d{2})?)?\.$/,
-    );
-    expect(card({ fails: 3, cooldownUntil: NOW - 1 }).line2).toBe("Nothing moved. They try again on the next run.");
+    expect(c.line2).toBe("Nothing moved. They try again next round.");
+    expect(card({ refused: 2 }).pill.text).not.toBe("Retrying");
   });
 
   it("in Act above Protector's line: still On, the gap back to Watch", () => {
@@ -115,9 +111,9 @@ describe("Protector's card on the Agents overview: one pill, the credit health, 
 
   it("the first state that applies wins", () => {
     // A grant waiting for its batch beats everything; a rescue beats failed runs; failed runs beat Act.
-    expect(card({ status: "starting", rescuing: true, fails: 5 }).pill.text).toBe("Needs you");
-    expect(card({ rescuing: true, fails: 5, hf: 1.01 }).pill.text).toBe("Working");
-    expect(card({ fails: 5, hf: 1.07, act: { addUsd: 45, protectOn: true } }).pill.text).toBe("Retrying");
+    expect(card({ status: "starting", rescuing: true, refused: 5 }).pill.text).toBe("Needs you");
+    expect(card({ rescuing: true, refused: 5, hf: 1.01 }).pill.text).toBe("Working");
+    expect(card({ refused: 5, hf: 1.07, act: { addUsd: 45, protectOn: true } }).pill.text).toBe("Retrying");
     expect(
       card({ hf: 1.07, act: { addUsd: 45, protectOn: true }, weekend: { addUsd: 1, dropPct: 15, when: "x" } }).pill
         .text,
@@ -164,7 +160,7 @@ describe("Protector's card on the Agents overview: one pill, the credit health, 
 
   it("reads as one line to a screen reader, and never names the machinery", () => {
     expect(protectCardLabel(card({}))).toBe("Protector, on. Your credit health 1.62, Safe. Steps in only under 1.03.");
-    const words = [card({}), card({ status: "starting" }), card({ fails: 3 }), card({ rescuing: true })]
+    const words = [card({}), card({ status: "starting" }), card({ refused: 3 }), card({ rescuing: true })]
       .flatMap((c) => [c.pill.text, c.line1, c.line2 ?? ""])
       .join(" ");
     expect(words).not.toMatch(/borrow|lock|permission|executor|registry|register|grant/i);

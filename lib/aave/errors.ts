@@ -2,7 +2,7 @@ import { decodeAbiParameters, decodeErrorResult, isAddressEqual, parseAbi, toFun
 import { spokeAbi } from "./abis/ISpoke";
 import { hubAbi } from "./abis/IHub";
 import { swapOf } from "@/lib/allowlist";
-import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
+import { guardAbi } from "@/lib/agents/abis/GooseGuard";
 import { PROTOCOLS, SEL } from "@/lib/protocols/config";
 import { BUY_LIMITS } from "@/lib/swap/buy";
 import { AERODROME_V1, ROUTERS, SPARK_PSM3 } from "@/lib/swap/venues";
@@ -28,17 +28,18 @@ const PLAIN: Record<string, string> = {
 const savingsErrorsAbi = parseAbi(["error SupplyCapExceeded()"]);
 
 /**
- * GooseExecutor's reasons for refusing a registration, as a turn-on says them (lib/agents/register.ts): the batch that
- * approves and registers an agent in one signature reverts whole, so nothing changed.
+ * GooseGuard's reasons for refusing a registration or a setting, as a turn-on says them (lib/agents/register.ts): the
+ * batch that approves and registers an agent in one signature reverts whole, so nothing changed.
  */
 const AGENT_PLAIN: Record<string, string> = {
-  NotApproved: "Your account didn’t approve this agent, so nothing changed. Try again.",
-  ManagerNotOwner: "Your account isn’t set up for agents yet, so nothing changed. Try again.",
+  NotAccount: "This agent isn’t set up for your account, so nothing changed.",
+  NotSpender: "This permission is for another app, so nothing changed.",
+  FutureStart: "Your clock runs ahead. Try again in a minute.",
+  Expired: "This agent’s time window has passed. Try again.",
   StaleGrant: "A newer setting is already on. Close this and open it again.",
-  AccountNotAllowed: "Agents can’t run on this account yet.",
-  BadWindow: "This agent’s time window isn’t right. Try again.",
-  CapOutOfBounds: "That’s over what an agent may move. Try a smaller amount.",
-  BadTerms: "This agent’s settings can’t be used. Try different ones.",
+  CodeNotAllowed: "Agents can’t run on this account yet.",
+  TooLong: "This agent’s settings can’t be used. Try different ones.",
+  BadJob: "This agent’s settings can’t be used. Try different ones.",
   BadMix: "Make your mix add up to 100% to save it.",
 };
 
@@ -129,10 +130,10 @@ export function explainRevert(raw: Hex | undefined, fallback: string, call?: { t
     }
   }
   try {
-    const { errorName } = decodeErrorResult({ abi: gooseExecutorAbi, data });
+    const { errorName } = decodeErrorResult({ abi: guardAbi, data });
     return AGENT_PLAIN[errorName] ?? fallback;
   } catch {
-    /* not the executor's */
+    /* not the Guard's */
   }
   return fallback;
 }

@@ -9,37 +9,25 @@ import {
   sellLimitsFor,
   type ProtectSaved,
 } from "@/lib/agents/protect";
-import { readAgentGrant, sellGrant, stockLimitsRaw, type ListedPermission } from "@/lib/agents/permissions";
+import { NO_LIMIT, readAgentGrant, sellGrant, stockLimitsRaw, type ListedPermission } from "@/lib/agents/permissions";
 import { EQUITIES } from "@/lib/tokens/registry";
 
-const usdc = (x: number) => BigInt(x) * 10n ** 6n;
-/** Aave's prices by reserve id: Apple $250, Amazon $220, Google $180, Meta $700, Microsoft $500, NVIDIA $180, Tesla $383. */
-const PRICES = [250, 220, 180, 700, 500, 180, 383].map((p) => BigInt(p) * 10n ** 8n);
-const CAP_MAX = usdc(10_000);
-const ctx = { capMaxRaw: CAP_MAX, pricesRaw: PRICES };
 const TESLA = 6;
 const NVIDIA = 5;
-const EXECUTOR = "0x00000000000000000000000000000000000e5ec0" as Address;
+const GUARD = "0x00000000000000000000000000000000000e5ec0" as Address;
 
 const off: ProtectSaved = { repayOn: false, sell: null, keepMix: false };
-const sellAll = { limitsRaw: sellLimitsFor(CAP_MAX, PRICES, []) };
+const sellAll = { limitsRaw: sellLimitsFor([]) };
 const fullOn: ProtectSaved = { repayOn: true, sell: sellAll, keepMix: false };
 
 describe("Protector's never-sell grant", () => {
   it("leaves the never-sell stocks out of the sell grant: no approve, no limit", () => {
-    const limitsRaw = sellLimitsFor(CAP_MAX, PRICES, [TESLA]);
+    const limitsRaw = sellLimitsFor([TESLA]);
     expect(limitsRaw[TESLA]).toBe(0n);
-    expect(limitsRaw.filter((l) => l > 0n)).toHaveLength(EQUITIES.length - 1);
-    expect(limitsRaw).toEqual(
-      stockLimitsRaw(
-        CAP_MAX,
-        CAP_MAX,
-        PRICES,
-        EQUITIES.map((e) => e.reserveId !== TESLA),
-      ),
-    );
+    expect(limitsRaw.filter((l) => l === NO_LIMIT)).toHaveLength(EQUITIES.length - 1);
+    expect(limitsRaw).toEqual(stockLimitsRaw(EQUITIES.map((e) => e.reserveId !== TESLA)));
 
-    const grant = sellGrant(CAP_MAX, limitsRaw);
+    const grant = sellGrant(limitsRaw);
     const tesla = EQUITIES[TESLA].address;
     expect(grant.calls!.some((c) => isAddressEqual(c.target, tesla))).toBe(false);
     expect(grant.spends!.some((s) => isAddressEqual(s.token, tesla))).toBe(false);
@@ -47,18 +35,18 @@ describe("Protector's never-sell grant", () => {
   });
 
   it("reads the never-sell list back off the grant JAW lists", () => {
-    const limitsRaw = sellLimitsFor(CAP_MAX, PRICES, [TESLA, NVIDIA]);
-    const g = sellGrant(CAP_MAX, limitsRaw);
+    const limitsRaw = sellLimitsFor([TESLA, NVIDIA]);
+    const g = sellGrant(limitsRaw);
     const listed: ListedPermission = {
       permissionId: `0x${"1".repeat(64)}`,
-      spender: EXECUTOR,
+      spender: GUARD,
       start: 1,
       end: 2,
       salt: "3",
       calls: g.calls!.map((c) => ({ target: c.target, selector: c.selector! })),
       spends: g.spends!.map((s) => ({ token: s.token, allowance: s.allowance, unit: s.unit, multiplier: 1 })),
     };
-    const read = readAgentGrant(listed, EXECUTOR);
+    const read = readAgentGrant(listed, GUARD);
     expect(read?.job).toBe("sell");
     expect(neverSellOf(read?.limitsRaw).sort()).toEqual([NVIDIA, TESLA]);
   });
@@ -66,110 +54,88 @@ describe("Protector's never-sell grant", () => {
 
 describe("protectSteps", () => {
   it("starts on what's saved: no change, nothing to save", () => {
-    expect(protectSteps(fullOn, savedChoice(fullOn), ctx)).toEqual({ steps: [], blocked: null });
+    expect(protectSteps(fullOn, savedChoice(fullOn))).toEqual({ steps: [], blocked: null });
     expect(savedChoice(off)).toEqual({ sellOn: false, keepMix: false, never: [] });
   });
 
-  it("while it's off, saving switches it on: repay from cash at the executor's CAP_MAX, then selling if chosen", () => {
-    expect(protectSteps(off, savedChoice(off), ctx)).toEqual({
-      steps: [{ kind: "grant", job: "protect", capRaw: CAP_MAX }],
+  it("while it's off, saving switches it on: repay from cash, then selling if chosen, neither with a limit", () => {
+    expect(protectSteps(off, savedChoice(off))).toEqual({
+      steps: [{ kind: "grant", job: "protect" }],
       blocked: null,
     });
-    const { steps } = protectSteps(off, { ...savedChoice(off), sellOn: true, never: [TESLA] }, ctx);
+    const { steps } = protectSteps(off, { ...savedChoice(off), sellOn: true, never: [TESLA] });
     expect(steps).toEqual([
-      { kind: "grant", job: "protect", capRaw: CAP_MAX },
-      { kind: "grant", job: "sell", capRaw: CAP_MAX, limitsRaw: sellLimitsFor(CAP_MAX, PRICES, [TESLA]) },
+      { kind: "grant", job: "protect" },
+      { kind: "grant", job: "sell", limitsRaw: sellLimitsFor([TESLA]) },
     ]);
     // Both grants in one batch, one Face ID (Adrian, 2026-10-20).
     expect(protectBatch(steps)?.grants.map((g) => g.job)).toEqual(["protect", "sell"]);
     // Selling still on from before, its repay grant ended: repaying goes back on first.
     const sellOnly: ProtectSaved = { ...fullOn, repayOn: false };
-    expect(protectSteps(sellOnly, savedChoice(sellOnly), ctx).steps).toEqual([
-      { kind: "grant", job: "protect", capRaw: CAP_MAX },
-    ]);
+    expect(protectSteps(sellOnly, savedChoice(sellOnly)).steps).toEqual([{ kind: "grant", job: "protect" }]);
   });
 
   it("has no limit to change: with Protector on and nothing else changed, there's nothing to save", () => {
     const saved: ProtectSaved = { ...fullOn, sell: null };
-    expect(protectSteps(saved, savedChoice(saved), ctx).steps).toEqual([]);
+    expect(protectSteps(saved, savedChoice(saved)).steps).toEqual([]);
     expect(Object.keys(savedChoice(fullOn))).not.toContain("limitUsd");
   });
 
-  it("switching selling on is its own grant, at the executor's CAP_MAX, leaving the never-sell stocks out", () => {
+  it("switching selling on is its own grant, with no limit, leaving the never-sell stocks out", () => {
     const saved: ProtectSaved = { ...fullOn, sell: null };
-    const { steps } = protectSteps(saved, { ...savedChoice(saved), sellOn: true, never: [TESLA] }, ctx);
-    expect(steps).toEqual([
-      { kind: "grant", job: "sell", capRaw: CAP_MAX, limitsRaw: sellLimitsFor(CAP_MAX, PRICES, [TESLA]) },
-    ]);
+    const { steps } = protectSteps(saved, { ...savedChoice(saved), sellOn: true, never: [TESLA] });
+    expect(steps).toEqual([{ kind: "grant", job: "sell", limitsRaw: sellLimitsFor([TESLA]) }]);
   });
 
-  it("switching selling off revokes it, in the same one batch as everything else", () => {
-    const { steps } = protectSteps(fullOn, { ...savedChoice(fullOn), sellOn: false }, ctx);
+  it("switching selling off turns it off (revoked and unregistered), in the same one batch as everything else", () => {
+    const { steps } = protectSteps(fullOn, { ...savedChoice(fullOn), sellOn: false });
     expect(steps).toEqual([{ kind: "revoke", job: "sell" }]);
     expect(protectBatch(steps)).toEqual({ grants: [], off: ["sell"] });
   });
 
   it("a changed never-sell list is a new sell grant; the same set in another order is not", () => {
-    const saved: ProtectSaved = { ...fullOn, sell: { limitsRaw: sellLimitsFor(CAP_MAX, PRICES, [TESLA, NVIDIA]) } };
-    expect(protectSteps(saved, { ...savedChoice(saved), never: [NVIDIA, TESLA] }, ctx).steps).toEqual([]);
-    const { steps } = protectSteps(saved, { ...savedChoice(saved), never: [NVIDIA] }, ctx);
-    expect(steps).toEqual([
-      { kind: "grant", job: "sell", capRaw: CAP_MAX, limitsRaw: sellLimitsFor(CAP_MAX, PRICES, [NVIDIA]) },
-    ]);
+    const saved: ProtectSaved = { ...fullOn, sell: { limitsRaw: sellLimitsFor([TESLA, NVIDIA]) } };
+    expect(protectSteps(saved, { ...savedChoice(saved), never: [NVIDIA, TESLA] }).steps).toEqual([]);
+    const { steps } = protectSteps(saved, { ...savedChoice(saved), never: [NVIDIA] });
+    expect(steps).toEqual([{ kind: "grant", job: "sell", limitsRaw: sellLimitsFor([NVIDIA]) }]);
     expect(steps[0].kind === "grant" && steps[0].job === "sell" && steps[0].limitsRaw[TESLA]).toBeGreaterThan(0n);
   });
 
   it("'Sells first' goes first, and only while selling stays on", () => {
-    const { steps } = protectSteps(fullOn, { ...savedChoice(fullOn), keepMix: true, never: [TESLA] }, ctx);
+    const { steps } = protectSteps(fullOn, { ...savedChoice(fullOn), keepMix: true, never: [TESLA] });
     expect(steps.map((s) => s.kind)).toEqual(["keepMix", "grant"]);
     expect(steps[0]).toEqual({ kind: "keepMix", on: true });
-    expect(protectSteps(fullOn, { ...savedChoice(fullOn), keepMix: true, sellOn: false }, ctx).steps).toEqual([
+    expect(protectSteps(fullOn, { ...savedChoice(fullOn), keepMix: true, sellOn: false }).steps).toEqual([
       { kind: "revoke", job: "sell" },
     ]);
     // Unread registry: nothing to compare with, so no setting is sent.
-    expect(protectSteps({ ...fullOn, keepMix: null }, { ...savedChoice(fullOn), keepMix: true }, ctx).steps).toEqual(
-      [],
-    );
+    expect(protectSteps({ ...fullOn, keepMix: null }, { ...savedChoice(fullOn), keepMix: true }).steps).toEqual([]);
   });
 
   it("blocks a never-sell list with every stock on it", () => {
     const all = EQUITIES.map((e) => e.reserveId);
-    expect(protectSteps(fullOn, { ...savedChoice(fullOn), never: all }, ctx)).toEqual({
+    expect(protectSteps(fullOn, { ...savedChoice(fullOn), never: all })).toEqual({
       steps: [],
       blocked: "Leave at least one stock Protector may sell.",
     });
   });
 
-  it("grants at whatever CAP_MAX the executor has: $5 on a capped test deploy, the largest a grant holds without", () => {
-    const test = { capMaxRaw: usdc(5), pricesRaw: PRICES };
-    expect(protectSteps(off, savedChoice(off), test).steps).toEqual([
-      { kind: "grant", job: "protect", capRaw: usdc(5) },
-    ]);
-    // No amount limit on the deploy: each stock's limit is what the grant's terms hold (32 bits of 1e-4 share).
-    const none = { capMaxRaw: 2n ** 160n - 1n, pricesRaw: PRICES };
-    const { steps } = protectSteps(off, { ...savedChoice(off), sellOn: true }, none);
+  it("grants with no limit anywhere (decision 9): every stock it may sell at the largest a JAW spend holds", () => {
+    const { steps } = protectSteps(off, { ...savedChoice(off), sellOn: true });
     const sell = steps[1];
     if (sell.kind !== "grant" || sell.job !== "sell") throw new Error("no sell grant");
-    expect(sell.limitsRaw).toEqual(EQUITIES.map(() => (2n ** 32n - 1n) * 10_000n));
-    expect(sellGrant(sell.capRaw, sell.limitsRaw).spends).toHaveLength(2 + EQUITIES.length);
+    expect(sell.limitsRaw).toEqual(EQUITIES.map(() => NO_LIMIT));
+    expect(sellGrant(sell.limitsRaw).spends).toHaveLength(2 + EQUITIES.length);
   });
 });
 
 describe('protectBatch: a save in one batch, one Face ID (Adrian, 2026-10-20: "in one signature")', () => {
-  const grantP = { kind: "grant" as const, job: "protect" as const, capRaw: CAP_MAX };
-  const grantS = {
-    kind: "grant" as const,
-    job: "sell" as const,
-    capRaw: CAP_MAX,
-    limitsRaw: sellLimitsFor(CAP_MAX, PRICES, []),
-  };
+  const grantP = { kind: "grant" as const, job: "protect" as const };
+  const grantS = { kind: "grant" as const, job: "sell" as const, limitsRaw: sellLimitsFor([]) };
 
   it("carries every grant, selling's revoke and Sells first together; nothing to save is no batch", () => {
     expect(protectBatch([{ kind: "keepMix", on: true }, grantP, grantS])).toEqual({
-      grants: [
-        { job: "protect", capRaw: CAP_MAX },
-        { job: "sell", capRaw: CAP_MAX, limitsRaw: grantS.limitsRaw },
-      ],
+      grants: [{ job: "protect" }, { job: "sell", limitsRaw: grantS.limitsRaw }],
       off: [],
       keepMix: true,
     });

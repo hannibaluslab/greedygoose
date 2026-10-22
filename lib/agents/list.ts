@@ -16,7 +16,7 @@ export const AGENTS = ["protect", "rebalance"] as const;
 export type Agent = (typeof AGENTS)[number];
 
 /**
- * The executor's jobs each agent runs. Protect is two grants: repaying from cash, and selling backing stock, which has
+ * GooseGuard's jobs each agent runs. Protect is two grants: repaying from cash, and selling backing stock, which has
  * its own switch inside Protect's sheet (decision 5). The first job is the one the agent's switch grants.
  */
 export const AGENT_JOBS: Record<Agent, readonly [AgentJob, ...AgentJob[]]> = {
@@ -59,11 +59,11 @@ export const AGENT_COPY: Record<Agent, { does: string; lead: string; never: stri
   protect: {
     does: `Steps in under ${LINE}`,
     lead: `${PROTECT_RULE} It repays from your cash, and can sell backing stock if cash isn’t enough.`,
-    never: `Protector does nothing until your credit falls under ${LINE}. It never sells a stock that doesn’t back your credit, and never sells on a weekend.`,
+    never: `Protector does nothing until your credit falls under ${LINE}. It never sells a stock that doesn’t back your credit.`,
   },
   rebalance: {
     does: "Keeps your mix on target",
-    lead: "Once a market day, it sells what grew too big to buy what fell short.",
+    lead: "Up to once a day, it sells what grew too big to buy what fell short.",
     never: "Rebalancer never touches your cash or the stocks backing your credit.",
   },
 };
@@ -75,7 +75,7 @@ export function agentStatus(agent: Agent, status: Readonly<Record<AgentJob, Agen
 }
 
 /**
- * What an agent does next, from the executor's `planOf` or its rule (lib/agents/next.ts): a move, said for an agent
+ * What an agent does next, from the Planner's `planOf` or its rule (lib/agents/next.ts): a move, said for an agent
  * that runs ("repays $40 from your cash") and for one that doesn't ("Would repay $40 from your cash"), or why there's
  * none ("Safe. Nothing to do.").
  */

@@ -1,11 +1,11 @@
 import { REBALANCER } from "@/config/risk";
-import { stockLimitsRaw, type StockLimits } from "@/lib/agents/permissions";
+import { NO_LIMIT, stockLimitsRaw } from "@/lib/agents/permissions";
 import { rebalanceTrades, type RebalanceOptions, type RebalanceTrade } from "@/lib/agents/rules/rebalance";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 
 /**
- * The Rebalancer's mix (plan item 9 step 4), set in its agent sheet: the weights GooseExecutor's registry keeps
- * (`setMix`, `mixes`) and what the Rebalancer would trade for them, from its TypeScript rule (lib/agents/rules/rebalance.ts).
+ * The Rebalancer's mix (plan item 9 step 4), set in its agent sheet: the weights GooseGuard keeps (`setMix`,
+ * `accountOf`) and what the Rebalancer would trade for them, from its TypeScript rule (lib/agents/rules/rebalance.ts).
  */
 
 /** A whole mix in BPS (RebalanceRules.WHOLE). */
@@ -32,9 +32,14 @@ export function isMix(weights: readonly number[]): boolean {
   return sum === MIX_WHOLE || sum === 0;
 }
 
-/** The registry's mix (`mixes`): 16 bits a stock by reserve id, in BPS. */
+/** GooseGuard's mix (`accountOf`'s settings, `setMix`, `MixSet`): 16 bits a stock by reserve id, in BPS. */
 export function unpackMix(packed: bigint): number[] {
   return EQUITIES.map((e) => Number((packed >> BigInt(16 * e.reserveId)) & 0xffffn));
+}
+
+/** The weights packed as `setMix` takes them: reserve r's BPS at bits [16r, 16r + 16). */
+export function packMix(weightsBps: readonly number[]): bigint {
+  return weightsBps.reduce((m, w, r) => m | (BigInt(w) << BigInt(16 * r)), 0n);
 }
 
 /** The rows' weights by reserve id, as `setMix` takes them; a stock not on the card is 0. */
@@ -117,7 +122,7 @@ export function mixBpsNow(holdings: readonly MixHolding[], mixBps: readonly numb
 }
 
 /**
- * The rule's options: GooseExecutor's live `rebalanceLimits()` once read (D18), config/risk.ts REBALANCER (its deploy
+ * The rule's options: GoosePlanner's live `rebalanceLimits()` once read (D18), config/risk.ts REBALANCER (its deploy
  * defaults) before.
  */
 export function rebalanceOptions(live?: {
@@ -147,32 +152,19 @@ export function rebalanceOptions(live?: {
 }
 
 /**
- * What the Rebalancer's next run would trade for `rows` on today's free stock: with what the grant's limits still allow
- * this period (`left`), or before it has one with a fresh period at `capRaw` (the executor's CAP_MAX: no amount limit)
- * and the stock limits a grant at that cap carries (`stockLimitsRaw`, each mix stock may be sold). Nothing while the
- * rows don't add up to 100%.
+ * What the Rebalancer's next round would trade for `rows` on today's free stock. Its grant has no limit (decision 9):
+ * each stock in the mix may be sold and the buys spend what the sales bring. Nothing while the rows don't add up to
+ * 100%.
  */
 export function previewTrades(p: {
   holdings: readonly MixHolding[];
   rows: readonly MixRow[];
-  capRaw: bigint;
-  /** The executor's CAP_MAX; the limit itself bounds it before the executor is read. */
-  capMaxRaw: bigint | null;
   options: RebalanceOptions;
-  /** The period's USDC left and each stock's shares left, by reserve id, from the grant the executor runs. */
-  left?: { usdcRaw: bigint; stocksRaw: StockLimits };
 }): RebalanceTrade[] {
   const weights = mixWeights(p.rows);
   if (!isMix(weights) || weights.every((w) => w === 0)) return [];
   const prices = EQUITIES.map((e) => holdingOf(p.holdings, e.reserveId)?.priceRaw ?? 0n);
-  const limits =
-    p.left?.stocksRaw ??
-    stockLimitsRaw(
-      p.capRaw,
-      p.capMaxRaw ?? p.capRaw,
-      prices,
-      weights.map((w) => w > 0),
-    );
+  const limits = stockLimitsRaw(weights.map((w) => w > 0));
   return rebalanceTrades(
     {
       stocks: EQUITIES.map((e) => ({
@@ -181,7 +173,7 @@ export function previewTrades(p: {
         weightBps: BigInt(weights[e.reserveId]),
         sellLeftRaw: limits[e.reserveId],
       })),
-      usdcLeftRaw: p.left?.usdcRaw ?? p.capRaw,
+      usdcLeftRaw: NO_LIMIT,
     },
     p.options,
   );

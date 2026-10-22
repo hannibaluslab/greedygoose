@@ -11,10 +11,6 @@ import {
   type TopUpsFacts,
 } from "@/lib/agents/topUps";
 
-/** Wednesday 2025-10-15 12:00 New York (16:00 UTC). */
-const WED_NOON = Date.UTC(2025, 9, 15, 16) / 1000;
-const DAY = 86_400;
-
 /** Top-ups available and on with Keep $500, $600 owed, Protect · sell running, the cash at 4.2%. */
 function input(over: Partial<TopUpsFacts & TopUpsChoice> = {}): TopUpsFacts & TopUpsChoice {
   return {
@@ -25,7 +21,6 @@ function input(over: Partial<TopUpsFacts & TopUpsChoice> = {}): TopUpsFacts & To
     rate: "4.2%",
     debtUsd: 600,
     protectSells: true,
-    nowSec: WED_NOON,
     on: true,
     keepUsd: 500,
     ...over,
@@ -97,15 +92,12 @@ describe("topUpsView: the one note", () => {
     });
   });
 
-  it("names a top-up waiting for the next check, and that it earns until then (board 7g)", () => {
-    const waiting = topUpsView(input({ waiting: { usd: 300, atSec: WED_NOON + DAY } })).note;
-    expect(waiting).toMatchObject({ kind: "waiting", title: "$300 waiting" });
-    expect(waiting?.line).toMatch(
-      /^Goes into your mix tomorrow at \d{1,2}(:\d{2})?\s[AP]M GMT([+-]\d{1,2}(:\d{2})?)?\. It earns until then\.$/,
-    );
-    expect(topUpsView(input({ waiting: { usd: 300.5, atSec: WED_NOON + DAY } })).note?.title).toBe("$300.50 waiting");
+  it("names a top-up waiting in the wallet: it goes in at the next round (board 7g)", () => {
+    const waiting = topUpsView(input({ waiting: { usd: 300 } })).note;
+    expect(waiting).toEqual({ kind: "waiting", title: "$300 waiting", line: "Goes into your mix at the next round." });
+    expect(topUpsView(input({ waiting: { usd: 300.5 } })).note?.title).toBe("$300.50 waiting");
     // Dust is no top-up to name.
-    expect(topUpsView(input({ waiting: { usd: 0.004, atSec: WED_NOON + DAY } })).note).toBeNull();
+    expect(topUpsView(input({ waiting: { usd: 0.004 } })).note).toBeNull();
   });
 
   it("warns only when something is owed, Keep is $0 and Protector can't sell (board 7h)", () => {
@@ -127,9 +119,7 @@ describe("topUpsView: the one note", () => {
   it("puts the warning before the other notes", () => {
     const off = { on: false, keepUsd: 500 };
     expect(topUpsView(input({ saved: off, keepUsd: 0, protectSells: false })).note).toEqual(WARNING);
-    expect(
-      topUpsView(input({ keepUsd: 0, protectSells: false, waiting: { usd: 300, atSec: WED_NOON + DAY } })).note,
-    ).toEqual(WARNING);
+    expect(topUpsView(input({ keepUsd: 0, protectSells: false, waiting: { usd: 300 } })).note).toEqual(WARNING);
   });
 
   it("has nothing to say while on with nothing waiting", () => {

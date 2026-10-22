@@ -2,15 +2,13 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { isAddressEqual, zeroAddress, type Hex } from "viem";
-import { useAccount, usePublicClient, useReadContract, useReadContracts } from "wagmi";
+import { useAccount, useBlock, usePublicClient, useReadContracts } from "wagmi";
 import { usePermissions } from "@jaw.id/wagmi";
 import { getPermissionFromRelay, type Permission } from "@jaw.id/core";
 import type { Call } from "@/lib/aave/tx";
 import { CHAIN_ID } from "@/lib/chain";
-import { GOOSE_EXECUTOR } from "@/lib/agents/config";
-import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
-import { executorAccountsAbi } from "@/lib/agents/abis/accounts";
-import type { SpendLeft } from "@/lib/agents/next";
+import { GOOSE_GUARD } from "@/lib/agents/config";
+import { guardAbi } from "@/lib/agents/abis/GooseGuard";
 import {
   contractPermission,
   jawPermission,
@@ -21,7 +19,6 @@ import {
 import {
   GRANT_SECONDS,
   JOBS,
-  carriesTopUps,
   grantPermission,
   jobGrant,
   readAgentGrant,
@@ -32,7 +29,13 @@ import {
   type StockLimits,
 } from "@/lib/agents/permissions";
 import { pickFor } from "@/lib/agents/picks";
-import { encodePermission, REGISTER_FALLBACK } from "@/lib/agents/register";
+import {
+  buildUnregisterCalls,
+  decodePermission,
+  encodePermission,
+  heldStartOf,
+  REGISTER_FALLBACK,
+} from "@/lib/agents/register";
 import { buildSetTopUpsCalls } from "@/lib/agents/settings";
 import { deleteFromRelay, recordInRelay, relayPermission, type RelayDeps } from "@/lib/agents/relay";
 import { jobStatus, type AgentStatus, type Stored } from "@/lib/agents/status";
@@ -45,17 +48,22 @@ import { useTopUpsSwitch } from "@/hooks/useTopUps";
 
 export { GRANT_SECONDS } from "@/lib/agents/permissions";
 
-/**
- * What a job runs with: its limit, for Protect · sell and the Rebalancer each stock's, and whether the Rebalancer's
- * grant carries top-ups (the savings withdraw).
- */
-type JobTerms = { capRaw: bigint; limitsRaw?: StockLimits; topUps?: boolean };
+/** What a job runs with: for Protect · sell and the Rebalancer, the stocks it may sell. No job has an amount limit. */
+type JobTerms = { limitsRaw?: StockLimits };
 
-/**
- * A job's new grant in a change: its limit, each stock's for Protect · sell and the Rebalancer, and for the Rebalancer
- * whether it carries top-ups.
- */
-export type GrantStep = { job: AgentJob; capRaw: bigint; limitsRaw?: StockLimits; topUps?: boolean };
+/** A job's new grant in a change: for Protect · sell and the Rebalancer, the stocks it may sell. */
+export type GrantStep = { job: AgentJob; limitsRaw?: StockLimits };
+
+/** A job's grant GooseGuard holds none of: what `permissionOf` reads as before the job's first grant. */
+const NONE: JawPermission = {
+  account: zeroAddress,
+  spender: zeroAddress,
+  start: 0,
+  end: 0,
+  salt: 0n,
+  calls: [],
+  spends: [],
+};
 
 /** A grant the account holds, as the manager knows it: its id (the manager's hash) and the struct it approved. */
 type Held = { id: Hex; job: AgentJob; p: JawPermission };
@@ -146,7 +154,10 @@ const topUpsOffGate = (
   return topUps === "unreadable" ? stopPlan(account, CANT_CHECK_AGENTS) : undefined;
 };
 
-/** `setTopUps(false)` when Rebalance turns off with top-ups on, so nothing is left counting. */
+/**
+ * `setTopUps(false)` when Rebalance turns off with top-ups on: with no Rebalancer, the cash top-ups leave in the wallet
+ * would wait for ever instead of going back to earning.
+ */
 const topUpsOffCalls = (account: `0x${string}`, off: readonly AgentJob[] | undefined, topUps: TopUpsSwitch): Call[] =>
   off?.includes("rebalance") && typeof topUps === "object" && topUps?.on
     ? buildSetTopUpsCalls(account, false, topUps.keepRaw)
@@ -155,31 +166,24 @@ const topUpsOffCalls = (account: `0x${string}`, off: readonly AgentJob[] | undef
 /**
  * One account's agents. A change is one batch, one Face ID (D14 dropped, Adrian 2026-10-20: "the permission, the cash
  * move and the registration in one signature like Leo's Guardian"): its new grants approved in JAW's manager and
- * registered with GooseExecutor, the grants they replace (or a turn-off's) revoked, with the registry settings and
- * anything that goes first (`changePlan`, signed through useTx). Once it lands the app puts each new grant in JAW's
- * relay as JAW's own grant does, so JAW lists it (`usePermissions`), and takes revoked ones out.
+ * registered with GooseGuard, the grants they replace (or a turn-off's) revoked and the job unregistered, with the
+ * Guard settings and anything that goes first (`changePlan`, signed through useTx). Once it lands the app puts each new
+ * grant in JAW's relay as JAW's own grant does, so JAW lists it (`usePermissions`), and takes revoked ones out.
  *
- * Whether a job runs is read on Base: registered in the executor (`accounts`, `permissionOf`), not past its end, not
- * revoked in the manager, and the manager still an owner of the account, so a list that's late or a record that
- * didn't save never shows a running agent as off. A listed record counts only when the manager's hash of it is its
- * id and the manager has it approved and not revoked: JAW's relay takes writes from anyone with the app's public key.
+ * Whether a job runs is read on Base: registered in the Guard (`accountOf`'s job bits, `permissionOf`), not past its
+ * end, not revoked in the manager, and the manager still an owner of the account, so a list that's late or a record
+ * that didn't save never shows a running agent as off. A listed record counts only when the manager's hash of it is
+ * its id and the manager has it approved and not revoked: JAW's relay takes writes from anyone with the app's public key.
  */
 export function useAgents(account: `0x${string}`) {
-  const executor = GOOSE_EXECUTOR;
-  const listed = usePermissions({ address: account, chainId: CHAIN_ID, query: { enabled: !!executor } });
-  const at = executor ?? zeroAddress; // the reads stay off until the executor is configured
+  const guard = GOOSE_GUARD;
+  const listed = usePermissions({ address: account, chainId: CHAIN_ID, query: { enabled: !!guard } });
+  const at = guard ?? zeroAddress; // the reads stay off until the Guard is configured
   const permissionOf = (id: number) =>
-    ({
-      address: at,
-      abi: gooseExecutorAbi,
-      functionName: "permissionOf",
-      args: [account, id],
-      chainId: CHAIN_ID,
-    }) as const;
+    ({ address: at, abi: guardAbi, functionName: "permissionOf", args: [account, id], chainId: CHAIN_ID }) as const;
   const registry = useReadContracts({
     contracts: [
-      // `accounts`, not `jobsOf`: the top-ups executor drops jobsOf to fit 24 KB. Read with the fields both have.
-      { address: at, abi: executorAccountsAbi, functionName: "accounts", args: [account], chainId: CHAIN_ID },
+      { address: at, abi: guardAbi, functionName: "accountOf", args: [account], chainId: CHAIN_ID },
       permissionOf(0),
       permissionOf(1),
       permissionOf(2),
@@ -187,16 +191,11 @@ export function useAgents(account: `0x${string}`) {
       permissionOf(4),
     ],
     allowFailure: false,
-    query: { enabled: !!executor, refetchInterval: 20_000 },
+    query: { enabled: !!guard, refetchInterval: 20_000 },
   });
-  // Immutable: the most any limit may be on this executor (a grant above it never registers).
-  const capMax = useReadContract({
-    address: executor,
-    abi: gooseExecutorAbi,
-    functionName: "CAP_MAX",
-    chainId: CHAIN_ID,
-    query: { enabled: !!executor, staleTime: Infinity },
-  });
+  // Base's latest block: a new grant starts behind it as well as behind the device's clock (lib/agents/picks.ts).
+  const head = useBlock({ chainId: CHAIN_ID, query: { enabled: !!guard, refetchInterval: 20_000 } });
+  const headSec = head.data ? Number(head.data.timestamp) : null;
   const { address: signer } = useAccount();
   const own = !!signer && isAddressEqual(signer, account);
   const nowSec = useNowSec();
@@ -204,38 +203,47 @@ export function useAgents(account: `0x${string}`) {
   // The account's own top-ups switch: a Rebalance turn-off switches it off in the same batch.
   const topUpsSwitch = useTopUpsSwitch(account);
 
-  /** The registry: the job bits, failures in a row and the back-off, and each job's stored grant (with its stock limits). */
+  /**
+   * What the Guard holds: the job bits, and each job's newest grant (`permissionOf`, kept after `unregister`) with the
+   * stocks it may sell and its start, the high-water mark a new grant must pass. A job's bytes the app can't read as a
+   * permission (the account registered something else itself) read as none, with their start kept.
+   */
   const stored = useMemo(() => {
     if (!registry.data) return undefined;
-    const [[jobs, , fails, cooldownUntil], ...raw] = registry.data;
-    const permissions = raw.map((p) => ({ ...p, calls: [...p.calls], spends: [...p.spends] }) as JawPermission);
-    const grants = byJob((job): Stored & { limitsRaw?: StockLimits; topUps: boolean; salt: bigint } => {
+    const [[a], ...raw] = registry.data;
+    const permissions = raw.map((bytes): JawPermission => {
+      try {
+        return bytes === "0x" ? NONE : decodePermission(bytes);
+      } catch {
+        return { ...NONE, start: heldStartOf(bytes) };
+      }
+    });
+    const grants = byJob((job): Stored & { limitsRaw?: StockLimits; salt: bigint } => {
       const p = permissions[JOBS.indexOf(job)];
       const limitsRaw =
         job === "sell" || job === "rebalance" ? (readStockLimits(job, p.spends) ?? undefined) : undefined;
-      const topUps = job === "rebalance" && carriesTopUps(p.spends);
-      return { start: p.start, end: p.end, cap: p.spends[0]?.allowance ?? 0n, limitsRaw, topUps, salt: p.salt };
+      return { start: heldStartOf(raw[JOBS.indexOf(job)]), end: p.end, limitsRaw, salt: p.salt };
     });
-    const registered = JOBS.filter((job) => (jobs & (1 << JOBS.indexOf(job))) !== 0);
-    return { jobs, fails, cooldownUntil: Number(cooldownUntil), grants, permissions, registered };
+    const registered = JOBS.filter((job) => (a.jobs & (1 << JOBS.indexOf(job))) !== 0);
+    return { jobs: a.jobs, grants, permissions, registered };
   }, [registry.data]);
 
   /** Records in JAW's list that read as one of our grants, with the struct each stands for (not yet checked on Base). */
   const candidates = useMemo(
     () =>
-      executor
+      guard
         ? (listed.data ?? [])
-            .map((p) => readAgentGrant(p, executor))
+            .map((p) => readAgentGrant(p, guard))
             .filter((g): g is AgentGrant => !!g)
-            .map((g) => ({ g, p: grantPermission(g, account, executor) }))
+            .map((g) => ({ g, p: grantPermission(g, account, guard) }))
         : [],
-    [executor, listed.data, account],
+    [guard, listed.data, account],
   );
 
   /**
-   * The jobs whose grant the executor keeps (`permissionOf`): registered, or switched off by the executor with its grant
-   * kept until it ends. Read on Base whatever the job's bit says: a grant the executor switched off can still be
-   * approved, and anyone could register it again, so a turn-off or a new grant revokes it too.
+   * The jobs whose grant the Guard keeps (`permissionOf`): registered, or unregistered with its grant kept until it
+   * ends. Read on Base whatever the job's bit says: a grant switched off can still be approved, and the account could
+   * register it again, so a turn-off or a new grant revokes it too.
    */
   const minute = Math.floor(nowSec / 60);
   const kept = useMemo(
@@ -274,12 +282,12 @@ export function useAgents(account: `0x${string}`) {
   const keptRead = useReadContracts({
     contracts: keptContracts,
     allowFailure: false,
-    query: { enabled: !!executor && kept.length > 0, refetchInterval: 20_000 },
+    query: { enabled: !!guard && kept.length > 0, refetchInterval: 20_000 },
   });
   const listRead = useReadContracts({
     contracts: candidates.flatMap(({ p }) => managerReads(p)),
     allowFailure: true,
-    query: { enabled: !!executor && candidates.length > 0, refetchInterval: 20_000 },
+    query: { enabled: !!guard && candidates.length > 0, refetchInterval: 20_000 },
   });
 
   /**
@@ -347,12 +355,12 @@ export function useAgents(account: `0x${string}`) {
   const status = useMemo(
     () =>
       byJob((job): AgentStatus => {
-        if (!executor) return "unconfigured";
+        if (!guard) return "unconfigured";
         if (!stored || listed.isLoading || !onChain) return "loading";
         // Base couldn't be read for the manager: the registry alone decides (`alive` follows the job's bit).
         return jobStatus(job, stored.jobs, stored.grants[job], granted, nowSec, listed.isError, onChain.alive[job]);
       }),
-    [executor, stored, listed.isLoading, listed.isError, onChain, granted, nowSec],
+    [guard, stored, listed.isLoading, listed.isError, onChain, granted, nowSec],
   );
 
   /** Each job's grants JAW lists that haven't ended, newest first. */
@@ -361,24 +369,22 @@ export function useAgents(account: `0x${string}`) {
     [granted, nowSec],
   );
 
-  /** What each job runs with: the registry's grant once it's on, the newest one JAW lists while it's starting. */
+  /** What each job runs with: the Guard's grant once it's on, the newest one JAW lists while it's starting. */
   const terms = useMemo(
     () =>
       byJob((job): (JobTerms & { end: number }) | null => {
         if (status[job] === "on" && stored) {
           const g = stored.grants[job];
-          return { capRaw: g.cap, limitsRaw: g.limitsRaw, topUps: g.topUps, end: g.end };
+          return { limitsRaw: g.limitsRaw, end: g.end };
         }
         if (status[job] !== "starting") return null;
         const newest = live[job][0];
-        return newest
-          ? { capRaw: newest.capRaw, limitsRaw: newest.limitsRaw, topUps: !!newest.topUps, end: newest.end }
-          : null;
+        return newest ? { limitsRaw: newest.limitsRaw, end: newest.end } : null;
       }),
     [status, stored, live],
   );
 
-  /** When a job stopped without being revoked: its grant the executor held ran out (a revoked one never counts). */
+  /** When a job stopped without being revoked: its grant the Guard held ran out (a revoked one never counts). */
   const ranOut = useMemo(
     () =>
       byJob((job): number | null => {
@@ -391,59 +397,24 @@ export function useAgents(account: `0x${string}`) {
   );
 
   /**
-   * The terms a job last ran with, to renew it: its newest grant in JAW's list, else the registry's; null if it never
-   * had one.
+   * The terms a job last ran with, to renew it: its newest grant in JAW's list, else the Guard's; null if it never had
+   * one.
    */
   const lastTerms = useMemo(
     () =>
       byJob((job): JobTerms | null => {
         const newest = granted.filter((g) => g.job === job).sort((a, b) => b.start - a.start)[0];
-        if (newest) return { capRaw: newest.capRaw, limitsRaw: newest.limitsRaw, topUps: !!newest.topUps };
+        if (newest) return { limitsRaw: newest.limitsRaw };
         const g = stored?.grants[job];
-        return g && g.cap > 0n ? { capRaw: g.cap, limitsRaw: g.limitsRaw, topUps: g.topUps } : null;
+        return g && g.end > 0 ? { limitsRaw: g.limitsRaw } : null;
       }),
     [granted, stored],
-  );
-
-  // What each running job's limits still allow this period: the manager's count against the grant the executor runs.
-  const spends = useMemo(
-    () =>
-      stored
-        ? JOBS.filter((job) => status[job] === "on").flatMap((job) => {
-            const permission = stored.permissions[JOBS.indexOf(job)];
-            return permission.spends.map((spend) => ({ job, permission, spend }));
-          })
-        : [],
-    [stored, status],
-  );
-  const periods = useReadContracts({
-    contracts: spends.map(({ permission, spend }) => ({
-      address: MANAGER,
-      abi: permissionManagerAbi,
-      functionName: "getCurrentPeriod",
-      args: [permission, spend],
-      chainId: CHAIN_ID,
-    })),
-    allowFailure: false,
-    query: { enabled: spends.length > 0, refetchInterval: 20_000 },
-  });
-  const left = useMemo(
-    () =>
-      byJob((job): SpendLeft[] | null => {
-        if (!periods.data || !spends.some((s) => s.job === job)) return null;
-        return spends.flatMap(({ job: j, spend }, k) => {
-          if (j !== job) return [];
-          const used = (periods.data[k] as { spend: bigint }).spend;
-          return [{ token: spend.token, leftRaw: spend.allowance > used ? spend.allowance - used : 0n }];
-        });
-      }),
-    [periods.data, spends],
   );
 
   const refetch = () => Promise.all([listed.refetch(), registry.refetch(), keptRead.refetch(), listRead.refetch()]);
 
   /**
-   * Each job's newest grant JAW lists that the executor hasn't registered and that is newer than the one it holds: one
+   * Each job's newest grant JAW lists that the Guard hasn't registered and that is newer than the one it holds: one
    * granted on JAW's own sheet before grants became one signature, its registration still to go. A grant a newer one
    * replaced is never it.
    */
@@ -458,28 +429,28 @@ export function useAgents(account: `0x${string}`) {
     [live, stored],
   );
 
-  /** The jobs granted on JAW's sheet that the executor doesn't run yet (status "starting"), and the batch that registers them all. */
+  /** The jobs granted on JAW's sheet that the Guard doesn't run yet (status "starting"), and the batch that registers them all. */
   const toFinish = JOBS.filter((job) => status[job] === "starting" && unregistered[job]);
   const finishPlan: TxPlan | null =
-    executor && toFinish.length > 0
+    guard && toFinish.length > 0
       ? registerPlan(
           account,
-          toFinish.map((job) => grantPermission(unregistered[job]!, account, executor)),
+          toFinish.map((job) => ({ job, p: grantPermission(unregistered[job]!, account, guard) })),
         )
       : null;
 
   /**
-   * Every grant of `job` the manager has approved and not revoked, that hasn't ended: the one the executor keeps (its
-   * bit set or not) and each JAW lists. What a turn-off takes back, and what a new grant replaces, so nothing old stays
-   * approved for anyone to register.
+   * Every grant of `job` the manager has approved and not revoked, that hasn't ended: the one the Guard keeps (its bit
+   * set or not) and each JAW lists. What a turn-off takes back, and what a new grant replaces, so nothing old stays
+   * approved for the account to register again.
    */
   const liveGrants = (job: AgentJob): Held[] => {
     const out: Held[] = [];
     const held = onChain?.held.find((h) => h.job === job);
     if (held && held.p.end >= nowSec) out.push(held);
     for (const g of live[job]) {
-      if (out.some((h) => h.p.salt === g.salt) || !executor) continue;
-      out.push({ id: g.permissionId, job, p: grantPermission(g, account, executor) });
+      if (out.some((h) => h.p.salt === g.salt) || !guard) continue;
+      out.push({ id: g.permissionId, job, p: grantPermission(g, account, guard) });
     }
     return out.filter((h) => !revoked.has(h.id.toLowerCase()));
   };
@@ -561,8 +532,8 @@ export function useAgents(account: `0x${string}`) {
     };
   }
 
-  // Catch-up: a grant the executor runs that JAW's list doesn't show (a record that didn't save after its batch, or a
-  // screen closed before it landed) is put in the relay from the registry's own copy of it. The signed-in account's
+  // Catch-up: a grant the Guard runs that JAW's list doesn't show (a record that didn't save after its batch, or a
+  // screen closed before it landed) is put in the relay from the Guard's own copy of it. The signed-in account's
   // own only; never one revoked on this page in the last minute, and `record` reads Base again right before.
   const missing = useMemo(() => {
     if (!own || !stored || !onChain || listed.isLoading || listed.isError) return [];
@@ -592,12 +563,12 @@ export function useAgents(account: `0x${string}`) {
 
   /**
    * A change's one batch, for useTx: `grants` (each job's new grant, its start and salt picked once per terms and per
-   * the grant the executor holds, lib/agents/picks.ts), `off` (jobs turned off), the registry `settings`, and `prefix`
-   * first (Start earning's supply). Each job granted anew or turned off has every live grant of it revoked in the same
-   * batch, and turning Rebalance off while top-ups are on switches them off too (`setTopUps(false)`), so nothing is
-   * left counting for a Rebalancer that's gone. Null while the agents' reads load (the screens wait on "loading") or
-   * with nothing to do; a plan that says why at the button when Base or JAW's list can't be read, or the grant can't
-   * be built.
+   * the grant the Guard holds, lib/agents/picks.ts), `off` (jobs turned off), the Guard `settings`, and `prefix` first
+   * (Start earning's supply). Each job granted anew or turned off has every live grant of it revoked in the same batch,
+   * a job turned off is unregistered in the Guard too (`unregister`, so it stops at once), and turning Rebalance off
+   * while top-ups are on switches them off (`setTopUps(false)`), so no cash is left waiting for a Rebalancer that's gone.
+   * Null while the agents' reads load (the screens wait on "loading") or with nothing to do; a plan that says why at
+   * the button when Base or JAW's list can't be read, or the grant can't be built.
    */
   function changePlan(change: {
     grants?: readonly GrantStep[];
@@ -605,7 +576,7 @@ export function useAgents(account: `0x${string}`) {
     settings?: readonly Call[];
     prefix?: ChangePrefix;
   }): TxPlan | null {
-    if (!executor || !client || !stored || !onChain) return null;
+    if (!guard || !client || !stored || !onChain || headSec === null) return null;
     const gate = topUpsOffGate(account, change.off, topUpsSwitch);
     if (gate !== undefined) return gate;
     const asked = change.grants ?? [];
@@ -613,19 +584,31 @@ export function useAgents(account: `0x${string}`) {
     // Nothing is granted or revoked on a guess: what Base or JAW's list would have said could be left behind.
     if (jobs.length > 0 && onChain.error) return stopPlan(account, onChain.error);
     const revokes = jobs.flatMap(liveGrants);
-    if (asked.length === 0 && revokes.length === 0 && (change.settings?.length ?? 0) === 0 && !change.prefix)
+    // A job turned off stops in the Guard at once, its grant revoked or not (one registered and since revoked included).
+    const unregisters = (change.off ?? []).filter((job) => stored.registered.includes(job));
+    if (
+      asked.length === 0 &&
+      revokes.length === 0 &&
+      unregisters.length === 0 &&
+      (change.settings?.length ?? 0) === 0 &&
+      !change.prefix
+    )
       return null;
     let grants: Permission[];
     let settings = change.settings ?? [];
     try {
       grants = asked.map((g) => {
         const held = stored.grants[g.job];
-        const terms = txKey(g.capRaw, g.limitsRaw, !!g.topUps, held.salt, held.start);
-        const pick = pickFor(account, g.job, terms, held.start + 1);
-        const detail = jobGrant(g.job, g.capRaw, g.limitsRaw, g.topUps);
-        return jawPermission(account, executor, pick.start + GRANT_SECONDS, detail, pick);
+        const terms = txKey(g.limitsRaw, held.salt, held.start);
+        const pick = pickFor(account, g.job, terms, held.start + 1, headSec);
+        const detail = jobGrant(g.job, g.limitsRaw);
+        return jawPermission(account, guard, pick.start + GRANT_SECONDS, detail, pick);
       });
-      settings = [...settings, ...topUpsOffCalls(account, change.off, topUpsSwitch)];
+      settings = [
+        ...settings,
+        ...topUpsOffCalls(account, change.off, topUpsSwitch),
+        ...buildUnregisterCalls(account, unregisters),
+      ];
     } catch {
       // A grant its job's template can't hold (a Rebalancer with no stock it may sell): said, never thrown in render.
       return stopPlan(account, REGISTER_FALLBACK);
@@ -646,21 +629,13 @@ export function useAgents(account: `0x${string}`) {
     terms,
     ranOut,
     lastTerms,
-    left,
-    /** What's left of the running jobs' limits couldn't be read (`left` stays null until it is). */
-    leftUnreadable: periods.isError && !periods.data,
     /** Grants a turn-off of `jobs` takes back, all in one batch (0: nothing to turn off). */
     toTurnOff: (jobs: readonly AgentJob[]) => jobs.reduce((n, job) => n + liveGrants(job).length, 0),
-    /** The most any limit may be on this executor, once read. */
-    capMaxRaw: capMax.data ?? null,
-    /** The registry couldn't be read (every status stays "loading" until it is). */
+    /** The Guard couldn't be read (every status stays "loading" until it is). */
     unreadable: registry.isError && !registry.data,
-    /** Failed runs in a row, and when the executor tries again: it backs off, then switches the account off at eight. */
-    fails: stored?.fails ?? 0,
-    cooldownUntil: stored?.cooldownUntil ?? 0,
     changePlan,
     refetch,
-    /** The jobs granted on JAW's sheet that the executor hasn't registered yet: they show "starting" and run once registered. */
+    /** The jobs granted on JAW's sheet that the Guard hasn't registered yet: they show "starting" and run once registered. */
     toFinish,
     /** The batch that registers them all, for useTx (null when there are none). */
     finishPlan,

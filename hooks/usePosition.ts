@@ -11,9 +11,9 @@ import { creditApr, monthlyCost, priceToUsd, summarize, type AccountData } from 
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
 import { statusFor } from "@/lib/risk/status";
 import { PROTOCOLS } from "@/lib/protocols/config";
-import { GOOSE_EXECUTOR } from "@/lib/agents/config";
-import { executorAccountsAbi } from "@/lib/agents/abis/accounts";
-import { cashRaw, protectRuns, saveRuns, toUsd, type Cash } from "@/lib/cash";
+import { GOOSE_GUARD } from "@/lib/agents/config";
+import { guardAbi } from "@/lib/agents/abis/GooseGuard";
+import { cashRaw, protectRuns, toUsd, walletSwept, type Cash } from "@/lib/cash";
 import { creditLineFor } from "@/config/risk";
 import { WALL_OPEN } from "@/lib/board/config";
 import { creditWith } from "@/lib/creditBuy";
@@ -102,9 +102,10 @@ export function usePosition(user: `0x${string}` | undefined) {
       { address: AAVE.SPOKE, abi: spokeAbi, functionName: "getReserveConfig", args: [BigInt(USDC.reserveId)] },
       { address: PROTOCOLS.AUSDC, abi: erc20Abi, functionName: "balanceOf", args: [who] },
       { address: PROTOCOLS.AAVE_V3_POOL, abi: v3ReserveAbi, functionName: "getReserveData", args: [USDC.address] },
-      // The Cash Agent's switches, once the executor is deployed: whether Save runs decides the keep-back.
-      ...(GOOSE_EXECUTOR
-        ? [{ address: GOOSE_EXECUTOR, abi: executorAccountsAbi, functionName: "accounts", args: [who] } as const]
+      // The agents' job bits and top-ups, once GooseGuard is deployed: whether an agent may sweep the wallet decides the
+      // keep-back.
+      ...(GOOSE_GUARD
+        ? [{ address: GOOSE_GUARD, abi: guardAbi, functionName: "accountOf", args: [who] } as const]
         : []),
     ] as const;
   }, [user]);
@@ -163,16 +164,22 @@ export function usePosition(user: `0x${string}` | undefined) {
         { paused: boolean; frozen: boolean; borrowable: boolean },
         bigint,
         { currentLiquidityRate: bigint },
-        readonly [jobs: number, ...rest: unknown[]] | undefined,
+        readonly [{ jobs: number; rescueAt: number }, { topUpsOn: boolean }] | undefined,
       ];
     const s = summarize(account);
     const apr = creditApr(drawnRate, riskPremium);
     const debtUsd = Number(debtRaw) / 10 ** USDC.decimals;
-    const cash: Cash = { walletRaw: usdcBal, savingsRaw, saveOn: saveRuns(agents?.[0] ?? 0) };
+    const jobs = agents?.[0].jobs ?? 0;
+    const cash: Cash = {
+      walletRaw: usdcBal,
+      savingsRaw,
+      saveOn: walletSwept(jobs, !!agents?.[1].topUpsOn),
+      rescuing: (agents?.[0].rescueAt ?? 0) !== 0,
+    };
     const usdcLiquidity = Number(liquidity) / 10 ** USDC.decimals;
     const creditPaused = usdcCfg.paused || usdcCfg.frozen || !usdcCfg.borrowable;
     // How low credit may go: 1.12 until Greedy Fatalities is open, then Protector's line or Aave's (config/risk.ts).
-    const line = creditLineFor({ wallOpen: WALL_OPEN, protectOn: protectRuns(agents?.[0] ?? 0) });
+    const line = creditLineFor({ wallOpen: WALL_OPEN, protectOn: protectRuns(jobs) });
     return {
       holdings,
       stocksUsd: holdings.reduce((a, h) => a + h.freeUsd + h.backingUsd, 0),

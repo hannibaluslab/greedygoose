@@ -1,6 +1,7 @@
 import { decodeFunctionData, erc20Abi, isAddressEqual, parseUnits } from "viem";
 import { ACT_LINE, RISK, pastStop, type CreditLine } from "@/config/risk";
 import { swapOf } from "@/lib/allowlist";
+import { endRescueCalls } from "@/lib/agents/settings";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { autoFill, combinedCredit, fillRaw, type BackingLine } from "@/lib/aave/credit";
@@ -435,11 +436,12 @@ export function splitCash(amountRaw: bigint, cash: Cash): { cashRaw: bigint; cre
 }
 
 /**
- * Credit Buy in one batch (plan item 3): [savings withdrawal] → [put backing in use] → take credit
+ * Credit Buy in one batch (plan item 3): [end the rescue] → [savings withdrawal] → [put backing in use] → take credit
  * → approve → swap, so the credit never sits in the wallet. The swap spends the credit plus what cash
  * pays (decision 1; 0 for a plain Credit Buy). Cash pays the network fee, from savings when the wallet
  * can't (payFromCash). Every call passes the allowlist with the user pinned, and the whole batch is
- * checked against the screen (assertCreditBuy).
+ * checked against the screen (assertCreditBuy). Taking credit by hand ends a rescue Protect started (decision 5,
+ * GooseGuard's `endRescue`, which does nothing when none is on), so Protect stops pushing toward its target.
  */
 export function buildCreditBuyCalls(p: {
   user: Address;
@@ -461,13 +463,14 @@ export function buildCreditBuyCalls(p: {
     ...buildBackAndCreditCalls({ user: p.user, backing: p.backing, creditRaw: p.creditRaw }),
     ...buildBuyCalls(p),
   ];
-  return assertCreditBuy(p.user, payFromCash(p.user, fromCash, p.cash, spend), {
+  const calls = assertCreditBuy(p.user, payFromCash(p.user, fromCash, p.cash, spend), {
     stock: p.stock,
     creditRaw: p.creditRaw,
     cashRaw: fromCash,
     backing: p.backing.filter((b) => b.raw > 0n),
     limit: p.limit,
   });
+  return [...endRescueCalls(p.user, !!p.cash.rescuing), ...calls];
 }
 
 const decodeApprove = (c: Call) => {

@@ -5,7 +5,7 @@ import { formatCoin, formatUsdTrim } from "@/lib/formatting";
 import { startEarningMinRaw } from "@/lib/startEarning";
 import { faceRaw, MIN_CONVERT_RAW } from "@/lib/swap/entry";
 import { USDC } from "@/lib/tokens/registry";
-import { CASH_COINS, ENTRY_COINS, type EntryCoinAsset } from "@/lib/tokens/stables";
+import { CASH_COINS, type EntryCoinAsset } from "@/lib/tokens/stables";
 
 /*
  * Earning and other dollars turning into cash run under the hood (D20). The user meets them only where they matter:
@@ -100,14 +100,14 @@ export function arrivedText(list: readonly Arrived[]): string {
 
 /**
  * What Home and Pay show for other dollars in the wallet:
- * - "ask": nothing converts them on its own (no Entry grant, no executor at all, or a coin the Entry agent doesn't take,
- *   DAI and EURC until EntryJob has them), so a card offers "Turn into cash" for those;
+ * - "ask": nothing converts them on its own (no Entry grant, no Guard at all, or a coin the Entry agent doesn't take:
+ *   it takes CASH_COINS, as GooseGuard's CONVERT does), so a card offers "Turn into cash" for those;
  * - "arriving": an Entry grant converts them all, so the Cash card only says "120 USDT arriving" until they're cash;
  * - "none": no coins, or the grant's state is still loading.
  */
 export type ArrivedView = { kind: "none" } | { kind: "ask" | "arriving"; text: string; coins: Arrived[] };
 
-const agentTakes = (a: Arrived) => ENTRY_COINS.some((c) => isAddressEqual(c.address, a.coin.address));
+const agentTakes = (a: Arrived) => CASH_COINS.some((c) => isAddressEqual(c.address, a.coin.address));
 
 export function arrivedView(list: readonly Arrived[], entry: AgentStatus): ArrivedView {
   if (list.length === 0 || entry === "loading") return { kind: "none" };
@@ -119,7 +119,7 @@ export function arrivedView(list: readonly Arrived[], entry: AgentStatus): Arriv
 
 /**
  * After a conversion, whether to ask "Do this automatically next time?" (the Entry grant): only once the agents are
- * live (`live`: AGENTS_LIVE), with an executor, and no Entry grant yet.
+ * live (`live`: AGENTS_LIVE), with a Guard, and no Entry grant yet.
  */
 export const askAutomatic = (entry: AgentStatus, live: boolean) => live && entry === "off";
 

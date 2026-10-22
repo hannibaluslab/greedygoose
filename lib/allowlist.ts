@@ -10,11 +10,11 @@ import {
 } from "viem";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
-import { GOOSE_EXECUTOR } from "@/lib/agents/config";
-import { gooseExecutorAbi } from "@/lib/agents/abis/GooseExecutor";
-import { isMix } from "@/lib/agents/mix";
+import { GOOSE_GUARD } from "@/lib/agents/config";
+import { guardAbi } from "@/lib/agents/abis/GooseGuard";
+import { isMix, unpackMix } from "@/lib/agents/mix";
 import { agentJobOf } from "@/lib/agents/agentJob";
-import { GRANT_SECONDS, type JawPermission } from "@/lib/agents/permissions";
+import { GRANT_SECONDS, JOBS, type JawPermission } from "@/lib/agents/permissions";
 import { gooseBoardAbi } from "@/lib/board/abi";
 import { GOOSE_BOARD } from "@/lib/board/config";
 import { recipientBlock } from "@/lib/contracts";
@@ -169,32 +169,39 @@ const savingsApprove: ArgsCheck = (args, user, ctx) =>
   is(args[0], PROTOCOLS.AAVE_V3_POOL) &&
   args[1] === ctx.saveRaw;
 
-/** A permission that is `user`'s own grant to GooseExecutor, exactly one job's template (lib/agents/permissions.ts). */
-const isOwnAgentGrant = (p: unknown, user: Address): boolean =>
-  !!GOOSE_EXECUTOR && !!p && typeof p === "object" && agentJobOf(p as JawPermission, user, GOOSE_EXECUTOR) !== null;
+/** The job a permission is a grant of: `user`'s own, to GooseGuard, exactly one job's template; null for anything else. */
+const ownAgentJob = (p: unknown, user: Address) =>
+  GOOSE_GUARD && !!p && typeof p === "object" ? agentJobOf(p as JawPermission, user, GOOSE_GUARD) : null;
+const isOwnAgentGrant = (p: unknown, user: Address): boolean => ownAgentJob(p, user) !== null;
 
 /**
- * GooseExecutor's registerApproved(approved): the permission it carries (abi.encode(permission), as the manager logs
- * it) is the user's own, granted to this executor, and exactly one job's template. It moves no money; the executor
- * still checks the manager approved it.
+ * GooseGuard's register(job, permission): the permission (abi.encode(permission), as the manager logs it) is the user's
+ * own, granted to the Guard, exactly one job's template, and that job is the one it is registered as. The Guard runs
+ * only its own fixed calls for the job it is told, so this check is what binds a grant to its agent (spec-final-v2.md
+ * §5, a release blocker). It moves no money; the manager still checks the grant before every agent batch.
  */
 const registersOwnGrant: ArgsCheck = (args, user, ctx) => {
   try {
-    const [p] = decodeAbiParameters([permissionTuple], args[0] as Hex);
-    return is(ctx.to, GOOSE_EXECUTOR ?? "0x") && isOwnAgentGrant(p, user);
+    const [job, permission] = args as [number, Hex];
+    const [p] = decodeAbiParameters([permissionTuple], permission);
+    const own = ownAgentJob(p, user);
+    return is(ctx.to, GOOSE_GUARD ?? "0x") && own !== null && JOBS[job] === own;
   } catch {
     return false;
   }
 };
 
-/** How far ahead of the device's clock a new grant may start: a clock a little fast, nothing more. */
-const START_AHEAD_SEC = 600;
+/**
+ * How far ahead of the device's clock a new grant may start: not at all. GooseGuard refuses a grant that starts after
+ * the block it lands in (FutureStart), so the app picks a start behind the device's clock and Base's (lib/agents/picks.ts).
+ */
+const START_AHEAD_SEC = 0;
 
 /**
- * JAW's permission manager: approve(permission) only for the user's own grant to GooseExecutor, exactly one job's
+ * JAW's permission manager: approve(permission) only for the user's own grant to GooseGuard, exactly one job's
  * template, for a year from a start no later than now (D14 dropped, Adrian 2026-10-20: the permission, the cash move
  * and the registration in one signature). JAW's batch sheet shows no window, so the allowlist holds it. It moves no
- * money itself; every agent run is still held to the template and its limits.
+ * money itself; every agent move is still held to the template and the Guard's own checks.
  */
 const approvesOwnAgent: ArgsCheck = (args, user) => {
   const p = args[0] as JawPermission | undefined;
@@ -205,12 +212,19 @@ const approvesOwnAgent: ArgsCheck = (args, user) => {
   );
 };
 
-/** revoke(permission): only a grant of the user's own to GooseExecutor (a job turned off, or one a new grant replaces). */
+/** revoke(permission): only a grant of the user's own to GooseGuard (a job turned off, or one a new grant replaces). */
 const revokesOwnAgent: ArgsCheck = (args, user) => isOwnAgentGrant(args[0], user);
 
 /** GooseBoard.join(): exactly its selector, nothing after it. */
 const JOIN = toFunctionSelector("join()");
 const bareJoin: ArgsCheck = (args, _user, ctx) => args.length === 0 && ctx.data.toLowerCase() === JOIN;
+
+/**
+ * GooseGuard.endRescue(): exactly its selector, nothing after it. The account ends its own rescue when it takes more
+ * credit or repays by hand (decision 5); it moves no money and does nothing when no rescue is on.
+ */
+const END_RESCUE = toFunctionSelector("endRescue()");
+const bareEndRescue: ArgsCheck = (args, _user, ctx) => args.length === 0 && ctx.data.toLowerCase() === END_RESCUE;
 
 /**
  * The one allowlist for user-signed batches (CLAUDE.md › Transaction safety): each target, the only
@@ -221,9 +235,9 @@ const bareJoin: ArgsCheck = (args, _user, ctx) => args.length === 0 && ctx.data.
  * sale into cash's batches, which declare it (`saveTo`): one USDC supply for the user, approved to Aave V3's pool for exactly that amount
  * (`saveForUser`, `savingsApprove`). Buys, repays and savings-first batches mix
  * targets, so each target is held to its own functions. A coin of Turn into cash is approved only to the venue that
- * converts it, and converted only there, at its own pool, into USDC (D20). GooseExecutor's settings move no money and apply to the signer alone
+ * converts it, and converted only there, at its own pool, into USDC (D20). GooseGuard's settings move no money and apply to the signer alone
  * (`msg.sender`): a mix must add up to 100% (or clear it). Its registrations move none either, and name only the user's
- * own grants to it (`registersOwnGrant`).
+ * own grants to it, each for its own job (`registersOwnGrant`); `unregister` names a job, and `endRescue` nothing.
  */
 const RULES: readonly Rule[] = [
   {
@@ -273,7 +287,7 @@ const RULES: readonly Rule[] = [
   { targets: [EFP_LIST_MINTER], abi: efpListMinterAbi, functions: { easyMint: mintsBaseList } },
   { targets: [EFP_LIST_RECORDS], abi: efpListRecordsAbi, functions: { applyListOps: ownListOps } },
   ...(GOOSE_BOARD ? [{ targets: [GOOSE_BOARD], abi: gooseBoardAbi, functions: { join: bareJoin } }] : []),
-  ...(GOOSE_EXECUTOR
+  ...(GOOSE_GUARD
     ? [
         {
           targets: [PROTOCOLS.PERMISSION_MANAGER],
@@ -281,15 +295,20 @@ const RULES: readonly Rule[] = [
           functions: { approve: approvesOwnAgent, revoke: revokesOwnAgent },
         },
         {
-          targets: [GOOSE_EXECUTOR],
-          abi: gooseExecutorAbi,
+          targets: [GOOSE_GUARD],
+          abi: guardAbi,
           functions: {
-            setMix: (args: readonly unknown[]) => isMix(args[0] as readonly number[]),
+            // The mix packed as GooseGuard keeps it: 16 bits a stock, adding up to 100% (or all 0, which clears it).
+            setMix: (args: readonly unknown[]) =>
+              typeof args[0] === "bigint" && args[0] < 1n << 112n && isMix(unpackMix(args[0])),
             setKeepMix: () => true,
             // Top-ups go into my mix: a switch, and Keep as cash in whole USDC units up to $1,000,000 (KEEP_MAX_USD).
             setTopUps: (args: readonly unknown[]) =>
               typeof args[0] === "boolean" && typeof args[1] === "number" && args[1] >= 0 && args[1] <= 10 ** 12,
-            registerApproved: registersOwnGrant,
+            register: registersOwnGrant,
+            unregister: (args: readonly unknown[]) =>
+              typeof args[0] === "number" && args[0] >= 0 && args[0] < JOBS.length,
+            endRescue: bareEndRescue,
           },
         },
       ]
@@ -348,15 +367,15 @@ export function assertAllowed<C extends { to: Address; data: Hex; value: bigint 
 
 /**
  * A batch's agent grants, as a whole: each approve in the manager is registered later in the same batch, exactly as
- * approved (a grant approved and left unregistered could be switched on by anyone once its job is off), at most one
- * approve a job, and the owner call (addOwnerAddress(manager)) only once, before the first approve of a batch that has
- * one.
+ * approved and as its own job (a grant approved and left unregistered stays approved for the account to register
+ * later, and one registered as another job would run that job's moves), at most one approve a job, and the owner call
+ * (addOwnerAddress(manager)) only once, before the first approve of a batch that has one.
  */
 function assertGrantsPaired(user: Address, calls: readonly { to: Address; data: Hex }[]) {
-  if (!GOOSE_EXECUTOR) return;
-  const executor = GOOSE_EXECUTOR;
+  if (!GOOSE_GUARD) return;
+  const guard = GOOSE_GUARD;
   const approves: { index: number; encoded: Hex; job: string }[] = [];
-  const registers: { index: number; encoded: Hex }[] = [];
+  const registers: { index: number; encoded: Hex; job: string }[] = [];
   const owners: number[] = [];
   calls.forEach((c, index) => {
     if (isAddressEqual(c.to, user)) owners.push(index);
@@ -365,17 +384,19 @@ function assertGrantsPaired(user: Address, calls: readonly { to: Address; data: 
       if (functionName !== "approve") return;
       const p = args[0] as JawPermission;
       const encoded = encodeAbiParameters([permissionTuple], [p]).toLowerCase() as Hex;
-      approves.push({ index, encoded, job: agentJobOf(p, user, executor) ?? "" });
-    } else if (isAddressEqual(c.to, executor)) {
-      const { functionName, args } = decodeFunctionData({ abi: gooseExecutorAbi, data: c.data });
-      if (functionName === "registerApproved")
-        registers.push({ index, encoded: (args[0] as Hex).toLowerCase() as Hex });
+      approves.push({ index, encoded, job: agentJobOf(p, user, guard) ?? "" });
+    } else if (isAddressEqual(c.to, guard)) {
+      const call = decodeFunctionData({ abi: guardAbi, data: c.data });
+      if (call.functionName === "register") {
+        const [job, permission] = call.args;
+        registers.push({ index, encoded: permission.toLowerCase() as Hex, job: JOBS[job] ?? "" });
+      }
     }
   });
   if (new Set(approves.map((a) => a.job)).size !== approves.length)
     throw new Error("Blocked: two grants for one agent");
   for (const a of approves) {
-    if (!registers.some((r) => r.index > a.index && r.encoded === a.encoded))
+    if (!registers.some((r) => r.index > a.index && r.encoded === a.encoded && r.job === a.job))
       throw new Error("Blocked: a grant that isn’t switched on in the same batch");
   }
   if (owners.length > 1 || (owners.length === 1 && (approves.length === 0 || owners[0] > approves[0].index)))

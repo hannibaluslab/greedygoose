@@ -9,7 +9,7 @@ import { useAgentFeed } from "@/hooks/useAgentFeed";
 import { useNowSec } from "@/hooks/useNowSec";
 import { useTransfersIn } from "@/hooks/useTransfersIn";
 import { CHAIN_ID } from "@/lib/chain";
-import { GOOSE_EXECUTOR } from "@/lib/agents/config";
+import { GOOSE_GUARD } from "@/lib/agents/config";
 import { LOG_CHUNK, WEEK_BLOCKS } from "@/lib/agents/history";
 import { ALCHEMY_ON } from "@/lib/activity/alchemy";
 import { arrivalsOf } from "@/lib/activity/arrivals";
@@ -85,7 +85,7 @@ export function useCashActivity(account: Address) {
   );
 
   const { live, reading } = cashFeedState({
-    executor: !!GOOSE_EXECUTOR,
+    executor: !!GOOSE_GUARD,
     arrivals: ALCHEMY_ON,
     windowKnown: from !== undefined,
     own,
