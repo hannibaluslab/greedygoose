@@ -42,8 +42,7 @@ next-env.d.ts
 
 !.env.example
 
-# Guardian
-keeper/.state.json
+# Foundry: build output and deploy broadcasts (a broadcast can hold the signer's address and raw transactions)
 contracts/out/
 contracts/cache/
 contracts/broadcast/
