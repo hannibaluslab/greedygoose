@@ -11,7 +11,7 @@ import { FeedCard, FeedDays } from "@/components/gg/activity/Activity";
 import { AgentSheet } from "@/components/gg/AgentSheet";
 import { ProtectSettings } from "@/components/gg/agents/ProtectSettings";
 import { RebalanceSheet } from "@/components/gg/agents/RebalanceSheet";
-import { AgentsFeed, AgentsView, AttentionCard } from "@/components/gg/Agents";
+import { AgentsFeed, AgentsView, WarningsAccordion } from "@/components/gg/Agents";
 import { ProtectCardSkeleton, ProtectCardView } from "@/components/gg/agents/ProtectCard";
 import { RebalanceCard } from "@/components/gg/agents/RebalanceCard";
 import { useAgentFeed } from "@/hooks/useAgentFeed";
@@ -305,9 +305,9 @@ function Agents({ address }: { address: `0x${string}` }) {
         }
         onAction={(action) => action !== "on" && act(action)}
         warnings={
-          agent === "protect" && warnings.length > 0
-            ? warnings.map((c) => <AttentionCard key={c.key} card={c} onLeave={() => setShown(false)} />)
-            : undefined
+          agent === "protect" && warnings.length > 0 ? (
+            <WarningsAccordion cards={warnings} onLeave={() => setShown(false)} />
+          ) : undefined
         }
         finish={finishing}
       />

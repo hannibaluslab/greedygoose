@@ -10,7 +10,7 @@ import { AgentsGuideButton, AgentsGuideSheet } from "./agents/AgentsGuide";
 import { stockColor } from "./kit/StockAvatar";
 import { Switch } from "./kit/Switch";
 import { TabBar } from "./TabBar";
-import { ChevronRight, PadlockIcon, PlugIcon, PlusIcon, RepeatIcon } from "./kit/icons";
+import { ChevronDown, ChevronRight, PadlockIcon, PlugIcon, PlusIcon, RepeatIcon } from "./kit/icons";
 import { NOT_LIVE, type AgentCard, type AgentItem, type CardAction } from "@/lib/agents/list";
 import { EQUITIES } from "@/lib/tokens/registry";
 import { RetryButton } from "./kit/RetryButton";
@@ -107,6 +107,32 @@ export function AttentionCard({ card, onLeave }: { card: AgentCard; onLeave?: ()
       </div>
       {card.actions.length > 0 && <div className="grid grid-cols-2 gap-2">{card.actions.map(button)}</div>}
     </section>
+  );
+}
+
+/**
+ * Protect's warnings behind one row (Adrian, 2026-10-23): closed, it says how many and wears the most urgent one's
+ * colour (Act first); open, each warning shows as its own card with Top up and Repay.
+ */
+export function WarningsAccordion({ cards, onLeave }: { cards: AgentCard[]; onLeave?: () => void }) {
+  const [open, setOpen] = useState(false);
+  const tone = cards.some((c) => c.tone === "act") ? "act" : "watch";
+  return (
+    <div className="flex flex-col gap-2">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className={`flex w-full items-center gap-2.5 rounded-[22px] p-3.5 text-left ${TONE[tone]}`}
+      >
+        <AgentMark agent="Protector" size={32} />
+        <span className="grow text-[15px] font-semibold leading-[1.3]">
+          {cards.length} {cards.length === 1 ? "warning" : "warnings"} about your credit
+        </span>
+        <ChevronDown className={`shrink-0 text-ink-2 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && cards.map((c) => <AttentionCard key={c.key} card={c} onLeave={onLeave} />)}
+    </div>
   );
 }
 
