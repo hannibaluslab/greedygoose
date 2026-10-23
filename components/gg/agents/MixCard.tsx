@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { ManageCard, MixSlider } from "@/components/gg/Manage";
 import { StockAvatar, tickerOf } from "@/components/gg/kit/StockAvatar";
-import { PlusIcon } from "@/components/gg/kit/icons";
+import { BacksIcon, PlusIcon } from "@/components/gg/kit/icons";
 import {
   MIX_WHOLE,
   inHomeOrder,
@@ -18,7 +18,8 @@ import { EQUITIES } from "@/lib/tokens/registry";
 /**
  * My mix: a target for each stock, which never adds up past 100%, and the share of the free stock each holds now. Its
  * rows keep Home's order (boards 7e–7h), an added stock too. A stock with no free shares that backs credit says so,
- * not "none now" (Adrian, 2026-10-21: the card above draws the whole portfolio).
+ * not "none now" (Adrian, 2026-10-21: the card above draws the whole portfolio); one that isn't in the mix shows greyed
+ * under it.
  */
 export function MixCard({
   holdings,
@@ -38,6 +39,9 @@ export function MixCard({
     return !!h && h.freeRaw === 0n && (h.backingRaw ?? 0n) > 0n;
   });
   const notInMix = EQUITIES.filter((e) => !rows.some((r) => r.reserveId === e.reserveId));
+  // Stock that backs credit and isn't in the mix, greyed under it with no slider (Adrian, 2026-10-23): the user sees
+  // everything they own, and that these stay put. Added to the mix, a stock leaves this list for its slider.
+  const backing = notInMix.filter((e) => (holdings.find((h) => h.reserveId === e.reserveId)?.backingRaw ?? 0n) > 0n);
   const add = (reserveId: number) => {
     onRows(inHomeOrder([...rows, { reserveId, bps: 0 }]));
     setAdding(false);
@@ -77,6 +81,18 @@ export function MixCard({
           </div>
         );
       })}
+      {backing.map((e) => (
+        <div key={e.reserveId} className="flex items-center gap-2.5 opacity-60">
+          <StockAvatar symbol={e.symbol} size={30} font={tickerOf(e.symbol).length > 4 ? 7 : 8.5} />
+          <div className="flex flex-col">
+            <span className="whitespace-nowrap text-sm font-semibold">{e.name}</span>
+            <span className="flex items-center gap-1 text-[11px] text-ink-mid">
+              <BacksIcon size={9} />
+              backs credit
+            </span>
+          </div>
+        </div>
+      ))}
       <AddStock notInMix={notInMix} adding={adding} onOpen={() => setAdding(true)} onAdd={add} />
     </ManageCard>
   );
