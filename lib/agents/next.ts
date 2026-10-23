@@ -288,6 +288,11 @@ export type RebalanceOutlook = {
    * when it trades, when the whole portfolio sits in its band, or when no mix is saved.
    */
   blocked: RebalanceBlock | null;
+  /**
+   * The free stock holds some of the mix and sits inside its band: what the Rebalancer can trade is done, whatever
+   * the stock backing credit does to the whole portfolio (Adrian, 2026-10-24).
+   */
+  freeOnTarget: boolean;
 };
 
 /**
@@ -312,7 +317,17 @@ export function rebalanceOutlook(i: OutlookInput): RebalanceOutlook {
   const topUpsFrom = Math.max(RISK.watchMin, i.numbers.triggerHf ?? CASH_AGENT.triggerHf);
   const held = { topUpsHeld: hf < topUpsFrom, topUpsFrom };
   if (!i.mixBps || !isMix(i.mixBps) || i.mixBps.every((w) => w === 0))
-    return { noMix: true, trades: [], checkAt, inAct, ...held, waitsInAct: false, offTarget: false, blocked: null };
+    return {
+      noMix: true,
+      trades: [],
+      checkAt,
+      inAct,
+      ...held,
+      waitsInAct: false,
+      offTarget: false,
+      blocked: null,
+      freeOnTarget: false,
+    };
   const mixBps = i.mixBps;
   const tradesOn = (holdings: readonly MixHolding[]) =>
     previewTrades({
@@ -341,7 +356,19 @@ export function rebalanceOutlook(i: OutlookInput): RebalanceOutlook {
           : tradesOn(whole).length > 0
             ? "credit"
             : "no-trade";
-  return { noMix: false, trades, checkAt, inAct, ...held, waitsInAct: trades.length > 0 && inAct, offTarget, blocked };
+  const freeOnTarget =
+    mixValue(i.holdings) > 0n && bandBreaks(book(i.holdings), i.numbers.rebalance).every((b) => b === null);
+  return {
+    noMix: false,
+    trades,
+    checkAt,
+    inAct,
+    ...held,
+    waitsInAct: trades.length > 0 && inAct,
+    offTarget,
+    blocked,
+    freeOnTarget,
+  };
 }
 
 /** The Rebalancer's rule, said wherever credit is what holds it (its sheet always says it). */
@@ -368,6 +395,7 @@ function rebalanceNext(i: NextInput): Next {
   const o = rebalanceOutlook(i);
   if (o.noMix) return { idle: "No mix yet" };
   const when = whenText(o.checkAt, i.nowSec);
+  if (o.blocked === "credit" && o.freeOnTarget) return { idle: `Free stock on target. Checks ${when}` };
   if (o.blocked) return { idle: blockedWords(o.blocked, when)[0].replace(/\.$/, "") };
   if (o.trades.length === 0) return { idle: `On target. Checks ${when}` };
   if (o.waitsInAct) return { idle: "Waits until your credit is out of Act" };

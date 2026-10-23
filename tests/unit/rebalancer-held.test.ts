@@ -359,6 +359,67 @@ describe("rebalanceCard: off target with nothing to trade", () => {
   });
 });
 
+/**
+ * jawegg.justan.id on 2026-10-24 after the Guard's first rounds: the free stock, all the Rebalancer trades, sits in its
+ * band (Apple 11, Amazon 20, Alphabet 6, Meta 7, Tesla 55 against 10, 18, 7, 8, 57); the $7.17 backing credit holds the
+ * whole portfolio far off. Dollars by reserve id, free and backing.
+ */
+const JAWEGG_FREE = [0.078, 0.142, 0.045, 0.051, 0, 0, 0.393];
+const JAWEGG_BACKING = [1.441, 1.617, 0.941, 1.027, 0.678, 0.611, 0.853];
+const JAWEGG_MIX = [1_000, 1_800, 700, 800, 0, 0, 5_700];
+const jawegg = () =>
+  account(
+    JAWEGG_FREE.map((x, i) => x + JAWEGG_BACKING[i]),
+    JAWEGG_FREE,
+  );
+
+describe("rebalanceCard: the free stock on target, the stock backing credit off it (Adrian, 2026-10-24)", () => {
+  const done = (over: Partial<RebalanceCardInput> = {}) =>
+    card(jawegg(), { topUps: { readyRaw: 0n }, ...over }, { mixBps: JAWEGG_MIX, debtUsd: 4.06, totalBackingUsd: 7.17 });
+
+  it("says the free stock is done, and that sending is only for the whole portfolio", () => {
+    const o = rebalanceOutlook(outlookIn(jawegg(), { mixBps: JAWEGG_MIX, debtUsd: 4.06, totalBackingUsd: 7.17 }));
+    expect(o.blocked).toBe("credit");
+    expect(o.freeOnTarget).toBe(true);
+    const m = done();
+    expect(m.pill).toEqual({ text: "On", tone: "on" });
+    expect(m.footer).toEqual({
+      kind: "words",
+      line1: "Your free stock is on target.",
+      line2: "Send $44 to bring your whole portfolio, stock backing credit included, to your mix.",
+    });
+    expect(sheetLine(m).text).toBe(
+      "Your free stock is on target. Send $44 to bring your whole portfolio, stock backing credit included, to your mix.",
+    );
+    expect(JSON.stringify(m)).not.toMatch(/borrow|loan|\block|locked|collateral|—/i);
+  });
+
+  it("draws the free stock in its band: no over, no under, no backs-credit mark, no side", () => {
+    const m = done();
+    expect(m.slots.map((s) => s.reserveId)).toEqual([0, 1, 2, 3, 6]);
+    expect(m.slots.every((s) => s.out === null && !s.backs && s.side === null)).toBe(true);
+    expect(m.slots.every((s) => Math.abs(s.offset) <= 1)).toBe(true);
+  });
+
+  it("with top-ups off, says to turn them on first", () => {
+    expect(done({ topUps: null }).footer).toEqual({
+      kind: "words",
+      line1: "Your free stock is on target.",
+      line2: "Turn on top-ups, then send $44 to bring your whole portfolio to your mix.",
+    });
+  });
+
+  it("free stock off its own band: the card stays as it was, the whole portfolio and what to send", () => {
+    // The same account, with Tesla's free part sold: the free stock breaks its band, so it isn't done.
+    const off = account(
+      JAWEGG_FREE.map((x, i) => x + JAWEGG_BACKING[i] - (i === 6 ? 0.393 : 0)),
+      JAWEGG_FREE.map((x, i) => (i === 6 ? 0 : x)),
+    );
+    const o = rebalanceOutlook(outlookIn(off, { mixBps: JAWEGG_MIX }));
+    expect(o.freeOnTarget).toBe(false);
+  });
+});
+
 describe("the Agents list's next line says the same", () => {
   const nextIn = (holdings: MixHolding[], debtUsd: number, backingUsd: number): NextInput => ({
     nowSec: WED_NOON,
@@ -384,5 +445,10 @@ describe("the Agents list's next line says the same", () => {
     });
     const meta = [0, 0, 0, 500, 0, 0, 0];
     expect(agentNexts(nextIn(account(meta, meta), 0, 0)).rebalance).toEqual({ idle: "You hold none of your mix yet" });
+  });
+
+  it("held by credit with the free stock on target: says the free stock is done", () => {
+    const idle = agentNexts({ ...nextIn(jawegg(), 4.06, 7.17), mixBps: JAWEGG_MIX }).rebalance;
+    expect(idle).toEqual({ idle: `Free stock on target. Checks ${whenText(nextRound(WED_NOON), WED_NOON)}` });
   });
 });

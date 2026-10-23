@@ -270,19 +270,27 @@ function dueFooter(
  * State 8 (off target, nothing trades): what holds the Rebalancer back. Where it's the stock backing credit, how much to
  * send so today's top-ups put the whole portfolio back in its bands (2026-10-22), and the over-weight stock that backs
  * credit wears the backs-credit mark instead of a sell tint: it isn't sold, what's sent buys the ones under.
+ * When the free stock itself sits in its band, the Rebalancer's own work is done (Adrian, 2026-10-24: "it should be
+ * considered done"): the logos sit by the free stock, and what's sent is only for the whole portfolio.
  */
 function heldCard(
   i: RebalanceCardInput,
-  why: RebalanceOutlook["blocked"],
+  o: RebalanceOutlook,
   blocked: [string, string],
   card: (
     pill: string,
     tone: PillTone,
     footer: RebalanceFooter,
-    over: { say?: string; marks?: boolean },
+    over: { say?: string; marks?: boolean; slots?: MixSlot[] },
   ) => RebalanceCardModel,
 ): RebalanceCardModel {
+  const why = o.blocked;
   const send = why === "credit" ? sendToFix(i) : null;
+  if (why === "credit" && o.freeOnTarget) {
+    const done: [string, string] = [FREE_ON_TARGET, send ? wholeWords(send, !!i.topUps) : BACKING_RULE];
+    const free = mixSlots({ holdings: i.holdings, mixBps: i.mixBps, options: i.options, trades: [] });
+    return card("On", "on", { kind: "words", line1: done[0], line2: done[1] }, { say: done.join(" "), slots: free });
+  }
   const say = send ? sendWords(send, !!i.topUps) : blocked;
   const marked = card("On", "on", { kind: "words", line1: say[0], line2: say[1] }, { say: say.join(" "), marks: true });
   if (!send) return marked;
@@ -314,6 +322,24 @@ function sendToFix(i: RebalanceCardInput): bigint | null {
 function sendWords(raw: bigint, topUpsOn: boolean): [string, string] {
   const usd = formatUsdTrim(Math.ceil(Number(raw) / 10 ** USDC.decimals));
   return [`Send ${usd} to fix your mix.`, topUpsOn ? BACKING_RULE : "Turn on top-ups so it goes in."];
+}
+
+/** The card's first line while the free stock sits in its band and the stock backing credit holds the rest off it. */
+export const FREE_ON_TARGET = "Your free stock is on target.";
+
+/** Where the mix stands while nothing trades, for the line under "Ends soon". */
+function standingWords(o: RebalanceOutlook, blocked: [string, string] | null, when: string): string {
+  if (o.noMix) return "No mix yet.";
+  if (o.blocked === "credit" && o.freeOnTarget) return FREE_ON_TARGET;
+  return blocked ? blocked[0] : `On target. Checks ${when}.`;
+}
+
+/** What sending does then: it only brings the whole portfolio, the stock backing credit too, to the mix. */
+function wholeWords(raw: bigint, topUpsOn: boolean): string {
+  const usd = formatUsdTrim(Math.ceil(Number(raw) / 10 ** USDC.decimals));
+  return topUpsOn
+    ? `Send ${usd} to bring your whole portfolio, stock backing credit included, to your mix.`
+    : `Turn on top-ups, then send ${usd} to bring your whole portfolio to your mix.`;
 }
 
 /** What the card says while off and before the agents are live. */
@@ -397,17 +423,22 @@ export function rebalanceCard(i: RebalanceCardInput): RebalanceCardModel | null 
   // what holds Rebalance back (`blocked`): the credit (it never trades stock that backs it), no trade it can make, or
   // nothing of the mix to keep.
   const blocked = o.blocked && blockedWords(o.blocked, when);
-  const standing = o.noMix ? "No mix yet." : blocked ? blocked[0] : `On target. Checks ${when}.`;
+  // Only the stock backing credit holds the whole portfolio off its mix: the free stock, all it trades, is done.
+  const freeDone = o.blocked === "credit" && o.freeOnTarget;
+  const standing = standingWords(o, blocked, when);
   // 7. Its grant ends within a week.
   if (i.endsAt !== null && i.endsAt - i.nowSec <= ENDS_SOON_SEC)
-    return card("Ends soon", "due", words(`Ends on ${date(i.endsAt)}. Then nothing trades.`, standing), {
-      marks: !!blocked,
-    });
+    return card(
+      "Ends soon",
+      "due",
+      words(`Ends on ${date(i.endsAt)}. Then nothing trades.`, standing),
+      freeDone ? { slots: picture(i.holdings, []) } : { marks: !!blocked },
+    );
   // On, with no mix saved: nothing to keep on target yet.
   if (o.noMix) return card("On", "on", words(standing));
   // 8. Off target (or none of the mix held), and nothing trades: what holds it back (Adrian, 2026-10-21). Where it's the
   // stock backing credit, how much to send so today's top-ups put the whole portfolio back in its bands (2026-10-22).
-  if (blocked) return heldCard(i, o.blocked, blocked, card);
+  if (blocked) return heldCard(i, o, blocked, card);
   // 9. All good: the whole portfolio is in its band.
   return card("On", "on", { kind: "on-target", next: capital(when) }, { say: `On target. Next check ${when}.` });
 }
