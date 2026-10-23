@@ -11,11 +11,11 @@ set -euo pipefail
 
 # Production's public build values (contracts/docs/DEPLOYMENTS.md, "Live now"). A deploy without them silently turns the
 # agents, the Leaderboard and the Wall off. GooseGuard (the spender of every agent permission) and GoosePlanner (its
-# views) aren't deployed yet: fill in their addresses and the Guard's deploy block from DEPLOYMENTS.md once the owner
-# has deployed them. Until then this script refuses to release: this app no longer talks to GooseExecutor (0x686c).
-GUARD=
-GUARD_BLOCK=
-PLANNER=
+# views), deployed 2026-10-23 at block 52997787 (DEPLOYMENTS.md, "GooseGuard + GoosePlanner"). This app no longer talks
+# to GooseExecutor (0x686c).
+GUARD=0x9f0deB42282A75eB2beCa6F6Ca200429F9851C74
+GUARD_BLOCK=52997787
+PLANNER=0xB971e69aad366A8AfC026a5d7Db1dD671B602D55
 BOARD=0x0E10c55D3f20D4Ea1DEf5aC6c60480b34c07FcA1
 WALL_FROM_BLOCK=52912478 # the block the Wall went live at: a new one would restart its count
 SITE=https://app.greedygoo.com

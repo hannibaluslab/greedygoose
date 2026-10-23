@@ -13,6 +13,20 @@ What production runs today. The sections below are the record of how it got here
 | GooseBoard | `0x0E10…FcA1` (below), the Leaderboard's member list. The Wall of shame counts sales from block 52912478 |
 | Waiting | The 12 NYSE holidays can be applied after 2026-10-27 10:32 UTC (the owner signs, table below). The review's fixes for the next executor are parked on `jl/executor-fixes` (`FIX-PLAN-2026-10-20.md`); the external audit hasn't started |
 
+## GooseGuard + GoosePlanner — deployed, not live yet (2026-10-23)
+
+Branch `jl/guard-r2-fixes` @ `ef43020` (Mariano's round-2 fixes), deployed by the owner with `script/DeployGuard.s.sol`. Five transactions from the deployer `0xF3bB…31aD` (nonces 29–33), blocks 52997787–52997791, 0.00013 ETH in all. The swap from 0x686c follows `GUARD-RELEASE-RUNBOOK.md`.
+
+| Contract | Address | Tx |
+|---|---|---|
+| GooseGuard (24,407 bytes) | `0x9f0deB42282A75eB2beCa6F6Ca200429F9851C74`, block 52997787 | `0xa3814780da4582f3250570c8c25302dad70850d1570af6a43f4abfd9f8b1d6ed` |
+| ProtectPlanner | `0x04a16dEA1D55e9b8A8786B628a1Dfa2EffB14843` | `0x4cd0d917f204129b55697d02341407f42dd94216d616aa1ef307b9b15559c05f` |
+| TradePlanner | `0xBe14b9CA0b0F78cECe74B1f0BA420D48179996A6` | `0xe4d263c9f8d5e58583effa4d5e9060f601cd64ba3f54e21d95c981f419df9afd` |
+| CashPlanner | `0x6Ccc42A5f56CB14475E2eC8241B93aCB3219C841` | `0x3a9bfa586f845c2fca06b7e0dc5e6c9f2db55f05a55e551e5a6aa41e60ce277b` |
+| GoosePlanner (21,280 bytes) | `0xB971e69aad366A8AfC026a5d7Db1dD671B602D55` | `0xe129f89b5df1dbc599933342a44495daffabf645ba0e350237749d7feb24f666` |
+
+Read back on Base (keyless RPC, 2026-10-23): owner = the deployer `0xF3bB…31aD` for the alpha (a Safe after it, LV-20, Adrian's call), the only runner KeeperHub's wallet `0x9c74…3E93` (1 runner, the deployer is not one), not paused, epoch 0, JAW's clone codehash allowed, floors 300 / 50 / 100 (tight 40), keep-back and dust $1, no members. The Planner and its three helpers all plan for the Guard, `PACK_GAS` 5,300,000, `SKIP_WEEKENDS` false, `checkUpkeep(abi.encode(0,1))` false. `sellLineOf` of a cashless account is 1.08. Build values for the app: `NEXT_PUBLIC_GOOSE_GUARD`, `NEXT_PUBLIC_GOOSE_GUARD_BLOCK` 52997787, `NEXT_PUBLIC_GOOSE_PLANNER` (`scripts/release.sh` carries them).
+
 ## Base mainnet — team-only preview deploy (2026-10-20)
 
 The no-limit executor (`CAP_MAX` = max uint160), unaudited, for a team-only preview (Adrian, 2026-10-20). Production stays off until the audit or Adrian's go (D13): greedygoose.vercel.app doesn't point at it, only the preview build below does. It supersedes the D13 test deploy for the preview; that one stays un-bootstrapped.
