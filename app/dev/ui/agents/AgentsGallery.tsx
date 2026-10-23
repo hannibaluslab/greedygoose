@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_PROTECT } from "@/lib/agents/lines";
 import { useState, type ReactNode } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
@@ -142,7 +143,10 @@ function protectStates(nowSec: number): [string, Partial<ProtectCardInput>][] {
     ["1 · Granted, not running yet", { status: "starting", waiting: "protect" }],
     ["1 · Selling granted, not running yet", { waiting: "sell" }],
     ["2 · Stopped on its own", { status: "off", stoppedAt: nowSec - 2 * 86_400 }],
-    ["3 · Off, and the credit is in Act", { status: "off", hf: 1.06, act: { addUsd: 54, protectOn: false } }],
+    [
+      "3 · Off, and the credit is in Act",
+      { status: "off", hf: 1.06, act: { addUsd: 54, protectOn: false, protect: DEFAULT_PROTECT } },
+    ],
     ["4 · Off", { status: "off" }],
     [
       "5 · Bringing the credit back",
@@ -158,7 +162,7 @@ function protectStates(nowSec: number): [string, Partial<ProtectCardInput>][] {
       { hf: 1.02, next: { will: "repays $40 from your cash", would: "Would repay $40 from your cash" } },
     ],
     ["Under the line, held back", { hf: 1.02, next: { idle: "Act. No cash to repay with" } }],
-    ["7 · Credit in Act", { hf: 1.07, act: { addUsd: 45, protectOn: true } }],
+    ["7 · Credit in Act", { hf: 1.07, act: { addUsd: 45, protectOn: true, protect: DEFAULT_PROTECT } }],
     ["8 · Weekend risk", { hf: 1.16, weekend: { addUsd: 96, dropPct: 15, when: atText(nowSec + 3 * 3_600, nowSec) } }],
     ["9 · Ends within 7 days", { endsAt: nowSec + 4 * 86_400 }],
     ["10 · All good", {}],

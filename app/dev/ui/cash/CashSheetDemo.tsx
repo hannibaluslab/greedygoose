@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_PROTECT } from "@/lib/agents/lines";
 import { ACT_LINE } from "@/config/risk";
 import { toast } from "sonner";
 import { CashFeed } from "@/components/gg/cash/CashActivity";
@@ -105,6 +106,7 @@ function position(p: { owed: number; saveOn: boolean; creditApr?: number }): Pos
     totalBackingUsd,
     debtUsd: p.owed,
     line: ACT_LINE,
+    protect: DEFAULT_PROTECT,
     // As usePosition: the credit left at the one cap (Act is the line), not Aave's own limit.
     availableUsd: creditWith({
       totalBackingUsd,

@@ -1,4 +1,5 @@
 import { NOT_LIVE, type ActCard, type Next, type WeekendCard } from "@/lib/agents/list";
+import { backToText, protectHfText } from "@/lib/agents/lines";
 import type { AgentStatus } from "@/lib/agents/status";
 import { formatUsdTrim } from "@/lib/formatting";
 import { fallTo } from "@/lib/risk/health";
@@ -94,8 +95,8 @@ export function dayChange(now: number | null, dayAgo: number | null): string | n
 export function protectCard(i: ProtectCardInput): ProtectCardModel {
   const status = statusFor(i.hf);
   const word = status === "none" ? null : (STATUS_LABEL[status] as "Safe" | "Watch" | "Act");
-  const line = two(i.triggerHf);
-  const target = two(i.targetHf);
+  const line = protectHfText(i.triggerHf);
+  const target = protectHfText(i.targetHf);
   const bar = (over: Partial<ProtectCardModel["bar"]> = {}) => ({
     hf: i.hf,
     line: i.triggerHf,
@@ -114,7 +115,9 @@ export function protectCard(i: ProtectCardInput): ProtectCardModel {
     line1,
     line2,
   });
-  const actGap = i.act ? `Repaying ${formatUsdTrim(i.act.addUsd)} now brings it back to Watch.` : null;
+  const actGap = i.act
+    ? `Repaying ${formatUsdTrim(i.act.addUsd)} now brings it back to ${backToText(i.act.protect)}.`
+    : null;
   const room = i.hf !== null ? `Your stocks can fall ${fallPct(i.hf, i.triggerHf)}% before that.` : null;
 
   if (!i.live) return card("Soon", "neutral", NOT_LIVE, null, { guarded: false });

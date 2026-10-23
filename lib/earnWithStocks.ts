@@ -1,5 +1,5 @@
 import { decodeFunctionData, erc20Abi, isAddressEqual } from "viem";
-import { ACT_LINE, pastStop } from "@/config/risk";
+import { ACT_LINE, pastStop, stopsAtAct } from "@/config/risk";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { buildBackAndCreditCalls, type Call } from "@/lib/aave/tx";
@@ -142,7 +142,7 @@ export function earnOffer(i: EarnInput): EarnOffer {
   if (rates.left <= 0) return closed("costs-more", rates);
   if (i.position.creditPaused) return closed("paused");
   if (pastStop(i.position.healthFactor, lineOf(i.position)))
-    return closed(lineOf(i.position).intoAct ? "past-limit" : "in-act");
+    return closed(stopsAtAct(lineOf(i.position)) ? "in-act" : "past-limit");
 
   const plan0 = planCredit({ position: i.position, options: i.options, creditRaw: 0n, cash: i.cash, now: i.now });
   const maxUsd = Math.floor(Math.min(plan0.maxUsd, i.position.usdcLiquidity));

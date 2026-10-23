@@ -207,11 +207,14 @@ describe("the Guard's own calls the allowlist lets the account send: unregister,
       args: [packMix([5_000, 0, 0, 0, 0, 4_000, 0])],
     });
     expect(() => assertAllowed(user, [{ to: GUARD, data: bad, value: 0n }])).toThrow(/Blocked/);
-    // setProtect and setRunner have no screen yet: the allowlist names no rule for them.
+    // setRunner has no screen yet: the allowlist names no rule for it. setProtect has Protector's two pickers, and
+    // goes through only with numbers the Guard takes (protect-lines.test.ts).
     const runner = encodeFunctionData({ abi: guardAbi, functionName: "setRunner", args: [someoneElse] });
     expect(() => assertAllowed(user, [{ to: GUARD, data: runner, value: 0n }])).toThrow(/Blocked/);
-    const protect = encodeFunctionData({ abi: guardAbi, functionName: "setProtect", args: [10_300, 11_200] });
-    expect(() => assertAllowed(user, [{ to: GUARD, data: protect, value: 0n }])).toThrow(/Blocked/);
+    const protect = (line: number, target: number) =>
+      encodeFunctionData({ abi: guardAbi, functionName: "setProtect", args: [line, target] });
+    expect(assertAllowed(user, [{ to: GUARD, data: protect(10_300, 11_200), value: 0n }])).toHaveLength(1);
+    expect(() => assertAllowed(user, [{ to: GUARD, data: protect(10_000, 11_200), value: 0n }])).toThrow(/Blocked/);
   });
 });
 

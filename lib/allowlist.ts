@@ -12,6 +12,7 @@ import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
 import { GOOSE_GUARD } from "@/lib/agents/config";
 import { guardAbi } from "@/lib/agents/abis/GooseGuard";
+import { linesOk } from "@/lib/agents/lines";
 import { isMix, unpackMix } from "@/lib/agents/mix";
 import { agentJobOf } from "@/lib/agents/agentJob";
 import { GRANT_SECONDS, JOBS, type JawPermission } from "@/lib/agents/permissions";
@@ -236,7 +237,7 @@ const bareEndRescue: ArgsCheck = (args, _user, ctx) => args.length === 0 && ctx.
  * (`saveForUser`, `savingsApprove`). Buys, repays and savings-first batches mix
  * targets, so each target is held to its own functions. A coin of Turn into cash is approved only to the venue that
  * converts it, and converted only there, at its own pool, into USDC (D20). GooseGuard's settings move no money and apply to the signer alone
- * (`msg.sender`): a mix must add up to 100% (or clear it). Its registrations move none either, and name only the user's
+ * (`msg.sender`): a mix must add up to 100% (or clear it), Protect's line and target must be ones it takes. Its registrations move none either, and name only the user's
  * own grants to it, each for its own job (`registersOwnGrant`); `unregister` names a job, and `endRescue` nothing.
  */
 const RULES: readonly Rule[] = [
@@ -302,6 +303,11 @@ const RULES: readonly Rule[] = [
             setMix: (args: readonly unknown[]) =>
               typeof args[0] === "bigint" && args[0] < 1n << 112n && isMix(unpackMix(args[0])),
             setKeepMix: () => true,
+            // Protect's line and target, as the Guard takes them (lib/agents/lines.ts), or (0, 0) for its defaults.
+            setProtect: (args: readonly unknown[]) =>
+              typeof args[0] === "number" &&
+              typeof args[1] === "number" &&
+              ((args[0] === 0 && args[1] === 0) || linesOk(args[0], args[1])),
             // Top-ups go into my mix: a switch, and Keep as cash in whole USDC units up to $1,000,000 (KEEP_MAX_USD).
             setTopUps: (args: readonly unknown[]) =>
               typeof args[0] === "boolean" && typeof args[1] === "number" && args[1] >= 0 && args[1] <= 10 ** 12,

@@ -1,4 +1,5 @@
 import { mixBpsNow, startingMix, type MixHolding } from "@/lib/agents/mix";
+import { protectHfText } from "@/lib/agents/lines";
 import {
   BACKING_RULE,
   blockedWords,
@@ -302,6 +303,15 @@ function sendWords(raw: bigint, topUpsOn: boolean): [string, string] {
 /** What the card says while off and before the agents are live. */
 const OFF_WORDS = ["When on, it keeps your mix on target.", "Trades at most once a day, or on a new mix."] as const;
 
+/** Whether what's due waits: top-ups under GooseGuard's invest line (max(1.10, Protect's own line)), trades in Act. */
+const waitsNow = (o: RebalanceOutlook, due: boolean, investing: boolean) => due && (investing ? o.topUpsHeld : o.inAct);
+
+/** Why it waits: Act, or a Protect line the user raised over it. */
+const waitWords = (o: RebalanceOutlook) =>
+  o.inAct
+    ? "Waits until your credit is out of Act."
+    : `Waits until your credit is over ${protectHfText(o.topUpsFrom)}.`;
+
 /** The card, or null while the Rebalancer's state loads (the view draws its frame). */
 export function rebalanceCard(i: RebalanceCardInput): RebalanceCardModel | null {
   if (i.live && i.status === "loading") return null;
@@ -349,7 +359,7 @@ export function rebalanceCard(i: RebalanceCardInput): RebalanceCardModel | null 
   const invest = investAt(i);
   const next = invest.length > 0 ? invest : o.trades;
   const when = whenText(invest.length > 0 ? nextRound(i.nowSec) : o.checkAt, i.nowSec);
-  const waits = next.length > 0 && o.inAct;
+  const waits = waitsNow(o, next.length > 0, invest.length > 0);
   // Trades and top-ups act on free stock: while some are due, the card draws the free stock they move, so each BUY,
   // SELL and ghost reads the way the trade moves it (none while they wait in Act). Nothing due: the whole portfolio.
   const moving = next.length === 0 ? still : picture(i.holdings, waits ? [] : next);
@@ -362,10 +372,7 @@ export function rebalanceCard(i: RebalanceCardInput): RebalanceCardModel | null 
       { slots: moving },
     );
   // 5. Trades or top-ups are due, and the credit is in Act: it waits.
-  if (waits)
-    return card("Paused", "neutral", words("Waits until your credit is out of Act.", "Nothing trades meanwhile."), {
-      slots: moving,
-    });
+  if (waits) return card("Paused", "neutral", words(waitWords(o), "Nothing trades meanwhile."), { slots: moving });
   // 6. Top-ups going into the mix at the next round, else the trades due when the pacing lets them.
   const due = dueFooter(invest, o.trades, when);
   if (due) return card("On", "on", due.footer, { slots: moving, say: due.say });

@@ -13,6 +13,7 @@ import { statusFor } from "@/lib/risk/status";
 import { PROTOCOLS } from "@/lib/protocols/config";
 import { GOOSE_GUARD } from "@/lib/agents/config";
 import { guardAbi } from "@/lib/agents/abis/GooseGuard";
+import { DEFAULT_PROTECT, type ProtectNumbers } from "@/lib/agents/lines";
 import { cashRaw, protectRuns, toUsd, walletSwept, type Cash } from "@/lib/cash";
 import { creditLineFor } from "@/config/risk";
 import { WALL_OPEN } from "@/lib/board/config";
@@ -105,7 +106,11 @@ export function usePosition(user: `0x${string}` | undefined) {
       // The agents' job bits and top-ups, once GooseGuard is deployed: whether an agent may sweep the wallet decides the
       // keep-back.
       ...(GOOSE_GUARD
-        ? [{ address: GOOSE_GUARD, abi: guardAbi, functionName: "accountOf", args: [who] } as const]
+        ? [
+            { address: GOOSE_GUARD, abi: guardAbi, functionName: "accountOf", args: [who] } as const,
+            // Protector's own line (decision 3): credit stops just above it (config/risk.ts creditLineFor).
+            { address: GOOSE_GUARD, abi: guardAbi, functionName: "linesOf", args: [who] } as const,
+          ]
         : []),
     ] as const;
   }, [user]);
@@ -153,19 +158,31 @@ export function usePosition(user: `0x${string}` | undefined) {
       };
     });
     const o = EQUITIES.length * PER;
-    const [account, debtRaw, riskPremium, drawnRate, liquidity, usdcBal, usdcCfg, savingsRaw, v3Reserve, agents] =
-      r.slice(o) as [
-        AccountData,
-        bigint,
-        bigint,
-        bigint,
-        bigint,
-        bigint,
-        { paused: boolean; frozen: boolean; borrowable: boolean },
-        bigint,
-        { currentLiquidityRate: bigint },
-        readonly [{ jobs: number; rescueAt: number }, { topUpsOn: boolean }] | undefined,
-      ];
+    const [
+      account,
+      debtRaw,
+      riskPremium,
+      drawnRate,
+      liquidity,
+      usdcBal,
+      usdcCfg,
+      savingsRaw,
+      v3Reserve,
+      agents,
+      lines,
+    ] = r.slice(o) as [
+      AccountData,
+      bigint,
+      bigint,
+      bigint,
+      bigint,
+      bigint,
+      { paused: boolean; frozen: boolean; borrowable: boolean },
+      bigint,
+      { currentLiquidityRate: bigint },
+      readonly [{ jobs: number; rescueAt: number }, { topUpsOn: boolean }] | undefined,
+      readonly [bigint, bigint] | undefined,
+    ];
     const s = summarize(account);
     const apr = creditApr(drawnRate, riskPremium);
     const debtUsd = Number(debtRaw) / 10 ** USDC.decimals;
@@ -178,8 +195,13 @@ export function usePosition(user: `0x${string}` | undefined) {
     };
     const usdcLiquidity = Number(liquidity) / 10 ** USDC.decimals;
     const creditPaused = usdcCfg.paused || usdcCfg.frozen || !usdcCfg.borrowable;
-    // How low credit may go: 1.12 until Greedy Fatalities is open, then Protector's line or Aave's (config/risk.ts).
-    const line = creditLineFor({ wallOpen: WALL_OPEN, protectOn: protectRuns(jobs) });
+    // Protector's own line and target (decision 3), the defaults with no Guard.
+    const protect: ProtectNumbers = lines
+      ? { line: Number(lines[0]) / 1e18, target: Number(lines[1]) / 1e18 }
+      : DEFAULT_PROTECT;
+    // How low credit may go: 1.12 until Greedy Fatalities is open, then Protector's line or Aave's (config/risk.ts);
+    // with Protector on, never under its own line.
+    const line = creditLineFor({ wallOpen: WALL_OPEN, protectOn: protectRuns(jobs), protectLine: protect.line });
     return {
       holdings,
       stocksUsd: holdings.reduce((a, h) => a + h.freeUsd + h.backingUsd, 0),
@@ -196,6 +218,7 @@ export function usePosition(user: `0x${string}` | undefined) {
         line,
       }),
       line,
+      protect,
       healthFactor: s.healthFactor,
       avgCf: s.avgCf,
       status: statusFor(s.healthFactor),

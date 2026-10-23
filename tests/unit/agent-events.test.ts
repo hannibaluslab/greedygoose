@@ -74,9 +74,10 @@ describe("decodeAgentLogs: every GooseGuard event", () => {
     "TopUpInvested",
     "EntryConverted",
     "Refused",
+    "ProtectSet",
   ];
-  /** Indexed by the account, with no screen yet (the account's own Protect line, its own runner). */
-  const LATER = ["ProtectSet", "RunnerSet"];
+  /** Indexed by the account, with no screen yet (its own runner). */
+  const LATER = ["RunnerSet"];
 
   it.each(EVENTS.map((e) => e.name))("%s decodes, or is known to belong to no account", (name) => {
     const event = EVENTS.find((e) => e.name === name)!;
@@ -169,6 +170,17 @@ describe("decodeAgentLogs: what each event carries", () => {
       reason: "0x3a5e3f02",
     });
     expect(one(log("Refused", { account, kind: 9, reason: "0x00000000" }))).toEqual([]);
+    // Protect's own line and target as health factors; (0, 0) is back on the defaults.
+    expect(one(log("ProtectSet", { account, line: 11_000, target: 12_000 }))[0]).toMatchObject({
+      kind: "lines-set",
+      line: 1.1,
+      target: 1.2,
+    });
+    expect(one(log("ProtectSet", { account, line: 0, target: 0 }))[0]).toMatchObject({
+      kind: "lines-set",
+      line: 1.03,
+      target: 1.12,
+    });
     expect(one(log("RescueEnded", { account }))[0]).toMatchObject({ kind: "rescue-ended" });
     expect(one(log("ConfigRefreshed", { account, hfBefore: 1n, hfAfter: 2n }))[0]).toMatchObject({
       kind: "refreshed",

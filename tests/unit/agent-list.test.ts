@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  AGENT_COPY,
   AGENTS,
   agentItems,
   agentOf,
@@ -8,11 +7,11 @@ import {
   agentStatus,
   nextLine,
   NOT_LIVE,
-  PROTECT_RULE,
   protectWarnings,
   TAB_JOBS,
   type Next,
 } from "@/lib/agents/list";
+import { DEFAULT_PROTECT } from "@/lib/agents/lines";
 import type { AgentJob } from "@/lib/agents/permissions";
 import type { AgentStatus } from "@/lib/agents/status";
 
@@ -38,18 +37,29 @@ describe("the two agents", () => {
       ["Rebalancer", "Keeps your mix on target"],
     ]);
     // Protect's line (Adrian, 2026-10-19): Protect steps in only under 1.03 and brings the credit back to 1.12.
-    expect(PROTECT_RULE).toBe("Steps in only if your credit falls under 1.03, and brings it back to 1.12.");
-    expect(AGENT_COPY.protect.lead.startsWith(PROTECT_RULE)).toBe(true);
-    expect(AGENT_COPY.protect.never).toBe(
+    const [protect] = items;
+    expect(protect.lead).toBe(
+      "Steps in only if your credit falls under 1.03, and brings it back to 1.12. It repays from your cash, and can sell backing stock if cash isn’t enough.",
+    );
+    expect(protect.never).toBe(
       "Protector does nothing until your credit falls under 1.03. It never sells a stock that doesn’t back your credit.",
     );
-    expect(Object.values(AGENT_COPY.protect).join(" ")).not.toMatch(/keeps your credit safe/i);
-    for (const a of AGENTS) {
-      expect(AGENT_COPY[a].does.split(" ").length).toBeLessThan(6);
-      expect(AGENT_COPY[a].never).toMatch(/never/);
-      expect(Object.values(AGENT_COPY[a]).join(" ")).not.toMatch(ON_SCREEN);
+    expect([protect.does, protect.lead, protect.never].join(" ")).not.toMatch(/keeps your credit safe/i);
+    for (const item of items) {
+      expect(item.does.split(" ").length).toBeLessThan(6);
+      expect(item.never).toMatch(/never/);
+      expect([item.does, item.lead, item.never].join(" ")).not.toMatch(ON_SCREEN);
     }
     expect(NOT_LIVE).not.toMatch(ON_SCREEN);
+  });
+
+  it("names the account's own line and target once it set them (decision 3)", () => {
+    const [protect] = agentItems({ status: jobs("on"), next: nexts, protect: { line: 1.1, target: 1.2 } });
+    expect(protect.does).toBe("Steps in under 1.10");
+    expect(protect.lead.startsWith("Steps in only if your credit falls under 1.10, and brings it back to 1.20.")).toBe(
+      true,
+    );
+    expect(protect.never).toMatch(/until your credit falls under 1\.10\./);
   });
 
   it("leaves earning and converting other dollars off the tab: no agent runs them, and turning all off spares them (D20)", () => {
@@ -89,7 +99,7 @@ describe("protectWarnings: the credit's warnings, with Top up and Repay, in Prot
 
   it("warns in Act, saying whether Protector is on to step in at 1.03, then the weekend", () => {
     const [act, weekend] = protectWarnings({
-      act: { addUsd: 120, protectOn: true },
+      act: { addUsd: 120, protectOn: true, protect: DEFAULT_PROTECT },
       weekend: { addUsd: 129, dropPct: 15, when: "at 8:00 PM" },
     });
     expect(act).toMatchObject({
@@ -109,9 +119,18 @@ describe("protectWarnings: the credit's warnings, with Top up and Repay, in Prot
         { kind: "sheet", label: "Top up", sheet: "top-up" },
         { kind: "sheet", label: "Repay", sheet: "repay" },
       ]);
-    expect(protectWarnings({ act: { addUsd: 5, protectOn: false }, weekend: null })[0].sub).toBe(
-      "Protector is off. Repaying $5 now brings it back to Watch.",
-    );
+    expect(
+      protectWarnings({ act: { addUsd: 5, protectOn: false, protect: DEFAULT_PROTECT }, weekend: null })[0].sub,
+    ).toBe("Protector is off. Repaying $5 now brings it back to Watch.");
+    // The account's own numbers: its line, and a target under Act named as a number, not "Watch".
+    expect(
+      protectWarnings({ act: { addUsd: 5, protectOn: true, protect: { line: 1.05, target: 1.1 } }, weekend: null })[0]
+        .sub,
+    ).toBe("Protector steps in at 1.05. Repaying $5 now brings it back to Watch.");
+    expect(
+      protectWarnings({ act: { addUsd: 5, protectOn: true, protect: { line: 1.03, target: 1.08 } }, weekend: null })[0]
+        .sub,
+    ).toBe("Protector steps in at 1.03. Repaying $5 now brings it back to 1.08.");
   });
 });
 

@@ -1,5 +1,6 @@
 "use client";
 
+import type { ProtectNumbers } from "@/lib/agents/lines";
 import { useState, type ReactNode } from "react";
 import { AgentMark, FeedCard, FeedDays, type FeedRow } from "./activity/Activity";
 import { Button } from "./kit/Button";
@@ -27,6 +28,7 @@ export function AgentsView({
   rebalance,
   live,
   feed,
+  numbers,
 }: {
   /** Protect's card (ProtectCard). */
   protect: ReactNode;
@@ -35,12 +37,14 @@ export function AgentsView({
   /** Whether the agents can be switched on (AGENTS_LIVE): until then, Coming soon. */
   live: boolean;
   feed: ReactNode;
+  /** Protector's own line and target, for "How it works"; the defaults until read. */
+  numbers?: ProtectNumbers;
 }) {
   const [guide, setGuide] = useState(false);
   return (
     <div className="relative flex min-h-dvh flex-col gap-3 px-5 leading-[normal]">
       <TabHeader title="Agents" back="/home" action={<AgentsGuideButton onOpen={() => setGuide(true)} />} />
-      <AgentsGuideSheet open={guide} onClose={() => setGuide(false)} />
+      <AgentsGuideSheet open={guide} onClose={() => setGuide(false)} protect={numbers} />
       <section aria-label="My agents" className="flex flex-col gap-3">
         {protect}
         {rebalance}

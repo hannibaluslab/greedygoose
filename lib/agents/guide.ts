@@ -1,3 +1,4 @@
+import { protectHfText, type ProtectNumbers } from "@/lib/agents/lines";
 import { CASH_AGENT, PROTECT_SELL, REBALANCER } from "@/config/risk";
 
 /*
@@ -9,7 +10,6 @@ import { CASH_AGENT, PROTECT_SELL, REBALANCER } from "@/config/risk";
 /** KeeperHub's round runs every 10 minutes (workflow q5vdv47dieyabhg4toiue, cron every 10 minutes). */
 export const RUNNER_EVERY_MIN = 10;
 
-const hf = (x: number) => x.toFixed(2);
 const pct = (bps: number) => `${Number((bps / 100).toFixed(2))}%`;
 /** The band's share of a target, as the note says it. */
 const SHARE: Record<number, string> = { 0.2: "a fifth", 0.25: "a quarter", 0.1: "a tenth" };
@@ -17,18 +17,23 @@ const SHARE: Record<number, string> = { 0.2: "a fifth", 0.25: "a quarter", 0.1: 
 const EXAMPLE = 25;
 const BAND = Math.min(EXAMPLE * REBALANCER.bandOfTarget, REBALANCER.bandMaxPoints);
 
+/** Protector's steps in "How it works", with the account's own line and target (decision 3). */
+export function protectGuideSteps(n: ProtectNumbers): string[] {
+  return [
+    `It checks your credit health every ${RUNNER_EVERY_MIN} minutes.`,
+    `Under ${protectHfText(n.line)}, it repays from your cash.`,
+    "If your cash isn’t enough, it sells some stock and repays with that.",
+    `It stops once your credit is back at ${protectHfText(n.target)}.`,
+  ];
+}
+
 export const AGENTS_GUIDE = {
   button: "How it works",
   title: "How your agents work",
   lead: "Two agents look after your account for you.",
   protect: {
     tag: "Keeps your credit safe",
-    steps: [
-      `It checks your credit health every ${RUNNER_EVERY_MIN} minutes.`,
-      `Under ${hf(CASH_AGENT.triggerHf)}, it repays from your cash.`,
-      "If your cash isn’t enough, it sells some stock and repays with that.",
-      `It stops once your credit is back at ${hf(CASH_AGENT.targetHf)}.`,
-    ],
+    steps: protectGuideSteps({ line: CASH_AGENT.triggerHf, target: CASH_AGENT.targetHf }),
     note: `It sells only the stocks you allow, at most ${pct(PROTECT_SELL.floorBps)} under the market price. It can’t move money out of your account.`,
   },
   rebalance: {

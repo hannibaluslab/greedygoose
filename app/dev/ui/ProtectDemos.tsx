@@ -11,9 +11,14 @@ const TESLA = 6;
 
 /** Protect's grants have no amount limit (decision 9). */
 const SAVED: Record<"off" | "on" | "repay", ProtectSaved> = {
-  off: { repayOn: false, sell: null, keepMix: null },
-  on: { repayOn: true, sell: { limitsRaw: sellLimitsFor([TESLA]) }, keepMix: false },
-  repay: { repayOn: true, sell: null, keepMix: false },
+  off: { repayOn: false, sell: null, keepMix: null, lines: { line: 10_300, target: 11_200 } },
+  on: {
+    repayOn: true,
+    sell: { limitsRaw: sellLimitsFor([TESLA]) },
+    keepMix: false,
+    lines: { line: 10_300, target: 11_200 },
+  },
+  repay: { repayOn: true, sell: null, keepMix: false, lines: { line: 10_500, target: 11_500 } },
 };
 
 /**
@@ -25,6 +30,8 @@ export function ProtectDemo({ state }: { state: "not-live" | "off" | "on" | "sel
     live: state !== "not-live",
     preview: false,
     saved: state === "not-live" || state === "off" ? SAVED.off : state === "on" ? SAVED.on : SAVED.repay,
+    // A credit at 1.24: each line in the list says how far the stocks can fall before Protector steps in there.
+    hf: 1.24,
     backsUsd: BACKS,
     feeBlocked: false,
     phase: "idle",

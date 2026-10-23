@@ -16,9 +16,9 @@ const TESLA = 6;
 const NVIDIA = 5;
 const GUARD = "0x00000000000000000000000000000000000e5ec0" as Address;
 
-const off: ProtectSaved = { repayOn: false, sell: null, keepMix: false };
+const off: ProtectSaved = { repayOn: false, sell: null, keepMix: false, lines: null };
 const sellAll = { limitsRaw: sellLimitsFor([]) };
-const fullOn: ProtectSaved = { repayOn: true, sell: sellAll, keepMix: false };
+const fullOn: ProtectSaved = { repayOn: true, sell: sellAll, keepMix: false, lines: null };
 
 describe("Protector's never-sell grant", () => {
   it("leaves the never-sell stocks out of the sell grant: no approve, no limit", () => {
@@ -55,7 +55,7 @@ describe("Protector's never-sell grant", () => {
 describe("protectSteps", () => {
   it("starts on what's saved: no change, nothing to save", () => {
     expect(protectSteps(fullOn, savedChoice(fullOn))).toEqual({ steps: [], blocked: null });
-    expect(savedChoice(off)).toEqual({ sellOn: false, keepMix: false, never: [] });
+    expect(savedChoice(off)).toEqual({ sellOn: false, keepMix: false, never: [], line: 10_300, target: 11_200 });
   });
 
   it("while it's off, saving switches it on: repay from cash, then selling if chosen, neither with a limit", () => {

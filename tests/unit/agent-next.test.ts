@@ -90,15 +90,27 @@ describe("agentNexts: each agent's rule on live data", () => {
     const at = (healthFactor: number | null, debtUsd: number, protectOn = true) =>
       actWarning({ healthFactor, totalBackingUsd: 2_000, avgCf: 0.7, debtUsd, numbers, protectOn });
     // 1.077: in Act, above 1.03. Back to 1.12 takes $50.
-    expect(at(1_400 / 1_300, 1_300)).toEqual({ addUsd: 50, protectOn: true });
-    expect(at(1_400 / 1_300, 1_300, false)).toEqual({ addUsd: 50, protectOn: false });
+    expect(at(1_400 / 1_300, 1_300)).toEqual({
+      addUsd: 50,
+      protectOn: true,
+      protect: { line: numbers.triggerHf, target: numbers.targetHf },
+    });
+    expect(at(1_400 / 1_300, 1_300, false)).toEqual({
+      addUsd: 50,
+      protectOn: false,
+      protect: { line: numbers.triggerHf, target: numbers.targetHf },
+    });
     expect(at(1.03, 1_400 / 1.03)).toMatchObject({ protectOn: true });
     // Watch, under Protect's line with Protect on (it acts itself), or nothing owed: no card.
     expect(at(1.1, 1_400 / 1.1)).toBeNull();
     expect(at(1_400 / 1_380, 1_380)).toBeNull();
     expect(at(null, 0)).toBeNull();
     // Protect off: nothing acts under its line, so the warning stays. Back to 1.12 from $1,380 owed takes $130.
-    expect(at(1_400 / 1_380, 1_380, false)).toEqual({ addUsd: 130, protectOn: false });
+    expect(at(1_400 / 1_380, 1_380, false)).toEqual({
+      addUsd: 130,
+      protectOn: false,
+      protect: { line: numbers.triggerHf, target: numbers.targetHf },
+    });
   });
 
   it("shows the weekend card only: before the Friday freeze, when a 15% drop would take the credit under Aave's line", () => {

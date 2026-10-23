@@ -4,12 +4,12 @@ import { useEffect, useRef } from "react";
 import { useTx, type TxPlan } from "@/hooks/useTx";
 import type { useAgents } from "@/hooks/useAgents";
 import { protectBatch, type ProtectStep } from "@/lib/agents/protect";
-import { buildSetKeepMixCalls } from "@/lib/agents/settings";
+import { buildSetKeepMixCalls, buildSetProtectCalls } from "@/lib/agents/settings";
 
 /**
  * Saves Protect's settings (lib/agents/protect.ts `protectSteps`) in one batch, one Face ID (`protectBatch`, useAgents
  * `changePlan`, Adrian 2026-10-20): each new grant approved and registered, the grant it replaces and selling's grants
- * when it's switched off revoked, and "Sells first", through the one write path (useTx). The batch is atomic: one that
+ * when it's switched off revoked, the line and target, and "Sells first", through the one write path (useTx). The batch is atomic: one that
  * didn't go through changed nothing, and the next Save sends it again. It opens from the tap with nothing awaited
  * before it: the settings body prepares it (`usePrepare(prep, planFor(steps))`). `onSaved` runs once it has landed.
  */
@@ -35,7 +35,10 @@ export function useProtectSave(account: `0x${string}`, agents: ReturnType<typeof
     return agents.changePlan({
       grants: batch.grants,
       off: batch.off,
-      settings: batch.keepMix === undefined ? [] : buildSetKeepMixCalls(account, batch.keepMix),
+      settings: [
+        ...(batch.lines ? buildSetProtectCalls(account, batch.lines.line, batch.lines.target) : []),
+        ...(batch.keepMix === undefined ? [] : buildSetKeepMixCalls(account, batch.keepMix)),
+      ],
     });
   }
 

@@ -1,11 +1,13 @@
 import { EQUITIES } from "@/lib/tokens/registry";
+import { DEFAULT_LINES, linesOk } from "@/lib/agents/lines";
 import { stockLimitsRaw, type StockLimits } from "@/lib/agents/permissions";
 
 /*
- * Protect's settings (the agent sheet, JUSTALAB-DECISIONS.md "From the Agents redesign"): repay from cash (job 1, always
- * first), selling backing stock as its own grant (job 2, decision 5), what it sells first (GooseGuard's `keepMix`) and
- * the never-sell list (stocks left out of the sell grant). No amount limit (decision 9): there is no limit to choose.
- * Pure, so the steps a save takes are tested.
+ * Protect's settings (the agent sheet, JUSTALAB-DECISIONS.md "From the Agents redesign"): where it steps in and what it
+ * brings the credit back to (GooseGuard's `setProtect`, decision 3), repay from cash (job 1, always first), selling
+ * backing stock as its own grant (job 2, decision 5), what it sells first (GooseGuard's `keepMix`) and the never-sell
+ * list (stocks left out of the sell grant). No amount limit (decision 9): there is no limit to choose. Pure, so the
+ * steps a save takes are tested.
  */
 
 /** What the chain says Protect runs with now. */
@@ -16,16 +18,25 @@ export type ProtectSaved = {
   sell: { limitsRaw: StockLimits } | null;
   /** GooseGuard's "Keep my mix"; null until read (or with no Guard). */
   keepMix: boolean | null;
+  /** The account's own line and target (GooseGuard's `linesOf`, lib/agents/lines.ts units); null until read. */
+  lines: { line: number; target: number } | null;
 };
 
-/** What the screen shows: the saved settings until the user changes one. */
-export type ProtectChoice = { sellOn: boolean; keepMix: boolean; never: readonly number[] };
+/** What the screen shows: the saved settings until the user changes one. `line` and `target` in the Guard's units. */
+export type ProtectChoice = {
+  sellOn: boolean;
+  keepMix: boolean;
+  never: readonly number[];
+  line: number;
+  target: number;
+};
 
 /**
- * What a save changes: "Sells first" (GooseGuard's `setKeepMix`), a new grant, or selling's turn-off, all in one
- * batch, one Face ID (`protectBatch`).
+ * What a save changes: the line and target (GooseGuard's `setProtect`), "Sells first" (`setKeepMix`), a new grant, or
+ * selling's turn-off, all in one batch, one Face ID (`protectBatch`).
  */
 export type ProtectStep =
+  | { kind: "lines"; line: number; target: number }
   | { kind: "keepMix"; on: boolean }
   | { kind: "grant"; job: "protect" }
   | { kind: "grant"; job: "sell"; limitsRaw: StockLimits }
@@ -45,6 +56,7 @@ export function savedChoice(saved: ProtectSaved): ProtectChoice {
     sellOn: saved.sell !== null,
     keepMix: saved.keepMix ?? false,
     never: neverSellOf(saved.sell?.limitsRaw),
+    ...(saved.lines ?? DEFAULT_LINES),
   };
 }
 
@@ -59,10 +71,10 @@ export function sellLimitsFor(never: readonly number[]): StockLimits {
 }
 
 /**
- * What saving `choice` takes, in order, from what is `saved`: "Sells first" (only while selling stays on), then the
- * repay grant while it's off (saving switches Protect on), then the sell grant (switched on, or its never-sell list
- * changed) or its turn-off. No grant has a limit. `blocked` says why it can't save: every stock is on the never-sell
- * list.
+ * What saving `choice` takes, in order, from what is `saved`: the line and target when either changed (once read),
+ * "Sells first" (only while selling stays on), then the repay grant while it's off (saving switches Protect on), then
+ * the sell grant (switched on, or its never-sell list changed) or its turn-off. No grant has a limit. `blocked` says
+ * why it can't save: every stock is on the never-sell list, or a target the Guard won't take.
  */
 export function protectSteps(
   saved: ProtectSaved,
@@ -73,6 +85,11 @@ export function protectSteps(
   if (choice.sellOn && choice.never.length >= EQUITIES.length) {
     return { steps, blocked: "Leave at least one stock Protector may sell." };
   }
+  if (!linesOk(choice.line, choice.target)) {
+    return { steps, blocked: "Bring your credit back at least 0.05 above where Protector steps in." };
+  }
+  if (saved.lines && (choice.line !== saved.lines.line || choice.target !== saved.lines.target))
+    steps.push({ kind: "lines", line: choice.line, target: choice.target });
   if (choice.sellOn && saved.keepMix !== null && choice.keepMix !== saved.keepMix)
     steps.push({ kind: "keepMix", on: choice.keepMix });
   // Repaying from cash always comes first: while it's off, any save switches it on.
@@ -86,13 +103,14 @@ export function protectSteps(
 /**
  * A save's one batch (Adrian, 2026-10-20: "the permission, the cash move and the registration in one signature"): its
  * new grants, each approved and registered (and the grant each replaces revoked), selling's turn-off (revoked and
- * unregistered) when it's switched off, and "Sells first" when it changed; null when there's nothing to save.
- * useProtectSave signs it through useTx (useAgents `changePlan`).
+ * unregistered) when it's switched off, and the line and target and "Sells first" when they changed; null when there's
+ * nothing to save. useProtectSave signs it through useTx (useAgents `changePlan`).
  */
 export function protectBatch(steps: readonly ProtectStep[]): {
   grants: { job: ProtectJob; limitsRaw?: StockLimits }[];
   off: ProtectJob[];
   keepMix?: boolean;
+  lines?: { line: number; target: number };
 } | null {
   if (steps.length === 0) return null;
   const grants = steps.flatMap((s) =>
@@ -100,7 +118,13 @@ export function protectBatch(steps: readonly ProtectStep[]): {
   );
   const off = steps.flatMap((s) => (s.kind === "revoke" ? [s.job] : []));
   const keep = steps.find((s) => s.kind === "keepMix");
-  return { grants, off, ...(keep && { keepMix: keep.on }) };
+  const lines = steps.find((s) => s.kind === "lines");
+  return {
+    grants,
+    off,
+    ...(keep && { keepMix: keep.on }),
+    ...(lines && { lines: { line: lines.line, target: lines.target } }),
+  };
 }
 
 /**

@@ -8,7 +8,8 @@ import { SheetShell, SheetSteps } from "../kit/SheetShell";
 import { LevelBar } from "./ProtectCard";
 import { MixPicture } from "./RebalanceCard";
 import { CASH_AGENT } from "@/config/risk";
-import { AGENTS_GUIDE as G } from "@/lib/agents/guide";
+import { AGENTS_GUIDE as G, protectGuideSteps } from "@/lib/agents/guide";
+import type { ProtectNumbers } from "@/lib/agents/lines";
 import type { MixSlot } from "@/lib/agents/rebalanceCard";
 
 /*
@@ -48,7 +49,16 @@ const MIX: MixSlot[] = [
   { reserveId: 6, targetBps: 2_000, offset: 0, side: null, out: null },
 ];
 
-export function AgentsGuideSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function AgentsGuideSheet({
+  open,
+  onClose,
+  protect,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** Protector's own line and target; the defaults until read. */
+  protect?: ProtectNumbers;
+}) {
   return (
     <SheetShell
       open={open}
@@ -58,7 +68,12 @@ export function AgentsGuideSheet({ open, onClose }: { open: boolean; onClose: ()
       description={G.lead}
     >
       <SheetSteps stepKey="agents-guide" className="flex flex-col gap-3 leading-[normal]">
-        <Agent agent="Protector" tag={G.protect.tag} steps={G.protect.steps} note={G.protect.note}>
+        <Agent
+          agent="Protector"
+          tag={G.protect.tag}
+          steps={protect ? protectGuideSteps(protect) : G.protect.steps}
+          note={G.protect.note}
+        >
           <LevelBar bar={PROTECT_BAR} />
         </Agent>
         <Agent agent="Rebalancer" tag={G.rebalance.tag} steps={G.rebalance.steps} note={G.rebalance.note}>

@@ -1,4 +1,4 @@
-import { ACT_LINE, type CreditLine } from "@/config/risk";
+import { ACT_LINE, type CreditLine, stopsAtAct } from "@/config/risk";
 import { LINE_MOVED } from "@/lib/creditBuy/copy";
 import { statusFor, type Status } from "@/lib/risk/status";
 import type { HealthFloor } from "@/lib/tx/prepared";
@@ -24,7 +24,7 @@ export const FREE_UP_BLOCKED = {
  */
 export const freeUpFloor = (line: CreditLine = ACT_LINE): HealthFloor => ({
   minHf: line.stopHf,
-  stop: line.intoAct ? LINE_MOVED : FREE_UP_BLOCKED.act,
+  stop: stopsAtAct(line) ? FREE_UP_BLOCKED.act : LINE_MOVED,
 });
 
 /** Under ACT_LINE: stopped in Act. */

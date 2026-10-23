@@ -1,4 +1,4 @@
-import { CASH_AGENT } from "@/config/risk";
+import { backToText, DEFAULT_PROTECT, protectHfText, type ProtectNumbers } from "@/lib/agents/lines";
 import type { AgentJob } from "@/lib/agents/permissions";
 import type { AgentStatus } from "@/lib/agents/status";
 import { formatUsdTrim } from "@/lib/formatting";
@@ -40,33 +40,28 @@ export const AGENT_NAME: Record<Agent, Exclude<AgentName, "Agents">> = {
   rebalance: "Rebalancer",
 };
 
-/** Health factors as the app writes them: "1.03", "1.12". */
-export const hfText = (hf: number) => hf.toFixed(2);
-/** Protect's line and target as the copy names them (the deploy defaults, config/risk.ts CASH_AGENT): "1.03", "1.12". */
-export const PROTECT_LINE = hfText(CASH_AGENT.triggerHf);
-export const PROTECT_TARGET = hfText(CASH_AGENT.targetHf);
-const LINE = PROTECT_LINE;
-const TARGET = PROTECT_TARGET;
+type AgentCopy = { does: string; lead: string; never: string };
 
 /**
- * Protect's rule in one line (Adrian, 2026-10-19: Protect's line is 1.03, Act is a warning only), wherever Protect is
- * named. Once it steps in, it goes on until the credit is back at the target.
+ * What each agent does, in under six words for its row and in a line for its sheet, and what it never does. Protect's
+ * rule in one line (Adrian, 2026-10-19: Protect's line is 1.03, Act is a warning only) names the account's own line
+ * and target (decision 3): once it steps in, it goes on until the credit is back at the target.
  */
-export const PROTECT_RULE = `Steps in only if your credit falls under ${LINE}, and brings it back to ${TARGET}.`;
-
-/** What each agent does, in under six words for its row and in a line for its sheet, and what it never does. */
-export const AGENT_COPY: Record<Agent, { does: string; lead: string; never: string }> = {
-  protect: {
-    does: `Steps in under ${LINE}`,
-    lead: `${PROTECT_RULE} It repays from your cash, and can sell backing stock if cash isn’t enough.`,
-    never: `Protector does nothing until your credit falls under ${LINE}. It never sells a stock that doesn’t back your credit.`,
-  },
-  rebalance: {
-    does: "Keeps your mix on target",
-    lead: "Up to once a day, it sells what grew too big to buy what fell short.",
-    never: "Rebalancer never touches your cash or the stocks backing your credit.",
-  },
-};
+function agentCopy(agent: Agent, n: ProtectNumbers): AgentCopy {
+  if (agent === "rebalance")
+    return {
+      does: "Keeps your mix on target",
+      lead: "Up to once a day, it sells what grew too big to buy what fell short.",
+      never: "Rebalancer never touches your cash or the stocks backing your credit.",
+    };
+  const line = protectHfText(n.line);
+  const rule = `Steps in only if your credit falls under ${line}, and brings it back to ${protectHfText(n.target)}.`;
+  return {
+    does: `Steps in under ${line}`,
+    lead: `${rule} It repays from your cash, and can sell backing stock if cash isn’t enough.`,
+    never: `Protector does nothing until your credit falls under ${line}. It never sells a stock that doesn’t back your credit.`,
+  };
+}
 
 /** An agent's state from its jobs': not live, loading, on (any job runs), starting, else off. */
 export function agentStatus(agent: Agent, status: Readonly<Record<AgentJob, AgentStatus>>): AgentStatus {
@@ -94,6 +89,9 @@ export type AgentItem = {
   agent: Agent;
   name: Exclude<AgentName, "Agents">;
   does: string;
+  /** The sheet's line under its title, and what the agent never does. */
+  lead: string;
+  never: string;
   status: AgentStatus;
   /** The switch: on while the agent runs or is starting. */
   on: boolean;
@@ -103,16 +101,19 @@ export type AgentItem = {
 type AgentItemsInput = {
   status: Readonly<Record<AgentJob, AgentStatus>>;
   next: Readonly<Record<Agent, Next>>;
+  /** Protect's own line and target; the defaults until they're read. */
+  protect?: ProtectNumbers;
 };
 
 /** The two rows, with no limit on either. */
 export function agentItems(i: AgentItemsInput): AgentItem[] {
   return AGENTS.map((agent) => {
     const status = agentStatus(agent, i.status);
+    const copy = agentCopy(agent, i.protect ?? DEFAULT_PROTECT);
     return {
       agent,
       name: AGENT_NAME[agent],
-      does: AGENT_COPY[agent].does,
+      ...copy,
       status,
       on: status === "on" || status === "starting",
       line: nextLine(status, i.next[agent]),
@@ -149,7 +150,7 @@ export type AgentCard = {
  * not yet under Protect's line, Protect on or off. A warning only: what repaying brings it back to Watch, and whether
  * Protect is on to step in at its line.
  */
-export type ActCard = { addUsd: number; protectOn: boolean };
+export type ActCard = { addUsd: number; protectOn: boolean; protect: ProtectNumbers };
 
 /**
  * The weekend card (lib/agents/rules/protect.ts `weekendHeadsUp`): no move, a card only. Before prices pause, credit
@@ -173,7 +174,7 @@ export function protectWarnings(i: { act: ActCard | null; weekend: WeekendCard |
       tone: "act",
       agent: "Protector",
       text: "Your credit is in Act.",
-      sub: `${i.act.protectOn ? `Protector steps in at ${LINE}.` : "Protector is off."} Repaying ${formatUsdTrim(i.act.addUsd)} now brings it back to Watch.`,
+      sub: `${i.act.protectOn ? `Protector steps in at ${protectHfText(i.act.protect.line)}.` : "Protector is off."} Repaying ${formatUsdTrim(i.act.addUsd)} now brings it back to ${backToText(i.act.protect)}.`,
       actions: money,
     });
   if (i.weekend)

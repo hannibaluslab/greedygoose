@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_PROTECT } from "@/lib/agents/lines";
 import { dayChange, protectCard, protectCardLabel, type ProtectCardInput } from "@/lib/agents/protectCard";
 
 const NOW = 1_760_000_000;
@@ -59,7 +60,9 @@ describe("Protector's card on the Agents overview: one pill, the credit health, 
       line2: "Nothing steps in while it’s off.",
       bar: { guarded: false },
     });
-    expect(card({ status: "off", hf: 1.06, act: { addUsd: 54, protectOn: false } })).toMatchObject({
+    expect(
+      card({ status: "off", hf: 1.06, act: { addUsd: 54, protectOn: false, protect: DEFAULT_PROTECT } }),
+    ).toMatchObject({
       pill: { text: "Off", tone: "act" },
       word: "Act",
       line1: "Your credit is in Act. Nothing steps in.",
@@ -86,7 +89,7 @@ describe("Protector's card on the Agents overview: one pill, the credit health, 
   });
 
   it("in Act above Protector's line: still On, the gap back to Watch", () => {
-    expect(card({ hf: 1.07, act: { addUsd: 45, protectOn: true } })).toMatchObject({
+    expect(card({ hf: 1.07, act: { addUsd: 45, protectOn: true, protect: DEFAULT_PROTECT } })).toMatchObject({
       pill: { text: "On", tone: "on" },
       word: "Act",
       line1: "Steps in if your credit falls under 1.03.",
@@ -113,10 +116,15 @@ describe("Protector's card on the Agents overview: one pill, the credit health, 
     // A grant waiting for its batch beats everything; a rescue beats failed runs; failed runs beat Act.
     expect(card({ status: "starting", rescuing: true, refused: 5 }).pill.text).toBe("Needs you");
     expect(card({ rescuing: true, refused: 5, hf: 1.01 }).pill.text).toBe("Working");
-    expect(card({ refused: 5, hf: 1.07, act: { addUsd: 45, protectOn: true } }).pill.text).toBe("Retrying");
     expect(
-      card({ hf: 1.07, act: { addUsd: 45, protectOn: true }, weekend: { addUsd: 1, dropPct: 15, when: "x" } }).pill
-        .text,
+      card({ refused: 5, hf: 1.07, act: { addUsd: 45, protectOn: true, protect: DEFAULT_PROTECT } }).pill.text,
+    ).toBe("Retrying");
+    expect(
+      card({
+        hf: 1.07,
+        act: { addUsd: 45, protectOn: true, protect: DEFAULT_PROTECT },
+        weekend: { addUsd: 1, dropPct: 15, when: "x" },
+      }).pill.text,
     ).toBe("On");
   });
 

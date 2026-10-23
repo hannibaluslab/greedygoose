@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseUnits } from "viem";
-import { ACT_LINE, creditLineFor, pastStop } from "@/config/risk";
+import { ACT_LINE, creditLineFor, pastStop, stopsAtAct } from "@/config/risk";
 import { protectRuns } from "@/lib/cash";
 import {
   CREDIT_FLOOR,
@@ -38,6 +38,40 @@ describe("the line", () => {
     expect(creditLineFor({ wallOpen: false, protectOn: true })).toBe(ACT_LINE);
     expect(creditLineFor({ wallOpen: false, protectOn: false })).toBe(ACT_LINE);
     expect(ACT_LINE).toEqual({ capHf: 1.12, stopHf: 1.1, intoAct: false });
+  });
+
+  it("follows the account's own Protect line (decision 3): credit stops 0.02 over it, a plan in Act only under Act", () => {
+    // Up to 1.10 the cap stays ACT_LINE's while the Wall is closed: it already sits 0.02 over 1.10.
+    expect(creditLineFor({ wallOpen: false, protectOn: true, protectLine: 1.1 })).toBe(ACT_LINE);
+    expect(creditLineFor({ wallOpen: false, protectOn: true, protectLine: 1.2 })).toEqual({
+      capHf: 1.22,
+      stopHf: 1.2,
+      intoAct: false,
+    });
+    expect(creditLineFor({ wallOpen: true, protectOn: true, protectLine: 1.05 })).toEqual({
+      capHf: 1.07,
+      stopHf: 1.05,
+      intoAct: true,
+    });
+    // A line in Act still lets a plan end in Act, so the Wall's tick is asked, as for the default 1.03.
+    expect(creditLineFor({ wallOpen: true, protectOn: true, protectLine: 1.09 })).toEqual({
+      capHf: 1.11,
+      stopHf: 1.09,
+      intoAct: true,
+    });
+    expect(creditLineFor({ wallOpen: true, protectOn: true, protectLine: 1.1 })).toEqual({
+      capHf: 1.12,
+      stopHf: 1.1,
+      intoAct: false,
+    });
+    // Which copy a stop takes: "in Act" only where it is Act; a raised line is a limit.
+    expect(stopsAtAct(ACT_LINE)).toBe(true);
+    expect(stopsAtAct(ON)).toBe(false);
+    expect(stopsAtAct(creditLineFor({ wallOpen: true, protectOn: true, protectLine: 1.1 }))).toBe(true);
+    expect(stopsAtAct(creditLineFor({ wallOpen: false, protectOn: true, protectLine: 1.2 }))).toBe(false);
+    // Off, the line is Aave's or ACT_LINE whatever was set.
+    expect(creditLineFor({ wallOpen: true, protectOn: false, protectLine: 1.2 })).toEqual(OFF);
+    expect(creditLineFor({ wallOpen: false, protectOn: false, protectLine: 1.2 })).toBe(ACT_LINE);
   });
 
   it("with the Wall open: 1.05 over Protector's 1.03 while it runs, Aave's own 1.0 when it doesn't", () => {

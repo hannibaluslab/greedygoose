@@ -7,6 +7,7 @@ import {
   type Log,
   type ParseEventLogsReturnType,
 } from "viem";
+import { DEFAULT_PROTECT } from "@/lib/agents/lines";
 import { guardAbi } from "@/lib/agents/abis/GooseGuard";
 import { unpackMix } from "@/lib/agents/mix";
 import { JOBS, type AgentJob } from "@/lib/agents/permissions";
@@ -34,7 +35,9 @@ export type AgentEvent =
   | { kind: "top-up-invested"; amountRaw: bigint; boughtRaw: readonly bigint[] }
   | { kind: "converted"; coin: Address; amountInRaw: bigint; usdcOutRaw: bigint }
   /** A move the Guard refused, and why: its error's selector, or the inner revert's (0 for none). Retried next round. */
-  | { kind: "refused"; move: MoveKind; reason: Hex };
+  | { kind: "refused"; move: MoveKind; reason: Hex }
+  /** Protect's own line and target, set by the account (`setProtect`, decision 3), as health factors. No row. */
+  | { kind: "lines-set"; line: number; target: number };
 
 /** One decoded event, where it sits on the chain. Health factors are WAD; amounts are raw units. */
 export type AgentLog = AgentEvent & { key: string; blockNumber: bigint; logIndex: number; txHash: Hex };
@@ -89,7 +92,11 @@ const DECODE: { [N in EventName]: (a: Args<N>) => AgentEvent | null } = {
     const move = MOVES[a.kind];
     return move ? { kind: "refused", move, reason: a.reason } : null;
   },
-  ProtectSet: () => null,
+  // (0, 0) puts the account back on the defaults.
+  ProtectSet: (a) => ({
+    kind: "lines-set",
+    ...(a.line === 0 && a.target === 0 ? DEFAULT_PROTECT : { line: a.line / 1e4, target: a.target / 1e4 }),
+  }),
   RunnerSet: () => null,
   Paused: () => null,
   ChangeQueued: () => null,

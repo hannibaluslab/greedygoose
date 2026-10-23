@@ -11,7 +11,7 @@ import type { useBuyQuote } from "@/hooks/useBuyQuote";
 import type { useCreditBuy } from "@/hooks/useCreditBuy";
 import type { PositionData } from "@/hooks/usePosition";
 import { monthlyCost } from "@/lib/aave/math";
-import { PROTECT_LINE } from "@/lib/agents/list";
+import { backToText, protectHfText, type ProtectNumbers } from "@/lib/agents/lines";
 import { backers, shortNames, type BackingOption, type BackingPick, type CreditPlan } from "@/lib/creditBuy";
 import {
   ceilCents,
@@ -316,7 +316,7 @@ function BatchNote({
         `exactly ${formatUsd(usd)} is approved for the ${VENUE_LABEL[venue]} router and swapped`,
       ])}
       . You’ll owe {formatUsd(data.debtUsd + amount)}, backed by {shortNames(againstNames)}.{" "}
-      {riskNote(againstNames, protectOn, sellOn)}
+      {riskNote(againstNames, protectOn, sellOn, data.protect)}
     </p>
   );
 }
@@ -326,13 +326,14 @@ function BatchNote({
  * the network fee comes from cash, and Protect repays from savings first (D11). It says Protect sells only while its
  * selling is on, as Earn with stocks' line does (lib/earnWithStocks/copy.ts).
  */
-function riskNote(backers: string[], protectOn: boolean, sellOn: boolean): string {
+function riskNote(backers: string[], protectOn: boolean, sellOn: boolean, lines: ProtectNumbers): string {
   const one = backers.length === 1 ? backers[0] : null;
-  // Protect's line (Adrian, 2026-10-19): Protect steps in only under 1.03, and brings the credit back to Watch.
+  // Protect's line (Adrian, 2026-10-19): Protect steps in only under its line (1.03 unless the user set another), and
+  // brings the credit back to its target.
   if (protectOn) {
-    const falls = `${one ? `If ${one} falls` : "If your stocks fall"}, you can repay. If your credit falls under ${PROTECT_LINE}`;
+    const falls = `${one ? `If ${one} falls` : "If your stocks fall"}, you can repay. If your credit falls under ${protectHfText(lines.line)}`;
     return sellOn
-      ? `${falls}, Protector repays from your cash, then sells a little ${one ?? "of them"} to bring it back to Watch.`
+      ? `${falls}, Protector repays from your cash, then sells a little ${one ?? "of them"} to bring it back to ${backToText(lines)}.`
       : `${falls}, Protector repays from your cash. Protector won’t sell your ${one ? "stock" : "stocks"}.`;
   }
   return one

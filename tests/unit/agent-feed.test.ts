@@ -3,6 +3,7 @@ import { maxUint256 } from "viem";
 import { toFunctionSelector, type Hex } from "viem";
 import type { AgentEvent } from "@/lib/agents/events";
 import { collapseRefused, describeAgentEvent, refusedInARow, type MoveContext, type Words } from "@/lib/agents/feed";
+import type { ProtectNumbers } from "@/lib/agents/lines";
 import { STATUS_LABEL } from "@/lib/risk/status";
 import { CASH_COINS } from "@/lib/tokens/stables";
 
@@ -14,8 +15,8 @@ const usdc = (x: number) => BigInt(Math.round(x * 1e6));
 const prices = [250e8, 0, 0, 0, 0, 180e8, 383e8].map(BigInt);
 const sevenWith = (r: number, raw: bigint) => Array.from({ length: 7 }, (_, i) => (i === r ? raw : 0n));
 
-function row(e: AgentEvent & { inARow?: number }, ctx?: MoveContext) {
-  const m = describeAgentEvent(e, ctx)!;
+function row(e: AgentEvent & { inARow?: number }, ctx?: MoveContext, protect?: ProtectNumbers) {
+  const m = describeAgentEvent(e, ctx, protect)!;
   return { by: m.by, line: text(m.line), details: Object.fromEntries(m.details.map((d) => [d.label, text(d.value)])) };
 }
 
@@ -44,6 +45,23 @@ describe("describeAgentEvent: the Agents board's rows", () => {
         "My cash": "Not touched",
       },
     });
+  });
+
+  it("says why with the account's own line and target (decision 3)", () => {
+    const sale: AgentEvent = {
+      kind: "sold",
+      sharesRaw: sevenWith(5, 100_000_000n),
+      repaidRaw: usdc(178.2),
+      hfBefore: hf(1.08),
+      hfAfter: hf(1.2),
+    };
+    // 1.08 is under a 1.10 line: it fell under it, rather than a rescue going on above 1.03.
+    expect(row(sale, { pricesRaw: prices }, { line: 1.1, target: 1.2 }).details.Why).toBe(
+      "Your credit fell under 1.10.",
+    );
+    expect(row({ ...sale, hfBefore: hf(1.15) }, { pricesRaw: prices }, { line: 1.1, target: 1.2 }).details.Why).toBe(
+      "Protector went on until 1.20.",
+    );
   });
 
   it("names a sale that goes on through a rescue above 1.03, and what the swaps left in the wallet", () => {

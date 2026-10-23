@@ -3,13 +3,14 @@ import { assertAllowed } from "@/lib/allowlist";
 import type { Call } from "@/lib/aave/tx";
 import { GOOSE_GUARD } from "@/lib/agents/config";
 import { guardAbi } from "@/lib/agents/abis/GooseGuard";
+import { linesOk } from "@/lib/agents/lines";
 import { isMix, packMix } from "@/lib/agents/mix";
 import { KEEP_MAX_RAW } from "@/lib/agents/topUps";
 
 /**
  * The agents' settings in GooseGuard, which only the account itself sets (the Guard reads `msg.sender`), each riding in
- * a change's one batch: the Rebalancer's mix, Protect · sell's "Keep my mix", Rebalance's "Top-ups go into my mix" with
- * Keep as cash, and the end of a rescue when the user takes credit or repays by hand.
+ * a change's one batch: the Rebalancer's mix, Protect's line and target, Protect · sell's "Keep my mix", Rebalance's
+ * "Top-ups go into my mix" with Keep as cash, and the end of a rescue when the user takes credit or repays by hand.
  */
 
 function guard() {
@@ -24,6 +25,22 @@ export function buildSetMixCalls(user: `0x${string}`, weightsBps: readonly numbe
     {
       to: guard(),
       data: encodeFunctionData({ abi: guardAbi, functionName: "setMix", args: [packMix(weightsBps)] }),
+      value: 0n,
+    },
+  ]);
+}
+
+/**
+ * `setProtect(line, target)`: where Protect steps in and what it brings the credit back to, in the Guard's units
+ * (lib/agents/lines.ts: 10300 = 1.03). Only what the Guard takes: a line of 1.03 or more, a target 0.05 above it, at
+ * most 1.40.
+ */
+export function buildSetProtectCalls(user: `0x${string}`, line: number, target: number): Call[] {
+  if (!linesOk(line, target)) throw new Error("Protector's numbers are out of range");
+  return assertAllowed(user, [
+    {
+      to: guard(),
+      data: encodeFunctionData({ abi: guardAbi, functionName: "setProtect", args: [line, target] }),
       value: 0n,
     },
   ]);

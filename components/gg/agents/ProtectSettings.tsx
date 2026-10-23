@@ -14,7 +14,7 @@ import { usePosition } from "@/hooks/usePosition";
 import { useProtectSave } from "@/hooks/useProtectSave";
 import { usePrepare, type TxPhase, type TxPlan, type TxPrep } from "@/hooks/useTx";
 import { AGENTS_LIVE } from "@/lib/agents/config";
-import { PROTECT_LINE } from "@/lib/agents/list";
+import { lineText, TARGET_GAP } from "@/lib/agents/lines";
 import {
   protectAllows,
   protectBatch,
@@ -27,14 +27,14 @@ import {
 import type { AgentStatus } from "@/lib/agents/status";
 import { inWords } from "@/lib/formatting";
 import { EQUITIES } from "@/lib/tokens/registry";
-import { ORDER, SaveSummary, SellChoices, saveState } from "./ProtectSettingsParts";
+import { ORDER, ProtectLines, SaveSummary, SellChoices, saveState } from "./ProtectSettingsParts";
 
 const running = (s: AgentStatus) => s === "on" || s === "starting";
 
 /**
- * Protect's settings, for the agent sheet's settings slot: repay from cash (always first), selling backing stock as its
- * own switch (job 2), what it sells first (`setKeepMix`) and the never-sell list (stocks left out of a new sell
- * grant). No limit to type (decision 9). Everything comes from the chain through the agents' hooks; saving opens JAW's
+ * Protect's settings, for the agent sheet's settings slot: where it steps in and what it brings the credit back to
+ * (`setProtect`), repay from cash (always first), selling backing stock as its own switch (job 2), what it sells first
+ * (`setKeepMix`) and the never-sell list (stocks left out of a new sell grant). No limit to type (decision 9). Everything comes from the chain through the agents' hooks; saving opens JAW's
  * sheet once a change (`useProtectSave`). Without a Guard it renders the real figures and saves nothing ("Not live
  * yet").
  */
@@ -46,9 +46,17 @@ export function ProtectSettings({ account, onDone }: { account: `0x${string}`; o
   const fee = useFeeSupport();
   const live = AGENTS_LIVE;
   const [round, setRound] = useState(0);
+  // After a save, until the Guard is read again: nothing to change or save meanwhile (the screen starts over then).
+  const [refreshing, setRefreshing] = useState(false);
   const saving = useProtectSave(account, agents, () => {
     toast.success("Protector saved");
-    setRound((r) => r + 1); // the screen starts again from what the chain now says
+    // The screen starts again from what the chain now says, once read again: the Guard's settings refetch every 20 s,
+    // and starting over from the old line and target would let the next Save send them back.
+    setRefreshing(true);
+    void Promise.resolve(settings?.refetch()).finally(() => {
+      setRefreshing(false);
+      setRound((r) => r + 1);
+    });
     onDone?.();
   });
 
@@ -60,6 +68,7 @@ export function ProtectSettings({ account, onDone }: { account: `0x${string}`; o
     repayOn: running(agents.status.protect) && !!protect,
     sell: running(agents.status.sell) && sell?.limitsRaw ? { limitsRaw: sell.limitsRaw } : null,
     keepMix: settings?.keepMix ?? null,
+    lines: settings?.lines ?? null,
   };
   return (
     <ProtectSettingsView
@@ -67,6 +76,7 @@ export function ProtectSettings({ account, onDone }: { account: `0x${string}`; o
       live={live}
       preview={!address || !isAddressEqual(address, account)}
       saved={saved}
+      hf={data.healthFactor}
       backsUsd={EQUITIES.map((e) =>
         data.holdings[e.reserveId].backingRaw > 0n ? data.holdings[e.reserveId].backingUsd : 0,
       )}
@@ -74,7 +84,7 @@ export function ProtectSettings({ account, onDone }: { account: `0x${string}`; o
       waiting={fee.loading}
       phase={saving.phase}
       error={saving.error}
-      busy={saving.busy}
+      busy={saving.busy || refreshing}
       prep={saving.prep}
       planFor={saving.planFor}
       onSave={saving.save}
@@ -97,6 +107,8 @@ export type ProtectSettingsViewProps = {
   /** Not signed in as this account (the dev preview): nothing signs. */
   preview: boolean;
   saved: ProtectSaved;
+  /** The credit's health now; null with no credit. */
+  hf: number | null;
   /** What each stock backs now, in dollars, by reserve id (0 = backs nothing). */
   backsUsd: readonly number[];
   feeBlocked: boolean;
@@ -116,6 +128,7 @@ export function ProtectSettingsView({
   live,
   preview,
   saved,
+  hf,
   backsUsd,
   feeBlocked,
   waiting = false,
@@ -127,6 +140,9 @@ export function ProtectSettingsView({
   onSave,
 }: ProtectSettingsViewProps) {
   const [chosen, setChosen] = useState<Partial<ProtectChoice>>({});
+  // The target a raised line bumps is the one picked by hand (else the saved one), so lowering the line again puts
+  // that one back rather than keeping the bump.
+  const [pickedTarget, setPickedTarget] = useState<number | null>(null);
   const start = savedChoice(saved);
   const choice: ProtectChoice = { ...start, ...chosen };
   const set = (c: Partial<ProtectChoice>) => setChosen((p) => ({ ...p, ...c }));
@@ -152,6 +168,11 @@ export function ProtectSettingsView({
 
   const neverChanged = choice.never.length !== start.never.length || choice.never.some((r) => !start.never.includes(r));
   const lines = steps.flatMap((s) => {
+    if (s.kind === "lines")
+      return [
+        ...(s.line !== start.line ? [`Steps in under: ${lineText(s.line)}`] : []),
+        ...(s.target !== start.target ? [`Brings it back to: ${lineText(s.target)}`] : []),
+      ];
     if (s.kind === "keepMix") return [`Sells first: ${ORDER.find((o) => o.keepMix === s.on)!.label}`];
     if (s.kind === "revoke") return ["Selling: off"];
     if (s.job === "protect") return ["Repay from your cash: on"];
@@ -168,10 +189,22 @@ export function ProtectSettingsView({
   return (
     <div className="flex flex-col gap-3.5 leading-[normal]">
       <ManageCard className="flex flex-col px-4 py-0.5">
-        <div className="flex flex-col gap-0.5 py-[13px]">
+        <ProtectLines
+          line={choice.line}
+          target={choice.target}
+          hf={hf}
+          saved={start}
+          onLine={(line) => set({ line, target: Math.max(pickedTarget ?? start.target, line + TARGET_GAP) })}
+          onTarget={(target) => {
+            setPickedTarget(target);
+            set({ target });
+          }}
+          disabled={!live || !saved.lines || busy}
+        />
+        <div className="flex flex-col gap-0.5 border-t border-hairline py-[13px]">
           <span className="text-[15px] font-semibold">Repay from your cash</span>
           <span className="text-xs leading-[1.35] text-subtle">
-            Only under {PROTECT_LINE}, and always first. Your cash pays before any stock is sold.
+            Only under {lineText(choice.line)}, and always first. Your cash pays before any stock is sold.
           </span>
         </div>
         <div className="flex items-center gap-3 border-t border-hairline py-[13px]">
@@ -195,6 +228,7 @@ export function ProtectSettingsView({
             onNever={toggleNever}
             listedStocks={listedStocks}
             backsUsd={backsUsd}
+            lines={{ line: choice.line, target: choice.target }}
           />
         )}
       </ManageCard>
@@ -203,7 +237,7 @@ export function ProtectSettingsView({
         <SaveSummary
           off={off}
           lines={lines}
-          allows={protectAllows(steps, PROTECT_LINE, choice.never.length > 0 ? names(choice.never) : null)}
+          allows={protectAllows(steps, lineText(choice.line), choice.never.length > 0 ? names(choice.never) : null)}
         />
       )}
 

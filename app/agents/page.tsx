@@ -111,7 +111,11 @@ function Agents({ address }: { address: `0x${string}` }) {
         sellOn: runs(agents.status.sell),
       })
     : LOADING;
-  const items = agentItems({ status: agents.status, next });
+  const items = agentItems({
+    status: agents.status,
+    next,
+    protect: { line: numbers.triggerHf, target: numbers.targetHf },
+  });
 
   // The Act warning: a plain health check, Protect on or off (Adrian, 2026-10-19). A card only.
   const protectRuns = runs(agentStatus("protect", agents.status));
@@ -314,6 +318,7 @@ function Agents({ address }: { address: `0x${string}` }) {
     <>
       <AgentsView
         live={live}
+        numbers={{ line: numbers.triggerHf, target: numbers.targetHf }}
         protect={
           !position || (live && agents.status.protect === "loading") ? (
             <ProtectCardSkeleton onOpen={() => openSheet("protect")} />

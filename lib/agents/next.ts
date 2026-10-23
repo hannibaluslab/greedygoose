@@ -1,7 +1,8 @@
 import { CASH_AGENT, RISK } from "@/config/risk";
+import { protectHfText } from "@/lib/agents/lines";
 import { OFF_REASONS } from "@/lib/agents/events";
 import { OFF_WHY } from "@/lib/agents/feed";
-import { agentOf, AGENTS, hfText, type ActCard, type Agent, type Next, type WeekendCard } from "@/lib/agents/list";
+import { agentOf, AGENTS, type ActCard, type Agent, type Next, type WeekendCard } from "@/lib/agents/list";
 import { isMix, previewTrades, type MixHolding } from "@/lib/agents/mix";
 import { JOBS, type AgentJob } from "@/lib/agents/permissions";
 import { planProtect, weekendHeadsUp } from "@/lib/agents/rules/protect";
@@ -181,7 +182,9 @@ function protectNext(i: NextInput): Next {
   if (d.reason === "healthy") {
     return {
       idle:
-        status === "safe" ? "Safe. Nothing to do." : `${label}. Protector steps in at ${hfText(i.numbers.triggerHf)}`,
+        status === "safe"
+          ? "Safe. Nothing to do."
+          : `${label}. Protector steps in at ${protectHfText(i.numbers.triggerHf)}`,
     };
   }
   if (!i.sellOn) return { idle: `${label}. No cash to repay with` };
@@ -208,7 +211,9 @@ export function actWarning(i: {
   if (hf === null || i.debtUsd <= 0 || hf >= RISK.watchMin || (i.protectOn && hf < i.numbers.triggerHf)) return null;
   // Whole dollars, rounded up; a millionth of a dollar of floating-point dust doesn't add one.
   const addUsd = Math.ceil(i.debtUsd - (i.totalBackingUsd * i.avgCf) / i.numbers.targetHf - 1e-6);
-  return addUsd > 0 ? { addUsd, protectOn: i.protectOn } : null;
+  return addUsd > 0
+    ? { addUsd, protectOn: i.protectOn, protect: { line: i.numbers.triggerHf, target: i.numbers.targetHf } }
+    : null;
 }
 
 /**
@@ -253,7 +258,8 @@ export type OutlookInput = Pick<
   NextInput,
   "nowSec" | "holdings" | "mixBps" | "pacing" | "debtUsd" | "totalBackingUsd" | "avgCf"
 > & {
-  numbers: Pick<RuleNumbers, "rebalance">;
+  /** `triggerHf`: Protect's own line, which holds top-ups back above Act (the default 1.03 when absent). */
+  numbers: Pick<RuleNumbers, "rebalance"> & Partial<Pick<RuleNumbers, "triggerHf">>;
 };
 
 /**
@@ -268,8 +274,11 @@ export type RebalanceOutlook = {
   noMix: boolean;
   trades: RebalanceTrade[];
   checkAt: number;
-  /** The credit is in Act now: no top-up goes in (GooseGuard: health at least max(1.10, line)), and the trades wait. */
+  /** The credit is in Act now: the trades wait (the Planner trades only from 1.10). */
   inAct: boolean;
+  /** Top-ups wait: GooseGuard invests only from health max(1.10, Protect's line), `topUpsFrom`. */
+  topUpsHeld: boolean;
+  topUpsFrom: number;
   /** Trades are due, and the credit is in Act: the Rebalancer waits. */
   waitsInAct: boolean;
   /** The whole portfolio (free stock and stock backing credit) breaks the mix's band, by the rule's own measure. */
@@ -300,8 +309,10 @@ export function rebalanceOutlook(i: OutlookInput): RebalanceOutlook {
   // Protect's, which acts further down (Adrian, 2026-10-19).
   const hf = i.debtUsd > 0 ? (i.totalBackingUsd * i.avgCf) / i.debtUsd : Infinity;
   const inAct = hf < RISK.watchMin;
+  const topUpsFrom = Math.max(RISK.watchMin, i.numbers.triggerHf ?? CASH_AGENT.triggerHf);
+  const held = { topUpsHeld: hf < topUpsFrom, topUpsFrom };
   if (!i.mixBps || !isMix(i.mixBps) || i.mixBps.every((w) => w === 0))
-    return { noMix: true, trades: [], checkAt, inAct, waitsInAct: false, offTarget: false, blocked: null };
+    return { noMix: true, trades: [], checkAt, inAct, ...held, waitsInAct: false, offTarget: false, blocked: null };
   const mixBps = i.mixBps;
   const tradesOn = (holdings: readonly MixHolding[]) =>
     previewTrades({
@@ -330,7 +341,7 @@ export function rebalanceOutlook(i: OutlookInput): RebalanceOutlook {
           : tradesOn(whole).length > 0
             ? "credit"
             : "no-trade";
-  return { noMix: false, trades, checkAt, inAct, waitsInAct: trades.length > 0 && inAct, offTarget, blocked };
+  return { noMix: false, trades, checkAt, inAct, ...held, waitsInAct: trades.length > 0 && inAct, offTarget, blocked };
 }
 
 /** The Rebalancer's rule, said wherever credit is what holds it (its sheet always says it). */

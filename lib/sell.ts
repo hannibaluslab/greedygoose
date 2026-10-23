@@ -1,4 +1,4 @@
-import { ACT_LINE, type CreditLine } from "@/config/risk";
+import { ACT_LINE, type CreditLine, stopsAtAct } from "@/config/risk";
 import { healthAfterWithdraw, maxWithdrawUsd } from "@/lib/aave/math";
 import { buildRepayCalls, buildWithdrawCalls, fullRepayAmount, type Call } from "@/lib/aave/tx";
 import type { ActivityItem } from "@/lib/activity/decode";
@@ -161,7 +161,7 @@ function sellBlock(
   if (s.usd < SELL_LIMITS.minUsd || (from === "repay" && repayRaw === 0n)) return "too-small";
   const line = pos.line ?? ACT_LINE;
   if (from === "repay" && hfAfter !== null && hfAfter < line.stopHf && hfAfter < (pos.healthFactor ?? Infinity))
-    return line.intoAct ? "under-line" : "act";
+    return stopsAtAct(line) ? "act" : "under-line";
   if (quote.amountOut < aaveFloorRaw(sharesRaw, stock, h.priceUsd)) return "price";
   return undefined;
 }

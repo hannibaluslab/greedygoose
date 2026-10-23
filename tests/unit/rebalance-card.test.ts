@@ -148,6 +148,8 @@ describe("rebalanceOutlook: the sheet's line and the card share it", () => {
       trades: [],
       checkAt: nextRound(WED_NOON),
       inAct: false,
+      topUpsHeld: false,
+      topUpsFrom: 1.1,
       waitsInAct: false,
       offTarget: false,
       blocked: null,
@@ -163,6 +165,14 @@ describe("rebalanceOutlook: the sheet's line and the card share it", () => {
     expect(rebalanceOutlook(outlookIn({ holdings: holdings(DRIFTED), debtUsd: 1_300 })).waitsInAct).toBe(true);
     // In Act but nothing to trade: it doesn't wait for anything (a top-up going in would: the card reads `inAct`).
     expect(rebalanceOutlook(outlookIn({ debtUsd: 1_300 }))).toMatchObject({ inAct: true, waitsInAct: false });
+  });
+
+  it("holds top-ups under GooseGuard's invest line: 1.10, or Protect's own line when the user set it higher", () => {
+    // $1,200 owed on $2,000 at 70%: health 1.17, out of Act.
+    const at117 = outlookIn({ debtUsd: 1_200 });
+    expect(rebalanceOutlook(at117)).toMatchObject({ inAct: false, topUpsHeld: false, topUpsFrom: 1.1 });
+    const raised = rebalanceOutlook({ ...at117, numbers: { ...at117.numbers, triggerHf: 1.2 } });
+    expect(raised).toMatchObject({ inAct: false, topUpsHeld: true, topUpsFrom: 1.2 });
   });
 });
 

@@ -1,8 +1,8 @@
 import { decodeErrorResult, isAddressEqual, maxUint256, toFunctionSelector, type Hex } from "viem";
-import { CASH_AGENT } from "@/config/risk";
 import { guardAbi } from "@/lib/agents/abis/GooseGuard";
 import type { AgentEvent, MoveKind } from "@/lib/agents/events";
-import { AGENT_JOBS, PROTECT_LINE, PROTECT_TARGET, type Agent, type AgentName } from "@/lib/agents/list";
+import { AGENT_JOBS, type Agent, type AgentName } from "@/lib/agents/list";
+import { DEFAULT_PROTECT, protectHfText, type ProtectNumbers } from "@/lib/agents/lines";
 import type { AgentJob } from "@/lib/agents/permissions";
 import { statusFor, type Status } from "@/lib/risk/status";
 import { EQUITIES, USDC } from "@/lib/tokens/registry";
@@ -96,28 +96,29 @@ function owedRow(ctx: MoveContext) {
  * Why Protect moved: the credit fell under its line, or a rescue it started went on (above the line, under the target)
  * until the credit was back at the target.
  */
-const protectWhy = (hfBefore: bigint): Words =>
-  Number(hfBefore) / 1e18 < CASH_AGENT.triggerHf
-    ? [`Your credit fell under ${PROTECT_LINE}.`]
-    : [`Protector went on until ${PROTECT_TARGET}.`];
+const protectWhy = (hfBefore: bigint, n: ProtectNumbers): Words =>
+  Number(hfBefore) / 1e18 < n.line
+    ? [`Your credit fell under ${protectHfText(n.line)}.`]
+    : [`Protector went on until ${protectHfText(n.target)}.`];
 
 /**
  * An agent job's name in a sentence, and the agent its rows sit under. Save and Entry are switched on once, where they
  * matter, and their switches make no row (D20). No agent job has an amount limit, so the lines name none.
  */
-const JOB: Partial<Record<AgentJob, { agent: AgentName; on: string; off: string }>> = {
-  protect: {
-    agent: "Protector",
-    on: `Protector is on. If your credit falls under ${PROTECT_LINE}, it repays from your cash.`,
-    off: "Protector is off",
-  },
-  sell: {
-    agent: "Protector",
-    on: "Protector can sell backing stock.",
-    off: "Protector won’t sell",
-  },
-  rebalance: { agent: "Rebalancer", on: "Rebalancer is on.", off: "Rebalancer is off" },
-};
+const JOB: Partial<Record<AgentJob, { agent: AgentName; on: string | ((n: ProtectNumbers) => string); off: string }>> =
+  {
+    protect: {
+      agent: "Protector",
+      on: (n) => `Protector is on. If your credit falls under ${protectHfText(n.line)}, it repays from your cash.`,
+      off: "Protector is off",
+    },
+    sell: {
+      agent: "Protector",
+      on: "Protector can sell backing stock.",
+      off: "Protector won’t sell",
+    },
+    rebalance: { agent: "Rebalancer", on: "Rebalancer is on.", off: "Rebalancer is off" },
+  };
 
 /** Why a plan switches a job off, after its name ("Protector is off: …"). */
 export const OFF_WHY = {
@@ -214,12 +215,12 @@ const OFF_BAND = toFunctionSelector("OffBand()");
 const coinAmount = (raw: bigint, decimals: number) => formatCoin(Number(raw) / 10 ** decimals);
 
 /** Protect repaid from the cash: how much, the status it brought, and why. */
-function repaidMove(e: Extract<AgentEvent, { kind: "repaid" }>, ctx: MoveContext): AgentMove {
+function repaidMove(e: Extract<AgentEvent, { kind: "repaid" }>, ctx: MoveContext, n: ProtectNumbers): AgentMove {
   return {
     by: "Protector",
     line: [`Repaid ${usd(e.amountRaw)} from your cash. `, ...after(e.hfAfter)],
     details: [
-      { label: "Why", value: protectWhy(e.hfBefore) },
+      { label: "Why", value: protectWhy(e.hfBefore, n) },
       ...owedRow(ctx),
       { label: "Status", value: [...word(e.hfBefore), " → ", ...word(e.hfAfter)] },
       // Cash is savings (D15): the repay came from it (plan §6's "From your cash: $X", in the board's 82px label).
@@ -229,12 +230,12 @@ function repaidMove(e: Extract<AgentEvent, { kind: "repaid" }>, ctx: MoveContext
 }
 
 /** Protect sold backing stock to repay: what and how much, the status it brought, and why. */
-function soldMove(e: Extract<AgentEvent, { kind: "sold" }>, ctx: MoveContext): AgentMove {
+function soldMove(e: Extract<AgentEvent, { kind: "sold" }>, ctx: MoveContext, n: ProtectNumbers): AgentMove {
   return {
     by: "Protector",
     line: [`Sold ${worth(e.sharesRaw, ctx.pricesRaw)} of ${names(held(e.sharesRaw))} to repay. `, ...after(e.hfAfter)],
     details: [
-      { label: "Why", value: protectWhy(e.hfBefore) },
+      { label: "Why", value: protectWhy(e.hfBefore, n) },
       ...owedRow(ctx),
       { label: "Status", value: [...word(e.hfBefore), " → ", ...word(e.hfAfter)] },
       { label: "My cash", value: cashAfterTrade(ctx) },
@@ -255,14 +256,18 @@ const topUpsSetLine = (e: Extract<AgentEvent, { kind: "top-ups-set" }>) =>
  * (D17's words too); null for what isn't a move from the user's side: Save's and Entry's switches, a config refresh or
  * a rescue's end (no money moves), and refusals of moves with no agent on screen.
  */
-export function describeAgentEvent(e: Counted<AgentEvent>, ctx: MoveContext = {}): AgentMove | null {
+export function describeAgentEvent(
+  e: Counted<AgentEvent>,
+  ctx: MoveContext = {},
+  n: ProtectNumbers = DEFAULT_PROTECT,
+): AgentMove | null {
   switch (e.kind) {
     case "job-on": {
       const j = JOB[e.job];
       return j
         ? {
             by: j.agent,
-            line: [j.on],
+            line: [typeof j.on === "string" ? j.on : j.on(n)],
             details: [{ label: "Until", value: [DATE.format(e.end * 1000)] }],
           }
         : null;
@@ -280,9 +285,9 @@ export function describeAgentEvent(e: Counted<AgentEvent>, ctx: MoveContext = {}
         details: [{ label: "Why", value: ["Money that arrives in your account earns with the rest of your cash."] }],
       };
     case "repaid":
-      return repaidMove(e, ctx);
+      return repaidMove(e, ctx, n);
     case "sold":
-      return soldMove(e, ctx);
+      return soldMove(e, ctx, n);
     case "keep-mix":
       return {
         by: "Protector",
@@ -345,6 +350,9 @@ export function describeAgentEvent(e: Counted<AgentEvent>, ctx: MoveContext = {}
       return null;
     case "refused":
       return refusedMove(e);
+    case "lines-set":
+      // Protect's own numbers: no row of its own; the moves after it are explained with them (useAgentFeed).
+      return null;
   }
 }
 

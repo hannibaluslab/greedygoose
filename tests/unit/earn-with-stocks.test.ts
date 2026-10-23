@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_PROTECT } from "@/lib/agents/lines";
 import { decodeFunctionData, encodeFunctionData, erc20Abi } from "viem";
 import { AAVE } from "@/lib/aave/addresses";
 import { spokeAbi } from "@/lib/aave/abis/ISpoke";
@@ -286,16 +287,18 @@ describe("earnQuote: one amount", () => {
 
 describe("the words around the button", () => {
   it("says what Protector does if the stocks fall: only under 1.03, back to Watch, selling only when that's on", () => {
-    expect(earnRiskLine({ names: ["Tesla"], protect: "on", sell: "on" })).toBe(
+    expect(earnRiskLine({ names: ["Tesla"], protect: "on", sell: "on", lines: DEFAULT_PROTECT })).toBe(
       "If Tesla falls, you can repay from your cash. If your credit falls under 1.03, Protector repays from it, then sells a little Tesla to bring it back to Watch.",
     );
-    expect(earnRiskLine({ names: ["Tesla"], protect: "on", sell: "off" })).toBe(
+    expect(earnRiskLine({ names: ["Tesla"], protect: "on", sell: "off", lines: DEFAULT_PROTECT })).toBe(
       "If Tesla falls, you can repay from your cash. If your credit falls under 1.03, Protector repays from it. Protector won’t sell your stock.",
     );
-    expect(earnRiskLine({ names: ["Tesla", "NVIDIA"], protect: "off", sell: "off" })).toBe(
+    expect(earnRiskLine({ names: ["Tesla", "NVIDIA"], protect: "off", sell: "off", lines: DEFAULT_PROTECT })).toBe(
       "If your stocks fall, repay from your cash. If they fall too far, part of them can be sold to repay what you owe. Protector is off.",
     );
-    expect(earnRiskLine({ names: ["Tesla"], protect: "starting", sell: "off" })).not.toMatch(/Protector is off/);
+    expect(earnRiskLine({ names: ["Tesla"], protect: "starting", sell: "off", lines: DEFAULT_PROTECT })).not.toMatch(
+      /Protector is off/,
+    );
   });
 
   it("lists every move in small print; what a stock is stays on the stock sheet (ruling 35)", () => {
@@ -317,7 +320,7 @@ describe("the words around the button", () => {
       ...Object.values(EARN_CLOSED),
       earnDone(5),
       EARN_COSTS_MORE,
-      earnRiskLine({ names: ["Tesla"], protect: "off", sell: "off" }),
+      earnRiskLine({ names: ["Tesla"], protect: "off", sell: "off", lines: DEFAULT_PROTECT }),
       earnSmallPrint({
         backing: [{ symbol: "TSLAc", shares: 1 }],
         amountUsd: 5,

@@ -286,7 +286,7 @@ export function EarnStep({
             amountUsd: amount,
             owedUsd: data.debtUsd + amount,
             backedBy: backedBy.map((h) => h.name),
-            risk: earnRiskLine({ names: backedBy.map((h) => h.name), protect, sell }),
+            risk: earnRiskLine({ names: backedBy.map((h) => h.name), protect, sell, lines: data.protect }),
           })}
         </p>
       )}

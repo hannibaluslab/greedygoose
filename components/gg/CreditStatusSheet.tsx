@@ -5,7 +5,7 @@ import { Button } from "./kit/Button";
 import { StatusBar, StatusPill } from "./Status";
 import { AAVE_LINE_HF, RISK, type CreditLine } from "@/config/risk";
 import { useBackingFactorsRead, type PositionData } from "@/hooks/usePosition";
-import { PROTECT_LINE } from "@/lib/agents/list";
+import { protectHfText } from "@/lib/agents/lines";
 import { formatUsd } from "@/lib/formatting";
 import { healthMargins, healthParts } from "@/lib/risk/health";
 import { STATUS_LABEL, type Status } from "@/lib/risk/status";
@@ -16,22 +16,35 @@ const pct = (f: number) => `${Math.floor(f * 100 + 1e-9)}%`;
 
 /**
  * The scale, from the top: where each band starts and what happens in it. Act is a warning only; Protect's line, under
- * it, is where Protect steps in (Adrian, 2026-10-19), still in Act, so its row wears Act's pill. New credit and free up
- * stop at the position's line: in Watch at 1.12 (ACT_LINE), in Act once Greedy Fatalities is open.
+ * it, is where Protect steps in (Adrian, 2026-10-19), still in Act, so its row wears Act's pill. A user who raised the
+ * line into Watch (decision 3) sees it in Watch, before Act, and Watch sells nothing only above it. New credit and free
+ * up stop at the position's line: in Watch at 1.12 (ACT_LINE), in Act once Greedy Fatalities is open, just above a
+ * raised line.
  */
 const scaleFor = (
   line: CreditLine,
+  protect: number,
 ): { key: string; status: Exclude<Status, "none">; range: string; line: string }[] => {
   // Protector off, the Wall open: credit goes down to Aave's own line and nothing steps in before Aave sells.
   const unguarded = line.intoAct && line.stopHf <= AAVE_LINE_HF;
+  const at = protectHfText(protect);
+  const inWatch = !unguarded && protect > RISK.watchMin;
+  const nothing = inWatch ? `Nothing is sold above ${at}.` : "Nothing is sold.";
+  const protectRow = {
+    key: "protect",
+    status: inWatch ? ("watch" as const) : ("act" as const),
+    range: `Under ${at}`,
+    line: "Protector repays from your cash, then sells if needed.",
+  };
   return [
     { key: "safe", status: "safe", range: `${RISK.safeMin} and up`, line: "Nothing to do." },
     {
       key: "watch",
       status: "watch",
       range: `${RISK.watchMin} to ${RISK.safeMin}`,
-      line: line.intoAct ? "Nothing is sold." : `Nothing is sold. New credit and free up stop at ${line.capHf}.`,
+      line: line.intoAct ? nothing : `${nothing} New credit and free up stop at ${line.capHf}.`,
     },
+    ...(inWatch ? [protectRow] : []),
     {
       key: "act",
       status: "act",
@@ -39,19 +52,10 @@ const scaleFor = (
       line: unguarded
         ? "A warning. Protector is off: nothing steps in before Aave’s line."
         : line.intoAct
-          ? `A warning. New credit and free up stop at ${line.capHf}. Protector steps in at ${PROTECT_LINE}.`
-          : `A warning. Protector steps in at ${PROTECT_LINE}.`,
+          ? `A warning. New credit and free up stop at ${line.capHf}. Protector steps in at ${at}.`
+          : `A warning. Protector steps in at ${at}.`,
     },
-    ...(unguarded
-      ? []
-      : [
-          {
-            key: "protect",
-            status: "act" as const,
-            range: `Under ${PROTECT_LINE}`,
-            line: "Protector repays from your cash, then sells if needed.",
-          },
-        ]),
+    ...(unguarded || inWatch ? [] : [protectRow]),
   ];
 };
 
@@ -74,7 +78,7 @@ export const statusLead = (owes: boolean) =>
  * "My credit status", a step of "My credit" behind the ⓘ beside its title (Adrian, 2026-10-21; it was Credit's ⓘ on
  * Home): the credit's health and how far the stocks can fall before Aave's line;
  * how the health is worked out on Aave's rules (each stock's value × the share Aave counts, ÷ what's owed); and the
- * scale, Safe, Watch, Act and Protect's line at 1.03, down to Aave's line at 1.0. With nothing owed, the scale only.
+ * scale, Safe, Watch, Act and Protect's line (1.03 unless the user set another), down to Aave's line at 1.0. With nothing owed, the scale only.
  */
 export function StatusBody({ status, data, onDone }: { status: Status; data: PositionData; onDone: () => void }) {
   const owes = status !== "none" && data.debtUsd > 0;
@@ -120,7 +124,7 @@ export function StatusBody({ status, data, onDone }: { status: Status; data: Pos
       )}
       <Card>
         <ul className="m-0 flex list-none flex-col gap-3 p-0">
-          {scaleFor(data.line).map((r) => (
+          {scaleFor(data.line, data.protect.line).map((r) => (
             <li key={r.key} className="flex items-start gap-2.5">
               <span className="w-[58px] shrink-0">
                 <StatusPill status={r.status} size="sm" />

@@ -8,6 +8,8 @@ import { CHAIN_ID } from "@/lib/chain";
 import { GOOSE_GUARD, GOOSE_GUARD_BLOCK } from "@/lib/agents/config";
 import { decodeAgentLogs, type AgentEvent, type AgentLog } from "@/lib/agents/events";
 import { collapseRefused, describeAgentEvent, type AgentMove, type MoveContext } from "@/lib/agents/feed";
+import type { ProtectNumbers } from "@/lib/agents/lines";
+import { useProtectNumbers } from "@/hooks/useProtectNumbers";
 import type { AgentJob } from "@/lib/agents/permissions";
 import { LOG_CHUNK, WEEK_BLOCKS, logChunks, readAgentLogs, readMoveContext } from "@/lib/agents/history";
 
@@ -31,6 +33,7 @@ type Switched = { on: boolean; byUser: boolean; at: number };
  * Guard's deploy block. Nothing is read until a Guard is configured.
  */
 export function useAgentFeed(account: Address) {
+  const now = useProtectNumbers(account);
   const guard = GOOSE_GUARD;
   const client = usePublicClient({ chainId: CHAIN_ID });
   const queryClient = useQueryClient();
@@ -70,7 +73,8 @@ export function useAgentFeed(account: Address) {
   });
 
   // Each agent's refusals in a row are one row, the newest, with their count; the rest are read as they are.
-  const events = useMemo(() => collapseRefused(logs.data ?? []), [logs.data]);
+  // Protect's own numbers as set over time make no row and need no read: they only say which applied to each move.
+  const events = useMemo(() => collapseRefused((logs.data ?? []).filter((e) => e.kind !== "lines-set")), [logs.data]);
   const moves = useQueries({
     queries: events.map((e: AgentLog) => ({
       queryKey: ["agentMove", guard, e.key],
@@ -89,14 +93,26 @@ export function useAgentFeed(account: Address) {
     queryFn: async () => Number((await client!.getBlock({ blockNumber: from! })).timestamp) * 1000,
   });
 
+  // The line and target each move ran under (decision 3): the last `setProtect` read before it. With none before it,
+  // today's, which held all along unless one came after it (then the older ones are past what was read).
+  const inForce = useMemo(() => {
+    const sets = (logs.data ?? []).filter((e) => e.kind === "lines-set");
+    const before = (e: AgentLog, s: AgentLog) =>
+      s.blockNumber < e.blockNumber || (s.blockNumber === e.blockNumber && s.logIndex < e.logIndex);
+    return events.map((e): ProtectNumbers => {
+      const s = sets.find((x) => before(e, x)); // newest first: the last one before the move
+      return s && s.kind === "lines-set" ? { line: s.line, target: s.target } : now;
+    });
+  }, [logs.data, events, now]);
+
   const rows = useMemo<AgentRow[]>(
     () =>
       events.flatMap((e, i) => {
         const m = moves[i]?.data;
-        const move = m && describeAgentEvent(e, m.ctx);
+        const move = m && describeAgentEvent(e, m.ctx, inForce[i]);
         return move ? [{ ...move, key: e.key, time: m.time * 1000, hash: e.txHash, event: e, ctx: m.ctx }] : [];
       }),
-    [events, moves],
+    [events, moves, inForce],
   );
 
   // Each job's newest switch: on, or off by the user (only the account itself unregisters a job in the Guard).

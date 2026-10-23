@@ -1,4 +1,4 @@
-import { PROTECT_LINE } from "@/lib/agents/list";
+import { backToText, protectHfText, type ProtectNumbers } from "@/lib/agents/lines";
 import type { AgentStatus } from "@/lib/agents/status";
 import { CREDIT_BLOCKED, shortNames, type CreditBlock } from "@/lib/creditBuy/copy";
 import type { CreditPlan } from "@/lib/creditBuy";
@@ -43,13 +43,19 @@ export const EARN_COSTS_MORE = "At this amount, credit costs more than your cash
  * (decision 5), only once the credit falls under Protect's line, and back to Watch (Adrian, 2026-10-19). "Protect is
  * off" only when it is.
  */
-export function earnRiskLine(p: { names: readonly string[]; protect: AgentStatus; sell: AgentStatus }): string {
+export function earnRiskLine(p: {
+  names: readonly string[];
+  protect: AgentStatus;
+  sell: AgentStatus;
+  /** Protector's own line and target (decision 3). */
+  lines: ProtectNumbers;
+}): string {
   const one = p.names.length === 1 ? p.names[0] : null;
   const falls = one ? `If ${one} falls` : "If your stocks fall";
   if (p.protect === "on") {
     return p.sell === "on"
-      ? `${falls}, you can repay from your cash. If your credit falls under ${PROTECT_LINE}, Protector repays from it, then sells a little ${one ?? "of them"} to bring it back to Watch.`
-      : `${falls}, you can repay from your cash. If your credit falls under ${PROTECT_LINE}, Protector repays from it. Protector won’t sell your ${one ? "stock" : "stocks"}.`;
+      ? `${falls}, you can repay from your cash. If your credit falls under ${protectHfText(p.lines.line)}, Protector repays from it, then sells a little ${one ?? "of them"} to bring it back to ${backToText(p.lines)}.`
+      : `${falls}, you can repay from your cash. If your credit falls under ${protectHfText(p.lines.line)}, Protector repays from it. Protector won’t sell your ${one ? "stock" : "stocks"}.`;
   }
   const off = p.protect === "off" || p.protect === "unconfigured" ? " Protector is off." : "";
   return `${falls}, repay from your cash. If ${one ? "it falls" : "they fall"} too far, part of ${one ? "it" : "them"} can be sold to repay what you owe.${off}`;

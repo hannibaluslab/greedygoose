@@ -80,6 +80,8 @@ export function useAgentSettings(account: `0x${string}`) {
       /** BPS per stock by reserve id; all 0 before a mix is saved. */
       mixBps: unpackMix(s.mix),
       keepMix: s.keepMix,
+      /** Protect's line and target in the Guard's units (lib/agents/lines.ts): 10300 = 1.03. */
+      lines: { line: Number(lineWad / 10n ** 14n), target: Number(targetWad / 10n ** 14n) },
       /**
        * A rescue Protect started is under way (`rescueAt`, when it started, isn't 0, and it is under 7 days old): it goes
        * on until the target, or until the user takes credit or repays by hand (`endRescue`).
@@ -92,6 +94,8 @@ export function useAgentSettings(account: `0x${string}`) {
       options: numbers.rebalance,
       numbers,
       plan: (plan.data ?? null) as Plan | null,
+      /** Reads the account's settings in the Guard again (after a save, before a screen starts over from them). */
+      refetch: own.refetch,
     };
-  }, [own.data, views.data, plan.data, minute]);
+  }, [own.data, own.refetch, views.data, plan.data, minute]);
 }

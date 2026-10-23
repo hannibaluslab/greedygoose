@@ -1,12 +1,15 @@
 "use client";
 
+import { useEffect } from "react";
 import type { ReactNode } from "react";
+import { SheetMenu } from "@/components/gg/kit/SheetMenu";
 import { SheetShell, SheetSteps } from "@/components/gg/kit/SheetShell";
+import { useMenuGuard } from "@/hooks/useMenuGuard";
 import { AgentPill } from "./Status";
 import { TxError } from "./TxUi";
 import { ShieldIcon } from "./kit/icons";
 import { FinishBlock, type FinishState } from "./agents/FinishTurningOn";
-import { AGENT_COPY, type AgentItem, type SheetAction } from "@/lib/agents/list";
+import type { AgentItem, SheetAction } from "@/lib/agents/list";
 import type { AgentStatus } from "@/lib/agents/status";
 
 /*
@@ -68,69 +71,77 @@ export function AgentSheet({
    */
   finish?: FinishState;
 }) {
-  const copy = AGENT_COPY[item.agent];
+  const copy = item;
   const on = item.status === "on" || item.status === "starting";
+  // A picker open in the settings (Protector's line and target): Escape or the dim closes its list first.
+  const { menu, setMenu, closeMenu, onOpenChange } = useMenuGuard<string | null>(onClose, null);
+  // Closed by any way (Close, a step done, another agent opened), no list stays open for the next time it opens.
+  useEffect(() => {
+    if (!open) setMenu(null);
+  }, [open, setMenu]);
   return (
     <SheetShell
       open={open}
-      onOpenChange={(next) => !next && onClose()}
+      onOpenChange={onOpenChange}
       title={item.name}
       description={copy.lead}
       confirming={confirming}
     >
-      <SheetSteps stepKey="main" className="flex flex-col gap-3.5">
-        <p className="m-0 flex items-start gap-2 rounded-[16px] bg-card-bone px-3 py-2.5 text-[13px] leading-[1.4] text-ink-2">
-          <ShieldIcon size={14} className="mt-0.5 shrink-0 text-pos" />
-          {copy.never}
-        </p>
+      <SheetMenu.Provider value={{ menu, setMenu, closeMenu }}>
+        <SheetSteps stepKey="main" className="flex flex-col gap-3.5">
+          <p className="m-0 flex items-start gap-2 rounded-[16px] bg-card-bone px-3 py-2.5 text-[13px] leading-[1.4] text-ink-2">
+            <ShieldIcon size={14} className="mt-0.5 shrink-0 text-pos" />
+            {copy.never}
+          </p>
 
-        <div className="flex flex-col gap-1.5 rounded-[22px] bg-card px-4 py-3.5 shadow-card-elev">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-[15px] font-semibold">Status</span>
-            <AgentPill tone={PILL[item.status].tone}>{PILL[item.status].text}</AgentPill>
+          <div className="flex flex-col gap-1.5 rounded-[22px] bg-card px-4 py-3.5 shadow-card-elev">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-[15px] font-semibold">Status</span>
+              <AgentPill tone={PILL[item.status].tone}>{PILL[item.status].text}</AgentPill>
+            </div>
+            <p className="num m-0 text-sm leading-[1.4] text-ink-2">{item.line}</p>
+            {stops && (
+              <p className="m-0 flex items-center gap-1.5 border-t border-hairline pt-2.5 text-[13px] text-ink-mid">
+                Stops on {stops}
+                <span aria-hidden>·</span>
+                <button
+                  type="button"
+                  disabled={!live || busy}
+                  onClick={() => onAction("renew")}
+                  className="font-semibold text-ink underline-offset-2 hover:underline disabled:opacity-45"
+                >
+                  Renew
+                </button>
+              </p>
+            )}
           </div>
-          <p className="num m-0 text-sm leading-[1.4] text-ink-2">{item.line}</p>
-          {stops && (
-            <p className="m-0 flex items-center gap-1.5 border-t border-hairline pt-2.5 text-[13px] text-ink-mid">
-              Stops on {stops}
-              <span aria-hidden>·</span>
+
+          {warnings}
+          {finish && <FinishBlock finish={finish} disabled={!live || busy} />}
+
+          {settings}
+
+          <section className="flex flex-col gap-2">
+            <Label>What it did</Label>
+            {activity}
+          </section>
+
+          <TxError error={error} />
+          {on && (
+            <div className="flex flex-col items-center gap-0.5">
               <button
                 type="button"
                 disabled={!live || busy}
-                onClick={() => onAction("renew")}
-                className="font-semibold text-ink underline-offset-2 hover:underline disabled:opacity-45"
+                aria-busy={busy}
+                onClick={() => onAction("off")}
+                className="flex h-11 items-center justify-center px-4 text-sm font-semibold text-act disabled:opacity-45"
               >
-                Renew
+                Turn off
               </button>
-            </p>
+            </div>
           )}
-        </div>
-
-        {warnings}
-        {finish && <FinishBlock finish={finish} disabled={!live || busy} />}
-
-        {settings}
-
-        <section className="flex flex-col gap-2">
-          <Label>What it did</Label>
-          {activity}
-        </section>
-
-        <TxError error={error} />
-        {on && (
-          <div className="flex flex-col items-center gap-0.5">
-            <button
-              type="button"
-              disabled={!live || busy}
-              aria-busy={busy}
-              onClick={() => onAction("off")}
-              className="flex h-11 items-center justify-center px-4 text-sm font-semibold text-act disabled:opacity-45"
-            >
-              Turn off
-            </button>
-          </div>
-        )}
-      </SheetSteps>
+        </SheetSteps>
+      </SheetMenu.Provider>
     </SheetShell>
   );
 }

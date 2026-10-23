@@ -54,15 +54,25 @@ export const ACT_LINE: CreditLine = { capHf: CREDIT_CAP.minHf, stopHf: RISK.watc
  * confirms): with Protector on, 1.05, its line plus the same margin as 1.12 over Act, so Protector doesn't sell straight
  * back what was just taken; with it off, Aave's own line, 1.0: as much as Aave lends, and nothing steps in before Aave
  * sells (Adrian, 2026-10-21: "without the protector let the user get liquidated by aave"). Until the Wall opens,
- * ACT_LINE.
+ * ACT_LINE. `protectLine` is the account's own line (GooseGuard's `linesOf`, decision 3; 1.03 unless it set another):
+ * with Protector on, credit always stops that margin above it, ACT_LINE included, for the same reason.
  */
-export function creditLineFor(p: { wallOpen: boolean; protectOn: boolean }): CreditLine {
-  if (!p.wallOpen) return ACT_LINE;
-  const round = (hf: number) => Math.round(hf * 100) / 100;
-  return p.protectOn
-    ? { capHf: round(CASH_AGENT.triggerHf + CAP_MARGIN_HF), stopHf: CASH_AGENT.triggerHf, intoAct: true }
-    : { capHf: AAVE_LINE_HF, stopHf: AAVE_LINE_HF, intoAct: true };
+export function creditLineFor(p: { wallOpen: boolean; protectOn: boolean; protectLine?: number }): CreditLine {
+  if (!p.protectOn) return p.wallOpen ? { capHf: AAVE_LINE_HF, stopHf: AAVE_LINE_HF, intoAct: true } : ACT_LINE;
+  const own = p.protectLine ?? CASH_AGENT.triggerHf;
+  const capHf = Math.round((own + CAP_MARGIN_HF) * 100) / 100;
+  // A line that puts the cap over ACT_LINE's sets it, open Wall or not.
+  if (!p.wallOpen && capHf <= ACT_LINE.capHf) return ACT_LINE;
+  // A line in Act lets a plan end in Act, with the Wall's tick; from 1.10 up, every plan stays out of it.
+  return { capHf, stopHf: own, intoAct: own < RISK.watchMin };
 }
+
+/**
+ * The line stops at Act (ACT_LINE, or a Protect line of 1.10 with the Wall open): its blocks say "in Act". Any other
+ * stop is a limit ("past its limit"): one a plan may end under with the Wall's tick, or a Protect line the user raised
+ * into Watch (decision 3), where "in Act" wouldn't be true.
+ */
+export const stopsAtAct = (line: CreditLine) => !line.intoAct && line.stopHf <= RISK.watchMin;
 
 /** Under the line's stop: no more credit or free up until it's back over it. */
 export const pastStop = (healthFactor: number | null, line: CreditLine) =>

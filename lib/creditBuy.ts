@@ -1,5 +1,5 @@
 import { decodeFunctionData, erc20Abi, isAddressEqual, parseUnits } from "viem";
-import { ACT_LINE, RISK, pastStop, type CreditLine } from "@/config/risk";
+import { ACT_LINE, RISK, pastStop, type CreditLine, stopsAtAct } from "@/config/risk";
 import { swapOf } from "@/lib/allowlist";
 import { endRescueCalls } from "@/lib/agents/settings";
 import { AAVE } from "@/lib/aave/addresses";
@@ -96,7 +96,7 @@ export const lineOf = (pos: { line?: CreditLine }): CreditLine => pos.line ?? AC
  */
 export const creditFloor = (line: CreditLine): HealthFloor => ({
   minHf: line.stopHf,
-  stop: line.intoAct ? LINE_MOVED : CREDIT_BLOCKED.act,
+  stop: stopsAtAct(line) ? CREDIT_BLOCKED.act : LINE_MOVED,
 });
 
 /** Under ACT_LINE: stopped in Act. */
@@ -253,7 +253,7 @@ export function bestBacking(
  * stop is ("past-limit"); past the cap is "too-much".
  */
 function lineBlock(healthFactor: number | null, after: Status, line: CreditLine): CreditBlock | undefined {
-  if (pastStop(healthFactor, line)) return line.intoAct ? "past-limit" : "in-act";
+  if (pastStop(healthFactor, line)) return stopsAtAct(line) ? "in-act" : "past-limit";
   if (!line.intoAct && endsInAct(after)) return "act";
   return undefined;
 }
@@ -388,7 +388,7 @@ export function creditAvailable(p: {
     if (!p.holdsStock) return "no-stocks";
     if (p.position.creditPaused) return "paused";
     if (pastStop(p.position.healthFactor, lineOf(p.position)))
-      return lineOf(p.position).intoAct ? "past-limit" : "in-act";
+      return stopsAtAct(lineOf(p.position)) ? "in-act" : "past-limit";
     if (usd >= BUY_LIMITS.minUsd) return undefined;
     if (p.position.usdcLiquidity < BUY_LIMITS.minUsd) return "no-liquidity";
     // Nothing backs credit yet: free stock too small to give the $1 minimum buy isn't "all in use".

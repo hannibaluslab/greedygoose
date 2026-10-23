@@ -146,7 +146,7 @@ export function CreditBuyCashStep({
             amountUsd: amount,
             owedUsd: data.debtUsd + amount,
             backedBy: names,
-            risk: earnRiskLine({ names, protect, sell }),
+            risk: earnRiskLine({ names, protect, sell, lines: data.protect }),
           })}
         </p>
       )}
