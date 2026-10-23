@@ -113,6 +113,14 @@ const STATES: [string, (now: number) => Fixture | "loading"][] = [
     () => ({ holdings: measuredAccount(PRICES, 1_000), mixBps: MEASURED_MIX }),
   ],
   [
+    "Free stock on target, the stock backing credit off it: jawegg (2026-10-24)",
+    () => ({
+      holdings: split([1.519, 1.759, 0.986, 1.078, 0.678, 0.611, 1.246], [0.078, 0.142, 0.045, 0.051, 0, 0, 0.393]),
+      mixBps: [1_000, 1_800, 700, 800, 0, 0, 5_700],
+      card: { topUps: counted(0) },
+    }),
+  ],
+  [
     "No trade too small: Adrian’s account, $7.74 of stock (2026-10-21)",
     () => ({ holdings: measuredAccount(PRICES, 1), mixBps: MEASURED_MIX }),
   ],
