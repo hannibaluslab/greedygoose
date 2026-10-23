@@ -9,9 +9,10 @@ import {PlannerForkBase} from "./PlannerForkBase.sol";
 import {IERC20Lite} from "./IJustaPermissionManager.sol";
 
 /// The Protect read's two capped calls, cold, on a seven-stock account (the costliest Aave read): ProtectPlanner.rankOf
-/// stays within 80% of GoosePlanner.CHECK_GAS, and planProtectExcept within 80% of PLAN_GAS. Cold: each call is run once
-/// to record every account it touches (calls, code reads, storage), all of them are cooled (vm.cool), and the second
-/// run is measured, as the first member of a read meets them.
+/// stays within 80% of GoosePlanner.CHECK_GAS, and planProtectExcept within 80% of PLAN_GAS. Cold, at its worst: the call
+/// is measured once while every account and slot it touches is recorded, then each distinct account is charged EIP-2929's
+/// cold premium (2,500 over a warm touch) and each distinct slot its own (2,000), as if the first member of a read met
+/// every one of them cold. (vm.cool did not cool them on this fork: the run after it cost the same as a warm one.)
 /// Run: BASE_RPC_URL=https://mainnet.base.org forge test --match-path test/PlannerGasFork.t.sol -vv
 abstract contract PlannerGasForkBase is PlannerForkBase {
     address a;
@@ -28,24 +29,48 @@ abstract contract PlannerGasForkBase is PlannerForkBase {
         hf = SPOKE.getUserAccountData(x).healthFactor;
     }
 
-    /// The gas of `data` on `target` with every account and slot it touches cold, and its return data.
+    /// The gas of `data` on `target` with every account and slot it touches cold (`cold`, an upper bound: the measured
+    /// run plus each distinct account's and slot's cold premium), the measured run (`warm`), and its return data.
     function _coldGas(address target, bytes memory data) internal returns (uint256 cold, uint256 warm, bytes memory ret) {
         vm.startStateDiffRecording();
-        (bool ok,) = target.staticcall(data);
+        uint256 g0 = gasleft();
+        (bool ok, bytes memory out) = target.staticcall(data);
+        warm = g0 - gasleft();
         Vm.AccountAccess[] memory seen = vm.stopAndReturnStateDiff();
         assertTrue(ok, "the call reverted");
+        ret = out;
+        address[] memory accounts = new address[](seen.length);
+        uint256 nAccounts;
+        uint256 nSlots;
         for (uint256 i; i < seen.length; ++i) {
-            if (seen[i].account != address(this)) vm.cool(seen[i].account);
+            nAccounts = _addAccount(accounts, nAccounts, seen[i].account);
+            nSlots += seen[i].storageAccesses.length;
+        }
+        bytes32[] memory slots = new bytes32[](nSlots);
+        nSlots = 0;
+        for (uint256 i; i < seen.length; ++i) {
             for (uint256 k; k < seen[i].storageAccesses.length; ++k) {
-                vm.cool(seen[i].storageAccesses[k].account);
+                bytes32 key = keccak256(abi.encode(seen[i].storageAccesses[k].account, seen[i].storageAccesses[k].slot));
+                bool known;
+                for (uint256 j; j < nSlots; ++j) {
+                    if (slots[j] == key) {
+                        known = true;
+                        break;
+                    }
+                }
+                if (!known) slots[nSlots++] = key;
             }
         }
-        uint256 g0 = gasleft();
-        (ok, ret) = target.staticcall(data);
-        cold = g0 - gasleft();
-        g0 = gasleft();
-        (ok,) = target.staticcall(data);
-        warm = g0 - gasleft();
+        cold = warm + nAccounts * 2500 + nSlots * 2000;
+        console2.log("  distinct accounts, slots", nAccounts, nSlots);
+    }
+
+    function _addAccount(address[] memory list, uint256 n, address x) internal pure returns (uint256) {
+        for (uint256 j; j < n; ++j) {
+            if (list[j] == x) return n;
+        }
+        list[n] = x;
+        return n + 1;
     }
 
     /// Moves stock r's pool `bps` under Aave's price with a real swap through Aerodrome's router.

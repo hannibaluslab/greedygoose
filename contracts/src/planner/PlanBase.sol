@@ -30,7 +30,10 @@ interface IGooseGuard {
     function accountOf(address a) external view returns (Account memory, Settings memory);
     function members(uint256 i) external view returns (address);
     function membersLength() external view returns (uint256);
+    function protectMembers(uint256 i) external view returns (address);
+    function protectMembersLength() external view returns (uint256);
     function linesOf(address a) external view returns (uint256 lineWad, uint256 targetWad);
+    function sellLineOf(address a) external view returns (uint256);
     function permissionOf(address a, uint8 job) external view returns (bytes memory);
     function capOf(uint8 kind, uint256[] memory args) external view returns (uint256);
     function paused() external view returns (bool);
@@ -121,6 +124,15 @@ abstract contract PlanBase {
     /// Under the line, a repay that doesn't cover the account's whole need must move at least this ($1): less can't
     /// lift health, and dust repays at the lowest health would take a write's slots from accounts a repay would save.
     uint256 public constant MIN_REPAY = 1e6;
+    /// GG-19: ProtectPlanner.rankOf adds this to the rank of an account under its own line, or in a rescue under its
+    /// target, so one that is a candidate only through the Guard's raised sale line (1.08, no cash) is planned after
+    /// every such account and never takes a write's pool from one nearer Aave's own sale.
+    uint256 public constant AT_RISK = 1 << 128;
+    /// Review R1: the top tier is set by Aave health alone, never by a user's own line, so an account parked at a safe
+    /// health under a high personal line (up to 1.35) can't outrank one near Aave's own sale. Every account under
+    /// CRITICAL_HF (1.03, the lowest line anyone can set) carries CRITICAL and comes before any AT_RISK account.
+    uint256 public constant CRITICAL = 1 << 129;
+    uint256 public constant CRITICAL_HF = 1.03e18;
     /// The most the Guard's gas caps may add up to in one write (KeeperHub sends 5.5M, about 5.4M reaches the Guard).
     /// ProtectPlanner cuts each sale to the room left under it, so the checks it runs see the sale that's sent.
     uint256 public constant PACK_GAS = 5_300_000;

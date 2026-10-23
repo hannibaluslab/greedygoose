@@ -96,14 +96,17 @@ contract TradePlanner is PlanBase {
             b.stocks[r].sellLeft = left[r];
         }
         t = _fit(RebalanceRules.trades(b, limits()), b);
-        bool sells;
+        uint256 floors; // the sales' floors, as the Guard adds them up
         uint256 buys;
         for (uint256 i; i < t.length; ++i) {
             if (t[i].amountIn == 0) continue;
             if (t[i].buy) buys += t[i].amountIn;
-            else sells = true;
+            else floors += t[i].amountIn * b.stocks[t[i].reserveId].price * (1e4 - SWAP_FLOOR_BPS) / 1e14;
         }
-        if (!sells || buys == 0) return n; // the Rebalancer never sells to cash
+        if (floors == 0 || buys == 0) return n; // the Rebalancer never sells to cash
+        // _fit can shrink or drop a buy after sizing: the Guard refuses buys that leave more than 10 units of the
+        // sales' floors unspent (SellsToCash), so such a move isn't planned.
+        if (buys + 10 < floors) return n;
         if (buys > _spendLeft(p, address(USDC))) return n; // the manager would refuse the buys
         return _push(moves, n, c.a, 0, t);
     }

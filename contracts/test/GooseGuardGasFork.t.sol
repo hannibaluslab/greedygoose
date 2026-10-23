@@ -55,7 +55,7 @@ contract GooseGuardGasForkTest is GuardForkBase {
         return _row("SELL, 1 slice", _move(a, SELL, _a1(_leg(NVDA, _slice(a, NVDA, 250)))));
     }
 
-    /// One sale leg of AAPLc in a drifted two-stock mix: the base of the trade's cap.
+    /// One sale leg of AAPLc in a drifted two-stock mix and the buy of NVDAc it funds: the base of the trade's cap.
     function _caseTradeOneLeg() internal returns (Row memory) {
         address a = _sevenStockAccount("trade1", 1.5e18);
         uint16[7] memory w;
@@ -66,7 +66,10 @@ contract GooseGuardGasForkTest is GuardForkBase {
         vm.prank(a);
         g.setMix(_pack(w));
         vm.warp(vm.getBlockTimestamp() + 1);
-        return _row("TRADE, 1 sale", _move(a, TRADE, _a2(0, _leg(AAPL, _sharesFor(AAPL, 400e6)))));
+        // A sale must buy with its floor (GG-06): the smallest move that sells is a sale and a buy.
+        uint256 sell = _sharesFor(AAPL, 400e6);
+        uint256 floor = sell * _price(AAPL) * 9950 / 1e14;
+        return _row("TRADE, 1 sale + 1 buy", _move(a, TRADE, _a3(0, _leg(AAPL, sell), _buy(NVDA, floor))));
     }
 
     /// One slice of each of the seven stocks, each 2% of the debt: every withdraw keeps health above 1 from 1.025.
@@ -127,11 +130,15 @@ contract GooseGuardGasForkTest is GuardForkBase {
         uint256[] memory args = new uint256[](8);
         uint8[3] memory sells = [0, 3, 4];
         uint8[4] memory buys = [1, 2, 5, 6];
+        uint256 floors;
         for (uint256 i; i < 3; ++i) {
-            args[1 + i] = _leg(sells[i], _sharesFor(sells[i], 400e6));
+            uint256 shares = _sharesFor(sells[i], 400e6);
+            args[1 + i] = _leg(sells[i], shares);
+            floors += shares * _price(sells[i]) * 9950 / 1e14;
         }
+        // The four buys spend exactly the sales' floors (GG-06), the last one the rounding.
         for (uint256 i; i < 4; ++i) {
-            args[4 + i] = _buy(buys[i], 290e6);
+            args[4 + i] = _buy(buys[i], i < 3 ? floors / 4 : floors - 3 * (floors / 4));
         }
         return _row("TRADE, 3 sales + 4 buys", _move(a, TRADE, args));
     }

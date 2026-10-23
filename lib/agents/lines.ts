@@ -55,3 +55,22 @@ export const lineOptions = (...keep: number[]) =>
 /** The targets the screen offers for `line`: from 0.05 above it, with `keep` (chosen now, saved) where they still fit. */
 export const targetOptions = (line: number, ...keep: number[]) =>
   sorted([...TARGETS, line + TARGET_GAP, ...keep]).filter((t) => t >= line + TARGET_GAP && t <= TARGET_MAX);
+
+/**
+ * GG-19 (Adrian): the line Protect · sell steps in under when Protect can't repay with cash (Protect off, or a wallet
+ * at most the keep-back and no savings), in the Guard's units: GooseGuard's SELL_LINE_NO_CASH (1.08), a line under it
+ * raised to it so a sale still has time to go through. A line at or over it is the account's own.
+ */
+export const SELL_LINE_NO_CASH = 10_800;
+
+/**
+ * Under "Repay from your cash" in Protect · settings: where it repays, and with selling on and a line under 1.08, that
+ * with no cash it sells from 1.08 and that a very fast fall can still beat a sale (GG-19). Both two lines on a phone,
+ * so the screen is no longer than before.
+ */
+export const repayNote = (line: number, sellOn: boolean) =>
+  `Only under ${lineText(line)}, and always first. ${
+    sellOn && line < SELL_LINE_NO_CASH
+      ? `With no cash, it sells from ${lineText(SELL_LINE_NO_CASH)}, but a very fast fall can beat a sale.`
+      : "Your cash pays before any stock is sold."
+  }`;

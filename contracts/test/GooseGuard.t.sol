@@ -794,6 +794,102 @@ contract GooseGuardTest is Test {
         assertEq(index, 2);
     }
 
+    /// GG-04: register needs JAW's manager to own the account; a no, a revert or an odd answer all count as no.
+    function test_register_needs_jaws_manager_to_own_the_account() public {
+        bytes memory ask = abi.encodeWithSignature("isOwnerAddress(address)", MANAGER);
+        vm.mockCall(account, ask, abi.encode(false));
+        _registerExpect(account, 1, _now() - 60, GooseGuard.NotManaged.selector);
+        vm.mockCall(account, ask, abi.encode(uint256(2)));
+        _registerExpect(account, 1, _now() - 60, GooseGuard.NotManaged.selector);
+        vm.mockCallRevert(account, ask, "no");
+        _registerExpect(account, 1, _now() - 60, GooseGuard.NotManaged.selector);
+        vm.clearMockedCalls();
+        assertEq(g.membersLength(), 0, "no member joined");
+        assertEq(g.protectMembersLength(), 0);
+
+        _register(account, 1, _now() - 60);
+        assertEq(g.membersLength(), 1, "a yes registers");
+    }
+
+    /// GG-14: the Protect set holds exactly the accounts with Protect or Protect · sell on; an account leaves it by
+    /// swap-and-pop when both are off, and its rescue ends then. `members` keeps everyone.
+    function test_the_protect_set_holds_exactly_the_accounts_with_a_protect_agent_on() public {
+        uint256 t = _now();
+        address third = address(new FakeAccount(false));
+        _register(account, JOB_SAVE, t - 60);
+        assertEq(g.protectMembersLength(), 0, "Save alone isn't Protect");
+        _register(account, JOB_PROTECT, t - 60);
+        _register(account, JOB_SELL, t - 60);
+        _register(other, JOB_SELL, t - 60);
+        _register(third, JOB_PROTECT, t - 60);
+        assertEq(g.protectMembersLength(), 3, "an account joins once");
+        assertEq(abi.encode(g.protectMembers(0), g.protectMembers(1), g.protectMembers(2)), abi.encode(account, other, third));
+
+        vm.prank(account);
+        g.unregister(JOB_PROTECT);
+        assertEq(g.protectMembersLength(), 3, "Protect sell still on");
+        _startRescue(account, t - 1 hours);
+        vm.expectEmit(true, false, false, false, address(g));
+        emit GooseGuard.RescueEnded(account);
+        vm.prank(account);
+        g.unregister(JOB_SELL);
+        assertEq(g.protectMembersLength(), 2);
+        assertEq(abi.encode(g.protectMembers(0), g.protectMembers(1)), abi.encode(third, other), "swap-and-pop");
+        uint32 rescueAt = _acct(account).rescueAt;
+        assertEq(rescueAt, 0, "no agent left to carry the rescue");
+        assertEq(g.membersLength(), 3, "still members");
+
+        vm.prank(account);
+        g.unregister(JOB_SELL); // already out: nothing moves
+        vm.prank(stranger);
+        g.unregister(JOB_PROTECT);
+        assertEq(g.protectMembersLength(), 2);
+
+        vm.prank(other);
+        g.unregister(JOB_SELL); // the last entry leaves
+        assertEq(g.protectMembersLength(), 1);
+        assertEq(g.protectMembers(0), third);
+        _register(account, JOB_SELL, t - 59);
+        assertEq(g.protectMembersLength(), 2);
+        assertEq(g.protectMembers(1), account, "back at the end");
+        vm.prank(third);
+        g.unregister(JOB_PROTECT); // the first entry leaves
+        assertEq(g.protectMembersLength(), 1);
+        assertEq(g.protectMembers(0), account);
+    }
+
+    /// The Protect set mirrors the jobs after any sequence of registers and unregisters by three accounts.
+    function testFuzz_the_protect_set_follows_the_protect_bits(uint256 seed) public {
+        address[3] memory who = [account, other, address(new FakeAccount(false))];
+        uint256 t = _now() - 1000;
+        for (uint256 i; i < 24; ++i) {
+            uint256 x = uint256(keccak256(abi.encode(seed, i)));
+            address a = who[x % 3];
+            uint8 job = uint8(x >> 8) % 5;
+            if (x >> 16 & 1 == 0) {
+                _register(a, job, ++t);
+            } else {
+                vm.prank(a);
+                g.unregister(job);
+            }
+            uint256 inSet;
+            for (uint256 k; k < 3; ++k) {
+                uint8 jobs = _acct(who[k]).jobs;
+                bool on = jobs & (1 << JOB_PROTECT | 1 << JOB_SELL) != 0;
+                bool found;
+                for (uint256 m; m < g.protectMembersLength(); ++m) {
+                    if (g.protectMembers(m) == who[k]) {
+                        assertFalse(found, "twice in the set");
+                        found = true;
+                    }
+                }
+                assertEq(found, on, "the set and the bits disagree");
+                if (on) ++inSet;
+            }
+            assertEq(g.protectMembersLength(), inSet);
+        }
+    }
+
     function test_a_new_member_past_the_last_index_is_refused_and_members_still_register() public {
         _register(account, 1, _now() - 60);
         vm.store(address(g), bytes32(MEMBERS_SLOT), bytes32(uint256(type(uint24).max)));
@@ -1023,7 +1119,7 @@ contract GooseGuardTest is Test {
     /// Every change waits 48 hours in public, then anyone may apply it.
     function test_a_change_waits_48_hours_then_anyone_may_apply_it() public {
         bytes32 arg = _arg(helper);
-        bytes32 id = keccak256(abi.encode(ADD_RUNNER, arg));
+        bytes32 id = _id(0, ADD_RUNNER, arg);
         uint256 eta = _now() + 48 hours;
         vm.expectEmit(true, false, false, true, address(g));
         emit GooseGuard.ChangeQueued(id, ADD_RUNNER, arg, eta);
@@ -1055,6 +1151,7 @@ contract GooseGuardTest is Test {
 
     /// Removing a runner waits too, so a stolen key can't stop Protect in one transaction.
     function test_removing_keeperhub_waits_48_hours_too() public {
+        _applyAfterDelay(ADD_RUNNER, _arg(helper)); // never the last runner (GG-09)
         vm.prank(owner);
         g.queueChange(REMOVE_RUNNER, _arg(KEEPERHUB));
         vm.warp(_now() + 48 hours - 1);
@@ -1137,11 +1234,193 @@ contract GooseGuardTest is Test {
             g.queueChange(addressKinds[i], bytes32(uint256(1) << 160 | uint160(helper)));
             vm.expectRevert(GooseGuard.BadChange.selector);
             g.queueChange(addressKinds[i], bytes32(type(uint256).max));
-            g.queueChange(addressKinds[i], _arg(helper));
+            // a target of its own: ADD and REMOVE of one runner can't both wait (GG-08)
+            g.queueChange(addressKinds[i], bytes32(uint256(uint160(helper)) + i));
         }
         g.queueChange(ALLOW_CODEHASH, bytes32(0));
         g.queueChange(DISALLOW_CODEHASH, bytes32(type(uint256).max));
         vm.stopPrank();
+    }
+
+    /// GG-08 (a): a change can't be queued while its opposite for the same target waits or is due (ADD and REMOVE of
+    /// one runner, ALLOW and DISALLOW of one codehash), so the owner's last word is the only one that can apply.
+    function test_a_change_cant_be_queued_while_its_opposite_waits() public {
+        bytes32 h = _arg(helper);
+        bytes4 opposite = GooseGuard.OppositeQueued.selector;
+        vm.startPrank(owner);
+        g.queueChange(REMOVE_RUNNER, h);
+        vm.expectRevert(opposite);
+        g.queueChange(ADD_RUNNER, h);
+        g.queueChange(ADD_RUNNER, _arg(stranger)); // another runner is free
+        g.queueChange(ALLOW_CODEHASH, bytes32(uint256(7)));
+        vm.expectRevert(opposite);
+        g.queueChange(DISALLOW_CODEHASH, bytes32(uint256(7)));
+        g.queueChange(DISALLOW_CODEHASH, bytes32(uint256(8)));
+        vm.expectRevert(opposite);
+        g.queueChange(ALLOW_CODEHASH, bytes32(uint256(8)));
+
+        vm.warp(_now() + 48 hours);
+        vm.expectRevert(opposite);
+        g.queueChange(ADD_RUNNER, h); // due, not applied: still in the way
+        g.cancelChange(_id(0, REMOVE_RUNNER, h));
+        g.queueChange(ADD_RUNNER, h); // the owner's last word
+        vm.expectRevert(opposite);
+        g.queueChange(REMOVE_RUNNER, h);
+        vm.stopPrank();
+
+        // Once applied, the other side may be queued.
+        g.applyChange(ALLOW_CODEHASH, bytes32(uint256(7)));
+        vm.prank(owner);
+        g.queueChange(DISALLOW_CODEHASH, bytes32(uint256(7)));
+        // SET_OWNER has no opposite: two may wait at once.
+        vm.startPrank(owner);
+        g.queueChange(SET_OWNER, _arg(stranger));
+        g.queueChange(SET_OWNER, _arg(helper));
+        vm.stopPrank();
+    }
+
+    /// Mariano's PoC: REMOVE queued, then ADD a day later. The ADD is refused, so no one can apply them in an order the
+    /// owner didn't mean.
+    function test_opposite_changes_can_never_both_be_due() public {
+        _applyAfterDelay(ADD_RUNNER, _arg(helper));
+        vm.prank(owner);
+        g.queueChange(REMOVE_RUNNER, _arg(KEEPERHUB));
+        vm.warp(_now() + 1 days);
+        vm.expectRevert(GooseGuard.OppositeQueued.selector);
+        vm.prank(owner);
+        g.queueChange(ADD_RUNNER, _arg(KEEPERHUB));
+    }
+
+    /// GG-08 (b): a due change can be applied for 7 days after its ETA, then it is refused; it may be queued again,
+    /// and once expired it no longer holds back its opposite.
+    function test_a_due_change_expires_7_days_after_its_eta() public {
+        bytes32 h = _arg(helper);
+        vm.prank(owner);
+        g.queueChange(ADD_RUNNER, h);
+        uint256 eta = _now() + 48 hours;
+
+        uint256 snap = vm.snapshotState();
+        vm.warp(eta + 7 days);
+        g.applyChange(ADD_RUNNER, h);
+        assertTrue(g.isRunner(helper), "the last second of its 7 days");
+        vm.revertToState(snap);
+
+        vm.warp(eta + 7 days + 1);
+        vm.expectRevert(GooseGuard.ChangeExpired.selector);
+        g.applyChange(ADD_RUNNER, h);
+        assertFalse(g.isRunner(helper));
+
+        vm.prank(owner);
+        g.queueChange(REMOVE_RUNNER, h); // the expired ADD is no longer in the way
+        vm.prank(owner);
+        g.cancelChange(_id(0, REMOVE_RUNNER, h));
+        vm.prank(owner);
+        assertEq(g.queueChange(ADD_RUNNER, h), _id(0, ADD_RUNNER, h), "queued again");
+        assertEq(g.queued(_id(0, ADD_RUNNER, h)), _now() + 48 hours, "it waits from now");
+        vm.warp(_now() + 48 hours);
+        g.applyChange(ADD_RUNNER, h);
+        assertTrue(g.isRunner(helper));
+    }
+
+    /// GG-08 (c): a new owner bumps the epoch, which is part of every change id, so nothing the old owner queued can
+    /// ever apply, a second SET_OWNER included. The new owner queues under the new epoch.
+    function test_a_new_owner_voids_every_change_the_old_owner_queued() public {
+        address next = makeAddr("next owner");
+        bytes32 h = _arg(helper);
+        assertEq(g.epoch(), 0);
+        vm.startPrank(owner);
+        g.queueChange(SET_OWNER, _arg(next));
+        g.queueChange(ADD_RUNNER, h);
+        g.queueChange(ALLOW_CODEHASH, bytes32(uint256(9)));
+        g.queueChange(SET_OWNER, _arg(stranger));
+        vm.stopPrank();
+        vm.warp(_now() + 48 hours);
+
+        vm.prank(next);
+        g.applyChange(SET_OWNER, _arg(next));
+        assertEq(g.owner(), next);
+        assertEq(g.epoch(), 1);
+
+        vm.expectRevert(GooseGuard.NotQueued.selector);
+        g.applyChange(ADD_RUNNER, h);
+        vm.expectRevert(GooseGuard.NotQueued.selector);
+        g.applyChange(ALLOW_CODEHASH, bytes32(uint256(9)));
+        vm.expectRevert(GooseGuard.NotQueued.selector);
+        vm.prank(stranger);
+        g.applyChange(SET_OWNER, _arg(stranger));
+        assertFalse(g.isRunner(helper));
+        assertFalse(g.codehashOk(bytes32(uint256(9))));
+        assertEq(g.owner(), next);
+
+        vm.prank(next);
+        assertEq(g.queueChange(ADD_RUNNER, h), _id(1, ADD_RUNNER, h), "the new owner's epoch");
+        vm.warp(_now() + 48 hours);
+        g.applyChange(ADD_RUNNER, h);
+        assertTrue(g.isRunner(helper));
+    }
+
+    /// GG-09: the last runner can never be removed, queued or at once, so Protect rounds always have a runner. Adding
+    /// a runner twice or removing one that isn't changes nothing.
+    function test_the_last_runner_can_never_be_removed() public {
+        assertEq(g.runners(), 1);
+        vm.prank(owner);
+        g.queueChange(REMOVE_RUNNER, _arg(KEEPERHUB));
+        vm.warp(_now() + 48 hours);
+        vm.expectRevert(GooseGuard.LastRunner.selector);
+        g.applyChange(REMOVE_RUNNER, _arg(KEEPERHUB));
+        vm.expectRevert(GooseGuard.LastRunner.selector);
+        vm.prank(owner);
+        g.removeRunner(KEEPERHUB);
+        assertTrue(g.isRunner(KEEPERHUB));
+
+        _applyAfterDelay(ADD_RUNNER, _arg(helper));
+        assertEq(g.runners(), 2);
+        _applyAfterDelay(ADD_RUNNER, _arg(helper));
+        assertEq(g.runners(), 2, "already a runner");
+        _applyAfterDelay(REMOVE_RUNNER, _arg(stranger));
+        assertEq(g.runners(), 2, "not a runner");
+
+        g.applyChange(REMOVE_RUNNER, _arg(KEEPERHUB)); // still due: now there is another runner
+        assertFalse(g.isRunner(KEEPERHUB));
+        assertEq(g.runners(), 1);
+        vm.expectRevert(GooseGuard.LastRunner.selector);
+        vm.prank(owner);
+        g.removeRunner(helper);
+        assertTrue(g.isRunner(helper));
+    }
+
+    /// GG-20: the owner removes a runner at once (a stolen runner key), only the owner, never the last one. Adding
+    /// one back still waits 48 hours, and pause still never stops Protect.
+    function test_the_owner_removes_a_runner_at_once() public {
+        _applyAfterDelay(ADD_RUNNER, _arg(helper));
+        vm.expectRevert(GooseGuard.NotOwner.selector);
+        vm.prank(stranger);
+        g.removeRunner(helper);
+        vm.expectRevert(GooseGuard.NotOwner.selector);
+        vm.prank(KEEPERHUB);
+        g.removeRunner(helper);
+
+        assertEq(_perform(helper, _moves(account, REPAY, 0))[0], GooseGuard.BadArgs.selector, "a runner");
+        vm.expectEmit(true, false, false, false, address(g));
+        emit GooseGuard.RunnerRemoved(helper);
+        vm.prank(owner);
+        g.removeRunner(helper);
+        assertFalse(g.isRunner(helper));
+        assertEq(g.runners(), 1);
+        assertEq(_perform(helper, _moves(account, REPAY, 0)).length, 0, "its moves are skipped in the same block");
+        vm.expectRevert(GooseGuard.NotRunner.selector);
+        vm.prank(owner);
+        g.removeRunner(helper);
+
+        vm.prank(owner);
+        g.queueChange(ADD_RUNNER, _arg(helper));
+        vm.warp(_now() + 48 hours - 1);
+        vm.expectRevert(abi.encodeWithSelector(GooseGuard.TooEarly.selector, _now() + 1));
+        g.applyChange(ADD_RUNNER, _arg(helper));
+
+        vm.prank(owner);
+        g.pause();
+        assertEq(_perform(KEEPERHUB, _moves(account, REPAY, 0))[0], GooseGuard.BadArgs.selector, "Protect runs paused");
     }
 
     /// The owner has no path to a move or to money: `run` is self-only, the perform refuses it, the Guard takes no
@@ -1228,14 +1507,14 @@ contract GooseGuardTest is Test {
             assertEq(_perform(KEEPERHUB, _moves(account, kind, 0))[0], paused[kind], "paused");
         }
         _rebalancer();
-        assertEq(_trade(0, _one(_sale(5, 1e8))), GooseGuard.IsPaused.selector, "a valid trade too");
+        assertEq(_trade(0, _rebal(1e8)), GooseGuard.IsPaused.selector, "a valid trade too");
 
         vm.prank(owner);
         g.unpause();
         for (uint8 kind; kind < 7; ++kind) {
             assertEq(_perform(KEEPERHUB, _moves(account, kind, 0))[0], open[kind], "unpaused");
         }
-        assertEq(_trade(0, _one(_sale(5, 1e8))), REBALANCED);
+        assertEq(_trade(0, _rebal(1e8)), REBALANCED);
     }
 
     // ================================================================== SAVE
@@ -1315,7 +1594,7 @@ contract GooseGuardTest is Test {
         g.setTopUps(true, 0);
         uint256 ok = _sale(5, 1e8);
         bytes4 bad = GooseGuard.BadArgs.selector;
-        assertEq(_trade(0, _one(ok)), REBALANCED, "a clean leg");
+        assertEq(_trade(0, _pair(ok, _buy(0, 99.5e6))), REBALANCED, "a clean leg");
         assertEq(_trade(0, _one(_sale(7, 1e8))), bad, "no reserve 7");
         assertEq(_trade(0, _one(_sale(255, 1e8))), bad, "no reserve 255");
         assertEq(_trade(0, _one(_sale(5, 0))), bad, "nothing to trade");
@@ -1340,7 +1619,7 @@ contract GooseGuardTest is Test {
         assertEq(_trade(0, _one(_sale(0, 1))), crossed, "a sale of a stock under its target");
         assertEq(_trade(0, _pair(_sale(5, 1e8), _buy(0, 99.5e6 + 1))), GooseGuard.CashOut.selector, "past the floor");
         assertEq(_trade(0, _pair(_sale(5, 1e8), _buy(0, 99.5e6))), REBALANCED, "the floor exactly");
-        assertEq(_trade(0, _one(_sale(5, 5e8))), REBALANCED, "down to the target exactly");
+        assertEq(_trade(0, _rebal(5e8)), REBALANCED, "down to the target exactly");
 
         // A $1,500 top-up: the total is $2,500, each target $1,250. NVDA is $250 under, AAPL $1,250 under.
         vm.prank(account);
@@ -1359,7 +1638,7 @@ contract GooseGuardTest is Test {
         _rebalancer();
         vm.prank(account);
         g.setTopUps(true, 0);
-        uint256[] memory sale = _one(_sale(5, 1e8));
+        uint256[] memory sale = _rebal(1e8);
         bytes4 paced = GooseGuard.Paced.selector;
         uint256 t = _now();
         assertEq(_trade(0, sale), REBALANCED);
@@ -1390,7 +1669,7 @@ contract GooseGuardTest is Test {
         vm.prank(account);
         g.setTopUps(true, 0);
         bytes4 off = GooseGuard.OffBand.selector;
-        uint256[] memory sale = _one(_sale(5, 1e8));
+        uint256[] memory sale = _rebal(1e8); // its buy's pool sits on Aave's price
         uint256[] memory buy = _one(_buy(0, 10e6));
         _mockPool(5, -35);
         assertEq(_trade(0, sale), REBALANCED, "a sale, the pool 0.35% under");
@@ -1451,7 +1730,7 @@ contract GooseGuardTest is Test {
         vm.prank(account);
         g.setTopUps(true, 0);
         _mockCashSteps(account, [uint256(101e6), 101e6 - 1]);
-        assertEq(_trade(0, _one(_sale(5, 1e8))), GooseGuard.CashLower.selector, "a rebalance");
+        assertEq(_trade(0, _rebal(1e8)), GooseGuard.CashLower.selector, "a rebalance");
         _mockCashSteps(account, [uint256(101e6), 101e6, 91e6 - 1]);
         assertEq(_trade(10e6, _one(_buy(0, 10e6))), GooseGuard.CashLower.selector, "a top-up");
         _mockCashSteps(account, [uint256(101e6), 101e6, 91e6]);
@@ -1459,6 +1738,35 @@ contract GooseGuardTest is Test {
 
         vm.mockCall(ORACLE, abi.encodeCall(IAaveOracle.getReservePrice, (0)), abi.encode(0));
         assertEq(_trade(0, _one(_sale(5, 1e8))), GooseGuard.NoPrice.selector, "AAPL unpriced, NVDA traded");
+    }
+
+    /// GG-06: a move that sells also buys, and its buys spend the sales' floors to within 10 units of rounding, so a
+    /// runner can't take free stock to cash. A refused one opens no session. A top-up only buys and keeps its rules.
+    function test_a_trade_that_sells_must_buy_with_the_sales_floors() public {
+        _rebalancer(); // NVDA $500 over its target, AAPL $500 under; a one-share sale's floor is $99.50
+        vm.prank(account);
+        g.setTopUps(true, 0);
+        bytes4 toCash = GooseGuard.SellsToCash.selector;
+        assertEq(_trade(0, _one(_sale(5, 1e8))), toCash, "a sale alone");
+        assertEq(_trade(0, _one(_sale(5, 5e8))), toCash, "a sale alone, down to the target");
+        assertEq(_acct(account).sessionAt, 0, "a refused sale opens no session");
+        assertEq(_trade(0, _pair(_sale(5, 1e8), _buy(0, 1e6))), toCash, "a token buy");
+        assertEq(_trade(0, _pair(_sale(5, 1e8), _buy(0, 99.5e6 - 11))), toCash, "11 units of the floor left");
+        assertEq(_trade(0, _pair(_sale(5, 1e8), _buy(0, 99.5e6 - 10))), REBALANCED, "10 units: rounding");
+        assertEq(_trade(0, _rebal(1e8)), REBALANCED, "the floor exactly");
+        assertEq(_trade(0, _rebal(5e8)), REBALANCED, "down to the target, all of it bought back");
+        assertEq(_trade(10e6, _one(_buy(0, 10e6))), INVESTED, "a top-up");
+        assertEq(_trade(10e6, _one(_buy(0, 4e6))), INVESTED, "a top-up may leave cash: it only buys");
+    }
+
+    /// The audit's drain on the unit book: 23 sell-only moves in one session, each refused, so the stock stays put.
+    function test_sell_only_moves_in_a_row_are_all_refused() public {
+        _rebalancer();
+        for (uint256 i; i < 23; ++i) {
+            vm.warp(_now() + 60);
+            assertEq(_trade(0, _one(_sale(5, 1e8))), GooseGuard.SellsToCash.selector);
+        }
+        assertEq(_trade(0, _rebal(1e8)), REBALANCED, "an honest rebalance still runs");
     }
 
     // ================================================================== CONVERT
@@ -1600,6 +1908,11 @@ contract GooseGuardTest is Test {
 
     function _buy(uint256 r, uint256 usdc) internal pure returns (uint256) {
         return r << 248 | 1 << 247 | usdc;
+    }
+
+    /// An honest rebalance on `_rebalancer`'s book: sell `shares` of NVDA, buy AAPL with exactly the sale's floor.
+    function _rebal(uint256 shares) internal pure returns (uint256[] memory) {
+        return _pair(_sale(5, shares), _buy(0, shares * PRICE * (1e4 - 50) / 1e14));
     }
 
     function _tradeMove(uint256 invest, uint256[] memory legs) internal view returns (GooseGuard.Move[] memory) {
@@ -2020,6 +2333,11 @@ contract GooseGuardTest is Test {
             assertEq(l, uint256(line) * 1e14);
             assertEq(t, uint256(target) * 1e14);
         }
+    }
+
+    /// A change's id: keccak256(abi.encode(epoch, kind, arg)).
+    function _id(uint32 epoch, uint8 kind, bytes32 arg) internal pure returns (bytes32) {
+        return keccak256(abi.encode(epoch, kind, arg));
     }
 
     function _arg(address a) internal pure returns (bytes32) {

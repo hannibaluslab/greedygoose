@@ -24,13 +24,21 @@ contract MockGuard {
     uint256 public constant KEEP_BACK = 1e6;
     uint256 public constant DUST = 1e6;
 
+    /// The Guard's Protect set: the members with Protect or Protect · sell on (GooseGuard._syncProtect).
+    address[] public protectMembers;
+
     function add(address a, uint8 jobs, uint32 rescueAt) external {
         members.push(a);
         acc[a] = IGooseGuard.Account(uint24(members.length), jobs, rescueAt, 0, address(0));
+        if (jobs & (1 << 1 | 1 << 2) != 0) protectMembers.push(a);
     }
 
     function membersLength() external view returns (uint256) {
         return members.length;
+    }
+
+    function protectMembersLength() external view returns (uint256) {
+        return protectMembers.length;
     }
 
     function setTimes(address a, uint32 rescueAt, uint32 sessionAt, uint32 mixSetAt) external {
@@ -45,6 +53,17 @@ contract MockGuard {
 
     function linesOf(address) external pure returns (uint256, uint256) {
         return (1.03e18, 1.12e18);
+    }
+
+    /// GooseGuard.sellLineOf: the line, or what a test sets (GG-19's raised line for a cashless account).
+    mapping(address => uint256) internal sellLine;
+
+    function setSellLine(address a, uint256 line) external {
+        sellLine[a] = line;
+    }
+
+    function sellLineOf(address a) external view returns (uint256) {
+        return sellLine[a] == 0 ? 1.03e18 : sellLine[a];
     }
 
     function permissionOf(address, uint8) external pure returns (bytes memory) {
@@ -423,7 +442,9 @@ contract GoosePlannerTest is Test {
         guard.add(b, PROTECT_BITS, 0);
         guard.add(c, PROTECT_BITS, 0);
         guard.add(d, PROTECT_BITS, 0);
-        guard.add(e, 0, uint32(block.timestamp)); // a rescue on, nothing owed: END
+        // A rescue on, nothing owed: END. Protect stays on: the Guard ends a rescue when an account leaves the Protect
+        // set, and the scan walks only that set (GG-14).
+        guard.add(e, PROTECT_BITS, uint32(block.timestamp));
         spoke.set(a, 100e6, 1.02e18, false);
         spoke.set(b, 100e6, 1.0e18, true); // its oracle reverts
         spoke.set(c, 100e6, 1.01e18, false);

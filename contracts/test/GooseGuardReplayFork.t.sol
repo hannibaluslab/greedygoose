@@ -230,7 +230,9 @@ contract GooseGuardReplayForkTest is GuardForkBase {
         deal(STOCKS[AAPL], a, _sharesFor(AAPL, 1_500e6));
         deal(NVDAC, a, _sharesFor(NVDA, 500e6));
         vm.warp(vm.getBlockTimestamp() + 1);
-        uint256[] memory args = _a3(0, _leg(AAPL, _sharesFor(AAPL, 400e6)), _buy(NVDA, 390e6));
+        // The buy spends exactly the sale's floor (GG-06).
+        uint256 sell = _sharesFor(AAPL, 400e6);
+        uint256[] memory args = _a3(0, _leg(AAPL, sell), _buy(NVDA, sell * _price(AAPL) * 9950 / 1e14));
         uint160 before = _sqrtPrice(NVDA);
         _nudge(NVDA, 60);
         Holdings memory h = _holdings(a);

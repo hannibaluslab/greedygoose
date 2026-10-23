@@ -60,6 +60,38 @@ contract GooseGuardJunkForkTest is GuardForkBase {
         g.register(JOB_PROTECT, abi.encode(p));
     }
 
+    /// GG-04: a JAW clone that JAW's permission manager doesn't own (the user is its only owner) can approve a grant in
+    /// the manager, but the Guard won't register it: every move would be refused, and it would sit in the scan.
+    function test_an_account_the_manager_does_not_own_does_not_register() public {
+        bytes[] memory owners = new bytes[](1);
+        owners[0] = abi.encode(makeAddr("unmanaged"));
+        address a = JAW_FACTORY.createAccount(owners, 0);
+        assertEq(a.codehash, _newJawAccount("managed").codehash, "not a JAW clone");
+        PM.Permission memory p = _protectP(a);
+        _grantThroughAccount(p);
+        vm.expectRevert(GooseGuard.NotManaged.selector);
+        vm.prank(a);
+        g.register(JOB_PROTECT, abi.encode(p));
+        assertEq(g.membersLength(), 0);
+        assertEq(g.protectMembersLength(), 0);
+    }
+
+    /// GG-14: junk members with only Save on are members (the page reads them) but not in the Protect set, so the
+    /// Protect scan reads only the victim, at the lowest health or not.
+    function test_members_with_protect_off_are_not_in_the_protect_set() public {
+        for (uint256 i; i < 6; ++i) {
+            _saveOn(_junk(string.concat("saver", vm.toString(i)), 50e6));
+        }
+        address v = _victim("victim");
+        assertEq(g.membersLength(), 7);
+        assertEq(g.protectMembersLength(), 1);
+        assertEq(g.protectMembers(0), v);
+        (, uint256 scanned, address[] memory cands) = planner.scanOf{gas: 50_000_000}(block.timestamp / 600, 0, 1);
+        assertEq(scanned, 1, "the scan read a member with Protect off");
+        assertEq(cands.length, 1);
+        assertEq(cands[0], v);
+    }
+
     /// Eight junk accounts at the lowest health, two of each kind the manager would refuse or that can't lift health:
     /// a checker on a call, the repay call missing, a 1-unit USDC limit, and a clean grant with $1.000001 in the wallet
     /// (a 1-unit repay). KeeperHub's first write repays all four victims and sends no junk move.

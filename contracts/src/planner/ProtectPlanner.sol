@@ -68,15 +68,18 @@ contract ProtectPlanner is PlanBase {
         _trim(moves, _protectMoves(c, d, moves, skip, room));
     }
 
-    /// The scan's rank for an account under its line (GG-01, GG-17; spec §10 now ranks Protect's candidates by this,
+    /// The scan's rank for an account under its line, or under its sale line with no cash (GG-19: then cash is 0 and
+    /// only the sale counts) (GG-01, GG-17; spec §10 now ranks Protect's candidates by this,
     /// not by lowest health): USDC Protect can put toward its need now. The need is the repay that lifts the stored
     /// health `hf` to the target. With health above WITHDRAW_FLOOR_MIN (a sale's first withdraw needs it) and a live Sell grant that may sell a stock backing the
     /// credit now (`_canSell`), a sale can cover it all; otherwise only cash the live Protect grant can repay (wallet
     /// above the keep-back, savings Aave V3 pays out) counts, under MIN_REPAY's rule. 0 = no move can help, and the
-    /// scan leaves it out. `sellOnly`: no cash, so only a sale's gas cap can carry it.
+    /// scan leaves it out. `sellOnly`: no cash, so only a sale's gas cap can carry it. Under its own line or in a rescue
+    /// under its target the rank carries AT_RISK; a candidate only through the raised sale line (GG-19) goes after.
+    /// Under CRITICAL_HF (1.03) it carries CRITICAL instead, ahead of every AT_RISK account (review R1).
     function rankOf(address a, uint256 hf) external view returns (uint256 key, bool sellOnly) {
         (IGooseGuard.Account memory acc,) = GUARD.accountOf(a);
-        (, uint256 target) = GUARD.linesOf(a);
+        (uint256 line, uint256 target) = GUARD.linesOf(a);
         if (hf >= target) return (0, false);
         uint256 need = _ceilDiv(SPOKE.getUserTotalDebt(USDC_RESERVE_ID, a) * (target - hf), target);
         uint256 cash;
@@ -84,9 +87,12 @@ contract ProtectPlanner is PlanBase {
             cash = _sub(USDC.balanceOf(a), KEEP_BACK) + savingsOut(a);
         }
         sellOnly = cash == 0;
-        if (hf > WITHDRAW_FLOOR_MIN && acc.jobs & (1 << JOB_SELL) != 0 && _canSell(a)) return (need, sellOnly);
-        if (cash < need && cash < MIN_REPAY) return (0, sellOnly);
-        key = _min(need, cash);
+        if (hf > WITHDRAW_FLOOR_MIN && acc.jobs & (1 << JOB_SELL) != 0 && _canSell(a)) key = need;
+        else if (cash < need && cash < MIN_REPAY) return (0, sellOnly);
+        else key = _min(need, cash);
+        bool rescuing = acc.rescueAt != 0 && block.timestamp <= uint256(acc.rescueAt) + RESCUE_MAX_AGE;
+        if (hf < CRITICAL_HF) key |= CRITICAL;
+        else if (hf < line || (rescuing && hf + DONE_GAP < target)) key |= AT_RISK;
     }
 
     /// A live Sell grant that may sell, now, at least one stock backing the credit: it lists the stock's approve, the
@@ -125,9 +131,13 @@ contract ProtectPlanner is PlanBase {
             if (c.rescueAt != 0) moves[n++] = _move(c.a, END, new uint256[](0));
             return n;
         }
-        // The Guard's gate: under the line, or in a rescue under the target.
+        // The Guard's gate: under the line, or in a rescue under the target. A sale's line is the Guard's
+        // sellLineOf (GG-19): raised to 1.08 when Protect can't repay the account with cash, so between its own line
+        // and that only a sale is planned.
         bool gate = c.hf < c.line || (c.rescuing && c.hf + DONE_GAP < c.target);
-        if (!gate || (!protectOn && !sellOn)) {
+        sellOn = sellOn && (gate || c.hf < GUARD.sellLineOf(c.a));
+        protectOn = protectOn && gate;
+        if (!sellOn && !protectOn) {
             if (c.rescueAt != 0 && (!c.rescuing || c.hf + DONE_GAP >= c.target)) {
                 moves[n++] = _move(c.a, END, new uint256[](0));
             }

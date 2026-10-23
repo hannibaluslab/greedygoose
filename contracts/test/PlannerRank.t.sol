@@ -23,8 +23,9 @@ contract MockProtect {
         empty[a] = e;
     }
 
+    /// Every member here is under its line, so a rank that helps carries PlanBase.AT_RISK, as rankOf's does.
     function rankOf(address a, uint256) external view returns (uint256, bool) {
-        return (key[a], false);
+        return (key[a] == 0 ? 0 : key[a] | 1 << 128, false);
     }
 
     function planProtectExcept(address a, uint256, uint256) external view returns (PlanBase.Move[] memory m) {
@@ -148,16 +149,51 @@ contract PlannerRankTest is Test {
         assertEq(need, 0);
     }
 
-    /// In the read: once the list is full, a member whose bound can't beat its worst rank is never read.
+    /// GG-19: between its own line (1.03) and the Guard's raised sale line (1.08), a member with Protect · sell is kept
+    /// for a sale when the Guard's sellLineOf says it has no cash; with cash (sellLineOf = its line) it isn't.
+    function test_gg19_a_cashless_member_at_1_07_is_kept_for_a_sale_and_a_cash_member_is_not() public {
+        address a = _member(0, PROTECT_BITS, 100e6, 0, true);
+        spoke.set(a, 100e6, 1.07e18, false);
+        (uint8 need,) = planner.protectCheck(a, 0);
+        assertEq(need, 0, "with cash: above its line");
+        guard.setSellLine(a, 1.08e18);
+        (need,) = planner.protectCheck(a, 0);
+        assertEq(need, 1, "cashless: under the sale line");
+        spoke.set(a, 100e6, 1.08e18, false);
+        (need,) = planner.protectCheck(a, 0);
+        assertEq(need, 0, "at 1.08 itself");
+        // Without Protect · sell the raised line doesn't apply.
+        address b = _member(1, PROTECT_ONLY, 100e6, 0, true);
+        spoke.set(b, 100e6, 1.07e18, false);
+        MockToken(USDC).set(b, 5e6);
+        guard.setSellLine(b, 1.08e18);
+        (need,) = planner.protectCheck(b, 0);
+        assertEq(need, 0, "no Protect sell grant");
+    }
+
+    /// In the read: once the list is full of CRITICAL ranks (health under 1.03, as rankOf gives these members at 1.0),
+    /// a member whose bound can't beat the worst one is never read.
     function test_the_read_skips_aave_for_a_member_that_cannot_beat_a_full_list() public {
         uint256 kept = planner.MAX_CANDS() + planner.CAND_RESERVE();
         for (uint256 i; i < kept; ++i) {
-            _member(i, PROTECT_BITS, 1_000e6, 600e6, true);
+            _member(i, PROTECT_BITS, 1_000e6, planner.CRITICAL() | 600e6, true);
         }
         address low = _member(kept, PROTECT_BITS, 500e6, 0, true); // debt $500 < the worst kept rank, $600
         address high = _member(kept + 1, PROTECT_BITS, 700e6, 0, true);
         vm.expectCall(SPOKE, abi.encodeCall(MockSpoke.getUserAccountData, (low)), 0);
         vm.expectCall(SPOKE, abi.encodeCall(MockSpoke.getUserAccountData, (high)), 1);
+        planner.checkUpkeep{gas: 8_600_000}(abi.encode(uint256(0), uint256(1)));
+    }
+
+    /// Review R1: a full list whose worst rank is only AT_RISK bounds nothing, because a member under 1.03 outranks it
+    /// whatever its value: the smaller member is still read.
+    function test_a_full_list_under_critical_still_reads_every_member() public {
+        uint256 kept = planner.MAX_CANDS() + planner.CAND_RESERVE();
+        for (uint256 i; i < kept; ++i) {
+            _member(i, PROTECT_BITS, 1_000e6, planner.AT_RISK() | 600e6, true);
+        }
+        address low = _member(kept, PROTECT_BITS, 500e6, 0, true);
+        vm.expectCall(SPOKE, abi.encodeCall(MockSpoke.getUserAccountData, (low)), 1);
         planner.checkUpkeep{gas: 8_600_000}(abi.encode(uint256(0), uint256(1)));
     }
 }

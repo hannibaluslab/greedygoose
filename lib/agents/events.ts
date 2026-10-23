@@ -102,6 +102,7 @@ const DECODE: { [N in EventName]: (a: Args<N>) => AgentEvent | null } = {
   ChangeQueued: () => null,
   ChangeApplied: () => null,
   ChangeCancelled: () => null,
+  RunnerRemoved: () => null,
 };
 
 /**

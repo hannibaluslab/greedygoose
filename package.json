@@ -11,7 +11,7 @@
     "typecheck": "next typegen && tsc --noEmit",
     "verify:registry": "vitest run tests/onchain",
     "contracts:test": "cd contracts && forge test",
-    "contracts:vectors": "tsx scripts/agent-vectors.ts",
+    "contracts:vectors": "tsx scripts/agent-vectors.ts && tsx scripts/app-bytes-vectors.ts",
     "rehearsal:fork": "bash scripts/rehearsal/start-fork.sh",
     "rehearsal:setup": "tsx scripts/rehearsal/setup.ts",
     "rehearsal:dev": "tsx scripts/rehearsal/dev.ts",

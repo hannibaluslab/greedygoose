@@ -10,6 +10,7 @@ import {
     IAeroRouter,
     IChainlinkFeed,
     IERC20,
+    IJustanAccount,
     IPsm3,
     ISpoke,
     IUniswapRouter
@@ -25,8 +26,8 @@ import {
 ///         replaced any day without users granting again. Every amount in a move is untrusted and bounded here.
 ///
 ///         The account registers its own approved permission per agent (only it can), and only the newest one counts.
-///         The owner can pause Save, Rebalance and Turn into cash, never Protect, and every other change waits 48
-///         hours in public. The owner can never move money.
+///         The owner can pause Save, Rebalance and Turn into cash, never Protect, and remove a runner at once (never
+///         the last one); every other change waits 48 hours in public. The owner can never move money.
 contract GooseGuard {
     // ------------------------------------------------------------------ types
 
@@ -146,6 +147,9 @@ contract GooseGuard {
     uint256 internal constant LINE_MIN = 1.03e18;
     uint256 internal constant DEFAULT_LINE = 1.03e18;
     uint256 internal constant DEFAULT_TARGET = 1.12e18;
+    /// GG-19: an account Protect can't repay with cash (Protect off, or no wallet cash above the keep-back and no
+    /// savings) may be sold from this health, not only under its own line. A user's own higher line still wins.
+    uint256 internal constant SELL_LINE_NO_CASH = 1.08e18;
     uint256 internal constant TARGET_MAX = 1.4e18;
     uint256 internal constant TARGET_GAP = 0.05e18;
     /// How far past the target a Protect move may land.
@@ -164,6 +168,11 @@ contract GooseGuard {
     uint256 internal constant EURC_FEED_MAX_AGE = 2 hours;
     /// Every owner change waits this long, in public.
     uint256 internal constant DELAY = 48 hours;
+    /// A matured change can be applied for this long after its ETA, then it must be queued again (GG-08).
+    uint256 internal constant CHANGE_TTL = 7 days;
+    /// A TRADE that sells must spend the sales' floors on its buys, give or take this much rounding, in USDC units
+    /// (GG-06): the Planner splits the floors over at most six buys, rounding each down.
+    uint256 internal constant TRADE_ROUNDING = 10;
     /// The largest permission an account may register.
     uint256 internal constant MAX_PERMISSION = 8192;
 
@@ -209,6 +218,10 @@ contract GooseGuard {
 
     address public owner;
     bool public paused;
+    /// Part of every change id, bumped by each SET_OWNER: a change the old owner queued can never apply (GG-08).
+    uint32 public epoch;
+    /// How many runners there are; never below one (GG-09).
+    uint32 public runners;
     mapping(bytes32 id => uint256 eta) public queued;
     mapping(address runner => bool) public isRunner;
     mapping(bytes32 codehash => bool) public codehashOk;
@@ -216,6 +229,11 @@ contract GooseGuard {
     mapping(address account => Account) internal accounts;
     mapping(address account => Settings) internal settings;
     mapping(address account => mapping(uint8 job => Perm)) internal perms;
+    /// The Protect set (GG-14): the accounts with Protect or Protect · sell on, which the Planner's Protect scan walks,
+    /// so a member with neither on costs the scan nothing. `members` stays whole for the Planner's page.
+    address[] public protectMembers;
+    /// The account's place in `protectMembers` plus one (0 = not in it).
+    mapping(address account => uint256) internal protectIndex;
     bool transient _lock;
 
     // ------------------------------------------------------------------ events
@@ -246,6 +264,7 @@ contract GooseGuard {
     event ChangeQueued(bytes32 indexed id, uint8 kind, bytes32 arg, uint256 eta);
     event ChangeApplied(bytes32 indexed id, uint8 kind, bytes32 arg);
     event ChangeCancelled(bytes32 indexed id);
+    event RunnerRemoved(address indexed runner);
 
     // ------------------------------------------------------------------ errors
 
@@ -280,6 +299,7 @@ contract GooseGuard {
     error Expired();
     error StaleGrant();
     error NotApproved();
+    error NotManaged();
     error TooManyMembers();
     error BadMix();
     error BadLines();
@@ -300,6 +320,10 @@ contract GooseGuard {
     error TooMuch();
     error StaleFeed();
     error CashLower();
+    error SellsToCash();
+    error OppositeQueued();
+    error ChangeExpired();
+    error LastRunner();
 
     modifier nonReentrant() {
         if (_lock) revert Reentered();
@@ -335,6 +359,7 @@ contract GooseGuard {
         if (owner_ == address(0) || runner == address(0)) revert OutOfBounds();
         owner = owner_;
         isRunner[runner] = true;
+        runners = 1;
         codehashOk[cloneCodehash] = true;
         SALE_FLOOR_BPS = saleFloorBps;
         SWAP_FLOOR_BPS = swapFloorBps;
@@ -427,7 +452,7 @@ contract GooseGuard {
     /// The wallet goes first; $1 always stays in it.
     function _repay(address a, uint256[] calldata args) internal {
         if (args.length != 2) revert BadArgs();
-        Before memory b = _protectBefore(a);
+        Before memory b = _protectBefore(a, false);
         uint256 cash = _bal(address(USDC), a);
         uint256 fromWallet = _min(args[0], cash > KEEP_BACK ? cash - KEEP_BACK : 0);
         uint256 fromSavings = _min(args[1], _bal(address(AUSDC), a));
@@ -475,7 +500,7 @@ contract GooseGuard {
             if (minOut[i] == 0) revert BelowFloor();
             repaid += minOut[i];
         }
-        Before memory b = _protectBefore(a);
+        Before memory b = _protectBefore(a, true);
 
         uint256[7] memory walletBefore;
         uint256 stocksSold;
@@ -620,7 +645,12 @@ contract GooseGuard {
         for (uint256 i = 1; i < n; ++i) {
             _tradeLeg(a, args[i], b, p, sold, calls, 2 * (i - 1));
         }
-        if (p.sales > 0) _pace(a, s.mixSetAt);
+        if (p.sales > 0) {
+            // GG-06: a move that sells also buys, and the buys spend the sales' floors, so stock never goes to cash.
+            // What the sales bring in over their floors is the only cash left; a top-up only buys.
+            if (p.bought == 0 || p.cash > TRADE_ROUNDING) revert SellsToCash();
+            _pace(a, s.mixSetAt);
+        }
 
         uint256 cashBefore = _bal(address(USDC), a);
         _execute(a, JOB_REBALANCE, calls);
@@ -811,11 +841,13 @@ contract GooseGuard {
     // ------------------------------------------------------------------ Protect's rule
 
     /// The gate: something is owed, and health is under the line, or a rescue is on and health is under the target.
-    function _protectBefore(address a) internal view returns (Before memory b) {
+    /// A sale's line is `sellLineOf` (GG-19); a repay's is the account's own.
+    function _protectBefore(address a, bool sale) internal view returns (Before memory b) {
         b.debt = _debt(a);
         if (b.debt == 0) revert NothingOwed();
         ISpoke.UserAccountData memory d = _data(a);
         (uint256 line, uint256 target) = linesOf(a);
+        if (sale) line = sellLineOf(a);
         b.hf = d.healthFactor;
         b.target = target;
         b.rescueAt = accounts[a].rescueAt;
@@ -905,6 +937,9 @@ contract GooseGuard {
         if (!_managerSays(PM.isApproved.selector, permission) || _managerSays(PM.isRevoked.selector, permission)) {
             revert NotApproved();
         }
+        // JAW's permission manager owns the account (the Planner's _aliveP asks the same): without it every move would
+        // be refused, so an account that isn't one can't take a place in the members or the Protect set (GG-04).
+        if (!_managerOwns(msg.sender)) revert NotManaged();
         g.data = SSTORE2.write(permission[0x20:]); // the tuple itself, ready to splice into executeBatch
         g.start = uint48(start);
 
@@ -915,7 +950,41 @@ contract GooseGuard {
             acc.index = uint24(members.length);
         }
         acc.jobs |= uint8(1 << job);
+        _syncProtect(msg.sender, acc.jobs);
         emit JobOn(msg.sender, job, uint48(start), uint48(end));
+    }
+
+    /// The account's `isOwnerAddress(manager)`, gas-capped, any odd answer counting as no (PlanBase._managerOwns).
+    function _managerOwns(address a) internal view returns (bool owns) {
+        bytes memory data = abi.encodeWithSelector(IJustanAccount.isOwnerAddress.selector, address(MANAGER));
+        assembly ("memory-safe") {
+            let ok := staticcall(50000, a, add(data, 0x20), mload(data), 0x00, 0x20)
+            owns := and(and(ok, eq(returndatasize(), 0x20)), eq(mload(0x00), 1))
+        }
+    }
+
+    /// Keeps `a` in the Protect set exactly while Protect or Protect · sell is on; it leaves by swap-and-pop. Leaving
+    /// also ends its rescue: no agent is left to carry it on or to end it (the scan no longer reads the account), and
+    /// a rescue left on would hold its top-ups back.
+    function _syncProtect(address a, uint8 jobs) internal {
+        uint256 i = protectIndex[a];
+        bool on = jobs & (1 << JOB_PROTECT | 1 << JOB_SELL) != 0;
+        if (on == (i != 0)) return;
+        if (on) {
+            protectMembers.push(a);
+            protectIndex[a] = protectMembers.length;
+            return;
+        }
+        address last = protectMembers[protectMembers.length - 1];
+        protectMembers[i - 1] = last;
+        protectIndex[last] = i;
+        protectMembers.pop();
+        delete protectIndex[a];
+        Account storage acc = accounts[a];
+        if (acc.rescueAt != 0) {
+            acc.rescueAt = 0;
+            emit RescueEnded(a);
+        }
     }
 
     /// The manager's answer to `isApproved(permission)` or `isRevoked(permission)`; false if it can't answer.
@@ -932,7 +1001,9 @@ contract GooseGuard {
     /// Switches an agent off. Its permission stays readable and its start stays the high-water mark.
     function unregister(uint8 job) external nonReentrant {
         if (job >= JOBS) revert BadJob();
-        accounts[msg.sender].jobs &= ~uint8(1 << job);
+        Account storage acc = accounts[msg.sender];
+        acc.jobs &= ~uint8(1 << job);
+        _syncProtect(msg.sender, acc.jobs);
         emit JobOff(msg.sender, job);
     }
 
@@ -1005,11 +1076,22 @@ contract GooseGuard {
         emit Paused(false);
     }
 
-    /// Starts a change's 48-hour wait. `arg` is the address (as bytes32) or the codehash.
+    /// Removes a runner at once, for a runner whose key is stolen (GG-20); never the last one (GG-09). Adding a
+    /// runner still waits 48 hours, and the account and its own helper can always send its Protect moves.
+    function removeRunner(address runner) external onlyOwner {
+        if (!isRunner[runner]) revert NotRunner();
+        _removeRunner(runner);
+        emit RunnerRemoved(runner);
+    }
+
+    /// Starts a change's 48-hour wait. `arg` is the address (as bytes32) or the codehash. A change can't be queued
+    /// while its opposite for the same target is (GG-08: ADD and REMOVE of one runner, ALLOW and DISALLOW of one
+    /// codehash), so the owner's last word is the only one that can apply; the owner cancels the other first.
     function queueChange(uint8 kind, bytes32 arg) external onlyOwner returns (bytes32 id) {
         _checkChange(kind, arg);
-        id = keccak256(abi.encode(kind, arg));
-        if (queued[id] != 0) revert AlreadyQueued();
+        id = _changeId(kind, arg);
+        if (_pending(id)) revert AlreadyQueued();
+        if (kind < SET_OWNER && _pending(_changeId(kind ^ 1, arg))) revert OppositeQueued();
         uint256 eta = block.timestamp + DELAY;
         queued[id] = eta;
         emit ChangeQueued(id, kind, arg, eta);
@@ -1021,19 +1103,24 @@ contract GooseGuard {
         emit ChangeCancelled(id);
     }
 
-    /// Anyone may apply a change once its wait is over, except a new owner, who must apply their own.
+    /// Anyone may apply a change from its ETA for 7 days, except a new owner, who must apply their own. A new owner
+    /// bumps the epoch, so nothing the old owner queued can apply.
     function applyChange(uint8 kind, bytes32 arg) external nonReentrant {
-        bytes32 id = keccak256(abi.encode(kind, arg));
+        bytes32 id = _changeId(kind, arg);
         uint256 eta = queued[id];
         if (eta == 0) revert NotQueued();
         if (block.timestamp < eta) revert TooEarly(eta);
+        if (block.timestamp > eta + CHANGE_TTL) revert ChangeExpired();
         _checkChange(kind, arg);
         delete queued[id];
         address who = address(uint160(uint256(arg)));
         if (kind == ADD_RUNNER) {
-            isRunner[who] = true;
+            if (!isRunner[who]) {
+                isRunner[who] = true;
+                ++runners;
+            }
         } else if (kind == REMOVE_RUNNER) {
-            isRunner[who] = false;
+            if (isRunner[who]) _removeRunner(who);
         } else if (kind == ALLOW_CODEHASH) {
             codehashOk[arg] = true;
         } else if (kind == DISALLOW_CODEHASH) {
@@ -1041,8 +1128,27 @@ contract GooseGuard {
         } else {
             if (msg.sender != who) revert NotNewOwner();
             owner = who;
+            ++epoch;
         }
         emit ChangeApplied(id, kind, arg);
+    }
+
+    /// A change's id: its kind and target in the current owner's epoch.
+    function _changeId(uint8 kind, bytes32 arg) internal view returns (bytes32) {
+        return keccak256(abi.encode(epoch, kind, arg));
+    }
+
+    /// Queued and not expired: matured or still waiting.
+    function _pending(bytes32 id) internal view returns (bool) {
+        uint256 eta = queued[id];
+        return eta != 0 && block.timestamp <= eta + CHANGE_TTL;
+    }
+
+    /// Takes away a runner that is one, unless it is the last (GG-09): Protect rounds always have a runner.
+    function _removeRunner(address runner) internal {
+        if (runners == 1) revert LastRunner();
+        isRunner[runner] = false;
+        --runners;
     }
 
     function _checkChange(uint8 kind, bytes32 arg) internal pure {
@@ -1063,11 +1169,26 @@ contract GooseGuard {
         return members.length;
     }
 
+    function protectMembersLength() external view returns (uint256) {
+        return protectMembers.length;
+    }
+
     /// The account's Protect line and target, WAD.
     function linesOf(address a) public view returns (uint256 line, uint256 target) {
         Settings storage s = settings[a];
         if (s.line == 0) return (DEFAULT_LINE, DEFAULT_TARGET);
         return (uint256(s.line) * 1e14, uint256(s.target) * 1e14);
+    }
+
+    /// The line under which Protect may sell the account's stock (GG-19): its own line, raised to SELL_LINE_NO_CASH
+    /// when Protect can't repay it with cash: Protect is off, or its wallet above the keep-back plus its savings is
+    /// under $1 (MIN_REPAY: dust doesn't count as cash, review R2). The rescue still ends at its own target.
+    function sellLineOf(address a) public view returns (uint256 line) {
+        (line,) = linesOf(a);
+        if (line >= SELL_LINE_NO_CASH) return line;
+        if (accounts[a].jobs & (1 << JOB_PROTECT) == 0) return SELL_LINE_NO_CASH;
+        uint256 w = _bal(address(USDC), a);
+        if ((w > KEEP_BACK ? w - KEEP_BACK : 0) + _bal(address(AUSDC), a) < 1e6) line = SELL_LINE_NO_CASH;
     }
 
     /// The account's newest permission for `job`, as it registered it (abi.encode(Permission)); empty if none.

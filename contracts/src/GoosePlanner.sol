@@ -15,9 +15,10 @@ import {TradePlanner} from "./planner/TradePlanner.sol";
 ///         reads. So it can be replaced any day by repointing KeeperHub's two read steps, with nothing for users to do.
 ///
 ///         One read, each account in its own `try` so one account's revert can't stop the round for everyone:
-///         1. Protect scan: each member, from a golden-ratio start keyed on the round, until the scan's share of the
-///            read budget is used. Candidates: under their own line, in a rescue under their target, or with a rescue
-///            to end.
+///         1. Protect scan: each account in the Guard's Protect set (Protect or Protect · sell on; GG-14), from a
+///            golden-ratio start keyed on the round, until the scan's share of the read budget is used. Candidates:
+///            under their own line, in a rescue under their target, with Protect · sell on and under the Guard's sale
+///            line (GG-19: 1.08 when Protect can't repay them with cash), or with a rescue to end.
 ///         2. Protect plan (ProtectPlanner), most USDC Protect can put toward the need first (ProtectPlanner.rankOf;
 ///            spec §10 changes here from lowest health first: GG-01, adopted from both judges), each candidate packed
 ///            into what's left of PACK_GAS as it's planned: REPAY (wallet, then savings) and SELL if still short, as
@@ -88,7 +89,9 @@ contract GoosePlanner is PlanBase {
         uint256 shards;
         uint256 round;
         uint256 members;
-        uint256 start; // the scan's first index
+        uint256 start; // the page's first index in `members`
+        uint256 protects; // the Protect set's size
+        uint256 pStart; // the scan's first index in the Protect set
         bool vet; // rank candidates by what Protect can do for them (the read), not by health (scanOf)
     }
 
@@ -148,7 +151,9 @@ contract GoosePlanner is PlanBase {
         r.round = block.timestamp / 600;
         r.members = GUARD.membersLength();
         if (r.members == 0) return (false, "");
-        r.start = _start(r);
+        r.start = _start(r, r.members);
+        r.protects = GUARD.protectMembersLength();
+        r.pStart = _start(r, r.protects);
         r.vet = true;
 
         Found memory f = _newFound();
@@ -160,7 +165,8 @@ contract GoosePlanner is PlanBase {
         return (true, abi.encode(out));
     }
 
-    /// The scan alone, for coverage: how many members one read reaches from `round`'s start, and its candidates.
+    /// The scan alone, for coverage: how many of the Protect set one read reaches from `round`'s start (an index in
+    /// the set), and its candidates.
     function scanOf(uint256 round, uint256 shard, uint256 shards)
         external
         view
@@ -170,9 +176,9 @@ contract GoosePlanner is PlanBase {
         r.entry = gasleft();
         r.limit = r.entry > READ_RESERVE ? _min(READ_GAS, r.entry - READ_RESERVE) : 0;
         (r.shard, r.shards, r.round) = (shard, shards == 0 ? 1 : shards, round);
-        r.members = GUARD.membersLength();
-        if (r.members == 0) return (0, 0, cands);
-        r.start = start = _start(r);
+        r.protects = GUARD.protectMembersLength();
+        if (r.protects == 0) return (0, 0, cands);
+        r.pStart = start = _start(r, r.protects);
         Cand[] memory c;
         (c, scanned) = _scan(r);
         cands = new address[](c.length);
@@ -222,6 +228,8 @@ contract GoosePlanner is PlanBase {
         (uint256 line, uint256 target) = GUARD.linesOf(a);
         bool rescuing = acc.rescueAt != 0 && block.timestamp <= uint256(acc.rescueAt) + RESCUE_MAX_AGE;
         if (protects && (hf < line || (rescuing && hf + DONE_GAP < target))) return (1, hf);
+        // GG-19: the Guard sells an account it can't repay with cash from its raised sale line.
+        if (acc.jobs & (1 << JOB_SELL) != 0 && hf < GUARD.sellLineOf(a)) return (1, hf);
         if (acc.rescueAt != 0 && (!rescuing || hf + DONE_GAP >= target)) return (2, hf);
         return (0, hf);
     }
@@ -234,21 +242,26 @@ contract GoosePlanner is PlanBase {
 
     // ================================================================== the read: scan, plan, pack
 
-    /// Phase 1: from the round's start, each member's cheap Protect check until the scan's budget is used. Keeps the
-    /// MAX_CANDS + CAND_RESERVE first in rank (lowest health in scanOf), END-only candidates after them. Returns how
-    /// many members it reached. A member starts while CHECK_GAS / 3 of the scan's share is left, and its check and
-    /// rank together never run past that share plus CHECK_GAS / 3, so the read can't run out of gas.
+    /// Phase 1: from the round's start, the cheap Protect check of each account in the Guard's Protect set until the
+    /// scan's budget is used: a member with neither Protect agent on is never read (GG-14), and a junk account can't
+    /// join at all (GG-04: register needs JAW's manager to own it). Keeps the MAX_CANDS + CAND_RESERVE first in rank
+    /// (lowest health in scanOf), END-only candidates after them. Returns how many of the set it reached.
+    /// A member starts while CHECK_GAS / 3 of the scan's share is left, and its check and rank together never run
+    /// past that share plus CHECK_GAS / 3, so the read can't run out of gas.
     function _scan(Read memory r) internal view returns (Cand[] memory cands, uint256 j) {
         cands = new Cand[](MAX_CANDS + CAND_RESERVE);
         uint256 n;
         uint256 stop = r.limit * SCAN_PCT / 100;
-        uint256 end = stop + CHECK_GAS / 3;
-        for (; j < r.members && _used(r) + CHECK_GAS / 3 < stop; ++j) {
-            uint256 k = (r.start + j) % r.members;
+        // R3: a member admitted with CHECK_GAS / 3 left gets room for both its check and its rank.
+        uint256 end = _min(stop + CHECK_GAS, r.limit * PROTECT_PCT / 100);
+        for (; j < r.protects && _used(r) + CHECK_GAS / 3 < stop; ++j) {
+            uint256 k = (r.pStart + j) % r.protects;
             if (k % r.shards != r.shard % r.shards) continue;
-            address a = GUARD.members(k);
-            // A full list's worst rank: a member whose stage-1 bound can't beat it skips Aave's read (G5).
-            uint256 bar = r.vet && n == cands.length ? ~cands[n - 1].hf : 0;
+            address a = GUARD.protectMembers(k);
+            // A full list's worst rank: a member whose stage-1 bound can't beat it skips Aave's read (G5). Only a
+            // CRITICAL worst bounds stage 1: below it, an account under 1.03 outranks any value (review R1).
+            uint256 w = r.vet && n == cands.length ? ~cands[n - 1].hf : 0;
+            uint256 bar = w >= CRITICAL ? w % AT_RISK : 0; // the value, without either tier bit
             try this.protectCheck{gas: _checkGas(r, end)}(a, bar) returns (uint8 need, uint256 hf) {
                 Cand memory x = Cand(a, need == 2 ? type(uint256).max : hf, false);
                 if (need == 1 && r.vet) x = _vet(r, end, a, hf);
@@ -514,12 +527,14 @@ contract GoosePlanner is PlanBase {
         }
     }
 
-    /// Where a read starts: the round's golden-ratio start. `checkData` (shard, shards) reads the members whose index is
-    /// shard mod shards; a shard of `shards` or more (decision 11's `abi.encode(1, 1)` for KeeperHub's second read)
-    /// reads the same members starting half the list away, so the round's two reads scan different members.
-    function _start(Read memory r) internal pure returns (uint256) {
-        uint256 offset = r.shard >= r.shards ? r.members / 2 : 0;
-        return (scanStart(r.round, r.members) + offset) % r.members;
+    /// Where a read starts in a list of `size` (the members for the page, the Protect set for the scan): the round's
+    /// golden-ratio start. `checkData` (shard, shards) reads the entries whose index is shard mod shards; a shard of
+    /// `shards` or more (decision 11's `abi.encode(1, 1)` for KeeperHub's second read) reads the same entries starting
+    /// half the list away, so the round's two reads scan different accounts.
+    function _start(Read memory r, uint256 size) internal pure returns (uint256) {
+        if (size == 0) return 0;
+        uint256 offset = r.shard >= r.shards ? size / 2 : 0;
+        return (scanStart(r.round, size) + offset) % size;
     }
 
     function _used(Read memory r) internal view returns (uint256) {

@@ -40,6 +40,7 @@ contract GuardHandler is Test {
     uint256 public freeStockSoldByProtect;
     uint256 public filledOffBand;
     uint256 public tradeCrossedTarget;
+    uint256 public soldToCash;
     // coverage
     mapping(uint8 => uint256) public ran;
     mapping(uint8 => uint256) public refused;
@@ -237,6 +238,12 @@ contract GuardHandler is Test {
                 uint256 amount = buy ? 1 + _r(seed, 20 + i) % 300e6 : 1 + _r(seed, 20 + i) % (s.wallet[r] + 1);
                 args[i] = r << 248 | (buy ? uint256(1) << 247 : 0) | amount;
             }
+            // A third of the rebalances are the Planner's kind: a sale within the drift and a buy with its floor
+            // (GG-06: a move that sells must buy with the sales' floors), so trades that sell get through the world.
+            if (_r(seed, 50) % 3 == 0) {
+                uint256[] memory honest = _honestTrade(a, seed, s);
+                if (honest.length > 0) args = honest;
+            }
         } else if (kind == 4) {
             args = new uint256[](2);
             args[0] = _r(seed, 0) % 6; // 5 is out of range on purpose
@@ -247,6 +254,51 @@ contract GuardHandler is Test {
         } else {
             args = new uint256[](0);
         }
+    }
+
+    /// A sale of part of the drift of the stock furthest over its target, and a buy of the one furthest under with
+    /// exactly the sale's floor; empty when the mix has no stock on each side.
+    function _honestTrade(address a, uint256 seed, Snap memory s) internal view returns (uint256[] memory args) {
+        (, GooseGuard.Settings memory st) = g.accountOf(a);
+        uint256[7] memory value;
+        uint256[7] memory price;
+        uint256 total;
+        for (uint256 r; r < 7; ++r) {
+            if (uint256(st.mix) >> (16 * r) & 0xffff == 0) continue;
+            price[r] = WOracle(ORACLE).getReservePrice(r);
+            value[r] = s.wallet[r] * price[r] / 1e10;
+            total += value[r];
+        }
+        uint256 over = 7;
+        uint256 under = 7;
+        uint256 overBy;
+        uint256 underBy;
+        for (uint256 r; r < 7; ++r) {
+            uint256 w = uint256(st.mix) >> (16 * r) & 0xffff;
+            if (w == 0) continue;
+            uint256 target = total * w / 1e4;
+            if (value[r] > target && value[r] - target > overBy) (over, overBy) = (r, value[r] - target);
+            if (target > value[r] && target - value[r] > underBy) (under, underBy) = (r, target - value[r]);
+        }
+        if (over == 7 || under == 7) return args;
+        uint256 usd = (overBy < underBy ? overBy : underBy) * (1 + _r(seed, 52) % 100) / 100;
+        uint256 shares = usd * 1e10 / price[over];
+        uint256 floor = shares * price[over] * (1e4 - SWAP_FLOOR) / 1e14;
+        if (floor == 0) return args;
+        args = new uint256[](3);
+        args[1] = over << 248 | shares;
+        args[2] = under << 248 | uint256(1) << 247 | floor;
+    }
+
+    /// What the sales' floors among legs 1 .. to - 1 leave after their buys, at Aave's prices (0 if the buys spend more).
+    function _floorsLeft(uint256[] memory args, uint256 to) internal view returns (uint256 left) {
+        uint256 spent;
+        for (uint256 i = 1; i < to; ++i) {
+            uint256 amount = uint128(args[i]);
+            if (args[i] >> 247 & 1 == 1) spent += amount;
+            else left += amount * WOracle(ORACLE).getReservePrice(args[i] >> 248) * (1e4 - SWAP_FLOOR) / 1e14;
+        }
+        left = left > spent ? left - spent : 0;
     }
 
     // ================================================================== actions
@@ -262,6 +314,8 @@ contract GuardHandler is Test {
             (GooseGuard.Account memory acc,) = g.accountOf(a);
             if (acc.runner != helper) from = runner;
         }
+        // The owner may have removed the runner at once (GG-20): the account itself sends its move then.
+        if (from == runner && !g.isRunner(runner)) from = a;
 
         Snap memory before = snap(a);
         Snap memory otherBefore = snap(other);
@@ -306,7 +360,17 @@ contract GuardHandler is Test {
                 if (afterS.wallet[r] < before.wallet[r]) _break(freeStockSoldByProtect++, "protect sold free stock");
             }
         }
-        if (kind == 3 && !wasRefused) _checkTradeTargets(a, args, before);
+        if (kind == 3 && !wasRefused) {
+            _checkTradeTargets(a, args, before);
+            // GG-06: a trade that ran and sold also bought, with the sales' floors to within 10 units.
+            bool sold;
+            bool bought;
+            for (uint256 i = 1; i < args.length; ++i) {
+                if (args[i] >> 247 & 1 == 1) bought = true;
+                else sold = true;
+            }
+            if (sold && (!bought || _floorsLeft(args, args.length) > 10)) _break(soldToCash++, "trade sold to cash");
+        }
         _checkBandOfFills(kind, fills0);
         _checkFills(kind, fills0, ROUTER);
         _checkFills(kind, v1fills0, AERO_V1);
@@ -410,16 +474,19 @@ contract GuardHandler is Test {
         Snap memory a0 = snap(A);
         Snap memory b0 = snap(B);
         vm.startPrank(owner);
-        op = op % 5;
+        op = op % 6;
         if (op == 0) g.pause();
         else if (op == 1) g.unpause();
         else if (op == 2) {
             try g.queueChange(uint8(seed % 5), bytes32(uint256(uint160(seed >> 8)))) {} catch {}
         } else if (op == 3) {
             try g.cancelChange(bytes32(seed)) {} catch {}
-        } else {
+        } else if (op == 4) {
             vm.warp(block.timestamp + 48 hours);
             try g.applyChange(uint8(seed % 5), bytes32(uint256(uint160(seed >> 8)))) {} catch {}
+        } else {
+            // GG-20: an instant removal, of the runner or of an address a queued change may have added
+            try g.removeRunner(seed % 2 == 0 ? runner : address(uint160(seed >> 8))) {} catch {}
         }
         vm.stopPrank();
         if (!_same(a0, snap(A)) || !_same(b0, snap(B))) _break(ownerMoved++, "owner moved money");
@@ -592,6 +659,16 @@ contract GuardInvariantTest is StdInvariant, Test {
 
     /// The stored grant is byte for byte the last one the account approved and registered, and the manager still says
     /// it was approved.
+    /// GG-06: no trade that ran sold without buying back with the sales' floors.
+    function invariant_no_trade_sells_to_cash() public view {
+        assertEq(h.soldToCash(), 0, h.lastBreak());
+    }
+
+    /// GG-09: the owner can never leave the Guard without a runner.
+    function invariant_always_a_runner() public view {
+        assertGe(h.g().runners(), 1);
+    }
+
     function invariant_registered_permission_is_the_approved_one() public view {
         assertEq(h.badRegistrationTaken(), 0, h.lastBreak());
         address[2] memory accts = [h.A(), h.B()];

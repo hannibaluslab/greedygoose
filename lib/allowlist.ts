@@ -15,6 +15,7 @@ import { guardAbi } from "@/lib/agents/abis/GooseGuard";
 import { linesOk } from "@/lib/agents/lines";
 import { isMix, unpackMix } from "@/lib/agents/mix";
 import { agentJobOf } from "@/lib/agents/agentJob";
+import { isLegacyGrant } from "@/lib/agents/legacy";
 import { GRANT_SECONDS, JOBS, type JawPermission } from "@/lib/agents/permissions";
 import { gooseBoardAbi } from "@/lib/board/abi";
 import { GOOSE_BOARD } from "@/lib/board/config";
@@ -213,8 +214,11 @@ const approvesOwnAgent: ArgsCheck = (args, user) => {
   );
 };
 
-/** revoke(permission): only a grant of the user's own to GooseGuard (a job turned off, or one a new grant replaces). */
-const revokesOwnAgent: ArgsCheck = (args, user) => isOwnAgentGrant(args[0], user);
+/**
+ * revoke(permission): only a grant of the user's own to GooseGuard (a job turned off, or one a new grant replaces), or
+ * to main's GooseExecutor (GG-05: an old grant left approved after the move, taken back in the same batch).
+ */
+const revokesOwnAgent: ArgsCheck = (args, user) => isOwnAgentGrant(args[0], user) || isLegacyGrant(args[0], user);
 
 /** GooseBoard.join(): exactly its selector, nothing after it. */
 const JOIN = toFunctionSelector("join()");

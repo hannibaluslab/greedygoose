@@ -46,3 +46,41 @@ jobs:
       - name: forge test (with the Base fork)
         if: ${{ env.BASE_RPC_URL != '' }}
         run: forge test
+
+  forks:
+    name: Contracts (Guard and Planner fork suites)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      # An archive RPC for Base mainnet: the Guard fork tests pin block 52,946,000. A pull request from another
+      # repository gets no secrets, so this job then says so and runs nothing.
+      BASE_RPC_URL: ${{ secrets.BASE_TEST_RPC_URL }}
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - name: Skipped, no Base RPC
+        if: ${{ env.BASE_RPC_URL == '' }}
+        working-directory: .
+        run: echo "::notice title=Fork suites skipped::The BASE_TEST_RPC_URL secret isn't available here (a pull request from another repository gets no secrets), so the Guard and Planner fork suites did not run."
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: ${{ env.BASE_RPC_URL != '' }}
+      # Its cache keeps Foundry's RPC cache between runs, so a run mostly reads the pinned block from the cache.
+      - uses: foundry-rs/foundry-toolchain@dba66c27052e63476d886f22216e119ba7e615bf # v1.9.2
+        if: ${{ env.BASE_RPC_URL != '' }}
+      - name: forge build
+        if: ${{ env.BASE_RPC_URL != '' }}
+        run: forge build
+      - name: Fork suites, one file at a time (-j 1)
+        if: ${{ env.BASE_RPC_URL != '' }}
+        run: |
+          failed=()
+          for f in test/*Fork.t.sol test/audit/*Fork.t.sol; do
+            echo "::group::$f"
+            if ! forge test --match-path "$f" -j 1; then failed+=("$f"); fi
+            echo "::endgroup::"
+          done
+          if [ ${#failed[@]} -gt 0 ]; then
+            printf '::error title=Fork suite failed::%s\n' "${failed[@]}"
+            exit 1
+          fi

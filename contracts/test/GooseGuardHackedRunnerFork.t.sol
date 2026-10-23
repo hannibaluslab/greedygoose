@@ -313,8 +313,15 @@ contract GooseGuardHackedRunnerForkTest is GuardForkBase {
         g.setTopUps(true, 0);
         deal(address(USDC), a, 101e6);
         _refused(a, TRADE, _a2(100e6, _buy(AAPL, 50e6)), GooseGuard.Crossed.selector);
-        // Within the drift it runs.
-        assertEq(_send(a, TRADE, _a2(0, _leg(AAPL, _sharesFor(AAPL, 400e6)))), bytes4(0), "the honest sale was refused");
+        // Alone, a sale within the drift goes to cash: refused (GG-06).
+        uint256 sell = _sharesFor(AAPL, 400e6);
+        _refused(a, TRADE, _a2(0, _leg(AAPL, sell)), GooseGuard.SellsToCash.selector);
+        // Within the drift, buying NVDAc with the sale's floor, it runs.
+        assertEq(
+            _send(a, TRADE, _a3(0, _leg(AAPL, sell), _buy(NVDA, _floorOf(sell, _price(AAPL))))),
+            bytes4(0),
+            "the honest sale was refused"
+        );
     }
 
     function test_a_sale_after_a_buy_is_refused() public {
@@ -459,10 +466,11 @@ contract GooseGuardHackedRunnerForkTest is GuardForkBase {
 
     // ================================================================== pacing
 
-    /// A hacked runner churns Rebalance every block (2 s) for a day while Aave's NVDAc price swings ±0.3% each block,
-    /// so there is always drift to trade one way or the other. Sales run only in the session the first sale opens
-    /// (1 hour) and in the one that opens 20 hours later; every other block is refused, and what the user can lose is
-    /// bounded by those two hours. Gas metering is paused: 43,200 performs don't fit a test's gas.
+    /// A hacked runner churns Rebalance every block (2 s) for a day while Aave's NVDAc price swings ±0.3% each block
+    /// around its pool's, so there is always drift to trade one way or the other; each move sells the stock over its
+    /// target and buys the other with the sale's floor (a sale alone is refused, GG-06). Sales run only in the session
+    /// the first sale opens (1 hour) and in the one that opens 20 hours later; every other block is refused, and what
+    /// the user can lose is bounded by those two hours. Gas metering is paused: 43,200 performs don't fit a test's gas.
     function test_a_day_of_every_block_churn_is_paced() public {
         address a = _newJawAccount("churn");
         _rebalanceOn(a);
@@ -473,7 +481,8 @@ contract GooseGuardHackedRunnerForkTest is GuardForkBase {
         g.setMix(_pack(w));
         deal(STOCKS[AAPL], a, _sharesFor(AAPL, 20_000e6));
         deal(NVDAC, a, _sharesFor(NVDA, 20_000e6));
-        uint256 p0 = _price(NVDA);
+        // Aave's NVDAc price swings around the pool's, so each block's buy leg stays inside the Guard's tight side too.
+        uint256 p0 = _poolPrice(NVDA);
         uint256 pa = _price(AAPL);
         vm.warp(vm.getBlockTimestamp() + 1);
         uint256 t0 = vm.getBlockTimestamp();
@@ -514,17 +523,27 @@ contract GooseGuardHackedRunnerForkTest is GuardForkBase {
         return _bal(address(USDC), a) + _bal(STOCKS[AAPL], a) * pa / 1e10 + _bal(NVDAC, a) * pn / 1e10;
     }
 
+    /// A sale of `shares` at Aave's price `price`, less the Guard's swap floor: what its buys must spend.
+    function _floorOf(uint256 shares, uint256 price) internal view returns (uint256) {
+        return shares * price * (1e4 - g.SWAP_FLOOR_BPS()) / 1e14;
+    }
+
     /// One block of the churn: Aave's NVDAc price is `p`, and the runner sells a twentieth of whichever stock is over
-    /// its target. Returns whether a move was sent and its refusal reason.
+    /// its target and buys the other with the sale's floor (a sale alone is refused, GG-06). Returns whether a move
+    /// was sent and its refusal reason.
     function churnBlock(address a, uint256 t, uint256 p, uint256 pa) external returns (bool sent, bytes4 reason) {
         vm.warp(t);
         vm.roll(block.number + 1);
         _mockPrice(NVDA, p);
         uint256 vA = _bal(STOCKS[AAPL], a) * pa / 1e10;
         uint256 vN = _bal(NVDAC, a) * p / 1e10;
-        uint256 leg = vN > vA ? _leg(NVDA, (vN - vA) / 20 * 1e10 / p) : _leg(AAPL, (vA - vN) / 20 * 1e10 / pa);
-        if (uint128(leg) == 0) return (false, 0);
-        (, Vm.Log[] memory logs) = _perform(_one(a, TRADE, _a2(0, leg)));
+        bool nvdaOver = vN > vA;
+        uint256 shares = nvdaOver ? (vN - vA) / 20 * 1e10 / p : (vA - vN) / 20 * 1e10 / pa;
+        uint256 floor = _floorOf(shares, nvdaOver ? p : pa);
+        if (shares == 0 || floor == 0) return (false, 0);
+        uint256 leg = _leg(nvdaOver ? NVDA : AAPL, shares);
+        uint256 buy = _buy(nvdaOver ? AAPL : NVDA, floor);
+        (, Vm.Log[] memory logs) = _perform(_one(a, TRADE, _a3(0, leg, buy)));
         return (true, _reason(logs, a));
     }
 }

@@ -211,7 +211,14 @@ contract GooseGuardMovesForkTest is ForkBase {
         assertGt(_bal(STOCKS[AAPL], a), 1e8, "no AAPLc bought");
 
         vm.warp(vm.getBlockTimestamp() + 2 hours);
-        assertEq(_send(a, 3, _args(0, NVDAC_RESERVE << 248 | shares / 10)), GooseGuard.Paced.selector, "not paced");
+        // A sale must buy with its floor (GG-06), so the paced move is an honest one.
+        uint256 tenth = shares / 10;
+        uint256 tenthFloor = tenth * nvdaPrice * 9950 / 1e14;
+        assertEq(
+            _send(a, 3, _args(0, NVDAC_RESERVE << 248 | tenth, AAPL << 248 | 1 << 247 | tenthFloor)),
+            GooseGuard.Paced.selector,
+            "not paced"
+        );
 
         w[AAPL] = 4000;
         w[NVDAC_RESERVE] = 6000;

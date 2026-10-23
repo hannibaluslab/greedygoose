@@ -14,7 +14,7 @@ import { usePosition } from "@/hooks/usePosition";
 import { useProtectSave } from "@/hooks/useProtectSave";
 import { usePrepare, type TxPhase, type TxPlan, type TxPrep } from "@/hooks/useTx";
 import { AGENTS_LIVE } from "@/lib/agents/config";
-import { lineText, TARGET_GAP } from "@/lib/agents/lines";
+import { lineText, repayNote, TARGET_GAP } from "@/lib/agents/lines";
 import {
   protectAllows,
   protectBatch,
@@ -203,9 +203,7 @@ export function ProtectSettingsView({
         />
         <div className="flex flex-col gap-0.5 border-t border-hairline py-[13px]">
           <span className="text-[15px] font-semibold">Repay from your cash</span>
-          <span className="text-xs leading-[1.35] text-subtle">
-            Only under {lineText(choice.line)}, and always first. Your cash pays before any stock is sold.
-          </span>
+          <span className="text-xs leading-[1.35] text-subtle">{repayNote(choice.line, choice.sellOn)}</span>
         </div>
         <div className="flex items-center gap-3 border-t border-hairline py-[13px]">
           <div className="flex grow flex-col gap-0.5">

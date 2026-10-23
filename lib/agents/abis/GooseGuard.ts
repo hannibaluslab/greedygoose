@@ -295,6 +295,19 @@ export const guardAbi = [
   },
   {
     type: "function",
+    name: "epoch",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint32",
+        internalType: "uint32",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
     name: "isRunner",
     inputs: [
       {
@@ -440,6 +453,38 @@ export const guardAbi = [
   },
   {
     type: "function",
+    name: "protectMembers",
+    inputs: [
+      {
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "protectMembersLength",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
     name: "queueChange",
     inputs: [
       {
@@ -501,6 +546,19 @@ export const guardAbi = [
   },
   {
     type: "function",
+    name: "removeRunner",
+    inputs: [
+      {
+        name: "runner",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
     name: "run",
     inputs: [
       {
@@ -528,6 +586,38 @@ export const guardAbi = [
     ],
     outputs: [],
     stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "runners",
+    inputs: [],
+    outputs: [
+      {
+        name: "",
+        type: "uint32",
+        internalType: "uint32",
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "sellLineOf",
+    inputs: [
+      {
+        name: "a",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "line",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    stateMutability: "view",
   },
   {
     type: "function",
@@ -1014,6 +1104,19 @@ export const guardAbi = [
   },
   {
     type: "event",
+    name: "RunnerRemoved",
+    inputs: [
+      {
+        name: "runner",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
     name: "RunnerSet",
     inputs: [
       {
@@ -1152,6 +1255,11 @@ export const guardAbi = [
   },
   {
     type: "error",
+    name: "ChangeExpired",
+    inputs: [],
+  },
+  {
+    type: "error",
     name: "CodeNotAllowed",
     inputs: [],
   },
@@ -1188,6 +1296,11 @@ export const guardAbi = [
   {
     type: "error",
     name: "IsPaused",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "LastRunner",
     inputs: [],
   },
   {
@@ -1233,6 +1346,11 @@ export const guardAbi = [
   {
     type: "error",
     name: "NotInMix",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "NotManaged",
     inputs: [],
   },
   {
@@ -1292,6 +1410,11 @@ export const guardAbi = [
   },
   {
     type: "error",
+    name: "OppositeQueued",
+    inputs: [],
+  },
+  {
+    type: "error",
     name: "OutOfBounds",
     inputs: [],
   },
@@ -1318,6 +1441,11 @@ export const guardAbi = [
   {
     type: "error",
     name: "RescueOn",
+    inputs: [],
+  },
+  {
+    type: "error",
+    name: "SellsToCash",
     inputs: [],
   },
   {

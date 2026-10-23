@@ -226,8 +226,10 @@ contract GooseGuardIsolationForkTest is GuardForkBase {
             }
         } else if (kind == TRADE && honest) {
             // The mix account: AAPLc is over its target, METAc and NVDAc under. Sell some AAPLc, buy with its floor.
-            uint256 sale = 1e6 + 400e6 * frac / 3e3;
-            args = _a3(0, _leg(AAPL, _sharesFor(AAPL, sale)), _buy((seed >> 48) % 2 == 0 ? 3 : NVDA, sale * 99 / 100));
+            // The buy spends exactly the sale's floor, as the Planner's does (GG-06).
+            uint256 shares = _sharesFor(AAPL, 1e6 + 400e6 * frac / 3e3);
+            uint256 floor = shares * _price(AAPL) * 9950 / 1e14;
+            args = _a3(0, _leg(AAPL, shares), _buy((seed >> 48) % 2 == 0 ? 3 : NVDA, floor));
         } else if (kind == TRADE) {
             uint256 n = 1 + (seed >> 48) % 3;
             args = new uint256[](n + 1);

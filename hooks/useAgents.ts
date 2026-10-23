@@ -28,6 +28,14 @@ import {
   type JawPermission,
   type StockLimits,
 } from "@/lib/agents/permissions";
+import {
+  LEGACY_EXECUTOR,
+  LEGACY_JOB_IDS,
+  legacyCandidates,
+  legacyExecutorAbi,
+  legacyRevokesFor,
+  legacyToRevoke,
+} from "@/lib/agents/legacy";
 import { pickFor } from "@/lib/agents/picks";
 import {
   buildUnregisterCalls,
@@ -67,6 +75,8 @@ const NONE: JawPermission = {
 
 /** A grant the account holds, as the manager knows it: its id (the manager's hash) and the struct it approved. */
 type Held = { id: Hex; job: AgentJob; p: JawPermission };
+/** A grant a change revokes: one of the Guard's (`Held`) or one to main's GooseExecutor (GG-05, lib/agents/legacy.ts). */
+type Revoke = { id: Hex; p: JawPermission };
 
 const byJob = <T>(f: (job: AgentJob) => T) =>
   Object.fromEntries(JOBS.map((job) => [job, f(job)])) as Record<AgentJob, T>;
@@ -290,6 +300,62 @@ export function useAgents(account: `0x${string}`) {
     query: { enabled: !!guard && candidates.length > 0, refetchInterval: 20_000 },
   });
 
+  // GG-05: the grants main's GooseExecutor still holds for the account (`permissionOf`, one per job) and those JAW lists
+  // to it, then each one's id and status in the manager: every one still approved goes in the next change's batch.
+  const legacyRegistry = useReadContracts({
+    contracts: LEGACY_JOB_IDS.map(
+      (id) =>
+        ({
+          address: LEGACY_EXECUTOR,
+          abi: legacyExecutorAbi,
+          functionName: "permissionOf",
+          args: [account, id],
+          chainId: CHAIN_ID,
+        }) as const,
+    ),
+    allowFailure: false,
+    query: { enabled: !!guard, refetchInterval: 60_000 },
+  });
+  const legacyFound = useMemo(
+    () =>
+      // JAW's list is read first: an old grant only it knows of is never missed.
+      legacyRegistry.data && !listed.isLoading
+        ? legacyCandidates(
+            account,
+            listed.data ?? [],
+            legacyRegistry.data.map((p) => ({ ...p, calls: [...p.calls], spends: [...p.spends] })),
+            minute * 60,
+          )
+        : null,
+    [account, listed.data, listed.isLoading, legacyRegistry.data, minute],
+  );
+  const legacyRead = useReadContracts({
+    contracts: (legacyFound ?? []).flatMap(({ p }) => managerReads(p)),
+    allowFailure: true,
+    query: { enabled: !!guard && !!legacyFound && legacyFound.length > 0, refetchInterval: 20_000 },
+  });
+
+  /**
+   * The grants to GooseExecutor the manager has approved and not revoked (`revokes`), through the page's cache like the
+   * Guard's own; `known` once Base has answered for all of them (a record JAW lists that Base can't read is left out,
+   * as with the Guard's). Never one revoked on this page.
+   */
+  const legacy = useMemo(() => {
+    if (!legacyFound) return { known: false, revokes: [] as Revoke[] };
+    if (legacyRead.data) {
+      legacyFound.forEach(({ p }, k) => {
+        const r = legacyRead.data!.slice(3 * k, 3 * k + 3);
+        if (r.length === 3 && r.every((x) => x.status === "success"))
+          readManager(p, { id: r[0].result as Hex, approved: !!r[1].result, revoked: !!r[2].result });
+      });
+    }
+    const reads = legacyFound.map(({ p }) => managerCache.get(cacheKey(p)));
+    const known = reads.every(Boolean) || !!legacyRead.data;
+    const revokes = legacyToRevoke(legacyFound, reads).filter((h) => !revoked.has(h.id.toLowerCase()));
+    return { known, revokes };
+  }, [legacyFound, legacyRead.data]);
+  const legacyUnreadable = (legacyRegistry.isError && !legacyRegistry.data) || (legacyRead.isError && !legacy.known);
+
   /**
    * What Base says, from the reads above through the page's cache of them (so a new read for the same grants never
    * sends a screen back to loading, and a change this page just landed reads as landed at once): the grants the manager
@@ -411,7 +477,15 @@ export function useAgents(account: `0x${string}`) {
     [granted, stored],
   );
 
-  const refetch = () => Promise.all([listed.refetch(), registry.refetch(), keptRead.refetch(), listRead.refetch()]);
+  const refetch = () =>
+    Promise.all([
+      listed.refetch(),
+      registry.refetch(),
+      keptRead.refetch(),
+      listRead.refetch(),
+      legacyRegistry.refetch(),
+      legacyRead.refetch(),
+    ]);
 
   /**
    * Each job's newest grant JAW lists that the Guard hasn't registered and that is newer than the one it holds: one
@@ -492,7 +566,7 @@ export function useAgents(account: `0x${string}`) {
    * under its id, read off the receipt (the PermissionApproved the manager logged for exactly that struct; a bundle's
    * receipt holds other accounts' logs too), else from the manager's hash.
    */
-  function landedFor(grants: readonly Permission[], revokes: readonly Held[]) {
+  function landedFor(grants: readonly Permission[], revokes: readonly Revoke[]) {
     return async (receipts: readonly TxReceipt[]) => {
       const now = Date.now();
       for (const h of revokes) {
@@ -583,7 +657,14 @@ export function useAgents(account: `0x${string}`) {
     const jobs = [...new Set([...asked.map((g) => g.job), ...(change.off ?? [])])];
     // Nothing is granted or revoked on a guess: what Base or JAW's list would have said could be left behind.
     if (jobs.length > 0 && onChain.error) return stopPlan(account, onChain.error);
-    const revokes = jobs.flatMap(liveGrants);
+    // GG-05: every grant to main's GooseExecutor still approved goes too; a new grant waits until Base has said which.
+    const old = legacyRevokesFor(
+      { ...legacy, unreadable: legacyUnreadable },
+      { granting: asked.length > 0, changingJobs: jobs.length > 0 },
+    );
+    if (old === "wait") return null;
+    if (old === "unreadable") return stopPlan(account, CANT_CHECK_AGENTS);
+    const revokes: Revoke[] = [...jobs.flatMap(liveGrants), ...old];
     // A job turned off stops in the Guard at once, its grant revoked or not (one registered and since revoked included).
     const unregisters = (change.off ?? []).filter((job) => stored.registered.includes(job));
     if (
