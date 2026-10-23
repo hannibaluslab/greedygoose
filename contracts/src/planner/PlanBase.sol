@@ -121,6 +121,13 @@ abstract contract PlanBase {
     /// Under the line, a repay that doesn't cover the account's whole need must move at least this ($1): less can't
     /// lift health, and dust repays at the lowest health would take a write's slots from accounts a repay would save.
     uint256 public constant MIN_REPAY = 1e6;
+    /// The most the Guard's gas caps may add up to in one write (KeeperHub sends 5.5M, about 5.4M reaches the Guard).
+    /// ProtectPlanner cuts each sale to the room left under it, so the checks it runs see the sale that's sent.
+    uint256 public constant PACK_GAS = 5_300_000;
+    /// The longest grant the Planner decodes: the app's largest (Protect · sell over all seven stocks, 12 calls and 9
+    /// spends, 2,624 bytes as `permissionOf` returns it) plus 25%. A longer one is no grant of the app's, and decoding
+    /// it would only burn the read's gas (GG-04), so it counts as none.
+    uint256 internal constant MAX_GRANT_BYTES = 3_280;
 
     // ================================================================== the Guard
 
@@ -213,10 +220,11 @@ abstract contract PlanBase {
         }
     }
 
-    /// The account's registered permission for `job`, decoded (a junk one reverts, and the caller's try skips it).
+    /// The account's registered permission for `job`, decoded (a junk one reverts, and the caller's try skips it). One
+    /// longer than MAX_GRANT_BYTES is left undecoded and counts as none.
     function _permission(address a, uint8 job) internal view returns (PM.Permission memory p) {
         bytes memory raw = GUARD.permissionOf(a, job);
-        if (raw.length == 0) return p;
+        if (raw.length == 0 || raw.length > MAX_GRANT_BYTES) return p;
         p = abi.decode(raw, (PM.Permission));
     }
 
@@ -225,14 +233,19 @@ abstract contract PlanBase {
     }
 
     /// The manager would run a batch of `job` under `p` now: it's for this account and this Guard, inside its time
-    /// window, every call it lists has no checker (the app's grants), it lists the calls every move of `job` makes, the
-    /// manager still owns the account, and it isn't revoked. Otherwise every move would be refused, and a junk grant at
+    /// window, every call it lists has no checker and every spend has no limit (the app's template), it lists the
+    /// calls every move of `job` makes, the manager still owns the account, and it isn't revoked. Otherwise every move would be refused, and a junk grant at
     /// the lowest health would take a write's slots from real accounts. (The Guard registers only an approved one.)
     function _aliveP(address a, uint8 job, PM.Permission memory p) internal view returns (bool) {
         if (p.account != a || p.spender != address(GUARD)) return false;
         if (p.start > block.timestamp || p.end < block.timestamp) return false;
         for (uint256 i; i < p.calls.length; ++i) {
             if (p.calls[i].checker != address(0)) return false;
+        }
+        // The app's template (decision 9): every limit is the maximum. A capped grant would let a paying attacker's
+        // tiny repays look like a rescue (GG-01); the app never grants one.
+        for (uint256 i; i < p.spends.length; ++i) {
+            if (p.spends[i].allowance != type(uint160).max) return false;
         }
         if (!_listsJob(p, job)) return false;
         if (!_managerOwns(a)) return false;
@@ -271,25 +284,14 @@ abstract contract PlanBase {
         return false;
     }
 
-    /// What's left of the permission's limit on `token` this period: unlimited at the maximum allowance (the app's
-    /// grants, decision 9), 0 with no entry (the manager would refuse the batch).
-    function _spendLeft(PM.Permission memory p, address token) internal view returns (uint256) {
+    /// What the permission may still spend of `token` this period: unlimited when it lists the token, 0 when it doesn't
+    /// (the manager would refuse the batch). Only a live grant is asked (`_aliveP`), and a live grant is the app's
+    /// template, every limit at the maximum (decision 9), so no period is read.
+    function _spendLeft(PM.Permission memory p, address token) internal pure returns (uint256) {
         for (uint256 i; i < p.spends.length; ++i) {
-            if (p.spends[i].token != token) continue;
-            uint256 cap = p.spends[i].allowance;
-            if (cap == type(uint160).max) return type(uint128).max;
-            return _sub(cap, MANAGER.getCurrentPeriod(p, p.spends[i]).spend);
+            if (p.spends[i].token == token) return type(uint128).max;
         }
         return 0;
-    }
-
-    /// `_spendLeft` for a token the grant lists; no bound for one it doesn't, which the manager doesn't watch unless a
-    /// call approves it (aUSDC on a repay from savings).
-    function _watchedLeft(PM.Permission memory p, address token) internal view returns (uint256) {
-        for (uint256 i; i < p.spends.length; ++i) {
-            if (p.spends[i].token == token) return _spendLeft(p, token);
-        }
-        return type(uint128).max;
     }
 
     /// The wallet rule (decision 1): what may go into the mix now is wallet USDC above the keep-back and above what

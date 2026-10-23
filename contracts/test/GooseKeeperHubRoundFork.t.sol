@@ -217,6 +217,33 @@ contract GooseKeeperHubRoundForkTest is PlannerForkBase {
         console2.log("moves in the second write", sent);
     }
 
+    /// Decision 11: KeeperHub's second read sends abi.encode(1, 1), the same members from half the list away. Twenty
+    /// members, six of them under their line with savings (more repays than one write holds): the round's two writes
+    /// bring all six back between line and target, and nothing is refused.
+    function test_a_round_with_the_second_read_at_1_1() public {
+        address[] memory low = new address[](6);
+        uint256 n;
+        for (uint256 i; i < 20; ++i) {
+            string memory name = string.concat("m", vm.toString(i));
+            if (i % 3 == 1 && n < 6) low[n++] = _owing(name, 1.02e18, true);
+            else _owing(name, 1.3e18, true);
+        }
+        uint256 round = vm.getBlockTimestamp() / 600;
+        (uint256 first,,) = planner.scanOf{gas: READ_CAP}(round, 0, 1);
+        (uint256 second,,) = planner.scanOf{gas: READ_CAP}(round, 1, 1);
+        assertEq(second, (first + 10) % 20, "the second read doesn't start half the list away");
+        RoundLog memory log;
+        uint256 sent = _readWriteAt(log, abi.encode(uint256(0), uint256(1)));
+        sent += _readWriteAt(log, abi.encode(uint256(1), uint256(1)));
+        console2.log("moves sent in the round, writes", sent, log.writes);
+        assertEq(log.refused, 0, "a move was refused");
+        assertEq(log.writes, 2, "the second read found nothing");
+        for (uint256 i; i < 6; ++i) {
+            _assertBack(low[i], string.concat("low", vm.toString(i)));
+        }
+        assertLe(log.maxWriteGas, KH_GAS, "a write took more than KeeperHub sends");
+    }
+
     /// If the second read runs before the first write lands, it sends the same moves: each is refused, and the second
     /// write costs little (decision 11 changes the second read's input only if the live test shows this).
     function test_a_second_read_before_the_first_write_is_refused_cheaply() public {

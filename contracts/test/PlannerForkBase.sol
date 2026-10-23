@@ -41,7 +41,7 @@ abstract contract PlannerForkBase is ForkBase {
     TradePlanner trader;
     CashPlanner cash;
 
-    function setUp() public {
+    function setUp() public virtual {
         // FORK_BLOCK pins the fork, so Foundry's RPC cache serves reruns (the keyless RPCs rate-limit).
         // Pinned by default to the Guard suites' block (GuardForkBase), so runs repeat and reuse the RPC cache.
         uint256 pinned = vm.envOr("FORK_BLOCK", uint256(52_946_000));
@@ -162,8 +162,13 @@ abstract contract PlannerForkBase is ForkBase {
 
     /// One read and, if it found anything, one write as KeeperHub sends it. Returns the moves it sent.
     function _readWrite(RoundLog memory log) internal returns (uint256 sent) {
+        return _readWriteAt(log, abi.encode(uint256(0), uint256(1)));
+    }
+
+    /// `_readWrite` with the read's `checkData` (decision 11: KeeperHub's second read sends abi.encode(1, 1)).
+    function _readWriteAt(RoundLog memory log, bytes memory checkData) internal returns (uint256 sent) {
         uint256 before = gasleft();
-        (bool need, bytes memory data) = planner.checkUpkeep{gas: READ_CAP}(abi.encode(uint256(0), uint256(1)));
+        (bool need, bytes memory data) = planner.checkUpkeep{gas: READ_CAP}(checkData);
         uint256 readGas = before - gasleft();
         if (readGas > log.maxReadGas) log.maxReadGas = readGas;
         if (!need) return 0;

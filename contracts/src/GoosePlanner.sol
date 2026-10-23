@@ -18,8 +18,10 @@ import {TradePlanner} from "./planner/TradePlanner.sol";
 ///         1. Protect scan: each member, from a golden-ratio start keyed on the round, until the scan's share of the
 ///            read budget is used. Candidates: under their own line, in a rescue under their target, or with a rescue
 ///            to end.
-///         2. Protect plan, lowest health first (ProtectPlanner): REPAY (wallet, then savings) and SELL if still short,
-///            as two moves; REFRESH after a collateral-factor raise; END for a finished or expired rescue.
+///         2. Protect plan (ProtectPlanner), most USDC Protect can put toward the need first (ProtectPlanner.rankOf;
+///            spec §10 changes here from lowest health first: GG-01, adopted from both judges), each candidate packed
+///            into what's left of PACK_GAS as it's planned: REPAY (wallet, then savings) and SELL if still short, as
+///            two moves; REFRESH after a collateral-factor raise; END for a finished or expired rescue.
 ///         3. One page for the rest: CONVERT and SAVE (CashPlanner), TRADE for Rebalance and top-ups (TradePlanner).
 ///         The write takes moves while the Guard's gas caps add up to at most PACK_GAS: Protect first, then END and
 ///         REFRESH, then CONVERT, TRADE, SAVE.
@@ -74,7 +76,8 @@ contract GoosePlanner is PlanBase {
     /// The Protect scan's verdict on one member.
     struct Cand {
         address a;
-        uint256 hf; // health, or max for an END-only candidate
+        uint256 hf; // the order: health (scanOf), or ~ProtectPlanner.rankOf (the read); max for an END-only candidate
+        bool sellOnly; // no cash: only a sale can carry it
     }
 
     /// One read's budget and position.
@@ -86,6 +89,7 @@ contract GoosePlanner is PlanBase {
         uint256 round;
         uint256 members;
         uint256 start; // the scan's first index
+        bool vet; // rank candidates by what Protect can do for them (the read), not by health (scanOf)
     }
 
     /// Moves found this read, by tier: 0 Protect, 1 END and REFRESH, 2 the rest.
@@ -96,8 +100,6 @@ contract GoosePlanner is PlanBase {
 
     // ================================================================== policy
 
-    /// The most the Guard's gas caps may add up to in one write (KeeperHub sends 5.5M, about 5.4M reaches the Guard).
-    uint256 public constant PACK_GAS = 5_300_000;
     /// The most gas one read uses, and what it leaves unused under whatever cap the reader sets (spec §10).
     uint256 public constant READ_GAS = 8_000_000;
     uint256 public constant READ_RESERVE = 500_000;
@@ -109,7 +111,10 @@ contract GoosePlanner is PlanBase {
     uint256 public constant PLAN_GAS = 2_500_000;
     /// Gas a phase must still have before it plans one more account.
     uint256 public constant PLAN_ROOM = 400_000;
+    /// Protect plans at most MAX_CANDS candidates a read; the scan keeps CAND_RESERVE more, so a candidate whose plan
+    /// comes back empty hands its place to the next one in rank (G3).
     uint256 public constant MAX_CANDS = 24;
+    uint256 public constant CAND_RESERVE = 8;
     uint256 public constant MAX_FOUND = 32;
     /// Optional policy (decision 7): leave sales and trades out while Aave's stock prices are held. Off: the Planner
     /// plans whatever the Guard accepts, weekends included.
@@ -144,6 +149,7 @@ contract GoosePlanner is PlanBase {
         r.members = GUARD.membersLength();
         if (r.members == 0) return (false, "");
         r.start = _start(r);
+        r.vet = true;
 
         Found memory f = _newFound();
         (Cand[] memory cands,) = _scan(r);
@@ -183,7 +189,6 @@ contract GoosePlanner is PlanBase {
         uint256 n;
         uint256 walletUsed;
         try PROTECT.planProtect(a) returns (Move[] memory p) {
-            _fitSale(p);
             for (uint256 i; i < p.length; ++i) {
                 moves[n++] = p[i];
                 if (p[i].kind == REPAY) walletUsed = p[i].args[0];
@@ -196,27 +201,23 @@ contract GoosePlanner is PlanBase {
         _trim(moves, n);
     }
 
-    /// A repay and a sale for one account go in the same write (H3), so the sale gives up its last slices until both
-    /// fit PACK_GAS. A shorter sale lands short of the target, and the rescue carries on at the next round.
-    function _fitSale(Move[] memory p) internal view {
-        if (p.length != 2 || p[0].kind != REPAY || p[1].kind != SELL) return;
-        uint256 room = PACK_GAS - GUARD.capOf(REPAY, p[0].args);
-        uint256[] memory legs = p[1].args;
-        for (uint256 n = legs.length; n > 1 && GUARD.capOf(SELL, legs) > room;) {
-            --n;
-            assembly ("memory-safe") {
-                mstore(legs, n) // drop the last slice
-            }
-        }
-    }
-
-    /// The scan's cheap Protect check for one member: 0 = nothing, 1 = Protect may act, 2 = only END.
-    function protectCheck(address a) external view returns (uint8 need, uint256 hf) {
+    /// The scan's cheap Protect check for one member: 0 = nothing, 1 = Protect may act, 2 = only END. Stage 1 (G5),
+    /// before Aave's costly account read, for a member with no rescue: the most its rank could be (its debt with
+    /// Protect · sell on, otherwise its debt within the wallet above the keep-back plus its savings); nothing when
+    /// that is 0 or no more than `bar`, the worst rank a full candidate list keeps.
+    function protectCheck(address a, uint256 bar) external view returns (uint8 need, uint256 hf) {
         (IGooseGuard.Account memory acc,) = GUARD.accountOf(a);
         bool protects = acc.jobs & (1 << JOB_PROTECT | 1 << JOB_SELL) != 0;
         if (!protects && acc.rescueAt == 0) return (0, 0);
         uint256 debt = SPOKE.getUserTotalDebt(USDC_RESERVE_ID, a);
         if (debt == 0) return (acc.rescueAt != 0 ? 2 : 0, type(uint256).max);
+        if (acc.rescueAt == 0) {
+            uint256 most = debt;
+            if (acc.jobs & (1 << JOB_SELL) == 0) {
+                most = _min(debt, _sub(USDC.balanceOf(a), KEEP_BACK) + AUSDC.balanceOf(a));
+            }
+            if (most <= bar) return (0, 0);
+        }
         hf = SPOKE.getUserAccountData(a).healthFactor;
         (uint256 line, uint256 target) = GUARD.linesOf(a);
         bool rescuing = acc.rescueAt != 0 && block.timestamp <= uint256(acc.rescueAt) + RESCUE_MAX_AGE;
@@ -234,17 +235,24 @@ contract GoosePlanner is PlanBase {
     // ================================================================== the read: scan, plan, pack
 
     /// Phase 1: from the round's start, each member's cheap Protect check until the scan's budget is used. Keeps the
-    /// MAX_CANDS lowest healths, END-only candidates after them. Returns how many members it reached.
+    /// MAX_CANDS + CAND_RESERVE first in rank (lowest health in scanOf), END-only candidates after them. Returns how
+    /// many members it reached. A member starts while CHECK_GAS / 3 of the scan's share is left, and its check and
+    /// rank together never run past that share plus CHECK_GAS / 3, so the read can't run out of gas.
     function _scan(Read memory r) internal view returns (Cand[] memory cands, uint256 j) {
-        cands = new Cand[](MAX_CANDS);
+        cands = new Cand[](MAX_CANDS + CAND_RESERVE);
         uint256 n;
         uint256 stop = r.limit * SCAN_PCT / 100;
+        uint256 end = stop + CHECK_GAS / 3;
         for (; j < r.members && _used(r) + CHECK_GAS / 3 < stop; ++j) {
             uint256 k = (r.start + j) % r.members;
             if (k % r.shards != r.shard % r.shards) continue;
             address a = GUARD.members(k);
-            try this.protectCheck{gas: CHECK_GAS}(a) returns (uint8 need, uint256 hf) {
-                if (need != 0) n = _insert(cands, n, Cand(a, need == 2 ? type(uint256).max : hf));
+            // A full list's worst rank: a member whose stage-1 bound can't beat it skips Aave's read (G5).
+            uint256 bar = r.vet && n == cands.length ? ~cands[n - 1].hf : 0;
+            try this.protectCheck{gas: _checkGas(r, end)}(a, bar) returns (uint8 need, uint256 hf) {
+                Cand memory x = Cand(a, need == 2 ? type(uint256).max : hf, false);
+                if (need == 1 && r.vet) x = _vet(r, end, a, hf);
+                if (need != 0 && x.hf != 0) n = _insert(cands, n, x);
             } catch {}
         }
         assembly ("memory-safe") {
@@ -252,18 +260,56 @@ contract GoosePlanner is PlanBase {
         }
     }
 
-    /// Phase 2: Protect's moves for the candidates, lowest health first.
+    /// A candidate under its line ranked by what Protect can do for it (ProtectPlanner.rankOf): most first, and left
+    /// out (rank 0) when no move can help. A rankOf that reverts leaves it out too.
+    function _vet(Read memory r, uint256 end, address a, uint256 hf) internal view returns (Cand memory x) {
+        x.a = a;
+        try PROTECT.rankOf{gas: _checkGas(r, end)}(a, hf) returns (uint256 key, bool sellOnly) {
+            if (key != 0) (x.hf, x.sellOnly) = (~key, sellOnly);
+        } catch {}
+    }
+
+    /// Phase 2: Protect's moves for the candidates in rank order, packed as they're planned: each one fits what's left
+    /// of PACK_GAS (ProtectPlanner cuts its sale to fit), and a sale is cut around the pools earlier sales in this
+    /// write sell into (GG-18), so the write carries several. Planning stops when not even a repay would fit, or after
+    /// MAX_CANDS plans with a move (an empty plan hands its place on, G3), and skips a sale-only candidate when a
+    /// one-slice sale wouldn't fit (GG-02).
     function _planProtect(Read memory r, Cand[] memory cands, Found memory f) internal view {
         uint256 stop = r.limit * PROTECT_PCT / 100;
-        for (uint256 i; i < cands.length; ++i) {
-            if (_used(r) + PLAN_ROOM > stop) break;
-            try PROTECT.planProtect{gas: _planGas(r, stop)}(cands[i].a) returns (Move[] memory m) {
-                _fitSale(m);
-                for (uint256 k; k < m.length; ++k) {
-                    _add(f, m[k].kind == END || m[k].kind == REFRESH ? 1 : 0, m[k]);
-                }
+        uint256 room = PACK_GAS;
+        uint256 taken; // stocks this write's sales sell, as bits
+        uint256 planned;
+        // The Guard's caps for a repay and a one-slice sale.
+        uint256[2] memory least = [GUARD.capOf(REPAY, new uint256[](2)), GUARD.capOf(SELL, new uint256[](1))];
+        for (uint256 i; i < cands.length && planned < MAX_CANDS; ++i) {
+            if (_used(r) + PLAN_ROOM > stop || room < least[0]) break;
+            if (cands[i].sellOnly && room < least[1]) continue;
+            try PROTECT.planProtectExcept{gas: _planGas(r, stop)}(cands[i].a, taken, room) returns (Move[] memory m) {
+                if (m.length != 0) ++planned;
+                (room, taken) = _take(f, m, room, taken);
             } catch {}
         }
+    }
+
+    /// One candidate's Protect moves into the write: END and REFRESH to their tier, the rest while they fit `room`.
+    /// Returns the room left and the stocks this write's sales now sell.
+    function _take(Found memory f, Move[] memory m, uint256 room, uint256 taken)
+        internal
+        view
+        returns (uint256, uint256)
+    {
+        for (uint256 k; k < m.length; ++k) {
+            if (m[k].kind == END || m[k].kind == REFRESH) {
+                _add(f, 1, m[k]);
+                continue;
+            }
+            uint256 cap = GUARD.capOf(m[k].kind, m[k].args);
+            if (cap > room) continue;
+            room -= cap;
+            taken |= _stocksOf(m[k]);
+            _add(f, 0, m[k]);
+        }
+        return (room, taken);
     }
 
     /// Phase 3: one page of members, from the same start, for CONVERT, TRADE and SAVE; none while the Guard is paused.
@@ -484,10 +530,16 @@ contract GoosePlanner is PlanBase {
         return _min(PLAN_GAS, _sub(stop, _used(r)));
     }
 
-    /// Inserts `x` into the sorted candidates (lowest health first), keeping at most MAX_CANDS.
+    function _checkGas(Read memory r, uint256 end) internal view returns (uint256) {
+        return _min(CHECK_GAS, _sub(end, _used(r)));
+    }
+
+    /// Inserts `x` into the sorted candidates (lowest `hf` first: lowest health, or most rank), keeping at most the
+    /// list's length.
     function _insert(Cand[] memory cands, uint256 n, Cand memory x) internal pure returns (uint256) {
-        if (n == MAX_CANDS && x.hf >= cands[n - 1].hf) return n;
-        uint256 k = n < MAX_CANDS ? n++ : n - 1;
+        uint256 most = cands.length;
+        if (n == most && x.hf >= cands[n - 1].hf) return n;
+        uint256 k = n < most ? n++ : n - 1;
         for (; k > 0 && cands[k - 1].hf > x.hf; --k) {
             cands[k] = cands[k - 1];
         }

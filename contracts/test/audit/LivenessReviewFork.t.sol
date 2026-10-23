@@ -5,6 +5,7 @@ import {console2} from "forge-std/console2.sol";
 import {GooseGuard} from "../../src/GooseGuard.sol";
 import {GoosePlanner} from "../../src/GoosePlanner.sol";
 import {PlanBase} from "../../src/planner/PlanBase.sol";
+import {ISpoke} from "../IJustaPermissionManager.sol";
 import {GooseKeeperHubRoundForkTest, IERC20Like} from "../GooseKeeperHubRoundFork.t.sol";
 
 interface IV3Borrow {
@@ -16,7 +17,8 @@ interface IV3Borrow {
         returns (uint256, uint256, uint256, uint256, uint256, uint256);
 }
 
-/// THROWAWAY liveness-review tests (not part of the suite). Run only with --match-test "test_LR_".
+/// Liveness-review tests. Those that proved a finding now assert its fix (each names the finding it guards); the rest
+/// log measurements. Run only with --match-test "test_LR_".
 contract ZLivenessReviewForkTest is GooseKeeperHubRoundForkTest {
     address constant V3 = 0xA238Dd80C259a72e81d7e4664a9801593F98d1c5;
 
@@ -40,6 +42,8 @@ contract ZLivenessReviewForkTest is GooseKeeperHubRoundForkTest {
         _protectOn(a);
     }
 
+    /// Guards the V3-borrow junk finding: savings that back a V3 borrow count only down to V3 health 1.01, so the junk
+    /// gets no move, nothing is refused, and every victim is repaid.
     function test_LR_v3_borrow_junk_blocks_every_repay() public {
         address[] memory v = new address[](4);
         for (uint256 i; i < 4; ++i) {
@@ -50,8 +54,8 @@ contract ZLivenessReviewForkTest is GooseKeeperHubRoundForkTest {
             j[i] = _v3Junk(string.concat("v3junk", vm.toString(i)));
         }
         PlanBase.Move[] memory m = planner.movesOf(j[0]);
-        console2.log("junk moves, kind, fromWallet", m.length, m[0].kind, m[0].args[0]);
-        console2.log("junk fromSavings, junk hf", m[0].args[1], _hf(j[0]));
+        console2.log("junk moves, junk savingsOut, junk hf", m.length, protect.savingsOut(j[0]), _hf(j[0]));
+        assertEq(m.length, 0, "a move is planned from savings V3 won't let go");
         RoundLog memory log;
         for (uint256 k; k < 3; ++k) {
             _round(log);
@@ -60,9 +64,9 @@ contract ZLivenessReviewForkTest is GooseKeeperHubRoundForkTest {
         for (uint256 i; i < 4; ++i) {
             console2.log("victim health after 3 rounds", _hf(v[i]));
         }
-        // The claim: no victim was repaid.
+        assertEq(log.refused, 0, "a move was refused");
         for (uint256 i; i < 4; ++i) {
-            assertLt(_hf(v[i]), 1.03e18, "a victim got protected");
+            assertGe(_hf(v[i]), 1.03e18, "a victim still under its line");
         }
     }
 
@@ -81,6 +85,8 @@ contract ZLivenessReviewForkTest is GooseKeeperHubRoundForkTest {
         g.setKeepMix(keepMix);
     }
 
+    /// Guards GG-03: a lone keep-my-mix sale over six stocks used to need more than a write's gas and was never sent;
+    /// now it's cut to fit, checked as cut, and the account is back over its line within four rounds.
     function test_LR_keepmix_six_stock_sale_is_never_sent() public {
         address a = _diversified("keepmix", true);
         PlanBase.Move[] memory m = planner.movesOf(a);
@@ -95,8 +101,9 @@ contract ZLivenessReviewForkTest is GooseKeeperHubRoundForkTest {
             _round(log);
         }
         console2.log("health before, after 4 rounds", before, _hf(a));
-        console2.log("writes", log.writes);
-        assertLt(_hf(a), 1.30e18, "it was protected");
+        console2.log("writes, refused", log.writes, log.refused);
+        assertEq(log.refused, 0, "a move was refused");
+        assertGe(_hf(a), 1.30e18, "still under its line after 4 rounds");
     }
 
     function test_LR_control_no_keepmix_sale_is_sent() public {
@@ -123,7 +130,7 @@ contract ZLivenessReviewForkTest is GooseKeeperHubRoundForkTest {
             _sellOn(a);
         }
         uint256 g0 = gasleft();
-        planner.protectCheck(g.members(0));
+        planner.protectCheck(g.members(0), 0);
         console2.log("one protectCheck, seven stocks", g0 - gasleft());
         g0 = gasleft();
         planner.checkUpkeep{gas: READ_CAP}(abi.encode(uint256(0), uint256(1)));
@@ -182,6 +189,8 @@ contract ZLivenessReviewForkTest is GooseKeeperHubRoundForkTest {
 
     // ------------------------------------------------------------------ 5. the paying attacker, re-borrowing each round
 
+    /// Guards GG-01 (tiny junk): eight $5 accounts at health 1.005 re-borrowing every round no longer rank above the
+    /// victims, whose need is larger: every victim is repaid.
     function test_LR_tiny_junk_reborrowing_each_round() public {
         address[] memory v = new address[](4);
         for (uint256 i; i < 4; ++i) {
@@ -201,14 +210,24 @@ contract ZLivenessReviewForkTest is GooseKeeperHubRoundForkTest {
         for (uint256 k; k < 3; ++k) {
             _round(log);
             for (uint256 i; i < 8; ++i) {
-                _drawMoreTo(j[i], 1.005e18); // the attacker's one borrow per account per round
+                _reborrowTo(j[i], 1.005e18); // the attacker's one borrow per account per round
             }
         }
         console2.log("writes, moves, refused", log.writes, log.moves, log.refused);
         for (uint256 i; i < 4; ++i) {
             console2.log("victim health after 3 rounds", _hf(v[i]));
         }
+        for (uint256 i; i < 4; ++i) {
+            assertGe(_hf(v[i]), 1.03e18, "a victim still under its line");
+        }
     }
+    /// The attacker's borrow back down to `hf`, for an account Protect repaid (one it didn't owes a little more by now).
+    function _reborrowTo(address a, uint256 hf) internal {
+        ISpoke.UserAccountData memory d = SPOKE.getUserAccountData(a);
+        uint256 owed = d.totalCollateralValue * d.avgCollateralFactor / 1e18 * 1e18 / hf / 1e20;
+        if (owed > SPOKE.getUserTotalDebt(7, a)) _drawMoreTo(a, hf);
+    }
+
     // ------------------------------------------------------------------ 6. Protect planning budget at scale
 
     function test_LR_plan_gas_per_candidate() public {
@@ -262,9 +281,15 @@ contract ZLivenessReviewForkTest is GooseKeeperHubRoundForkTest {
             vm.warp(vm.getBlockTimestamp() + 10 minutes);
         }
     }
+    /// Guards GG-18: four seven-stock victims near health 1.0 whose sales all start on the same pool. A sale near the
+    /// withdraw floor takes six slices of one stock, a 4.3M cap, so one fits a write (the Guard's SELL caps bound this,
+    /// not the pool); the write's sales never share a pool, its caps fit PACK_GAS, nothing is refused, and each round
+    /// sells for a different victim, so all four are sold for within two rounds.
     function test_LR_diversified_victims_sell_the_same_pool() public {
+        address[] memory v = new address[](4);
         for (uint256 i; i < 4; ++i) {
             address a = _diversified2(string.concat("sv", vm.toString(i)), 1.0e18 + 0.005e18 * (i + 1));
+            v[i] = a;
             PlanBase.Move[] memory m = planner.movesOf(a);
             for (uint256 k; k < m.length; ++k) {
                 for (uint256 l; l < m[k].args.length; ++l) {
@@ -273,7 +298,73 @@ contract ZLivenessReviewForkTest is GooseKeeperHubRoundForkTest {
             }
         }
         (bool need, bytes memory data) = planner.checkUpkeep{gas: READ_CAP}(abi.encode(uint256(0), uint256(1)));
-        console2.log("moves in the write", need ? abi.decode(data, (GooseGuard.Move[])).length : 0);
+        GooseGuard.Move[] memory w = need ? abi.decode(data, (GooseGuard.Move[])) : new GooseGuard.Move[](0);
+        console2.log("moves in the write", w.length);
+        uint256 sales;
+        uint256 seen;
+        uint256 gas;
+        for (uint256 k; k < w.length; ++k) {
+            gas += g.capOf(w[k].kind, w[k].args);
+            if (w[k].kind != 2) continue;
+            ++sales;
+            uint256 bits;
+            for (uint256 l; l < w[k].args.length; ++l) {
+                bits |= 1 << (w[k].args[l] >> 248);
+            }
+            assertEq(bits & seen, 0, "two sales in one write share a pool");
+            seen |= bits;
+        }
+        console2.log("sales in the write, caps", sales, gas);
+        assertGe(sales, 1, "no sale");
+        assertLe(gas, planner.PACK_GAS(), "the write's caps pass PACK_GAS");
+        uint256[] memory before = new uint256[](4);
+        for (uint256 i; i < 4; ++i) {
+            before[i] = _hf(v[i]);
+        }
+        RoundLog memory log;
+        _round(log);
+        _round(log);
+        assertEq(log.refused, 0, "a move was refused");
+        for (uint256 i; i < 4; ++i) {
+            console2.log("victim, health before, after two rounds", i, before[i], _hf(v[i]));
+            assertGt(_hf(v[i]), before[i], "a victim waited two rounds");
+        }
+    }
+
+    /// GG-18 where the caps allow it: two cautious seven-stock victims (line 1.30, target 1.40) at health 1.25 whose
+    /// sales both start on the same lowest-factor stock, a slice or two each. Both go in one write, on different
+    /// pools, and neither is refused.
+    function test_LR_two_sales_through_different_pools_in_one_write() public {
+        address[] memory v = new address[](2);
+        for (uint256 i; i < 2; ++i) {
+            v[i] = _diversified(string.concat("tv", vm.toString(i)), false);
+            assertEq(planner.movesOf(v[i]).length, 1, "not one sale");
+        }
+        uint256 first = planner.movesOf(v[0])[0].args[0] >> 248;
+        assertEq(planner.movesOf(v[1])[0].args[0] >> 248, first, "the sales don't start on the same stock");
+        (bool need, bytes memory data) = planner.checkUpkeep{gas: READ_CAP}(abi.encode(uint256(0), uint256(1)));
+        assertTrue(need);
+        GooseGuard.Move[] memory w = abi.decode(data, (GooseGuard.Move[]));
+        uint256 seen;
+        uint256 sold;
+        for (uint256 k; k < w.length; ++k) {
+            if (w[k].kind != 2) continue;
+            uint256 bits;
+            for (uint256 l; l < w[k].args.length; ++l) {
+                bits |= 1 << (w[k].args[l] >> 248);
+            }
+            assertEq(bits & seen, 0, "two sales in one write share a pool");
+            seen |= bits;
+            sold |= w[k].account == v[0] ? 1 : w[k].account == v[1] ? 2 : 0;
+        }
+        assertEq(sold, 3, "both sales aren't in the write");
+        uint256 h0 = _hf(v[0]);
+        uint256 h1 = _hf(v[1]);
+        RoundLog memory log;
+        _readWrite(log);
+        assertEq(log.refused, 0, "a move was refused");
+        assertGt(_hf(v[0]), h0);
+        assertGt(_hf(v[1]), h1);
     }
     function test_LR_one_sale_depth_per_pool() public view {
         for (uint256 r; r < 7; ++r) {

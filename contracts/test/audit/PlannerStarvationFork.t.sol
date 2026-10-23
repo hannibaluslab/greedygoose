@@ -12,7 +12,8 @@ import {CashPlanner} from "../../src/planner/CashPlanner.sol";
 import {GuardForkBase} from "../GuardForkBase.sol";
 import {IJustaPermissionManager as PM} from "../IJustaPermissionManager.sol";
 
-/// Audit PoCs: Protect starvation by accounts kept at the lowest health.
+/// Audit PoCs: Protect starvation by accounts kept at the lowest health. Flipped: they now guard GG-01's fix (Protect
+/// ranks candidates by what it can do for them, and plans only grants that are the app's NO_LIMIT template).
 ///   BASE_RPC_URL=https://mainnet.base.org forge test --match-contract PlannerStarvationForkTest -vv
 contract PlannerStarvationForkTest is GuardForkBase {
     GoosePlanner planner;
@@ -74,7 +75,8 @@ contract PlannerStarvationForkTest is GuardForkBase {
         if (need) moves = abi.decode(data, (GooseGuard.Move[]));
     }
 
-    /// Eight paying attackers take every Protect slot of both writes, three rounds running: no victim is repaid.
+    /// Eight paying attackers took every Protect slot of both writes, three rounds running, and no victim was repaid.
+    /// Guards GG-01 (paying attacker): their capped grants are never planned, and every victim is repaid.
     function test_paying_attacker_starves_protect() public {
         address[] memory victims = new address[](4);
         for (uint256 i; i < 4; ++i) {
@@ -87,12 +89,14 @@ contract PlannerStarvationForkTest is GuardForkBase {
             debtBefore += _debt(atk[i]);
         }
         uint256 victimMoves;
+        uint256 attackerMoves;
         for (uint256 round; round < 3; ++round) {
             for (uint256 w; w < 2; ++w) {
                 (GooseGuard.Move[] memory moves, bytes memory data) = _read();
                 console2.log("round, write, moves", round, w, moves.length);
                 console2.log("  attacker moves, victim moves", _count(moves, atk), _count(moves, victims));
                 victimMoves += _count(moves, victims);
+                attackerMoves += _count(moves, atk);
                 if (moves.length > 0) {
                     vm.recordLogs();
                     vm.prank(KEEPERHUB);
@@ -111,16 +115,22 @@ contract PlannerStarvationForkTest is GuardForkBase {
         for (uint256 i; i < 8; ++i) {
             debtAfter += _debt(atk[i]);
         }
-        console2.log("attacker debt repaid over 3 rounds (USDC units)", debtBefore - debtAfter);
+        console2.log("attacker debt before, after 3 rounds (USDC units)", debtBefore, debtAfter);
         console2.log("attacker lowest/highest health after", _hf(atk[0]), _hf(atk[7]));
         for (uint256 i; i < 4; ++i) {
             console2.log("victim health", _hf(victims[i]));
         }
-        assertEq(victimMoves, 0, "a victim was repaid");
-        assertLt(_hf(victims[0]), 1.03e18, "victim back over its line");
+        assertGe(victimMoves, 4, "a victim wasn't repaid");
+        assertEq(attackerMoves, 0, "an attacker's capped grant was planned");
+        assertGe(debtAfter, debtBefore, "an attacker was repaid");
+        for (uint256 i; i < 4; ++i) {
+            assertGe(_hf(victims[i]), 1.03e18, "a victim still under its line");
+        }
     }
 
-    /// Cost of one burner's Protect plan, and how many burners keep every victim out of the read entirely.
+    /// Cost of one burner's Protect plan, and how many burners kept every victim out of the read entirely. Guards GG-01
+    /// (free attacker): a capped Sell grant ranks 0 and takes no candidate place, so with eleven burners every victim
+    /// is still planned in every read, and no burner is.
     function test_free_attacker_burns_the_protect_planning_budget() public {
         address[] memory victims = new address[](4);
         for (uint256 i; i < 4; ++i) {
@@ -144,11 +154,12 @@ contract PlannerStarvationForkTest is GuardForkBase {
             (GooseGuard.Move[] memory moves,) = _read();
             uint256 v = _count(moves, victims);
             console2.log("burners, victim moves in the read", k, v);
-            if (v == 0) break;
+            assertEq(v, 4, "a victim was left out of the read");
+            assertEq(_count(moves, burners), 0, "a burner got a move");
             burners[k] = _burner(string.concat("burner", vm.toString(k)));
         }
         (GooseGuard.Move[] memory last,) = _read();
-        assertEq(_count(last, victims), 0, "a victim is still planned");
+        assertEq(_count(last, victims), 4, "a victim is no longer planned");
         assertEq(_count(last, burners), 0, "a burner got a move");
     }
 }

@@ -113,6 +113,22 @@ contract MockSpoke {
     }
 }
 
+/// ProtectPlanner with its slicer exposed (it's internal there, to keep the contract under the code limit).
+contract ProtectHarness is ProtectPlanner {
+    constructor(IGooseGuard g) ProtectPlanner(g) {}
+
+    function slices(
+        Book memory b,
+        uint256[7] memory take,
+        uint256 floorBps,
+        uint256 maxSlice,
+        uint256 floorHf,
+        uint256 capRoom
+    ) external view returns (Slice[] memory, uint256) {
+        return slicesOf(b, take, floorBps, maxSlice, floorHf, capRoom);
+    }
+}
+
 /// GoosePlanner with its packer exposed.
 contract PlannerHarness is GoosePlanner {
     constructor(IGooseGuard g, ProtectPlanner p, TradePlanner t, CashPlanner c) GoosePlanner(g, p, t, c) {}
@@ -145,14 +161,14 @@ contract GoosePlannerTest is Test {
     MockGuard guard;
     MockSpoke spoke;
     PlannerHarness planner;
-    ProtectPlanner protect;
+    ProtectHarness protect;
 
     function setUp() public {
         guard = new MockGuard();
         vm.etch(SPOKE, type(MockSpoke).runtimeCode);
         spoke = MockSpoke(SPOKE);
         IGooseGuard ig = IGooseGuard(address(guard));
-        protect = new ProtectPlanner(ig);
+        protect = new ProtectHarness(ig);
         planner = new PlannerHarness(ig, protect, new TradePlanner(ig), new CashPlanner(ig));
     }
 
@@ -252,7 +268,7 @@ contract GoosePlannerTest is Test {
         uint256 aim = 1.12e18 + protect.SELL_MARGIN();
         uint256[7] memory take = SellRules.amounts(b, aim, 300, false);
         uint256 floorHf = protect.withdrawFloor(hf0);
-        (Slice[] memory s, uint256 endHf) = protect.slicesOf(b, take, 300, 5_000e6, floorHf);
+        (Slice[] memory s, uint256 endHf) = protect.slices(b, take, 300, 5_000e6, floorHf, type(uint256).max);
         assertLe(s.length, 6);
         uint256 power = SellRules.power(b.stocks);
         uint256 debt = b.debt;
@@ -282,11 +298,53 @@ contract GoosePlannerTest is Test {
         }
         b.debt = SellRules.power(b.stocks) * 1e14 / 1.01e18;
         uint256[7] memory take = SellRules.amounts(b, 1.125e18, 300, false);
-        (Slice[] memory s, uint256 endHf) = protect.slicesOf(b, take, 300, 5_000e6, protect.withdrawFloor(1.01e18));
+        (Slice[] memory s, uint256 endHf) = protect.slices(b, take, 300, 5_000e6, protect.withdrawFloor(1.01e18), type(uint256).max);
         assertGt(s.length, 0);
         assertEq(s[0].reserveId, 5, "not the lowest factor first");
         assertLe(endHf, 1.13e18);
         console2.log("slices, end health", s.length, endHf);
+    }
+
+    /// GG-03 (a lone keep-my-mix sale over too many stocks was never sent): the sale is cut inside ProtectPlanner to the
+    /// room it's given, its Guard cap fits that room, and the health it returns is the cut sale's own, so the Guard's
+    /// H6 and overshoot checks run on what's sent.
+    function test_a_sale_cut_to_its_room_returns_the_cut_sales_health() public view {
+        Book memory b;
+        b.usdcPrice = 1e8;
+        b.usdcLeft = type(uint128).max;
+        uint16[7] memory cfs = [7000, 6800, 7200, 6500, 7400, 5500, 6000];
+        for (uint256 r; r < 7; ++r) {
+            b.stocks[r] = Holding(2e8, (100 + 50 * r) * 1e8, cfs[r], 2e8, type(uint128).max);
+        }
+        b.debt = SellRules.power(b.stocks) * 1e14 / 1.25e18;
+        uint256[7] memory take = SellRules.amounts(b, 1.405e18, 300, true); // keep my mix: some of every stock
+        uint256 floorHf = protect.withdrawFloor(1.25e18);
+        (Slice[] memory full, uint256 endFull) = protect.slices(b, take, 300, 5_000e6, floorHf, type(uint256).max);
+        assertEq(full.length, 6, "the uncut sale");
+        uint256 room = guard.capOf(2, _legsOf(full, 3));
+        assertGt(guard.capOf(2, _legsOf(full, 6)), planner.PACK_GAS(), "the uncut sale fits a write");
+        (Slice[] memory cut, uint256 endCut) = protect.slices(b, take, 300, 5_000e6, floorHf, room);
+        assertEq(cut.length, 3, "not cut to its room");
+        assertLe(guard.capOf(2, _legsOf(cut, 3)), room);
+        uint256 power = SellRules.power(b.stocks);
+        uint256 debt = b.debt;
+        for (uint256 i; i < cut.length; ++i) {
+            assertEq(cut[i].reserveId, full[i].reserveId);
+            assertEq(cut[i].shares, full[i].shares);
+            Holding memory h = b.stocks[cut[i].reserveId];
+            power -= h.cf * cut[i].shares * h.price * 1e10;
+            debt -= cut[i].minOut * 1e20;
+        }
+        assertEq(endCut, power * 1e14 / debt, "not the cut sale's health");
+        assertLt(endCut, endFull);
+        assertGt(endCut, 1.25e18, "the cut sale doesn't lift health (H6)");
+    }
+
+    function _legsOf(Slice[] memory s, uint256 n) internal pure returns (uint256[] memory legs) {
+        legs = new uint256[](n);
+        for (uint256 i; i < n; ++i) {
+            legs[i] = uint256(s[i].reserveId) << 248 | s[i].shares;
+        }
     }
 
     // ================================================================== the scan
