@@ -112,8 +112,9 @@ describe("Pay with: the rows, their order and who's listed", () => {
     const s = repaySources(data(), cfs);
     expect(ids(s)).toEqual(["cash", "free:AAPLc", "free:NVDAc", "backing:NVDAc"]);
     expect(s.map((x) => x.kind)).toEqual(["cash", "free", "free", "backing"]);
+    // The cash row leaves out the fuel tank, as Home's Cash card does.
     expect(s.map((x) => x.sub)).toEqual([
-      "$100.00 in your cash",
+      `${formatUsd(100 - B)} in your cash`,
       "$100.00 free",
       "$25.00 free",
       "$1,000.00 backs your credit",
@@ -189,6 +190,13 @@ describe("Pay with: the rows, their order and who's listed", () => {
     expect(v.fieldText).toBe((1.36 - B).toFixed(2));
     expect(v.repayRaw).toBe(usd(1.36) - fee);
     expect(v.ready).toBe(true);
+  });
+
+  it("$1.20 in the wallet reads $0.70 of cash, the most it repays: the fuel tank isn't cash", () => {
+    const d = data({ debt: 4.77, wallet: 1.2, holdings: [] });
+    const [cash] = repaySources(d, cfs);
+    expect(cash.sub).toBe(`${formatUsd(1.2 - B)} in your cash`);
+    expect(planRepay({ data: d, source: cash, form: ALL }).fieldText).toBe((1.2 - B).toFixed(2));
   });
 });
 

@@ -3,6 +3,7 @@ import { CASH } from "@/config/risk";
 import { fullRepayAmount } from "@/lib/aave/tx";
 import { cashRaw, feeBufferRaw, feeFromSale, maxSpendRaw, toUsd, type Cash } from "@/lib/cash";
 import { ceilCents, floorCents } from "@/lib/formatting";
+import { cashWithoutTankUsd } from "@/lib/fuelTank";
 import { homeStatus, statusFor, type Status } from "@/lib/risk/status";
 import { freeRepayRaw, repaySaleMaxRaw, saleRepayRaw, type SellPosition } from "@/lib/sell";
 import { SLIP_KEEP } from "@/lib/swap/buy";
@@ -82,7 +83,8 @@ export function repaySources(data: RepayData, cfs: Record<string, number> | unde
     id: "cash",
     kind: "cash",
     name: REPAY_COPY.cash,
-    sub: REPAY_COPY.cashSub(data.cashUsd),
+    // The cash as Home's Cash card shows it: the fuel tank isn't cash (Adrian, 2026-10-23).
+    sub: REPAY_COPY.cashSub(cashWithoutTankUsd(data)),
     cf: 0,
     maxSharesRaw: 0n,
     valueUsd: 0,
