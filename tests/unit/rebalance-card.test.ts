@@ -195,6 +195,14 @@ describe("rebalanceCard: the first state that applies, in board 7's order, with 
       [5, "sell"],
     ]);
     expect(m.label).toBe(`Rebalancer, on. 3 trades ${next}. Sells NVIDIA. Buys Apple and Meta.`);
+    // One by one, as GooseGuard makes them: the sale first, and the buys spend what it brings at least.
+    expect(m.moves.map((x) => [x.reserveId, x.side])).toEqual([
+      [5, "sell"],
+      [0, "buy"],
+      [3, "buy"],
+    ]);
+    const [sale, ...buys] = m.moves;
+    expect(buys.reduce((a, x) => a + x.usd, 0)).toBeCloseTo(sale.usd, 5);
   });
 
   it("ends soon: within a week of its grant's end, on target", () => {

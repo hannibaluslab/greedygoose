@@ -45,6 +45,20 @@ export const OFFSET_MAX = 23.5 / 22;
 /** What the next check does to a stock: from the trades, never from the drift. */
 export type Side = "sell" | "buy";
 
+/**
+ * One trade of the next check, as the sheet lists them one by one (Adrian, 2026-10-23), in the order GooseGuard makes
+ * them: the sales first, then the buys they pay for. A sale's dollars are the least it brings (`minOut`), which is what
+ * the buys spend, so the list adds up; a buy's are what it spends.
+ */
+export type TradeMove = { reserveId: number; side: Side; usd: number };
+
+export const tradeMoves = (trades: readonly RebalanceTrade[]): TradeMove[] =>
+  [...trades.filter((t) => !t.buy), ...trades.filter((t) => t.buy)].map((t) => ({
+    reserveId: t.reserveId,
+    side: t.buy ? "buy" : "sell",
+    usd: Number(t.buy ? t.amountIn : t.minOut) / 10 ** USDC.decimals,
+  }));
+
 export type MixSlot = {
   reserveId: number;
   /** Its target, BPS of the mix; null when no mix is saved and nothing is held (the seven stocks, with no target). */
@@ -152,6 +166,8 @@ export type RebalanceCardModel = {
   label: string;
   /** Its grant ends within a week: the sheet offers Renew whatever else it shows (Adrian, 2026-10-20). */
   endsSoon: boolean;
+  /** The trades or top-up buys due at the next check, one by one; empty when none is due. */
+  moves: TradeMove[];
 };
 
 export type RebalanceCardInput = {
@@ -324,7 +340,7 @@ export function rebalanceCard(i: RebalanceCardInput): RebalanceCardModel | null 
     pill: string,
     tone: PillTone,
     footer: RebalanceFooter,
-    over: { faded?: boolean; slots?: MixSlot[]; say?: string; marks?: boolean } = {},
+    over: { faded?: boolean; slots?: MixSlot[]; say?: string; marks?: boolean; moves?: TradeMove[] } = {},
   ): RebalanceCardModel => ({
     pill: { text: pill, tone },
     faded: over.faded ?? false,
@@ -334,6 +350,7 @@ export function rebalanceCard(i: RebalanceCardInput): RebalanceCardModel | null 
     footer,
     label: `Rebalancer, ${pill.toLowerCase()}. ${over.say ?? (footer.kind === "words" ? footer.line1 : "")}`.trim(),
     endsSoon: i.endsAt !== null && i.endsAt - i.nowSec <= ENDS_SOON_SEC,
+    moves: over.moves ?? [],
   });
   const words = (line1: string, line2: string | null = null): RebalanceFooter => ({ kind: "words", line1, line2 });
   const faded = { faded: true };
@@ -375,7 +392,7 @@ export function rebalanceCard(i: RebalanceCardInput): RebalanceCardModel | null 
   if (waits) return card("Paused", "neutral", words(waitWords(o), "Nothing trades meanwhile."), { slots: moving });
   // 6. Top-ups going into the mix at the next round, else the trades due when the pacing lets them.
   const due = dueFooter(invest, o.trades, when);
-  if (due) return card("On", "on", due.footer, { slots: moving, say: due.say });
+  if (due) return card("On", "on", due.footer, { slots: moving, say: due.say, moves: tradeMoves(next) });
   // Nothing trades. "On target" only while the whole portfolio sits in its band; past it, or holding none of the mix,
   // what holds Rebalance back (`blocked`): the credit (it never trades stock that backs it), no trade it can make, or
   // nothing of the mix to keep.

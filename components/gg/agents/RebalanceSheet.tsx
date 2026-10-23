@@ -1,7 +1,9 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { ChevronDown } from "@/components/gg/kit/icons";
 import { SheetShell } from "@/components/gg/kit/SheetShell";
+import { StockAvatar } from "@/components/gg/kit/StockAvatar";
 import { TxError } from "@/components/gg/TxUi";
 import { FinishBlock, type FinishState } from "./FinishTurningOn";
 import { RebalancePill } from "./RebalanceCard";
@@ -11,8 +13,10 @@ import { useRebalanceCard } from "@/hooks/useRebalanceCard";
 import { AGENTS_LIVE } from "@/lib/agents/config";
 import type { SheetAction } from "@/lib/agents/list";
 import { BACKING_RULE } from "@/lib/agents/next";
-import type { RebalanceCardModel } from "@/lib/agents/rebalanceCard";
+import type { RebalanceCardModel, TradeMove } from "@/lib/agents/rebalanceCard";
 import { sheetLine } from "@/lib/agents/rebalanceSettings";
+import { formatUsd } from "@/lib/formatting";
+import { EQUITIES } from "@/lib/tokens/registry";
 
 /*
  * Rebalance's sheet (boards 7e–7h, Adrian 2026-10-20: "The Rebalance sheet keeps only my mix and the top-ups
@@ -71,6 +75,52 @@ export function RebalanceSheet({
   );
 }
 
+/**
+ * The next check's trades behind one row (Adrian, 2026-10-23: "see exactly what are the actions one by one"): open,
+ * each swap in the order GooseGuard makes it, its stock and its dollars.
+ */
+function NextTrades({ moves }: { moves: readonly TradeMove[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-[22px] bg-card shadow-card-elev">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left text-[15px] font-semibold"
+      >
+        {moves.length === 1 ? "See the trade" : `See the ${moves.length} trades`}
+        <ChevronDown className={`shrink-0 text-ink-mid transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="border-t border-hairline px-4 pb-3.5 pt-1">
+          <ol className="m-0 list-none p-0">
+            {moves.map((m, i) => {
+              const stock = EQUITIES[m.reserveId];
+              return (
+                <li key={`${m.side}:${m.reserveId}`} className="num flex items-center gap-2.5 py-2">
+                  <span className="w-4 shrink-0 text-[13px] text-ink-mid">{i + 1}</span>
+                  <StockAvatar symbol={stock.symbol} size={28} />
+                  <span className="min-w-0 grow truncate text-sm font-semibold">
+                    <span className={m.side === "buy" ? "text-pos" : "text-neg"}>
+                      {m.side === "buy" ? "Buy" : "Sell"}
+                    </span>{" "}
+                    {stock.name}
+                  </span>
+                  <span className="shrink-0 text-sm font-semibold">{formatUsd(m.usd)}</span>
+                </li>
+              );
+            })}
+          </ol>
+          {moves.some((m) => m.side === "sell") && moves.some((m) => m.side === "buy") && (
+            <p className="m-0 pt-1 text-[13px] leading-[18px] text-ink-mid">Sales go first and pay for the buys.</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** The sheet under its title, from plain values, so the dev gallery draws each state. */
 export function RebalanceSheetBody({
   model,
@@ -121,6 +171,7 @@ export function RebalanceSheetBody({
       {!line?.text.includes(BACKING_RULE) && (
         <p className="m-0 -mt-1.5 px-0.5 text-[13px] leading-[18px] text-ink-mid">{BACKING_RULE}</p>
       )}
+      {!finish && model && model.moves.length > 0 && <NextTrades moves={model.moves} />}
 
       {settings}
 
