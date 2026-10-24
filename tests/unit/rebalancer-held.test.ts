@@ -377,7 +377,7 @@ describe("rebalanceCard: the free stock on target, the stock backing credit off 
   const done = (over: Partial<RebalanceCardInput> = {}) =>
     card(jawegg(), { topUps: { readyRaw: 0n }, ...over }, { mixBps: JAWEGG_MIX, debtUsd: 4.06, totalBackingUsd: 7.17 });
 
-  it("says the free stock is done, and that sending is only for the whole portfolio", () => {
+  it("says the free stock is done and the stock backing credit stays, with no amount to send", () => {
     const o = rebalanceOutlook(outlookIn(jawegg(), { mixBps: JAWEGG_MIX, debtUsd: 4.06, totalBackingUsd: 7.17 }));
     expect(o.blocked).toBe("credit");
     expect(o.freeOnTarget).toBe(true);
@@ -386,11 +386,10 @@ describe("rebalanceCard: the free stock on target, the stock backing credit off 
     expect(m.footer).toEqual({
       kind: "words",
       line1: "Your free stock is on target.",
-      line2: "Send $44 to bring your whole portfolio, stock backing credit included, to your mix.",
+      line2: "Stock backing your credit stays as it is.",
     });
-    expect(sheetLine(m).text).toBe(
-      "Your free stock is on target. Send $44 to bring your whole portfolio, stock backing credit included, to your mix.",
-    );
+    expect(sheetLine(m).text).toBe("Your free stock is on target. Stock backing your credit stays as it is.");
+    expect(JSON.stringify(m)).not.toMatch(/Send \$|whole portfolio/);
     expect(JSON.stringify(m)).not.toMatch(/borrow|loan|\block|locked|collateral|—/i);
   });
 
@@ -401,11 +400,11 @@ describe("rebalanceCard: the free stock on target, the stock backing credit off 
     expect(m.slots.every((s) => Math.abs(s.offset) <= 1)).toBe(true);
   });
 
-  it("with top-ups off, says to turn them on first", () => {
+  it("with top-ups off, says the same: nothing to send while the free stock is done", () => {
     expect(done({ topUps: null }).footer).toEqual({
       kind: "words",
       line1: "Your free stock is on target.",
-      line2: "Turn on top-ups, then send $44 to bring your whole portfolio to your mix.",
+      line2: "Stock backing your credit stays as it is.",
     });
   });
 

@@ -271,7 +271,8 @@ function dueFooter(
  * send so today's top-ups put the whole portfolio back in its bands (2026-10-22), and the over-weight stock that backs
  * credit wears the backs-credit mark instead of a sell tint: it isn't sold, what's sent buys the ones under.
  * When the free stock itself sits in its band, the Rebalancer's own work is done (Adrian, 2026-10-24: "it should be
- * considered done"): the logos sit by the free stock, and what's sent is only for the whole portfolio.
+ * considered done"): the logos sit by the free stock, and the card says the stock backing credit stays as it is, with
+ * no amount to send (Adrian, 2026-10-24: the whole-portfolio amount next to free-stock numbers confused).
  */
 function heldCard(
   i: RebalanceCardInput,
@@ -285,12 +286,12 @@ function heldCard(
   ) => RebalanceCardModel,
 ): RebalanceCardModel {
   const why = o.blocked;
-  const send = why === "credit" ? sendToFix(i) : null;
   if (why === "credit" && o.freeOnTarget) {
-    const done: [string, string] = [FREE_ON_TARGET, send ? wholeWords(send, !!i.topUps) : BACKING_RULE];
     const free = mixSlots({ holdings: i.holdings, mixBps: i.mixBps, options: i.options, trades: [] });
-    return card("On", "on", { kind: "words", line1: done[0], line2: done[1] }, { say: done.join(" "), slots: free });
+    const say = `${FREE_ON_TARGET} ${BACKING_STAYS}`;
+    return card("On", "on", { kind: "words", line1: FREE_ON_TARGET, line2: BACKING_STAYS }, { say, slots: free });
   }
+  const send = why === "credit" ? sendToFix(i) : null;
   const say = send ? sendWords(send, !!i.topUps) : blocked;
   const marked = card("On", "on", { kind: "words", line1: say[0], line2: say[1] }, { say: say.join(" "), marks: true });
   if (!send) return marked;
@@ -324,22 +325,15 @@ function sendWords(raw: bigint, topUpsOn: boolean): [string, string] {
   return [`Send ${usd} to fix your mix.`, topUpsOn ? BACKING_RULE : "Turn on top-ups so it goes in."];
 }
 
-/** The card's first line while the free stock sits in its band and the stock backing credit holds the rest off it. */
+/** The card's two lines while the free stock sits in its band and the stock backing credit holds the rest off it. */
 export const FREE_ON_TARGET = "Your free stock is on target.";
+export const BACKING_STAYS = "Stock backing your credit stays as it is.";
 
 /** Where the mix stands while nothing trades, for the line under "Ends soon". */
 function standingWords(o: RebalanceOutlook, blocked: [string, string] | null, when: string): string {
   if (o.noMix) return "No mix yet.";
   if (o.blocked === "credit" && o.freeOnTarget) return FREE_ON_TARGET;
   return blocked ? blocked[0] : `On target. Checks ${when}.`;
-}
-
-/** What sending does then: it only brings the whole portfolio, the stock backing credit too, to the mix. */
-function wholeWords(raw: bigint, topUpsOn: boolean): string {
-  const usd = formatUsdTrim(Math.ceil(Number(raw) / 10 ** USDC.decimals));
-  return topUpsOn
-    ? `Send ${usd} to bring your whole portfolio, stock backing credit included, to your mix.`
-    : `Turn on top-ups, then send ${usd} to bring your whole portfolio to your mix.`;
 }
 
 /** What the card says while off and before the agents are live. */

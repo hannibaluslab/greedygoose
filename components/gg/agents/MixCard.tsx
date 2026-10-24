@@ -70,7 +70,7 @@ export function MixCard({
             <div className="flex w-[78px] shrink-0 flex-col">
               <span className="whitespace-nowrap text-sm font-semibold">{e.name}</span>
               <span className="num text-[11px] text-ink-mid">
-                {backsOnly[i] ? "backs credit" : now[i] === null ? "none now" : `now ${now[i]}%`}
+                {backsOnly[i] ? "backs credit" : now[i] === null ? "none now" : `free ${now[i]}%`}
               </span>
             </div>
             {/* Never past 100% in all: a target stops where the other stocks' leave off (setMixRow). */}

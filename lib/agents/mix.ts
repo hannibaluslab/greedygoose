@@ -97,7 +97,7 @@ export function startingMix(holdings: readonly MixHolding[], saved: readonly num
   return inHomeOrder(held.map((h, i) => ({ reserveId: h.reserveId, bps: pct[i] * 100 })).filter((r) => r.bps > 0));
 }
 
-/** "now 43%": each row's share of the rows' free stock at Aave's price, rounded on its own; null when there is none. */
+/** "free 43%" (Adrian, 2026-10-24: "now" read as the whole portfolio): each row's share of the rows' free stock at Aave's price, rounded on its own; null when there is none. */
 export function nowPercents(holdings: readonly MixHolding[], rows: readonly MixRow[]): (number | null)[] {
   const values = rows.map((r) => {
     const h = holdingOf(holdings, r.reserveId);

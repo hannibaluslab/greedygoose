@@ -13,7 +13,7 @@ import { useRebalanceCard } from "@/hooks/useRebalanceCard";
 import { AGENTS_LIVE } from "@/lib/agents/config";
 import type { SheetAction } from "@/lib/agents/list";
 import { BACKING_RULE } from "@/lib/agents/next";
-import type { RebalanceCardModel, TradeMove } from "@/lib/agents/rebalanceCard";
+import { BACKING_STAYS, type RebalanceCardModel, type TradeMove } from "@/lib/agents/rebalanceCard";
 import { sheetLine } from "@/lib/agents/rebalanceSettings";
 import { formatUsd } from "@/lib/formatting";
 import { EQUITIES } from "@/lib/tokens/registry";
@@ -168,7 +168,7 @@ export function RebalanceSheetBody({
       ) : (
         <span aria-hidden className="h-[19px] w-3/4 animate-pulse rounded-md bg-chip" />
       )}
-      {!line?.text.includes(BACKING_RULE) && (
+      {!line?.text.includes(BACKING_RULE) && !line?.text.includes(BACKING_STAYS) && (
         <p className="m-0 -mt-1.5 px-0.5 text-[13px] leading-[18px] text-ink-mid">{BACKING_RULE}</p>
       )}
       {!finish && model && model.moves.length > 0 && <NextTrades moves={model.moves} />}
